@@ -435,44 +435,25 @@ if [ -e "$REC" ]; then
     emit fail true "" 1
   fi
 
-  # Whether a component was repaired is read two ways, because real records carry both: a
-  # `rounds` count above one on the component row, and a top-level `rounds[]` entry naming the
-  # component. A non-numeric count answers neither, and is reported as a repair state that
-  # could not be established rather than folded into the clean set.
+  # Whether a component was repaired is read from `checkpoint_repaired` on its row, the sha
+  # captured inside the `[a]ddress` block in commands/implement.md and nowhere else. A value
+  # that is neither a sha string nor null says a repair state was written down and cannot be
+  # read, and is reported as unresolved rather than folded into the clean set.
+  #
+  # IT USED TO BE READ TWO WAYS, from a `rounds` count above one on the row and from a
+  # top-level `rounds[]` entry naming the component. Both counted rounds, and a component now
+  # gets at most one critic round. The count was also the weaker reading while it worked: on
+  # the last record built under it, `rounds>1` named 2 of 14 components and 13 of 14 carried a
+  # repaired checkpoint.
   UNREADABLE_REPAIR=$(accept_unreadable_repair_components "$PAYLOAD")
   if [ "$UNREADABLE_REPAIR" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
-    add_msg "the component rounds counts could not be read, so which components were repaired is unknown"
+    add_msg "the component repair checkpoints could not be read, so which components were repaired is unknown"
     emit fail true "" 1
   fi
   if [ "$(jq -r 'length' <<<"$UNREADABLE_REPAIR")" -gt 0 ]; then
     set_ev unreadable_repair_state "$UNREADABLE_REPAIR"
-    add_msg "a component records a non-numeric rounds count and no accept verdict, so whether it was repaired cannot be established; that is unresolved, not clean"
-    emit fail true "" 1
-  fi
-
-  # A `rounds[]` entry naming a component establishes a repair only from round 2. Round 1 is
-  # the initial critique, not a repair, and `references/build-critique.md` asks for an entry on
-  # every round including the first -- so reading any entry as a repair demanded an accept
-  # verdict from every component of every clean build that followed that instruction, and hard-
-  # failed it. That is the same round-number condition the component-row read already applies,
-  # which is why the two readings agreed on the row and disagreed here.
-  #
-  # An entry whose `round` is absent or is not a number is resolved as UNREADABLE, in the check
-  # directly below, rather than as either a repair or an untouched component. It cannot say
-  # which of the two it is: round 1 owes no verdict and round 3 owes one, and picking either
-  # silently is the guess this block refuses on `accept.action` twenty lines up. It is reported
-  # only when nothing else already settled the component's repair state, so a readable round-2
-  # entry beside a malformed one is still read as the repair it is.
-  UNREADABLE_ROUND=$(accept_unreadable_round_components "$PAYLOAD")
-  if [ "$UNREADABLE_ROUND" = "$JQ_ERR" ]; then
-    set_ev_s accept_check "unreadable"
-    add_msg "the rounds[] entries could not be read, so whether each names a first critique or a repair is unknown"
-    emit fail true "" 1
-  fi
-  if [ "$(jq -r 'length' <<<"$UNREADABLE_ROUND")" -gt 0 ]; then
-    set_ev unreadable_repair_round "$UNREADABLE_ROUND"
-    add_msg "a rounds[] entry names a component with no accept verdict and carries no numeric round, so whether that entry is the first critique or a repair cannot be established; that is unresolved, not clean"
+    add_msg "a component records a checkpoint_repaired that is neither a sha nor null, and no accept verdict, so whether it was repaired cannot be established; that is unresolved, not clean"
     emit fail true "" 1
   fi
 
@@ -680,6 +661,17 @@ if [ -e "$REC" ]; then
           ;;
         *) add_msg "scope compliance returned an unrecognised action: $SCOPE_ACTION" ;;
       esac
+      # The inverse set, reported whatever the action was (v5.47.0+). `unnamed` says the repair
+      # went somewhere no finding asked for; this says it did not go somewhere a finding did.
+      # A round-2 critic used to answer that question, and it ranked "did less" as the CRITICAL
+      # of the three shapes it looked for, because the defect the remedy named is still there.
+      # A component now gets one critic round, so that reader is gone and this is what replaced
+      # it. Emitted here rather than left in evidence: `out_of_range[]` shipped as a field with
+      # no reader while the schema called it the channel to /review, and that is the same shape.
+      SCOPE_UNADDR=$(jq -r '(.unaddressed // []) | join(", ")' <<<"$SCOPE_OUT")
+      if [ -n "$SCOPE_UNADDR" ]; then
+        add_msg "scope compliance ($TOUCHED_SUBJECT): finding site(s) the repair never touched: $SCOPE_UNADDR -- the remedy may be part-applied; surfaced, not blocking"
+      fi
     else
       set_ev_s scope_compliance "unreadable"
       add_msg "scope compliance could not be computed: repair-scope-check.sh produced no readable verdict"
@@ -689,7 +681,12 @@ if [ -e "$REC" ]; then
     add_msg "scope compliance could not be computed: repair-scope-check.sh not found"
   fi
 
-  ROUNDS_ARR=$(jq -c '(.rounds // [])' <<<"$PAYLOAD" 2>/dev/null) || ROUNDS_ARR='[]'
+  # Deferrals live on the component row since v5.47.0. They were parked on a `rounds[]` entry,
+  # and a component now gets at most one critic round, so no such entry is written and a reader
+  # pointed at that array would find nothing on every record. The fallback is the sentinel, not
+  # '[]': an unreadable payload here used to read as "I looked and found no deferrals", which is
+  # a silent pass in a block whose whole job is to refuse one.
+  DEFER_ARR=$(jq -c '(.components // [])' <<<"$PAYLOAD" 2>/dev/null) || DEFER_ARR="$JQ_ERR"
   # `JQ_ERR` is the same sentinel the accept block above uses, defined once beside the first
   # read that needs it. The deferral filter below falls back to it rather than to `[]`, and
   # the sentinel is reported as unresolved.
@@ -710,7 +707,7 @@ if [ -e "$REC" ]; then
            | select((((.blocked_on // "") | tostring) | gsub("^\\s+|\\s+$";"")) == ""
                     or (((.finding // "") | tostring) | gsub("^\\s+|\\s+$";"")) == ""
                     or (((.why_now_is_wrong // "") | tostring) | gsub("^\\s+|\\s+$";"")) == "")
-           | ((.finding // "unnamed") | tostring) ]' <<<"$ROUNDS_ARR" 2>/dev/null) || BAD_DEFERRALS="$JQ_ERR"
+           | ((.finding // "unnamed") | tostring) ]' <<<"$DEFER_ARR" 2>/dev/null) || BAD_DEFERRALS="$JQ_ERR"
   if [ "$BAD_DEFERRALS" = "$JQ_ERR" ]; then
     set_ev_s deferral_check "unreadable"
     add_msg "the deferred findings could not be read, so whether each names what it waits on and why now is wrong is unknown"
@@ -722,7 +719,7 @@ if [ -e "$REC" ]; then
     add_msg "$BD_N deferred finding(s) are missing the finding, the component they wait on, or why answering now would be wrong; a deferral short any of the three is a finding nobody will return to"
     emit fail true "" 1
   fi
-  DEFERRED_N=$(jq -r '[ .[] | (.deferred // []) | length ] | add // 0' <<<"$ROUNDS_ARR" 2>/dev/null) || DEFERRED_N=0
+  DEFERRED_N=$(jq -r '[ .[] | (.deferred // []) | length ] | add // 0' <<<"$DEFER_ARR" 2>/dev/null) || DEFERRED_N=0
   if [ "$DEFERRED_N" -gt 0 ]; then
     set_ev deferred_findings "$DEFERRED_N"
     add_msg "$DEFERRED_N finding(s) deferred to a component not yet built; they carry forward rather than being answered speculatively"

@@ -24,7 +24,7 @@
 #
 # Output (single JSON object to stdout):
 #   { "action": "in_scope|out_of_scope|cannot_judge", "blocks": false, "decided_by": "sets|none",
-#     "unnamed": [<path>, ...] }
+#     "unnamed": [<path>, ...], "unaddressed": [<path>, ...] }
 #     action     in_scope/out_of_scope = every/not-every touched file is named or --allow-covered.
 #                cannot_judge = --finding-sites was empty, OR --touched-files-source was
 #                undetermined. Nothing to compare against, so this is UNMEASURED, not "fine" —
@@ -35,6 +35,19 @@
 #                touch a helper or test alongside the named site) gets bypassed, not satisfied.
 #     decided_by sets | none: sets when a comparison was made, none when one could not be.
 #     unnamed    every touched path neither named nor --allow-covered. Always emitted, even empty.
+#     unaddressed THE INVERSE SET (v5.47.0+): every named site the repair never touched. Always
+#                emitted, even empty, and empty on cannot_judge rather than a guess.
+#
+#                It exists because a component now gets at most one critic round. Until then a
+#                round-2 critic was handed the previous remedy and ruled on whether the repair did
+#                it, in three shapes: did the remedy (nothing raised), did MORE (a `concern`), did
+#                LESS or did it at some named sites and not others (a `critical`, because the
+#                defect the remedy addressed is still there). `unnamed` is the deterministic form
+#                of "did more". This is the deterministic form of "did less", and without it that
+#                `critical` had no reader left once the round it lived in was deleted.
+#
+#                `--allow` does not apply here. It exempts EXTRA files a repair touched; a named
+#                site left untouched is not an extra file.
 #
 # What this cannot see: a set comparison cannot tell a touched file that was NECESSARY to the fix
 # (a shared helper, a broken test) from one that is genuinely off-topic — it sees paths, never
@@ -87,7 +100,8 @@ validate_array() { jq -e 'type == "array" and (all(.[]; type == "string"))' >/de
 validate_array "$FINDING_SITES" || { echo "repair-scope-check: --finding-sites must be a JSON array of strings" >&2; exit 2; }
 validate_array "$TOUCHED_FILES" || { echo "repair-scope-check: --touched-files must be a JSON array of strings" >&2; exit 2; }
 
-emit() { jq -nc --arg a "$1" --arg d "$2" --argjson u "$3" '{action:$a, blocks:false, decided_by:$d, unnamed:$u}'; }
+emit() { jq -nc --arg a "$1" --arg d "$2" --argjson u "$3" --argjson n "${4:-[]}" \
+  '{action:$a, blocks:false, decided_by:$d, unnamed:$u, unaddressed:$n}'; }
 
 # --- the matrix (deterministic) ---
 if [ "$(jq 'length' <<<"$FINDING_SITES")" -eq 0 ]; then
@@ -107,6 +121,10 @@ fi
 
 # Literal set difference: touched paths absent from finding-sites, by exact string match.
 CANDIDATE=$(jq -c --argjson s "$FINDING_SITES" '[.[] | select(. as $f | ($s | index($f)) == null)]' <<<"$TOUCHED_FILES")
+
+# And the same difference the other way: named sites the repair never touched. Same literal
+# string match, same no-normalisation rule as above.
+UNADDRESSED=$(jq -c --argjson t "$TOUCHED_FILES" '[.[] | select(. as $f | ($t | index($f)) == null)]' <<<"$FINDING_SITES")
 
 UNNAMED='[]'
 if [ "$(jq 'length' <<<"$CANDIDATE")" -gt 0 ]; then
@@ -132,8 +150,8 @@ if [ "$(jq 'length' <<<"$CANDIDATE")" -gt 0 ]; then
 fi
 
 if [ "$(jq 'length' <<<"$UNNAMED")" -eq 0 ]; then
-  emit in_scope sets '[]'
+  emit in_scope sets '[]' "$UNADDRESSED"
 else
-  emit out_of_scope sets "$UNNAMED"
+  emit out_of_scope sets "$UNNAMED" "$UNADDRESSED"
 fi
 exit 0

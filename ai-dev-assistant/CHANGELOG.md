@@ -1,5 +1,55 @@
 # Changelog
 
+## [5.47.0] - 2026-09-02
+
+### Changed
+- **A component gets at most one critic round.** No critic is dispatched again once a repair is
+  accepted, and no `rounds[]` array is written. The epic contract this implements has said "No
+  critic is re-dispatched to judge a repair" since 2026-08-30; v5.42.0 shipped the accept verdict
+  while keeping the loop, and wrote a paragraph into `references/build-critique.md` arguing against
+  any round ceiling. That paragraph is gone. Measured on real records before this change: 9 of 28
+  component rows carried more than one round and one carried six, with six separate critic verdict
+  files on disk for a single component.
+- **The repair signal moved off the round count onto `checkpoint_repaired`.** That sha is captured
+  inside the `[a]ddress` block and nowhere else, so a non-null value is the fact that the repair path
+  ran. The old reading was the weaker one even while it worked: on the last record built under it,
+  `rounds > 1` named 2 of 14 components while 13 of 14 carried a repaired checkpoint, so eleven
+  repairs owed an accept verdict under the contract and none under the check. That is the inherited
+  ceiling a build could walk through by writing `rounds: 1`, and it is closed rather than documented
+  again.
+- **Deferrals moved from a round entry to the component row**, since no round entry is written. The
+  reader's `|| ROUNDS_ARR='[]'` fallback went with it, replaced by the jq-error sentinel: an
+  unreadable payload used to read as "I looked and found no deferrals" in a block whose purpose is
+  refusing exactly that.
+- `scripts/accept-verdict.sh` is seven pure decisions rather than eight.
+  `accept_unreadable_round_components` disambiguated a `rounds[]` entry's round number and has no
+  subject left. `accept_unreadable_repair_components` was retargeted with the signal; reading a
+  count that is now 1 on every row, it could no longer fail for its own subject.
+
+### Added
+- **`repair-scope-check.sh` emits `unaddressed[]`**, the inverse set difference: sites a finding
+  named that the repair never touched. `unnamed` was the deterministic form of a round-2 critic's
+  "the repair did MORE" concern. This is the form of its "did LESS" critical, which it ranked above
+  the other because the defect the remedy named is still there. Without it, deleting the round-2
+  read would have removed one of the two independent checks on a repair rather than mechanising it.
+  `build-critique-assert.sh` names the sites in a message, because a field with no reader is the
+  defect this plugin has now shipped twice.
+- **A stop on the repair path.** `not_accepted` or `cannot_judge` HALTS the build rather than
+  closing the component, and an autonomous run halts rather than overriding itself. v5.42.0 deleted
+  the round budget and deleted with it "at the second blocking round put the choice to the person;
+  with `run_mode: autonomous` there is nobody to ask, so HALT". What replaced it recorded a verdict
+  and told nobody to act on one, so for one release a rejected repair closed its component and the
+  build carried on. The stop is now at the verdict rather than at a count.
+- `references/gate-audit-schema.md` gains a `repair-scope-check` consumer contract. The kernel
+  shipped in v5.40.0 and the schema mentioned it once, in passing, as a precedent for `not_run`.
+
+### Fixed
+- A `git diff` range in `commands/implement.md` was built from a checkpoint label rather than a sha.
+  A label is not a revision, so git exits 128 and the redirect leaves a 0-byte file the kernel
+  answers `cannot_judge` on. Caught by `tests/build-critique-wiring-spec.sh`, which exists for it.
+- `references/build-critique.md` said a deferral fails only when `blocked_on` is missing. The code
+  has rejected all three blank fields since v5.36.0.
+
 ## [5.46.0] - 2026-09-02
 
 ### Added

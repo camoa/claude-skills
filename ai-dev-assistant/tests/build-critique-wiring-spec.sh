@@ -294,6 +294,29 @@ else
   fail_check "/implement does not forbid taking the verdict from the critic's Task return"
 fi
 
+# --- c3/c4: the loop has a stop, and an unattended run cannot vote itself past it ----------
+# THE DEFECT THIS DEFENDS AGAINST. v5.42.0 deleted the round budget and, with it, the sentence
+# "at the second blocking round put the choice to the person; with run_mode: autonomous there is
+# nobody to ask, so HALT". What replaced it recorded an accept verdict and told nobody to act on
+# it, so the repair path had no stopping condition for one release. The bound is now structural,
+# one critic round per component, and the verdict has to be able to stop the build or the
+# structure is the only thing holding it.
+if printf '%s' "$CMD_FLAT" | grep -qiE 'at most one critic round'; then
+  pass_check "/implement bounds a component to one critic round"
+else
+  fail_check "/implement does not say a component gets at most one critic round"
+fi
+if printf '%s' "$CMD_FLAT" | grep -qiE 'not_accepted[^.]{0,120}HALT|HALT[^.]{0,120}not_accepted'; then
+  pass_check "/implement halts the build on a repair the kernel did not accept"
+else
+  fail_check "/implement does not halt on not_accepted, so a rejected repair closes its component"
+fi
+if printf '%s' "$CMD_FLAT" | grep -qiE 'autonomous[^.]{0,160}(nobody to ask|no one to ask)'; then
+  pass_check "/implement says an unattended run has nobody to ask and must halt rather than proceed"
+else
+  fail_check "/implement lets an autonomous run past the accept halt with no operator"
+fi
+
 # Posture. Without these two the rung is decoration.
 if printf '%s' "$CMD_FLAT" | grep -qF '`unresolved` is not a pass'; then
   pass_check "/implement states that unresolved is not a pass"

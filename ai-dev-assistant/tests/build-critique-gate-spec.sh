@@ -333,6 +333,25 @@ printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'could not be determi
   && pass_check "the message says the touched-file set could not be determined" \
   || fail_check "the absent-key case said nothing about why it could not judge"
 
+# --- c4: a named site the repair never touched, surfaced by name -------------------------
+# Written from the criterion before the message existed. Under one critic round per component
+# nothing re-reads the repair, so "the repair did LESS than the remedy" lost its only reader.
+# The kernel's `unaddressed` set is the deterministic replacement, and a set nobody prints is
+# the `out_of_range[]` defect this epic already found once.
+CRITIQUE_SAVE="$CRITIQUE"
+CRITIQUE='{"wo":"main","overall":"pass","blocking":false,"critics":[{"lens":"correctness","verdict":"pass","findings":[
+  {"severity":"critical","text":"f1","where":[{"file":"src/A.php"},{"file":"src/B.php"}]}]}]}'
+D=$(mktask scope_unaddressed); write_record "$D" '.'
+run_cs "$D" "$CS_OK"
+UNADDR=$(printf '%s' "$OUT" | jq -c '.evidence.scope_compliance.unaddressed // "absent"')
+[ "$UNADDR" = '["src/B.php"]' ] \
+  && pass_check "a named site the repair never touched lands in the unaddressed evidence" \
+  || fail_check "unaddressed evidence was $UNADDR, expected [\"src/B.php\"]"
+printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'src/B.php' \
+  && pass_check "the unaddressed site is named in a message, not left in evidence nobody reads" \
+  || fail_check "no message named the site the repair never touched"
+CRITIQUE="$CRITIQUE_SAVE"
+
 # ...and the case that is NOT the same fact. A change set that genuinely recorded zero files is a
 # real, determined answer, and collapsing it into the absent-key case would be the mirror defect.
 D=$(mktask scope_empty); write_record "$D" '.'

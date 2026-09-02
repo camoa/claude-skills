@@ -111,8 +111,8 @@ its own acceptance criteria). Those are different units on purpose, and step 0 b
 joins them: a component is critiqued when its criteria are all built, not once per criterion.
 
 0. **Open the component.** Before writing the first line of a component's code:
-   `${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath> --label <component>.before`
-   Keep the `.sha`. A flat `architecture.md` with no component files is one component named `main`.
+   `BEFORE=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath>
+   --label <component>.before | jq -r .sha)`. Keep that sha; every range below is built from it. A flat `architecture.md` with no component files is one component named `main`.
 1. Developer requests piece to implement.
 2. Claude proposes approach (test first, per TDD discipline from `references/tdd-workflow.md`).
 3. Developer approves or adjusts.
@@ -145,19 +145,18 @@ AFTER=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePa
           --label <component>.after | jq -r .sha)
 
 # 2. the realized file list, which is what the classifier takes (it has no rev-range input)
-# ROUND 1 diffs from <component>.before. EVERY LATER ROUND diffs from the PREVIOUS ROUND's
-# .after, not from the component base. A repair round that re-diffs the whole component hands
-# three critics ~670 lines they already reviewed, and they find new things in old code every
-# time — findings accumulate instead of converging. Measured live: five rounds re-diffed from
-# base and none was clean; the sixth scoped to the delta and was the first non-blocking round
-# of the six. Keep each round's .after sha; the next round's base is that sha.
-git -C <codePath> diff --name-only <base-sha-for-this-round>..$AFTER > "$CD/<component>.files.txt"
+# The base is $BEFORE from step 0, and there is no other base: a component gets ONE critic round.
+# The measurement behind that: five rounds re-diffed from base and none was clean; the sixth
+# scoped to the delta and was the first non-blocking round of the six. Handing critics code they
+# already reviewed makes them find new things in old code, so findings accumulate instead of
+# converging. Delta-scoping survives where it is still needed, on the repair diff below.
+git -C <codePath> diff --name-only $BEFORE..$AFTER > "$CD/<component>.files.txt"
 
 # 2c. test motion, on EVERY build, not only on repairs. The kernel is general and had one caller,
 # the repair path, so a test modified during the initial build was classified only if the component
-# later entered a repair round. Globs come from the recipe's `## Oracle files` row, else the project
+# later entered the repair path. Globs come from the recipe's `## Oracle files` row, else the project
 # convention, and the origin is recorded; --suite is the result you hold for this component's own spec.
-git -C <codePath> diff --name-status <base-sha-for-this-round>..$AFTER > "$CD/<component>.motion.txt"
+git -C <codePath> diff --name-status $BEFORE..$AFTER > "$CD/<component>.motion.txt"
 G=$(${CLAUDE_PLUGIN_ROOT}/scripts/oracle-globs.sh --body <body_path> --fallback-globs '<convention, JSON array>') || exit 2   # no body_path: skip this call, pass --test-globs-source undetermined below
 case "$(jq -r .origin <<<"$G")" in recipe|convention) GF=--test-globs-origin; GV=$(jq -r .origin <<<"$G") ;; *) GF=--test-globs-source; GV=undetermined ;; esac
 ${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run> --test-motion-from "$CD/<component>.motion.txt" \
@@ -223,8 +222,13 @@ an empty range is refused as a range, because a range that excludes everything w
 sited finding.
 
 The kernel always exits 0 and always emits an envelope; **the verdict is in `blocking`**, not
-in the exit code. On `blocking: true` the component stops: `[a]ddress` (fix, then re-run this
-rung for this component) or `[o]verride (reason)`, recorded in the envelope's `bypass_reason`.
+in the exit code. On `blocking: true` the component stops: `[a]ddress` (fix, then record the accept
+verdict below, which is where the component ends) or `[o]verride (reason)`, recorded in the
+envelope's `bypass_reason`.
+
+**A component gets at most one critic round.** No critic is dispatched again once a repair is
+accepted, and no `rounds[]` entry is written. What a re-dispatch used to catch is now two
+deterministic checks the repair already runs; `references/build-critique.md` carries which.
 
 - **A `critical` halts that component.** The build does not move to the next one.
 - **`unresolved` is not a pass.** A critic that could not determine has cleared nothing, and
@@ -236,15 +240,18 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
 before the fix is authored, gated by `verified` exactly as step 6 (the body is the method, never a
 command), and only when that record's `phase` is `implement`: any other phase, or no file, is
 `no_body_path` with the reason naming what was found. Record `frameworks[].fix_recipe_read`
-(`{verdict: read | no_body_path | unreadable, body_path, round, reason}`; `round` is the `rounds[]`
-entry the re-run will write, so the first `[a]ddress` is 2) by writing the whole `gate_specific` back
+(`{verdict: read | no_body_path | unreadable, body_path, reason}`; the `round` key went with the
+rounds it numbered) by writing the whole `gate_specific` back
 through `gate-audit-write.sh <task_folder> recipe-load`, every other framework entry and every key on
-this one preserved (§5.12). The body was Read at step 6; by round three, or past a compaction, it is
+this one preserved (§5.12). The body was Read at step 6; past a compaction it is
 not in context, and a fixer without the stack's test strategy adds a test because that is what
 discipline sounds like. `no_body_path` or `unreadable` means the fix proceeds under step 6's no-body
 rule, inventing no stack specifics, with `reason` saying why.
 
-**Every `[a]ddress` ends with an accept verdict on the repair, before the rung re-runs.**
+**Every `[a]ddress` ends with an accept verdict on the repair, and the component closes there.**
+**`not_accepted` or `cannot_judge` HALTS the build** rather than closing the component: `[f]ix and
+re-run the kernel` or `[o]verride (reason)`, recorded in `escalation.reason`. Under `run_mode:
+autonomous` there is nobody to ask, so HALT; never override yourself. This sentence is the stop.
 
 ```
 # The REPAIR's range, not the build's. Step 2's `--name-only` diff covers the code the critics
@@ -259,20 +266,20 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run>
   --test-motion-from "$CD/<component>.repair.txt" --test-globs '<test paths, JSON array>' \
   [--test-globs-source undetermined] [--modification-reason "<why a test file changed>"]
 
-# And the scope half, from the SAME repair diff. Copy it verbatim, every value is computed here:
-# it surfaces a file the repair touched that no critical/concern finding named. `blocks` is false.
+# And the scope half, from the SAME repair diff. Copy it verbatim, every value is computed here.
+# TWO sets come back: `unnamed`, a file the repair touched that no finding named, and `unaddressed`,
+# a site a finding named that the repair never touched. `blocks` is false on both.
 ${CLAUDE_PLUGIN_ROOT}/scripts/repair-scope-check.sh \
   --finding-sites "$(jq -c '[(.critics[]?, .) | (.findings // [])[]? | select((.severity // "") == "critical" or (.severity // "") == "concern") | (.where // [])[]? | (.file // empty)] | unique' "$CD/<component>.critique.json" 2>/dev/null || echo '[]')" \
   --touched-files "$(awk -F'\t' 'NF>1{for(i=2;i<=NF;i++) if($i!="") print $i}' "$CD/<component>.repair.txt" 2>/dev/null | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')" \
   --touched-files-source "$([ -s "$CD/<component>.repair.txt" ] && echo determined || echo undetermined)" \
   > "$CD/<component>.scope.json"
-jq -r '"scope: \(.action) (\(.decided_by)): \(.unnamed | join(", "))"' "$CD/<component>.scope.json"   # SAY IT
+jq -r '"scope: \(.action): touched-unnamed [\(.unnamed|join(", "))] site-unaddressed [\(.unaddressed|join(", "))]"' "$CD/<component>.scope.json"  # SAY IT
 ```
 
 `repair-scope-check.sh` ran once per task at `/review` and nowhere else, so its only verdict landed
-after every repair round was over and could not constrain the rounds it exists for. An unreadable
-critique yields `[]` sites and `cannot_judge`, never `in_scope`; a 0-byte repair diff is
-`undetermined`, the same abstention the accept kernel makes on one.
+after every repair was over. An unreadable critique yields `[]` sites and `cannot_judge`, never
+`in_scope`; a 0-byte repair diff is `undetermined`, the abstention the accept kernel makes on one.
 
 `--suite` is a RESULT you hand in; the kernel runs nothing. Who runs it is settled by `run_mode`
 (`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. Per repair the suite is
@@ -283,29 +290,25 @@ cannot be established pass `--test-globs-source undetermined`, never `[]`, the c
 
 **Both ends of that diff are shas**, the same way the phase range at Step 12 is. A checkpoint
 label is not a revision, so handing one to `git diff` leaves an empty file rather than an error
-the rung would notice, and an empty file is `cannot_judge` at the kernel. **Every `rounds[]`
-entry carries a numeric `round`**: the gate reads the repair state from it and hard-fails an
-entry that has none, at `/review`, on an otherwise clean build.
+the rung would notice, and an empty file is `cannot_judge` at the kernel. **Write `$REP` to the
+component row as `checkpoint_repaired`.** That sha is the record that the repair path ran, and it
+is what the gate reads at `/review` to decide who owes an accept verdict. A row that omits it on a
+repaired component is a repair the gate cannot see.
 
 **Record `accept {action, suite, decided_by, reason}` on that component's row**, the first
-three from the kernel and `reason` from its `reasons[]`. Required on every repaired component:
-one with no `accept` is `unresolved` at `/review`, and any action other than `accepted` needs
-the decision to ship it recorded in `escalation.reason` or the round's `resolution`.
+three from the kernel and `reason` from its `reasons[]`. Required on every component carrying a
+`checkpoint_repaired`: one with no `accept` is `unresolved` at `/review`, and any action other than
+`accepted` needs the decision to ship it recorded in `escalation.reason`.
 
 Do not skip the rung because the component looks small. Whether it is small is a judgment by
 the same context that built it, which is the judgment being checked.
 
-**Carry a `rounds` count on each component row and a `rounds[]` history of what each round
-found.** The deferred-findings check below reads `.rounds[]`, and an absent key yields an empty
-list, which passes silently — so a build that defers a finding and writes no `rounds[]` records
-the deferral nowhere the gate can see it.
-
 **A finding you cannot answer yet is deferred, not fixed speculatively.** When a critic reports
-something whose resolution lives in a component later in the build order, carry it in the round's
-`deferred[]` as `{finding, blocked_on, why_now_is_wrong}` rather than inventing a fix for absent
-code. In the same live build, answering one such finding produced the next round's critical and
-that answer produced the round after. Deferred findings do not block; they are re-checked when
-`blocked_on` is built.
+something whose resolution lives in a component later in the build order, carry it on the component
+row's `deferred[]` as `{finding, blocked_on, why_now_is_wrong}` rather than inventing a fix for
+absent code. Deferred findings do not block; they are re-checked when `blocked_on` is built. The
+check at `/review` reads `deferred[]` off the component rows, and an absent key yields an empty
+list, so a build that defers a finding and writes none records the deferral nowhere the gate sees.
 
 ### Runtime Step 12 — close the phase
 

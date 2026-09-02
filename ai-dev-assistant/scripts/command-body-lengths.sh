@@ -166,7 +166,16 @@ budget_for() {
     # build: 19 assertions, 11 red and 8 green on arrival, and nothing was counting the 8. Two
     # lines: the value itself and the one clause saying when it applies rather than
     # `passed_first_run`, which stays what it always was, a wrong test.
-    implement) printf '443' ;;
+    # 443 -> 446, raise 3: the halt on a repair the accept kernel did not accept. Everything else
+    # in this change is a deletion -- the round budget's last readers, the `rounds[]` array, the
+    # eighth accept-verdict function -- and the body still landed 3 over, so the raise buys the one
+    # sentence those deletions made load-bearing. v5.42.0 removed the round budget and removed with
+    # it "at the second blocking round put the choice to the person; with run_mode: autonomous there
+    # is nobody to ask, so HALT". What replaced it recorded a verdict and told nobody to act on one,
+    # so for a release a `not_accepted` repair closed its component and the build carried on. A
+    # component now gets at most one critic round, which bounds the loop structurally; this sentence
+    # is what stops a rejected repair shipping inside that bound.
+    implement) printf '446' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

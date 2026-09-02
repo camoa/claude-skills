@@ -89,46 +89,58 @@ assert_eq "bad_basis: malformed JSON returns the sentinel" \
 # 4. accept_unreadable_repair_components
 # ═══════════════════════════════════════════════════════════════════════════
 
-CLEAN_REPAIR='{"components":[{"component":"a","rounds":2}]}'
-assert_eq "unreadable_repair: a numeric rounds count trips nothing" \
-  '[]' "$(accept_unreadable_repair_components "$CLEAN_REPAIR")"
-
-TRIP_REPAIR='{"components":[{"component":"a","rounds":"two"}]}'
-assert_eq "unreadable_repair: a non-numeric rounds count with no accept verdict names the component" \
-  '["a"]' "$(accept_unreadable_repair_components "$TRIP_REPAIR")"
-
 assert_eq "unreadable_repair: malformed JSON returns the sentinel" \
   "$JQ_ERR" "$(accept_unreadable_repair_components "$MALFORMED")"
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 5. accept_unreadable_round_components
-# ═══════════════════════════════════════════════════════════════════════════
+# --- c4: unreadable is a malformed checkpoint, not a malformed count -----------------------
+# Written from the criterion before the function was touched. A sha or null both answer the
+# question; anything else present says a repair state was written down and cannot be read.
 
-CLEAN_ROUND='{"components":[{"component":"a"}],"rounds":[{"component":"a","round":2}]}'
-assert_eq "unreadable_round: a readable round-2 entry trips nothing" \
-  '[]' "$(accept_unreadable_round_components "$CLEAN_ROUND")"
+CLEAN_CHECKPOINT='{"components":[{"component":"a","checkpoint_repaired":"deadbee"}]}'
+assert_eq "unreadable_repair: a sha checkpoint trips nothing" \
+  '[]' "$(accept_unreadable_repair_components "$CLEAN_CHECKPOINT")"
 
-TRIP_ROUND='{"components":[{"component":"a"}],"rounds":[{"component":"a","round":"two"}]}'
-assert_eq "unreadable_round: a non-numeric round on the only entry names the component" \
-  '["a"]' "$(accept_unreadable_round_components "$TRIP_ROUND")"
+TRIP_CHECKPOINT='{"components":[{"component":"a","checkpoint_repaired":12}]}'
+assert_eq "unreadable_repair: a non-string non-null checkpoint names the component" \
+  '["a"]' "$(accept_unreadable_repair_components "$TRIP_CHECKPOINT")"
 
-assert_eq "unreadable_round: malformed JSON returns the sentinel" \
-  "$JQ_ERR" "$(accept_unreadable_round_components "$MALFORMED")"
+NULL_CHECKPOINT='{"components":[{"component":"a","checkpoint_repaired":null}]}'
+assert_eq "unreadable_repair: a null checkpoint is readable and trips nothing" \
+  '[]' "$(accept_unreadable_repair_components "$NULL_CHECKPOINT")"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. accept_missing_verdict_components
 # ═══════════════════════════════════════════════════════════════════════════
 
 CLEAN_MISSING='{"components":[{"component":"a","rounds":1}]}'
-assert_eq "missing_verdict: an untouched round-1 component trips nothing" \
+assert_eq "missing_verdict: a component that never entered the repair path trips nothing" \
   '[]' "$(accept_missing_verdict_components "$CLEAN_MISSING")"
-
-TRIP_MISSING='{"components":[{"component":"a","rounds":3}]}'
-assert_eq "missing_verdict: a repaired component with no accept verdict names the component" \
-  '["a"]' "$(accept_missing_verdict_components "$TRIP_MISSING")"
 
 assert_eq "missing_verdict: malformed JSON returns the sentinel" \
   "$JQ_ERR" "$(accept_missing_verdict_components "$MALFORMED")"
+
+# --- c4: the repair signal is the repaired checkpoint, not the round count -----------------
+# Written from the criterion before the function was touched. Under c4 a component gets at
+# most one critic round, so `rounds` is 1 on every row and can no longer say who was repaired.
+# `<component>.repaired` is captured only on the `[a]ddress` path, so a non-null
+# `checkpoint_repaired` is the fact that the path ran. The four cells below fail against the
+# round-count reading and pass against the checkpoint reading.
+
+REPAIRED_ONE_ROUND='{"components":[{"component":"a","rounds":1,"checkpoint_repaired":"deadbee"}]}'
+assert_eq "missing_verdict: a repaired component at rounds 1 with no verdict names the component" \
+  '["a"]' "$(accept_missing_verdict_components "$REPAIRED_ONE_ROUND")"
+
+NEVER_REPAIRED='{"components":[{"component":"a","rounds":1,"checkpoint_repaired":null}]}'
+assert_eq "missing_verdict: a null repaired checkpoint is not a repair and trips nothing" \
+  '[]' "$(accept_missing_verdict_components "$NEVER_REPAIRED")"
+
+REPAIRED_WITH_VERDICT='{"components":[{"component":"a","rounds":1,"checkpoint_repaired":"deadbee","accept":{"action":"accepted"}}]}'
+assert_eq "missing_verdict: a repaired component that recorded a verdict trips nothing" \
+  '[]' "$(accept_missing_verdict_components "$REPAIRED_WITH_VERDICT")"
+
+NO_CHECKPOINT_FIELD='{"components":[{"component":"a","rounds":1}]}'
+assert_eq "missing_verdict: an absent checkpoint field is not a repair and trips nothing" \
+  '[]' "$(accept_missing_verdict_components "$NO_CHECKPOINT_FIELD")"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. accept_unaccepted_components
@@ -165,11 +177,17 @@ assert_eq "escalation_reason: malformed JSON returns the sentinel" \
   "$JQ_ERR" "$(accept_escalation_reason "$MALFORMED")"
 
 # --- a spec that checked nothing has not passed ---
-# 3 cases each for the 6 functions with one tripping condition, 4 cases each for the 2
-# functions with two independent cases beyond clean/malformed (bad_basis: off-enum decided_by
-# AND blank reason; escalation_reason: no decision recorded AND the round-resolution fallback).
-# (3 x 6) + (4 x 2) = 26.
-EXPECTED=26
+# Seven functions since v5.47.0, not eight: `accept_unreadable_round_components` was deleted
+# with the `rounds[]` reading it disambiguated. 3 cases each for the 3 functions with one
+# tripping condition (bad_action, bad_suite, unaccepted), 4 cases each for the 2 with two
+# independent cases beyond clean/malformed (bad_basis: off-enum decided_by AND blank reason;
+# escalation_reason: no decision recorded AND the round-resolution fallback), 4 for
+# unreadable_repair and 6 for missing_verdict. Those last two both moved onto
+# `checkpoint_repaired`: unreadable_repair takes clean, malformed, a non-string non-null
+# value and an explicit null; missing_verdict adds an absent field and a repaired row that
+# did record a verdict. Every round-count case was deleted with the reading.
+# (3 x 3) + (4 x 2) + 4 + 6 = 27.
+EXPECTED=27
 [ "$ASSERTIONS" -eq "$EXPECTED" ] && pass_check "ran the expected $EXPECTED assertions" \
   || fail_check "expected $EXPECTED assertions, ran $ASSERTIONS (a skipped block reads as green)"
 

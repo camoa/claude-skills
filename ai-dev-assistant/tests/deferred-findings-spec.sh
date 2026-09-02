@@ -112,25 +112,45 @@ msg_lacks() { # msg_lacks <substring> <label>
 # and that answer produced the next round's critical.
 
 D=$(mktask deferral_no_blocker)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"deferred":[{"finding":"verify() has no production caller"}]}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+  "deferred":[{"finding":"verify() has no production caller"}]}]'
 run "$D"
 verdict_is fail "a deferral naming no blocked_on fails"
 unresolved_is true "an unanchored deferral is a could-not-tell"
 msg_has "the component they wait on" "the message says why the deferral is not acceptable"
 
 D=$(mktask deferral_good)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"deferred":[{"finding":"verify() has no production caller",
-      "blocked_on":"drush-commands","why_now_is_wrong":"the caller is step 6 of the build order"}]}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+  "deferred":[{"finding":"verify() has no production caller","blocked_on":"drush-commands",
+    "why_now_is_wrong":"the caller is step 6 of the build order"}]}]'
 run "$D"
 verdict_is pass "a deferral that names its blocker passes and does not block"
 rc_is 0 "a well-formed deferral exits 0"
 msg_has "deferred to a component not yet built" "deferred findings are surfaced, not silently dropped"
 
+# --- c4: the deferral lives on the component row, not on a round entry --------------------
+# Written from the criterion before the reader was touched. A component gets at most one critic
+# round, so no `rounds[]` entry is written and a deferral parked on one is a deferral nothing
+# reads. These two cells fail against the rounds[] reader and pass against the row reader.
+
+D=$(mktask deferral_on_row_bad)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+  "deferred":[{"finding":"verify() has no production caller"}]}]'
+run "$D"
+verdict_is fail "a row deferral naming no blocked_on fails"
+unresolved_is true "an unanchored row deferral is a could-not-tell"
+
+D=$(mktask deferral_on_row_good)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+  "deferred":[{"finding":"verify() has no production caller","blocked_on":"drush-commands",
+    "why_now_is_wrong":"the caller is step 6 of the build order"}]}]'
+run "$D"
+verdict_is pass "a well-formed row deferral passes and does not block"
+msg_has "deferred to a component not yet built" "a row deferral is surfaced, not silently dropped"
+
 D=$(mktask deferral_empty_finding)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"deferred":[{"finding":"","blocked_on":"drush-commands"}]}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+  "deferred":[{"finding":"","blocked_on":"drush-commands"}]}]'
 run "$D"
 verdict_is fail "a deferral with no finding text fails too"
 
@@ -143,8 +163,8 @@ verdict_is fail "a deferral with no finding text fails too"
 
 D=$(mktask order_tdd_before_deferred)
 write_record "$D" 'del(.tdd)
-  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"deferred":[{"finding":"verify() has no production caller"}]}]'
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+      "deferred":[{"finding":"verify() has no production caller"}]}]'
 run "$D"
 verdict_is fail "a payload missing tdd AND carrying a malformed deferral still fails"
 unresolved_is true "the double violation is unresolved"
@@ -167,8 +187,8 @@ fi
 
 D=$(mktask order_deferred_before_contract)
 write_record "$D" 'del(.contract)
-  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"deferred":[{"finding":"verify() has no production caller"}]}]'
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+      "deferred":[{"finding":"verify() has no production caller"}]}]'
 run "$D"
 verdict_is fail "a payload with a malformed deferral AND no contract block still fails"
 unresolved_is true "the double violation is unresolved"
@@ -184,7 +204,7 @@ msg_lacks "the record carries no contract block" \
 # notices a fixture that never ran, and a `set -e` abort inside a helper would end the file
 # quietly with FAIL still 0. The count is the assertion that every other assertion happened.
 # Update it deliberately, in the same commit as the case you added or removed.
-EXPECTED_ASSERTIONS=19
+EXPECTED_ASSERTIONS=23
 if [ "$ASSERTIONS" != "$EXPECTED_ASSERTIONS" ]; then
   printf 'FAIL: expected %s assertions, ran %s -- a block was skipped, added or removed\n' \
     "$EXPECTED_ASSERTIONS" "$ASSERTIONS" >&2
