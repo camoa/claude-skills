@@ -7,7 +7,7 @@
 # The load-bearing cells:
 #   - empty --finding-sites (nothing named)      → cannot_judge, NEVER in_scope. Folding an absent
 #     site list into in_scope is the exact defect this repo keeps re-finding (mechanism-disposition.sh's
-#     `not_searched`, proportionality-check.sh's `cannot_judge`).
+#     `not_searched`).
 #   - --touched-files-source undetermined        → cannot_judge, REGARDLESS of what --touched-files
 #     holds — asserted with both an empty and a non-empty touched array, because a naive
 #     implementation only guards the empty case (that was the actual gap wo-b.md's build report

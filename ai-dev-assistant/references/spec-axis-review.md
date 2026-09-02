@@ -56,7 +56,7 @@ does, via the optional ` — by: <owner|designer>` marker (`references/alignment
 `/review` step 5.0d runs `scripts/criterion-provenance.sh --task-folder <task_folder> --section task_level`
 alongside the dispatch and hands the reviewer each criterion's recorded `author` — `"owner"`, `"designer"`,
 or `null`. `null` means nobody recorded one; it is never read as `"owner"`, the same discipline
-`mechanism-disposition.sh`'s `not_searched` and `proportionality-check.sh`'s `cannot_judge` already apply to
+`mechanism-disposition.sh`'s `not_searched` and `repair-scope-check.sh`'s `cannot_judge` already apply to
 an absent signal elsewhere in this framework. The agent sees `author` alongside the criteria it judges, but
 does not re-report it: naming which criteria are designer-authored or unrecorded is the kernel's own
 `designer_authored[]`/`unrecorded[]` output, deterministic and already computed — a second, agent-produced

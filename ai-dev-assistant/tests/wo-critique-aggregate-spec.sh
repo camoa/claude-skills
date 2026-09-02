@@ -11,9 +11,9 @@ WO="wo-01"
 newdir() { local d; d="$(mktemp -d "$TMP/cd.XXXX")"; echo "$d"; }
 critic() { # $1 dir $2 k $3 verdict [$4 finding-severity]
   if [ -n "${4:-}" ]; then
-    jq -nc --arg v "$3" --arg fs "$4" '{lens:"skeptic",verdict:$v,findings:[{severity:$fs,text:"x"}]}' > "$1/${WO}.critic-$2.json"
+    jq -nc --arg v "$3" --arg fs "$4" '{lens:"correctness",verdict:$v,findings:[{severity:$fs,text:"x"}]}' > "$1/${WO}.critic-$2.json"
   else
-    jq -nc --arg v "$3" '{lens:"skeptic",verdict:$v,findings:[]}' > "$1/${WO}.critic-$2.json"
+    jq -nc --arg v "$3" '{lens:"correctness",verdict:$v,findings:[]}' > "$1/${WO}.critic-$2.json"
   fi
 }
 assert() { # $1 label $2 want_overall $3 want_blocking $4.. args
@@ -103,4 +103,43 @@ d="$(newdir)"; critic "$d" 1 critical
 hr="$(bash "$KERNEL" --wo $WO --tier high --mode fanout --expected 1 --critics-dir "$d" --evaluated true | jq -r '.halt_reason')"
 [ "$hr" = "critique_critical" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL M2 halt_reason (got $hr)"; }
 
+
+# T-nd1 --not-dispatched records the lens and why on the envelope (recipe-to-critic, review_ladder)
+d="$(newdir)"; critic "$d" 1 pass
+out="$(bash "$KERNEL" --wo $WO --tier medium --mode fanout --expected 1 --critics-dir "$d" --evaluated true --not-dispatched correctness:no_body_path)"
+if [ "$(jq -c '.not_dispatched' <<<"$out")" = '[{"lens":"correctness","reason":"no_body_path","accepted":true}]' ]; then PASS=$((PASS+1))
+else FAIL=$((FAIL+1)); echo "FAIL T-nd1 not_dispatched: $(jq -c '.not_dispatched' <<<"$out")"; fi
+# T-nd2 absent flag => empty list, never null; a malformed value still emits an envelope (the kernel's
+# always-emit contract) and counts as a missing critic; a withheld security lens is missing too; a
+# withheld correctness at low tier with nothing present is unresolved, never pass
+out="$(bash "$KERNEL" --wo $WO --tier medium --mode fanout --expected 1 --critics-dir "$d" --evaluated true)"
+[ "$(jq -c '.not_dispatched' <<<"$out")" = '[]' ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-nd2 default: $(jq -c '.not_dispatched' <<<"$out")"; }
+out="$(bash "$KERNEL" --wo $WO --tier medium --mode fanout --expected 1 --critics-dir "$d" --evaluated true --required --not-dispatched correctness 2>/dev/null)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(jq -r '.missing, .blocking, .not_dispatched[0].accepted' <<<"$out" | paste -sd,)" = "1,true,false" ] && PASS=$((PASS+1)) \
+  || { FAIL=$((FAIL+1)); echo "FAIL T-nd3 malformed: rc=$rc $(jq -c '{missing,blocking,not_dispatched}' <<<"$out")"; }
+out="$(bash "$KERNEL" --wo $WO --tier high --mode fanout --expected 1 --critics-dir "$d" --evaluated true --required --not-dispatched security:whatever)"
+[ "$(jq -r '.missing, .blocking' <<<"$out" | paste -sd,)" = "1,true" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-nd4 withheld security: $(jq -c '{missing,blocking}' <<<"$out")"; }
+e="$(newdir)"
+out="$(bash "$KERNEL" --wo $WO --tier low --mode fanout --expected 0 --critics-dir "$e" --evaluated true --required --not-dispatched correctness:no_body_path)"
+[ "$(jq -r '.overall, .blocking' <<<"$out" | paste -sd,)" != "pass,false" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-nd5 low tier zero present read as pass"; }
+
+# clean-count (review_ladder): a clean return is credited by the aggregator, from fields it already reads.
+# T-cc1 three critics, one pass with empty findings => clean_returns 1 beside expected_critics 3
+d="$(newdir)"; critic "$d" 1 pass; critic "$d" 2 pass pass; critic "$d" 3 concern concern
+out="$(bash "$KERNEL" --wo $WO --tier high --mode fanout --expected 3 --critics-dir "$d" --evaluated true)"
+[ "$(jq -r '.clean_returns, .expected_critics' <<<"$out" | paste -sd,)" = "1,3" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-cc1: $(jq -c '{clean_returns,expected_critics}' <<<"$out")"; }
+# T-cc2 a pass with non-empty findings is not clean; no critics => 0, never null
+d="$(newdir)"; critic "$d" 1 pass pass
+out="$(bash "$KERNEL" --wo $WO --tier low --mode fanout --expected 1 --critics-dir "$d" --evaluated true)"
+[ "$(jq -r '.clean_returns' <<<"$out")" = "0" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-cc2 pass-with-findings counted clean: $(jq -c .clean_returns <<<"$out")"; }
+e="$(newdir)"; out="$(bash "$KERNEL" --wo $WO --tier low --mode fanout --expected 0 --critics-dir "$e" --evaluated true)"
+[ "$(jq -r '.clean_returns' <<<"$out")" = "0" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-cc2b empty dir: $(jq -c .clean_returns <<<"$out")"; }
+# T-cc2c a malformed findings value is not clean and does not zero a clean sibling
+d="$(newdir)"; critic "$d" 1 pass; jq -nc '{lens:"security",verdict:"pass",findings:true}' > "$d/${WO}.critic-2.json"
+out="$(bash "$KERNEL" --wo $WO --tier medium --mode fanout --expected 2 --critics-dir "$d" --evaluated true)"
+[ "$(jq -r '.clean_returns' <<<"$out")" = "1" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-cc2c malformed sibling: $(jq -c '{clean_returns,critics:(.critics|map(.effective))}' <<<"$out")"; }
+# T-cc3 the per-critic file is untouched: same bytes before and after the run
+d="$(newdir)"; critic "$d" 1 pass; before="$(sha256sum "$d/${WO}.critic-1.json")"
+bash "$KERNEL" --wo $WO --tier low --mode fanout --expected 1 --critics-dir "$d" --evaluated true >/dev/null
+[ "$before" = "$(sha256sum "$d/${WO}.critic-1.json")" ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL T-cc3 the kernel wrote to a per-critic file"; }
 echo "----"; echo "wo-critique-aggregate-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

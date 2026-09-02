@@ -451,6 +451,8 @@ Expected `gate_specific` shape:
         "reason": "method is contrib-module prior art; this task installs no module" },
       "arch_validate": { "verdict": "no_return", "sidecar": "<abs path or null>",
         "reason": "dispatched with an output path; no file at it when the gate read" },
+      "fix_recipe_read": { "verdict": "read", "body_path": "<abs path or null>", "round": 2,
+        "reason": null },
       "advisory": "expected '## Change-impact globs' absent — gate uses the neutral floor"
     }
   ],
@@ -467,6 +469,7 @@ Expected `gate_specific` shape:
 | `frameworks[].declarations_audit` | object \| null | Verbatim `recipe-declarations-audit.sh` output for declaration-bearing phases; `null` otherwise. |
 | `frameworks[].method_fit` | object \| null | **v5.30.1+.** `{verdict, reason}`. `verdict` is `fits` \| `partial` \| `mismatch` \| `undetermined`; `reason` is one line and is required for `partial` and `mismatch`. Expected on every `available:true` entry — the writer warns when it is absent, because an unassessed recipe otherwise reads as a suitable one. `undetermined` is the honest answer when nobody looked. |
 | `frameworks[].arch_validate` | object \| null | **v5.35.7+, `phase: "review"` only.** The step-5.0 `architecture-validator` outcome for this framework: `{verdict, sidecar, reason}`. `verdict` is `proceed` \| `blocked` \| `needs_adjustment` \| `unresolved` \| **`no_return`** \| **`skipped`** — `no_return` being an absent sidecar after a dispatch that supplied an output path, which is never read as `proceed`, and `skipped` being a task whose own architecture artifact — `<task_folder>/architecture.md` plus `<task_folder>/architecture/*.md`, the set `contract-baseline.sh` freezes, never the `{project_path}/architecture/main.md` stub `/new` writes — is absent or is a placeholder, which is a benign missing-input state and is deliberately NOT `unresolved`. `reason` is one line and is required for `no_return`, `unresolved` and `skipped`; this field is where that reason lives, and `commands/review.md` step 5.0 named this record before the field existed, which is the `notes` failure below in a second place. `null` on an entry that dispatched no validator. **Recorded here, adjudicated elsewhere** — the gate consequence is the `architecture-fit` `gates_run[]` entry in `_review.json` (§5.8), because this record never blocks. |
+| `frameworks[].fix_recipe_read` | object \| null | **v5.43.0+, `phase: "implement"` only.** Written by the build-critique rung's `[a]ddress` step before a fix is authored: `{verdict, body_path, round, reason}`. `verdict` is `read` \| `no_body_path` \| `unreadable`; `round` is the `rounds[]` entry number the re-run writes, so the first `[a]ddress` records `2`; `reason` is one line and is required for the two non-`read` values. Same posture as `arch_validate`: this record never blocks, it says whether the fixer had the stack's method in hand. `null` on an entry that has not been through a repair. **Lifetime:** this file is overwrite-on-fire per phase, so the field lives until the next phase that resolves recipes rewrites it; `/review` step 5.0 does. A reader wanting it after that reads the `build-critique` record's `rounds[]`, not this file. |
 | `frameworks[].advisory` | string \| null | One-line human note emitted when a `recommended:true` declaration is `absent` (the surfaced fail-open). `null` when clean. |
 | `bypass` | object \| null | `{ "reason": "no_frameworks_defined \| navigator_unavailable \| recipe_not_published \| user_declined" }` when the phase proceeded stack-neutral with no recipe; `null` on a normal resolve. Records the deliberate degrade-first path so it is auditable rather than silent. |
 
@@ -1042,7 +1045,7 @@ lenient, pre-`finding_contract` reading rather than a failure. Each critic file 
 of that check as `shape_check`, alongside its `verdict`: `"pass"`, `"fail"` with a reason, or
 `"not_run"` with a reason. **`not_run` means the check did not run, and must never be read as
 clean.** This repo has three existing precedents for that rule: `not_searched` in
-`scripts/mechanism-disposition.sh`, `cannot_judge` in `scripts/proportionality-check.sh`, and
+`scripts/mechanism-disposition.sh`, `cannot_judge` in `scripts/repair-scope-check.sh`, and
 `criteria_unreadable` in `scripts/criterion-provenance.sh`. An unchecked thing that reports as
 checked is the defect this plugin keeps finding in itself.
 

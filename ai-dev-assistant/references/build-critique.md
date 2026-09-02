@@ -7,7 +7,7 @@ Phase 3 contract for the two questions a builder cannot answer about its own wor
 
 Both agents already existed. Neither could reach an in-session build.
 
-`wo-critic` — fresh context, hostile-diff posture, four lenses — fires only inside
+`wo-critic` — fresh context, hostile-diff posture, three lenses — fires only inside
 `/run-work-orders` and the work-order loop skills. `spec-axis-reviewer` runs only in
 Phase 4. So a task that declined the work-order offer had no adversarial coverage at all
 until every line was written, and the work-order offer never said that declining removed
@@ -129,7 +129,7 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    `high` when both the work-order file and the flag are missing. The value is the
    `base_gate_floor` from `references/risk-tiering-rules.json`, so a component is tiered on
    what it changed rather than on a missing input. Read `.risk_tier` from its JSON.
-6. **Lenses** from that file's `tier_lenses`: `low` → `skeptic`; `medium` → `security`,
+6. **Lenses** from that file's `tier_lenses`: `low` → `correctness`; `medium` → `security`,
    `correctness`; `high` → `security`, `correctness`, `meets-ac`. A security lens is
    guaranteed at `medium` and above, so executable code always gets one.
 7. **For each lens, dispatch ONE `ai-dev-assistant:wo-critic`** via the Task tool — fresh and

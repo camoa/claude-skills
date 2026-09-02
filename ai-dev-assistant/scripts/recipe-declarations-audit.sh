@@ -82,6 +82,8 @@ expected_for_phase() {
       # that states a precondition only in prose gets it injected verbatim and parsed by nothing,
       # which is how a missing test runner reached a build step unchallenged.
       printf '%s\t%s\t%s\n' '## Preconditions'  'heading' '1'
+      # Where the test-file globs come from. Absent is the honest "no oracle declared" state.
+      printf '%s\t%s\t%s\n' '## Oracle files'  'heading' '0'
       ;;
     design)
       printf '%s\t%s\t%s\n' '## Routing hints' 'heading' '0'

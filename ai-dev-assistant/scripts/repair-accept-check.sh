@@ -58,8 +58,8 @@
 #                                UNMEASURED, never "fine". cannot_judge is NEVER accepted. Folding
 #                                "I could not look" into a pass is the defect this repo keeps
 #                                re-finding (mechanism-disposition.sh's `not_searched`,
-#                                proportionality-check.sh's `cannot_judge`, criterion-provenance.sh's
-#                                `unrecorded`, repair-scope-check.sh's own `cannot_judge`).
+#                                criterion-provenance.sh's `unrecorded`, repair-scope-check.sh's own
+#                                `cannot_judge`).
 #     blocks      always false. SURFACES, never halts. A brake that fires on most repairs gets
 #                 bypassed, not satisfied.
 #     decided_by  motion           = the test motion alone settled it, whatever the suite said.
@@ -115,13 +115,15 @@ require_value() {
   esac
 }
 
-SUITE=""; MOTION_FROM=""; TEST_GLOBS=""; GLOBS_SOURCE="determined"; MOD_REASON=""; MOD_REASON_SET=0
+SUITE=""; MOTION_FROM=""; TEST_GLOBS=""; GLOBS_SOURCE="determined"; GLOBS_ORIGIN=""; MOD_REASON=""; MOD_REASON_SET=0
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/glob-to-regex.sh"
 while [ $# -gt 0 ]; do
   case "$1" in
     --suite) [ "$#" -ge 2 ] || { echo "repair-accept-check: --suite needs a value" >&2; exit 2; }; require_value --suite "$2"; SUITE="$2"; shift 2 ;;
     --test-motion-from) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-motion-from needs a value" >&2; exit 2; }; require_value --test-motion-from "$2"; MOTION_FROM="$2"; shift 2 ;;
     --test-globs) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs needs a value" >&2; exit 2; }; require_value --test-globs "$2"; TEST_GLOBS="$2"; shift 2 ;;
     --test-globs-source) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-source needs a value" >&2; exit 2; }; require_value --test-globs-source "$2"; GLOBS_SOURCE="$2"; shift 2 ;;
+    --test-globs-origin) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-origin needs a value" >&2; exit 2; }; require_value --test-globs-origin "$2"; GLOBS_ORIGIN="$2"; shift 2 ;;
     --modification-reason) [ "$#" -ge 2 ] || { echo "repair-accept-check: --modification-reason needs a value" >&2; exit 2; }; require_value --modification-reason "$2"; MOD_REASON="$2"; MOD_REASON_SET=1; shift 2 ;;
     *) echo "repair-accept-check: unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -139,6 +141,13 @@ esac
 case "$GLOBS_SOURCE" in
   determined|undetermined) ;;
   *) echo "repair-accept-check: --test-globs-source must be determined|undetermined" >&2; exit 2 ;;
+esac
+# Where the globs came from (scripts/oracle-globs.sh): the recipe's `## Oracle files` row, or a
+# convention. Optional, recorded, closed enum. No globs and no recorded origin used to read as "no
+# test files changed", a false clean; the record now says which source the classification stood on.
+case "$GLOBS_ORIGIN" in
+  ""|recipe|convention) ;;
+  *) echo "repair-accept-check: --test-globs-origin must be recipe|convention" >&2; exit 2 ;;
 esac
 
 # A flag PASSED with a blank value is a bad argument, and this is the one place the difference
@@ -168,8 +177,8 @@ REASONS=()
 emit() {
   local reasons_json
   reasons_json="$(to_json_array ${REASONS[@]+"${REASONS[@]}"})"
-  jq -nc --arg a "$1" --arg d "$2" --arg s "$SUITE" --argjson m "$3" --argjson r "$reasons_json" \
-    '{action:$a, blocks:false, decided_by:$d, suite:$s, motion:$m, reasons:$r}'
+  jq -nc --arg a "$1" --arg d "$2" --arg s "$SUITE" --argjson m "$3" --argjson r "$reasons_json" --arg o "$GLOBS_ORIGIN" \
+    '{action:$a, blocks:false, decided_by:$d, suite:$s, motion:$m, reasons:$r, test_globs_origin:(if $o=="" then null else $o end)}'
 }
 EMPTY_MOTION='{"added":[],"deleted":[],"modified":[]}'
 
@@ -207,11 +216,13 @@ matches_test_glob() {
   [ "${#GLOBS[@]}" -eq 0 ] && return 1
   local _p="$1" pattern
   for pattern in "${GLOBS[@]}"; do
-    # shellcheck disable=SC2254
-    # $pattern is UNQUOTED on purpose. --test-globs takes globs, so `tests/*.sh` has to match every
-    # path under tests/. Quoting it would match only a file literally named `tests/*.sh`, which would
-    # silently disable the flag rather than fail loudly.
-    case "$_p" in $pattern) return 0 ;; esac
+    # The shared translator, not a bash `case`: under `case`, `**` is `*` and `*` needs the slash
+    # present, so `**/tests/**/*Test.php` missed tests/src/Kernel/FooTest.php and `**/*_test.go`
+    # missed main_test.go, while wo-oracle-check.sh matched both. Same declaration, one semantics.
+    path_matches "$_p" "$pattern"; case $? in
+      0) return 0 ;;
+      2) echo "repair-accept-check: --test-globs pattern did not compile: $pattern" >&2; exit 2 ;;
+    esac
   done
   return 1
 }
@@ -251,6 +262,16 @@ M_JSON="$(to_json_array ${MODIFIED[@]+"${MODIFIED[@]}"})"
 MOTION="$(jq -nc --argjson a "$A_JSON" --argjson d "$D_JSON" --argjson m "$M_JSON" \
   '{added:$a, deleted:$d, modified:$m}')"
 
+# The motion tripwire first, ahead of the not_run abstention too, because it settles the answer whatever
+# the suite said or did not say: a green suite
+# over a test somebody quietly rewrote is the case the tripwire exists for.
+if [ "${#MODIFIED[@]}" -gt 0 ] && [ -z "$MOD_REASON" ]; then
+  REASONS+=("a test file was modified with no --modification-reason: ${MODIFIED[*]}")
+  emit not_accepted motion "$MOTION"
+  exit 0
+fi
+
+
 # The second abstention. The motion is a fact about the repair and stands on its own, so it is read
 # and reported even here; what is missing is the other half of the decision.
 if [ "$SUITE" = "not_run" ]; then
@@ -260,14 +281,6 @@ if [ "$SUITE" = "not_run" ]; then
 fi
 
 # --- the matrix (deterministic) -----------------------------------------------
-# The motion tripwire first, because it settles the answer whatever the suite said: a green suite
-# over a test somebody quietly rewrote is the case the tripwire exists for.
-if [ "${#MODIFIED[@]}" -gt 0 ] && [ -z "$MOD_REASON" ]; then
-  REASONS+=("a test file was modified with no --modification-reason: ${MODIFIED[*]}")
-  emit not_accepted motion "$MOTION"
-  exit 0
-fi
-
 if [ "${#MODIFIED[@]}" -gt 0 ]; then
   REASONS+=("a test file was modified and the caller stated a reason: $MOD_REASON")
 fi

@@ -30,8 +30,7 @@
 #                undetermined. Nothing to compare against, so this is UNMEASURED, not "fine" —
 #                folding an absent site list, or an unreadable touched set, into in_scope is the
 #                exact defect this repo keeps re-finding (mechanism-disposition.sh's
-#                `not_searched`, proportionality-check.sh's `cannot_judge`, criterion-provenance.sh's
-#                `unrecorded`). Absence must never read as an answer.
+#                `not_searched`, criterion-provenance.sh's `unrecorded`). Absence must never read as an answer.
 #     blocks     always false. SURFACES, never halts — a brake that fires on most repairs (most
 #                touch a helper or test alongside the named site) gets bypassed, not satisfied.
 #     decided_by sets | none: sets when a comparison was made, none when one could not be.

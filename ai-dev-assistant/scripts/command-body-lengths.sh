@@ -70,7 +70,7 @@ budget_for() {
     # instruction rather than in a task folder nobody opens while editing this file.
     research) printf '144' ;;
     design)   printf '82'  ;;
-    # 363 -> 370, raise: wires scripts/proportionality-check.sh into the component close, so a build
+    # 363 -> 370, raise: wires the size-estimate kernel (since deleted, see 389 -> 382) into the component close, so a build
     # that outgrows its plan is visible while it is still open. Nothing in the lifecycle asked whether
     # a change was bigger than its problem. Measured: one build produced 1,637 insertions for roughly
     # 150 lines of necessary code and no gate, agent or record noticed the ratio at any point; the
@@ -103,7 +103,39 @@ budget_for() {
     # numeric `round` the gate requires and no instruction stated, and two are the blank lines around
     # them. The kernel now abstains on an empty motion file, so the same mistake made later is
     # `cannot_judge` rather than a clean repair, but nothing outside this body says to use the sha.
-    implement) printf '389' ;;
+    # 389 -> 382, LOWER: review_ladder deleted the size-estimate block at the component close (the
+    # 363 -> 370 raise above). The kernel compared a build against a number the designer wrote about
+    # its own design, omitting the number was free and returned `cannot_judge`, and it hardcoded
+    # blocks:false; the criterion it served was deleted from the epic. Seven lines gone, so the budget
+    # follows them down, per the rule stated at 370 -> 356.
+    # 382 -> 393, raise 11: the security and correctness critics receive the resolved implement
+    # recipe. /review one stage later injected the same body into its validator and called
+    # dispatching without it a bug, while the per-component critic at step 5 got acceptance
+    # criteria and nothing else, so the lens named "does it do the right thing" had no stack
+    # method to judge against. One line is the meets-ac exclusion, two are the no-body rule that
+    # keeps a correctness critic from inventing the method, and the envelope records the lens
+    # it did not run and why. The eighth line says security is still dispatched without a body:
+    # the first cut bound both lenses to "inject or do not dispatch", which at medium tier on a
+    # project with no recipe meant zero critics and a blocking envelope on every component. Four
+    # more (three lines) say the dispatch is the contract and nothing more: with the old lens deleted, a builder wrote
+    # a probe list into every prompt and bought a repair round per component (c9, owner-added).
+    # 393 -> 405, raise 12: the [a]ddress step re-Reads each framework's body_path before the fix is
+    # authored and records fix_recipe_read on _recipe-load.json. Repair is main flow, not a
+    # dispatch, so there is no prompt to inject into; the body Read at step 6 is out of context by
+    # round three or past a compaction, and the repair loop is where test growth compounds (1,336
+    # of 1,944 lines in one change were tests; three fix rounds added 69 assertions and no
+    # functions). Twelve lines: the instruction, the record's shape and writer, what `round` is, the
+    # phase and `verified` gates on the re-read, and the two non-read verdicts with their reason.
+    # 405 -> 417, raise 12: test motion is classified at the build-critique rung on every build, not
+    # only on a repair. scripts/repair-accept-check.sh was general in its code and had one caller, the
+    # repair path, so a test modified during the initial build was classified only if the component
+    # later entered a repair round. Globs come from the recipe's `## Oracle files` row through
+    # scripts/oracle-globs.sh, else the project convention, and the origin is recorded on the verdict.
+    # Five lines are the runnable block (globs, the origin-or-undetermined branch, the kernel, the
+    # verdict read back and said aloud), four the comment saying where the globs come from and why,
+    # and three the surfaces-never-blocks rule. The first cut piped an `undetermined` origin into a
+    # flag that rejects it and left a 0-byte record nothing read; three critics found it.
+    implement) printf '417' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

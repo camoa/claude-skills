@@ -212,13 +212,13 @@ assert_overall() { # label want_overall want_blocking, K args...
   else FAIL=$((FAIL+1)); echo "FAIL $label: overall=$o blocking=$b shape_check(s)=$sc (want $eo/$eb/not_run)"; fi
 }
 d="$(mktemp -d "$TMP/legacy.XXXX")"
-jq -nc '{lens:"skeptic",verdict:"pass",findings:[]}' > "$d/${WO}.critic-1.json"
-jq -nc '{lens:"skeptic",verdict:"pass",findings:[]}' > "$d/${WO}.critic-2.json"
+jq -nc '{lens:"correctness",verdict:"pass",findings:[]}' > "$d/${WO}.critic-1.json"
+jq -nc '{lens:"correctness",verdict:"pass",findings:[]}' > "$d/${WO}.critic-2.json"
 assert_overall "legacy T1-equivalent: all pass" pass false --wo "$WO" --tier high --mode team --expected 2 --critics-dir "$d" --evaluated true
 
 d="$(mktemp -d "$TMP/legacy.XXXX")"
-jq -nc '{lens:"skeptic",verdict:"pass",findings:[]}' > "$d/${WO}.critic-1.json"
-jq -nc '{lens:"skeptic",verdict:"critical",findings:[]}' > "$d/${WO}.critic-2.json"
+jq -nc '{lens:"correctness",verdict:"pass",findings:[]}' > "$d/${WO}.critic-1.json"
+jq -nc '{lens:"correctness",verdict:"critical",findings:[]}' > "$d/${WO}.critic-2.json"
 assert_overall "legacy T2-equivalent: one critical" critical true --wo "$WO" --tier high --mode fanout --expected 2 --critics-dir "$d" --evaluated true
 
 d="$(mktemp -d "$TMP/legacy.XXXX")"
