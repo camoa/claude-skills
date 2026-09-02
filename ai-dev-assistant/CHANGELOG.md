@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.44.1] - 2026-09-02
+
+### Fixed
+- **The coverage gate's only invocation site could not be followed as written.** `/design` step 7
+  redirected `coverage-check.sh` into a command substitution of `mktemp`, which creates the file and
+  discards its name, leaving the next clause with no path to hand `gate-audit-write.sh`. The path is
+  now captured into a variable first. Found by the review phase's architecture-fit gate and
+  reproduced before it was believed; introduced in 5.44.0 by the remedy for the shell-argument
+  defect. `design-close-gate-spec` G3 asserted only that the two script names appeared, so it passed
+  the broken literal; it now asserts the capture and was watched red against the shipped text.
+- **The architecture-drafter's description contradicted its own body.** The frontmatter still said it
+  creates `architecture/main.md` while the body, rewritten in 5.44.0, says `architecture.md` at the
+  task root. `coverage-check.sh` skips `architecture/main.md` by name and `phase-records-check.sh`
+  requires the root file, so a drafter obeying its description wrote a hub the gate ignores and left
+  the required design record missing.
+
 ## [5.44.0] - 2026-09-01
 
 ### Added

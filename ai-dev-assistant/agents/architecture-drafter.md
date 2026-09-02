@@ -1,6 +1,6 @@
 ---
 name: architecture-drafter
-description: "Use when designing architecture for a task - creates architecture/main.md with a component breakdown, dependency mapping, and pattern references. Trigger: 'design module', 'plan architecture', 'create architecture document', 'component design', 'service design'. Enforces business logic out of the UI layer, reusable services or libraries, a programmatic entry point, SOLID, and DRY. NEVER approve architecture that puts business logic in the UI layer."
+description: "Use when designing architecture for a task - creates architecture.md at the task root plus architecture/<component>.md per component, with a component breakdown, dependency mapping, and pattern references. Trigger: 'design module', 'plan architecture', 'create architecture document', 'component design', 'service design'. Enforces business logic out of the UI layer, reusable services or libraries, a programmatic entry point, SOLID, and DRY. NEVER approve architecture that puts business logic in the UI layer."
 capabilities: ["architecture-design", "component-breakdown", "pattern-selection", "dependency-mapping", "solid-enforcement", "reusable-service-design"]
 version: 2.0.0
 model: opus
