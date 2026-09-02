@@ -32,7 +32,7 @@ command -v jq >/dev/null 2>&1 || { printf 'FAIL: jq required\n' >&2; exit 1; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
- "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
+ "tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[]},
  "contract":{"baseline_status":"captured","changed":[]},
  "closing_fixes":{"applied":0},
  "alignment":{"verdict":"pass","criteria_unverifiable":[]},

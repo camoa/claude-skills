@@ -95,7 +95,7 @@ msg_has "no tdd block" "the message names the missing tdd block specifically"
 # ------------------------------------------------- 2. a complete, clean tdd block
 
 D=$(mktask tdd_complete)
-write_record "$D" '.tdd={"red_observed":3,"passed_first_run":0,"unobserved":[]}'
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":0,"ratified":0,"unobserved":[]}'
 run "$D"
 verdict_is pass "a complete tdd block with nothing unobserved passes"
 unresolved_is false "a complete tdd block is not unresolved"
@@ -109,7 +109,7 @@ msg_has "3 criterion/criteria were seen to fail" "the RED count is surfaced in t
 # by design. v5.34.0 failed both with no reason path, which would have made a live build
 # record a violation for tests that were not violations.
 D=$(mktask tdd_firstrun)
-write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"unobserved":[]}'
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"ratified":0,"unobserved":[]}'
 run "$D"
 verdict_is fail "a first-run pass with no reason fails the gate"
 unresolved_is true "an unexplained first-run pass is a could-not-tell, not a settled violation"
@@ -117,7 +117,7 @@ rc_is 1 "an unexplained first-run pass exits 1"
 msg_has "no reason recorded" "the message asks which kind of test it was"
 
 D=$(mktask tdd_firstrun_reason)
-write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"unobserved":[],
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"ratified":0,"unobserved":[],
   "reason":"two characterization tests written against existing code during a repair round"}'
 run "$D"
 verdict_is pass "a first-run pass passes once the reason says which kind of test it was"
@@ -127,7 +127,7 @@ rc_is 0 "an explained first-run pass exits 0"
 # ------------------------------------------- 4. unobserved criteria with no reason
 
 D=$(mktask tdd_unobs_noreason)
-write_record "$D" '.tdd={"red_observed":2,"passed_first_run":0,"unobserved":["c3"]}'
+write_record "$D" '.tdd={"red_observed":2,"passed_first_run":0,"ratified":0,"unobserved":["c3"]}'
 run "$D"
 verdict_is fail "unobserved criteria with no reason recorded fails the gate"
 unresolved_is true "an unexplained unobserved criterion is unresolved"
@@ -137,7 +137,7 @@ msg_has "no reason; say why nobody watched them fail" "the message says a reason
 # ---------------------------------------- 5. unobserved criteria WITH a recorded reason
 
 D=$(mktask tdd_unobs_reason)
-write_record "$D" '.tdd={"red_observed":2,"passed_first_run":0,"unobserved":["c3"],
+write_record "$D" '.tdd={"red_observed":2,"passed_first_run":0,"ratified":0,"unobserved":["c3"],
   "reason":"c3 needs a live payment gateway, exercised manually"}'
 run "$D"
 verdict_is pass "unobserved criteria with a recorded reason passes"
@@ -156,7 +156,7 @@ rc_is 1 "a tdd block missing red_observed exits 1"
 msg_has "omits red_observed, passed_first_run or unobserved" "the message names what the block cannot say"
 
 D=$(mktask tdd_missing_firstrun)
-write_record "$D" '.tdd={"red_observed":3,"unobserved":[]}'
+write_record "$D" '.tdd={"red_observed":3,"ratified":0,"unobserved":[]}'
 run "$D"
 verdict_is fail "a tdd block missing passed_first_run fails the gate"
 unresolved_is true "a tdd block missing passed_first_run is unresolved"
@@ -164,7 +164,7 @@ rc_is 1 "a tdd block missing passed_first_run exits 1"
 msg_has "omits red_observed, passed_first_run or unobserved" "the message names what the block cannot say (missing passed_first_run)"
 
 D=$(mktask tdd_missing_unobserved)
-write_record "$D" '.tdd={"red_observed":3,"passed_first_run":0}'
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":0,"ratified":0}'
 run "$D"
 verdict_is fail "a tdd block missing unobserved[] fails the gate"
 unresolved_is true "a tdd block missing unobserved[] is unresolved"
@@ -198,7 +198,7 @@ printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -qi 'tdd' \
 # to be positive, only that the field exists. A zero count passes cleanly.
 
 D=$(mktask tdd_red_zero)
-write_record "$D" '.tdd={"red_observed":0,"passed_first_run":0,"unobserved":[]}'
+write_record "$D" '.tdd={"red_observed":0,"passed_first_run":0,"ratified":0,"unobserved":[]}'
 run "$D"
 verdict_is pass "red_observed: 0 with nothing unobserved still passes"
 unresolved_is false "red_observed: 0 is not reported unresolved"
@@ -218,6 +218,222 @@ rc_is 0 "a bypass exits 0 even though the record carries no tdd block at all"
 printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'no tdd block' \
   && fail_check "the bypass path still evaluated the missing-tdd branch" \
   || pass_check "the bypass path never reaches the tdd check, so its 'no tdd block' message never fires"
+
+# ===================================================================================
+# 10. `ratified` — the value that separates a RED from a ratification (v5.46.0+)
+#
+# THE DEFECT THIS PART DEFENDS AGAINST. Write the assertion, run it against unmodified
+# code, watch it fail, record the count: that evidence cannot tell TDD from mutation
+# verification. A test authored while READING the implementation, then run against a
+# pre-fix or reverted tree, fails at its own assertion for the reason it names and
+# satisfies every rule the framework stated. The ordering of RUNS is observable; the
+# ordering of KNOWLEDGE is what separates them, and no count exposed it.
+#
+# `ratified` is that count: a test that passed the moment it was written because the code
+# it describes already existed. It is NOT `passed_first_run`, which means the test is
+# wrong. It never blocks -- characterization and regression tests are written this way on
+# purpose -- but it is recorded and surfaced, because a number nobody sees is the same as
+# no number.
+
+# --- absence is fail-closed, the way its three sibling keys already are ---------------
+
+D=$(mktask tdd_no_ratified)
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":0,"unobserved":[]}'
+run "$D"
+verdict_is fail "a tdd block with no ratified key fails the gate"
+unresolved_is true "a missing ratified count is a could-not-tell, not a settled violation"
+rc_is 1 "a missing ratified count exits 1"
+msg_has "ratified" "the message names the missing ratified count specifically"
+
+# --- a positive count passes, needs no reason, and is surfaced ------------------------
+
+D=$(mktask tdd_ratified_ok)
+write_record "$D" '.tdd={"red_observed":11,"passed_first_run":0,"ratified":8,"unobserved":[]}'
+run "$D"
+verdict_is pass "a positive ratified count passes: ratification is legitimate, not a violation"
+rc_is 0 "a positive ratified count exits 0"
+msg_has "8" "the ratified count is surfaced in the messages, not folded away"
+msg_has "ratified" "the surfaced count says what it counts"
+
+# `passed_first_run > 0` owes a reason; `ratified > 0` must not, or the honest answer is
+# again the expensive one. This fixture carries no `reason` at all.
+[ "$(printf '%s' "$OUT" | jq -r '.verdict')" = "pass" ] \
+  && pass_check "ratified > 0 with no reason recorded still passes, unlike passed_first_run" \
+  || fail_check "ratified > 0 was made to owe a reason it should not owe"
+
+[ "$(printf '%s' "$OUT" | jq -r '.evidence.tdd.ratified')" = "8" ] \
+  && pass_check "the ratified count is carried in the evidence a consumer reads back" \
+  || fail_check "the ratified count is absent from the evidence"
+
+# --- the comparison that makes the number mean something ------------------------------
+#
+# A high ratified count against a low red_observed means the suite ratified more than it
+# constrained. Deterministic, no threshold judgement: ratified >= red_observed.
+
+D=$(mktask tdd_ratifying)
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":0,"ratified":8,"unobserved":[]}'
+run "$D"
+verdict_is pass "a suite that ratified more than it constrained still passes: it never blocks"
+rc_is 0 "the ratifying-suite comparison exits 0"
+msg_has "ratifying" "a ratified count at or above red_observed is said aloud, not just tallied"
+
+D=$(mktask tdd_constraining)
+write_record "$D" '.tdd={"red_observed":11,"passed_first_run":0,"ratified":2,"unobserved":[]}'
+run "$D"
+printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'ratifying' \
+  && fail_check "the ratifying-suite message fired on a suite that constrained more than it ratified" \
+  || pass_check "a ratified count below red_observed does not fire the ratifying-suite message"
+
+# --- the work-order path is still untouched ------------------------------------------
+
+D=$(mktask wo_no_ratified); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf '# wo\n' > "$D/work-orders/wo-01.md"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+run "$D"
+verdict_is pass "a work-order build with no tdd block anywhere still passes"
+printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -qi 'ratified' \
+  && fail_check "the work-order path's messages mention the ratified count" \
+  || pass_check "the work-order path never mentions the ratified count"
+
+# ===================================================================================
+# 11. the wiring: the value implement.md tells a builder to record is a value the gate,
+#     the schema and the outcome table all know about.
+#
+# A value named in one file and unreadable in the next is the shape this repo shipped in
+# 5.44.0, where a /design step's literal could not run and its spec grepped for script
+# names and passed it. So the cross-file check below DERIVES the enum from the command
+# body and RUNS the real gate against each value it finds, rather than grepping for
+# `ratified` in four places and calling that wiring.
+
+CMD="${PLUGIN_ROOT}/commands/implement.md"
+SCHEMA="${PLUGIN_ROOT}/references/gate-audit-schema.md"
+WORKFLOW="${PLUGIN_ROOT}/references/tdd-workflow.md"
+REVIEW="${PLUGIN_ROOT}/commands/review.md"
+for f in "$CMD" "$SCHEMA" "$WORKFLOW" "$REVIEW"; do
+  [ -f "$f" ] || { printf 'FAIL: %s missing\n' "$f" >&2; exit 1; }
+done
+
+# The per-criterion outcome enum, read out of the sentence in loop step 4 that tells a
+# builder what to write down. Backticked tokens only, between "Record the outcome" and
+# the end of that instruction.
+STEP4=$(awk '/Record the outcome for this/,/Then write the implementation/' "$CMD")
+VALUES=$(printf '%s' "$STEP4" | grep -o '`[a-z_]*`' | tr -d '`' | sort -u)
+
+printf '%s\n' "$VALUES" | grep -qx 'ratified' \
+  && pass_check "implement.md loop step 4 names ratified as a per-criterion outcome" \
+  || fail_check "implement.md loop step 4 does not name ratified (found: $(printf '%s' "$VALUES" | tr '\n' ' '))"
+
+for v in observed passed_first_run unobserved; do
+  printf '%s\n' "$VALUES" | grep -qx "$v" \
+    && pass_check "implement.md loop step 4 still names $v" \
+    || fail_check "implement.md loop step 4 lost the $v outcome"
+done
+
+# Every outcome the command body names must have a home in the record the gate reads.
+# `observed` is recorded as the `red_observed` count; the rest are same-named. A fifth
+# value added to the body with nowhere to land fails here.
+key_for() {
+  case "$1" in
+    observed) printf 'red_observed' ;;
+    passed_first_run|ratified) printf '%s' "$1" ;;
+    unobserved) printf 'unobserved' ;;
+    *) return 1 ;;
+  esac
+}
+
+for v in $VALUES; do
+  if ! K=$(key_for "$v"); then
+    fail_check "implement.md step 4 names the outcome '$v' with no key in the tdd record"
+    continue
+  fi
+  # Executed, not grepped: build a record whose only non-zero count is this outcome's key
+  # and hand it to the real gate. A key the gate cannot read shows up as a fail here.
+  D=$(mktask "wire_$v")
+  write_record "$D" ".tdd={\"red_observed\":0,\"passed_first_run\":0,\"ratified\":0,\"unobserved\":[]} | .tdd.${K}=(if \"${K}\"==\"unobserved\" then [\"c1\"] else 1 end) | .tdd.reason=\"wiring fixture\""
+  run "$D"
+  [ "$(printf '%s' "$OUT" | jq -r ".evidence.tdd.${K} // \"absent\"")" != "absent" ] \
+    && pass_check "the gate reads back the '$v' outcome as tdd.${K}" \
+    || fail_check "the gate does not carry tdd.${K}, the record home of the '$v' outcome"
+done
+
+# The schema's tdd row names the same four keys the gate reads.
+TDD_ROW=$(grep -n '^| `tdd` |' "$SCHEMA" | head -1 | cut -d: -f2-)
+for k in red_observed passed_first_run ratified unobserved; do
+  printf '%s' "$TDD_ROW" | grep -q "$k" \
+    && pass_check "the schema's tdd row names $k" \
+    || fail_check "the schema's tdd row does not name $k"
+done
+
+grep -q 'ratifying' "$SCHEMA" \
+  && pass_check "the schema says what a high ratified count against a low red_observed means" \
+  || fail_check "the schema records ratified without saying what the number means"
+
+# The outcome table in tdd-workflow.md gains a row, and passed_first_run gives up the half
+# of its meaning that ratified now owns. Both values claiming the same case is the
+# conflation this change exists to end.
+grep -q '^| `ratified` |' "$WORKFLOW" \
+  && pass_check "the tdd-workflow outcome table carries a ratified row" \
+  || fail_check "the tdd-workflow outcome table has no ratified row"
+
+PFR_ROW=$(grep '^| `passed_first_run` |' "$WORKFLOW" | head -1)
+printf '%s' "$PFR_ROW" | grep -qi 'characterization' \
+  && fail_check "the passed_first_run row still claims the characterization case ratified now owns" \
+  || pass_check "the passed_first_run row no longer claims the case ratified owns"
+
+# /review step 5.0f: run the literal invocation the command body states, against a record
+# with a ratified count, and assert the gate really hands back what 5.0f promises to copy
+# into the verdict table. Extracting and executing the literal is the point -- grepping
+# 5.0f for the script's name would pass on a command line that cannot run.
+LITERAL=$(grep -o '\${CLAUDE_PLUGIN_ROOT}/scripts/build-critique-assert\.sh[^`]*' "$REVIEW" | head -1)
+if [ -z "$LITERAL" ]; then
+  fail_check "review.md states no build-critique-assert.sh invocation to execute"
+else
+  D=$(mktask five_oh_f)
+  write_record "$D" '.tdd={"red_observed":11,"passed_first_run":0,"ratified":8,"unobserved":[]}'
+  CMDLINE=$(printf '%s' "$LITERAL" \
+    | sed -e 's|\${CLAUDE_PLUGIN_ROOT}|'"$PLUGIN_ROOT"'|' \
+          -e 's|"<task_folder>"|'"$D"'|' \
+          -e 's|<path to step 4.s saved review-change-set\.sh JSON>|'"$CSF"'|')
+  set +e
+  L_OUT=$(bash -c "bash $CMDLINE" 2>/dev/null); L_RC=$?
+  set -e
+  [ "$L_RC" = "0" ] \
+    && pass_check "5.0f's literal invocation runs and exits 0 on a record with a ratified count" \
+    || fail_check "5.0f's literal invocation did not run cleanly (rc=$L_RC, cmd: $CMDLINE)"
+  printf '%s' "$L_OUT" | jq -r '.messages|join(" ")' 2>/dev/null | grep -q 'ratified' \
+    && pass_check "5.0f's own invocation returns the ratified count it promises to copy into the table" \
+    || fail_check "5.0f's invocation returns no ratified count for the table to carry"
+fi
+
+# The writer instruction, not just the outcome enum. Loop step 4 says what to record per
+# criterion; Runtime Step 12 says what shape the aggregate payload has, and it is the only
+# place a real build learns to write the key at all. A gate that requires a key no
+# instruction names fails every live build for omitting it. Derived from the schema's own
+# tdd row so a fifth key added to the gate and not to the body fails here.
+STEP12=$(awk '/The payload also carries .tdd/,/reads it back/' "$CMD")
+for k in red_observed passed_first_run ratified unobserved; do
+  printf '%s' "$STEP12" | grep -q "$k" \
+    && pass_check "implement.md Runtime Step 12 tells the writer to carry tdd.$k" \
+    || fail_check "implement.md Runtime Step 12 never names tdd.$k, so no build writes it"
+done
+
+# The body must not contradict the gate about what blocks. Establish the gate's answer by
+# running it, then check the instruction agrees.
+D=$(mktask pfr_with_reason)
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"ratified":0,"unobserved":[],"reason":"the test was wrong and was fixed"}'
+run "$D"
+if [ "$(printf '%s' "$OUT" | jq -r '.verdict')" = "pass" ]; then
+  pass_check "the gate passes an explained passed_first_run, so the body must not call it always-blocking"
+  printf '%s' "$STEP12" | grep -qi 'is a blocking violation' \
+    && fail_check "implement.md still tells the writer any passed_first_run blocks, which the gate contradicts" \
+    || pass_check "implement.md does not claim passed_first_run always blocks"
+else
+  fail_check "the gate no longer passes an explained passed_first_run; this pair needs rewriting"
+fi
+
+grep -q 'ratified' "$REVIEW" \
+  && pass_check "review.md 5.0f says what happens to the ratified count" \
+  || fail_check "review.md 5.0f never mentions the ratified count, so it passes silently"
 
 if [ "$FAIL" = "0" ]; then
   printf '\ntdd-red-observation-spec: all checks passed\n'

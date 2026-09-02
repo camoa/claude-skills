@@ -158,7 +158,15 @@ budget_for() {
     # eight of prose saying what the flag suppresses, what it does NOT suppress when absent, and why
     # an empty range is refused rather than applied. A kernel with no caller is the same defect this
     # same body just fixed for repair-scope-check.sh, one round earlier.
-    implement) printf '441' ;;
+    # 441 -> 443, raise 2: loop step 4 records a fourth per-criterion outcome, `ratified` -- a
+    # test that passed the moment it was written because the code it describes already existed.
+    # `red_observed` could not tell a test-first test from one authored while reading the
+    # implementation and run against a reverted tree: both fail at their own assertion and both
+    # were written down as `observed`, so the count said "test-first" for either. Measured on one
+    # build: 19 assertions, 11 red and 8 green on arrival, and nothing was counting the 8. Two
+    # lines: the value itself and the one clause saying when it applies rather than
+    # `passed_first_run`, which stays what it always was, a wrong test.
+    implement) printf '443' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

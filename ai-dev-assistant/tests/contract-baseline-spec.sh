@@ -337,7 +337,7 @@ arr_empty added "removing alone after a late capture adds nothing"
 GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
  "components":[{"component":"a","runtime":"executed","blocking":false}],
  "closing_fixes":{"applied":0},
- "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},"integration":{"ran":false,"reason":"single-component fixture"}}'
+ "tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[]},"integration":{"ran":false,"reason":"single-component fixture"}}'
 
 write_record() { # write_record <folder> <jq filter over GOOD>
   bash "$W" "$1" build-critique "$(printf '%s' "$GOOD" | jq -c "$2")" >/dev/null 2>&1

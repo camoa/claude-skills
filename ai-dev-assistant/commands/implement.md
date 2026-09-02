@@ -120,8 +120,10 @@ joins them: a component is critiqued when its criteria are all built, not once p
    implementation exists.** Who runs it follows `run_mode` (`references/tdd-workflow.md`, "Who
    runs the tests"): attended, Claude gives the exact command and the developer reports back;
    autonomous, the agent runs it, because there is nobody else to. Record the outcome for this
-   criterion as `observed`, `passed_first_run` (the test is wrong; fix it before writing code)
-   or `unobserved` with a reason. Then write the implementation.
+   criterion as `observed`, `passed_first_run` (it passed and the test is wrong; fix it before
+   writing code), `ratified` (it passed because the code it describes already existed; a
+   characterization or regression test, counted apart from `observed` and never standing in for
+   it) or `unobserved` with a reason. Then write the implementation.
 5. Developer runs tests (GREEN).
 6. Update `implementation.md` Progress + `task.md` AC checkboxes.
 7. Repeat 1-6 until this component's acceptance criteria are built.
@@ -364,11 +366,11 @@ Reached when the last component closes. All four parts are required.
    an unrecorded edit lets a build authorise itself. A `changed[]` with no `reason` fails, and
    so does a phase that never captured a baseline at Step 11.
 
-   **The payload also carries `tdd` (v5.34.0+):** `{red_observed, passed_first_run, unobserved[], reason}` aggregated over every
-   criterion built this phase, from the loop step 4 outcomes. `unobserved[]` is legal and needs
-   a `reason`; without one it is indistinguishable from nobody having thought about it. Any
-   `passed_first_run` is a blocking violation. This is the only place the RED observation is
-   written down, and `/review` step 5.0f is what reads it back.
+   **The payload also carries `tdd` (v5.34.0+):** `{red_observed, passed_first_run, ratified, unobserved[], reason}` aggregated over
+   every criterion built this phase, from the loop step 4 outcomes. `unobserved[]` and any
+   `passed_first_run` are legal and need a `reason`; without one they are indistinguishable from
+   nobody having thought about it. `ratified` (v5.46.0+) is required, owes no reason, never blocks.
+   This is the only place the RED observation is written down, and `/review` 5.0f reads it back.
 
    **The payload carries `closing_fixes` (v5.35.3+):** `{applied, verified_by, reason}` — what
    changed after the last critique pass. Anything repaired after the critics returned is code no

@@ -1,5 +1,32 @@
 # Changelog
 
+## [5.46.0] - 2026-09-02
+
+### Added
+- **A build now records how many of its tests ratified code that already existed.** The per-criterion
+  outcome at loop step 4 gains `ratified`: a test that passed the moment it was written, because the
+  behaviour it describes was already there. `red_observed` could not tell a test-first test from one
+  authored while reading the implementation and run against a reverted tree. Both fail at their own
+  assertion, both were written down as observed, and the count read as "test-first" either way.
+  Measured on one build: 19 assertions, 11 red and 8 green on arrival, and nothing counted the 8.
+  `passed_first_run` keeps its meaning, which is a different thing: a test-first test that passes is
+  a wrong test.
+- `/review` surfaces the count and never blocks on it. Ratification is legitimate, and
+  characterization and regression tests are written that way on purpose. The gate says
+  `N test(s) ratified code that already existed, against M seen to fail first`, and adds
+  `this suite is ratifying more than it is constraining` when the ratified count reaches
+  `red_observed`. A number nobody sees is the same as no number.
+- A `tdd` block **omitting** `ratified` fails closed, like its three sibling counts. Absence and a
+  count of zero are different answers, and without that a build that never writes the key reproduces
+  the invisible state this exists to end.
+
+### Fixed
+- **Two shipped documents asserted a rule the gate does not enforce.** `gate-audit-schema.md`'s
+  enforcement table and `implement.md` Runtime Step 12 both said any `passed_first_run` is a blocking
+  violation. `build-critique-assert.sh` passes it whenever a reason is recorded and fails only an
+  unexplained one. Both corrected, with a paired assertion that runs the gate to establish the fact
+  and then checks the body agrees.
+
 ## [5.45.0] - 2026-09-02
 
 ### Added
