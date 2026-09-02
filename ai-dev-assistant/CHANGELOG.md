@@ -1,5 +1,54 @@
 # Changelog
 
+## [5.48.0] - 2026-09-02
+
+### Added
+- **A delegated build owes a TDD record, per work-order.** Until now `/review`'s build-critique
+  gate demanded a `tdd` block of the in-session `_build-critique.json` and of nothing else, so a
+  build that went through `/run-work-orders` owed no statement about whether any test was watched
+  failing before the code existed. Since the orchestration rules route real builds to delegated
+  agents, following them routed every real build around the test-first rung by construction.
+  Measured on a live build: three components built, reviewed and merged with no TDD record of any
+  kind, and every downstream check satisfied, because each one read a record nobody was asked to
+  write.
+
+  The record now travels as a sidecar file. `work-order-builder` names
+  `<WO_DIR>/wo-NN.tdd.json` in the prompt it hands the builder; the builder writes one JSON object
+  there; the loop computes the same path from the work-order id it is already iterating and passes
+  it to `wo-run-state.sh collect --tdd-file`, which parses and type-checks before storing and
+  refuses a malformed one with exit 2 and the run record untouched. A file rather than a line in
+  the builder's reply, because every other subagent-produced value in this plugin already moves
+  this way, and because a Task response that truncates in transit has already cost this framework
+  a verdict once. The build atom neither reads nor validates nor carries it: the handle stays
+  git/disk derived and accepts no subagent content (M-6).
+- **`work_orders_owing_tdd`, `work_orders_without_tdd`, `work_orders_bad_tdd`** on the
+  build-critique record. The last is present on a pass as well as a failure, so an empty list
+  reads as checked-and-clean rather than as never-looked.
+- **`--tdd-file <path>` on `wo-run-state.sh collect`.** Eight distinct refusals, each exit 2 with
+  the sidecar untouched: unsafe path, absent, not a regular file, unreadable, empty, not JSON, not
+  an object. No `--tdd-file` leaves no `tdd` key; nothing is ever auto-filled, because an invented
+  default makes a build that ran no test indistinguishable from one that did.
+
+### Changed
+- **One judge, two paths.** `tdd_block_problems` in `scripts/accept-verdict.sh` is now the single
+  authority on what a sound `tdd` block is, and both the in-session and work-order branches call
+  it. The first cut of the delegated branch called `has()` on four keys and stopped, under a
+  comment claiming the two paths could not disagree; they could, and a block with five unexplained
+  first-run passes passed one and failed the other. Verified after the change on 17 identical
+  blocks: 17/17 agree.
+- **`tdd-companion` no longer calls a first-run pass a violation by itself.** Only an unexplained
+  one blocks, which is what the gate has always enforced. v5.46.0 corrected the same rule in
+  `gate-audit-schema.md` and `commands/implement.md` and missed this file, which is the copy an
+  agent has loaded while building.
+- `references/build-critique.md` and `references/gate-audit-schema.md` said in as many words that
+  the work-order path carried no RED evidence and was not asked for any. Both now describe what
+  the gate does.
+
+### Fixed
+- **`wo-run-state.sh` hung forever on a valueless trailing flag.** `shift 2` with one argument left
+  shifts nothing and returns 1, so the argument loop re-read the same token indefinitely. It
+  affected every flag in all three argument loops, and predates this release.
+
 ## [5.47.0] - 2026-09-02
 
 ### Changed

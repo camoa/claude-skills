@@ -154,12 +154,53 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
    **The loop never writes `in_progress`** (single owner = the builder), so a committed build is never left
    under `status: ready`.
 7. **Persist the handle snapshot.** `wo-run-state.sh collect <wo-NN.run.json> --override-used <…>
-   --halt-reason <…> --build-returned <…> --checkpoint-after <…>` (from the handle). If the handle's
+   --halt-reason <…> --build-returned <…> --checkpoint-after <…>` (from the handle), plus
+   `--tdd-file <…>` (v5.48.0+) when the builder wrote its TDD record. If the handle's
    `halt_reason != null` — the builder's re-gate **refused** (no flip happened ⇒ WO still `ready`) or
    `spawn_failed` (the flip already happened ⇒ WO `in_progress`) — ⇒ write `wo-NN.HALT` (reason = the
    handle `halt_reason`), mark the sidecar `wo-run-state.sh halt`, escalate. The WO is now TERMINAL
    (terminal keys off the HALT marker, regardless of `ready`/`in_progress` status). Otherwise the WO is
    already `in_progress` (the builder flipped it) — proceed to review.
+
+   **The TDD record is required, it comes off DISK, and it is NOT part of the handle (v5.48.0+).**
+   The handle is built from git and disk and accepts no subagent content (M-6), because it carries
+   authority: the verdict and the status. A TDD record carries none. It is the builder's report of
+   what it watched fail before the code existed, `/review` judges it, and the framework already
+   says in as many words that a recorded `observed` is a report of an observation and not proof of
+   one. So it travels as explicitly untrusted data into the state sidecar, never into the handle.
+
+   **The builder WROTE it to a file; you read the file.** The path is
+   `<WO_DIR>/wo-NN.tdd.json`, beside `wo-NN.run.json` and `wo-NN._critique.json` in the same
+   work-order directory — the same path `work-order-builder` names in the prompt it hands the
+   subagent. You do not need the atom to tell you: you are looping over work-order ids in that
+   directory, so you compute it, exactly as you already compute `wo-NN.run.json`. A file rather
+   than a value the atom hands back, for the reason `commands/review.md` step 5.0 records — an
+   agent whose report was its Task response alone had that response truncate in transit
+   repeatedly — and because the handle could not have carried it anyway.
+
+   ```bash
+   tddf="<WO_DIR>/wo-NN.tdd.json"
+   if [ -f "$tddf" ]; then
+     wo-run-state.sh collect <wo-NN.run.json> --override-used "$ov" --build-returned "$br" \
+       --halt-reason "$hr" --checkpoint-after "$cpa" --tdd-file "$tddf"
+   else
+     # No file ⇒ pass NO flag. The run record gets no `tdd` key, and /review fails this
+     # work-order fail-closed. Never synthesise one: an invented default makes a build that
+     # ran no test indistinguishable from one that did.
+     wo-run-state.sh collect <wo-NN.run.json> --override-used "$ov" --build-returned "$br" \
+       --halt-reason "$hr" --checkpoint-after "$cpa"
+   fi
+   ```
+
+   The file's shape is `{red_observed, passed_first_run, ratified, unobserved[], reason}`, the same
+   an in-session `_build-critique.json` carries. Its content is untrusted subagent output:
+   `wo-run-state.sh` parses and type-checks it before storing and **refuses** a malformed one with
+   exit 2 and the run record untouched — treat that as a hard error, not a reason to retry without
+   the flag. **Skipping the flag on a file that exists is not a shortcut.** `/review`'s
+   build-critique gate fails a work-order whose run record has no `tdd` block, fail-closed and
+   unresolved, exactly as it fails an in-session record with no `tdd` key. Until v5.48.0 it
+   demanded one from the in-session record and from nothing else, so delegating a build routed
+   around the test-first rung by construction.
 8. **Per-WO review (run for EVERY dispatched WO).** Run `/review --headless --dry-run --base <base> <task-folder>`
    **inline from cwd=`<worktree>`** (command-prose, not a callable; `/review` derives the change from
    `git diff $(git merge-base main HEAD)..HEAD` in its cwd, so it MUST run in the worktree where the build

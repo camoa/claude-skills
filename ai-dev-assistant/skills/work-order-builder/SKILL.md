@@ -143,7 +143,7 @@ The re-gate passed (RC==0), so the WO is still `status: ready`. Flip it **now** 
 checkpoint/spawn/commit below — so every code mutation happens under `in_progress`:
 
 ```bash
-bash "$KERNEL" set-status "$WO" in_progress      # ready→in_progress (legal); the ONLY memory-repo write
+bash "$KERNEL" set-status "$WO" in_progress      # ready→in_progress (legal); the atom's ONLY memory-repo write
 ```
 
 This runs **only on a passing re-gate** (a refused gate already `return`ed at step 1, leaving the WO
@@ -172,6 +172,51 @@ the **Task** tool:
   to the prompt as clearly-demarcated trusted runtime context, separated from the WO body (the build
   brief) — e.g. a `BUILD ROOT (write all changes under this absolute path): <abs>` header line, a
   delimiter, then the verbatim WO body.
+- **Give the builder the test-first obligation, and a file to record it in (v5.48.0+).** A
+  delegated builder inherits no methodology floor and no activated `tdd-companion`: both happen in
+  the main context, on the `/implement` path, and this atom is the other path. Until this version
+  the framework demanded a TDD record of an in-session build and of nothing else, so the
+  orchestration rule that says the main loop coordinates rather than builds routed every real
+  build around the test-first rung by construction. Measured on a live build: three components
+  built, reviewed and merged with no TDD record of any kind, and every downstream check satisfied,
+  because each one reads a record nobody was asked to write.
+
+  So state the obligation in the prompt as trusted runtime context beside `BUILD ROOT`, **and name
+  the file the builder writes the record to** — a **third** anchor line, because the builder is
+  otherwise told to write everything under `BUILD ROOT` and this one file does not go there:
+
+  `TDD RECORD (write ONE JSON object to this absolute path, in addition to your build output under BUILD ROOT): <abs $WO_DIR>/<wo-NN>.tdd.json`
+
+  where `<wo-NN>` is the work-order id, so the file lands beside `wo-NN.run.json` and
+  `wo-NN._critique.json` in the **same `$WO_DIR`** the `../`-resolution anchor below already names.
+  It is one directory with two roles for the builder, read and write, not two notions of the same
+  path. The object:
+
+  `{"red_observed": <n>, "passed_first_run": <n>, "ratified": <n>, "unobserved": [<criterion>, ...], "reason": "<why, when unobserved is non-empty>"}`
+
+  What each value means is `references/tdd-workflow.md`, which the prompt should point at rather
+  than restate. The two that get conflated: `red_observed` counts tests run before the
+  implementation existed AND watched failing, and `ratified` counts tests that passed the moment
+  they were written because the behaviour was already there. A test authored while reading the
+  implementation and then run against a reverted tree fails identically to a test-first one, so
+  the count cannot separate them and the builder has to.
+
+  **A file, and NOT a line in the response, because a response is not a delivery channel.** This
+  plugin already routes every subagent-produced value through a file it names in advance —
+  `wo-critic` writes `wo-NN._critique.json`, `architecture-validator` writes
+  `_arch-validate-<slug>.json`, `distill-agent` writes `_distill.json` — and `commands/review.md`
+  step 5.0 records why: an agent whose report was its Task response alone had that response
+  truncate in transit repeatedly, and the session had to improvise a scratchpad file mid-review to
+  recover it. A record asked for as a trailing transcript line has no reader and no path; on a file
+  the path is derivable from first-party data at both ends, so a truncated builder response costs
+  nothing here. **The atom does not read the response for this.**
+
+  **The file's CONTENT is still untrusted subagent output.** ③ collects it with
+  `wo-run-state.sh collect --tdd-file <that same path>`, which parses and type-checks before it
+  stores and refuses a malformed one with the run record untouched. `/review` judges what was
+  stored and fails a work-order whose run record carries no `tdd` block, fail-closed. Nothing here
+  parses the file to decide control flow.
+
 - **Give the builder the WO_DIR second anchor — a body's `../` refs live in the MEMORY repo, not the
   worktree.** A self-contained WO body should inline what it needs, but a body legitimately carries two
   kinds of relative path: **worktree-relative** (`## Files to touch`, resolved against `BUILD ROOT`)
@@ -184,9 +229,15 @@ the **Task** tool:
   trusted-runtime-context anchor alongside `BUILD ROOT`:
   `WO_DIR (resolve any ../ reference in this work-order — e.g. ../task.md, ../coverage-map.json —
   against this absolute path, NOT against BUILD ROOT): <abs $WO_DIR>`. The builder's Read tool already
-  reaches absolute paths; it just needs to be told where the WO's siblings live. Keep the two anchors
-  visually distinct so the builder never writes build output under `$WO_DIR` (read-only) nor reads
-  inputs from under `BUILD ROOT`.
+  reaches absolute paths; it just needs to be told where the WO's siblings live. Keep the anchors
+  visually distinct so the builder never writes **build output** under `$WO_DIR` nor reads inputs from
+  under `BUILD ROOT`. `$WO_DIR` is the same directory the TDD-record line above names. **Two files under
+  it are written during a build, and they have different authors:** the atom flips `status:` on
+  `wo-NN.md` at step 2, and the builder writes `wo-NN.tdd.json`. Neither is build output. Do not read
+  the TDD-record instruction as a claim that the status flip does not happen — it is the crash-safety
+  hinge, it happens before any code is mutated, and `work-order-loop` step 7 depends on it to tell a
+  `spawn_failed` (flip happened, WO `in_progress`) from a refused re-gate (no flip, WO still `ready`).
+  One directory, two stated roles — not a second notion of the same path.
 - **Standard, not forked.** Do **not** set `CLAUDE_CODE_FORK_SUBAGENT` — a forked subagent inherits
   the parent conversation and defeats the load-bearing fresh-context guarantee. The builder must start
   in **clean context** with no parent narrative.
@@ -236,6 +287,15 @@ bash "$KERNEL" collect-handle "$WORKTREE" "$WO" \
 `git`/disk — the transcript is structurally unreachable to it. **Return the handle JSON** to ③ and
 stop.
 
+**The atom does nothing at all about `<wo-NN>.tdd.json`.** It does not read it, does not validate it,
+does not check whether the builder wrote one, and does not mention it in the handle. It has no reason
+to: the builder wrote it at a path ③ computes for itself from the work-order id it is already looping
+over, so neither side needs the other to carry it. Do **not** add a key to the handle for it and do
+**not** add a flag to `wo-compile.sh collect-handle` — that sub-command accepts no argument that could
+carry subagent content, which is the structural half of M-6, and it stays that way. An absent file is
+③'s and ②'s to notice: ③ passes no `--tdd-file`, the run record gets no `tdd` key, and `/review` fails
+the work-order fail-closed.
+
 ## The handle (the seam shape — built from git/disk, no transcript echo)
 
 ```json
@@ -249,8 +309,12 @@ stop.
 ```
 
 **No `verdict`** (②'s), **no `next`** (③'s), **no `status`** field (the `ready→in_progress` flip is a
-direct `set-status` at step 2, not a handle field; ③ owns every OTHER status write — H-3). Those
-deliberate omissions *are* the boundary made concrete. `halt_reason` is drawn **only** from the frozen
+direct `set-status` at step 2, not a handle field; ③ owns every OTHER status write — H-3), and **no
+TDD record** — that one is absent for a different reason than the other three, so read it separately.
+The first three are withheld because they carry authority this atom does not have. The TDD record is
+withheld because the handle is built from git and disk and structurally cannot carry subagent content
+(M-6); it did not go missing, it went to `<WO_DIR>/<wo-NN>.tdd.json`, where ③ reads it off disk
+(`work-order-loop` step 7) without this atom carrying it. Those deliberate omissions *are* the boundary made concrete. `halt_reason` is drawn **only** from the frozen
 enum above — step 1 **maps** the kernel's `assert-dispatchable` reason onto it (`status_not_ready:*` →
 `sequencing_error`, `frontmatter_unreadable:*` → `frontmatter_unreadable`), never forwarding a raw
 kernel string. `produced_changes` (git-derived, `checkpoint_after == null ⟺ produced_changes ==

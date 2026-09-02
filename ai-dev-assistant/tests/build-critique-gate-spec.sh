@@ -191,11 +191,258 @@ verdict_is fail "an unparseable _build-critique.json fails rather than being ign
 D=$(mktask wo_clean); mkdir -p "$D/work-orders" >/dev/null 2>&1
 printf '# wo\n' > "$D/work-orders/wo-01.md"
 printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+# The run record joined this fixture in v5.48.0, when the delegated path started owing a tdd
+# block. The assertion is unchanged: this cell is about resolving the build path from disk with
+# no _build-critique.json present, and it still is.
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
 run "$D"
 verdict_is pass "a /run-work-orders build passes on its per-work-order critiques with no _build-critique.json"
+# --- the delegated build path owes a TDD record too ---------------------------------------
+# THE DEFECT THIS DEFENDS AGAINST. `tdd` is demanded of the in-session record and of nothing
+# else. A /run-work-orders build satisfied this gate on its critique files alone and owed no
+# statement about whether any test was watched failing before the code existed. So the rung
+# that enforces test-first was reachable only on the path where the main context does the
+# building, while the orchestration rules route real builds to delegated agents. Measured on a
+# live build: three components built, reviewed and merged with no TDD record of any kind, and
+# every downstream check satisfied, because each one reads a record nobody was asked to write.
+#
+# Absence is the failure, not a skip. A work-order that recorded no TDD block is `unresolved`,
+# the same answer an in-session record with no `tdd` key gets, and for the same reason: nobody
+# looked is not the same answer as nothing was wrong.
+
+D=$(mktask wo_no_tdd); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf '# wo\n' > "$D/work-orders/wo-01.md"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true}' > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order build whose run record carries no tdd block fails"
+[ "$(printf '%s' "$OUT" | jq -r '.unresolved')" = "true" ] \
+  && pass_check "a missing work-order tdd block is a could-not-tell, not a clean pass" \
+  || fail_check "a work-order build with no tdd record was resolved rather than left unresolved"
+printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'wo-01' \
+  && pass_check "the message names the work-order that owes the record" \
+  || fail_check "the message does not say which work-order is missing its tdd block"
+
+D=$(mktask wo_with_tdd); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf '# wo\n' > "$D/work-orders/wo-01.md"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":2,"passed_first_run":0,"ratified":1,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is pass "a work-order build that recorded its tdd block passes"
+
+D=$(mktask wo_partial_tdd); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf '# wo\n' > "$D/work-orders/wo-01.md"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":2}}' > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order tdd block missing a sibling count fails like the in-session one"
+
 [ "$(printf '%s' "$OUT" | jq -r '.build_path')" = "work-orders" ] \
   && pass_check "the work-order build path is resolved from disk, not from prose" \
   || fail_check "the work-order build path was not resolved from the files on disk"
+
+# --- one cell per required key, each omitting EXACTLY that one key -------------------------
+# WHY ONE CELL PER KEY. The fixture above (`wo_partial_tdd`) omits three keys at once, so it
+# cannot say which of them is load-bearing. Measured before these cells existed: deleting
+# `has("unobserved")` from the gate, and separately deleting `has("passed_first_run")`, changed
+# the gate's behaviour and NO cell in either spec noticed. A single fixture missing everything
+# ratifies the check rather than constraining it.
+
+# mkwo <folder> <wo id> <status> — a compiled work-order with frontmatter the subject rule reads.
+mkwo() {
+  mkdir -p "$1/work-orders" >/dev/null 2>&1
+  printf -- '---\nid: %s\nstatus: %s\n---\n# wo\n' "$2" "$3" > "$1/work-orders/$2.md"
+}
+
+for key in red_observed passed_first_run ratified unobserved; do
+  D=$(mktask "wo_omit_$key"); mkwo "$D" wo-01 "done"
+  printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+  printf '%s' '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":2,"passed_first_run":0,"ratified":1,"unobserved":[],"reason":null}}' \
+    | jq -c --arg k "$key" 'del(.tdd[$k])' > "$D/work-orders/wo-01.run.json"
+  run "$D"
+  verdict_is fail "a work-order tdd block omitting only $key fails"
+  printf '%s' "$OUT" | jq -r '.evidence.work_orders_bad_tdd[0].problems | join(" ")' | grep -q "$key" \
+    && pass_check "the gate names $key specifically as the problem, not a generic omission" \
+    || fail_check "the gate failed without naming $key (evidence: $(printf '%s' "$OUT" | jq -c '.evidence.work_orders_bad_tdd'))"
+done
+
+# --- the two VALUE judgements, which are what C1 was about ---------------------------------
+# THE DEFECT THESE DEFEND AGAINST. The delegated branch called has() on four keys and stopped,
+# under a comment claiming it demanded exactly what the in-session branch demands. The
+# in-session branch additionally BLOCKS on two value judgements, so this exact block --
+# {"red_observed":0,"passed_first_run":5,"ratified":0,"unobserved":["A","B","C"],"reason":null}
+# -- returned pass on the delegated path and fail on the in-session one. Both paths now call
+# one function, so a record satisfies both or neither.
+
+# The MESSAGE has to name the problems too, not just the evidence object. Replacing this message
+# with a generic "a work-order tdd block was refused" survived a mutation sweep: every naming
+# assertion here read `.evidence`, and a person reading /review output reads the message.
+D=$(mktask wo_firstrun_no_reason); mkwo "$D" wo-01 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":0,"passed_first_run":5,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order recording passed_first_run > 0 with no reason fails, as the in-session path does"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_bad_tdd[0].problems | join(" ")' | grep -q 'passed_first_run > 0' \
+  && pass_check "the delegated path says the reason is what is missing, not the count" \
+  || fail_check "the delegated path failed without naming the unreasoned passed_first_run"
+printf '%s' "$OUT" | jq -r '.messages | join(" | ")' | grep -q 'wo-01 (passed_first_run > 0' \
+  && pass_check "the message names the work-order AND the problem, not just that something was refused" \
+  || fail_check "the message does not carry the problem names ($(printf '%s' "$OUT" | jq -c '.messages'))"
+
+D=$(mktask wo_firstrun_with_reason); mkwo "$D" wo-01 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":0,"passed_first_run":5,"ratified":0,"unobserved":[],"reason":"characterization tests written against existing code"}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is pass "a work-order recording passed_first_run > 0 WITH a reason passes, so the honest answer is not the expensive one"
+
+D=$(mktask wo_unobs_no_reason); mkwo "$D" wo-01 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":["A","B"],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order recording unobserved criteria with no reason fails, as the in-session path does"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_bad_tdd[0].problems | join(" ")' | grep -q 'unobserved' \
+  && pass_check "the delegated path names the unexplained unobserved[] entries" \
+  || fail_check "the delegated path failed without naming the unexplained unobserved[]"
+
+D=$(mktask wo_unobs_with_reason); mkwo "$D" wo-01 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":["A","B"],"reason":"both need a live payment gateway"}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is pass "a work-order recording unobserved criteria WITH a reason passes"
+
+# --- the subject set is the work-orders, not the critique files ----------------------------
+# THE DEFECT THIS DEFENDS AGAINST. The block iterated the critique files, so a compiled
+# work-order carrying no `wo-NN._critique.json` was never examined. Measured on three compiled
+# work-orders, one with a critique and a TDD record and two with nothing at all: `verdict: pass`,
+# `work_orders_without_tdd: []`, while the record's own evidence said `work_orders: 3`.
+
+# wo-02 is `pending` on purpose, so ONLY the run-record disjunct makes it a subject: no critique
+# file, not marked done. Measured before this line said `pending`: deleting the run-record
+# disjunct from the subject rule turned NOTHING red, because every fixture carrying a run record
+# also carried a critique or a `done` status. A disjunct no cell can kill is not being tested.
+# The shape is real -- the loop dispatched wo-02 and wrote its run record, and no critic has run
+# on it and nothing has marked it finished.
+D=$(mktask wo_no_critique_still_judged); mkwo "$D" wo-01 "done"; mkwo "$D" wo-02 pending
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+printf '{"wo":"wo-02","build_returned":true}' > "$D/work-orders/wo-02.run.json"
+run "$D"
+verdict_is fail "a dispatched work-order with a run record and NO critique file is still judged for its tdd block"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_without_tdd | join(" ")' | grep -q 'wo-02' \
+  && pass_check "the work-order with no critique file of its own is named as owing a record" \
+  || fail_check "the uncritiqued work-order was never examined (without_tdd: $(printf '%s' "$OUT" | jq -c '.evidence.work_orders_without_tdd'))"
+[ "$(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd')" = "2" ] \
+  && pass_check "the subject count is the work-orders that owe a record, not the critique files" \
+  || fail_check "the subject count did not follow the work-orders (got $(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd'))"
+
+D=$(mktask wo_never_dispatched); mkwo "$D" wo-01 "done"; mkwo "$D" wo-02 ready
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is pass "a compiled work-order with neither a run record nor status: done is not a subject: it built nothing"
+[ "$(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd')" = "1" ] \
+  && pass_check "the never-dispatched work-order is excluded from the subject count, and the count says so" \
+  || fail_check "the never-dispatched work-order was counted as owing a record"
+
+# `ready` and `blocked` are the ONLY two statuses reachable without a dispatch, so the exclusion
+# names those two rather than listing the three that owe. An unrecognised status is not evidence
+# that nothing happened: it fails closed and is named, which is what keeps the exclusion from
+# becoming a way to opt out by writing something the enum does not contain.
+D=$(mktask wo_unknown_status); mkwo "$D" wo-01 "done"; mkwo "$D" wo-02 banana
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order carrying a status outside the enum owes a record rather than being skipped"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_without_tdd | join(" ")' | grep -q 'wo-02' \
+  && pass_check "the unrecognised-status work-order is named, not silently excluded" \
+  || fail_check "an unrecognised status excluded the work-order in silence"
+
+# `done` with no run record is the lost-record half of the union, and it must not pass.
+D=$(mktask wo_done_no_run); mkwo "$D" wo-01 "done"; mkwo "$D" wo-02 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order marked done with no run record at all fails rather than passing silently"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_without_tdd | join(" ")' | grep -q 'wo-02' \
+  && pass_check "the done-but-recordless work-order is named" \
+  || fail_check "the done-but-recordless work-order was not named"
+
+# A critique is BUILD EVIDENCE: `wo-critic` reads a diff and the gate envelopes, so it cannot have
+# run over something nobody built. wo-02 below is `pending` with no run record, so ONLY the
+# critique disjunct makes it a subject. The first cut of the subject rule omitted that disjunct and
+# this shape passed.
+D=$(mktask wo_critique_no_run); mkwo "$D" wo-01 "done"; mkwo "$D" wo-02 pending
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+printf '{"blocking":false}' > "$D/work-orders/wo-02._critique.json"
+run "$D"
+verdict_is fail "a critiqued work-order with no run record fails: it was built, and its record is lost"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_without_tdd | join(" ")' | grep -q 'wo-02' \
+  && pass_check "the critiqued-but-recordless work-order is named" \
+  || fail_check "the critiqued-but-recordless work-order was not named"
+[ "$(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd')" = "2" ] \
+  && pass_check "a critique alone makes a work-order a subject" \
+  || fail_check "the critique disjunct did not make it a subject (count $(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd'))"
+
+# THE MIRROR OF THE ORIGINAL DEFECT. Iterating `wo-*.md` fixes "a work-order with no critique was
+# never examined" and opens "a critique whose .md is gone is never examined". Before the id set
+# became a union of all three globs this returned pass, with the record's own evidence saying one
+# critic ran and zero work-orders owed anything.
+D=$(mktask wo_critique_no_md); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+run "$D"
+verdict_is fail "a critique whose work-order .md is gone is still a subject: the critic ran on something"
+[ "$(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd')" = "1" ] \
+  && pass_check "the subject set survives the deletion of the .md it was drawn from" \
+  || fail_check "a deleted .md emptied the subject set (owing $(printf '%s' "$OUT" | jq -r '.evidence.work_orders_owing_tdd'))"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_without_tdd | join(" ")' | grep -q 'wo-01' \
+  && pass_check "the orphaned critique's work-order is named as owing a record" \
+  || fail_check "the orphaned critique's work-order was not named"
+
+# A `tdd` THAT IS NOT AN OBJECT is the JQ_ERR path, and it is reachable rather than defensive:
+# the key is present, so the has("tdd") check passes, and every reading below it errors. Both
+# branches treat that as could-not-read, never as nothing-wrong. Without these two cells the
+# JQ_ERR handling on both paths survived a mutation that deleted it.
+D=$(mktask wo_tdd_not_object); mkwo "$D" wo-01 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":5}' > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is fail "a work-order whose tdd block is not an object fails rather than reading as sound"
+printf '%s' "$OUT" | jq -r '.evidence.work_orders_bad_tdd[0].problems | join(" ")' | grep -q 'could not be read' \
+  && pass_check "an unreadable work-order tdd block says it could not be read" \
+  || fail_check "an unreadable work-order tdd block was reported as some other problem"
+
+D=$(mktask tdd_not_object); write_record "$D" '.tdd=5'
+run "$D"
+verdict_is fail "an in-session tdd block that is not an object fails"
+[ "$(printf '%s' "$OUT" | jq -r '.unresolved')" = "true" ] \
+  && pass_check "an unreadable in-session tdd block is unresolved, not a settled violation" \
+  || fail_check "an unreadable in-session tdd block was reported as resolved"
+printf '%s' "$OUT" | jq -r '.messages | join(" | ")' | grep -q 'could not be read' \
+  && pass_check "the in-session path says the block could not be read" \
+  || fail_check "the in-session path failed without saying the block was unreadable"
+
+# An evidence key that appears only on failure cannot be read as "checked and clean".
+D=$(mktask wo_evidence_on_pass); mkwo "$D" wo-01 "done"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is pass "a delegated build with a sound tdd record passes"
+[ "$(printf '%s' "$OUT" | jq -r '.evidence | has("work_orders_bad_tdd")')" = "true" ] \
+  && pass_check "work_orders_bad_tdd is present on a pass, so an empty list means checked-and-clean" \
+  || fail_check "work_orders_bad_tdd only appears on failure, so its absence cannot be read"
 
 D=$(mktask wo_uncritiqued); mkdir -p "$D/work-orders" >/dev/null 2>&1
 printf '# wo\n' > "$D/work-orders/wo-01.md"

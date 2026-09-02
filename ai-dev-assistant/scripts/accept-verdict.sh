@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# accept-verdict.sh — the 7 pure decisions behind the repair accept verdict block in
+# accept-verdict.sh — the 7 pure decisions behind the repair accept verdict block, plus one
+# shared tdd-block judge (see its own banner below), in
 # build-critique-assert.sh (the section commented "the repair accept verdict (v5.42.0+)").
 #
 # SOURCE this file (do not execute it). Each function takes the record's PAYLOAD as $1 and
@@ -155,5 +156,53 @@ accept_escalation_reason() {
                    else ([(.rounds // [])[] | (.resolution // empty) | tostring | trim]
                          | map(select(. != "")) | last // "")
                    end' <<<"$1" 2>/dev/null) || { printf '%s' "$JQ_ERR"; return 0; }
+  printf '%s' "$out"
+}
+
+# =====================================================================================
+# THE TDD BLOCK JUDGE — one function, two callers (v5.48.0+)
+#
+# NOT part of the accept verdict. It lives here because this file is where
+# build-critique-assert.sh keeps the pure decisions it makes twice, and this is the second
+# one: the in-session branch reads `.tdd` off `_build-critique.json` and the work-order
+# branch reads `.tdd` off each `wo-NN.run.json`, and the two have to reach the same answer
+# or the delegated path becomes the cheap way to satisfy a rung.
+#
+# THE DEFECT THIS EXISTS FOR. The work-order branch shipped calling has() on four keys and
+# stopping, with a comment claiming it demanded "the same three counts and the same array
+# the in-session branch demands, so one path cannot be satisfied by a record the other would
+# refuse". That was false: the in-session branch additionally blocks on two VALUE
+# judgements, so
+#   {"red_observed":0,"passed_first_run":5,"ratified":0,"unobserved":["A","B","C"],"reason":null}
+# returned pass on the delegated path and fail on the in-session one. A comment asserting a
+# property the code does not enforce is the exact defect class the rung it guards exists to
+# catch.
+
+# tdd_block_problems <tdd-block-json>
+# The problems that BLOCK, as a compact JSON array of human-readable strings; `[]` when the
+# block is sound. Blocking only: the ratified-vs-red ratio line and the per-count surfacing
+# lines are reporting, they stay in the caller, and nothing here formats or emits.
+#
+# The four `omits` readings mirror the caller's own coercions verbatim rather than reading
+# has(): the in-session branch resolves each count through `(.x // -1)` and treats -1 as "the
+# block cannot say", so a key present-but-null is missing to it and has() would disagree.
+# `unobserved` is the exception, keyed on has() there and here, because an empty array and an
+# absent one are different answers and `// []` collapses them.
+tdd_block_problems() {
+  local out
+  out=$(jq -c '
+    def absent($v): (($v // -1) == -1);
+    def count($v): (($v // -1) | tonumber? // -1);
+    (((.reason // "") | tostring) as $r
+     | (($r == "") or ($r == "null")) as $noreason
+     | [ (if absent(.red_observed) then "omits red_observed" else empty end),
+         (if absent(.passed_first_run) then "omits passed_first_run" else empty end),
+         (if (has("unobserved") | not) then "omits unobserved[]" else empty end),
+         (if absent(.ratified) then "omits ratified" else empty end),
+         (if ((count(.passed_first_run) > 0) and $noreason)
+          then "passed_first_run > 0 with no reason recorded" else empty end),
+         (if ((((.unobserved // []) | length) > 0) and $noreason)
+          then "unobserved[] non-empty with no reason recorded" else empty end) ])
+  ' <<<"$1" 2>/dev/null) || { printf '%s' "$JQ_ERR"; return 0; }
   printf '%s' "$out"
 }

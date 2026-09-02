@@ -83,6 +83,29 @@ emit() { # emit <verdict> <unresolved true|false> <bypass_reason or empty> <exit
   exit "$4"
 }
 
+# has_tdd_problem <problems-json> <problem string>
+# Membership in what `tdd_block_problems` returned. A lookup, not a judgement -- the judging is
+# already done by the time this is called, and it is done in one place for both build paths.
+has_tdd_problem() { jq -e --arg p "$2" 'index($p) != null' <<<"$1" >/dev/null 2>&1; }
+
+# wo_frontmatter_status <work-order.md>
+# The `status:` value in the leading `---` frontmatter block, lowercased, or empty when the file
+# has no frontmatter or no status line. Deliberately not a YAML parse: this reads one line of a
+# file this repo writes itself, and a YAML dependency for that is a dependency the gate would
+# then fail closed on when it is missing.
+wo_frontmatter_status() {
+  awk '
+    NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit; next }
+    /^---[[:space:]]*$/ { exit }
+    /^status:/ {
+      sub(/^status:[[:space:]]*/, "")
+      gsub(/[[:space:]"]/, "")
+      print tolower($0)
+      exit
+    }
+  ' "$1" 2>/dev/null
+}
+
 BUILD_PATH="none"
 
 if [ -z "$TASK_DIR" ] || [ ! -d "$TASK_DIR" ]; then
@@ -259,7 +282,19 @@ if [ -e "$REC" ]; then
   [ "$TDD_REASON" = "null" ] && TDD_REASON=""
   set_ev tdd "$TDD"
 
-  if [ "$RED_N" = "-1" ] || [ "$FIRSTRUN_N" = "-1" ] || ! jq -e 'has("unobserved")' <<<"$TDD" >/dev/null 2>&1; then
+  # Every blocking decision about this block comes from ONE function, `tdd_block_problems` in
+  # accept-verdict.sh, and the delegated branch at the bottom of this file calls the same one.
+  # The counts above stay because the NON-blocking lines below say them out loud, and saying a
+  # number is not judging it.
+  TDD_PROBLEMS=$(tdd_block_problems "$TDD")
+  if [ "$TDD_PROBLEMS" = "$JQ_ERR" ]; then
+    add_msg "the tdd block could not be read, so it cannot say what was watched failing before the code existed"
+    emit fail true "" 1
+  fi
+
+  if has_tdd_problem "$TDD_PROBLEMS" "omits red_observed" \
+     || has_tdd_problem "$TDD_PROBLEMS" "omits passed_first_run" \
+     || has_tdd_problem "$TDD_PROBLEMS" "omits unobserved[]"; then
     add_msg "the tdd block omits red_observed, passed_first_run or unobserved[], so it cannot say what it did not watch"
     emit fail true "" 1
   fi
@@ -283,7 +318,7 @@ if [ -e "$REC" ]; then
   # `ratified` key reads identically to a phase that ratified nothing, and those are different
   # answers. Measured on one build: 19 assertions across two fixes, 11 red and 8 green on
   # arrival, and nothing anywhere was counting the 8.
-  if [ "$RATIFIED_N" = "-1" ]; then
+  if has_tdd_problem "$TDD_PROBLEMS" "omits ratified"; then
     add_msg "the tdd block omits ratified, so it cannot say how many tests passed on arrival because the code they describe already existed"
     emit fail true "" 1
   fi
@@ -293,7 +328,7 @@ if [ -e "$REC" ]; then
     add_msg "this suite is ratifying more than it is constraining: $RATIFIED_N ratified against $RED_N red"
   fi
 
-  if [ "$FIRSTRUN_N" -gt 0 ] && [ -z "$TDD_REASON" ]; then
+  if has_tdd_problem "$TDD_PROBLEMS" "passed_first_run > 0 with no reason recorded"; then
     # Two different things pass on their first run and only one is a defect.
     #
     # A test written test-first that passes immediately is the blocking violation
@@ -313,7 +348,7 @@ if [ -e "$REC" ]; then
     add_msg "$FIRSTRUN_N test(s) passed on their first run: $TDD_REASON"
   fi
 
-  if [ "$UNOBS_N" -gt 0 ] && [ -z "$TDD_REASON" ]; then
+  if has_tdd_problem "$TDD_PROBLEMS" "unobserved[] non-empty with no reason recorded"; then
     # Recording `unobserved` is legal. Leaving it unexplained is not: with no reason it reads
     # identically to a run where nobody thought about it, which is the state this whole block
     # exists to make visible.
@@ -1167,6 +1202,115 @@ if [ "$CRIT_N" -gt 0 ]; then
     add_msg "work-order critique(s) with no evaluated blocking field: $(jq -r 'join(", ")' <<<"$UNREADABLE")"
     emit fail true "" 1
   fi
+  # ---------------------------------------- the delegated path owes a TDD record too (v5.48.0+)
+  #
+  # Until this version `tdd` was demanded of `_build-critique.json` and of nothing else, so a
+  # /run-work-orders build satisfied this gate on its critique files alone and owed no statement
+  # about whether any test was watched failing before the code existed. The rung that enforces
+  # test-first was reachable only on the path where the main context does the building, while
+  # the orchestration rules route real builds to delegated agents. Measured on a live build:
+  # three components built, reviewed and merged with no TDD record of any kind, every downstream
+  # check satisfied, because each one reads a record nobody was asked to write.
+  #
+  # The unit of the record is the WORK-ORDER, not the phase. A delegated builder returns one and
+  # the loop collects it into `wo-NN.run.json` via wo-run-state.sh; the orchestrator aggregates
+  # rather than authoring on the builder's behalf. Absence is `unresolved`, the same answer the
+  # in-session branch gives a record with no `tdd` key: nobody looked is not nothing was wrong.
+  # THE SUBJECT SET IS THE WORK-ORDERS, NOT THE CRITIQUE FILES. The first cut of this block
+  # iterated `$CRITIQUES`, so a compiled work-order carrying no `wo-NN._critique.json` was never
+  # examined at all. Measured on a three-work-order fixture, one critiqued and two with nothing
+  # on disk beside their `.md`: `verdict: pass`, `work_orders_without_tdd: []`, and the record's
+  # own evidence saying `work_orders: 3`. A check whose subject set is the evidence it is looking
+  # for cannot report the evidence missing.
+  #
+  # NOT EVERY COMPILED WORK-ORDER OWES A RECORD. One that was never dispatched built nothing, and
+  # demanding a TDD statement of it would make the honest answer the expensive one. The rule is
+  # decidable from disk and is a UNION on purpose:
+  #
+  #   owes a record IFF `wo-NN.run.json` exists,
+  #                  OR `wo-NN._critique.json` exists,
+  #                  OR the frontmatter `status:` is NOT one of `ready` / `blocked`
+  #
+  # The status half is stated as an EXCLUSION because the state machine in `wo-compile.sh`
+  # (`blocked→ready→in_progress→{done,needs_rework}→ready`) has exactly two statuses a work-order
+  # can hold without ever having been dispatched: `blocked` and `ready`. Every other status is
+  # reached by the atom's own `ready→in_progress` flip, which happens BEFORE it mutates code. The
+  # first cut named `done` alone, which excluded `in_progress` (the loop crashed after the flip)
+  # and `needs_rework` (a failing verdict sent it back) -- both built something, and both were
+  # skipped in silence rather than named. Listing the two that owe nothing cannot rot as the
+  # enum grows; listing the three that owe something can.
+  #
+  # A run record means the loop dispatched it. A critique means it was BUILT: `wo-critic` reads a
+  # diff and the gate envelopes, so it cannot have run over something nobody built. A status past
+  # `ready` means the atom flipped it and started. Each of the three catches a lost-record shape
+  # the others miss, which is why the subject set is their union and not any one of them. A
+  # work-order matching none is one nobody dispatched, and it owes nothing: demanding a TDD
+  # statement of a build that never happened makes the honest answer the expensive one.
+  #
+  # The critique disjunct was missing from the first cut of this rule, which is how a fixture
+  # carrying a critique and no run record went from failing to passing without anyone choosing
+  # that.
+  #
+  # THE ID SET IS THE UNION OF THREE GLOBS, NOT THE `.md` LIST. Iterating `wo-*.md` fixes the
+  # original defect (a work-order with no critique was never examined) and opens its mirror: a
+  # `wo-NN._critique.json` whose `.md` is gone becomes invisible, and the gate returns `pass` on a
+  # record whose own evidence says one critic ran and zero work-orders owed anything. Measured:
+  # `work_orders: 0, work_order_critiques: 1, work_orders_owing_tdd: 0, verdict: pass`. A subject
+  # set drawn from ONE artifact can always be emptied by deleting that artifact, so it is drawn
+  # from all three that name a work-order.
+  WO_NO_TDD='[]'
+  WO_BAD_TDD='[]'
+  WO_TDD_SUBJECTS=0
+  WO_IDS=$( { printf '%s\n' "$WOS" | sed -n 's#.*/\(wo-[^/]*\)\.md$#\1#p'
+              find "$WO_DIR" -maxdepth 1 -name 'wo-*.run.json' -type f 2>/dev/null \
+                | sed -n 's#.*/\(wo-[^/]*\)\.run\.json$#\1#p'
+              printf '%s\n' "$CRITIQUES" | sed -n 's#.*/\(wo-[^/]*\)\._critique\.json$#\1#p'
+            } | grep . | sort -u )
+  while IFS= read -r WO_ID; do
+    [ -z "$WO_ID" ] && continue
+    f="$WO_DIR/$WO_ID.md"
+    RUN_JSON="$WO_DIR/$WO_ID.run.json"
+    WO_ST=""
+    [ -f "$f" ] && WO_ST=$(wo_frontmatter_status "$f")
+    if [ ! -f "$RUN_JSON" ] \
+       && [ ! -f "$WO_DIR/$WO_ID._critique.json" ] \
+       && { [ -z "$WO_ST" ] || [ "$WO_ST" = "ready" ] || [ "$WO_ST" = "blocked" ]; }; then
+      continue
+    fi
+    WO_TDD_SUBJECTS=$((WO_TDD_SUBJECTS + 1))
+    if [ ! -f "$RUN_JSON" ] || ! jq -e 'has("tdd")' "$RUN_JSON" >/dev/null 2>&1; then
+      WO_NO_TDD=$(jq -c --arg n "$WO_ID" '. + [$n]' <<<"$WO_NO_TDD")
+      continue
+    fi
+    # ONE JUDGE, TWO PATHS. `tdd_block_problems` is the same function the in-session branch
+    # blocks on above, so this record either satisfies both paths or neither. The comment this
+    # replaces claimed that property while the code checked four has() calls and nothing else,
+    # and a block with `passed_first_run: 5` and no reason passed here and failed there.
+    WO_TDD_PROBLEMS=$(tdd_block_problems "$(jq -c '.tdd' "$RUN_JSON" 2>/dev/null || printf 'null')")
+    if [ "$WO_TDD_PROBLEMS" = "$JQ_ERR" ]; then
+      WO_TDD_PROBLEMS='["the tdd block could not be read"]'
+    fi
+    if [ "$(jq -r 'length' <<<"$WO_TDD_PROBLEMS")" -gt 0 ]; then
+      WO_BAD_TDD=$(jq -c --arg n "$WO_ID" --argjson p "$WO_TDD_PROBLEMS" \
+        '. + [{work_order:$n, problems:$p}]' <<<"$WO_BAD_TDD")
+    fi
+  done <<< "$WO_IDS"
+  # Both keys are set unconditionally. An evidence key that appears only on failure cannot be
+  # read as "checked and clean", and `work_orders_owing_tdd` is here so a reader can tell an
+  # empty list that means nothing was wrong from one that means nothing was a subject.
+  set_ev work_orders_owing_tdd "$WO_TDD_SUBJECTS"
+  set_ev work_orders_without_tdd "$WO_NO_TDD"
+  set_ev work_orders_bad_tdd "$WO_BAD_TDD"
+  if [ "$(jq -r 'length' <<<"$WO_NO_TDD")" -gt 0 ]; then
+    add_msg "work-order(s) with no tdd block in their run record: $(jq -r 'join(", ")' <<<"$WO_NO_TDD")"
+    add_msg "a delegated build owes the same statement an in-session build owes: what was watched failing before the code existed, and what was not"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$WO_BAD_TDD")" -gt 0 ]; then
+    add_msg "work-order tdd block(s) the in-session branch would also refuse: $(jq -r '[.[] | .work_order + " (" + (.problems | join("; ")) + ")"] | join(", ")' <<<"$WO_BAD_TDD")"
+    emit fail true "" 1
+  fi
+
   add_msg "the build was challenged through /run-work-orders: $CRIT_N work-order critique(s), none blocking"
   emit pass false "" 0
 fi
