@@ -39,7 +39,11 @@ else bad "G2b a not_run record written the way step 7 writes it is present and t
 # G3: design.md's close step calls coverage-check.sh, writes through gate-audit-write with gate_type coverage,
 #     halts on fail with [f]ix/[o]verride, lets not_run proceed, and runs the design records check
 DES="$ROOT/commands/design.md"
-if grep -q 'scripts/coverage-check.sh' "$DES" && grep -q 'gate-audit-write.sh "<task_folder>" coverage' "$DES" \
+#     and the payload path is CAPTURED before it is passed: a bare `> "$(mktemp)"` creates the file and
+#     discards its name, so the write half has nothing to hand over. The architecture-fit gate found
+#     that literal shipped; G3 passed it because it only grepped for the two script names.
+if grep -q -E 'CV=.*mktemp.*coverage-check\.sh.*> *"\$CV"' "$DES" && grep -q -F 'coverage "@$CV"' "$DES" \
+  && grep -q 'scripts/coverage-check.sh' "$DES" && grep -q 'gate-audit-write.sh "<task_folder>" coverage' "$DES" \
   && grep -q -E '\[f\]ix' "$DES" && grep -q -E '\[o\]verride' "$DES" && grep -q 'not_run' "$DES" \
   && grep -q 'phase-records-check.sh "<task_folder>" --phase design' "$DES" && ! grep -q -i 'Traceability walkthrough (opt-in)' "$DES"; then ok "G3 design close runs the gate, records it, halts on fail, checks its records; the opt-in walkthrough is gone"
 else bad "G3 design close runs the gate, records it, halts on fail, checks its records; the opt-in walkthrough is gone"; fi
