@@ -1,5 +1,44 @@
 # Changelog
 
+## [5.53.0] - 2026-09-03
+
+The second halves of four tasks that had shipped a first half and stopped. Each was a specific named
+gap rather than open-ended work.
+
+### Fixed
+- **Converting a task to an epic no longer strands its contract.** `migrate-to-epic.sh` swept
+  `alignment.md` into `shared/` with every other sibling, and `alignment-read.sh` only ever looked at
+  the task root, so a migrated epic kept its contract on disk and lost it to every reader. **20 epics
+  on this machine were in that state, up from 17 recorded four days earlier** — three more were lost
+  while the defect sat unfixed. The migration now keeps it at the epic root, and the reader falls
+  back to `shared/` so the ones already stranded resolve on the next read: **15 of the 20 recovered.**
+  The other 5 fail for an older unrelated reason, bold labels instead of headings, and are not
+  counted as fixed. The migration spec had 13 cells and never mentioned the contract — it checked
+  that files were preserved, never that the contract was still findable.
+- **A criterion's author was known to one reader and invisible to another.**
+  `contract-resolve.sh` had no author-marker handling at all, and `criterion-provenance.sh` never
+  opened `task.md`, so it returned "no criteria" on tasks where the resolver found nine. Both now
+  share one way of reading the marker. On the epic that owns this work the two readers agree exactly:
+  22 criteria, 6 owner-authored, 14 unrecorded.
+- **A test guarded a schema it could not see deleted.** `sidecar-contract-spec.sh` matched a
+  substring that also matched two unrelated files, so removing the schema it exists to protect left
+  it green.
+- **An unattended run did not say it was unattended.** `wo-unattended-launch.sh` exported five
+  variables and not `AIDA_UNATTENDED`, which the session greeting reads to decide whether to put a
+  question to a person who is not there. Two defects, not one: `--print-cmd` also filtered the
+  variable out of its own dump, which is why nobody noticed the export was missing.
+- **A reference claimed five callers read the normalizer's exit status; one did.** Two now do, and
+  the document names which commands read it and which do not, with a check comparing that against the
+  commands themselves — so converting the remaining one later cannot leave the document behind.
+
+### Added
+- **The offer to set up a project in unregistered code can be declined, and the refusal is
+  remembered per directory.** What shipped in 5.27.0 was a paragraph printed every session with
+  nothing recording a refusal, so declining cost the same interruption every time. The record follows
+  the three-state shape already used for the code map and the task rule — absent means nobody was
+  asked, declined means never ask again, and those are not the same fact. It lives beside the
+  registry rather than in `project_state.md`, because the answer is given before a project exists.
+
 ## [5.52.0] - 2026-09-03
 
 Closing out the `critique_serves_the_goal` epic. Its contract read 2 of 22 done while most of it had

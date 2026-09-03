@@ -69,6 +69,25 @@ When `/next` is called without a project name:
      not set up, and offer `/ai-dev-assistant:new <name>` as the first option. Offer the list of other
      projects as the second option, for the case where the user meant to work somewhere else. Under an
      unattended run, state the fact and stop; do not prompt.
+
+0a. **Propose a project here once, and remember the answer.** This is the one place the proposal is
+   put to the user, and `.offer` from the same `project-for-cwd.sh` call above says whether it has
+   already been answered. Three states, and they are not two:
+   - **`.offer` is `null`** — nobody has been asked. Make the offer, in one line, before any deep
+     analysis: setting a project up here gives findings and decisions somewhere to live past this
+     session. Then **wait for a plain yes or no.** Never assume either.
+   - **`.offer.declined` is `true`** — the user already said no for this directory. **Do not offer
+     again.** Answer the question that was actually asked and move on. Only an explicit
+     `/ai-dev-assistant:new` overrides it.
+   - **`.offer.declined` is `false`** — a project was made here. It should also be registered, so
+     `registered: true` normally covers this; if it does not, say so rather than re-offering.
+
+   Record whichever answer you get:
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/project-offer-write.sh" --dir "<cwd>" --answer declined`
+   on no, and `--answer accepted --project <name>` once a project is created. Recording the decline
+   is the point — an unrecorded no is re-asked every session, which is what shipped before v5.53.0.
+   Under an unattended run, skip the offer entirely and record nothing: there is nobody to answer,
+   and silence is not a decline.
 1. Read registry at `~/.claude/ai-dev-assistant/active_projects.json`
 2. List all projects (sorted by lastAccessed, newest first)
 3. Ask user to choose
@@ -351,6 +370,11 @@ This will:
 ## Output
 
 Prints the recommended next action. It writes the session-context file at `~/.claude/ai-dev-assistant/sessions/<hash>.json`, outside the project, recording the resolved project and task.
+
+Answering the "set a project up here?" offer records that answer in
+`~/.claude/ai-dev-assistant/project_offers.json`, outside the project, keyed by
+the directory you were standing in. It holds the directory, the answer, and when
+it was given. A no is recorded so it is never asked again.
 
 Two paths write more than that, and both are on your confirmation:
 

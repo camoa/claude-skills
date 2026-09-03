@@ -9,34 +9,42 @@
 # Usage: project-for-cwd.sh [dir]     (dir defaults to $PWD)
 #
 # Emits ONE JSON object to stdout and exits 0 on every recoverable state:
-#   { registered, dir, project, project_path, code_path, match, registry_present, warnings[] }
+#   { registered, dir, project, project_path, code_path, match, registry_present, offer, warnings[] }
 #
 # match: exact   — the directory IS a project's code path
 #        below   — the directory is inside a project's code path (a subdir of the codebase)
 #        none    — no registered project owns it
 #
 # Deepest code path wins, so a project nested inside another resolves to the nearer one.
+#
+# `offer` is what project-offer-read.sh answers for this directory: null when nobody has been asked
+# whether to set a project up here, {"declined": true, ...} when they said no. Callers that decide
+# whether to propose setting one up need both facts, and asking two scripts is how a caller ends up
+# asking one and not the other.
 set -uo pipefail
 
+SELF_DIR="$(dirname "$(readlink -f "$0")")"
 DIR="${1:-$PWD}"
 REGISTRY="${AIDA_REGISTRY:-$HOME/.claude/ai-dev-assistant/active_projects.json}"
+OFFER='null'
 WARNINGS='[]'
 add_warn(){ WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS" 2>/dev/null || printf '[]'); }
 
 if ! command -v jq >/dev/null 2>&1; then
-  printf '{"registered":false,"match":"none","registry_present":false,"warnings":["jq_missing"]}\n'
+  printf '{"registered":false,"match":"none","registry_present":false,"offer":null,"warnings":["jq_missing"]}\n'
   exit 0
 fi
 
 emit(){ # emit <registered> <match> <project|""> <project_path|""> <code_path|""> <registry_present>
   jq -n --argjson reg "$1" --arg match "$2" --arg name "$3" --arg ppath "$4" \
         --arg cpath "$5" --argjson present "$6" --arg dir "$DIR" --argjson warnings "$WARNINGS" \
+        --argjson offer "$OFFER" \
     '{schema_version:"1.0",
       registered:$reg, dir:$dir, match:$match,
       project:(if $name=="" then null else $name end),
       project_path:(if $ppath=="" then null else $ppath end),
       code_path:(if $cpath=="" then null else $cpath end),
-      registry_present:$present, warnings:$warnings}'
+      registry_present:$present, offer:$offer, warnings:$warnings}'
   exit 0
 }
 
@@ -47,6 +55,15 @@ if [ -z "$RESOLVED" ]; then
   emit false none "" "" "" false
 fi
 DIR="$RESOLVED"
+
+# What has this directory already said about being set up as a project? Read once, after resolution,
+# so every answer below carries it. A reader that cannot run leaves it null, which is the answer that
+# lets the proposal fire — the safe direction, since the alternative is silently settling a question
+# nobody answered.
+if [ -x "$SELF_DIR/project-offer-read.sh" ]; then
+  OFFER="$("$SELF_DIR/project-offer-read.sh" "$DIR" 2>/dev/null | jq -c '.offer // null' 2>/dev/null)" || OFFER='null'
+  [ -n "$OFFER" ] || OFFER='null'
+fi
 
 if [ ! -r "$REGISTRY" ]; then
   # No registry is not an error: it is a first-ever run. Unregistered is the honest answer.

@@ -55,6 +55,20 @@ if [ "$RC" -eq 0 ] \
 else fail_check "T3" "rc=$RC cmd=[$cmd_line] max=[$max_line] started=[$started] task=[$task_line]"; fi
 
 # ──────────────────────────────────────────────────────────────────────────────
+# T3b: THE RUN DECLARES ITSELF UNATTENDED.
+#
+# `hooks/session-start.sh` reads AIDA_UNATTENDED to decide whether to put a proposal to a person,
+# because an unattended run has nobody to answer one. This launcher exported five variables and not
+# that one, so the suppression held only for an operator who set it by hand -- and the whole point
+# of this wrapper is that nobody is at the keyboard. A launcher that does not say what kind of run
+# it is starting leaves every consumer guessing, and the consumer here guesses "attended".
+T="$(mktask t3b)"
+OUT="$(bash "$SUT" "$T" --budget-max 5 --print-cmd 2>/dev/null)"; RC=$?
+un_line="$(echo "$OUT" | grep -E '^AIDA_UNATTENDED=' | head -1)"
+if [ "$RC" -eq 0 ] && [ "$un_line" = "AIDA_UNATTENDED=true" ]; then pass_check
+else fail_check "T3b unattended launch declares AIDA_UNATTENDED=true" "rc=$RC got=[$un_line]"; fi
+
+# ──────────────────────────────────────────────────────────────────────────────
 # T4: --budget-max missing → exit≠0 (fail-closed; never launch an ungoverned run)
 T="$(mktask t4)"
 OUT="$(bash "$SUT" "$T" --print-cmd 2>/dev/null)"; RC=$?

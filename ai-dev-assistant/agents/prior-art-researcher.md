@@ -55,7 +55,7 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 3. **Analyze top candidates.** Read their code, documentation, and issue history.
 4. **Extract patterns.** Document reusable approaches found.
 5. **Assess fit.** Recommend use, extend, or build from scratch.
-6. **Return findings.** Return structured research to the caller (the command writes to files).
+6. **Write the two files.** The markdown research and the JSON record go to the paths the dispatcher handed you, before you return. Your message is a pointer, not the deliverable — see "Deliver by file, not by message" below.
 
 ## Output Format
 

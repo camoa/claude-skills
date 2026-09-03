@@ -343,6 +343,7 @@ if [ "$DRY_RUN" = "true" ]; then
     if [ -f "$p" ]; then
       case "$n" in
         task.md|research.md|architecture.md|implementation.md) ;;
+        alignment.md) echo "    - $n (epic root)" ;;
         *) echo "    - shared/$n" ;;
       esac
     elif [ -d "$p" ]; then
@@ -427,6 +428,14 @@ else
     if [ -f "$srcpath" ]; then
       case "$name" in
         task.md|research.md|architecture.md|implementation.md) ;;  # already handled above
+        # alignment.md goes to the epic ROOT, not shared/, 2026-09-03. It was being swept sideways
+        # with everything else, and `alignment-read.sh` only looks at the task root, so a migrated
+        # epic kept its contract on disk and lost it to every consumer. 20 epics on this machine
+        # were in that state, up from 17 four days earlier. Unlike the four above it has no earlier
+        # copy step, so it is copied here rather than merely skipped: excluding it from the sweep
+        # without giving it a destination loses the file outright, which is what the first attempt
+        # at this fix did.
+        alignment.md) cp "$srcpath" "$TEMP_ROOT/$TASK_NAME/$name" ;;
         *) cp "$srcpath" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;
       esac
     elif [ -d "$srcpath" ]; then

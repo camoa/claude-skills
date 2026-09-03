@@ -17,24 +17,32 @@
 # so the adjustment is visible in /audit-status and the on-disk audit file.
 #
 # Output: the normalized JSON object to stdout.
-# Exit codes:
+#
+# THREE FACTS, THREE VALUES. A caller has to be able to tell these apart, because it routes them
+# differently and because two of them mean an agent failed while one means the caller did.
+#
 #   0  normalized successfully (whether or not a clamp was applied)
-#   1  input missing or not valid JSON (original text echoed unchanged)
-#   2  input EMPTY, or valid JSON missing a required key
+#   1  TEXT ARRIVED AND IS NOT JSON. The original is echoed on stdout unchanged. Also the value
+#      for calling this script wrong (no argument), which is a caller bug, not an agent event.
+#   2  A PAYLOAD ARRIVED AND IS NOT AN ANSWER. Valid JSON that is not an object, or an object
+#      missing `decision`, `confidence` or `code_read`. Something was delivered; it is unusable.
+#   3  NOTHING ARRIVED. No such file, or an empty input. Nobody delivered anything.
 #
 # WHY 2 EXISTS (v5.37.0). This script was honest about malformed input and silent about absent
 # input, and absent is the case that shipped. `jq empty` exits 0 on an empty byte stream, so the
-# validity check above passed, the filter emitted nothing, and the exit was 0 — indistinguishable
+# validity check below passed, the filter emitted nothing, and the exit was 0 — indistinguishable
 # from a run that legitimately filtered everything out. An agent that returned nothing and an agent
-# with nothing to say produced the same observable, which is the defect this whole release is about.
+# with nothing to say produced the same observable.
 #
 # The missing-key case is the same shape one level in. The clamp reads `.code_read == false`, and a
 # MISSING field is not equal to false in jq, so an object carrying neither `code_read` nor
 # `confidence` passed through untouched and read as an answer that had already been checked.
 #
-# A DISTINCT code, not 1: exit 1 means "here is text I could not parse, decide for yourself", and a
-# caller may reasonably echo it. Exit 2 means the input carried no answer at all, and there is
-# nothing to echo. Callers that branch on the exit code need to tell those apart.
+# WHY 3 EXISTS. 1 and 2 both mean something was delivered. A file the agent never wrote was
+# returning 1, so "nobody delivered an answer" and "an answer arrived and was garbage" reached the
+# caller as the same value, and a caller cannot route them differently if it cannot see the
+# difference. An absent file is the commonest failure in this area and it now says so on its own.
+# `null`, an empty list and a bare number are NOT absence: they arrived, so they stay at 2.
 
 set -uo pipefail
 
@@ -51,8 +59,9 @@ if [ "$SRC" = "-" ]; then
   RAW=$(cat)
 else
   if [ ! -f "$SRC" ]; then
-    echo "analysis-agent-normalize: file not found: $SRC" >&2
-    exit 1
+    echo "analysis-agent-normalize: no file at $SRC; nothing was delivered" >&2
+    echo "  Record it as no_return. This is not a malformed answer, it is the absence of one." >&2
+    exit 3
   fi
   RAW=$(cat "$SRC")
 fi
@@ -61,7 +70,7 @@ fi
 if [ -z "${RAW//[[:space:]]/}" ]; then
   echo "analysis-agent-normalize: input is empty; the agent returned no payload" >&2
   echo "  This is not an empty result. Record it as no_return and do not read it as a verdict." >&2
-  exit 2
+  exit 3
 fi
 
 if ! printf '%s' "$RAW" | jq empty >/dev/null 2>&1; then

@@ -29,7 +29,8 @@ jq -n --arg s "$TMP/code/site" --arg i "$TMP/code/site/inner" --arg pa "$TMP/pro
   '{version:"1.1", projectsBase:"/x", projects:[
      {name:"outer", path:$pa, codePath:$s},
      {name:"inner", path:$pb, codePath:$i}]}' > "$REG"
-run(){ AIDA_REGISTRY="$REG" "$K" "$1" 2>/dev/null; }
+OFFERS="$TMP/offers.json"
+run(){ AIDA_REGISTRY="$REG" AIDA_OFFERS="$OFFERS" "$K" "$1" 2>/dev/null; }
 f(){ printf '%s' "$1" | jq -r "$2" 2>/dev/null; }
 
 # --- always JSON, always exit 0 ---------------------------------------------------------------
@@ -91,6 +92,30 @@ OUT="$(run "$TMP/code/site")"
 OUT="$(run "$TMP/does-not-exist")"; RC=$?
 [ "$RC" -eq 0 ] && ok || no "a missing directory still exits 0"
 [ "$(f "$OUT" .registered)" = "false" ] && ok || no "a missing directory is unregistered"
+
+# --- the answer a directory already gave to the setup proposal ---------------------------------
+# Callers that decide whether to propose setting up a project ask this one script which project owns
+# the directory. Making them ask a second script whether the proposal was already declined is how a
+# caller ends up asking one and not the other. Both facts come back together.
+jq -n --arg s "$TMP/code/site" --arg pa "$TMP/proj/a" \
+  '{version:"1.1", projects:[{name:"outer", path:$pa, codePath:$s}]}' > "$REG"
+rm -f "$OFFERS"
+mkdir -p "$TMP/unreg"
+
+OUT="$(run "$TMP/unreg")"
+# `jq .missing` also prints "null", so assert the key is PRESENT before trusting its value —
+# otherwise every null assertion below passes against a script that never learned the field.
+printf '%s' "$OUT" | jq -e 'has("offer")' >/dev/null 2>&1 && ok || no "the answer carries an offer field at all"
+[ "$(f "$OUT" .offer)" = "null" ] && ok || no "an unregistered directory nobody has answered for reads offer:null"
+
+AIDA_OFFERS="$OFFERS" "$ROOT/scripts/project-offer-write.sh" --dir "$TMP/unreg" --answer declined >/dev/null 2>&1
+OUT="$(run "$TMP/unreg")"
+[ "$(f "$OUT" .registered)" = "false" ] && ok || no "recording a decline does not make a directory registered"
+[ "$(f "$OUT" .offer.declined)" = "true" ] && ok || no "a declined directory surfaces its decline here"
+
+# EXCLUSION: the decline belongs to that directory, not to the concept of being unregistered.
+OUT="$(run "$TMP/code/site2")"
+[ "$(f "$OUT" .offer)" = "null" ] && ok || no "another unregistered directory has still answered nothing"
 
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

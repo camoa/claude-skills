@@ -12,7 +12,7 @@ rm -f "$(ddf_session_file)"
 # check was removed once that declaration landed — install-time enforcement
 # supersedes it and makes missing-dependency failures loud instead of silent.
 
-REGISTRY="$HOME/.claude/ai-dev-assistant/active_projects.json"
+REGISTRY="${AIDA_REGISTRY:-$HOME/.claude/ai-dev-assistant/active_projects.json}"
 
 echo "## AI Dev Assistant"
 echo ""
@@ -24,6 +24,22 @@ echo ""
 WHERE=$("$DDF_DIR/scripts/project-for-cwd.sh" "$PWD" 2>/dev/null)
 REGISTERED=$(printf '%s' "$WHERE" | jq -r '.registered // false' 2>/dev/null || echo "false")
 PROJECT=$(printf '%s' "$WHERE" | jq -r '.project // ""' 2>/dev/null || echo "")
+
+# Has this directory already turned the proposal down? The argument below is an offer, and an offer
+# that cannot be declined is a demand. Until this existed the paragraph printed in every session
+# forever, so saying no cost the same interruption every time and nothing recorded that it had been
+# said. A recorded decline suppresses the ARGUMENT only; the one-line fact that this code is
+# unregistered, and the command that changes that, stay — a person who changes their mind must not
+# have to remember how.
+DECLINED=$(printf '%s' "$WHERE" | jq -r '.offer.declined // false' 2>/dev/null || echo "false")
+
+# An unattended run has nobody to answer a proposal, so it is not handed one. Only an explicit
+# AIDA_UNATTENDED counts: `CI` is deliberately NOT read, because this repository's own test suite
+# runs under it and would then be asserting the suppressed shape as the normal one.
+UNATTENDED="false"
+case "$(printf '%s' "${AIDA_UNATTENDED:-}" | tr '[:upper:]' '[:lower:]')" in
+  true|yes|y|1|on) UNATTENDED="true" ;;
+esac
 
 if [ "$REGISTERED" = "true" ] && [ -n "$PROJECT" ]; then
   echo "This code belongs to the **$PROJECT** project."
@@ -42,12 +58,17 @@ else
   echo "This code is not set up as a project yet, so nothing here is being tracked."
   echo ""
   echo "Run \`/ai-dev-assistant:new <project-name>\` to set it up, or carry on without it."
-  echo ""
-  echo "**If real work is starting here, set it up first.** Look around only as much as you need to"
-  echo "name the thing — the stack, whether it runs, roughly what it is. Then set up the project and"
-  echo "make the deep analysis its first task. Findings and decisions produced before there is a"
-  echo "project have nowhere to go: they live in this session and are gone when it closes, and the"
-  echo "next session starts over. Auditing first and setting up afterwards is the common mistake."
+  if [ "$DECLINED" != "true" ] && [ "$UNATTENDED" != "true" ]; then
+    echo ""
+    echo "**If real work is starting here, set it up first.** Look around only as much as you need to"
+    echo "name the thing — the stack, whether it runs, roughly what it is. Then set up the project and"
+    echo "make the deep analysis its first task. Findings and decisions produced before there is a"
+    echo "project have nowhere to go: they live in this session and are gone when it closes, and the"
+    echo "next session starts over. Auditing first and setting up afterwards is the common mistake."
+    echo ""
+    echo "\`/ai-dev-assistant:next\` puts that choice to you once and records your answer for this"
+    echo "directory. Say no there and this paragraph stops appearing here."
+  fi
   if [ -f "$REGISTRY" ]; then
     OTHERS=$(jq -r '.projects | length' "$REGISTRY" 2>/dev/null || echo "0")
     if [ "$OTHERS" -gt 0 ] 2>/dev/null; then
