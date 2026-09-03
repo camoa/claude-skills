@@ -1,5 +1,5 @@
 ---
-description: "Author or retrofit a task's scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. For a NEW task the contract (the artifact) is required; the elicitation intensity stays soft (draft-and-confirm when the goal is clear, interview or --grill otherwise). Retrofitting an EXISTING task is a soft nudge that never blocks. Introduced v3.12.0; new-task artifact requirement v5.21.0."
+description: "Author or retrofit a task's scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. A new task is not required to carry one at creation: the contract is required by /research, which refuses to author research.md without it, and /scope itself never blocks. Elicitation intensity stays soft (draft-and-confirm when the goal is clear, interview or --grill otherwise). Retrofitting an EXISTING task is a soft nudge that never blocks. Introduced v3.12.0; new-task artifact requirement v5.21.0, moved off creation to /research in v5.51.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
 argument-hint: <task-name> [--phase 1|2|3] [--grill]
 ---

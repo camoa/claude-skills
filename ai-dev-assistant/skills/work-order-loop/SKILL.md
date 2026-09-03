@@ -155,7 +155,10 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
    under `status: ready`.
 7. **Persist the handle snapshot.** `wo-run-state.sh collect <wo-NN.run.json> --override-used <…>
    --halt-reason <…> --build-returned <…> --checkpoint-after <…>` (from the handle), plus
-   `--tdd-file <…>` (v5.48.0+) when the builder wrote its TDD record. If the handle's
+   `--tdd-file <…>` (v5.48.0+) when the builder wrote its TDD record. The two booleans take the
+   literals `true` or `false` and nothing else: `TRUE`, `yes` and `1` exit 2 rather than being read
+   as `false`, which is what they silently became before v5.51.0. A failed write exits 1 with
+   `sidecar_write_failed`, so a `collect` that reports success has actually landed on disk. If the handle's
    `halt_reason != null` — the builder's re-gate **refused** (no flip happened ⇒ WO still `ready`) or
    `spawn_failed` (the flip already happened ⇒ WO `in_progress`) — ⇒ write `wo-NN.HALT` (reason = the
    handle `halt_reason`), mark the sidecar `wo-run-state.sh halt`, escalate. The WO is now TERMINAL

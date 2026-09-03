@@ -49,6 +49,10 @@
 # All writes: temp-file + mv (crash-atomic; partial write never replaces the live sidecar).
 #
 # Output: JSON to stdout + compact line to stderr. Exit 0 on success; 1 on halt/error; 2 on bad args.
+# A FAILED WRITE IS AN ERROR, NOT A SUCCESS: every mode exits 1 with `sidecar_write_failed` rather
+# than printing the record it could not store. `--override-used` and `--build-returned` take the
+# literals `true` or `false` only; anything else exits 2 with `bool_unreadable`. Omitting either
+# still takes this kernel's own default, because absence is not a caller's bad value.
 
 set -uo pipefail
 
@@ -69,6 +73,34 @@ atomic_write() {
   local target="$1" tmpf
   tmpf="$(mktemp "${target}.tmp.XXXXXX")"
   cat > "$tmpf" && mv "$tmpf" "$target"
+}
+
+# write_failed: the sidecar IS the record, so a mode that printed its new JSON and its "ok" line
+# while the file on disk still held the old one reported a state nothing had entered. Every mode
+# discarded atomic_write's status and this script has no `set -e`, so an unwritable directory made
+# `halt` print halted:true and exit 0 over a sidecar that still said false. The loop reads the file.
+# A halt nobody recorded does not stop the next dispatch, and a dispatch nobody recorded leaves
+# `attempts` where it was, so the cap `--cap` exists to enforce is never reached.
+write_failed() {
+  jq -nc --arg m "$MODE" --arg p "$RUN_JSON" \
+    '{"ok":false,"reason":"sidecar_write_failed","mode":$m,"path":$p}'
+  printf 'wo-run-state %s write-failed wo=%s path=%s\n' "$MODE" "$WO" "$RUN_JSON" >&2
+  exit 1
+}
+
+# read_bool: a boolean this kernel cannot read is refused, never quietly made `false`. The old form
+# compared against the exact lowercase literal and defaulted everything else to false, so
+# `--override-used TRUE` recorded the opposite of what the caller said: wo-merge-gate.sh then loses
+# a recorded grounding override, and work-order-critique/SKILL.md stops forcing the critique it
+# forces on one. `false` is a caller saying no; an unreadable value is a caller nobody understood.
+# Called for its EXIT, never in a command substitution: a subshell's `exit 2` ends the subshell, and
+# the refusal JSON would land in the field it was refusing.
+require_bool() { # $1 flag name  $2 value
+  case "$2" in true|false) return 0 ;; esac
+  jq -nc --arg f "$1" --arg v "$2" \
+    '{"ok":false,"reason":"bool_unreadable","flag":$f,"value":$v}'
+  printf 'wo-run-state %s bad-bool flag=%s value=%s\n' "$MODE" "$1" "$2" >&2
+  exit 2
 }
 
 # tdd_refuse: emit the refusal JSON + a stderr line and exit 2, leaving the sidecar untouched.
@@ -145,7 +177,7 @@ case "$MODE" in
         "dispatched_at":$dispatched_at,"halted":false,"halt_reason":null,
         "override_used":null,"build_returned":null,"checkpoint_after":null}')"
 
-    printf '%s\n' "$JSON" | atomic_write "$RUN_JSON"
+    printf '%s\n' "$JSON" | atomic_write "$RUN_JSON" || write_failed
     printf '%s\n' "$JSON"
     printf 'wo-run-state dispatch ok wo=%s attempts=%s\n' "$WO" "$ATTEMPTS" >&2
     ;;
@@ -180,8 +212,9 @@ case "$MODE" in
     }
 
     # Build typed jq-argument values (all via --arg/--argjson; injection-inert).
-    OV_JSON="$([ "$OV_USED"  = "true" ] && echo 'true' || echo 'false')"
-    BR_JSON="$([ "$BUILD_RET" = "true" ] && echo 'true' || echo 'false')"
+    require_bool --override-used  "$OV_USED"
+    require_bool --build-returned "$BUILD_RET"
+    OV_JSON="$OV_USED"; BR_JSON="$BUILD_RET"
 
     # halt_reason: the literal string "null" → JSON null; any other value → JSON string.
     if [ "$HALT_REASON" = "null" ]; then HR_JSON="null"
@@ -237,7 +270,7 @@ case "$MODE" in
       JSON="$(jq -c --argjson tdd "$TDD_BLOCK" '. + {tdd:$tdd}' <<<"$JSON")"
     fi
 
-    printf '%s\n' "$JSON" | atomic_write "$RUN_JSON"
+    printf '%s\n' "$JSON" | atomic_write "$RUN_JSON" || write_failed
     printf '%s\n' "$JSON"
     printf 'wo-run-state collect ok wo=%s\n' "$WO" >&2
     ;;
@@ -295,7 +328,7 @@ case "$MODE" in
       '. + {halted:true, halt_reason:$r}' \
       "$RUN_JSON")"
 
-    printf '%s\n' "$JSON" | atomic_write "$RUN_JSON"
+    printf '%s\n' "$JSON" | atomic_write "$RUN_JSON" || write_failed
     printf '%s\n' "$JSON"
     printf 'wo-run-state halt ok wo=%s reason=%s\n' "$WO" "$REASON" >&2
     ;;

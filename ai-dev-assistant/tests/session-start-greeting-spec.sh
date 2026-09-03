@@ -44,9 +44,17 @@ printf '%s' "$REG_OUT" | grep -qi 'new work' \
   && pass_check "the registered greeting speaks to work that is arriving, not only resuming" \
   || fail_check "the registered greeting must address new work, not only how to resume"
 
-printf '%s' "$REG_OUT" | grep -q 'ai-dev-assistant:scope' \
+# It has to name a command, and the command has to be the one that opens a task. This asserted
+# `/scope` until 2026-09-03, which is how the greeting told every session in this repo the wrong
+# front door: `/scope` scaffolds a folder on a miss, so the claim was superficially true and
+# substantively wrong, since it charged a scope contract for the act of capturing a task. Creation
+# is `/next`, and it offers the contract afterwards.
+printf '%s' "$REG_OUT" | grep -q 'ai-dev-assistant:next' \
   && pass_check "it names the command that opens a task" \
-  || fail_check "it must name /scope — otherwise there is nothing to act on"
+  || fail_check "it must name /next — otherwise there is nothing to act on"
+printf '%s' "$REG_OUT" | grep -q 'ai-dev-assistant:scope' \
+  && fail_check "it must not name /scope as the way to open a task; capturing one costs no contract" \
+  || pass_check "and it does not send the reader to /scope to create one"
 
 # The call is the model's; what is NOT optional is saying which way it went. A
 # greeting that only offers a task lets "too small to track" be decided in

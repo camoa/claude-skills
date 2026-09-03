@@ -1,5 +1,42 @@
 # Changelog
 
+## [5.51.0] - 2026-09-03
+
+Capturing a task no longer costs a scope contract, and two ways `wo-run-state.sh` reported something that had not happened. Both found by the review phase
+on `deterministic_accept`; neither had any test coverage.
+
+### Changed
+- **Creating a task makes the stub and PROPOSES the contract; it no longer requires it.** Naming a
+  new task used to charge a scope contract as the price of the folder, so a task captured out of a
+  discussion could not exist without one. A contract authored at capture time freezes what was
+  believed then, and that belief is usually wrong by the time the task runs. `/next` now creates the
+  task and offers the contract next, and the offer can be declined: the task stays captured with
+  `alignment.md` unwritten. **The guarantee is unchanged and moved to where it is load-bearing** —
+  `/research` step 2a still refuses to author `research.md` for a new task with no Task-Level
+  contract, and that is now the only gate. Two gates for one rule meant the earlier one fired at the
+  moment it was most wrong.
+- **The session-start greeting named the wrong front door.** It told every session in this repo that
+  `/ai-dev-assistant:scope <name>` opens a task. `/scope` does scaffold a folder on a miss, which
+  made the claim superficially true and substantively wrong, because it demanded the contract in the
+  same breath. It names `/next` now, and says the contract comes after.
+
+### Fixed
+- **A write that failed is no longer reported as a success.** `atomic_write` returns non-zero when
+  it cannot write, every mode discarded that status, and the script has no `set -e`. With the
+  directory unwritable, `halt` printed a sidecar reading `halted: true`, printed `halt ok` to
+  stderr and exited 0, while the file on disk still said `false`. The loop reads the file, so a halt
+  nobody recorded does not stop the next dispatch. The same hole on `dispatch` left `attempts`
+  where it was, meaning the retry cap `--cap` exists to enforce was never reached and the loop could
+  dispatch without limit. All three modes now exit 1 with `sidecar_write_failed` and print that
+  instead of the record they could not store.
+- **A boolean this kernel cannot read is refused instead of quietly becoming `false`.**
+  `--override-used` and `--build-returned` were compared against the exact lowercase literal, so
+  `TRUE`, `True`, `yes`, `1` and a typo all recorded `false` — the opposite of what the caller said
+  for the first four. Downstream that drops a recorded grounding override at `wo-merge-gate.sh` and
+  cancels the forced critique in `work-order-critique/SKILL.md`. Anything but `true` or `false` now
+  exits 2 with `bool_unreadable`. Omitting either flag still takes the kernel's own default, because
+  absence is not a caller's bad value.
+
 ## [5.50.1] - 2026-09-03
 
 The first review phase this task has ever had found that the rule shipped in 5.50.0 was undone one
