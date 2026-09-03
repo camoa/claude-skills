@@ -1308,7 +1308,7 @@ expect sec-not-object.json       security skipped true  false "the report parses
 # tools_absent[] means one thing.
 expect sec-changed-scope-skipped.json    security pass    false false "fully tooled, clean, and composer.lock not in the diff: composer_audit is scoped out BY DESIGN and does not block"
 expect sec-changed-lock-only.json        security pass    false false "a composer.lock-only diff scopes out all three SAST layers — also by design, also not a gap"
-expect sec-changed-no-eligible.json      security skipped false false "a docs-only diff: nothing in scope, so no layer was denied anything. skipped WITHOUT unresolved, or every documentation PR fails review"
+expect sec-changed-no-eligible.json      security not_applicable false false "a docs-only diff: nothing in scope, so no layer was denied anything. not_applicable — a completed check that counts as applied — never unresolved, or every documentation PR fails review"
 # And the direction that must survive the fix: a by-design skip in the same report must
 # not launder a genuine absence sitting beside it.
 expect sec-scope-skip-hides-absent.json  security pass    false false "composer_audit scoped out and semgrep machine-scope absent: neither blocks, and both are reported"
@@ -1542,9 +1542,13 @@ trap 'rm -rf "$MATRIX_DIR"' EXIT
 contract_expect() {
   local f="$1" blocking="$2" zero="$3" cov="${4:-}" v partial
   case "$f" in
-    # A CORRECTLY SCOPED NO-OP is the one `skipped` that is benign, and it rests on TWO
-    # claims the report has to carry: nothing was eligible, which only skip_reason can
-    # say, AND nothing was denied anything, which the coverage lists say by being empty.
+    # A CORRECTLY SCOPED NO-OP resolves `not_applicable`, and it rests on TWO claims the
+    # report has to carry: nothing was eligible, which only skip_reason can say, AND
+    # nothing was denied anything, which the coverage lists say by being empty.
+    # It used to resolve `skipped`, the same word an unreadable report gets, so a reader
+    # of the verdict alone could not tell a docs-only diff from a scanner that returned
+    # nothing usable. `not_applicable` is a COMPLETED check: it counts as applied, it
+    # passes, and the reason it carries is what makes it a judgement rather than a gap.
     # A layer named in any of the three unavailability lists is the second claim
     # contradicting itself; NO coverage fields at all is the second claim never made and
     # `// []` supplying it out of silence. Both are unresolved. The columns that reach
@@ -1553,7 +1557,7 @@ contract_expect() {
     # with empty lists, exactly what a run with nothing eligible should look like.
     skipped-no-eligible)
       case "$cov" in
-        full|scoped-out|all-absent) printf 'skipped false false' ;;
+        full|scoped-out|all-absent) printf 'not_applicable false false' ;;
         *)                          printf 'skipped true false' ;;
       esac
       return ;;

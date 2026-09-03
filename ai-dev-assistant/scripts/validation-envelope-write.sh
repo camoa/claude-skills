@@ -85,7 +85,11 @@ SCHEMA_VERSION="1.1"
 # row of references/validation-gate-result.md §2 and with the commands/
 # directory: a new validate-* command that persists an envelope belongs here.
 KNOWN_GATES="tdd solid dry security guides playbook-adherence e2e visual-parity visual-regression"
-KNOWN_VERDICTS="pass warning fail skipped"
+# `not_applicable` is a COMPLETED check: the gate applied its scope test, found nothing of
+# its kind in the change, and recorded why. It counts as applied and it passes. It is a
+# separate word from `skipped` because `skipped` names the opposite fact — nobody could
+# look — and one word for both is how a run that checked nothing read as a clean one.
+KNOWN_VERDICTS="pass warning fail not_applicable skipped"
 
 # The severity mapping, defined once. Both modes call it; nothing else maps a
 # verdict to a severity. references/validation-gate-result.md §0 documents it.
@@ -94,13 +98,19 @@ def severity_of:
   if . == "fail" then "HIGH"
   elif . == "warning" then "MEDIUM"
   elif . == "pass" then "INFO"
+  elif . == "not_applicable" then "INFO"
   elif . == "skipped" then "INFO"
   else error("unknown verdict: " + tostring)
   end;
+# The rank orders FINDINGS, not coverage: that is why `skipped` sits at the bottom and a
+# mix of pass and skipped still aggregates to pass. `not_applicable` sits one step above
+# `skipped` for one reason — so a run where every gate considered its scope and excused
+# itself does not aggregate to the word that means nobody looked.
 def rank_of:
-  if . == "fail" then 3
-  elif . == "warning" then 2
-  elif . == "pass" then 1
+  if . == "fail" then 4
+  elif . == "warning" then 3
+  elif . == "pass" then 2
+  elif . == "not_applicable" then 1
   elif . == "skipped" then 0
   else error("unknown verdict: " + tostring)
   end;
@@ -352,9 +362,10 @@ else
     ($gates | map(.verdict)) as $verdicts
     | (if ($verdicts | length) == 0 then "skipped"
        else ([$verdicts[] | rank_of] | max) as $worst
-       | (if $worst == 3 then "fail"
-          elif $worst == 2 then "warning"
-          elif $worst == 1 then "pass"
+       | (if $worst == 4 then "fail"
+          elif $worst == 3 then "warning"
+          elif $worst == 2 then "pass"
+          elif $worst == 1 then "not_applicable"
           else "skipped" end)
        end) as $status
     | {
@@ -374,6 +385,7 @@ else
           pass:    ([$verdicts[] | select(. == "pass")]    | length),
           warning: ([$verdicts[] | select(. == "warning")] | length),
           fail:    ([$verdicts[] | select(. == "fail")]    | length),
+          not_applicable: ([$verdicts[] | select(. == "not_applicable")] | length),
           skipped: ([$verdicts[] | select(. == "skipped")] | length),
           total:   ($verdicts | length)
         },

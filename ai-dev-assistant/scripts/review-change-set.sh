@@ -147,9 +147,17 @@ UNTRACKED=$(git -C "$REPO" ls-files --others --exclude-standard 2>/dev/null \
 [ -n "$TREE" ] || TREE='[]'
 [ -n "$UNTRACKED" ] || UNTRACKED='[]'
 
+# `untracked` is counted HERE and nowhere else. It stays out of `files[]` on purpose -- the change
+# being judged is what the task committed or staged -- but "is there anything at all" is a different
+# question from "what am I judging", and reading only the first two arrays answered it wrongly. A
+# tree whose only work was new files reported `no_changes_anywhere` while the record beside it said
+# untracked: 2, and `commands/review.md` lets every gate skip on that reason, so the whole review
+# skipped citing something its own output contradicted. A build that has added files and staged
+# nothing is exactly what `/implement` leaves behind.
 REASON=""
 if [ "$(printf '%s' "$COMMITTED" | jq 'length')" -eq 0 ] \
-   && [ "$(printf '%s' "$TREE" | jq 'length')" -eq 0 ]; then
+   && [ "$(printf '%s' "$TREE" | jq 'length')" -eq 0 ] \
+   && [ "$(printf '%s' "$UNTRACKED" | jq 'length')" -eq 0 ]; then
   if [ -z "$MB" ]; then REASON="base_unresolvable"; else REASON="no_changes_anywhere"; fi
 fi
 

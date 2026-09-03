@@ -1,5 +1,49 @@
 # Changelog
 
+## [5.52.0] - 2026-09-03
+
+Closing out the `critique_serves_the_goal` epic. Its contract read 2 of 22 done while most of it had
+been live for weeks, so the bulk of this was reconciling the record against the code — but checking
+rather than assuming turned up four defects, one of them a live false green.
+
+### Fixed
+- **The duplication gate claimed it had measured a change it never looked at.** On a diff with no
+  PHP in it, `dry-check.sh` writes `status: pass` beside a skip reason, and `gate-verdict-resolve.sh`
+  turned that into `verdict: pass, measured: true`, reported as "duplication measured and within
+  target". Zero lines examined, a measurement claimed. It fired on every documentation-only pull
+  request and no spec covered that producer branch.
+- **An author marker written after the verify clause was silently unread.** `alignment-read.sh`
+  accepted `— by: owner` only before `— verify:`, and its near-miss warning scanned only the
+  pre-verify text, so the form every contract in this epic actually uses produced `unrecorded` with
+  no warning at all. Measured on the epic's own contract: 8 markers written, 0 read, 0 warnings,
+  under a criterion ticked as done since 5.39.0 promising every criterion records who wrote it. The
+  marker is now read from the verify tail too, including before a parenthetical note, which is the
+  shape real contracts use. The delimiter stays strict, so prose is still not promoted to an author.
+- **A change living entirely in untracked files reported `no_changes_anywhere`.** The emptiness test
+  read committed and tracked changes and never untracked, while the same record said `untracked: 2`
+  — and `commands/review.md` lets every gate skip on that reason, so a whole review skipped citing
+  something its own output contradicted, on exactly the state `/implement` leaves behind. Untracked
+  now counts toward whether anything changed at all, while staying out of what is judged.
+
+### Added
+- **`not_applicable` is a first-class gate verdict.** A gate that applied its own scope test, found
+  nothing of its kind, and recorded why has completed a check — it counts as applied, ranks above
+  `skipped` so an all-excused run does not read as nobody-looked, and gets its own column instead of
+  being folded into pass. The reason is required: a gate that declines and says nothing stays
+  unresolved and fails closed. Two gates could not adopt it and are named in
+  `references/validation-gate-result.md` rather than left implicit.
+- **`--suite-ran` on `repair-accept-check.sh`.** The specs a repair actually ran, recorded as an
+  array on the accept verdict, changing no outcome. Absent is `null`, never `[]`, because an empty
+  list would claim the repair ran no specs and nobody made that claim. Before this, a repair that
+  ran one spec, one that ran everything, and one that ran nothing and typed `green` wrote
+  byte-identical records.
+- **A seeded-defect cell in four more kernel specs, each asserting an exact kill count.**
+  `repair-accept-check.sh` 12, `coverage-check.sh` 4, `criterion-provenance.sh` 3,
+  `mechanism-disposition.sh` 6. Each disables the one branch where the script decides something
+  rather than repeating what its caller said, and refuses to run unless the replacement applied
+  exactly once. The count lives in the spec, so the claim no longer depends on trusting a build
+  report. Adds about 16s to a 366s suite.
+
 ## [5.51.0] - 2026-09-03
 
 Capturing a task no longer costs a scope contract, and two ways `wo-run-state.sh` reported something that had not happened. Both found by the review phase

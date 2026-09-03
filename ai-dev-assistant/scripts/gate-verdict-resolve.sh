@@ -55,18 +55,35 @@
 #                   is treated as closeable, which is the fail-closed direction.
 #
 # Output: one JSON object on stdout.
-#   {gate, verdict, unresolved, coverage_partial, measured, mode, messages[], evidence{}}
-#   verdict           pass | warning | fail | skipped
+#   {gate, verdict, unresolved, coverage_partial, reason, measured, mode, messages[], evidence{}}
+#   verdict           pass | warning | fail | not_applicable | skipped
 #   unresolved        true  ⇒ nothing was measured. review.md step 8 rule 2, fail-closed.
 #   coverage_partial  true  ⇒ part of it was.      review.md step 8 rule 4, fail-closed.
-#   Both false on a clean or ordinarily-warning run. They are never both true.
+#   reason            non-null ONLY on `not_applicable`, and required there. Null otherwise.
+#   Both markers false on a clean or ordinarily-warning run. They are never both true.
 #
-# `skipped` with unresolved FALSE is the third state, and it is benign: the gate was in
+# `not_applicable` is the third answer, and it is a COMPLETED check. The gate applied its own
+# scope test to the change, found nothing of its kind in it, and SAID WHY. It counts as
+# applied, it passes, and it is never `skipped` — which names the opposite fact, that nobody
+# could look. Before this value existed the two shared one word and one of them was worse
+# than that: dry-check.sh's no-PHP-in-the-changed-set branch writes `"status": "pass"` with a
+# `skip_reason`, so this resolver reported `duplication measured and within target` about a
+# run that measured nothing, on the majority of documentation pull requests.
+#
+# THE REASON IS THE BRANCH CONDITION, not a check applied afterwards. Each `not_applicable`
+# below is reached only by a report that names its reason, and the reason it names is the one
+# emitted — no literal here supplies one. A gate that declines and says nothing therefore
+# cannot reach this value at all: it falls through to `unresolved`, unchanged. That is
+# deliberate, because a declination that cannot say why nothing applied is not a considered
+# judgement and is indistinguishable from a gate nobody ran.
+#
+# That benign state is `not_applicable`, and it used to be spelled `skipped`: the gate was in
 # scope for nothing. A changed set with no PHP in it denies no scanner anything, and
 # fail-closing on it puts a red on every documentation pull request. The producer has to
 # SAY that is what happened — see the security branch's meta.skip_reason — because the
 # word `skipped` also names the state "the tools were here and returned nothing usable",
-# which is unresolved. A gate that cannot tell the two apart is guessing either way.
+# which is unresolved. A gate that cannot tell the two apart is guessing either way, and
+# for as long as one word carried both, no consumer could tell them apart either.
 #
 # Exit: 0 when a verdict was produced (including unresolved), 2 on a USAGE error only —
 # a bad gate name, a missing argument, no jq. A report that is missing, unparseable, not
@@ -154,6 +171,7 @@ command -v jq >/dev/null 2>&1 || die "jq is required"
 
 # One place builds the output, so `verdict`, `unresolved` and `coverage_partial` cannot
 # drift apart the way the prose versions of this mapping did.
+NA_REASON=""
 emit() {
   local verdict="$1" unresolved="$2" partial="$3" measured="$4" mode="$5" evidence="$6"; shift 6
   local msgs='[]' m
@@ -164,15 +182,24 @@ emit() {
   if [ "$unresolved" = "true" ]; then msgs=$(printf '%s' "$msgs" | jq -c '. + ["unresolved: true"]'); fi
   if [ "$partial" = "true" ];    then msgs=$(printf '%s' "$msgs" | jq -c '. + ["coverage_partial: true"]'); fi
   jq -n -c \
-    --arg gate "$GATE" --arg verdict "$verdict" --arg mode "$mode" \
+    --arg gate "$GATE" --arg verdict "$verdict" --arg mode "$mode" --arg reason "$NA_REASON" \
     --argjson unresolved "$unresolved" --argjson partial "$partial" \
     --argjson measured "$measured" --argjson messages "$msgs" --argjson evidence "$evidence" \
     '{gate:$gate, verdict:$verdict, unresolved:$unresolved, coverage_partial:$partial,
+      reason:(if $reason == "" then null else $reason end),
       measured:$measured, mode:$mode, messages:$messages, evidence:$evidence}'
   exit 0
 }
 
 unresolved_out() { emit skipped true false false "${2:-unknown}" "${3:-{\}}" "$1"; }
+
+# not_applicable_out <reason> <message> [mode] [evidence]
+# The reason is the FIRST argument because it is the thing that makes the value legitimate.
+# Every caller reads it out of the report it was handed; none of them invents one.
+not_applicable_out() {
+  NA_REASON="$1"
+  emit not_applicable false false false "${3:-unknown}" "${4:-{\}}" "$2"
+}
 
 # ------------------------------------------------------------------------------- tdd
 # No report on any path. tdd-workflow.sh: "This gate writes no JSON report, so the exit
@@ -560,8 +587,25 @@ case "$GATE" in
       WHICH="$ABSENT"; [ -n "$WHICH" ] || WHICH="which one is not stated in this report"
       unresolved_out "dry: this gate's only analyzer is absent ($WHICH; ${SKIP:-tools_absent}) — duplication was not measured" "$MODE" "$EV"
     fi
+    # CONSIDERED, AND NOTHING APPLIED. Everything above has already removed the ways a dry
+    # report can decline for a reason that is a TOOL problem: `unmeasured`, `measured:false`,
+    # `skip_reason: tool_absent`, and a non-empty tools_absent[] — the nextjs producer's
+    # `tool_failed` arrives carrying `unmeasured` and is caught with them. A skip_reason still
+    # standing here is therefore the gate saying the change held nothing it reads, and the
+    # reason emitted is the producer's own words, never a literal of this file's.
+    #
+    # THE STATUS IS NOT THE TEST, and this is why. drupal/dry-check.sh's no-PHP-in-the-changed
+    # -set branch writes `"status": "pass"` beside this reason, so a condition keyed on
+    # `skipped` alone left that path resolving `pass` with the message "duplication measured
+    # and within target" — a measurement claim about a run that measured nothing, on the
+    # majority of documentation pull requests. An empty skip_reason reaches neither branch
+    # here and falls to the guard below, which is the exclusion: a declination that names no
+    # reason is not a considered judgement and stays unresolved.
+    if [ -n "$SKIP" ]; then
+      not_applicable_out "$SKIP" "dry: nothing in the changed set is in this gate's scope ($SKIP) — duplication was not measured and no analyzer was denied anything" "$MODE" "$EV"
+    fi
     if [ "$STATUS" = "skipped" ]; then
-      unresolved_out "dry: the gate skipped without measuring (status=skipped)" "$MODE" "$EV"
+      unresolved_out "dry: the gate skipped without measuring, and named no reason (status=skipped)" "$MODE" "$EV"
     fi
     # ---- AXIS 1: findings. ---- AXIS 2: coverage, whose ONLY source here is `partial`,
     # the producer's word for "some changed files were not on disk". Written as two axes
@@ -759,9 +803,10 @@ case "$GATE" in
     # there was nothing to measure and no scanner was denied anything. The producer says
     # so in meta.skip_reason because the whole-project path uses the same word `skipped`
     # for the very different state below, and the two are not distinguishable otherwise.
-    # Reported `skipped` with unresolved FALSE: benign per review.md step 8 rule 5, which
-    # defines benign by exclusion — not unresolved, no coverage_partial marker, not a
-    # fail. Fail-closing here would red every documentation pull request.
+    # Reported `not_applicable`, carrying the producer's reason: benign per review.md step 8
+    # rule 5, and distinct from `skipped` by name rather than only by a field a one-line
+    # render drops. Fail-closing here would red every documentation pull request; calling it
+    # `skipped` made it unreadable beside the state where nobody could look.
     #
     # THE COVERAGE LISTS ARE READ FIRST, AND SO IS THEIR ABSENCE. This branch used to sit
     # above both and short-circuit. Only the current producer's hardcoded empty lists kept
@@ -782,7 +827,7 @@ case "$GATE" in
       if [ "$SEC_HAVE_LISTS" = "no" ]; then
         unresolved_out "security: the report claims nothing was in scope (skip_reason=no_eligible_changes) and carries no coverage lists and no analyzers_ran — nothing in it says no layer was denied anything, and that is the half of the benign reading a report has to state rather than have assumed" "$MODE" "$EV"
       fi
-      emit skipped false false false "$MODE" "$EV" "security: nothing in the changed set is in this gate's scope — no layer was denied anything, so this is not a coverage gap"
+      not_applicable_out "$SKIP_REASON" "security: nothing in the changed set is in this gate's scope — no layer was denied anything, so this is not a coverage gap" "$MODE" "$EV"
     fi
     if [ "$RAN" != "null" ] && [ "$RAN" = "0" ]; then
       unresolved_out "security: analyzers_ran is 0 — no scanner produced a measurement" "$MODE" "$EV"

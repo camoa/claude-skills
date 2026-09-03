@@ -279,7 +279,7 @@ REP=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath
 git -C <codePath> diff --name-status $AFTER..$REP > "$CD/<component>.repair.txt"
 ${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run> \
   --test-motion-from "$CD/<component>.repair.txt" --test-globs "$(jq -c .globs <<<"$G")" "$GF" "$GV" \
-  [--modification-reason "<why a test file changed>"]   # $G/$GF/$GV: step 2c's, same component
+  --suite-ran '<the specs you ran, comma-separated>' [--modification-reason "<why a test changed>"]
 
 # And the scope half, from the SAME repair diff. Copy it verbatim, every value is computed here.
 # TWO sets come back: `unnamed`, a file the repair touched that no finding named, and `unaddressed`,
@@ -298,7 +298,7 @@ An unreadable critique yields `[]` sites and `cannot_judge`, never `in_scope`; a
 
 `--suite` is a RESULT you hand in; the kernel runs nothing. Who runs it is settled by `run_mode`
 (`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. Per repair the suite is
-the specs that read the files in `<component>.files.txt`, named in the record; `make` targets run once,
+the specs that read the files in `<component>.files.txt`, passed to `--suite-ran` so the record names them; `make` targets run once,
 when the PR is final, never per repair. With no suite over the repaired tree, `not_run` is the honest
 value and returns `cannot_judge`, not a pass. `--test-globs` is where this project's tests live; when that
 cannot be established pass `--test-globs-source undetermined`; `[]` alone is `cannot_judge`, and `[] determined` claims there are none.

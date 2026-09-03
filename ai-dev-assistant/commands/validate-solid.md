@@ -37,7 +37,7 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 
 6. **Check the exit code** — 0 means both writes succeeded. 1 is a write failure (missing task folder, permissions) — carry on and say so in the CLI summary. 2 means the arguments were rejected and nothing was written; fix the call rather than falling back to a hand-written file.
 
-7. **Print CLI summary** — show verdict, top 3 messages, and the persisted-result paths. When invoked non-interactively (chained from `/validate:all` or CI equivalents), signal verdict via exit code: 0 for `pass`/`warning`/`skipped`; 1 for `fail`. In interactive use the printed summary IS the signal — Claude does not literally exit the session. User workflow is NEVER blocked regardless of verdict.
+7. **Print CLI summary** — show verdict, top 3 messages, and the persisted-result paths. When invoked non-interactively (chained from `/validate:all` or CI equivalents), signal verdict via exit code: 0 for `pass`/`warning`/`not_applicable`/`skipped`; 1 for `fail`. In interactive use the printed summary IS the signal — Claude does not literally exit the session. User workflow is NEVER blocked regardless of verdict.
 
 ## Where the result comes from
 
@@ -74,7 +74,8 @@ It prints one JSON object:
 
 | Field | Use it for |
 |---|---|
-| `verdict` | the envelope's `--verdict`, verbatim: `pass` \| `warning` \| `fail` \| `skipped` |
+| `verdict` | the envelope's `--verdict`, verbatim: `pass` \| `warning` \| `fail` \| `not_applicable` \| `skipped` |
+| `reason` | non-null only on `not_applicable`, where it is required: the producer's own words for why nothing of this gate's kind was in the change. Print it beside the verdict — a gate that excused itself has to say so out loud. `not_applicable` is a COMPLETED check, counts as applied, and is never `skipped`, which means nobody could look |
 | `unresolved` | `true` ⇒ **nothing** was measured. The resolver has already put the literal `unresolved: true` in `messages[]`; pass those messages through unchanged. `/review` step 8 rule 2 reads it and fails closed |
 | `coverage_partial` | `true` ⇒ **part** of it was measured. Same deal: the literal `coverage_partial: true` is already in `messages[]`, and `/review` step 8 rule 4 fails closed on it |
 | `messages[]` | one `--message` per entry, in order. **Do not edit, reorder or drop any of them** — the two markers live in here, and a marker a caller trims is a green review |
@@ -98,7 +99,7 @@ this replaced.
   --gate solid \
   --task "<task_name>" \
   --task-folder "<abs path to the task folder>" \
-  --verdict "<pass|warning|fail|skipped>" \
+  --verdict "<pass|warning|fail|not_applicable|skipped>" \
   --details "$(jq -n \
       --arg raw "<absolute path to solid-report.json as resolved by report-dir.sh --latest, else empty>" \
       --arg cqt "<version from plugin.json of code-quality-tools>" \

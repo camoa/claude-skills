@@ -31,6 +31,14 @@
 #                    when no such file exists on disk. That is deliberate. A deleted test file is
 #                    exactly the motion this kernel most needs to see, and it is gone from disk by
 #                    the time anyone asks.
+#   --suite-ran <comma-separated spec paths>  OPTIONAL. The specs the caller actually ran over the
+#                    repaired tree, recorded verbatim as an array. ABSENT is `null`, never `[]`: an
+#                    empty list would read as "this repair ran no specs", which is a claim, and an
+#                    unnamed suite is nobody making one. It does not change any verdict. `--suite` is
+#                    a self-report with or without it; what this adds is enough specificity for a
+#                    reader to compare the named specs against the files the repair touched. Without
+#                    it, a repair that ran one spec, one that ran everything, and one that ran
+#                    nothing and typed `green` write byte-identical records.
 #   --test-globs-source <determined|undetermined>  OPTIONAL, default determined WHEN --test-globs is
 #                    non-empty; an EMPTY list with this flag omitted is cannot_judge, because nothing
 #                    then separates "this project has no test paths" from "the caller never looked".
@@ -125,7 +133,7 @@ require_value() {
   esac
 }
 
-SUITE=""; MOTION_FROM=""; TEST_GLOBS=""; GLOBS_SOURCE="determined"; GLOBS_SOURCE_SET=0; GLOBS_ORIGIN=""; MOD_REASON=""; MOD_REASON_SET=0
+SUITE=""; MOTION_FROM=""; TEST_GLOBS=""; GLOBS_SOURCE="determined"; GLOBS_SOURCE_SET=0; GLOBS_ORIGIN=""; MOD_REASON=""; MOD_REASON_SET=0; SUITE_RAN=""
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/glob-to-regex.sh"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -134,6 +142,7 @@ while [ $# -gt 0 ]; do
     --test-globs) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs needs a value" >&2; exit 2; }; require_value --test-globs "$2"; TEST_GLOBS="$2"; shift 2 ;;
     --test-globs-source) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-source needs a value" >&2; exit 2; }; require_value --test-globs-source "$2"; GLOBS_SOURCE="$2"; GLOBS_SOURCE_SET=1; shift 2 ;;
     --test-globs-origin) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-origin needs a value" >&2; exit 2; }; require_value --test-globs-origin "$2"; GLOBS_ORIGIN="$2"; shift 2 ;;
+    --suite-ran) [ "$#" -ge 2 ] || { echo "repair-accept-check: --suite-ran needs a value" >&2; exit 2; }; require_value --suite-ran "$2"; SUITE_RAN="$2"; shift 2 ;;
     --modification-reason) [ "$#" -ge 2 ] || { echo "repair-accept-check: --modification-reason needs a value" >&2; exit 2; }; require_value --modification-reason "$2"; MOD_REASON="$2"; MOD_REASON_SET=1; shift 2 ;;
     *) echo "repair-accept-check: unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -188,7 +197,9 @@ emit() {
   local reasons_json
   reasons_json="$(to_json_array ${REASONS[@]+"${REASONS[@]}"})"
   jq -nc --arg a "$1" --arg d "$2" --arg s "$SUITE" --argjson m "$3" --argjson r "$reasons_json" --arg o "$GLOBS_ORIGIN" \
-    '{action:$a, blocks:false, decided_by:$d, suite:$s, motion:$m, reasons:$r, test_globs_origin:(if $o=="" then null else $o end)}'
+    --arg sr "$SUITE_RAN" \
+    '{action:$a, blocks:false, decided_by:$d, suite:$s, motion:$m, reasons:$r, test_globs_origin:(if $o=="" then null else $o end),
+      suite_ran:(if $sr=="" then null else ($sr|split(",")|map(gsub("^\\s+|\\s+$";""))|map(select(length>0))) end)}'
 }
 EMPTY_MOTION='{"added":[],"deleted":[],"modified":[]}'
 
