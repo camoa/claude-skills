@@ -37,8 +37,11 @@
 #                    path" and "I do not know what a test path is here"; repair-scope-check.sh had to
 #                    add this flag after shipping without it, and this one ships with it.
 #   --modification-reason <text>             OPTIONAL. Why a test file was modified. A modified test
-#                    with no reason is not_accepted; the same modification WITH a reason is accepted.
-#                    The tripwire demands a reason, it never forbids the change. Passing the flag
+#                    is not_accepted either way: the reason is recorded AT the halt and never clears
+#                    it. The tripwire does not forbid the change and does not judge it -- it takes
+#                    the decision away from the party whose work is being judged, because the
+#                    builder writes this reason and accepting on it is a self-issued permit.
+#                    Passing the flag
 #                    with a value that is empty or whitespace-only is rejected as a bad argument:
 #                    omitting the flag says "I have no reason" and is answered not_accepted, while
 #                    passing a blank one says "here is my reason" and hands over nothing. Whitespace
@@ -51,8 +54,11 @@
 #     "decided_by": "suite_and_motion|motion|none", "suite": "green|red|not_run",
 #     "motion": { "added": [], "deleted": [], "modified": [] }, "reasons": [] }
 #     action      accepted     = the suite was green and the motion raised nothing unanswered.
-#                 not_accepted = the suite was red, OR a test file was modified with no
-#                                --modification-reason.
+#                 not_accepted = the suite was red, OR a test file was MODIFIED -- with or without
+#                                a --modification-reason. A reason is recorded at the halt; it never
+#                                clears one. The builder writes that reason, so accepting on it is a
+#                                self-issued permit, and a repair loop that may edit the standard
+#                                always converges. Adds and deletes still pass silently.
 #                 cannot_judge = --test-motion-from named a ZERO-BYTE file, OR --suite was not_run,
 #                                OR --test-globs-source was undetermined.
 #                                UNMEASURED, never "fine". cannot_judge is NEVER accepted. Folding
@@ -265,8 +271,34 @@ MOTION="$(jq -nc --argjson a "$A_JSON" --argjson d "$D_JSON" --argjson m "$M_JSO
 # The motion tripwire first, ahead of the not_run abstention too, because it settles the answer whatever
 # the suite said or did not say: a green suite
 # over a test somebody quietly rewrote is the case the tripwire exists for.
-if [ "${#MODIFIED[@]}" -gt 0 ] && [ -z "$MOD_REASON" ]; then
-  REASONS+=("a test file was modified with no --modification-reason: ${MODIFIED[*]}")
+if [ "${#MODIFIED[@]}" -gt 0 ]; then
+  # A MODIFIED TEST NEVER CLOSES THE COMPONENT, REASON OR NO REASON.
+  #
+  # The contract this implements says a repair that modifies a test "halts for a stated reason".
+  # The first cut read that as "is accepted once a reason is given", which turned the reason from
+  # something recorded AT a halt into something that CLEARS one. That is a loophole with a shape
+  # worth naming: the builder writes the reason, and the builder's own change is then accepted on
+  # the strength of it. A self-issued permit is the same defect as a builder reviewing its own
+  # work, in a smaller frame, and it is invisible because it looks like compliance. A repair loop
+  # whose subject may edit the standard always converges -- the work can move the goalposts instead
+  # of meeting them -- so the adversary it answers to stops being one.
+  #
+  # `not_accepted` is not a judgement that the change was wrong, and nothing here judges the test:
+  # the motion is the subject, added / deleted / modified, exactly as the contract's non-goal
+  # requires. It routes the decision to somebody who is not the author. That path already exists:
+  # `not_accepted` halts the build, offers `[f]ix` or `[o]verride (reason)`, and under an
+  # autonomous run there is nobody to ask, so it halts rather than overriding itself.
+  #
+  # The reason is still recorded and still reaches `/review`. It stops being sufficient; it does
+  # not stop being useful.
+  #
+  # Adds and deletes still pass silently. Only modification can quietly rewrite what an existing
+  # assertion demands, and that asymmetry is the contract's, not this script's.
+  if [ -z "$MOD_REASON" ]; then
+    REASONS+=("a test file was modified with no --modification-reason: ${MODIFIED[*]}")
+  else
+    REASONS+=("a test file was modified and the caller stated a reason, which is recorded but does not accept it: ${MODIFIED[*]} -- $MOD_REASON")
+  fi
   emit not_accepted motion "$MOTION"
   exit 0
 fi
@@ -281,9 +313,6 @@ if [ "$SUITE" = "not_run" ]; then
 fi
 
 # --- the matrix (deterministic) -----------------------------------------------
-if [ "${#MODIFIED[@]}" -gt 0 ]; then
-  REASONS+=("a test file was modified and the caller stated a reason: $MOD_REASON")
-fi
 if [ "${#ADDED[@]}" -gt 0 ] || [ "${#DELETED[@]}" -gt 0 ]; then
   REASONS+=("test paths were added or deleted, neither of which demands a reason")
 fi

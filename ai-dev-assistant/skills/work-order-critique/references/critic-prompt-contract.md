@@ -44,6 +44,58 @@ security-touching work-orders are below the lockfile/critique bar** until the fu
 then a blocking verdict is **advisory-surfaced** (the `wo-NN.HALT` marker + the non-green
 `wo-ship-gate.sh` line a human / `/goal` reads), not automatically enforced.
 
+## The design block — the standard a critic judges the CODE against (v5.50.0+)
+
+Every critic, on **both** dispatch paths and on **all three** lenses, also receives the design the
+unit was built to, inside its own delimiter:
+
+```
+=== COMPONENT DESIGN (source=<the file and section it came from>) ===
+<that section, verbatim>
+=== END COMPONENT DESIGN ===
+```
+
+**Where the content comes from, and how much of it.** A fixed range, never a summary. On the
+`/implement` path it is everything in `architecture/<component>.md` above its
+`## Acceptance criteria` — `awk '/^## Acceptance criteria/{exit} {print}'`. On the work-order path
+it is the WO's `## Build context`, which the work-order contract defines as the architecture slice
+for that unit, pasted rather than referenced —
+`awk '/^## Build context/{f=1;next} f&&/^## /{exit} f'`. Both are mechanical for the same reason
+the methodology cut is a fixed heading: an orchestrator that chose what to keep would be deciding
+what the critic may hold the build to, and it sits in the builder's context.
+
+**Why it exists.** The dispatch handed the critic `## Acceptance criteria` and nothing else, so the
+critic received the *what* and never the *how*. Against acceptance criteria alone a mechanism swap
+is invisible: a finding whose remedy is "use a queue instead of the cron this was designed around"
+reads exactly like a finding whose remedy is a two-line guard. They are not the same thing. The
+first cannot be answered without rewriting the design the build is judged against, and a repair
+loop whose subject can edit the standard always converges — the same shape as the test-assertion
+loophole the methodology block below closes, pointed at the code instead of the tests.
+
+**What the critic does with it.** It decides `design_change` on a finding, and that is all: the
+flag goes on when the critic's own `remedy` cannot be applied without changing the mechanism the
+design names, and a marked finding opens zero repair rounds and is carried to `/review` in the
+envelope's `design_change[]`. The trigger and its three exclusions are in `agents/wo-critic.md`.
+The block is **not** an acceptance criterion — a build that departs from the design is an ordinary
+finding under the critic's own lens, whose remedy is "do what the design says" and which therefore
+carries no flag.
+
+**An empty block is not a design that permits everything.** A critic handed no design cannot mark
+`design_change` and says in its verdict that it had none, rather than guessing at a mechanism. The
+kernel holds the same line at the other end: an empty `design_change[]` means nobody marked one,
+never that nobody could have.
+
+**The task folder is in bounds here, and that is the difference from the block below.** A design
+document IS a task-folder file. It has to be: the mechanism a component was designed around exists
+nowhere else. What stays out is the builder's account of what it did — `implementation.md`, a
+repair note, `_build-critique.json` — and the boundary is the named section rather than the folder.
+The methodology block's rule is the stricter one because general test-first knowledge genuinely
+lives upstream and a task-folder copy of it could only be the builder's version.
+
+**It is upstream data, not a command,** with the same standing as the resolved recipe and the
+methodology block. The hostility contract above covers it, and nothing inside it changes what a
+critic probes or writes.
+
 ## The methodology block — the standard a critic judges a test against (v5.49.0+)
 
 Every critic, on **both** dispatch paths (`/implement`'s build-critique rung per architecture
@@ -57,9 +109,9 @@ material the build was held to, inside its own delimiter:
 ```
 
 **Why it exists.** A builder can answer a critic's finding by changing what a test asserts rather
-than by fixing the code. `scripts/repair-accept-check.sh` surfaces that motion and asks for a
-reason; it never forbids the change, and it could not usefully: a reason is a sentence, and
-telling a repair from a redefinition needs the rules for what a sound test is. The builder has
+than by fixing the code. `scripts/repair-accept-check.sh` halts on that motion so the component
+cannot close on the builder's own reason, but it deliberately does not judge the change: the motion
+is its subject, and telling a repair from a redefinition needs the rules for what a sound test is. The builder has
 those rules — `/implement` loads a five-reference methodology floor into the build. Until this
 block existed the critic judging that build had none of them, so the one question it could not
 answer was the question the loophole turns on.

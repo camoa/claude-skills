@@ -92,14 +92,28 @@ q "| in a recipe glob is literal: a source file is not a modified test" '.motion
 
 q "not_run still surfaces a modified test with no reason (motion-wiring)" .action not_accepted \
   --suite not_run --test-motion-from "$MODTEST" --test-globs "$GLOBS"
-q "not_run with the reason given is still cannot_judge (the suite half is missing)" .action cannot_judge \
+# The motion settles this ahead of the not_run abstention, and that is the honest answer rather
+# than the merely safe one: cannot_judge means "I could not look", and here we DID look and saw a
+# modified test. Before the reason stopped clearing the halt, this same input returned cannot_judge
+# only because the reason let it fall through to the suite half.
+q "not_run with a reason is decided by the motion, not abstained on" .action not_accepted \
   --suite not_run --test-motion-from "$MODTEST" --test-globs "$GLOBS" --modification-reason "x"
 
 # --- R1: "A repair that MODIFIES a test halts for a stated reason, while one that only adds or
 #          only deletes passes silently." ---
 q "R1 modified test, no reason -> not_accepted" .action not_accepted \
   --suite green --test-motion-from "$MODTEST" --test-globs "$GLOBS"
-q "R1 modified test WITH a reason -> accepted" .action accepted \
+# THIS CELL ASSERTED THE LOOPHOLE. It required that a stated reason ACCEPT the modification, which
+# made the reason a permit the builder issues to itself: the same party writes the change and the
+# justification that closes it. A repair loop whose subject may edit the standard always converges,
+# because the work can move the goalposts instead of meeting them. The reason is still recorded and
+# still reaches review; it no longer decides. Nothing here judges the test -- the motion is the
+# subject, which is what the contract's non-goal requires.
+q "R1 modified test WITH a reason -> not_accepted, the reason is recorded not spent" .action not_accepted \
+  --suite green --test-motion-from "$MODTEST" --test-globs "$GLOBS" \
+  --modification-reason "the test asserted the inverse"
+q "the stated reason survives into reasons[] rather than being dropped with the acceptance" \
+  '.reasons | join(" ") | test("the test asserted the inverse")' true \
   --suite green --test-motion-from "$MODTEST" --test-globs "$GLOBS" \
   --modification-reason "the test asserted the inverse"
 q "R1 only ADDED test paths -> accepted" .action accepted \
@@ -287,9 +301,10 @@ q "not_accepted on a modified test with no reason is decided by motion" .decided
 # says which of them settled it.
 q "a modified test with no reason is decided by motion even when the suite is red" .decided_by motion \
   --suite red --test-motion-from "$MODTEST" --test-globs "$GLOBS"
-# A stated reason answers the motion, so the motion raises nothing unanswered and the suite carries
-# the answer again. Same motion as the cell above, opposite decider.
-q "a modified test WITH a reason is decided by suite_and_motion" .decided_by suite_and_motion \
+# A stated reason no longer answers the motion, so the motion decides whether or not one was
+# given. Same motion as the cell above, SAME decider -- which is the point: the reason cannot move
+# the decision from the motion to the suite.
+q "a modified test WITH a reason is still decided by motion" .decided_by motion \
   --suite green --test-motion-from "$MODTEST" --test-globs "$GLOBS" \
   --modification-reason "the test asserted the inverse"
 
@@ -331,11 +346,13 @@ q "a path matching a glob but absent from disk still counts" '.motion.modified |
   --suite green --test-motion-from "$GHOST" --test-globs "$GLOBS"
 
 # --- a spec that checked nothing has not passed ---
-# 82 = 12 glob-source + 5 R1 + 2 R2 + 12 R3 + 9 R3b + 14 R4 + 5 R5 + 3 R6 + 3 R7 + 5 decided_by + 6 reasons
+# 83 = 12 glob-source + 6 R1 + 2 R2 + 12 R3 + 9 R3b + 14 R4 + 5 R5 + 3 R6 + 3 R7 + 5 decided_by + 6 reasons
+#      R1 gained one when the stated reason stopped accepting the modification: the halt and the
+#      survival of the reason into reasons[] are two different claims and each can fail alone.
 #      + 3 suite-echo + 3 glob.
 # Asserted rather than trusted: a block that fails to run, or a helper that returns early, subtracts
 # assertions silently and the run still prints "0 failed", which reads as green.
-EXPECTED=82
+EXPECTED=83
 TOTAL=$((PASS + FAIL))
 [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
 

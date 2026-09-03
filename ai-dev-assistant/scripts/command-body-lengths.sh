@@ -176,9 +176,9 @@ budget_for() {
     # component now gets at most one critic round, which bounds the loop structurally; this sentence
     # is what stops a rejected repair shipping inside that bound.
     # 446 -> 456, raise 10: every critic receives the methodology block, the test-first material
-    # the build was held to. `repair-accept-check.sh` accepts a modified test as long as a reason
-    # is recorded -- the tripwire demands a reason, it never forbids the change -- so a repair loop
-    # could answer a finding by moving the standard rather than meeting it. Telling those apart is
+    # the build was held to. At the time of this raise `repair-accept-check.sh` accepted a
+    # modified test as long as a reason was recorded, so a repair loop could answer a finding by
+    # moving the standard rather than meeting it; 5.50.0 made that motion halt. Telling those apart is
     # the critic's job and nothing had ever given the critic the standard: /implement loads a
     # five-reference methodology floor into the BUILD, and the critic that judges the build's
     # methodology got none of it. `meets-ac`, the lens that would judge a test rewritten to match
@@ -197,7 +197,24 @@ budget_for() {
     # it exists to reduce. Three lines: the awk that names the section, and the sentence saying why
     # the rest is out. The cut is a fixed heading rather than a summary because an orchestrator
     # choosing what to keep would be deciding what the critic may hold the build to.
-    implement) printf '459' ;;
+    # 459 -> 461, raise 2: every critic receives the component's own design. `methodology_block`
+    # one release earlier gave the critic the standard a TEST is judged against; this gives it the
+    # standard the CODE is judged against, and the loophole has the same shape. A repair loop whose
+    # subject can edit the standard always converges, because the work can move the goalposts
+    # instead of meeting them. Until now every blocking finding took one path -- repair, in the
+    # build -- so a finding whose only fix was "build it a different way" got repaired mid-build and
+    # the design was quietly rewritten to match the fix. `contract-baseline.sh` notices at the close
+    # of the phase, after every round it caused was already spent. The critic could not have flagged
+    # it either: the dispatch handed over `## Acceptance criteria` and nothing else, so the critic
+    # received the WHAT and never the HOW, and a mechanism swap is invisible against acceptance
+    # criteria alone. One line is the new `@=` value on the render call and one is the `whole
+    # dispatch` list (both existing lines, rewritten), one is the sentence on the range-check
+    # paragraph saying the second trigger takes the same route, eleven are the paragraph naming the
+    # source, the mechanical extraction, and why the builder is not the party who settles this, and
+    # one is the blank line above it. The trigger itself lives in agents/wo-critic.md and the source
+    # boundary in skills/work-order-critique/references/critic-prompt-contract.md, so both dispatch
+    # paths read one copy; only the wiring is here.
+    implement) printf '461' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

@@ -738,6 +738,75 @@ run_cs "$D" "$CS_OK"
   && pass_check "and a readable envelope is never counted as an unreadable ref" \
   || fail_check "a readable envelope was counted as an unreadable ref"
 
+# ------------------- 5c. a design finding reaches /review, or nothing does
+#
+# The sibling channel, same posture, different trigger. `wo-critique-aggregate.sh` suppresses a
+# finding the CRITIC marked `design_change: true` -- set when the critic's own remedy could not be
+# applied without changing the mechanism the component's design names -- and collects it into the
+# envelope's top-level `design_change[]`. `references/gate-audit-schema.md` calls that array the
+# channel by which a design finding reaches /review, and a channel with nothing listening is the
+# exact defect 5b above was written to fix, one field earlier. So it is asserted end to end here
+# rather than grepped for, and the absent-key and unreadable-ref cases are asserted too, because
+# every record written before this field existed is the absent-key shape.
+
+CRITIQUE_DSG='{"wo":"main","overall":"pass","blocking":false,
+ "range_check":{"status":"not_run","decided_by":"none","reason":"--component-files-from absent"},
+ "out_of_range":[],
+ "design_change":[{"severity":"critical","text":"the cron cannot see a queued item","id":"f7",
+   "remedy":"drain from a queue instead of the cron this was designed around",
+   "where":[{"file":"src/Cron.php","line":40}]}],
+ "critics":[{"lens":"correctness","verdict":"pass","findings":[
+   {"severity":"critical","text":"f1","where":[{"file":"src/A.php"}]}]}]}'
+
+D=$(mktask dsg_read); write_record "$D" '.'
+printf '%s' "$CRITIQUE_DSG" > "$D/build-critique/main.critique.json"
+run_cs "$D" "$CS_OK"
+[ "$(ev_of design_change_findings)" = "1" ] \
+  && pass_check "a finding the critic marked as fixable only by changing the design reaches /review" \
+  || fail_check "the gate read no design finding off the critique_ref (got $(ev_of design_change_findings))"
+# The EXACT list, not a substring of it. A `grep -q` for the site passes just as happily on a list
+# that also carries something nobody found, so it cannot tell a list that was read from one that
+# was seeded -- measured: a mutation that pre-filled the accumulator with a decoy path survived a
+# substring check and dies against this one.
+[ "$(printf '%s' "$OUT" | jq -c '.evidence.design_change_sites' 2>/dev/null)" = '["src/Cron.php"]' ] \
+  && pass_check "carrying the site it named and nothing else, so the reviewer can act on it" \
+  || fail_check "the design finding's sites are $(printf '%s' "$OUT" | jq -c '.evidence.design_change_sites' 2>/dev/null), not exactly the one site the finding named"
+printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'mechanism the design names' \
+  && pass_check "and it is said in the messages, not only in evidence" \
+  || fail_check "no message says a finding was routed to the design"
+verdict_is pass "a design finding is surfaced without failing the gate"
+# It is a separate count from the range check's, so neither can be read as the other. The fixture
+# carries an EMPTY out_of_range[] beside a populated design_change[]: a consumer that folded the
+# two together would report a range suppression that never happened.
+[ "$(ev_of out_of_range_findings)" = "absent" ] \
+  && pass_check "and the range-check count is not moved by a design finding" \
+  || fail_check "a design finding was counted as an out-of-range one ($(ev_of out_of_range_findings))"
+
+# The absent-key case: every record written before the field existed. It claims nothing and adds
+# to neither count -- not the design count, and not the unreadable-ref count either.
+D=$(mktask dsg_absent); write_record "$D" '.'
+printf '%s' "$CRITIQUE_OOR" > "$D/build-critique/main.critique.json"
+run_cs "$D" "$CS_OK"
+[ "$(ev_of design_change_findings)" = "absent" ] \
+  && pass_check "an envelope carrying no design_change[] adds no design count" \
+  || fail_check "a record with no design_change[] reported $(ev_of design_change_findings)"
+[ "$(ev_of out_of_range_unreadable_refs)" = "absent" ] \
+  && pass_check "and a readable envelope missing only that key is not an unreadable ref" \
+  || fail_check "an envelope with no design_change[] was counted as unreadable"
+
+# An unreadable ref answers neither question. The walk reads BOTH arrays before it counts either,
+# so a broken pointer raises the unreadable count exactly once and contributes to no total --
+# a ref counted as both read and unreadable would be worse than either answer alone.
+D=$(mktask dsg_unreadable); write_record "$D" '.'
+printf 'not json' > "$D/build-critique/main.critique.json"
+run_cs "$D" "$CS_OK"
+[ "$(ev_of design_change_findings)" = "absent" ] \
+  && pass_check "no design count is claimed over a ref nobody could read" \
+  || fail_check "an unreadable ref yielded a design count of $(ev_of design_change_findings)"
+[ "$(ev_of out_of_range_unreadable_refs)" = "1" ] \
+  && pass_check "and the unreadable ref is counted exactly once for both questions" \
+  || fail_check "the unreadable ref was counted $(ev_of out_of_range_unreadable_refs) times"
+
 # ------------------------------------------------- 6. the wiring the fixtures cannot reach
 
 grep -q 'build-critique-assert\.sh' "$REVIEW" \

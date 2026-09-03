@@ -149,9 +149,10 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    **The methodology block goes to all three lenses**, `meets-ac` included, unlike the resolved
    recipe, which `security` and `correctness` receive and `meets-ac` does not. It carries the
    test-first material the build was held to, so a critic can tell a repair that met the standard
-   from a change that moved it — a builder can answer a finding by rewriting what a test asserts,
-   `repair-accept-check.sh` demands a reason for that and never forbids it, and judging which one
-   happened needs the rules for what a sound test is. `/implement` loads those into the build and,
+   from a change that moved it — a builder can answer a finding by rewriting what a test asserts.
+   `repair-accept-check.sh` halts that motion rather than accepting it, so the component cannot
+   close on the builder's own reason, but the halt does not say WHICH of the two happened and
+   judging that needs the rules for what a sound test is. `/implement` loads those into the build and,
    until this block, into nothing that judged the build. It is one named section of
    `references/tdd-workflow.md` plus any already-loaded `development/tdd-spec-driven/*` guide,
    **never** the whole file — the rest of it is build-time procedure a critic cannot act on — and
@@ -362,8 +363,13 @@ not the range of the build being critiqued. Both ends are shas: a checkpoint lab
 `git diff` handed one exits 128 with the redirect's file already created and empty.
 
 `accepted` means the suite was green and the motion raised nothing unanswered. `not_accepted` means
-the suite was red, or a test file was modified with no `--modification-reason`; the tripwire demands
-a reason for a modified test, it never forbids the change. `cannot_judge` has three causes: the
+the suite was red, or a test file was MODIFIED — with or without a `--modification-reason`. The
+reason is recorded at the halt and never clears it: the builder writes that reason, so accepting on
+it is a permit the author issues to itself, and a repair loop whose subject may edit the standard
+always converges. The tripwire still does not judge the change, and nothing here reads the test: it
+moves the decision to somebody who is not the author, through the halt `/implement` already offers
+as `[f]ix` or `[o]verride`, which an autonomous run may not take for itself. Adds and deletes pass
+silently. `cannot_judge` has three causes: the
 motion file was zero bytes, no suite was run over the repaired tree, or the caller could not
 establish what a test path is here. The first exists because an empty diff carries no claim. A
 caller who knows there are no test paths says `--test-globs '[]'`, and one who cannot tell says
@@ -523,6 +529,44 @@ one of `pass`, `concern` or `critical` and ranks no higher than the worst suppre
 `unresolved` or unrecognised verdict is never dropped: `unresolved` means the critic could not
 investigate, which is a separate signal with nowhere else to live, and a verdict ranking above
 everything the range check judged is claiming more than the suppressed findings said.
+
+## A finding whose only fix is a different design is moved, not repaired (v5.50.0+)
+
+The sibling of the range check above, with the same routing and a different trigger. A critic
+sometimes finds something whose smallest honest fix is not a change to this code but a change to
+the mechanism the component's design named. Opening a repair round against that asks the builder
+to rewrite the standard it is being judged against, in the same session, with nobody else reading
+— and a repair loop whose subject can edit the standard always converges, because the work can
+move the goalposts instead of meeting them. `scripts/contract-baseline.sh` catches the edited
+design at the close of the phase, after every round it caused has already been spent.
+
+So the critic marks it. A finding carrying `design_change: true` is dropped from the severity that
+decides `blocking`, opens no repair round, and is copied whole into the envelope's top-level
+`design_change[]` with its `remedy` — the remedy is the trigger, and a reviewer weighing the
+finding against the design cannot read the record without it.
+`scripts/build-critique-assert.sh` walks the same `components[].critique_ref` list it already
+walks for `out_of_range[]` and surfaces the count in `evidence.design_change_findings` with the
+sites in `evidence.design_change_sites`. It surfaces and never blocks, the same posture as
+`deferred_findings` and `out_of_range_findings`: the finding is real, the disagreement is between
+it and the design, and the reviewer is the one who decides which gives way.
+
+**The trigger is the critic's, and it is the remedy.** `agents/wo-critic.md` states it as one
+sentence — the flag goes on when the critic's own `remedy` cannot be applied without changing the
+mechanism the design names — and rules out the three things it is not: a severity, an opinion of
+the design, and a way to raise a departure the design already forbids (that last one's remedy is
+"do what the design says", which fits the mechanism perfectly). The kernel cannot compute this.
+Whether a remedy fits a mechanism is a reading of the design, so the dispatch hands every lens the
+design body, and this route is only as real as that wiring.
+
+**It grants the critic no authority it did not have.** A critic that wanted a component not to
+block would write `verdict: "pass"` and file nothing, which is cheaper than marking a finding.
+Only the JSON literal `true` suppresses; a string, a number and a null all leave the finding
+blocking exactly as before, so every unrecognised value fails toward opening the round.
+
+**Absence is not a clean answer here either, and the kernel does not pretend otherwise.** An empty
+`design_change[]` means no critic marked one. It does not mean a critic was given a design to mark
+against — the kernel never sees the dispatch, so it claims neither, and
+`tests/build-critique-wiring-spec.sh` is what asserts the design reaches the critic on both paths.
 
 ## A finding built on a number states its threshold (v5.36.0+)
 

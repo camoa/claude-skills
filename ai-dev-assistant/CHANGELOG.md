@@ -1,5 +1,100 @@
 # Changelog
 
+## [5.50.0] - 2026-09-03
+
+One criterion, both halves. A build finding gets fixed by changing the code, never by moving what
+the code is measured against. Two things could move it: what an existing test asserts, and the
+mechanism the design names. Both now route away from the repair path, and they differ only in
+what detects them.
+
+
+### Fixed
+- **A modified test no longer closes a component on the builder's own reason.** The scope contract
+  said a repair that modifies a test "halts for a stated reason". It shipped as "is accepted once a
+  reason is given", which turned the reason from something recorded AT a halt into something that
+  CLEARS one. The builder writes the change and writes the justification that accepts it, so the
+  reason was a permit its author issued to itself -- the same defect as a builder reviewing its own
+  work, in a smaller frame, and invisible because it looks like compliance. A repair loop whose
+  subject may edit the standard always converges: the work can move the goalposts instead of
+  meeting them, and the adversary it answers to stops being one.
+
+  `not_accepted` now covers a modified test whether or not a reason was given. This judges nothing
+  and reads no test -- the motion is the subject, added, deleted or modified, which is what the
+  contract's non-goal requires. It routes the decision to somebody who is not the author, over the
+  path that already exists: `not_accepted` halts the build and offers `[f]ix` or `[o]verride`, and
+  an autonomous run has nobody to ask so it halts rather than overriding itself. The reason is
+  still recorded and still reaches `/review`; it stops being sufficient, not useful. Adds and
+  deletes still pass silently, which is the contract's own asymmetry.
+
+  A modified test now also decides ahead of the `not_run` abstention in every case rather than only
+  when no reason was given. `cannot_judge` means "I could not look", and here the motion was looked
+  at and seen.
+
+### Changed
+- Six documents stated the old rule, one of them twice, and a spec comment described the loophole
+  as live. All now describe the halt. Three spec cells asserted the old behaviour outright,
+  including one requiring that a stated reason accept the modification; they are inverted, and the
+  suite's assertion-count guard was raised with the arithmetic beside it.
+
+### Added
+- **A build finding whose only fix is a different design is recorded and handed to review, never
+  repaired mid-build.** Until now every blocking finding took one path: repair, inside the build.
+  So a finding whose smallest honest fix was "swap the mechanism this component was designed
+  around" got repaired there too, and the design was quietly rewritten to match the fix. A repair
+  loop whose subject can edit the standard always converges, because the work can move the
+  goalposts instead of meeting them. `scripts/contract-baseline.sh` catches the edited design at
+  the close of the phase, after every round it caused has already been spent.
+
+  A critic now sets `design_change: true` on a finding when its own `remedy` cannot be applied
+  without changing the mechanism the component's design names. `scripts/wo-critique-aggregate.sh`
+  drops such a finding from the severity that decides `blocking` — so it opens **zero** repair
+  rounds — and carries it whole into the envelope's new top-level `design_change[]`, with its
+  sites and its `remedy`. That is the same routing `out_of_range[]` already had for the range
+  check, on a different trigger. `scripts/build-critique-assert.sh` reads the new array in the
+  walk it already makes for `out_of_range[]` and surfaces `evidence.design_change_findings` with
+  `evidence.design_change_sites`. It surfaces and never blocks, exactly as the range check does:
+  the disagreement is between the finding and the design, and the reviewer decides which gives way.
+
+  The trigger is the **remedy**, never the severity and never the critic's opinion of the design.
+  A critic that dislikes the mechanism but whose remedy fits inside it files an ordinary finding,
+  and a build that departs from the design is an ordinary finding too — its remedy is "do what the
+  design says", which fits the mechanism perfectly. Only the JSON literal `true` suppresses; a
+  string, a number and a null all leave the finding blocking exactly as before. The flag grants a
+  critic nothing it did not already have: one that wanted a component not to block would write
+  `verdict: "pass"` and file nothing, which is cheaper than marking a finding.
+
+- **The critic is handed the component's design, not only its acceptance criteria.** The dispatch
+  passed `## Acceptance criteria` and nothing else, so a critic received the *what* and never the
+  *how* — and against acceptance criteria alone a mechanism swap is invisible. "Use a queue instead
+  of the cron this was designed around" reads exactly like a two-line guard.
+  `references/gate-hardening-prompts.md`'s `critic-dispatch` template gains `{{design_block}}`
+  (v1.10), a sibling of `{{recipe_block}}` and `{{methodology_block}}` carrying the design inside
+  `=== COMPONENT DESIGN (source=…) === … === END COMPONENT DESIGN ===`, for **all three** lenses.
+
+  It is a fixed range, never a summary: everything in `architecture/<component>.md` above
+  `## Acceptance criteria` on the `/implement` path, and the work-order's `## Build context` — the
+  architecture slice the work-order contract already requires to be pasted rather than referenced —
+  on the delegated path. **Both dispatch paths are wired.** An orchestrator choosing what to keep
+  would be deciding what the critic may hold the build to, and it sits in the builder's context;
+  the same reason the methodology cut is a fixed heading. A critic handed an empty block cannot
+  mark `design_change` and says in its verdict that it had no design, rather than guessing at one.
+
+### Changed
+- `agents/wo-critic.md` 0.2.0 → 0.3.0: the design block joins its documented inputs, `findings[]`
+  gains `design_change`, and a new section states the trigger and the three things it is not.
+- `references/gate-hardening-prompts.md` v1.9 → v1.10 (additive; existing templates and
+  placeholders byte-identical).
+- `scripts/command-body-lengths.sh`: the `implement` budget rises 459 → 472, with the reason
+  recorded beside the number.
+
+### Known limits
+- **An empty `design_change[]` means no critic marked one; it does not mean a critic was given a
+  design to mark against.** The kernel never sees the dispatch, so it claims neither.
+  `tests/build-critique-wiring-spec.sh` is what asserts the design reaches the critic on both
+  paths — there is no runtime check that a dispatch carried it.
+- `/review` records a design finding and does not act on it, the same posture `out_of_range[]` has
+  had since 5.45.0. No new gate was added.
+
 ## [5.49.0] - 2026-09-02
 
 ### Added

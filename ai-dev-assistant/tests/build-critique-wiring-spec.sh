@@ -462,10 +462,10 @@ TPL="$(awk '/^## Template ID: `critic-dispatch`/,0' "$PLUGIN_ROOT/references/gat
 # three lenses, receives the test-first material the build was held to.
 #
 # THE LOOPHOLE THIS DEFENDS AGAINST. A builder can answer a critic's finding by changing what a
-# test asserts rather than by fixing the code. scripts/repair-accept-check.sh surfaces that motion
-# and asks for a reason; its own header says the tripwire demands a reason and never forbids the
-# change. A repair loop that can edit the standard always converges, because the work can move the
-# goalposts instead of meeting them. Telling a repair from a redefinition is the critic's job --
+# test asserts rather than by fixing the code. scripts/repair-accept-check.sh halts on that motion
+# (since 5.50.0 it halts whether or not a reason was given, because the builder writes the reason),
+# so the component cannot close on it. The halt does not say WHICH of the two happened, and a
+# repair loop that can edit the standard always converges if nobody can tell them apart. Telling a repair from a redefinition is the critic's job --
 # and nothing had ever handed the critic the standard. /implement loads a five-reference
 # methodology floor into the BUILD; the critic that judges that build's methodology got none of it.
 #
@@ -493,9 +493,10 @@ RT="$T/methodology-render"; mkdir -p "$RT"
 printf '=== METHODOLOGY (source=dev-guides, refs=plugin:tdd-workflow) ===\nRED is an observation, not an intention.\n=== END METHODOLOGY ===\n' > "$RT/m.txt"
 printf -- '- one criterion\n' > "$RT/ac.txt"
 printf 'src/A.php\n' > "$RT/f.txt"
+printf '=== COMPONENT DESIGN (source=architecture/c.md) ===\nThe queue is drained by cron.\n=== END COMPONENT DESIGN ===\n' > "$RT/d.txt"
 RENDERED=$(bash "${PLUGIN_ROOT}/scripts/prompt-render.sh" critic-dispatch \
   lens=meets-ac worktree=/w range=aaa..bbb files@="$RT/f.txt" component=c \
-  acceptance_criteria@="$RT/ac.txt" recipe_block= methodology_block@="$RT/m.txt" \
+  acceptance_criteria@="$RT/ac.txt" design_block@="$RT/d.txt" recipe_block= methodology_block@="$RT/m.txt" \
   output_path=/o.json 2>/dev/null) || RENDERED=""
 if printf '%s' "$RENDERED" | grep -q 'END METHODOLOGY' \
    && printf '%s' "$RENDERED" | grep -q 'RED is an observation, not an intention.'; then
@@ -566,6 +567,85 @@ grep -q '=== METHODOLOGY (source=dev-guides, refs=' <<<"$CPCB" && grep -q '=== E
 grep -q 'Never the task folder' <<<"$CPCB" && grep -q 'repair-accept-check.sh' <<<"$CPCB" \
   && pass_check "the contract records the loophole the block closes and the source boundary that keeps it safe" \
   || fail_check "the contract does not record the loophole or the source boundary"
+
+# design-to-critic (design_finding_route): the critic is handed the component's DESIGN, not only its
+# acceptance criteria, on both dispatch paths and all three lenses.
+#
+# THE LOOPHOLE THIS DEFENDS AGAINST. It is the sibling of the methodology one above, pointed at the
+# code instead of the tests. A finding whose only fix is "build it a different way" is not a defect
+# in the build; it is a disagreement with the design, and the builder is not the party who settles
+# that. Until this wiring every blocking finding took one path -- repair, in the build -- so such a
+# finding got repaired mid-build and the design was quietly rewritten to match the fix.
+# scripts/contract-baseline.sh notices at the close of the phase, after every round it caused was
+# already spent. And the critic could not have flagged it either: the dispatch handed over
+# `## Acceptance criteria` and nothing else, so a mechanism swap was invisible -- against acceptance
+# criteria alone, "use a queue instead of the cron this was designed around" reads exactly like a
+# two-line guard. The render assertion below is what makes the design a thing a critic actually
+# receives rather than a paragraph in a reference.
+
+grep -q '{{design_block}}' <<<"$TPL" \
+  && pass_check "the critic-dispatch template carries {{design_block}}" \
+  || fail_check "the critic-dispatch template has no {{design_block}}"
+
+# The real renderer, on `meets-ac` again. A grep over the template proves a marker is in the file;
+# this proves a critic is handed the bytes. `design_block` has no lens that empties it, so the lens
+# chosen here is the one that would be emptied if anyone copied `recipe_block`'s shape by mistake.
+if printf '%s' "$RENDERED" | grep -q 'END COMPONENT DESIGN' \
+   && printf '%s' "$RENDERED" | grep -q 'The queue is drained by cron.'; then
+  pass_check "a rendered meets-ac dispatch carries the component design through to the critic"
+else
+  fail_check "a rendered meets-ac dispatch does not carry the design block — the critic still gets the what and never the how"
+fi
+
+grep -q 'design_block@=' <<<"$BLOCK1" \
+  && pass_check "step 5 passes design_block to the render as a file, never as a shell argument" \
+  || fail_check "step 5 does not pass design_block@= to the render"
+grep -q "All three lenses receive the component.s design" <<<"$BLOCK1" \
+  && grep -q 'architecture/<component>.md' <<<"$BLOCK1" && grep -q 'END COMPONENT DESIGN' <<<"$BLOCK1" \
+  && pass_check "step 5 names the design source and the delimiter for all three lenses" \
+  || fail_check "step 5 does not name the design source, the delimiter, or the lenses"
+# The extraction is a FIXED RANGE, not a summary. An orchestrator choosing what to keep would be
+# deciding what the critic may hold the build to, and it sits in the builder's context. A grep for
+# the awk is the only thing that separates the two, since both read as "hand over the design".
+grep -q "awk '/\^## Acceptance criteria/{exit} {print}'" <<<"$BLOCK1" && grep -q 'never a' <<<"$BLOCK1" \
+  && pass_check "step 5 extracts the design mechanically rather than summarising it" \
+  || fail_check "step 5 does not name the mechanical extraction, so an orchestrator picks what the critic sees"
+grep -q 'design_change' <<<"$BLOCK1" && grep -q 'opens no repair round' <<<"$BLOCK1" \
+  && pass_check "step 5 says a design finding opens no repair round and reaches /review" \
+  || fail_check "step 5 does not say what a design finding does to the loop"
+
+# The delegated path, asserted for the same reason the methodology block asserts it one block up:
+# 5.48.0 shipped entirely because a rung reached the in-session dispatcher and not this one.
+grep -q 'design block' <<<"$WOB" && grep -q 'all three lenses' <<<"$WOB" \
+  && pass_check "the work-order dispatch hands the design block to all three lenses" \
+  || fail_check "the work-order dispatch does not hand the design block to all three lenses"
+grep -q 'END COMPONENT DESIGN' <<<"$WOB" && grep -q 'Build context' <<<"$WOB" \
+  && pass_check "the work-order dispatch names the delimiter and takes the design from ## Build context" \
+  || fail_check "the work-order dispatch does not name the delimiter or the section the design comes from"
+
+# The trigger. It is the critic's own REMEDY, never the severity and never its opinion of the
+# design — a critic that dislikes the mechanism but whose remedy fits inside it files an ordinary
+# finding. A route triggered on an opinion would swallow every finding a critic felt strongly
+# about, which is worse than no route.
+AGENT_TRIG="$(awk '/^## When your fix would change the design/,/^## When a finding cannot/' "$AGENT_CRITIC" | tr '\n' ' ')"
+grep -q 'cannot be applied without changing the mechanism the component.s design names' <<<"$AGENT_TRIG" \
+  && pass_check "the critic's trigger is that its own remedy cannot be applied within the design" \
+  || fail_check "the critic agent does not state the design_change trigger as a property of the remedy"
+grep -q 'Not a severity' <<<"$AGENT_TRIG" && grep -q 'Not your opinion of the design' <<<"$AGENT_TRIG" \
+  && pass_check "and it rules out severity and the critic's opinion of the design as triggers" \
+  || fail_check "the critic agent does not rule out severity or opinion as the trigger"
+grep -q 'zero' <<<"$AGENT_TRIG" && grep -q 'repair round' <<<"$AGENT_TRIG" \
+  && pass_check "the critic agent states that a marked finding opens zero repair rounds" \
+  || fail_check "the critic agent does not say a marked finding opens no repair round"
+
+CPCD="$(awk '/^## The design block/,/^## The methodology block/' "$CPC" | tr '\n' ' ')"
+grep -q '=== COMPONENT DESIGN (source=' <<<"$CPCD" && grep -q '=== END COMPONENT DESIGN ===' <<<"$CPCD" \
+  && grep -q 'dispatch paths' <<<"$CPCD" \
+  && pass_check "the critic-prompt contract defines the design delimiter for both dispatch paths" \
+  || fail_check "the critic-prompt contract does not define the design delimiter for both paths"
+grep -q 'Build context' <<<"$CPCD" && grep -q 'Acceptance criteria' <<<"$CPCD" \
+  && pass_check "the contract names both extractions, so neither dispatcher has to invent one" \
+  || fail_check "the contract does not name the extraction for both paths"
 
 if [ "$FAIL" = "0" ]; then
   printf '\nbuild-critique-wiring-spec: all checks passed\n'
