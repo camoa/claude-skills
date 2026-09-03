@@ -436,6 +436,95 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# T13: A WRITE THAT FAILED IS NOT A SUCCESS.
+#
+# Found by Phase 4, 2026-09-03. atomic_write is `cat > tmp && mv tmp target`, its status was
+# discarded at all three call sites, and the script has no `set -e`. So with the directory
+# unwritable, `halt` printed a sidecar reading halted:true, printed "halt ok" to stderr, and exited
+# 0, while the file on disk still said halted:false. The loop reads that file. A halt nobody
+# recorded is a halt that does not stop the next dispatch, which is the one thing this kernel is for.
+#
+# The same hole on `dispatch` is worse than a lost record: attempts never rises, so the retry cap
+# the --cap flag exists to enforce is never reached and the loop can dispatch forever.
+RUN="$(mkrun t13halt)"; seed "$RUN" 1
+chmod 500 "$(dirname "$RUN")"
+krun halt "$RUN" --reason "cap_exhausted"
+chmod 700 "$(dirname "$RUN")"
+[ "$RC" -ne 0 ] \
+  && pass_check "T13 halt whose write failed exits non-zero" \
+  || fail_check "T13 halt whose write failed exits non-zero" "rc=$RC, and it printed a halt it did not record"
+[ "$(jq -r '.halted' "$RUN" 2>/dev/null)" = "false" ] \
+  && pass_check "T13 and the sidecar on disk is genuinely unchanged" \
+  || fail_check "T13 and the sidecar on disk is genuinely unchanged" "the fixture did not reproduce an unwritable target"
+# `.ok // "absent"` would read "absent" here: jq's alternative operator treats `false` as empty, so
+# the one value this cell is about is the one it cannot express. has() first.
+[ "$(jq -r 'if has("ok") then (.ok|tostring) else "absent" end' <<<"$OUT")" = "false" ] \
+  && pass_check "T13 and stdout says so rather than printing the record it failed to write" \
+  || fail_check "T13 and stdout says so rather than printing the record it failed to write" "stdout was $OUT"
+
+RUN="$(mkrun t13disp)"; seed "$RUN" 1
+chmod 500 "$(dirname "$RUN")"
+krun dispatch "$RUN" --checkpoint-before "sha9" --cap 3
+chmod 700 "$(dirname "$RUN")"
+[ "$RC" -ne 0 ] \
+  && pass_check "T13 dispatch whose write failed exits non-zero, so the cap cannot be evaded" \
+  || fail_check "T13 dispatch whose write failed exits non-zero, so the cap cannot be evaded" "rc=$RC with attempts still $(jq -r .attempts "$RUN")"
+[ "$(jq -r '.attempts' "$RUN" 2>/dev/null)" = "1" ] \
+  && pass_check "T13 and attempts on disk did not move" \
+  || fail_check "T13 and attempts on disk did not move" "attempts=$(jq -r '.attempts' "$RUN" 2>/dev/null)"
+
+RUN="$(mkrun t13coll)"; seed "$RUN" 1
+chmod 500 "$(dirname "$RUN")"
+krun collect "$RUN" --override-used true --halt-reason null --build-returned true
+chmod 700 "$(dirname "$RUN")"
+[ "$RC" -ne 0 ] \
+  && pass_check "T13 collect whose write failed exits non-zero" \
+  || fail_check "T13 collect whose write failed exits non-zero" "rc=$RC"
+
+# The exclusion, so the rule above cannot be met by a kernel that refuses every write: the ordinary
+# writable case still succeeds and still lands on disk.
+RUN="$(mkrun t13ok)"; seed "$RUN" 1
+krun halt "$RUN" --reason "real_halt"
+[ "$RC" -eq 0 ] && [ "$(jq -r '.halted' "$RUN")" = "true" ] \
+  && pass_check "T13 a writable halt still succeeds and still lands" \
+  || fail_check "T13 a writable halt still succeeds and still lands" "rc=$RC halted=$(jq -r '.halted' "$RUN" 2>/dev/null)"
+
+# ---------------------------------------------------------------------------
+# T14: A BOOLEAN THIS KERNEL CANNOT READ IS REFUSED, NOT SILENTLY MADE false.
+#
+# Found by Phase 4, 2026-09-03. `[ "$OV_USED" = "true" ] && echo true || echo false` matched the
+# exact lowercase literal and quietly wrote `false` for everything else, so `--override-used TRUE`
+# recorded the opposite of what the caller said. Downstream, wo-merge-gate.sh loses a recorded
+# grounding override and work-order-critique/SKILL.md stops forcing the critique it forces on one.
+# A value nobody can read is not `false`; `false` is a caller saying no.
+for BAD in TRUE True yes 1 ture; do
+  RUN="$(mkrun "t14$BAD")"; seed "$RUN" 1
+  krun collect "$RUN" --override-used "$BAD" --halt-reason null --build-returned true
+  [ "$RC" -eq 2 ] \
+    && pass_check "T14 --override-used $BAD is refused" \
+    || fail_check "T14 --override-used $BAD is refused" "rc=$RC wrote override_used=$(jq -r '.override_used' "$RUN" 2>/dev/null)"
+done
+RUN="$(mkrun t14br)"; seed "$RUN" 1
+krun collect "$RUN" --override-used true --halt-reason null --build-returned TRUE
+[ "$RC" -eq 2 ] \
+  && pass_check "T14 --build-returned TRUE is refused too" \
+  || fail_check "T14 --build-returned TRUE is refused too" "rc=$RC"
+# Both literals still work, and an omitted flag still takes the kernel's own default rather than
+# being treated as a caller's bad value.
+for GOOD in true false; do
+  RUN="$(mkrun "t14ok$GOOD")"; seed "$RUN" 1
+  krun collect "$RUN" --override-used "$GOOD" --halt-reason null --build-returned "$GOOD"
+  [ "$RC" -eq 0 ] && [ "$(jq -r '.override_used' "$RUN")" = "$GOOD" ] \
+    && pass_check "T14 --override-used $GOOD is stored as itself" \
+    || fail_check "T14 --override-used $GOOD is stored as itself" "rc=$RC got $(jq -r '.override_used' "$RUN" 2>/dev/null)"
+done
+RUN="$(mkrun t14omit)"; seed "$RUN" 1
+krun collect "$RUN" --halt-reason null
+[ "$RC" -eq 0 ] \
+  && pass_check "T14 an omitted boolean is still the kernel's default, not a refusal" \
+  || fail_check "T14 an omitted boolean is still the kernel's default, not a refusal" "rc=$RC"
+
+# ---------------------------------------------------------------------------
 echo "----"
 echo "wo-run-state-spec: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

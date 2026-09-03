@@ -233,9 +233,11 @@ non-empty run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/recipe-key-check.sh" "<projec
 Print it alongside the other nudges. Skip silently on `ok`, `none`, or `unknown` — an uncached index
 means nothing was checked, which is not a finding. Never blocks.
 
-### Scope contract for brand-new tasks (v5.21.0+, required artifact + adaptive elicitation)
+### Scope contract for brand-new tasks (v5.51.0+, creation proposes, `/research` requires)
 
-When the user names a NEW task (Step 2 "User Names New Task" path, no task folder yet), a scope contract (`alignment.md`: Goal / Expected result / Success criteria / Non-goals) is authored BEFORE `/research`. For a new task the **artifact is required**; the **elicitation intensity is not**. This is the one deliberate exception to the soft-nudge posture, and it is scoped to NEW tasks only: existing tasks keep the soft retrofit nudge below, unchanged, and no legacy task is migrated.
+When the user names a NEW task (Step 2 "User Names New Task" path, no task folder yet), **create the task stub and then propose the scope contract as the next step.** Creating the folder and `task.md` costs nothing; a scope contract (`alignment.md`: Goal / Expected result / Success criteria / Non-goals) is offered immediately after and the person may **decline** it, in which case the task stays captured with `alignment.md` unwritten and the offer is not repeated by this command.
+
+**The requirement did not disappear, it moved to where it is load-bearing.** `/research` step 2a refuses to author `research.md` for a new task with no Task-Level contract, unchanged. That is the one gate. Until v5.51.0 this command charged the contract as the price of the folder, so a task captured out of a discussion could not exist without one — and a contract authored at capture time freezes what was believed then, which is usually wrong by the time the task runs. Creating and being ready to research are different states, and only the second needs a contract. Existing tasks keep the soft retrofit nudge below, unchanged, and no legacy task is migrated.
 
 Route by how much is already known. Every path ends in `/scope`'s own `[y]es / [e]dit / [c]ancel` confirm, so the contract is never authored silently:
 
