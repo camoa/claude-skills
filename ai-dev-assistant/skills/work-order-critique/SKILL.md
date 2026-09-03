@@ -122,8 +122,9 @@ lowers high). **A security lens is guaranteed at medium+** (so executable-code c
 
 **4 — spawn the critics (AR-F: fan-out is the unattended primitive).** For each lens, spawn ONE
 **`wo-critic`** agent via the **Task** tool (fresh, independent — NOT a fork). Give each, as trusted
-runtime context: `<worktree>`, `<before>..<after>`, `<review_ref>`, the WO `## Done =` checklist, its
-**lens**, the **methodology block**, and its **output path** `$CDIR/${WO_ID}.critic-<k>.json`. Do
+runtime context: `<worktree>`, `<before>..<after>`, `<review_ref>`, the WO `## Done =` checklist, the
+**design block**, its **lens**, the **methodology block**, and its **output path**
+`$CDIR/${WO_ID}.critic-<k>.json`. Do
 **not** read the Task return for the verdict — the critic writes its verdict file; you read **that**
 (disk-is-truth). `MODE="fanout"`; `EXPECTED=<number of critics spawned>`.
 
@@ -140,6 +141,18 @@ a critic cannot act on, and padding a critic prompt buys a repair round.
 it a critic cannot tell a repair that met the standard from a change that moved it, and
 `repair-accept-check.sh` demands a reason for a modified test without ever forbidding one. Rule and
 rationale: `references/critic-prompt-contract.md`.
+
+**The design block goes to all three lenses too.** A work-order has no architecture component file,
+and it does not need one: `## Build context` is the architecture slice for this unit, pasted rather
+than referenced, which is exactly what a component file's design body is. Write it to
+`$CDIR/design.txt` and inject that file verbatim, inside
+`=== COMPONENT DESIGN (source=<wo path>#Build context) === … === END COMPONENT DESIGN ===`.
+Extract it mechanically — `awk '/^## Build context/{f=1;next} f&&/^## /{exit} f'` — never a
+summary, for the reason the methodology cut is a fixed heading. Without it a critic cannot tell a
+finding whose remedy fits the mechanism the design names from one whose only fix is to build the
+unit another way, and only the second kind is `design_change`. A work-order missing the section
+renders an empty block: an absent design is not a design that permits anything, and a critic that
+was handed nothing marks nothing. Rule: `references/critic-prompt-contract.md`.
 > **TeamCreate is an attended-only escalation (AR-F), not the unattended default** — one-team-per-session
 > makes it unusable in a per-WO loop. If a team IS used and falls back, set `MODE="team-fallback-to-fanout"`
 > (the kernel blocks a degraded **high** WO). Pre-flight the team slot; never silently ship the weaker

@@ -1120,6 +1120,23 @@ extender records `extends_resolved`, and a link to an unknown id or to itself re
 `extends_reason`. It records the link and does not control the loop: an extending `critical` still
 blocks, exactly as before.
 
+`design_change[]` is the third kernel-written envelope field a consumer has to know about
+(v5.51.0+), and it is the only one whose trigger is the CRITIC'S rather than a comparison this
+kernel makes. A finding carrying `design_change: true` — set when the critic's own `remedy` cannot
+be applied without changing the mechanism the component's design names — is dropped from the
+severity that decides `blocking`, so it opens no repair round, and is kept in `design_change[]`
+with its sites and its `remedy`. **That array is the channel by which a design finding reaches
+`/review`**, exactly as `out_of_range[]` is for the range check, and the consumer is the same
+walk in `scripts/build-critique-assert.sh`: it counts them into
+`evidence.design_change_findings` with their sites in `evidence.design_change_sites`, surfaces and
+never blocks. Only the JSON literal `true` suppresses; every other value opens the round. The
+route exists because a repair loop whose subject can edit the standard always converges — a
+finding whose only fix is a different mechanism is a disagreement with the design, and the builder
+is not the party who settles it. What the kernel cannot say is whether a critic was ever handed a
+design to judge against, so an empty `design_change[]` claims only that nobody marked one; the
+dispatch is what carries the design, and `tests/build-critique-wiring-spec.sh` is what checks the
+dispatch.
+
 `out_of_range[]` and `range_check` come from `--component-files-from`, the component range the
 critics were handed. A finding whose sites are ALL outside that range is dropped from the severity
 that decides `blocking` — so it opens no repair round — and is kept in full in `out_of_range[]`.
@@ -1154,7 +1171,7 @@ ranked "did less" as its `critical`, and deleting the round left that question w
 one of `HIGH`, `MEDIUM` or `INFO` — the shape every `code-quality-tools` and `code-paper-test` gate
 uses. The critic-file `findings[]` above is a different contract at the same key name: `severity` is
 `concern` or `critical`, and the object carries `text`, `where[]`, `remedy`, `reachable_by`, `id`,
-`extends` and `measured` instead of `title`. **The shape check applies to critic files only**,
+`extends`, `design_change` and `measured` instead of `title`. **The shape check applies to critic files only**,
 matched by the `*.critic-*.json` filename glob under `<task_folder>/build-critique/` and
 `<critics-dir>/`, and must never be applied to a `findings[]` reached any other way — the kernel
 already contains this by construction, since it only opens files matching that glob, and this

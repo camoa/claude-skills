@@ -63,6 +63,27 @@
 #   One in-range finding, or no findings at all, and the verdict stands untouched: a verdict names no site of its own, so it
 #   is not a thing this kernel can judge against a range on its own.
 #
+# Design change — a finding whose only fix is to build it a different way is not this build's.
+#   Same routing as the range check above, different trigger, and the trigger is the CRITIC'S, not
+#   this kernel's: a finding carrying `design_change: true` is dropped from the `effective`
+#   computation (so it cannot make `blocking` true and cannot open a repair round) and is collected
+#   into the envelope's top-level `design_change[]` for the review phase. The kernel cannot compute
+#   this one. Whether a remedy can be applied without swapping the mechanism the component's design
+#   names is a reading of the design, and only the party holding the design can do it — which is why
+#   the dispatch hands the critic the design body (`references/gate-hardening-prompts.md`,
+#   `critic-dispatch`). agents/wo-critic.md defines when a critic sets the flag.
+#   ONLY THE JSON LITERAL `true` COUNTS. A string "true", a 1, a null, an absent key: none of them
+#   suppress, so every unrecognised value fails toward opening the round. That is the same direction
+#   as every other read here, and it matters more than usual because this flag is critic-authored.
+#   It grants the critic no authority it did not already have: a critic that wants a component not to
+#   block writes `verdict: "pass"` and files nothing, which is cheaper than marking a finding.
+#   The verdict-drop rule below is shared with the range check and reads BOTH: a file's own verdict is
+#   a max over its findings, so a verdict summarising only suppressed findings — out of range,
+#   design-change, or a mix — summarises nothing that survived. The three conditions are unchanged.
+#   `design_change[]` carries `remedy` as well as the sites, which `out_of_range[]` does not: the
+#   remedy IS the trigger here, so a reviewer deciding whether the design or the finding gives way
+#   cannot read the record without it.
+#
 # Under-enumeration (D7) — `extends` is a declared link, and it is READ here.
 #   A finding carrying a non-blank `extends` naming the `id` of another finding ANYWHERE in this
 #   aggregation appends its where[] sites to that finding (deduplicated, order preserved) and sets
@@ -145,18 +166,25 @@ fi
 # `file` is not a string, makes the whole finding NOT out of range — unjudgeable is not outside.
 # `.file` is bound to $p BEFORE the `$range | index(...)`: inside index() the input is $range, so
 # a bare `index(.file)` indexes the range array with a string and errors the whole filter out.
-OOR_DEF='def oor:
+#
+# `dsg` is the critic-authored sibling: the JSON literal `true` and nothing else, so a string, a
+# number, a null and an absent key all fail toward opening the round. `suppressed` is what the
+# verdict math reads; `oor` stays separate because the merge below marks `out_of_range:true` on the
+# findings THIS KERNEL judged, and a design-change finding was marked by the critic already.
+SUPPRESS_DEF='def oor:
     ($range != null)
     and ((.where|type) == "array") and ((.where|length) > 0)
     and ([ .where[]
            | if (type == "object") and ((.file|type) == "string")
              then (.file as $p | ($range | index($p)) == null)
-             else false end ] | all);'
+             else false end ] | all);
+  def dsg: (.design_change == true);
+  def suppressed: (oor or dsg);'
 
 # effective verdict of one critic file — fail-closed against label/shape drift (CRIT-1/HIGH-5).
 # $2 is the range (a JSON array, or `null` when no range check ran).
 effective() {
-  jq -er --argjson range "$2" "$OOR_DEF"'
+  jq -er --argjson range "$2" "$SUPPRESS_DEF"'
     def n: (. // "" | tostring | ascii_downcase | gsub("^\\s+|\\s+$";""));
     def vrank(v): {"pass":0,"concern":1,"unresolved":2,"critical":3}[(v|n)] // 2;     # unknown verdict => unresolved
     def srank(s):
@@ -173,18 +201,21 @@ effective() {
       # predates the range check and a rewrite to a type-guarded form would quietly turn it into a
       # pass. Bind it once, so the same list feeds the ranks and the out-of-range count.
       [ (.findings // [])[] ] as $fs
-      | [ $fs[] | if type=="object" then (if oor then empty else srank(.severity) end) else 2 end ] as $ranks
-      | [ $fs[] | select((type=="object") and oor) ] as $oorfs
-      | ($oorfs | length) as $noor
-      | (if $noor > 0 then ([ $oorfs[] | srank(.severity) ] | max) else -1 end) as $oormax
+      | [ $fs[] | if type=="object" then (if suppressed then empty else srank(.severity) end) else 2 end ] as $ranks
+      | [ $fs[] | select((type=="object") and suppressed) ] as $supfs
+      | ($supfs | length) as $nsup
+      | (if $nsup > 0 then ([ $supfs[] | srank(.severity) ] | max) else -1 end) as $supmax
       | vrank(.verdict) as $v
-      # The verdict is dropped only when it summarises nothing that survived the range check, and
-      # only as far as the suppressed findings themselves went. Three conditions, all required:
-      # every finding out of range and at least one finding; the verdict is a rankable summary
-      # (rank 2 is `unresolved` or an unrecognised label, neither of which is a max over findings);
-      # and it ranks no higher than the worst finding the range check actually judged. See the
-      # header note on why each one is there.
-      | (if ($fs|length) > 0 and $noor == ($fs|length) and $v != 2 and $v <= $oormax
+      # The verdict is dropped only when it summarises nothing that survived suppression, and only
+      # as far as the suppressed findings themselves went. Three conditions, all required: every
+      # finding suppressed (out of range, design-change, or a mix) and at least one finding; the
+      # verdict is a rankable summary (rank 2 is `unresolved` or an unrecognised label, neither of
+      # which is a max over findings); and it ranks no higher than the worst finding that was
+      # actually suppressed. See the header notes on why each one is there. Reading BOTH triggers
+      # here is what stops a design-change route that records a flag and opens the round anyway:
+      # a critic files `verdict: "critical"` alongside a critical finding, so a rule that dropped
+      # the finding and kept the verdict would leave `blocking` exactly where it was.
+      | (if ($fs|length) > 0 and $nsup == ($fs|length) and $v != 2 and $v <= $supmax
          then [] else [ $v ] end) as $vr
       | ($vr + $ranks) | if length == 0 then 0 else max end
     end
@@ -328,7 +359,7 @@ if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
       # each out-of-range finding on the copy the envelope carries. The per-critic file on disk is
       # never touched (wo-critique-aggregate-spec.sh T-cc3 asserts the bytes).
       CRITICS="$(jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --argjson shape "$SHAPE" --argjson range "$RANGE" --slurpfile c "$cf" \
-        "$OOR_DEF"'$a + [ (($c[0] // {}) | if type=="object" then . else {raw:(tostring)} end)
+        "$SUPPRESS_DEF"'$a + [ (($c[0] // {}) | if type=="object" then . else {raw:(tostring)} end)
                 | (if (.findings|type) == "array"
                    then .findings |= map(if (type == "object") and oor then . + {out_of_range:true} else . end)
                    else . end)
@@ -362,6 +393,22 @@ OUT_OF_RANGE="$(jq -c '[ .[] | (.lens // null) as $l
   | select((type == "object") and (.out_of_range == true))
   | {lens:$l, id:(.id // null), severity:(.severity // null), where:(.where // [])} ]' <<<"$CRITICS" 2>/dev/null)"
 [ -n "$OUT_OF_RANGE" ] || OUT_OF_RANGE='[]'
+
+# --- design_change[]: handed to review rather than repaired here ------------
+# Derived at the same point and for the same reason as `out_of_range[]` above: before the
+# under-enumeration pass, so what is recorded is what was judged. `remedy` rides along because the
+# remedy is this route's whole trigger — the finding is here BECAUSE its remedy cannot be applied
+# without swapping the mechanism the design names, and a reviewer weighing the design against the
+# finding cannot do it from the sites alone. `[]` means no critic marked one; it does not mean no
+# critic was given the design to mark it against. Nothing this kernel can see says which, so it
+# claims neither: the dispatch is what guarantees the critic held the design, and
+# tests/build-critique-wiring-spec.sh is what checks the dispatch.
+DESIGN_CHANGE="$(jq -c '[ .[] | (.lens // null) as $l
+  | ((.findings // []) | if type=="array" then .[] else empty end)
+  | select((type == "object") and (.design_change == true))
+  | {lens:$l, id:(.id // null), severity:(.severity // null), where:(.where // []),
+     remedy:(.remedy // null), text:(.text // null)} ]' <<<"$CRITICS" 2>/dev/null)"
+[ -n "$DESIGN_CHANGE" ] || DESIGN_CHANGE='[]'
 
 # --- under-enumeration (c3, D7): `extends` is read here ----------------------
 # Runs AFTER every `effective` is computed and after clean_returns is counted: this pass records a
@@ -449,6 +496,7 @@ jq -nc \
   --argjson diff_empty "$DIFF_EMPTY" --argjson required "$REQUIRED" --argjson halt_reason "$HALT" \
   --argjson not_dispatched "$NOT_DISPATCHED" --argjson clean "$CLEAN_RETURNS" \
   --arg rstatus "$RANGE_STATUS" --arg rreason "$RANGE_REASON" --argjson oor "$OUT_OF_RANGE" \
+  --argjson dsg "$DESIGN_CHANGE" \
   '{schema_version:"1.0", wo_id:$wo, risk_tier:$tier, run_at:$at, mode:$mode,
     evaluated:$evaluated, required:$required, expected_critics:$expected, clean_returns:$clean, present:$present,
     missing:$missing, critics:$critics, overall:$overall, blocking:$blocking,
@@ -456,4 +504,4 @@ jq -nc \
     not_dispatched:$not_dispatched,
     range_check:{status:$rstatus, decided_by:(if $rstatus=="ran" then "sets" else "none" end),
                  reason:(if $rreason=="" then null else $rreason end)},
-    out_of_range:$oor}'
+    out_of_range:$oor, design_change:$dsg}'

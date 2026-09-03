@@ -524,6 +524,44 @@ one of `pass`, `concern` or `critical` and ranks no higher than the worst suppre
 investigate, which is a separate signal with nowhere else to live, and a verdict ranking above
 everything the range check judged is claiming more than the suppressed findings said.
 
+## A finding whose only fix is a different design is moved, not repaired (v5.51.0+)
+
+The sibling of the range check above, with the same routing and a different trigger. A critic
+sometimes finds something whose smallest honest fix is not a change to this code but a change to
+the mechanism the component's design named. Opening a repair round against that asks the builder
+to rewrite the standard it is being judged against, in the same session, with nobody else reading
+— and a repair loop whose subject can edit the standard always converges, because the work can
+move the goalposts instead of meeting them. `scripts/contract-baseline.sh` catches the edited
+design at the close of the phase, after every round it caused has already been spent.
+
+So the critic marks it. A finding carrying `design_change: true` is dropped from the severity that
+decides `blocking`, opens no repair round, and is copied whole into the envelope's top-level
+`design_change[]` with its `remedy` — the remedy is the trigger, and a reviewer weighing the
+finding against the design cannot read the record without it.
+`scripts/build-critique-assert.sh` walks the same `components[].critique_ref` list it already
+walks for `out_of_range[]` and surfaces the count in `evidence.design_change_findings` with the
+sites in `evidence.design_change_sites`. It surfaces and never blocks, the same posture as
+`deferred_findings` and `out_of_range_findings`: the finding is real, the disagreement is between
+it and the design, and the reviewer is the one who decides which gives way.
+
+**The trigger is the critic's, and it is the remedy.** `agents/wo-critic.md` states it as one
+sentence — the flag goes on when the critic's own `remedy` cannot be applied without changing the
+mechanism the design names — and rules out the three things it is not: a severity, an opinion of
+the design, and a way to raise a departure the design already forbids (that last one's remedy is
+"do what the design says", which fits the mechanism perfectly). The kernel cannot compute this.
+Whether a remedy fits a mechanism is a reading of the design, so the dispatch hands every lens the
+design body, and this route is only as real as that wiring.
+
+**It grants the critic no authority it did not have.** A critic that wanted a component not to
+block would write `verdict: "pass"` and file nothing, which is cheaper than marking a finding.
+Only the JSON literal `true` suppresses; a string, a number and a null all leave the finding
+blocking exactly as before, so every unrecognised value fails toward opening the round.
+
+**Absence is not a clean answer here either, and the kernel does not pretend otherwise.** An empty
+`design_change[]` means no critic marked one. It does not mean a critic was given a design to mark
+against — the kernel never sees the dispatch, so it claims neither, and
+`tests/build-critique-wiring-spec.sh` is what asserts the design reaches the critic on both paths.
+
 ## A finding built on a number states its threshold (v5.36.0+)
 
 When the argument for acting on a finding is a measurement, it carries
