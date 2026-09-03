@@ -1,5 +1,35 @@
 # Changelog
 
+## [5.50.0] - 2026-09-03
+
+### Fixed
+- **A modified test no longer closes a component on the builder's own reason.** The scope contract
+  said a repair that modifies a test "halts for a stated reason". It shipped as "is accepted once a
+  reason is given", which turned the reason from something recorded AT a halt into something that
+  CLEARS one. The builder writes the change and writes the justification that accepts it, so the
+  reason was a permit its author issued to itself -- the same defect as a builder reviewing its own
+  work, in a smaller frame, and invisible because it looks like compliance. A repair loop whose
+  subject may edit the standard always converges: the work can move the goalposts instead of
+  meeting them, and the adversary it answers to stops being one.
+
+  `not_accepted` now covers a modified test whether or not a reason was given. This judges nothing
+  and reads no test -- the motion is the subject, added, deleted or modified, which is what the
+  contract's non-goal requires. It routes the decision to somebody who is not the author, over the
+  path that already exists: `not_accepted` halts the build and offers `[f]ix` or `[o]verride`, and
+  an autonomous run has nobody to ask so it halts rather than overriding itself. The reason is
+  still recorded and still reaches `/review`; it stops being sufficient, not useful. Adds and
+  deletes still pass silently, which is the contract's own asymmetry.
+
+  A modified test now also decides ahead of the `not_run` abstention in every case rather than only
+  when no reason was given. `cannot_judge` means "I could not look", and here the motion was looked
+  at and seen.
+
+### Changed
+- Six documents stated the old rule, one of them twice, and a spec comment described the loophole
+  as live. All now describe the halt. Three spec cells asserted the old behaviour outright,
+  including one requiring that a stated reason accept the modification; they are inverted, and the
+  suite's assertion-count guard was raised with the arithmetic beside it.
+
 ## [5.49.0] - 2026-09-02
 
 ### Added

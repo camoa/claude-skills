@@ -462,10 +462,10 @@ TPL="$(awk '/^## Template ID: `critic-dispatch`/,0' "$PLUGIN_ROOT/references/gat
 # three lenses, receives the test-first material the build was held to.
 #
 # THE LOOPHOLE THIS DEFENDS AGAINST. A builder can answer a critic's finding by changing what a
-# test asserts rather than by fixing the code. scripts/repair-accept-check.sh surfaces that motion
-# and asks for a reason; its own header says the tripwire demands a reason and never forbids the
-# change. A repair loop that can edit the standard always converges, because the work can move the
-# goalposts instead of meeting them. Telling a repair from a redefinition is the critic's job --
+# test asserts rather than by fixing the code. scripts/repair-accept-check.sh halts on that motion
+# (since 5.50.0 it halts whether or not a reason was given, because the builder writes the reason),
+# so the component cannot close on it. The halt does not say WHICH of the two happened, and a
+# repair loop that can edit the standard always converges if nobody can tell them apart. Telling a repair from a redefinition is the critic's job --
 # and nothing had ever handed the critic the standard. /implement loads a five-reference
 # methodology floor into the BUILD; the critic that judges that build's methodology got none of it.
 #

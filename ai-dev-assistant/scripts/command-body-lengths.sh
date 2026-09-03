@@ -176,9 +176,9 @@ budget_for() {
     # component now gets at most one critic round, which bounds the loop structurally; this sentence
     # is what stops a rejected repair shipping inside that bound.
     # 446 -> 456, raise 10: every critic receives the methodology block, the test-first material
-    # the build was held to. `repair-accept-check.sh` accepts a modified test as long as a reason
-    # is recorded -- the tripwire demands a reason, it never forbids the change -- so a repair loop
-    # could answer a finding by moving the standard rather than meeting it. Telling those apart is
+    # the build was held to. At the time of this raise `repair-accept-check.sh` accepted a
+    # modified test as long as a reason was recorded, so a repair loop could answer a finding by
+    # moving the standard rather than meeting it; 5.50.0 made that motion halt. Telling those apart is
     # the critic's job and nothing had ever given the critic the standard: /implement loads a
     # five-reference methodology floor into the BUILD, and the critic that judges the build's
     # methodology got none of it. `meets-ac`, the lens that would judge a test rewritten to match

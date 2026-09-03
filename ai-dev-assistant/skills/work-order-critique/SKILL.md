@@ -137,8 +137,9 @@ file: `awk '/^### The observation gets recorded/,0'
 here and no critic is given permission to go looking. The rest of that file is build-time procedure
 a critic cannot act on, and padding a critic prompt buys a repair round.
 **Never from the task folder**, which is where the builder's own account of its tests lives. Without
-it a critic cannot tell a repair that met the standard from a change that moved it, and
-`repair-accept-check.sh` demands a reason for a modified test without ever forbidding one. Rule and
+it a critic cannot tell a repair that met the standard from a change that moved it.
+`repair-accept-check.sh` halts on a modified test and routes the decision to a person, which stops
+the build closing on its own reason but says nothing about which of the two happened. Rule and
 rationale: `references/critic-prompt-contract.md`.
 > **TeamCreate is an attended-only escalation (AR-F), not the unattended default** — one-team-per-session
 > makes it unusable in a per-WO loop. If a team IS used and falls back, set `MODE="team-fallback-to-fanout"`

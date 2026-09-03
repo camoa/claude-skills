@@ -149,9 +149,10 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    **The methodology block goes to all three lenses**, `meets-ac` included, unlike the resolved
    recipe, which `security` and `correctness` receive and `meets-ac` does not. It carries the
    test-first material the build was held to, so a critic can tell a repair that met the standard
-   from a change that moved it — a builder can answer a finding by rewriting what a test asserts,
-   `repair-accept-check.sh` demands a reason for that and never forbids it, and judging which one
-   happened needs the rules for what a sound test is. `/implement` loads those into the build and,
+   from a change that moved it — a builder can answer a finding by rewriting what a test asserts.
+   `repair-accept-check.sh` halts that motion rather than accepting it, so the component cannot
+   close on the builder's own reason, but the halt does not say WHICH of the two happened and
+   judging that needs the rules for what a sound test is. `/implement` loads those into the build and,
    until this block, into nothing that judged the build. It is one named section of
    `references/tdd-workflow.md` plus any already-loaded `development/tdd-spec-driven/*` guide,
    **never** the whole file — the rest of it is build-time procedure a critic cannot act on — and
@@ -362,8 +363,13 @@ not the range of the build being critiqued. Both ends are shas: a checkpoint lab
 `git diff` handed one exits 128 with the redirect's file already created and empty.
 
 `accepted` means the suite was green and the motion raised nothing unanswered. `not_accepted` means
-the suite was red, or a test file was modified with no `--modification-reason`; the tripwire demands
-a reason for a modified test, it never forbids the change. `cannot_judge` has three causes: the
+the suite was red, or a test file was MODIFIED — with or without a `--modification-reason`. The
+reason is recorded at the halt and never clears it: the builder writes that reason, so accepting on
+it is a permit the author issues to itself, and a repair loop whose subject may edit the standard
+always converges. The tripwire still does not judge the change, and nothing here reads the test: it
+moves the decision to somebody who is not the author, through the halt `/implement` already offers
+as `[f]ix` or `[o]verride`, which an autonomous run may not take for itself. Adds and deletes pass
+silently. `cannot_judge` has three causes: the
 motion file was zero bytes, no suite was run over the repaired tree, or the caller could not
 establish what a test path is here. The first exists because an empty diff carries no claim. A
 caller who knows there are no test paths says `--test-globs '[]'`, and one who cannot tell says

@@ -57,9 +57,9 @@ material the build was held to, inside its own delimiter:
 ```
 
 **Why it exists.** A builder can answer a critic's finding by changing what a test asserts rather
-than by fixing the code. `scripts/repair-accept-check.sh` surfaces that motion and asks for a
-reason; it never forbids the change, and it could not usefully: a reason is a sentence, and
-telling a repair from a redefinition needs the rules for what a sound test is. The builder has
+than by fixing the code. `scripts/repair-accept-check.sh` halts on that motion so the component
+cannot close on the builder's own reason, but it deliberately does not judge the change: the motion
+is its subject, and telling a repair from a redefinition needs the rules for what a sound test is. The builder has
 those rules — `/implement` loads a five-reference methodology floor into the build. Until this
 block existed the critic judging that build had none of them, so the one question it could not
 answer was the question the loophole turns on.
