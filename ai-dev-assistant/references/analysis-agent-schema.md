@@ -88,24 +88,43 @@ if .code_read == false and .confidence != "low" then .confidence = "low"
 
 ### Read the exit code (v5.37.0+)
 
-The script has three, and **a caller that ignores them gets the defect this release exists for**:
+The script separates three ways of having no answer, and **a caller that ignores them gets the
+defect this release exists for**:
 
-| Exit | Meaning | What the caller does |
+| Exit | The fact | What the caller does |
 |---|---|---|
-| `0` | Normalized. A clamp may or may not have fired. | Branch on `decision` as usual. |
-| `1` | The input was not valid JSON. The raw text is echoed on stdout. | There is text but no verdict. Record `no_return` and do not parse the echo for a decision. |
-| `2` | The input was **empty**, or valid JSON missing `decision`, `confidence` or `code_read`. | The agent delivered no answer. Record `no_return` and treat the decision as `insufficient_info`, never `keep_flat`. |
+| `0` | An answer arrived. A clamp may or may not have fired. | Branch on `decision` as usual. |
+| `1` | **Text arrived and is not JSON.** The original is echoed on stdout unchanged. Calling the script with no argument also lands here; that is a caller bug, not an agent event. | Record `no_return`. Never parse the echo for a decision. |
+| `2` | **A payload arrived and is not an answer.** Valid JSON that is not an object, or an object missing `decision`, `confidence` or `code_read`. | Record `no_return` and take `insufficient_info`, never `keep_flat`. The agent produced something; it is unusable. |
+| `3` | **Nothing arrived.** No such file, or an empty input. | Record `no_return` and take `insufficient_info`. Nobody delivered anything, so there is nothing to report about a payload. |
 
-Exit `2` is separate from `1` on purpose. `1` says "here is text I could not parse"; `2` says there
-was nothing to parse. Before v5.37.0 an empty input exited `0` with empty output, because `jq empty`
-calls an empty stream valid, so an agent that returned nothing was indistinguishable from a run that
-legitimately filtered everything out. A payload missing `code_read` also passed through untouched,
-since a missing field is not equal to `false` in jq, so the clamp could not fire and the result read
-as already checked.
+Every non-zero value means no verdict is available, so a caller may treat them alike when deciding
+what to do next. They are separate so a caller can say what happened in the record it writes. "The
+agent wrote nothing" and "the agent wrote garbage" are different events and get investigated
+differently.
 
-**The five callers** are `/research` (pre-analysis and the post-research epic check), `/design`,
-`/implement` and `/propose-epics`. Each reads the exit code. A better error on a channel nobody reads
-would change nothing observable, which is the failure shape this plugin keeps finding in itself.
+`3` is the newest and the commonest in the field: a sidecar the agent never wrote. It returned `1`
+until this split, sharing a value with unparseable text, so no record could distinguish the two.
+`null`, an empty list and a bare number are **not** absence. They arrived. They stay at `2`.
+
+Before v5.37.0 an empty input exited `0` with empty output, because `jq empty` calls an empty stream
+valid, so an agent that returned nothing was indistinguishable from a run that legitimately filtered
+everything out. A payload missing `code_read` also passed through untouched, since a missing field is
+not equal to `false` in jq, so the clamp could not fire and the result read as already checked.
+
+**The five call sites** are `/research` (pre-analysis and the post-research epic check), `/design`,
+`/implement` and `/propose-epics`. All five read the exit code. Through 5.52.0 this section said the
+same thing and it was true of one of them, which is why the two lines below exist and are checked.
+
+A caller's rule is that **any non-zero exit is `no_return`**. The value says which fact to record
+alongside it, not whether to proceed.
+
+- **Reads the exit code:** commands/design.md, commands/implement.md, commands/propose-epics.md, commands/research.md
+- **Normalizes and does not read the exit code:** none.
+
+`tests/sidecar-contract-spec.sh` compares those two lines against the tree, so the claim cannot drift
+from what the commands say. A better error on a channel nobody reads would change nothing observable,
+which is the failure shape this plugin keeps finding in itself.
 
 When it clamps, it appends a `notes[]` entry citing this invariant so the
 adjustment is visible in `/audit-status` and the on-disk audit. Every consumer

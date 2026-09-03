@@ -13,7 +13,7 @@ K="${CP_KERNEL:-$ROOT/scripts/criterion-provenance.sh}"
 # Assertions this file runs with CP_KERNEL set: everything except the mutation block and the count
 # guard. The mutation block asserts the mutant run reached exactly this many, because a mutant that
 # dies early runs fewer assertions and would otherwise read as a smaller kill.
-BASE_ASSERTIONS=29
+BASE_ASSERTIONS=34
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ PASS=$((PASS+1)); }
@@ -422,6 +422,120 @@ if [ "$(jq -r .counts.unrecognized <<<"$OUT")" = "0" ]; then ok; else no "F5 unr
 #     restate the code, so none is written here. The fix stands on the one-line cost / failure-mode
 #     argument in the kernel's own header, not on a red-then-green run.
 
+# --- The kernel reads task.md too, because the resolver does ---------------------------------
+# scripts/contract-resolve.sh resolves a task's criteria from alignment.md when it carries them and
+# from task.md when it does not. This kernel only ever read alignment.md, so on a task whose criteria
+# live in task.md it answered no_criteria — "I looked and there is nothing to count" — while the
+# resolver was resolving those same criteria and their markers were sitting in the file. Measured on
+# review_ladder: the resolver returned 9 criteria from task.md, this kernel returned 0, and the file
+# carried 5 author markers. Same resolution order as the resolver: alignment.md first, task.md next.
+
+# mktask_md: a task dir with task.md only (no alignment.md), body on stdin.
+mktask_md() { local d="$TMP/$1"; mkdir -p "$d"; cat > "$d/task.md"; echo "$d"; }
+
+# --- P1: no alignment.md, criteria and markers in task.md, both marker orders ---
+D="$(mktask_md p1_task_md <<'EOF'
+# Task: p1
+
+## Criteria this task owns
+- [ ] The owner asked for this — id: c1 — by: owner — verify: a spec names it
+- [x] A step returning nothing is recorded as run — id: c2 — verify: a step returning zero
+      findings is recorded as having run — by: owner
+- [ ] The designer added this — id: c3 — by: designer
+- [ ] Nobody signed this one — id: c4
+EOF
+)"
+run --task-folder "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(jq -r .status <<<"$OUT")" = "unrecorded_present" ] \
+  && [ "$(jq -r .source <<<"$OUT")" = "task" ] \
+  && [ "$(jq -c .counts <<<"$OUT")" = '{"owner":2,"designer":1,"unrecorded":1,"unrecognized":0,"total":4}' ] \
+  && [ "$(jq -c .designer_authored <<<"$OUT")" = '["The designer added this"]' ]; then
+  ok
+else
+  no "P1 task.md criteria and markers should be counted, both marker orders: got $OUT"
+fi
+
+# --- P2: both files present, alignment.md wins — the resolver's order, not a merge ---
+D="$TMP/p2_both"; mkdir -p "$D"
+cat > "$D/alignment.md" <<'EOF'
+# Alignment: p2
+
+## Task-Level
+
+### Success criteria
+- [ ] From the contract — by: owner
+
+### Non-goals
+- n/a
+EOF
+cat > "$D/task.md" <<'EOF'
+# Task: p2
+- [ ] From task.md, nobody signed it — id: c1
+- [ ] From task.md, designer — id: c2 — by: designer
+EOF
+run --task-folder "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(jq -r .status <<<"$OUT")" = "all_owner" ] \
+  && [ "$(jq -r .source <<<"$OUT")" = "alignment" ] \
+  && [ "$(jq -r .counts.total <<<"$OUT")" = "1" ]; then
+  ok
+else
+  no "P2 alignment.md must win over task.md, never merge: got $OUT"
+fi
+
+# --- P3: task.md has no sections, so only --section task_level may read it. A phase section asked for
+#     on a task.md-only folder is no_criteria, never task.md's list under a phase heading's name. ---
+run --task-folder "$TMP/p1_task_md" --section phase_2
+if [ "$RC" -eq 0 ] \
+  && [ "$(jq -r .status <<<"$OUT")" = "no_criteria" ] \
+  && [ "$(jq -r .source <<<"$OUT")" = "null" ] \
+  && [ "$(jq -r .counts.total <<<"$OUT")" = "0" ]; then
+  ok
+else
+  no "P3 a phase section on a task.md-only folder must be no_criteria: got $OUT"
+fi
+
+# --- P4 THE EXCLUSION: prose in task.md that merely names who did something is not an author, and a
+#     written-but-rejected marker is unrecorded WITH the evidence somebody tried. Promoting prose here
+#     would invent an owner for a criterion nobody signed, which is the failure this kernel exists for. ---
+D="$(mktask_md p4_prose <<'EOF'
+# Task: p4
+- [ ] Rows are filtered - by: owner — id: c1
+- [ ] Reviewed by: designer before merge — id: c2
+- [ ] A record names who ran it — id: c3 — verify: the record names it — by: owner and the designer
+- [ ] Marker with a value nobody accepts — id: c4 — by: architect
+EOF
+)"
+run --task-folder "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(jq -r .status <<<"$OUT")" = "unrecorded_present" ] \
+  && [ "$(jq -c .counts <<<"$OUT")" = '{"owner":0,"designer":0,"unrecorded":4,"unrecognized":3,"total":4}' ]; then
+  ok
+else
+  no "P4 prose naming a person must not be promoted to an author: got $OUT"
+fi
+
+# --- P5: alignment.md present but carrying no Task-Level section, criteria in task.md → task.md is
+#     read. "The file exists" is not "the file answered"; T14 keeps the no-task.md case at no_criteria. ---
+D="$TMP/p5_align_no_section"; mkdir -p "$D"
+cat > "$D/alignment.md" <<'EOF'
+# Alignment: p5
+
+## Phase 1 — Research
+
+### Success criteria
+- [ ] A phase-1 criterion — by: owner
+EOF
+printf '# Task: p5\n- [ ] Owner asked — id: c1 — by: owner\n' > "$D/task.md"
+run --task-folder "$D"
+if [ "$RC" -eq 0 ] && [ "$(jq -r .status <<<"$OUT")" = "all_owner" ] \
+  && [ "$(jq -r .source <<<"$OUT")" = "task" ] && [ "$(jq -r .counts.owner <<<"$OUT")" = "1" ]; then
+  ok
+else
+  no "P5 alignment.md without a Task-Level section must fall through to task.md: got $OUT"
+fi
+
 # --- SEEDED MUTATION: this spec is shown failing on a defect before it ships ------------------
 #
 # Everything above is green against the kernel as written, and a green run is not evidence that any
@@ -496,7 +610,7 @@ if [ -z "${CP_KERNEL:-}" ]; then
   # read the status on a section carrying an unrecorded author. A smaller number means one of them
   # stopped asserting the status; a larger one means the seed reached past the branch it was aimed
   # at. Either is worth failing on.
-  MUTANT_KILLS=3
+  MUTANT_KILLS=5
   subrun "$MDIR/mutant/criterion-provenance.sh"
   [ "$SUB_FAIL" = "$MUTANT_KILLS" ] && ok \
     || no "the seeded precedence defect must kill exactly $MUTANT_KILLS assertions, killed $SUB_FAIL"
@@ -504,8 +618,43 @@ if [ -z "${CP_KERNEL:-}" ]; then
   [ "$((SUB_PASS + SUB_FAIL))" = "$BASE_ASSERTIONS" ] && ok \
     || no "the mutant run must still reach $BASE_ASSERTIONS assertions, reached $((SUB_PASS + SUB_FAIL))"
 
-  # A spec that checked nothing has not passed. BASE_ASSERTIONS + the four above.
-  EXPECTED=$((BASE_ASSERTIONS + 4))
+  # --- SECOND SEEDED MUTATION: the task.md fallback, the guard added by this change ------------
+  #
+  # THE GUARD CHOSEN. This kernel reads task.md when alignment.md has no criteria for the section.
+  # That is the whole of what was added: before it, a task whose criteria live in task.md reported
+  # `no_criteria` — "I looked and there is nothing to count" — while contract-resolve.sh resolved
+  # those same criteria and their author markers sat in the file. Turn the fallback off and the
+  # kernel goes back to answering about a contract it never read.
+  #
+  # The alternatives are the same fallback seen from a different side. Seeding the `--section
+  # task_level` guard would make phase sections read task.md, which P3 catches; seeding the
+  # alignment-wins order would make task.md override a real contract, which P2 catches. Both are
+  # real, and both are narrower than the fallback itself, which is the thing that either happens or
+  # does not.
+  cp -R "$ROOT/scripts" "$MDIR/mutant2"
+  if ! seed_defect '  [ "$(jq '"'"'length'"'"' <<<"$TASK_CRITERIA")" -gt 0 ] || return 1' '  false || return 1' \
+        "$MDIR/clean/criterion-provenance.sh" "$MDIR/mutant2/criterion-provenance.sh" \
+     || diff -q "$MDIR/clean/criterion-provenance.sh" "$MDIR/mutant2/criterion-provenance.sh" >/dev/null 2>&1; then
+    echo "MUTATION 2 NOT APPLIED: the task.md fallback in $K no longer holds exactly one length test on \$TASK_CRITERIA; re-read the kernel and re-target the seed" >&2
+    exit 1
+  fi
+  chmod +x "$MDIR/mutant2/criterion-provenance.sh"
+  ok
+
+  # P1 (criteria and markers in task.md), P4 (prose in task.md not promoted, with the rejected-marker
+  # count) and P5 (alignment.md present but carrying no Task-Level section) are the three assertions
+  # that can only pass if the fallback runs. P2 and P3 must SURVIVE: they assert the fallback does not
+  # fire — alignment.md wins, and a phase section never reads task.md — so a seed that killed them
+  # would mean the fallback had been reaching further than it should.
+  MUTANT2_KILLS=3
+  subrun "$MDIR/mutant2/criterion-provenance.sh"
+  [ "$SUB_FAIL" = "$MUTANT2_KILLS" ] && ok \
+    || no "the seeded task.md-fallback defect must kill exactly $MUTANT2_KILLS assertions, killed $SUB_FAIL"
+  [ "$((SUB_PASS + SUB_FAIL))" = "$BASE_ASSERTIONS" ] && ok \
+    || no "the second mutant run must still reach $BASE_ASSERTIONS assertions, reached $((SUB_PASS + SUB_FAIL))"
+
+  # A spec that checked nothing has not passed. BASE_ASSERTIONS + the seven above.
+  EXPECTED=$((BASE_ASSERTIONS + 7))
   TOTAL=$((PASS + FAIL))
   [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
 fi

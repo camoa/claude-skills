@@ -77,6 +77,10 @@ export WO_TASK_FOLDER="$TASK"
 export WO_BUDGET_CMD="$GOVERNOR"
 export WO_BUDGET_MAX="$BUDGET_MAX"
 export WO_RUN_STARTED_AT="$(date +%s)"
+# The run says what kind of run it is. `hooks/session-start.sh` reads this to decide whether to put
+# a proposal to a person; without it the suppression held only for an operator who exported it by
+# hand, which defeats the one thing this wrapper is for -- there is nobody at the keyboard.
+export AIDA_UNATTENDED="true"
 [ -n "$SOFT_SECS" ] && export WO_BUDGET_SOFT_SECS="$SOFT_SECS"
 [ -n "$HARD_SECS" ] && export WO_BUDGET_HARD_SECS="$HARD_SECS"
 
@@ -94,7 +98,10 @@ LAUNCH=(claude)
 # to stdout/logs). The GH_TOKEN=/GITHUB_TOKEN= patterns are included so their ABSENCE proves the scrub;
 # after `unset` they will not appear. No PAT value is ever in env (only WO_MERGE_PAT_FILE, a path).
 if [ "$PRINT_CMD" -eq 1 ]; then
-  env | grep -E '^(WO_|HOME=|GH_TOKEN=|GITHUB_TOKEN=)' | sort
+  # AIDA_UNATTENDED is in the allowlist because it is a boolean naming the KIND of run, never a
+  # credential, and because a variable a consumer depends on and this dump omits is one nobody can
+  # verify was set. That is how it came to be missing from the exports above for as long as it was.
+  env | grep -E '^(WO_|HOME=|AIDA_UNATTENDED=|GH_TOKEN=|GITHUB_TOKEN=)' | sort
   printf -- '--- launch argv ---\n'
   printf '%s\n' "${LAUNCH[*]}"
   exit 0

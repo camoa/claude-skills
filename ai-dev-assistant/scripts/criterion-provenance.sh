@@ -41,9 +41,27 @@
 #                  script's own location.
 #   --section      OPTIONAL, default task_level. One of the four alignment.md sections.
 #
+# WHERE THE CRITERIA COME FROM. alignment.md first, task.md next — scripts/contract-resolve.sh's
+# resolution order, because a kernel that reports on a different set of criteria than the resolver
+# resolves is reporting about a contract nobody is checked against. Until now this kernel read
+# alignment.md only, so on a task whose criteria live in task.md it answered `no_criteria` while the
+# resolver returned that task's criteria and their markers sat in the file unread. Measured on
+# review_ladder: 9 criteria resolved, 0 counted here, 5 author markers on disk.
+# A task.md criterion is a checkbox line outside a code fence carrying an ` — id: c<n> ` marker, the
+# resolver's own definition (scripts/lib/task-criteria.awk). Checkbox lines with no id are not
+# criteria: a task.md's phase-status list is checkboxes too.
+# task.md has no sections, so only `--section task_level` reads it. A phase section asked for on a
+# task.md-only folder is `no_criteria`, never task.md's list answering under a phase heading's name.
+# alignment.md WINS when it carries criteria for the section, including when they are present but
+# unreadable — `criteria_unreadable` is "there are criteria and I could not read them", and reaching
+# past them to a second file would answer about a different set than the one that exists.
+# The marker itself is read by scripts/lib/author-marker.awk on both paths, the same reading
+# alignment-read.sh does, so the author of a criterion no longer depends on which script asks.
+#
 # Output (single JSON object to stdout):
 #   { "section": "task_level",
 #     "status": "no_criteria|criteria_unreadable|all_owner|designer_present|unrecorded_present",
+#     "source": "alignment|task|null",
 #     "blocks": false,
 #     "counts": { "owner": N, "designer": N, "unrecorded": N, "unrecognized": N, "total": N },
 #     "designer_authored": ["criterion text", ...],
@@ -78,6 +96,9 @@
 #   never render the same as an answer of "nothing found". A caller passing a bad path never asked the
 #   question either — nothing looked — so it cannot read as no_criteria's calm, non-blocking "checked,
 #   empty". Distinguishing the two costs nothing this kernel doesn't already pay for --section.
+#
+#   `source` names the file the counts came from, or null when nothing was counted. A reader that
+#   sees zeros needs to know whether a contract was found at all.
 #
 #   Both arrays are ALWAYS emitted, even empty, so the status never hides a signal: a run can be
 #   `unrecorded_present` and still list designer-authored criteria.
@@ -133,12 +154,31 @@ ALIGNMENT_READ_SH="$SCRIPT_DIR/alignment-read.sh"
 
 emit_no_criteria() {
   jq -nc --arg s "$SECTION" \
-    '{section:$s, status:"no_criteria", blocks:false, counts:{owner:0,designer:0,unrecorded:0,unrecognized:0,total:0}, designer_authored:[], unrecorded:[]}'
+    '{section:$s, status:"no_criteria", source:null, blocks:false, counts:{owner:0,designer:0,unrecorded:0,unrecognized:0,total:0}, designer_authored:[], unrecorded:[]}'
 }
 
 emit_criteria_unreadable() {
   jq -nc --arg s "$SECTION" \
-    '{section:$s, status:"criteria_unreadable", blocks:false, counts:{owner:0,designer:0,unrecorded:0,unrecognized:0,total:0}, designer_authored:[], unrecorded:[]}'
+    '{section:$s, status:"criteria_unreadable", source:"alignment", blocks:false, counts:{owner:0,designer:0,unrecorded:0,unrecognized:0,total:0}, designer_authored:[], unrecorded:[]}'
+}
+
+# read_task_md: the task.md criteria, in the same shape alignment-read.sh returns them, through the
+# shared reader both this kernel and contract-resolve.sh use. Sets TASK_CRITERIA to a JSON array
+# (empty when the file is absent, unreadable, or carries no id-marked checkbox line) and
+# TASK_UNRECOGNIZED to the number of rejected or near-miss author markers on those lines. Sets
+# globals rather than echoing: a command substitution runs in a subshell, where a second return
+# value is lost, and losing the unrecognized count is losing the evidence somebody tried.
+read_task_md() {
+  TASK_CRITERIA='[]'; TASK_UNRECOGNIZED=0
+  local rows
+  [ -r "$TASK_FOLDER/task.md" ] || return 0
+  rows="$(awk -f "$SCRIPT_DIR/lib/author-marker.awk" -f "$SCRIPT_DIR/lib/task-criteria.awk" \
+           "$TASK_FOLDER/task.md" 2>/dev/null)" || return 0
+  TASK_UNRECOGNIZED="$(awk -F'\t' '$1 == "author_warn" {n++} END {print n + 0}' <<<"$rows")"
+  TASK_CRITERIA="$(printf '%s' "$rows" | jq -R -s -c '
+    split("\n") | map(select(startswith("crit\t")) | split("\t")
+      | {text: .[4], author: (if .[3] == "owner" or .[3] == "designer" then .[3] else null end)})')" \
+    || { TASK_CRITERIA='[]'; TASK_UNRECOGNIZED=0; }
 }
 
 AR="$(bash "$ALIGNMENT_READ_SH" "$TASK_FOLDER" 2>/dev/null)"
@@ -146,13 +186,34 @@ jq -e . >/dev/null 2>&1 <<<"$AR" || { echo "criterion-provenance: alignment-read
 
 # --- the matrix (deterministic) ---
 
-# alignment.md missing, or the section absent from a present file: no_criteria, not an error.
+SOURCE="alignment"
+
+# fall_back_to_task_md: task.md answers only where alignment.md could not, and only for task_level,
+# which is the only section task.md can be said to have. Sets CRITERIA/SOURCE/UNRECOGNIZED and
+# returns 0 when it found criteria; returns 1 when there is nothing there, leaving the caller to
+# report the honest empty it was already about to report.
+fall_back_to_task_md() {
+  [ "$SECTION" = "task_level" ] || return 1
+  read_task_md
+  [ "$(jq 'length' <<<"$TASK_CRITERIA")" -gt 0 ] || return 1
+  CRITERIA="$TASK_CRITERIA"; SOURCE="task"; UNRECOGNIZED="$TASK_UNRECOGNIZED"
+  return 0
+}
+
+# alignment.md missing, or the section absent from a present file: task.md next, then no_criteria.
 if [ "$(jq -r '.file_exists' <<<"$AR")" != "true" ] || \
    [ "$(jq -r --arg s "$SECTION" '.sections[$s].present // false' <<<"$AR")" != "true" ]; then
-  emit_no_criteria
-  exit 0
+  if fall_back_to_task_md; then
+    ALIGNMENT_ANSWERED=false
+  else
+    emit_no_criteria
+    exit 0
+  fi
+else
+  ALIGNMENT_ANSWERED=true
 fi
 
+if [ "$ALIGNMENT_ANSWERED" = "true" ]; then
 CRITERIA="$(jq -c --arg s "$SECTION" '.sections[$s].success_criteria // []' <<<"$AR")"
 
 if [ "$(jq 'length' <<<"$CRITERIA")" -eq 0 ]; then
@@ -163,25 +224,32 @@ if [ "$(jq 'length' <<<"$CRITERIA")" -eq 0 ]; then
   UNREADABLE="$(jq -r --arg s "$SECTION" \
     '[.warnings[]? | select(.code == "success_criteria_not_checklist" and .section == $s)] | length' <<<"$AR")"
   if [ "$UNREADABLE" -gt 0 ]; then
+    # Criteria ARE present and did not parse. Do not reach past them to task.md: that would answer
+    # about a different set of criteria than the ones this task actually has.
     emit_criteria_unreadable
     exit 0
   fi
-  emit_no_criteria
-  exit 0
+  if ! fall_back_to_task_md; then
+    emit_no_criteria
+    exit 0
+  fi
+fi
 fi
 
 # How many of this section's criteria carry a written-but-rejected author marker (reader warning
 # criterion_author_unrecognized). These criteria already read as author:null from the reader, so they
 # are already inside $unrecorded below; this is a visible SUBSET count, not an additional bucket.
-UNRECOGNIZED="$(jq -r --arg s "$SECTION" \
-  '[.warnings[]? | select(.code == "criterion_author_unrecognized" and .section == $s)] | length' <<<"$AR")"
+if [ "$SOURCE" = "alignment" ]; then
+  UNRECOGNIZED="$(jq -r --arg s "$SECTION" \
+    '[.warnings[]? | select(.code == "criterion_author_unrecognized" and .section == $s)] | length' <<<"$AR")"
+fi
 
 # Capture, don't stream straight to stdout: a `jq` that fails or prints nothing must not leave the
 # script to fall through to an unconditional `exit 0` on empty stdout. That is a silent success that
 # means nothing ran — the exact failure mode this whole change exists to remove, one line away from
 # happening in the kernel's own final step. No known input triggers this (unverified by test; see the
 # spec file's note beside this fix), but the guard is one line and the failure mode is the same one.
-VERDICT="$(jq -c --arg s "$SECTION" --argjson unrecognized "$UNRECOGNIZED" '
+VERDICT="$(jq -c --arg s "$SECTION" --arg src "$SOURCE" --argjson unrecognized "$UNRECOGNIZED" '
   (map(select(.author == "owner"))   | length) as $owner
   | (map(select(.author == "designer")) | length) as $designer
   | (map(select(.author != "owner" and .author != "designer")) | length) as $unrecorded
@@ -196,6 +264,7 @@ VERDICT="$(jq -c --arg s "$SECTION" --argjson unrecognized "$UNRECOGNIZED" '
         else "all_owner"
         end
       ),
+      source: $src,
       blocks: false,
       counts: { owner: $owner, designer: $designer, unrecorded: $unrecorded, unrecognized: $unrecognized, total: $total },
       designer_authored: $designer_list,

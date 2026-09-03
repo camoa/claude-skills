@@ -17,6 +17,16 @@ set -uo pipefail
 
 TASK_DIR="${1:?path to task folder required}"
 ALIGNMENT_MD="$TASK_DIR/alignment.md"
+# SELF-HEAL FOR MIGRATED EPICS. `migrate-to-epic.sh` swept the contract into `shared/` until
+# 2026-09-03, and this reader only ever looked at the task root, so the contract was preserved on
+# disk and invisible to every consumer. 20 epics on this machine were in that state, up from 17 four
+# days earlier, so it was still spreading. Fixing the migration stops new ones and repairs none of
+# the 20: those folders exist and nobody is going to walk them. Look in `shared/` when the root has
+# nothing, and they resolve on the next read. Root always wins, so a folder holding both is
+# unambiguous and this can never shadow a real contract.
+if [ ! -f "$ALIGNMENT_MD" ] && [ -f "$TASK_DIR/shared/alignment.md" ]; then
+  ALIGNMENT_MD="$TASK_DIR/shared/alignment.md"
+fi
 
 emit_missing_file() {
   jq -nc --arg p "$ALIGNMENT_MD" '
@@ -65,7 +75,27 @@ fi
 #   {"kind":"criteria_prose","section":"<key>","body":"..."}
 #   {"kind":"non_goals_prose","section":"<key>","body":"..."}
 #   {"kind":"empty_field","section":"<key>","field":"<key>"}
-RECORDS=$(awk '
+# The criterion-marker reader is shared, not copied: scripts/lib/author-marker.awk. It is prepended
+# to the inline awk program below (awk takes one program text; two -f files would need the whole
+# program in a file). A missing library is a read failure, reported as one — never a silent parse
+# where every author comes back null.
+AM_LIB="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/author-marker.awk"
+if [ ! -r "$AM_LIB" ]; then
+  jq -nc --arg p "$ALIGNMENT_MD" --arg l "$AM_LIB" '
+    {
+      file_exists: true,
+      file_path: $p,
+      task_name: null,
+      created: null,
+      schema_version: "1.0",
+      sections: {},
+      warnings: [{code: "error", detail: ("shared criterion-marker library not readable at " + $l)}]
+    }'
+  exit 1
+fi
+AM_SRC="$(cat "$AM_LIB")"
+
+RECORDS=$(awk "$AM_SRC"'
   function json_escape(s,    r) {
     r = s
     gsub(/\\/, "\\\\", r)
@@ -152,105 +182,19 @@ RECORDS=$(awk '
           checked = (substr(text, 1, 1) ~ /[xX]/) ? "true" : "false"
           sub(/^[[:space:]xX]\][[:space:]]+/, "", text)
           text = trim(text)
-          # Optional verification suffix: "<text> — verify: <note>".
-          # Byte-safe detection via index()/substr() (em-dash is multibyte —
-          # regex split would mis-handle the multibyte boundary). Accept em-dash,
-          # en-dash, and hyphen in the delimiter position; the "verify: " token
-          # (lowercase, trailing space) is required. Split on the FIRST delimiter.
-          d1 = " — verify: "   # em-dash U+2014
-          d2 = " – verify: "   # en-dash U+2013
-          d3 = " - verify: "   # hyphen
-          p1 = index(text, d1)
-          p2 = index(text, d2)
-          p3 = index(text, d3)
-          best = 0; dl = 0
-          if (p1 > 0)                              { best = p1; dl = length(d1) }
-          if (p2 > 0 && (best == 0 || p2 < best))  { best = p2; dl = length(d2) }
-          if (p3 > 0 && (best == 0 || p3 < best))  { best = p3; dl = length(d3) }
-          if (best > 0) {
-            verif = trim(substr(text, best + dl))
-            text = trim(substr(text, 1, best - 1))
-            has_verif = 1
-          } else {
-            has_verif = 0
-          }
-          # Optional author suffix: "<text> — by: owner|designer", applied to
-          # the text AFTER the verify split above, never before — so an author
-          # marker written before a verify suffix on the same line is read
-          # correctly, and one written after "verify:" (wrong order) is left
-          # inside the captured verification note rather than stripped, which
-          # is the documented consequence of running verify-split first.
-          # Rightmost delimiter wins, so an em-dash inside the criterion prose
-          # itself does not pre-empt a trailing marker.
-          # Em-dash ONLY — unlike the verify split above, this does NOT accept
-          # en-dash or hyphen. "verify:" is a distinctive token that never
-          # occurs in ordinary criterion prose, so tolerating three delimiters
-          # there is safe. "by:" is ordinary English ("filtered - by: owner"
-          # reads as a hyphenated aside, not a marker), so a hyphen or en-dash
-          # here would silently promote unmarked prose to an author — the
-          # exact failure this field exists to prevent. One strict delimiter.
-          b1 = " — by: "   # em-dash U+2014 — the only accepted delimiter
-          la1 = last_index(text, b1)
-          abest = 0; adl = 0
-          if (la1 > 0) { abest = la1; adl = length(b1) }
-          author = "null"
-          if (abest > 0) {
-            atail = trim(substr(text, abest + adl))
-            if (atail == "owner" || atail == "designer") {
-              author = "\"" atail "\""
-              text = trim(substr(text, 1, abest - 1))
-            } else {
-              printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(atail)
-            }
-          } else {
-            # Near-miss detection, not parsing. The strict delimiter above
-            # found nothing, but the writer may still have attempted a
-            # marker with the wrong spacing or a rejected dash (F1 dropped
-            # en-dash/hyphen as accepted delimiters; this is what makes that
-            # drop safe instead of silent). Loose match: an em-dash, en-dash,
-            # or hyphen, then a run of spaces/tabs, then "by:" in any case,
-            # then anything, matched anywhere in text. Never sets author,
-            # never touches text — it only flags that this looks like a
-            # failed attempt, so the writer learns the em-dash is required
-            # instead of getting a silent "unrecorded" with no cause.
-            if (match(text, /(—|–|-)[ \t]+[bB][yY]:.*$/)) {
-              printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(text, RSTART))
-            }
-          }
-          # THE MARKER MAY ALSO SIT AFTER THE VERIFY CLAUSE, and until 2026-09-03 it was swallowed
-          # there. The verify split runs first, so " — by: owner" written at the end of the line
-          # ended up inside `verif` and never reached the search above: the criterion read
-          # `unrecorded` while its author sat on disk in plain sight, and NOTHING WARNED, because
-          # the near-miss detector only ever looked at `text`. Measured on the epic that owns this
-          # work: 8 owner markers written, 0 read, 0 warnings, under a ticked criterion promising
-          # every criterion records who wrote it. Marker-after-verify is also the order every
-          # contract in that epic uses, so the strict rule rejected the only form anyone writes.
-          # Same delimiter, same accepted values, so reading the tail is exactly as safe as the head.
-          if (author == "null" && has_verif) {
-            la2 = last_index(verif, b1)
-            if (la2 > 0) {
-              atail = trim(substr(verif, la2 + length(b1)))
-              # The marker is the whole tail, OR the tail up to a parenthetical note. Real contracts
-              # write the note recording WHY a criterion was added on the next line, and join_wrapped
-              # folds it in, so the marker sits mid-string. Only a parenthetical may follow: ordinary
-              # prose after the value means the words were a sentence, not a marker, and stay prose.
-              anote = ""
-              if (atail != "owner" && atail != "designer" \
-                  && match(atail, /^(owner|designer)[ \t]*\(/)) {
-                aw = atail; sub(/[ \t]*\(.*$/, "", aw)
-                anote = trim(substr(atail, index(atail, "(")))
-                atail = aw
-              }
-              if (atail == "owner" || atail == "designer") {
-                author = "\"" atail "\""
-                verif = trim(substr(verif, 1, la2 - 1))
-                if (anote != "") verif = verif " " anote
-              } else {
-                printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(atail)
-              }
-            } else if (match(verif, /(—|–|-)[ \t]+[bB][yY]:.*$/)) {
-              printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(verif, RSTART))
-            }
+          # Verification suffix, author marker, and the warnings either produces: one reading,
+          # scripts/lib/author-marker.awk, shared with contract-resolve.sh and criterion-provenance.sh.
+          # The rules and the reasons for each one live in that file. This used to be ~80 lines here,
+          # and it was the only copy, which is why the other two readers of the same fact disagreed
+          # with it. Reading order is unchanged: verify clause first, then the author marker in the
+          # head, then the author marker in the tail of the verification note.
+          am_read(text)
+          text = AM_TEXT
+          verif = AM_VERIFY
+          has_verif = AM_HAS_VERIFY
+          author = (AM_AUTHOR == "") ? "null" : "\"" AM_AUTHOR "\""
+          for (awi = 1; awi <= AM_WARN_N; awi++) {
+            printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(AM_WARN[awi])
           }
           # Optional id marker (v1.4+): "<text> — id: c<n>", read from what is
           # left after the verify and author splits, rightmost delimiter, em-dash
