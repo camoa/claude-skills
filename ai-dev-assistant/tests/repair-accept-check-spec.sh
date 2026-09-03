@@ -148,8 +148,22 @@ q "R3 empty globs + source undetermined -> cannot_judge" .action cannot_judge \
 # "an empty glob list determined by the caller means 'no test paths here', which is a real answer"
 q "R3 empty globs + source determined + green -> accepted" .action accepted \
   --suite green --test-motion-from "$MODTEST" --test-globs '[]' --test-globs-source determined
-q "R3 empty globs + source omitted + green -> accepted" .action accepted \
+# An OMITTED source is not a caller's assertion. Found by Phase 4 2026-09-03: this cell asserted
+# `accepted`, so `--test-globs '[]'` with no source flag classified nothing, left every motion array
+# empty, and still returned "the test motion raised nothing unanswered" over a MODIFIED test file.
+# That is a positive claim about a comparison that never ran, and it switched off the whole halt.
+# Absence gets its own answer; only an explicit `determined` makes an empty list mean something.
+q "R3 empty globs + source omitted -> cannot_judge, absence is not an assertion" .action cannot_judge \
   --suite green --test-motion-from "$MODTEST" --test-globs '[]'
+q "R3 empty globs + source omitted names the empty list, not the suite" \
+  '[.reasons[] | select(test("empty"))] | length > 0' true \
+  --suite green --test-motion-from "$MODTEST" --test-globs '[]'
+q "R3 empty globs + source omitted carries decided_by none" .decided_by none \
+  --suite green --test-motion-from "$MODTEST" --test-globs '[]'
+# The exclusion, so the rule above cannot be satisfied by refusing everything: a NON-empty glob list
+# with no source flag is still a determination, and still decides.
+q "R3 non-empty globs + source omitted still decides" .action not_accepted \
+  --suite green --test-motion-from "$MODTEST" --test-globs "$GLOBS"
 # "every cannot_judge result carries decided_by 'none' and a non-empty reasons[]"
 q "R3 not_run cannot_judge carries decided_by none" .decided_by none \
   --suite not_run --test-motion-from "$NOTEST" --test-globs "$GLOBS"
@@ -352,7 +366,7 @@ q "a path matching a glob but absent from disk still counts" '.motion.modified |
 #      + 3 suite-echo + 3 glob.
 # Asserted rather than trusted: a block that fails to run, or a helper that returns early, subtracts
 # assertions silently and the run still prints "0 failed", which reads as green.
-EXPECTED=83
+EXPECTED=86
 TOTAL=$((PASS + FAIL))
 [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
 

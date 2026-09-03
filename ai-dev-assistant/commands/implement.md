@@ -278,30 +278,30 @@ REP=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath
         --label <component>.repaired | jq -r .sha)
 git -C <codePath> diff --name-status $AFTER..$REP > "$CD/<component>.repair.txt"
 ${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run> \
-  --test-motion-from "$CD/<component>.repair.txt" --test-globs '<test paths, JSON array>' \
-  [--test-globs-source undetermined] [--modification-reason "<why a test file changed>"]
+  --test-motion-from "$CD/<component>.repair.txt" --test-globs "$(jq -c .globs <<<"$G")" "$GF" "$GV" \
+  [--modification-reason "<why a test file changed>"]   # $G/$GF/$GV: step 2c's, same component
 
 # And the scope half, from the SAME repair diff. Copy it verbatim, every value is computed here.
 # TWO sets come back: `unnamed`, a file the repair touched that no finding named, and `unaddressed`,
-# a site a finding named that the repair never touched. `blocks` is false on both.
+# a site a finding named and the repair skipped. `blocks` false on both. A finding the kernel
+# SUPPRESSED is not a site: asking a repair for it back is how the design route was defeated.
 ${CLAUDE_PLUGIN_ROOT}/scripts/repair-scope-check.sh \
-  --finding-sites "$(jq -c '[(.critics[]?, .) | (.findings // [])[]? | select((.severity // "") == "critical" or (.severity // "") == "concern") | (.where // [])[]? | (.file // empty)] | unique' "$CD/<component>.critique.json" 2>/dev/null || echo '[]')" \
+  --finding-sites "$(jq -c '[(.critics[]?, .) | (.findings // [])[]? | select((.severity // "") == "critical" or (.severity // "") == "concern") | select((.design_change != true) and (.out_of_range != true)) | (.where // [])[]? | (.file // empty)] | unique' "$CD/<component>.critique.json" 2>/dev/null || echo '[]')" \
   --touched-files "$(awk -F'\t' 'NF>1{for(i=2;i<=NF;i++) if($i!="") print $i}' "$CD/<component>.repair.txt" 2>/dev/null | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')" \
   --touched-files-source "$([ -s "$CD/<component>.repair.txt" ] && echo determined || echo undetermined)" \
   > "$CD/<component>.scope.json"
 jq -r '"scope: \(.action): touched-unnamed [\(.unnamed|join(", "))] site-unaddressed [\(.unaddressed|join(", "))]"' "$CD/<component>.scope.json"  # SAY IT
 ```
 
-`repair-scope-check.sh` ran once per task at `/review` and nowhere else, so its only verdict landed
-after every repair was over. An unreadable critique yields `[]` sites and `cannot_judge`, never
-`in_scope`; a 0-byte repair diff is `undetermined`, the abstention the accept kernel makes on one.
+`repair-scope-check.sh` ran once per task at `/review`, so its only verdict landed after every repair was over.
+An unreadable critique yields `[]` sites and `cannot_judge`, never `in_scope`; a 0-byte repair diff is `undetermined`.
 
 `--suite` is a RESULT you hand in; the kernel runs nothing. Who runs it is settled by `run_mode`
 (`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. Per repair the suite is
 the specs that read the files in `<component>.files.txt`, named in the record; `make` targets run once,
 when the PR is final, never per repair. With no suite over the repaired tree, `not_run` is the honest
 value and returns `cannot_judge`, not a pass. `--test-globs` is where this project's tests live; when that
-cannot be established pass `--test-globs-source undetermined`, never `[]`, the claim that no test path was touched.
+cannot be established pass `--test-globs-source undetermined`; `[]` alone is `cannot_judge`, and `[] determined` claims there are none.
 
 **Both ends of that diff are shas**, the same way the phase range at Step 12 is. A checkpoint
 label is not a revision, so handing one to `git diff` leaves an empty file rather than an error

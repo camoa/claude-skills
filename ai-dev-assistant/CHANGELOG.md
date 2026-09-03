@@ -1,5 +1,48 @@
 # Changelog
 
+## [5.50.1] - 2026-09-03
+
+The first review phase this task has ever had found that the rule shipped in 5.50.0 was undone one
+line after it was made, and that the halt shipped alongside it could be switched off by passing an
+empty list. Three fresh readers, none of them allowed to read the build's own account of itself;
+two reached the first defect independently from opposite directions.
+
+### Fixed
+- **A finding the kernel suppressed is no longer asked for back by the next reader.** The kernel
+  drops a finding marked `design_change: true` from `effective`, so no repair round opens for it.
+  `commands/implement.md` then rebuilt the list of files a repair had to touch from the raw critics
+  array, selecting on severity alone, and handed the design site to `repair-scope-check.sh` anyway.
+  A repair that obeyed the rule and left the file alone was reported `unaddressed` and said out loud
+  as a shortfall; one that rewrote the design mid-build came back clean. The only deterministic
+  reading of a repair rewarded the forbidden move. `out_of_range` had the identical hole and
+  predates 5.50.0 — the design route copied the routing pattern and inherited its defect. Both are
+  excluded now, on the JSON literal `true` only, matching the kernel's own test.
+- **An empty `--test-globs` no longer accepts a repair that modified a test.**
+  `--test-globs-source` defaulted to `determined`, so `--test-globs '[]'` with the flag omitted
+  classified no path as a test path, left every motion array empty, and still returned `accepted`
+  with "the test motion raised nothing unanswered" — a positive claim about a comparison that never
+  ran, and enough to switch off the modified-test halt that 5.50.0 exists to install. Omitting the
+  flag is not an assertion, so it is now `cannot_judge`. An explicit `--test-globs-source
+  determined` still means the project has no test paths, and a non-empty list still decides with the
+  flag omitted.
+- **The repair's test globs are derived, not typed.** The call site carried the free-text
+  placeholder `--test-globs '<test paths, JSON array>'`, which is what made an empty list reachable.
+  It now reuses the `oracle-globs.sh` result step 2c already computed for that component.
+- **`references/build-critique.md`'s aggregate invocation was missing `--component-files-from`.**
+  A builder following the file that calls itself the full instructions got a range check that
+  reported `not_run` and suppressed nothing, while the same file said 320 lines later that the
+  kernel is handed that list.
+
+### Changed
+- `tests/design-finding-route-spec.sh` follows the value past the envelope. Its 48 assertions all
+  stopped at the aggregate output and all passed on the broken version, so the route was verified
+  where it was built and nowhere it was read. D10 lifts the site expression and the scope
+  invocation out of the command body and runs them, the way `build-critique-gate-spec.sh` does.
+  Each suppression is isolated by its own fixture: the first version of these cells used one
+  finding carrying both flags, and the design half alone was enough to make them pass.
+- `tests/repair-accept-check-spec.sh` no longer pins the empty-globs default as `accepted`. That
+  cell asserted the defect, with a fixture that is visibly a test file.
+
 ## [5.50.0] - 2026-09-03
 
 One criterion, both halves. A build finding gets fixed by changing the code, never by moving what
