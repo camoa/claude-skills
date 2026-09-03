@@ -31,7 +31,10 @@
 #                    when no such file exists on disk. That is deliberate. A deleted test file is
 #                    exactly the motion this kernel most needs to see, and it is gone from disk by
 #                    the time anyone asks.
-#   --test-globs-source <determined|undetermined>  OPTIONAL, default determined. `undetermined` means
+#   --test-globs-source <determined|undetermined>  OPTIONAL, default determined WHEN --test-globs is
+#                    non-empty; an EMPTY list with this flag omitted is cannot_judge, because nothing
+#                    then separates "this project has no test paths" from "the caller never looked".
+#                    `undetermined` means
 #                    the caller could not establish what a test path is in this project, and forces
 #                    cannot_judge. An empty array cannot carry both "this repair touched no test
 #                    path" and "I do not know what a test path is here"; repair-scope-check.sh had to
@@ -60,7 +63,8 @@
 #                                self-issued permit, and a repair loop that may edit the standard
 #                                always converges. Adds and deletes still pass silently.
 #                 cannot_judge = --test-motion-from named a ZERO-BYTE file, OR --suite was not_run,
-#                                OR --test-globs-source was undetermined.
+#                                OR --test-globs-source was undetermined, OR --test-globs was empty
+#                                with --test-globs-source omitted.
 #                                UNMEASURED, never "fine". cannot_judge is NEVER accepted. Folding
 #                                "I could not look" into a pass is the defect this repo keeps
 #                                re-finding (mechanism-disposition.sh's `not_searched`,
@@ -121,14 +125,14 @@ require_value() {
   esac
 }
 
-SUITE=""; MOTION_FROM=""; TEST_GLOBS=""; GLOBS_SOURCE="determined"; GLOBS_ORIGIN=""; MOD_REASON=""; MOD_REASON_SET=0
+SUITE=""; MOTION_FROM=""; TEST_GLOBS=""; GLOBS_SOURCE="determined"; GLOBS_SOURCE_SET=0; GLOBS_ORIGIN=""; MOD_REASON=""; MOD_REASON_SET=0
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/glob-to-regex.sh"
 while [ $# -gt 0 ]; do
   case "$1" in
     --suite) [ "$#" -ge 2 ] || { echo "repair-accept-check: --suite needs a value" >&2; exit 2; }; require_value --suite "$2"; SUITE="$2"; shift 2 ;;
     --test-motion-from) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-motion-from needs a value" >&2; exit 2; }; require_value --test-motion-from "$2"; MOTION_FROM="$2"; shift 2 ;;
     --test-globs) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs needs a value" >&2; exit 2; }; require_value --test-globs "$2"; TEST_GLOBS="$2"; shift 2 ;;
-    --test-globs-source) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-source needs a value" >&2; exit 2; }; require_value --test-globs-source "$2"; GLOBS_SOURCE="$2"; shift 2 ;;
+    --test-globs-source) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-source needs a value" >&2; exit 2; }; require_value --test-globs-source "$2"; GLOBS_SOURCE="$2"; GLOBS_SOURCE_SET=1; shift 2 ;;
     --test-globs-origin) [ "$#" -ge 2 ] || { echo "repair-accept-check: --test-globs-origin needs a value" >&2; exit 2; }; require_value --test-globs-origin "$2"; GLOBS_ORIGIN="$2"; shift 2 ;;
     --modification-reason) [ "$#" -ge 2 ] || { echo "repair-accept-check: --modification-reason needs a value" >&2; exit 2; }; require_value --modification-reason "$2"; MOD_REASON="$2"; MOD_REASON_SET=1; shift 2 ;;
     *) echo "repair-accept-check: unknown arg: $1" >&2; exit 2 ;;
@@ -207,6 +211,18 @@ if [ "$GLOBS_SOURCE" = "undetermined" ]; then
   # The caller could not establish what a test path is here. Every path would have to be classified
   # against a set nobody has, so the motion arrays stay empty rather than reporting a guess.
   REASONS+=("--test-globs-source was undetermined, so no path could be classified as a test path")
+  emit cannot_judge none "$EMPTY_MOTION"
+  exit 0
+fi
+
+# An EMPTY glob list is only an answer when the caller said so. Omitting --test-globs-source used to
+# default to `determined`, so `--test-globs '[]'` with no source flag classified nothing, left every
+# motion array empty, and still returned "the test motion raised nothing unanswered" over a modified
+# test file: a positive claim about a comparison that never ran, and enough to switch off the whole
+# modified-test halt. Absence is not the caller's assertion, so it gets its own verdict. A NON-empty
+# list still decides with the flag omitted, because handing over the paths IS the determination.
+if [ "$GLOBS_SOURCE_SET" -eq 0 ] && [ "$(jq -r 'length' <<<"$TEST_GLOBS")" = "0" ]; then
+  REASONS+=("--test-globs was an empty list and --test-globs-source was omitted, so nothing establishes whether this project has no test paths or whether the caller never looked; pass --test-globs-source determined to state that it has none")
   emit cannot_judge none "$EMPTY_MOTION"
   exit 0
 fi

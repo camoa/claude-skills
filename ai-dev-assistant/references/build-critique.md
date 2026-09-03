@@ -179,6 +179,7 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    ```
    wo-critique-aggregate.sh --wo "<component>" --tier "<risk_tier>" --mode fanout \
      --expected <lens count> --critics-dir "<...>/<component>.critics" \
+     --component-files-from "<...>/<component>.files.txt" \
      --evaluated true --required [--diff-empty] \
      > <task_folder>/build-critique/<component>.critique.json
    ```
@@ -351,6 +352,19 @@ never touched. One critic round per component is what that buys: the two questio
 was there to answer are now asked on every repair, by something that cannot be talked out of its
 answer.
 
+**A finding the kernel suppressed is not one of those sites.** The sites come from
+`commands/implement.md`'s `--finding-sites` expression, and it excludes any finding carrying
+`design_change: true` or `out_of_range: true` before it reads `where[]`. Without that exclusion the
+suppression is undone one line after it is made: the kernel drops the finding from `effective` so no
+repair round opens, and then the scope comparison asks the repair for the same file anyway. That
+shipped. A repair that obeyed the design rule and left the file alone was reported `unaddressed` and
+said out loud as a shortfall, while one that rewrote the design mid-build came back clean, so the
+only deterministic reading of a repair rewarded the forbidden move. Both suppressions read the JSON
+literal `true` only, matching `wo-critique-aggregate.sh`'s own test, so a string or a `1` still
+counts as a site. `tests/design-finding-route-spec.sh` D10 lifts the expression and the invocation
+out of the command body and runs them, because a spec that stops at the envelope cannot see this:
+the 48 assertions that shipped with the route all passed on the broken version.
+
 What the trade costs is stated in `agents/wo-critic.md` and is not re-argued here. A set
 comparison sees paths, never intent: it cannot tell a named site the repair deliberately left
 alone from one it forgot, and it cannot see a repair that edited the right file and fixed
@@ -370,11 +384,21 @@ always converges. The tripwire still does not judge the change, and nothing here
 moves the decision to somebody who is not the author, through the halt `/implement` already offers
 as `[f]ix` or `[o]verride`, which an autonomous run may not take for itself. Adds and deletes pass
 silently. `cannot_judge` has three causes: the
-motion file was zero bytes, no suite was run over the repaired tree, or the caller could not
-establish what a test path is here. The first exists because an empty diff carries no claim. A
-caller who knows there are no test paths says `--test-globs '[]'`, and one who cannot tell says
+motion file was zero bytes, no suite was run over the repaired tree, the caller could not establish
+what a test path is here, or the glob list was empty and nothing said which of those two it meant.
+The first exists because an empty diff carries no claim. A caller who knows there are no test paths
+says `--test-globs '[]' --test-globs-source determined`, and one who cannot tell says
 `--test-globs-source undetermined`, so a file with nothing in it means either the diff failed or the
 repair changed nothing, and neither is a repair that moved no test.
+
+**An empty list with the source flag omitted is the fourth cause, and it used to be a pass.** The
+flag defaulted to `determined`, so `--test-globs '[]'` on its own classified no path as a test path,
+left all three motion arrays empty, and returned `accepted` with the reason "the test motion raised
+nothing unanswered" over a diff that modified a test file. That is a positive claim about a
+comparison that never ran, and it switched off the modified-test halt entirely for any caller who
+passed an empty list. Omitting the flag is not the caller asserting anything, so it now gets its own
+`cannot_judge`. A non-empty list with the flag omitted still decides, because handing over the paths
+is itself the determination.
 
 **`cannot_judge` is not a pass.** It is the answer for nobody looked, and folding that into a clean
 result is the defect this framework has now found at five layers. Nothing halts on it: `blocks` is

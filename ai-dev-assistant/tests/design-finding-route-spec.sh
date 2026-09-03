@@ -208,7 +208,85 @@ ok "D9 clean_returns is untouched by the route"     "1" "$(jq -r '.clean_returns
 ok "D9 and the finding count is untouched"          "1" "$(jq -r '[.critics[].findings[]] | length' <<<"$out")"
 ok "D9 the marked file itself still reads pass"     "pass" "$(jq -r '.critics[1].effective' <<<"$out")"
 
+# =============================================================================
+# D10 — THE SUPPRESSION HAS TO SURVIVE ITS NEXT READER
+# =============================================================================
+#
+# Every cell above stops at the aggregate envelope. Phase 4 (2026-09-03) found that one line further
+# on, `commands/implement.md` rebuilds the list of files a repair must touch from the RAW critics
+# array, selecting on severity alone, and hands the design site to repair-scope-check.sh anyway. So
+# a repair that obeyed the rule and left the design file alone was reported `unaddressed` -- named
+# out loud as a shortfall -- while one that rewrote it mid-build came back clean. The deterministic
+# reading rewarded the forbidden repair. Suppressing a finding from `effective` is not the whole
+# rule; the rule is that no downstream reader may ask for it back.
+#
+# So this block does not assert on the envelope. It runs the aggregate for real, lifts the site
+# expression and the invocation OUT of the command body the way build-critique-gate-spec does, and
+# executes them. A grep for `design_change` in the body would have passed on the broken version.
+IMPL="$ROOT/commands/implement.md"
+d="$(newdir)"
+critic "$d" 1 "$(filev critical "$(f critical dsg '[{"file":"src/DESIGN.php","line":3}]' true)" "$(f concern ord '[{"file":"src/ORD.php","line":4}]')")"
+ENV_OUT="$(run --tier high --expected 1 --critics-dir "$d" --required)"
+CJ="$TMP/d10.critique.json"; printf '%s' "$ENV_OUT" > "$CJ"
+
+# The site expression, lifted verbatim from the body rather than restated here: a copy in this file
+# would agree with itself forever while the shipped one drifted.
+SITE_JQ="$(awk '/--finding-sites /{ sub(/^.*--finding-sites "\$\(jq -c /,""); sub(/" \$\{?CD.*$/,""); sub(/ "\$CD.*$/,""); print; exit }' "$IMPL" | sed "s/^'//; s/'\$//")"
+if [ -z "$SITE_JQ" ]; then
+  FAIL=$((FAIL+1)); echo "FAIL D10: no --finding-sites expression could be lifted from implement.md"
+else
+  PASS=$((PASS+1))
+  SITES="$(jq -c "$SITE_JQ" "$CJ" 2>/dev/null)"
+  ok "D10 the ordinary finding is still asked for"  "true"  "$(jq -r 'index("src/ORD.php") != null' <<<"$SITES")"
+  ok "D10 the design site is NOT asked for"         "false" "$(jq -r 'index("src/DESIGN.php") != null' <<<"$SITES")"
+  # The OTHER suppression, tested on its own. Both disjuncts went into the fix together and only one
+  # had a cell: dropping the out_of_range half left this block at 55/55 under mutation. A rule looks
+  # covered when its sibling is.
+  # The off-range finding carries NO design_change, or the design half alone would suppress it and
+  # this cell could never isolate the range half. That is exactly how the first version of it passed.
+  dO="$(newdir)"
+  critic "$dO" 1 "$(filev critical "$(f critical off '[{"file":"src/OFF.php","line":7}]')" "$(f concern ord '[{"file":"src/ORD.php","line":4}]')")"
+  RJ="$(rangef src/ORD.php)"
+  ENV_OOR="$(run --tier high --expected 1 --critics-dir "$dO" --required --component-files-from "$RJ")"
+  SITES_OOR="$(jq -c "$SITE_JQ" <<<"$ENV_OOR" 2>/dev/null)"
+  ok "D10 the range check marked the off-range site" "true" "$(jq -r '[.out_of_range[].id] | index("off") != null' <<<"$ENV_OOR")"
+  ok "D10 an out-of-range site is NOT asked for"     "false" "$(jq -r 'index("src/OFF.php") != null' <<<"$SITES_OOR")"
+  ok "D10 while the in-range site still is"          "true"  "$(jq -r 'index("src/ORD.php") != null' <<<"$SITES_OOR")"
+  # And the design half isolated the same way: in range, so only the flag can suppress it.
+  RJ2="$(rangef src/ORD.php src/DESIGN.php)"
+  S2="$(jq -c "$SITE_JQ" <<<"$(run --tier high --expected 1 --critics-dir "$d" --required --component-files-from "$RJ2")" 2>/dev/null)"
+  ok "D10 an in-range design site is still NOT asked for" "false" "$(jq -r 'index("src/DESIGN.php") != null' <<<"$S2")"
+  ok "D10 and the in-range ordinary site still is"        "true"  "$(jq -r 'index("src/ORD.php") != null' <<<"$S2")"
+fi
+
+# And the same thing again through the real checker, because the site list is an input nobody reads
+# directly: what a builder is told is repair-scope-check.sh's verdict.
+LIT="$TMP/d10-scope.sh"
+awk 'index($0, "/scripts/repair-scope-check.sh") { s=1 }
+     s { print; if ($0 !~ /\\[[:space:]]*$/) exit }' "$IMPL" | sed 's/<component>/main/g' > "$LIT"
+if [ ! -s "$LIT" ]; then
+  FAIL=$((FAIL+1)); echo "FAIL D10: implement.md carries no repair-scope-check.sh invocation to run"
+else
+  PASS=$((PASS+1))
+  CD10="$TMP/d10cd"; mkdir -p "$CD10"
+  cp "$CJ" "$CD10/main.critique.json"
+  # THE COMPLIANT REPAIR: it fixes the ordinary finding and leaves the design file alone, which is
+  # exactly what the criterion demands of it.
+  printf 'M\tsrc/ORD.php\n' > "$CD10/main.repair.txt"
+  ( CLAUDE_PLUGIN_ROOT="$ROOT" CD="$CD10" bash "$LIT" ) >/dev/null 2>&1
+  ok "D10 the compliant repair is not told it missed the design site" "false" \
+     "$(jq -r '(.unaddressed // []) | index("src/DESIGN.php") != null' "$CD10/main.scope.json" 2>/dev/null)"
+  ok "D10 and it is not told it missed anything at all"               "0" \
+     "$(jq -r '(.unaddressed // []) | length' "$CD10/main.scope.json" 2>/dev/null)"
+  # THE INVERSE, so the cell above cannot be satisfied by a checker that reports nothing ever: a
+  # repair that DOES rewrite the design site is now touching a file no finding asked it to.
+  printf 'M\tsrc/ORD.php\nM\tsrc/DESIGN.php\n' > "$CD10/main.repair.txt"
+  ( CLAUDE_PLUGIN_ROOT="$ROOT" CD="$CD10" bash "$LIT" ) >/dev/null 2>&1
+  ok "D10 the repair that rewrites the design site is flagged, not cleared" "true" \
+     "$(jq -r '(.unnamed // []) | index("src/DESIGN.php") != null' "$CD10/main.scope.json" 2>/dev/null)"
+fi
+
 # --- guard: exact count, so a silently-skipped block cannot pass as green ---
-[ "$((PASS + FAIL))" -eq 48 ] || { echo "design-finding-route-spec: expected 48 assertions, ran $((PASS + FAIL))"; exit 2; }
+[ "$((PASS + FAIL))" -eq 60 ] || { echo "design-finding-route-spec: expected 60 assertions, ran $((PASS + FAIL))"; exit 2; }
 
 echo "----"; echo "design-finding-route-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]
