@@ -87,6 +87,24 @@ OUT=$(cs main)
   && pass_check "a genuinely clean tree says so, which is grounds for a gate to skip" \
   || fail_check "a clean tree did not report a reportable nothing"
 
+# A CHANGE LIVING ENTIRELY IN UNTRACKED FILES IS NOT NO CHANGE.
+#
+# The emptiness test read committed and tracked-tree changes and never `untracked`, so a tree whose
+# only work was new files reported `no_changes_anywhere` while the same object said untracked: 1.
+# `commands/review.md` tells every gate it may skip on that reason, so the whole review skipped
+# citing a reason its own record contradicted -- and a build that has added files and staged nothing
+# is exactly the state `/implement` leaves behind. `untracked` stays out of `files[]`, which is the
+# separate and deliberate rule the cells above pin; it is the EMPTINESS verdict that has to see it.
+printf 'new work\n' > "$R/NEWFILE.md"
+OUT=$(cs main)
+[ "$(printf '%s' "$OUT" | jq -r '.empty_reason // "null"')" = "null" ] \
+  && pass_check "a tree whose only change is untracked is not reported as no change at all" \
+  || fail_check "an untracked-only tree said $(printf '%s' "$OUT" | jq -r .empty_reason) while reporting $(printf '%s' "$OUT" | jq -r '.untracked|length') untracked file(s)"
+[ "$(printf '%s' "$OUT" | jq -r '.files|length')" = "0" ] \
+  && pass_check "and the untracked file still stays out of the judged change set" \
+  || fail_check "the untracked-only fix pulled untracked files into files[]"
+rm -f "$R/NEWFILE.md"
+
 OUT=$(cs no-such-branch)
 [ "$(printf '%s' "$OUT" | jq -r .empty_reason)" = "base_unresolvable" ] \
   && pass_check "an unresolvable base is a different empty from no changes" \

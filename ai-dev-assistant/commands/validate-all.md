@@ -66,9 +66,14 @@ Run every validation gate sequentially against the current task. Aggregate the p
    ```
 
    The aggregate's own `status` is the worst gate status present: `fail` if any
-   gate failed, else `warning` if any warned, else `pass` if any passed. A run
-   where every gate was skipped aggregates to `skipped`, never `pass` — a run
-   that checked nothing must not read like a run that found nothing wrong.
+   gate failed, else `warning` if any warned, else `pass` if any passed, else
+   `not_applicable` if any gate considered its scope and found nothing of its
+   kind in the change. A run where every gate was skipped aggregates to
+   `skipped`, never `pass` — a run that checked nothing must not read like a run
+   that found nothing wrong. `not_applicable` ranks above `skipped` for the
+   opposite reason: those gates DID look, at their own scope, and each recorded
+   why nothing applied, so folding them into the word for "nobody looked" throws
+   away the fact that makes them trustworthy.
    `findings[]` collects every gate's messages with the gate name prefixed onto
    each `title`, at the severity that gate's verdict implies. `findings` is
    always an array. An unknown gate name or verdict in `--gates-json` is
@@ -94,7 +99,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
      visual-regression     skipped    no baselines in store yet
      visual-parity         skipped    design-scoped — /validate:visual-parity or /review
 
-     Totals: 3 pass · 1 warning · 1 fail · 2 skipped
+     Totals: 3 pass · 1 warning · 1 fail · 0 not applicable · 2 skipped
 
    For deeper coverage, see:
      /code-quality:lint          (coding standards)
@@ -108,7 +113,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
      history → <task>/validations/history.jsonl
    ```
 
-8. **Exit behavior** — In interactive mode, the printed summary is the signal. When chained non-interactively (CI), exit with a code reflecting the worst verdict: 0 if all pass/warning/skipped; 1 if any fail.
+8. **Exit behavior** — In interactive mode, the printed summary is the signal. When chained non-interactively (CI), exit with a code reflecting the worst verdict: 0 if all pass/warning/not_applicable/skipped; 1 if any fail.
 
 ## Sequential execution
 

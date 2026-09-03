@@ -19,7 +19,7 @@ As of v1.1 every envelope carries **both** sets. The pairs hold the same informa
 | `timestamp` | `run_at` | Same ISO-8601 UTC string, always equal |
 | `findings` | `messages` | `findings` is the structured form. See below |
 
-`messages[]` holds human-readable strings. `findings[]` holds one object per message: `{"severity": <string>, "title": <the message string>}`. Severity comes from the verdict: `fail` → `HIGH`, `warning` → `MEDIUM`, `pass` and `skipped` → `INFO`. `findings` is always an array, never `null` and never absent, so `jq '.findings[]'` is safe on a clean run.
+`messages[]` holds human-readable strings. `findings[]` holds one object per message: `{"severity": <string>, "title": <the message string>}`. Severity comes from the verdict: `fail` → `HIGH`, `warning` → `MEDIUM`, `pass`, `not_applicable` and `skipped` → `INFO`. `findings` is always an array, never `null` and never absent, so `jq '.findings[]'` is safe on a clean run.
 
 The ai-dev-assistant names are **not** deprecated in v1.1. Anything reading `verdict`, `messages`, or `run_at` keeps working unchanged. Prefer the shared names in new code.
 
@@ -60,7 +60,7 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 | `task` | string | Task folder name the run was scoped to |
 | `run_at` | string | ISO-8601 UTC with `Z` suffix |
 | `timestamp` | string | Same value as `run_at`. The cross-plugin name |
-| `verdict` | enum | `"pass"` \| `"warning"` \| `"fail"` \| `"skipped"` |
+| `verdict` | enum | `"pass"` \| `"warning"` \| `"fail"` \| `"not_applicable"` \| `"skipped"` |
 | `status` | enum | Same value as `verdict`. The cross-plugin name |
 | `details` | object | Gate-specific detail structure. See the gate details section |
 | `messages` | array of string | Human-readable findings. Shown in CLI output. Non-empty for warning/fail; usually present for pass too (e.g., "3 checks passed") |
@@ -73,9 +73,44 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 | `pass` | Gate's criteria met. Nothing to fix | Command prints summary + exits 0 |
 | `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking **on the verdict** — but a `warning` carrying `coverage_partial: true` blocks through `review.md` rule 4, which keys on the marker and never on this word | Command prints summary + exits 0 |
 | `fail` | Gate's criteria NOT met. Action required | Command prints summary + exits 1 (signals failure; user/AI can see + fix) |
-| `skipped` | Gate was invoked and did not run, for a reason that leaves nothing unknown — the user passed `--skip`, the gate is not applicable, the change set is empty. **Not** the state for "the analyzer was missing, so nothing got measured": that is a `skipped` carrying `unresolved`, below | Command prints reason + exits 0 |
+| `not_applicable` | Gate applied its own scope test to the change, found nothing of its kind in it, and **named the reason**. A completed check: it counts as applied and it passes. See below | Command prints the reason + exits 0 |
+| `skipped` | Gate was invoked and did not run — the user passed `--skip`, or the change set is empty. **Neither** of the two states beside it: "nothing of mine was in scope" is `not_applicable` above, and "the analyzer was missing, so nothing got measured" is a `skipped` carrying `unresolved`, below | Command prints reason + exits 0 |
 
 All gates are advisory by default — `fail` does NOT block the user's workflow (soft-nudge posture). The exit code communicates the result to invokers that want to chain (e.g., CI, `/validate:all` orchestration).
+
+### `not_applicable` — considered, and nothing applied
+
+The third answer, and the one the four verdicts had no room for. A gate ends in one of
+three places, not two: it looked and found nothing wrong; it could not look at all; or it
+looked at its own scope, found nothing of its kind in the change, and said why. The third
+used to be spelled `skipped`, the same word as the second.
+
+**Why one word for both was not survivable.** A reader of a verdict — and any consumer
+that renders one line — could not tell a documentation-only diff from a scanner that
+returned nothing usable. One producer made it worse than ambiguous:
+`drupal/dry-check.sh`'s no-PHP-in-the-changed-set branch writes `"status": "pass"` with a
+`skip_reason`, so `gate-verdict-resolve.sh` reported *duplication measured and within
+target* about a run that measured nothing, on the majority of documentation pull requests.
+That is a measurement claim with no measurement behind it.
+
+**It counts as applied, and it passes.** `review.md` step 8 rule 5 lists it among the
+benign states; it sets neither `unresolved` nor `coverage_partial`; `validation-envelope-write.sh`
+counts it in its own `summary.not_applicable` bucket rather than folding it into `pass` or
+`skipped`, and ranks it one step above `skipped` so an all-not-applicable run does not
+aggregate to the word meaning nobody looked.
+
+**The reason is required, and it is the branch condition.** `gate-verdict-resolve.sh`
+reaches this verdict only from a report that names its own reason, and emits that reason
+verbatim in the object's `reason` field — no literal in the resolver supplies one. A gate
+that declines and says nothing therefore cannot reach this value: it falls through to
+`unresolved` and `review.md` rule 2 fails it closed. That is not a formality. A
+declination that cannot say why nothing applied is indistinguishable from a gate nobody
+ran, and treating the two alike is the false all-clear this value exists to remove.
+
+`drupal/solid-check.sh`'s own no-PHP branch is the live example of the excluded shape: it
+writes `"status": "skipped"` with no `skip_reason` at all, so that gate still resolves
+`unresolved` on a docs-only diff. The fix belongs in that producer, which has to name its
+reason the way `security-check.sh` and `dry-check.sh` already do.
 
 ### `unresolved` — invoked, and could not check anything
 

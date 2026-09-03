@@ -616,9 +616,17 @@ else
     "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
 fi
 
-# A8: wrong order, `— verify: how — by: owner` → author null and the marker
-# stays inside verification. This is the documented consequence of running
-# the verify split first, not an accident.
+# A8: the marker AFTER the verify clause is read, and stripped from it.
+#
+# This asserted the opposite until 2026-09-03 -- author null, marker swallowed into the
+# verification string -- and called it the documented consequence of splitting on verify first. It
+# was documented and it was still wrong, because nothing warned: the near-miss detector runs on the
+# pre-verify text only, so a marker written this way produced a silent `unrecorded` on a criterion
+# whose author was written down in plain sight. Measured on the epic that owns this work: 8 owner
+# markers on disk, 0 read, 0 warnings. Its own ticked criterion says every criterion records who
+# wrote it. Marker-after-verify is also the order every contract in that epic actually uses, so the
+# rule rejected the only form anyone writes. The delimiter stays strict -- em-dash, exact spacing,
+# and a value of exactly owner or designer -- so reading it from the tail is as safe as from the head.
 D="$(mkalign a8 <<'EOF'
 # Alignment: a8
 
@@ -631,12 +639,98 @@ EOF
 arun "$D"
 if [ "$RC" -eq 0 ] \
   && [ "$(tlcrit 0 text)" = "Criterion text" ] \
-  && [ "$(tlcrit 0 author)" = "null" ] \
-  && [ "$(tlcrit 0 verification)" = "how — by: owner" ]; then
-  pass_check "A8 wrong order: author null, marker stays inside verification"
+  && [ "$(tlcrit 0 author)" = "owner" ] \
+  && [ "$(tlcrit 0 verification)" = "how" ]; then
+  pass_check "A8 marker after verify: author owner, verification clean"
 else
-  fail_check "A8 wrong order: author null, marker stays inside verification" \
+  fail_check "A8 marker after verify: author owner, verification clean" \
     "text=$(tlcrit 0 text) author=$(tlcrit 0 author) verif=$(tlcrit 0 verification) rc=$RC"
+fi
+
+# A8b: the exclusion. A verify clause whose tail is not exactly owner|designer is NOT a marker, so
+# reading the tail cannot promote ordinary prose. Warned, never silently accepted.
+D="$(mkalign a8b <<'EOF'
+# Alignment: a8b
+
+## Task-Level
+
+### Success criteria
+- [ ] Criterion text — verify: reviewed — by: the release manager
+EOF
+)"
+arun "$D"
+WARNA8B="$(printf '%s' "$OUT" | jq '[.warnings[]?|select(.code=="criterion_author_unrecognized")]|length' 2>/dev/null)"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARNA8B" = "1" ]; then
+  pass_check "A8b unrecognized author after verify: null, and warned"
+else
+  fail_check "A8b unrecognized author after verify: null, and warned" \
+    "author=$(tlcrit 0 author) warn=$WARNA8B rc=$RC"
+fi
+
+# A8d: THE SHAPE REAL CONTRACTS USE. The marker is followed by a parenthetical note recording why
+# the criterion was added, which join_wrapped folds into the same criterion, so the marker sits mid
+# string rather than at the end. Every owner marker in this epic is written this way -- 8 in its own
+# contract, 3 in deterministic_accept -- and all of them read as unrecorded. A marker is still only
+# a marker when the value is exactly owner or designer AND what follows it is nothing or a
+# parenthetical; anything else is prose and stays prose.
+D="$(mkalign a8d <<'EOF'
+# Alignment: a8d
+
+## Task-Level
+
+### Success criteria
+- [ ] Criterion text — verify: the check exits non-zero — by: owner
+      (Added 2026-09-01 after a live run. The note explains itself.)
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 author)" = "owner" ] \
+  && [ "$(tlcrit 0 verification)" = "the check exits non-zero (Added 2026-09-01 after a live run. The note explains itself.)" ]; then
+  pass_check "A8d marker before a parenthetical note: author owner, note kept"
+else
+  fail_check "A8d marker before a parenthetical note: author owner, note kept" \
+    "author=$(tlcrit 0 author) verif=$(tlcrit 0 verification) rc=$RC"
+fi
+
+# A8e: the exclusion for A8d. `— by: owner` followed by ordinary prose rather than a parenthetical
+# is NOT a marker, so the rule above cannot promote a sentence that merely mentions who did it.
+D="$(mkalign a8e <<'EOF'
+# Alignment: a8e
+
+## Task-Level
+
+### Success criteria
+- [ ] Criterion text — verify: the report is signed — by: owner and countersigned by the reviewer
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 author)" = "null" ]; then
+  pass_check "A8e marker followed by prose is not a marker"
+else
+  fail_check "A8e marker followed by prose is not a marker" "author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A8c: a verify clause with no marker at all is untouched.
+D="$(mkalign a8c <<'EOF'
+# Alignment: a8c
+
+## Task-Level
+
+### Success criteria
+- [ ] Criterion text — verify: run it and read the exit code
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$(tlcrit 0 verification)" = "run it and read the exit code" ]; then
+  pass_check "A8c no marker after verify: verification untouched"
+else
+  fail_check "A8c no marker after verify: verification untouched" \
+    "author=$(tlcrit 0 author) verif=$(tlcrit 0 verification) rc=$RC"
 fi
 
 # ---------------------------------------------------------------------------

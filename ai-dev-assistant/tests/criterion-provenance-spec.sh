@@ -6,7 +6,14 @@
 # of alignment-read.sh, since this kernel's whole job is to sit correctly on top of it.
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
-K="$ROOT/scripts/criterion-provenance.sh"
+SELF="$(readlink -f "$0")"
+# CP_KERNEL is set only by this spec's own seeded-mutation block, which re-runs this file against a
+# mutated COPY of the kernel to count how many assertions the defect kills. Unset in every other run.
+K="${CP_KERNEL:-$ROOT/scripts/criterion-provenance.sh}"
+# Assertions this file runs with CP_KERNEL set: everything except the mutation block and the count
+# guard. The mutation block asserts the mutant run reached exactly this many, because a mutant that
+# dies early runs fewer assertions and would otherwise read as a smaller kill.
+BASE_ASSERTIONS=29
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ PASS=$((PASS+1)); }
@@ -414,5 +421,93 @@ if [ "$(jq -r .counts.unrecognized <<<"$OUT")" = "0" ]; then ok; else no "F5 unr
 #     external dependency that can break. A test asserting a case that cannot be triggered would just
 #     restate the code, so none is written here. The fix stands on the one-line cost / failure-mode
 #     argument in the kernel's own header, not on a red-then-green run.
+
+# --- SEEDED MUTATION: this spec is shown failing on a defect before it ships ------------------
+#
+# Everything above is green against the kernel as written, and a green run is not evidence that any
+# of it CAN go red. One defect is seeded against the guard this kernel exists for, and the number of
+# assertions it kills is asserted here rather than written up in prose somewhere else.
+#
+# THE GUARD CHOSEN. `unrecorded_present` takes precedence over every other status. That is the
+# kernel's central promise stated at the only place a consumer reads: a criterion nobody signed must
+# not come back as a criterion the owner asked for. The kernel's own header names the defect it was
+# built after — a builder wrote a criterion describing what it had already decided to build, four
+# critics checked the code against it faithfully, and nobody could see the owner never asked for it.
+# Turn this branch off and that task reports `all_owner` while `counts.unrecorded` and the
+# `unrecorded` array still list the unsigned lines: the record contradicts itself, and the field a
+# reader routes on is the one that lies.
+#
+# The alternatives are real guards but not this one. The counts (owner / designer / unrecorded)
+# describe the same fact one level down, and a defect there leaves the status honest, so a consumer
+# switching on status still behaves. The `-d` task-folder check and require_value refuse a caller
+# error rather than answering a question wrongly. `criteria_unreadable` separates two empty states
+# and matters, but only for the 2 of 198 real files that hit it.
+#
+# The seed changes the status branch and nothing else, so every count and both arrays stay correct.
+# That is the point: the defect is invisible to any check that does not read the verdict itself.
+if [ -z "${CP_KERNEL:-}" ]; then
+  MDIR="$TMP/mutation"; mkdir -p "$MDIR"
+  # The kernel resolves alignment-read.sh beside itself, so the copy is of the whole scripts folder
+  # rather than the one file: a mutant that cannot find its sibling would fail every assertion for a
+  # reason that has nothing to do with the seeded defect.
+  cp -R "$ROOT/scripts" "$MDIR/clean"
+  cp -R "$ROOT/scripts" "$MDIR/mutant"
+
+  # seed_defect <literal-old> <literal-new> <src> <dst>: one LITERAL replacement, exactly once.
+  # Fixed strings rather than a regex: the target is a jq expression full of metacharacters, and a
+  # pattern that quietly matches nothing is the failure mode this whole block rules out.
+  seed_defect() {
+    awk -v old="$1" -v new="$2" '
+      { i = index($0, old)
+        if (i > 0) { $0 = substr($0, 1, i - 1) new substr($0, i + length(old)); n++ }
+        print }
+      END { exit (n == 1 ? 0 : 3) }' "$3" > "$4"
+  }
+
+  if ! seed_defect 'if $unrecorded > 0 then "unrecorded_present"' 'if false then "unrecorded_present"' \
+        "$MDIR/clean/criterion-provenance.sh" "$MDIR/mutant/criterion-provenance.sh" \
+     || diff -q "$MDIR/clean/criterion-provenance.sh" "$MDIR/mutant/criterion-provenance.sh" >/dev/null 2>&1; then
+    echo "MUTATION NOT APPLIED: the status precedence in $K no longer holds exactly one 'if \$unrecorded > 0 then \"unrecorded_present\"'; re-read the kernel and re-target the seed" >&2
+    exit 1
+  fi
+  chmod +x "$MDIR/mutant/criterion-provenance.sh"
+  # A mutation that silently fails to apply reads exactly like a survivor: the sub-run comes back
+  # green and the spec reports the check as unkillable.
+  ok
+
+  # subrun <kernel-path> -> SUB_PASS / SUB_FAIL from the tally line.
+  subrun() {
+    local line
+    line="$(CP_KERNEL="$1" bash "$SELF" 2>&1 | tail -1)"
+    SUB_PASS="$(sed -n 's/.*: \([0-9][0-9]*\) passed, \([0-9][0-9]*\) failed.*/\1/p' <<<"$line")"
+    SUB_FAIL="$(sed -n 's/.*: \([0-9][0-9]*\) passed, \([0-9][0-9]*\) failed.*/\2/p' <<<"$line")"
+    [ -n "$SUB_PASS" ] && [ -n "$SUB_FAIL" ] || { SUB_PASS=-1; SUB_FAIL=-1; }
+  }
+
+  # The control. An UNMUTATED copy, run the same way, has to be green: without it a red mutant run
+  # proves only that the kernel was moved, not that the defect was seen.
+  subrun "$MDIR/clean/criterion-provenance.sh"
+  { [ "$SUB_FAIL" = "0" ] && [ "$SUB_PASS" = "$BASE_ASSERTIONS" ]; } && ok \
+    || no "the unmutated copy must be green and complete: $SUB_PASS passed, $SUB_FAIL failed (want $BASE_ASSERTIONS/0)"
+
+  # The kill count. A named number, not "it went red": T3 (two unsigned criteria), T4 (owner,
+  # designer and unsigned together, where precedence is the whole point) and F5 (a written-but-
+  # rejected marker, which is unrecorded with evidence somebody tried) are the three assertions that
+  # read the status on a section carrying an unrecorded author. A smaller number means one of them
+  # stopped asserting the status; a larger one means the seed reached past the branch it was aimed
+  # at. Either is worth failing on.
+  MUTANT_KILLS=3
+  subrun "$MDIR/mutant/criterion-provenance.sh"
+  [ "$SUB_FAIL" = "$MUTANT_KILLS" ] && ok \
+    || no "the seeded precedence defect must kill exactly $MUTANT_KILLS assertions, killed $SUB_FAIL"
+  # And it killed them by failing, not by aborting the run early.
+  [ "$((SUB_PASS + SUB_FAIL))" = "$BASE_ASSERTIONS" ] && ok \
+    || no "the mutant run must still reach $BASE_ASSERTIONS assertions, reached $((SUB_PASS + SUB_FAIL))"
+
+  # A spec that checked nothing has not passed. BASE_ASSERTIONS + the four above.
+  EXPECTED=$((BASE_ASSERTIONS + 4))
+  TOTAL=$((PASS + FAIL))
+  [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
+fi
 
 echo "----"; echo "criterion-provenance-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

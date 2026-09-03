@@ -259,7 +259,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
     {
       "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity | architecture-fit | agentic-verifier | mechanism-challenge | spec | internal-prior-art | build-critique",
       "kind": "hard-block | soft",
-      "verdict": "pass | warning | fail | skipped | bypassed | skipped-not-shipped",
+      "verdict": "pass | warning | fail | not_applicable | skipped | bypassed | skipped-not-shipped",
       "envelope_path": "<task>/validations/latest/<gate>.json or null",
       "bypass_reason": "<string from --skip-<gate> flag> or null",
       "messages": []
@@ -274,6 +274,8 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "dispatch_plan": { /* v1.2+, optional — see below */ }
 }
 ```
+
+**`not_applicable` (v5.52.0+).** A gate that applied its own scope test, found nothing of its kind in the change, and recorded why. A **completed** check: it counts as applied, step 8 rule 5 treats it as benign, and it never carries `unresolved`. It is a separate enum value from `skipped` because `skipped` names the opposite fact — nobody could look — and one word for both is how a run that checked nothing read as a clean one. The reason is required and lives in the gate's `messages[]` (and in the resolver's own `reason` field); a declination that names none resolves `skipped` + `unresolved` instead, where rule 2 fails it closed.
 
 `user_choice` enum: `"automatic" | "r" | "s" | "a"` (`"automatic"` when no `review-gate-fail` prompt fired; `"r"`/`"s"`/`"a"` from the prompt). `pr_ready: true` only when `overall_verdict == "pass"` AND not `--dry-run` — bypass paths get `pr_ready: false`. `gates_run[]` is always the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
 

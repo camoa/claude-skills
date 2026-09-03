@@ -17,7 +17,14 @@
 # anywhere in the decision. It SURFACES, never halts, so blocks is false in every outcome.
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
-K="$ROOT/scripts/repair-accept-check.sh"
+SELF="$(readlink -f "$0")"
+# RAC_KERNEL is set only by this spec's own seeded-mutation block, which re-runs this file against a
+# mutated COPY of the kernel to count how many assertions the defect kills. Unset in every other run.
+K="${RAC_KERNEL:-$ROOT/scripts/repair-accept-check.sh}"
+# Assertions this file runs with RAC_KERNEL set: everything except the mutation block and the count
+# guard. The mutation block asserts the mutant run reached exactly this many, because a mutant that
+# dies early runs fewer assertions and would otherwise read as a smaller kill.
+BASE_ASSERTIONS=90
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ PASS=$((PASS+1)); }
@@ -129,6 +136,27 @@ q "R2 red suite, no test motion -> not_accepted" .action not_accepted \
   --suite red --test-motion-from "$NOTEST" --test-globs "$GLOBS"
 q "R2 green suite, no test motion -> accepted" .action accepted \
   --suite green --test-motion-from "$NOTEST" --test-globs "$GLOBS"
+
+# --- THE SUITE HAS TO NAME ITSELF -------------------------------------------------------------
+#
+# "A repair's suite is the specs that read the files the repair changed, NAMED IN THE RECORD."
+# Without the name, a repair that ran one spec, one that ran the whole suite, and one that ran
+# nothing and typed `green` write byte-identical records, so the claim cannot be checked by anyone
+# reading it afterwards. `--suite` is a self-report either way and this does not change that; what
+# it changes is that the report becomes specific enough for a reader to compare against the files
+# the repair touched.
+MOTIONF="$(mkns suitenamed 'M\tsrc/A.php')"
+q "S1 the specs run are recorded" '.suite_ran|join(",")' "tests/a-spec.sh,tests/b-spec.sh" \
+  --suite green --test-motion-from "$MOTIONF" --test-globs "$GLOBS" \
+  --suite-ran 'tests/a-spec.sh,tests/b-spec.sh'
+q "S1 and an unnamed suite is null, not an empty list" .suite_ran null \
+  --suite green --test-motion-from "$MOTIONF" --test-globs "$GLOBS"
+# Absence gets its own value here rather than a plausible one: `[]` would read as "the repair ran no
+# specs", which is a claim, and nobody made it.
+q "S1 a not_run suite records no specs and still abstains" .action cannot_judge \
+  --suite not_run --test-motion-from "$MOTIONF" --test-globs "$GLOBS"
+q "S1 naming specs does not change the verdict" .action accepted \
+  --suite green --test-motion-from "$MOTIONF" --test-globs "$GLOBS" --suite-ran 'tests/a-spec.sh'
 
 # --- R3: "The kernel says plainly what it could not check, and that answer is distinct from a
 #          pass." ---
@@ -366,8 +394,94 @@ q "a path matching a glob but absent from disk still counts" '.motion.modified |
 #      + 3 suite-echo + 3 glob.
 # Asserted rather than trusted: a block that fails to run, or a helper that returns early, subtracts
 # assertions silently and the run still prints "0 failed", which reads as green.
-EXPECTED=86
-TOTAL=$((PASS + FAIL))
-[ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
+#
+# --- SEEDED MUTATION: this spec is shown failing on a defect before it ships ------------------
+#
+# Every assertion above is green against the kernel as written, and a green run is not evidence that
+# any of it CAN go red. One defect is seeded against the guard this kernel exists for, and the
+# number of assertions it kills is asserted here rather than written up in prose somewhere else.
+#
+# THE GUARD CHOSEN. The modified-test tripwire: a repair that MODIFIES a test file is never
+# accepted, whatever the suite said and whether or not a reason was given. It carries the central
+# promise because it is the only place the kernel has an opinion of its own. Every other outcome
+# reports back a fact the caller handed in — `--suite` is a self-report, the three abstentions say
+# the input was not usable — while this one branch overrides a green suite the caller typed. Turn it
+# off and the kernel degenerates into echoing `--suite`: a builder can edit the assertion its repair
+# fails, report green, and be accepted, which is the self-issued permit the header names and the
+# reason a repair loop whose subject may edit the standard always converges.
+#
+# The alternatives sit lower. The zero-byte abstention and the two glob-source abstentions are real
+# and each shipped after a live false-accept, but they refuse to answer rather than answering
+# against the caller; a defect there costs a `cannot_judge` that should have been a decision. The
+# rename and copy normalisation decides which array a path lands in, not whether the repair passes.
+#
+# The seed is one comparison: `-gt 0` becomes `-lt 0`, so the array is measured and the branch can
+# never fire. Nothing else changes — the motion arrays are still built and still reported, so the
+# JSON keeps looking like a kernel that checked.
+if [ -z "${RAC_KERNEL:-}" ]; then
+  MDIR="$TMP/mutation"; mkdir -p "$MDIR"
+  # The kernel sources lib/glob-to-regex.sh from beside itself, so the copy is of the whole scripts
+  # folder rather than the one file: a mutant that cannot find its library would fail every
+  # assertion for a reason that has nothing to do with the seeded defect.
+  cp -R "$ROOT/scripts" "$MDIR/clean"
+  cp -R "$ROOT/scripts" "$MDIR/mutant"
+
+  # seed_defect <literal-old> <literal-new> <src> <dst>: one LITERAL replacement, exactly once.
+  # Fixed strings rather than a regex: the target line is full of shell metacharacters, and a
+  # pattern that quietly matches nothing is the failure mode this whole block rules out.
+  seed_defect() {
+    awk -v old="$1" -v new="$2" '
+      { i = index($0, old)
+        if (i > 0) { $0 = substr($0, 1, i - 1) new substr($0, i + length(old)); n++ }
+        print }
+      END { exit (n == 1 ? 0 : 3) }' "$3" > "$4"
+  }
+
+  if ! seed_defect 'if [ "${#MODIFIED[@]}" -gt 0 ]; then' 'if [ "${#MODIFIED[@]}" -lt 0 ]; then' \
+        "$MDIR/clean/repair-accept-check.sh" "$MDIR/mutant/repair-accept-check.sh" \
+     || diff -q "$MDIR/clean/repair-accept-check.sh" "$MDIR/mutant/repair-accept-check.sh" >/dev/null 2>&1; then
+    echo "MUTATION NOT APPLIED: the modified-test tripwire in $K no longer holds exactly one 'if [ \"\${#MODIFIED[@]}\" -gt 0 ]; then'; re-read the kernel and re-target the seed" >&2
+    exit 1
+  fi
+  chmod +x "$MDIR/mutant/repair-accept-check.sh"
+  # A mutation that silently fails to apply reads exactly like a survivor: the sub-run comes back
+  # green and the spec reports the check as unkillable.
+  ok
+
+  # subrun <kernel-path> -> SUB_PASS / SUB_FAIL from the tally line.
+  subrun() {
+    local line
+    line="$(RAC_KERNEL="$1" bash "$SELF" 2>&1 | tail -1)"
+    SUB_PASS="$(sed -n 's/.*: \([0-9][0-9]*\) passed, \([0-9][0-9]*\) failed.*/\1/p' <<<"$line")"
+    SUB_FAIL="$(sed -n 's/.*: \([0-9][0-9]*\) passed, \([0-9][0-9]*\) failed.*/\2/p' <<<"$line")"
+    [ -n "$SUB_PASS" ] && [ -n "$SUB_FAIL" ] || { SUB_PASS=-1; SUB_FAIL=-1; }
+  }
+
+  # The control. An UNMUTATED copy, run the same way, has to be green: without it a red mutant run
+  # proves only that the kernel was moved, not that the defect was seen.
+  subrun "$MDIR/clean/repair-accept-check.sh"
+  { [ "$SUB_FAIL" = "0" ] && [ "$SUB_PASS" = "$BASE_ASSERTIONS" ]; } && ok \
+    || no "the unmutated copy must be green and complete: $SUB_PASS passed, $SUB_FAIL failed (want $BASE_ASSERTIONS/0)"
+
+  # The kill count. A named number, not "it went red". The 12 are every assertion that depends on a
+  # modified test path being answered by the motion: the two recipe-glob cells that assert a `**`
+  # match is not_accepted, the two not_run cells the motion settles ahead of the abstention, the
+  # three R1 modified-test cells (halt with no reason, halt with a reason, the reason surviving into
+  # reasons[]), the non-empty-globs-with-no-source cell, the three decided_by cells that name
+  # `motion` as the decider, and the reasons[] cell naming the modification. A smaller number means
+  # one of them stopped depending on the tripwire; a larger one means the seed reached further than
+  # the branch it was aimed at. Either is worth failing on.
+  MUTANT_KILLS=12
+  subrun "$MDIR/mutant/repair-accept-check.sh"
+  [ "$SUB_FAIL" = "$MUTANT_KILLS" ] && ok \
+    || no "the seeded modified-test defect must kill exactly $MUTANT_KILLS assertions, killed $SUB_FAIL"
+  # And it killed them by failing, not by aborting the run early.
+  [ "$((SUB_PASS + SUB_FAIL))" = "$BASE_ASSERTIONS" ] && ok \
+    || no "the mutant run must still reach $BASE_ASSERTIONS assertions, reached $((SUB_PASS + SUB_FAIL))"
+
+  EXPECTED=$((BASE_ASSERTIONS + 4))
+  TOTAL=$((PASS + FAIL))
+  [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
+fi
 
 echo "----"; echo "repair-accept-check-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

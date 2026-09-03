@@ -9,7 +9,14 @@
 #   - none (no supersede)              → keep (regardless of mode/hint)
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
-K="$ROOT/scripts/mechanism-disposition.sh"
+SELF="$(readlink -f "$0")"
+# MD_KERNEL is set only by this spec's own seeded-mutation block, which re-runs this file against a
+# mutated COPY of the kernel to count how many assertions the defect kills. Unset in every other run.
+K="${MD_KERNEL:-$ROOT/scripts/mechanism-disposition.sh}"
+# Assertions this file runs with MD_KERNEL set, i.e. everything except the mutation block and the
+# count guard. The mutation block asserts the mutant run reached exactly this many, because a mutant
+# that dies early runs fewer assertions and would otherwise read as a smaller kill.
+BASE_ASSERTIONS=31
 PASS=0; FAIL=0
 ok(){ PASS=$((PASS+1)); }
 no(){ FAIL=$((FAIL+1)); echo "FAIL: $1"; }
@@ -78,5 +85,82 @@ done
 "$K" --grounding verified --mode attended --hint bogus >/dev/null 2>&1 && no "bad hint should exit 2" || ok
 # hint defaults to none when omitted
 DA="$("$K" --grounding none --mode attended)"; [ "$(jq -r '.action' <<<"$DA")" = "keep" ] && ok || no "omitted hint should default none"
+
+# --- SEEDED MUTATION: this spec is shown failing on a defect before it ships ------------------
+#
+# Everything above is green against the kernel as written, and a green run is not evidence that any
+# of it CAN go red. So one defect is seeded against the guard this kernel exists for, and the number
+# of assertions it kills is asserted here rather than reported in prose somewhere else.
+#
+# THE GUARD CHOSEN. `not_searched` returns `unresolved`, never `keep`. That cell is the kernel's
+# central promise: every other cell routes a search RESULT, and only this one refuses to route the
+# absence of a search as a result. It is also the measured defect — 59 of 99 mechanisms carried
+# `grounding: none` and 57 of those had no evidence any search ran, so the conflation this cell
+# forbids is the one that actually happened. The alternative guards are narrower: the `required`
+# author-lock (one cell, and a wrong answer there is a silent auto-swap a human can still see in the
+# record) and the attended `blocks: true` (a scheduling fact, not a truth claim). Only the
+# not_searched cell decides whether "nobody looked" is reported as "we looked and it was fine".
+#
+# The defect is the historic one exactly: not_searched answers keep/false/auto, which is what `none`
+# answers. Nothing else changes — the enum still accepts the value, so a caller writing
+# `not_searched` still gets a clean verdict, and only its content is wrong. That is what makes it
+# worth seeding: it is invisible to every check except one that reads the answer.
+if [ -z "${MD_KERNEL:-}" ]; then
+  MTMP="$(mktemp -d)"; trap 'rm -rf "$MTMP"' EXIT
+  cp "$K" "$MTMP/clean.sh"; chmod +x "$MTMP/clean.sh"
+
+  # seed_defect <literal-old> <literal-new> <src> <dst>: one LITERAL replacement, exactly once.
+  # Fixed strings rather than a regex, because the kernel lines carry shell and jq metacharacters and
+  # a pattern that quietly matches nothing is the failure mode this whole block exists to rule out.
+  seed_defect() {
+    awk -v old="$1" -v new="$2" '
+      { i = index($0, old)
+        if (i > 0) { $0 = substr($0, 1, i - 1) new substr($0, i + length(old)); n++ }
+        print }
+      END { exit (n == 1 ? 0 : 3) }' "$3" > "$4"
+  }
+
+  # A mutation that silently fails to apply reads exactly like a survivor: the sub-run comes back
+  # green and the spec reports the check as unkillable. Assert the edit landed before trusting it.
+  if ! seed_defect 'emit unresolved false none' 'emit keep false auto' "$MTMP/clean.sh" "$MTMP/mutant.sh" \
+     || diff -q "$MTMP/clean.sh" "$MTMP/mutant.sh" >/dev/null 2>&1; then
+    echo "MUTATION NOT APPLIED: the not_searched branch of $K no longer holds exactly one 'emit unresolved false none'; re-read the kernel and re-target the seed" >&2
+    exit 1
+  fi
+  chmod +x "$MTMP/mutant.sh"
+  ok
+
+  # subrun <kernel-path>  -> SUB_PASS / SUB_FAIL from the tally line.
+  subrun() {
+    local line
+    line="$(MD_KERNEL="$1" bash "$SELF" 2>&1 | tail -1)"
+    SUB_PASS="$(sed -n 's/.*: \([0-9][0-9]*\) passed, \([0-9][0-9]*\) failed.*/\1/p' <<<"$line")"
+    SUB_FAIL="$(sed -n 's/.*: \([0-9][0-9]*\) passed, \([0-9][0-9]*\) failed.*/\2/p' <<<"$line")"
+    [ -n "$SUB_PASS" ] && [ -n "$SUB_FAIL" ] || { SUB_PASS=-1; SUB_FAIL=-1; }
+  }
+
+  # The control. An UNMUTATED copy, run the same way, has to be green: without it a red mutant run
+  # proves only that the kernel was moved, not that the defect was seen.
+  subrun "$MTMP/clean.sh"
+  { [ "$SUB_FAIL" = "0" ] && [ "$SUB_PASS" = "$BASE_ASSERTIONS" ]; } && ok \
+    || no "the unmutated copy must be green and complete: $SUB_PASS passed, $SUB_FAIL failed (want $BASE_ASSERTIONS/0)"
+
+  # The kill count. A named number, not "it went red": the six not_searched cells are exhaustive over
+  # mode x hint, so a defect in that one branch kills all six and nothing else. A smaller number
+  # means a cell stopped covering the branch; a larger one means the seed reached further than the
+  # branch it was aimed at, and either is worth failing on.
+  MUTANT_KILLS=6
+  subrun "$MTMP/mutant.sh"
+  [ "$SUB_FAIL" = "$MUTANT_KILLS" ] && ok \
+    || no "the seeded not_searched defect must kill exactly $MUTANT_KILLS assertions, killed $SUB_FAIL"
+  # And it killed them by failing, not by aborting the run early.
+  [ "$((SUB_PASS + SUB_FAIL))" = "$BASE_ASSERTIONS" ] && ok \
+    || no "the mutant run must still reach $BASE_ASSERTIONS assertions, reached $((SUB_PASS + SUB_FAIL))"
+
+  # A spec that checked nothing has not passed. BASE_ASSERTIONS + the four above.
+  EXPECTED=$((BASE_ASSERTIONS + 4))
+  TOTAL=$((PASS + FAIL))
+  [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
+fi
 
 echo "----"; echo "mechanism-disposition-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

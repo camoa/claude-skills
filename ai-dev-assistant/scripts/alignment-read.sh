@@ -217,6 +217,41 @@ RECORDS=$(awk '
               printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(text, RSTART))
             }
           }
+          # THE MARKER MAY ALSO SIT AFTER THE VERIFY CLAUSE, and until 2026-09-03 it was swallowed
+          # there. The verify split runs first, so " — by: owner" written at the end of the line
+          # ended up inside `verif` and never reached the search above: the criterion read
+          # `unrecorded` while its author sat on disk in plain sight, and NOTHING WARNED, because
+          # the near-miss detector only ever looked at `text`. Measured on the epic that owns this
+          # work: 8 owner markers written, 0 read, 0 warnings, under a ticked criterion promising
+          # every criterion records who wrote it. Marker-after-verify is also the order every
+          # contract in that epic uses, so the strict rule rejected the only form anyone writes.
+          # Same delimiter, same accepted values, so reading the tail is exactly as safe as the head.
+          if (author == "null" && has_verif) {
+            la2 = last_index(verif, b1)
+            if (la2 > 0) {
+              atail = trim(substr(verif, la2 + length(b1)))
+              # The marker is the whole tail, OR the tail up to a parenthetical note. Real contracts
+              # write the note recording WHY a criterion was added on the next line, and join_wrapped
+              # folds it in, so the marker sits mid-string. Only a parenthetical may follow: ordinary
+              # prose after the value means the words were a sentence, not a marker, and stay prose.
+              anote = ""
+              if (atail != "owner" && atail != "designer" \
+                  && match(atail, /^(owner|designer)[ \t]*\(/)) {
+                aw = atail; sub(/[ \t]*\(.*$/, "", aw)
+                anote = trim(substr(atail, index(atail, "(")))
+                atail = aw
+              }
+              if (atail == "owner" || atail == "designer") {
+                author = "\"" atail "\""
+                verif = trim(substr(verif, 1, la2 - 1))
+                if (anote != "") verif = verif " " anote
+              } else {
+                printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(atail)
+              }
+            } else if (match(verif, /(—|–|-)[ \t]+[bB][yY]:.*$/)) {
+              printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(verif, RSTART))
+            }
+          }
           # Optional id marker (v1.4+): "<text> — id: c<n>", read from what is
           # left after the verify and author splits, rightmost delimiter, em-dash
           # only, for the same reason as "by:". The value must be c<n>; anything
