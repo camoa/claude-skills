@@ -1,5 +1,64 @@
 # Changelog
 
+## [5.49.0] - 2026-09-02
+
+### Added
+- **Every adversarial critic now receives the test-first material the build was held to.** A
+  builder could answer a critic's finding by changing what a test asserts rather than by fixing
+  the code. `scripts/repair-accept-check.sh` surfaces that motion and asks for a reason; its own
+  contract is that the tripwire demands a reason and never forbids the change. A repair loop that
+  can edit the standard always converges, because the work can move the goalposts instead of
+  meeting them. Telling a repair from a redefinition is the critic's job, and nothing had ever
+  handed the critic the standard: `/implement` loads a five-reference methodology floor into the
+  build, and the critic that judges that build's methodology got none of it.
+
+  `references/gate-hardening-prompts.md`'s `critic-dispatch` template gains
+  `{{methodology_block}}`, a sibling of the existing `{{recipe_block}}` carrying the test-first
+  references inside `=== METHODOLOGY (source=dev-guides, refs=…) === … === END METHODOLOGY ===`.
+  Unlike the recipe block it goes to **all three** lenses. `meets-ac` is the reason: it is the
+  lens that would have to judge a test rewritten to match the code it was meant to constrain, and
+  it is the one lens `recipe_block` deliberately renders as the empty string.
+
+  The content is **one named section**, not a file dump: `### The observation gets recorded` from
+  `references/tdd-workflow.md` to the end of that file, extracted mechanically with a fixed `awk`
+  range, unioned with any `development/tdd-spec-driven/*` guide already in `_dev-guides-load.json`'s
+  `guides_actually_loaded[]` — material the preflight loaded before the critic was dispatched. The
+  rest of `tdd-workflow.md` is build-time procedure a critic cannot act on: enforcement checkpoints,
+  a developer-says/response script, which `run_mode` decides who runs a test, and 62 lines on where
+  a delegated builder writes `wo-NN.tdd.json`. Measured at 102 of its 180 lines, and the
+  `critic-dispatch` header already records that padding a critic prompt with unusable material
+  bought a repair round per component. The cut is a fixed heading rather than a summary because an
+  orchestrator choosing what to keep would be deciding what the critic may hold the build to, and
+  the orchestrator sits in the builder's context. No
+  fetch is added and no critic is given permission to go looking; a critic still receives an
+  enumerated list of inputs handed to it as rendered text. **Never the task folder**, which is the
+  source boundary the whole thing rests on: a dev-guides page is general knowledge authored before
+  this build existed, so it structurally cannot carry the builder's account of what it did, and
+  the critic's standing rule against reading the builder's transcript is unchanged.
+
+  **Both dispatch paths carry it** — `/implement` step 5 per architecture component, and
+  `skills/work-order-critique` step 4 per work-order. 5.48.0 existed entirely because a rung was
+  wired to the in-session path and not the delegated one, so following the orchestration rules
+  routed every real build around it; repeating that shape in the change that fixes its sibling
+  would have been the same defect twice.
+
+  The rule lives in `skills/work-order-critique/references/critic-prompt-contract.md`, which both
+  paths already honor, so there is one copy of it rather than two. `agents/wo-critic.md` documents
+  the new input, its three-lens scope, and its standing as upstream data rather than a command.
+  `references/build-critique.md` names it in the rung's dispatch step.
+
+  What this does **not** build: finding classification, a `kind` field on a verdict, or any change
+  to how a finding is routed. Those are downstream of a critic that can read the standard, which
+  is what this release supplies.
+
+### Changed
+- `tests/critique-refs-resolve-spec.sh` resolves a `${CLAUDE_PLUGIN_ROOT}/references/<name>.md`
+  citation against the plugin root rather than reading its tail as a skill-relative path and
+  failing it. The guard's power is unchanged — a dangling citation of either form still fails —
+  and it stopped failing a citation that resolves.
+- `scripts/command-body-lengths.sh` raises the `implement` budget 446 → 456, with the reason
+  recorded beside the number as that script requires.
+
 ## [5.48.0] - 2026-09-02
 
 ### Added

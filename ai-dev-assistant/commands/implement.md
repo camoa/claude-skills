@@ -178,7 +178,7 @@ security lens is guaranteed at `medium` and above, so executable code always get
 
 **5. Critics.** For each lens dispatch ONE `ai-dev-assistant:wo-critic` via the Task tool,
 **fresh and independent, never a fork** — a forked critic inherits the reasoning it exists to
-challenge. **Render the dispatch:** write the component's `## Acceptance criteria` to `$CD/<component>.ac.txt` and the delimited recipe block (empty for `meets-ac`) to `$CD/<component>.recipe.txt` the way `<component>.files.txt` is written, then `${CLAUDE_PLUGIN_ROOT}/scripts/prompt-render.sh critic-dispatch lens=<lens> worktree=<codePath> range=<base-sha-for-this-round>..$AFTER files@="$CD/<component>.files.txt" component=<component> acceptance_criteria@="$CD/<component>.ac.txt" recipe_block@="$CD/<component>.recipe.txt" output_path="$CD/<component>.critics/<component>.critic-<lens>.json"` (Bash). The three `@=` values are repo text and never pass through a shell argument: inline, every backtick and `$(...)` in them ran and the code vanished while the render exited 0.
+challenge. **Render the dispatch:** write the component's `## Acceptance criteria` to `$CD/<component>.ac.txt` and the delimited recipe block (empty for `meets-ac`) to `$CD/<component>.recipe.txt` and the delimited methodology block to `$CD/<component>.methodology.txt` the way `<component>.files.txt` is written, then `${CLAUDE_PLUGIN_ROOT}/scripts/prompt-render.sh critic-dispatch lens=<lens> worktree=<codePath> range=<base-sha-for-this-round>..$AFTER files@="$CD/<component>.files.txt" component=<component> acceptance_criteria@="$CD/<component>.ac.txt" recipe_block@="$CD/<component>.recipe.txt" methodology_block@="$CD/<component>.methodology.txt" output_path="$CD/<component>.critics/<component>.critic-<lens>.json"` (Bash). The four `@=` values are repo text and never pass through a shell argument: inline, every backtick and `$(...)` in them ran and the code vanished while the render exited 0.
 Hand the Task tool exactly what it printed: nothing above it, nothing below it, no wording of your
 own. The template carries `review_ref: null` and says so, because there is no per-component `/review`
 and a critic must not read an absent record as a clean one; it also tells the critic to run the
@@ -194,6 +194,19 @@ envelope records why. The kernel counts any other withheld lens as a missing cri
 whole dispatch:** criteria, recipe block, range, lens, output path. A probe list, a posture ("treat as
 hostile"), or a checklist in the prompt is the deleted lens by another name, and it was
 measured to buy a repair round per component.
+
+**All three lenses receive the methodology block**, `meets-ac` included, and that is the point:
+`recipe_block` empties for `meets-ac`, the one lens that would have to judge a test rewritten to
+match the code it was meant to constrain. Compose it from ONE named section, never
+the whole file: `awk '/^### The observation gets recorded/,0'
+"${CLAUDE_PLUGIN_ROOT}/references/tdd-workflow.md"`, unioned with every
+`development/tdd-spec-driven/*` slug in `_dev-guides-load.json`'s `guides_actually_loaded[]` —
+already loaded at step 3, so nothing is fetched here — inside
+`=== METHODOLOGY (source=dev-guides, refs=…) === … === END METHODOLOGY ===`. The rest of that file
+is build-time procedure a critic cannot act on, and padding a critic prompt buys a repair round.
+Never from the task folder: a dev-guides page cannot carry the builder's account of what it did
+and a task-folder file can. Rule:
+`skills/work-order-critique/references/critic-prompt-contract.md`.
 
 **Read each verdict from the file the critic wrote, never from its Task return.** An agent
 that died mid-response returns text that reads like an answer.
@@ -442,7 +455,7 @@ non-functional change.
 
 ## Output
 
-Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`, plus the two diff listings it hands the kernels there, `<component>.files.txt` (the build under critique) and `<component>.repair.txt` (the repair's own name-status range), and freezes the contract at `<task_folder>/build-critique/_contract-baseline/` (v5.34.0+) — copies of `alignment.md`, `architecture.md` and `architecture/*.md` as they stood before any code was written, so the critics judging scope can tell a design that authorised the work from one amended to describe it. Written once at Runtime Step 11 and never overwritten; it stays with the task folder rather than being cleared at end of phase, because it is the evidence for what the phase was judged against.
+Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`, plus the two diff listings it hands the kernels there, `<component>.files.txt` (the build under critique) and `<component>.repair.txt` (the repair's own name-status range), plus the three rendered dispatch inputs `<component>.ac.txt`, `<component>.recipe.txt` and `<component>.methodology.txt`, and freezes the contract at `<task_folder>/build-critique/_contract-baseline/` (v5.34.0+) — copies of `alignment.md`, `architecture.md` and `architecture/*.md` as they stood before any code was written, so the critics judging scope can tell a design that authorised the work from one amended to describe it. Written once at Runtime Step 11 and never overwritten; it stays with the task folder rather than being cleared at end of phase, because it is the evidence for what the phase was judged against.
 
 **In the code repository (v5.33.0+):** the rung anchors its build checkpoints as refs under `refs/worktree/aida/build-checkpoints/` in the repository at `codePath`, plus a shared keep-ref per object at `refs/aida/build-checkpoints-keep/<sha>`. These are commit objects on no branch — HEAD, the index, the working tree, `git branch`, `git status` and `git stash` are all untouched, and a plain `git log` does not show them, though `git log --all` does. The rung removes them at end of phase with `build-checkpoint.sh clear`; `build-checkpoint.sh list --repo <codePath>` shows any left behind by an interrupted run. It is the only thing this command writes into the code repository other than the code itself.
 

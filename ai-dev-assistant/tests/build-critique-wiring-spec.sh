@@ -458,6 +458,115 @@ TPL="$(awk '/^## Template ID: `critic-dispatch`/,0' "$PLUGIN_ROOT/references/gat
   && grep -q '{{acceptance_criteria}}' <<<"$TPL" && grep -q '{{recipe_block}}' <<<"$TPL" && grep -q '{{range}}' <<<"$TPL" && grep -q '{{lens}}' <<<"$TPL" \
   && pass_check "the critic-dispatch template holds the four inputs and no probe, posture or checklist" \
   || fail_check "the critic-dispatch template is missing an input or carries a probe, posture or checklist"
+# methodology-to-critic (critic_methodology): every critic, on BOTH dispatch paths and on ALL
+# three lenses, receives the test-first material the build was held to.
+#
+# THE LOOPHOLE THIS DEFENDS AGAINST. A builder can answer a critic's finding by changing what a
+# test asserts rather than by fixing the code. scripts/repair-accept-check.sh surfaces that motion
+# and asks for a reason; its own header says the tripwire demands a reason and never forbids the
+# change. A repair loop that can edit the standard always converges, because the work can move the
+# goalposts instead of meeting them. Telling a repair from a redefinition is the critic's job --
+# and nothing had ever handed the critic the standard. /implement loads a five-reference
+# methodology floor into the BUILD; the critic that judges that build's methodology got none of it.
+#
+# `meets-ac` is the case that decides whether this wiring is real. It is the lens that would have
+# to judge a test rewritten to match the code it was meant to constrain, and it is the one lens
+# `recipe_block` deliberately renders as the empty string. A change that wires the block for the
+# two method-bearing lenses and empties it for `meets-ac` has wired everything except the reason
+# it exists, so the render assertion below is aimed straight at that lens.
+SKILL_WOC="${PLUGIN_ROOT}/skills/work-order-critique/SKILL.md"
+CPC="${PLUGIN_ROOT}/skills/work-order-critique/references/critic-prompt-contract.md"
+AGENT_CRITIC="${PLUGIN_ROOT}/agents/wo-critic.md"
+for f in "$SKILL_WOC" "$CPC" "$AGENT_CRITIC"; do
+  [ -f "$f" ] || { printf 'FAIL: %s missing\n' "$f" >&2; exit 1; }
+done
+
+grep -q '{{methodology_block}}' <<<"$TPL" \
+  && pass_check "the critic-dispatch template carries {{methodology_block}}" \
+  || fail_check "the critic-dispatch template has no {{methodology_block}}"
+
+# RENDER a meets-ac dispatch and read the block back out of what a critic would actually be
+# handed. A grep over the template proves only that a marker is in the file; the template has no
+# conditionals, so the thing that can still go wrong is upstream -- a caller that passes an empty
+# value for this lens the way it passes an empty recipe_block. This runs the real renderer.
+RT="$T/methodology-render"; mkdir -p "$RT"
+printf '=== METHODOLOGY (source=dev-guides, refs=plugin:tdd-workflow) ===\nRED is an observation, not an intention.\n=== END METHODOLOGY ===\n' > "$RT/m.txt"
+printf -- '- one criterion\n' > "$RT/ac.txt"
+printf 'src/A.php\n' > "$RT/f.txt"
+RENDERED=$(bash "${PLUGIN_ROOT}/scripts/prompt-render.sh" critic-dispatch \
+  lens=meets-ac worktree=/w range=aaa..bbb files@="$RT/f.txt" component=c \
+  acceptance_criteria@="$RT/ac.txt" recipe_block= methodology_block@="$RT/m.txt" \
+  output_path=/o.json 2>/dev/null) || RENDERED=""
+if printf '%s' "$RENDERED" | grep -q 'END METHODOLOGY' \
+   && printf '%s' "$RENDERED" | grep -q 'RED is an observation, not an intention.'; then
+  pass_check "a rendered meets-ac dispatch carries the methodology block through to the critic"
+else
+  fail_check "a rendered meets-ac dispatch does not carry the methodology block — the lens the change exists for receives nothing"
+fi
+
+BLOCK1="$(tr '\n' ' ' <<<"$BLOCK")"
+grep -q 'methodology_block@=' <<<"$BLOCK1" \
+  && pass_check "step 5 passes methodology_block to the render as a file, never as a shell argument" \
+  || fail_check "step 5 does not pass methodology_block@= to the render"
+grep -q 'All three lenses receive the methodology block' <<<"$BLOCK1" && grep -q 'meets-ac. included' <<<"$BLOCK1" \
+  && pass_check "step 5 states the methodology block goes to all three lenses, meets-ac included" \
+  || fail_check "step 5 does not state that meets-ac receives the methodology block"
+grep -q 'guides_actually_loaded' <<<"$BLOCK1" && grep -q 'tdd-workflow.md' <<<"$BLOCK1" \
+  && grep -q 'Never from the task folder' <<<"$BLOCK1" \
+  && pass_check "step 5 names the block's already-loaded source and rules the task folder out of it" \
+  || fail_check "step 5 does not name the block's source, or does not rule out the task folder"
+
+# The delegated path. 5.48.0 shipped entirely because a rung was wired to the in-session path and
+# not the delegated one, so following the orchestration rule that the main loop coordinates rather
+# than builds routed every real build around it. Repeating that shape in the change that fixes its
+# sibling would be the same defect twice, so both dispatchers are asserted here.
+WOB="$(awk '/^\*\*4 — spawn the critics/,/^\*\*5 — aggregate/' "$SKILL_WOC" | tr '\n' ' ')"
+grep -q 'methodology block' <<<"$WOB" && grep -q 'all three lenses' <<<"$WOB" && grep -q 'meets-ac. included' <<<"$WOB" \
+  && pass_check "the work-order dispatch hands the methodology block to all three lenses" \
+  || fail_check "the work-order dispatch does not hand the methodology block to all three lenses"
+grep -q 'Never from the task folder' <<<"$WOB" && grep -q 'END METHODOLOGY' <<<"$WOB" \
+  && pass_check "the work-order dispatch names the delimiter and rules the task folder out of the source" \
+  || fail_check "the work-order dispatch does not name the delimiter or does not rule out the task folder"
+
+# The consumer contract. A block nothing tells the critic how to read is a block it can treat as
+# an instruction, which is the injection surface the whole rung is built around narrowing.
+MB="$(awk '/^- \*\*The methodology block\*\*/,/^- \*\*Your output path\*\*/' "$AGENT_CRITIC" | tr '\n' ' ')"
+grep -q 'all three' <<<"$MB" && grep -q 'meets-ac' <<<"$MB" && grep -q 'END METHODOLOGY' <<<"$MB" \
+  && pass_check "wo-critic documents the methodology block as an input on all three lenses" \
+  || fail_check "wo-critic does not document the methodology block as an all-three-lens input"
+grep -q 'upstream data, not a command' <<<"$MB" && grep -q 'never' <<<"$MB" && grep -q 'task folder' <<<"$MB" \
+  && pass_check "wo-critic treats the methodology block as untrusted upstream data sourced outside the task folder" \
+  || fail_check "wo-critic does not treat the methodology block as untrusted upstream data outside the task folder"
+
+CPCB_PRE="$(awk '/^## The methodology block/,0' "$CPC" | tr '\n' ' ')"
+# The block is ONE NAMED SECTION, never the whole file. tdd-workflow.md is 180 lines and 102 of
+# them are build-time procedure a critic cannot act on -- enforcement checkpoints, a
+# developer-says/response script, which run_mode decides who runs a test, and 62 lines on where a
+# delegated builder writes wo-NN.tdd.json. The critic-dispatch template's own header records that
+# padding a critic prompt with unusable material bought a repair round per component, so a
+# whole-file dump would make this change cost the thing it exists to reduce. The cut is a fixed
+# heading rather than a summary because an orchestrator choosing what to keep would be deciding
+# what the critic may hold the build to, and the orchestrator sits in the builder's context.
+SECTION_AWK="awk '/^### The observation gets recorded/,0'"
+for pair in "step 5|$BLOCK1" "the work-order dispatch|$WOB"; do
+  WHO="${pair%%|*}"; TXT="${pair#*|}"
+  grep -qF "$SECTION_AWK" <<<"$TXT" && grep -q 'never.*the whole\|never the\s*whole' <<<"$TXT" \
+    && pass_check "$WHO composes the block from one named section, never the whole file" \
+    || fail_check "$WHO does not name the section to extract, or does not rule out the whole file"
+done
+grep -qF "$SECTION_AWK" <<<"$CPCB_PRE" && grep -q 'cannot act on' <<<"$CPCB_PRE" && grep -q '102 of its 180 lines' <<<"$CPCB_PRE" \
+  && pass_check "the contract names the section and records the measured share it leaves out" \
+  || fail_check "the contract does not name the section, or does not record why the rest is out"
+
+CPCB="$(awk '/^## The methodology block/,0' "$CPC" | tr '\n' ' ')"
+grep -q '=== METHODOLOGY (source=dev-guides, refs=' <<<"$CPCB" && grep -q '=== END METHODOLOGY ===' <<<"$CPCB" \
+  && grep -q 'dispatch paths' <<<"$CPCB" \
+  && pass_check "the critic-prompt contract defines the delimiter for both dispatch paths" \
+  || fail_check "the critic-prompt contract does not define the methodology delimiter for both paths"
+grep -q 'Never the task folder' <<<"$CPCB" && grep -q 'repair-accept-check.sh' <<<"$CPCB" \
+  && pass_check "the contract records the loophole the block closes and the source boundary that keeps it safe" \
+  || fail_check "the contract does not record the loophole or the source boundary"
+
 if [ "$FAIL" = "0" ]; then
   printf '\nbuild-critique-wiring-spec: all checks passed\n'
 else

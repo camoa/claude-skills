@@ -1,6 +1,6 @@
-# Gate Hardening Prompts v1.8
+# Gate Hardening Prompts v1.9
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`); v5.20.0 (v1.6, additive — `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution, M2; also documents that `{{gates_run_table}}` excludes the `name:"spec"` entry and defines the `{{spec_verdict_line}}` format, fixing M1's spec double-render risk; template literal unchanged beyond the two-axis block additions); v5.26.0 (v1.7, additive — adds `prior-art-ask` for the internal prior-art search); v1.8 (additive — `review-summary` gains `{{spec_provenance_line}}` under `## Spec`, surfacing `criterion-provenance.sh`'s owner/designer/unrecorded counts and naming the designer-authored and unrecorded criteria; informational only, never feeds `{{spec_verdict_line}}`'s pass/fail; `{{mechanism_unresolved_line}}` under `## Standards`, GAP G's unresolved-mechanism count, was already documented here as of the prior commit on this branch and is unchanged by this edit).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`); v5.20.0 (v1.6, additive — `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution, M2; also documents that `{{gates_run_table}}` excludes the `name:"spec"` entry and defines the `{{spec_verdict_line}}` format, fixing M1's spec double-render risk; template literal unchanged beyond the two-axis block additions); v5.26.0 (v1.7, additive — adds `prior-art-ask` for the internal prior-art search); v1.8 (additive — `review-summary` gains `{{spec_provenance_line}}` under `## Spec`, surfacing `criterion-provenance.sh`'s owner/designer/unrecorded counts and naming the designer-authored and unrecorded criteria; informational only, never feeds `{{spec_verdict_line}}`'s pass/fail; `{{mechanism_unresolved_line}}` under `## Standards`, GAP G's unresolved-mechanism count, was already documented here as of the prior commit on this branch and is unchanged by this edit)); v5.49.0 (v1.9, additive — `critic-dispatch` gains `{{methodology_block}}`, the test-first material the build was held to, rendered for all three lenses including `meets-ac`; no existing template or placeholder changed).
 **Owner:** This reference; consumed by command bodies.
 **Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
@@ -29,7 +29,7 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `e2e-gate-fail` (v1.3+) | `/validate:e2e` on `verdict: fail` | `failed_count`, `failed_test_list`, `report_path` | (no default; options listed) |
 | `visual-regression-gate-fail` (v1.4+) | `/validate:visual-regression` per failed surface | `surface_id`, `viewport`, `diff_percent`, `diff_pixels`, `diff_path` | `[c]` |
 | `visual-parity-gate-fail` (v1.5+) | `/validate:visual-parity` per failed surface | `surface_id`, `viewport`, `diff_percent`, `css_diff_mode`, `css_diff_count`, `css_diff_list`, `diff_path` | `[c]` |
-| `critic-dispatch` (v5.44.0+) | `/implement` build-critique rung, once per critic | `lens`, `worktree`, `range`, `files`, `component`, `acceptance_criteria` (multi-line), `recipe_block` (multi-line, empty for `meets-ac`), `output_path` | (no prompt; the whole dispatch) |
+| `critic-dispatch` (v5.44.0+; `methodology_block` v1.9+) | `/implement` build-critique rung and `work-order-critique` step 4, once per critic | `lens`, `worktree`, `range`, `files`, `component`, `acceptance_criteria` (multi-line), `recipe_block` (multi-line, empty for `meets-ac`), `methodology_block` (multi-line, ALL three lenses), `output_path` | (no prompt; the whole dispatch) |
 
 ## Template authoring rules
 
@@ -353,6 +353,8 @@ Variables: `{{surface_id}}` (the registry surface id), `{{viewport}}` (viewport 
 
 ## Changelog
 
+- **v1.9 (v5.49.0):** additive; `critic-dispatch` gains `{{methodology_block}}`, rendered for every
+  lens including `meets-ac`. Existing templates and placeholders byte-identical to the v1.8 baseline.
 - **v1.6 (v5.20.0):** additive; `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution (M2); also documents that `{{gates_run_table}}` excludes the `name:"spec"` gates_run[] entry (rendered only via `{{spec_verdict_line}}`) and defines `{{spec_verdict_line}}`'s format, fixing M1 (spec entry double-rendering into both the Standards table and the Spec block). The M1 documentation addition is prose-only — no template literal changed beyond the two-axis block additions.
 - **v1.5 (2026-05-21, v4.14.0):** additive; adds `visual-parity-gate-fail` template for `/validate:visual-parity` (Task D). Existing 9 templates byte-identical to v1.4 baseline.
 - **v1.4 (2026-05-21, v4.13.0):** additive; adds `visual-regression-gate-fail` template for `/validate:visual-regression` (Task C). Existing 8 templates byte-identical to v1.3 baseline.
@@ -372,6 +374,16 @@ a repair round. The lens definition lives in `agents/wo-critic.md`; the dispatch
 and `correctness`, and the empty string for `meets-ac`. Rendered by `scripts/prompt-render.sh
 critic-dispatch …` and handed to the Task tool exactly as printed.
 
+`methodology_block` (v1.9+) is the sibling of `recipe_block` and it goes to **all three** lenses,
+`meets-ac` included: the test-first material the build was held to, inside
+`=== METHODOLOGY (source=dev-guides, refs=…) === … === END METHODOLOGY ===`. A critic that cannot
+tell a repair from a redefinition of the standard is a critic nobody gave the standard to, and
+`meets-ac` — the lens that would have to judge a test rewritten to match the code it was meant to
+constrain — is the one lens `recipe_block` deliberately empties. Its content, its source boundary
+(dev-guides and plugin methodology refs, never the task folder) and its untrusted-upstream-data
+standing are defined in `skills/work-order-critique/references/critic-prompt-contract.md`, and
+both dispatch paths compose it from that one rule.
+
 ```
 Lens: {{lens}}.
 Worktree: {{worktree}}
@@ -385,5 +397,7 @@ Component: {{component}}. Acceptance criteria:
 {{acceptance_criteria}}
 
 {{recipe_block}}
+
+{{methodology_block}}
 ```
 
