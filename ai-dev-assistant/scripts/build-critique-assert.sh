@@ -783,9 +783,20 @@ if [ -e "$REC" ]; then
   # kernel's own `range_check.status:"not_run"`: nobody looked is not the same answer as nothing
   # was found. A readable envelope with no `out_of_range` key claims nothing either way -- every
   # record written before the field existed is that shape -- so it adds to neither count.
+  #
+  # THE SAME WALK COLLECTS `design_change[]` (v5.50.0+, the design-finding route). Same routing,
+  # same posture, different trigger: the kernel suppresses on a comparison it makes, this one on a
+  # flag the CRITIC set when its own remedy could not be applied without changing the mechanism the
+  # component's design names. One loop rather than two because a ref that cannot be read cannot be
+  # read for either, and a second walk would have to invent its own answer to the same question.
+  # The count carries the sites, and `design_change_findings` is emitted only when there is one:
+  # an evidence key that is always present would say "0 design findings" on every record written
+  # before the field existed, which is a claim the record does not make.
   OOR_N=0
   OOR_UNREADABLE=0
   OOR_SITES='[]'
+  DSG_N=0
+  DSG_SITES='[]'
   while IFS= read -r ref; do
     if [ -z "$ref" ] || [ "$ref" = "null" ]; then continue; fi
     case "$ref" in
@@ -795,14 +806,22 @@ if [ -e "$REC" ]; then
     if [ ! -f "$REF_PATH" ] || ! jq -e 'type == "object"' "$REF_PATH" >/dev/null 2>&1; then
       OOR_UNREADABLE=$(( OOR_UNREADABLE + 1 )); continue
     fi
+    # BOTH arrays are read before either is counted, so an unreadable ref raises the unreadable
+    # count exactly once and contributes to neither total. Reading one, counting it, and then
+    # failing on the other would leave a ref counted as both read and unreadable.
     REF_OOR=$(jq -c '[ (.out_of_range // [])[]? | select(type == "object") ]' "$REF_PATH" 2>/dev/null) || REF_OOR="$JQ_ERR"
-    if [ "$REF_OOR" = "$JQ_ERR" ]; then
+    REF_DSG=$(jq -c '[ (.design_change // [])[]? | select(type == "object") ]' "$REF_PATH" 2>/dev/null) || REF_DSG="$JQ_ERR"
+    if [ "$REF_OOR" = "$JQ_ERR" ] || [ "$REF_DSG" = "$JQ_ERR" ]; then
       OOR_UNREADABLE=$(( OOR_UNREADABLE + 1 )); continue
     fi
     OOR_N=$(( OOR_N + $(jq -r 'length' <<<"$REF_OOR") ))
     REF_OOR_SITES=$(jq -c '[ .[] | (.where // [])[]? | (.file // empty) ]' <<<"$REF_OOR" 2>/dev/null) || REF_OOR_SITES='[]'
     OOR_SITES=$(jq -c -n --argjson a "$OOR_SITES" --argjson b "$REF_OOR_SITES" \
       '($a + $b) | unique' 2>/dev/null) || OOR_SITES='[]'
+    DSG_N=$(( DSG_N + $(jq -r 'length' <<<"$REF_DSG") ))
+    REF_DSG_SITES=$(jq -c '[ .[] | (.where // [])[]? | (.file // empty) ]' <<<"$REF_DSG" 2>/dev/null) || REF_DSG_SITES='[]'
+    DSG_SITES=$(jq -c -n --argjson a "$DSG_SITES" --argjson b "$REF_DSG_SITES" \
+      '($a + $b) | unique' 2>/dev/null) || DSG_SITES='[]'
   done < <(jq -r '.[] | (.critique_ref // "") | tostring' <<<"$FS_COMPONENTS" 2>/dev/null)
 
   if [ "$OOR_N" -gt 0 ]; then
@@ -810,9 +829,14 @@ if [ -e "$REC" ]; then
     set_ev out_of_range_sites "$OOR_SITES"
     add_msg "$OOR_N finding(s) were recorded out of the component's own range and opened no repair round; they are handed here rather than dropped, sited at: $(jq -r 'join(", ")' <<<"$OOR_SITES")"
   fi
+  if [ "$DSG_N" -gt 0 ]; then
+    set_ev design_change_findings "$DSG_N"
+    set_ev design_change_sites "$DSG_SITES"
+    add_msg "$DSG_N finding(s) were marked as fixable only by changing the mechanism the design names; they opened no repair round and are handed here for the design to answer, sited at: $(jq -r 'join(", ")' <<<"$DSG_SITES")"
+  fi
   if [ "$OOR_UNREADABLE" -gt 0 ]; then
     set_ev out_of_range_unreadable_refs "$OOR_UNREADABLE"
-    add_msg "$OOR_UNREADABLE component critique_ref(s) could not be read, so whether a finding was suppressed as out of range is unknown, not zero"
+    add_msg "$OOR_UNREADABLE component critique_ref(s) could not be read, so whether a finding was suppressed as out of range or as a design change is unknown, not zero"
   fi
 
   # ----------------------- the repair AFTER the last critique pass (v5.35.3+)

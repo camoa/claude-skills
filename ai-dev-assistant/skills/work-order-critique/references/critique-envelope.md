@@ -28,13 +28,15 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
                       "reachable_by": "<who can trigger this and what they already hold>",
                       "id": "<a handle for this finding>",
                       "extends": "<an earlier finding's id, or omitted>",
+                      "design_change": false,
                       "measured": null } ] }
   ],
   "overall": "pass | concern | critical | not_evaluated",
   "blocking": true,
   "degraded": false,
   "diff_empty": false,
-  "halt_reason": "critique_critical | not_evaluated_required | degraded_high | diff_empty | required_unresolved | null"
+  "halt_reason": "critique_critical | not_evaluated_required | degraded_high | diff_empty | required_unresolved | null",
+  "out_of_range": [ ], "design_change": [ ]
 }
 ```
 
@@ -42,7 +44,7 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
 |---|---|
 | `evaluated` | `false` ⇒ the rung did not run (dial off / budget skip). A **present, explicit** skip — NOT an absent file. |
 | `overall` | `not_evaluated` ≠ `pass`. A required/high WO whose file is absent/unreadable is fail-closed to blocking by the **consumer** (③/`wo-ship-gate.sh`), not silently treated as pass. |
-| `critics[].effective` | `max(self verdict, worst finding severity)` — a `pass` carrying a `critical` finding is `critical` (the kernel's F8 cross-check). Out-of-range findings are left out of that max, and the self verdict is left out too when it summarises only them: every finding out of range, at least one finding, the verdict one of `pass`/`concern`/`critical`, and ranking no higher than the worst suppressed finding. An `unresolved` or unrecognised verdict is never dropped — it means the critic could not investigate, which is a signal with no other field to live in — and neither is a verdict claiming more than the range check judged (v5.45.0+). |
+| `critics[].effective` | `max(self verdict, worst finding severity)` — a `pass` carrying a `critical` finding is `critical` (the kernel's F8 cross-check). Suppressed findings — out of range, `design_change`, or a mix — are left out of that max, and the self verdict is left out too when it summarises only them: every finding suppressed, at least one finding, the verdict one of `pass`/`concern`/`critical`, and ranking no higher than the worst suppressed finding. An `unresolved` or unrecognised verdict is never dropped — it means the critic could not investigate, which is a signal with no other field to live in — and neither is a verdict claiming more than the suppression judged (v5.45.0+; design_change v5.50.0+). |
 | `critics[].shape_check` | The result of checking this critic file against the finding shape below: `"pass"`, `"fail"` with a reason, or `"not_run"` with a reason. `not_run` means the check did not run — it is never read as clean. |
 | `critics[].shape_check_reason` | The reason behind a `"fail"` or `"not_run"` `shape_check`. Absent (not present as a key) when `shape_check` is `"pass"`. |
 | `critics[].findings[].where[]` | Required on `critical` and `concern`. `[{file, line, symbol}]`, one entry per site the finding names — every site, not one example standing for the rest. |
@@ -55,6 +57,8 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
 | `critics[].findings[].extends_resolved` | v5.45.0+. `true` when this finding's `extends` named an id present in this aggregation, `false` when it named an unknown id or itself. A dangling link is recorded, never silently dropped. |
 | `critics[].findings[].extends_reason` | v5.45.0+. Why `extends_resolved` is `false`, naming the id that did not resolve. |
 | `critics[].findings[].out_of_range` | v5.45.0+. `true` when EVERY site the finding names lies outside the component range passed as `--component-files-from`. Such a finding is dropped from the severity that decides `blocking`, so it opens no repair round, and is carried in `out_of_range[]` for the review phase. A finding with at least one site inside the range, or with no `where[]` at all, is never out of range. |
+| `critics[].findings[].design_change` | v5.50.0+. Written by the CRITIC, not the kernel — the one flag on this contract that is. `true` when the finding's own `remedy` cannot be applied without changing the mechanism the component's design names. Such a finding is dropped from the severity that decides `blocking`, so it opens no repair round, and is carried in `design_change[]` for the review phase. Only the JSON literal `true` counts: a string, a number, a null and an absent key all leave the finding contributing its severity exactly as before. The trigger is the remedy, never the severity and never the critic's opinion of the design; rules live in `agents/wo-critic.md`. |
+| `design_change[]` | v5.50.0+. Top-level. The findings suppressed by that flag, carried with their sites AND their `remedy` — the remedy is this route's trigger, so a reviewer weighing the design against the finding cannot read the record without it. **This is the channel by which a design finding reaches `/review`**, the same way `out_of_range[]` is for the range check. An empty array means no critic marked one; it does not mean a critic was given the design to mark against. Nothing the kernel can see says which, so it claims neither — the dispatch (`references/gate-hardening-prompts.md`, `critic-dispatch`) is what guarantees the critic held the design. |
 | `out_of_range[]` | v5.45.0+. Top-level. The findings suppressed by the range check, kept in full. **This is the channel by which an out-of-range finding reaches `/review`** rather than being discarded: a build finding about code outside the slice is still a finding, it is just not this component's round to spend. |
 | `range_check` | v5.45.0+. `{status, decided_by, reason}`. `ran` when a range was compared; `not_run` with a reason when `--component-files-from` was absent, unreadable, or empty. `not_run` suppresses nothing and is never read as "every finding was in range" — the absence has its own value, as it does for `shape_check` above. |
 | `missing` | `expected − present`; each missing critic is a synthetic `unresolved`. |
