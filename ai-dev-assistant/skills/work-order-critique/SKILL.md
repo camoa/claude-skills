@@ -1,7 +1,7 @@
 ---
 name: work-order-critique
 description: "Use when an orchestrator must run the opt-in adversarial-critique rung on ONE built work-order — the absent-human review layered ABOVE the deterministic gates. Derives the work-order's risk tier (wo-risk-classify.sh), decides whether critique is required (forced-on for high-risk-unattended; else the per-task/per-project dial), spawns risk-scaled INDEPENDENT fresh-context wo-critic agents that re-derive the verdict from artifacts (git diff + gate envelopes), aggregates fail-closed (wo-critique-aggregate.sh) into a per-WO _critique.json, and writes a wo-NN.HALT marker when blocking. Fan-out is the unattended primitive; never edits /review's _review.json. A judgment layer, not a gate — gates always run first."
-version: 0.1.0
+version: 0.2.0
 user-invocable: false
 model: inherit
 allowed-tools: Read, Bash, Task
@@ -123,9 +123,23 @@ lowers high). **A security lens is guaranteed at medium+** (so executable-code c
 **4 — spawn the critics (AR-F: fan-out is the unattended primitive).** For each lens, spawn ONE
 **`wo-critic`** agent via the **Task** tool (fresh, independent — NOT a fork). Give each, as trusted
 runtime context: `<worktree>`, `<before>..<after>`, `<review_ref>`, the WO `## Done =` checklist, its
-**lens**, and its **output path** `$CDIR/${WO_ID}.critic-<k>.json`. Do **not** read the Task return for
-the verdict — the critic writes its verdict file; you read **that** (disk-is-truth).
-`MODE="fanout"`; `EXPECTED=<number of critics spawned>`.
+**lens**, the **methodology block**, and its **output path** `$CDIR/${WO_ID}.critic-<k>.json`. Do
+**not** read the Task return for the verdict — the critic writes its verdict file; you read **that**
+(disk-is-truth). `MODE="fanout"`; `EXPECTED=<number of critics spawned>`.
+
+**The methodology block goes to all three lenses, `meets-ac` included.** Write it to
+`$CDIR/methodology.txt` and inject that file's content verbatim, inside
+`=== METHODOLOGY (source=dev-guides, refs=…) === … === END METHODOLOGY ===`. Compose it from ONE named section, never the whole
+file: `awk '/^### The observation gets recorded/,0'
+"${CLAUDE_PLUGIN_ROOT}/references/tdd-workflow.md"`, unioned with every
+`development/tdd-spec-driven/*` slug in the task's `_dev-guides-load.json`
+`guides_actually_loaded[]` when that record exists — already-loaded material, so nothing is fetched
+here and no critic is given permission to go looking. The rest of that file is build-time procedure
+a critic cannot act on, and padding a critic prompt buys a repair round.
+**Never from the task folder**, which is where the builder's own account of its tests lives. Without
+it a critic cannot tell a repair that met the standard from a change that moved it, and
+`repair-accept-check.sh` demands a reason for a modified test without ever forbidding one. Rule and
+rationale: `references/critic-prompt-contract.md`.
 > **TeamCreate is an attended-only escalation (AR-F), not the unattended default** — one-team-per-session
 > makes it unusable in a per-WO loop. If a team IS used and falls back, set `MODE="team-fallback-to-fanout"`
 > (the kernel blocks a degraded **high** WO). Pre-flight the team slot; never silently ship the weaker

@@ -175,7 +175,29 @@ budget_for() {
     # so for a release a `not_accepted` repair closed its component and the build carried on. A
     # component now gets at most one critic round, which bounds the loop structurally; this sentence
     # is what stops a rejected repair shipping inside that bound.
-    implement) printf '446' ;;
+    # 446 -> 456, raise 10: every critic receives the methodology block, the test-first material
+    # the build was held to. `repair-accept-check.sh` accepts a modified test as long as a reason
+    # is recorded -- the tripwire demands a reason, it never forbids the change -- so a repair loop
+    # could answer a finding by moving the standard rather than meeting it. Telling those apart is
+    # the critic's job and nothing had ever given the critic the standard: /implement loads a
+    # five-reference methodology floor into the BUILD, and the critic that judges the build's
+    # methodology got none of it. `meets-ac`, the lens that would judge a test rewritten to match
+    # the code it was meant to constrain, is the lens `recipe_block` deliberately empties. One line
+    # is the new `@=` value on the render call (the existing line, rewritten), eight are the prose
+    # saying which lenses, where the content comes from, and the task-folder boundary that is the
+    # whole safety argument, and one is the blank line above them. The rule itself lives in
+    # skills/work-order-critique/references/critic-prompt-contract.md so both dispatch paths read
+    # one copy; only the wiring is here.
+    # 456 -> 459, raise 3: the methodology block is ONE NAMED SECTION of tdd-workflow.md, not the
+    # file. The first cut injected all 180 lines; 102 of them are build-time procedure a critic
+    # cannot act on -- enforcement checkpoints, a developer-says/response script, which run_mode
+    # decides who runs a test, and 62 lines on where a delegated builder writes wo-NN.tdd.json.
+    # The template's own header records that padding a critic prompt with unusable material bought
+    # a repair round per component, so a whole-file dump would have made this change cost the thing
+    # it exists to reduce. Three lines: the awk that names the section, and the sentence saying why
+    # the rest is out. The cut is a fixed heading rather than a summary because an orchestrator
+    # choosing what to keep would be deciding what the critic may hold the build to.
+    implement) printf '459' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

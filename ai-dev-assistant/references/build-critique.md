@@ -143,8 +143,22 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    independent, never a fork, or the critique inherits the reasoning it exists to challenge.
    Hand it what the existing contract specifies: `<worktree>` (the project's `codePath`), the
    `<before>..<after>` range, the component's acceptance criteria as injected content, its
-   lens, and its output path
+   lens, the methodology block, and its output path
    `<task_folder>/build-critique/<component>.critics/<component>.critic-<lens>.json`.
+
+   **The methodology block goes to all three lenses**, `meets-ac` included, unlike the resolved
+   recipe, which `security` and `correctness` receive and `meets-ac` does not. It carries the
+   test-first material the build was held to, so a critic can tell a repair that met the standard
+   from a change that moved it — a builder can answer a finding by rewriting what a test asserts,
+   `repair-accept-check.sh` demands a reason for that and never forbids it, and judging which one
+   happened needs the rules for what a sound test is. `/implement` loads those into the build and,
+   until this block, into nothing that judged the build. It is one named section of
+   `references/tdd-workflow.md` plus any already-loaded `development/tdd-spec-driven/*` guide,
+   **never** the whole file — the rest of it is build-time procedure a critic cannot act on — and
+   **never** the task folder, which is the one place the builder's own account of its tests could
+   reach a critic. The full rule, for
+   both dispatch paths, is in
+   `skills/work-order-critique/references/critic-prompt-contract.md`.
    There is no per-component `_review.json`, so `<review_ref>` is passed as `null` and the
    critic is told the deterministic gates have not run for this unit — it must not read an
    absent gate record as a clean one.

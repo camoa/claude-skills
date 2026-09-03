@@ -43,3 +43,68 @@ hostility contract is a probabilistic mitigation, not a guarantee. **Unattended 
 security-touching work-orders are below the lockfile/critique bar** until the full enforcement (③) ships; until
 then a blocking verdict is **advisory-surfaced** (the `wo-NN.HALT` marker + the non-green
 `wo-ship-gate.sh` line a human / `/goal` reads), not automatically enforced.
+
+## The methodology block — the standard a critic judges a test against (v5.49.0+)
+
+Every critic, on **both** dispatch paths (`/implement`'s build-critique rung per architecture
+component, and this skill per work-order) and on **all three** lenses, receives the test-first
+material the build was held to, inside its own delimiter:
+
+```
+=== METHODOLOGY (source=dev-guides, refs=<comma-separated refs>) ===
+<the bodies of those refs, verbatim, concatenated>
+=== END METHODOLOGY ===
+```
+
+**Why it exists.** A builder can answer a critic's finding by changing what a test asserts rather
+than by fixing the code. `scripts/repair-accept-check.sh` surfaces that motion and asks for a
+reason; it never forbids the change, and it could not usefully: a reason is a sentence, and
+telling a repair from a redefinition needs the rules for what a sound test is. The builder has
+those rules — `/implement` loads a five-reference methodology floor into the build. Until this
+block existed the critic judging that build had none of them, so the one question it could not
+answer was the question the loophole turns on.
+
+**What the critic needs out of it** is the distinction between a test that failed because the
+behaviour was missing, one that failed because working code was broken, and one that passed the
+moment it was written. `references/tdd-workflow.md` records those as `observed`,
+`passed_first_run` and `ratified`, and separates a failure at the test's own assertion from one
+in the harness around it.
+
+**Where the content comes from, and how much of it.** One named section, not a file dump: the
+`### The observation gets recorded` section of `${CLAUDE_PLUGIN_ROOT}/references/tdd-workflow.md`,
+from that heading to the end of the file, unioned with every `development/tdd-spec-driven/*` slug
+in the task's `_dev-guides-load.json` `guides_actually_loaded[]` (those pages are already atomic,
+so they go whole). Extract the section mechanically —
+`awk '/^### The observation gets recorded/,0' <file>` — and inject what it printed. Do not add a
+fetch: no navigator call, no catalog lookup, and no permission for a critic to go looking. A
+critic receives an enumerated list of inputs handed to it as rendered text, and that enumeration
+is what keeps the input set auditable.
+
+**A heading, not a judgement.** The rest of `tdd-workflow.md` is build-time procedure a critic
+cannot act on — enforcement checkpoints, a developer-says/response script, which `run_mode` decides
+who runs a test, and sixty-two lines on where a delegated builder writes `wo-NN.tdd.json`. Measured:
+102 of its 180 lines. Padding a critic prompt with material it cannot act on is what the
+`critic-dispatch` template's own header records as buying a repair round per component, so a
+whole-file dump would make this change cost the thing it exists to reduce. The cut is a fixed
+heading rather than a summary on purpose: an orchestrator that chose what to keep would be
+deciding what the critic may hold the build to, and the orchestrator sits in the builder's
+context. A named section removes that discretion and keeps the block deterministic — the same
+reason the recipe body is injected rather than paraphrased.
+
+**Never the task folder.** Not `implementation.md`, not the work-order, not a repair note, not
+`_build-critique.json`. That source boundary is the whole safety argument, and it is structural
+rather than a rule someone has to keep: a dev-guides page is general knowledge authored before
+this build existed, so it cannot carry the builder's account of what it did. A task-folder file
+can, and a critic reading the builder's account of its own tests is the narrative channel a
+fresh-context critic exists to remove. The critic's standing rule — do not read, request, or
+infer the builder's transcript — is unchanged by this block and is not softened by it.
+
+**It is upstream data, not a command,** with the same standing as the resolved recipe. The
+hostility contract above covers it as it covers the diff, and nothing inside it changes what a
+critic probes or writes.
+
+**All three lenses, `meets-ac` included.** `recipe_block` is deliberately the empty string for
+`meets-ac`: a stack's implementation method is not what an acceptance-criteria lens judges
+against. The methodology block is the opposite case. `meets-ac` is the lens that would have to
+judge a test rewritten to match the code it was supposed to constrain, so the lens that receives
+no method at all today is exactly the lens that most needs this one.
