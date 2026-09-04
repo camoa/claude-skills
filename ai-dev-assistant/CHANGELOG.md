@@ -1,5 +1,59 @@
 # Changelog
 
+## [5.55.1] - 2026-09-04
+
+Three holes in 5.54.0's discovery, found by a fresh reader running the artifact rather than reading
+about it. The suite stayed green through all of them.
+
+### Fixed
+- **A discovered stack could still be checked against nothing** — 5.54.0's own goal statement, still
+  true after 5.54.0. Discovery answers "what stacks exist"; it never answered "did we check them".
+  `file_for_gate` names four filenames and the loop skips a path that is not there, so a stack whose
+  producers are named anything else was discovered, announced in a passing line as a producer stack,
+  and read by nothing. A real `python/` directory holding one off-pattern file made the suite print
+  `discovered 3 producer stacks` and `42 required paths across 6 producers` in the same green run.
+
+  Producers are now counted per stack and asserted after the gate loop. Zero fails, and the message
+  names both repairs: a stack with genuinely no gates belongs in `exclude_dirs`, and a stack using
+  different filenames means `file_for_gate` is out of date.
+
+  **The comment on that line asserted the check existed.** It read "It must implement at least one,
+  which 1c checks", and 1c checks a synthetic `mktemp` tree, never the real discovered set. A claim
+  with nothing behind it, in the release whose subject is claims with nothing behind them.
+
+- **The changed-mode derivation was bypassable by ordinary shell style.** It is the sole observable
+  behind four of the five `optional` exemptions, and it recognised only the literal `--changed)`. A
+  producer writing `--changed|--only-changed)` or `--changed=*)` or `[ "$1" = "--changed" ]` kept a
+  working changed mode, was silently moved into the exempt set, and stopped being required to emit
+  the fields the resolver reads. Demonstrated on a real producer: the arm rewritten, the `mode`
+  emitters renamed, suite still green. All four forms are now recognised, and they classify the six
+  shipped producers identically.
+
+- **The coverage budget had room for two whole producers to vanish.** `>= 4` producers and `>= 15`
+  paths against an actual 6 and 42. Deleting `nextjs/dry-check.sh` left that line green at 35 paths
+  across 5 producers; the run only went red through the older hardcoded assertions this change set
+  out to replace. The expected count is now derived from the discovered tree, so a lost producer
+  fails on its own line.
+
+- **The section 1c `EXIT` trap never ran and leaked a temp directory every invocation.** Bash keeps
+  one EXIT trap and two later sections replace it. Cleanup is now explicit where the directory is
+  finished with.
+
+- **A `why` string named a producer in prose nothing checks.** It asserted that
+  `nextjs/security-check.sh` has no `--changed` arm. The rule is derived, so the moment that
+  producer gained one the derivation would correctly start requiring the path while the prose kept
+  asserting the opposite. The producers are no longer named there.
+
+### Coverage
+- Three mutations, each verified applied, each killed on its own message: an off-pattern stack
+  directory, a producer whose changed arm is written as an alternation while losing `.mode`, and a
+  deleted producer. `make test` 159 passed.
+
+### Known deviation
+- The contract scoped `.meta.tools_skipped` as an optional security path; it ships as required.
+  Stricter than scoped and both producers emit it, so nothing is lost — recorded so it is not later
+  read as the contract having been met verbatim.
+
 ## [5.55.0] - 2026-09-04
 
 The material a task is captured with has somewhere to live, and research reads it.

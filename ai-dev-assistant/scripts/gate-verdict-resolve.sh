@@ -183,7 +183,7 @@ emit_field_paths() {
       "optional": {
         ".meta.mode": {
           "when_producer_lacks": "changed-mode",
-          "why": "Same rule as solid's .mode. nextjs/security-check.sh has no --changed arm, so it records no mode and the whole-project default is correct for it."
+          "why": "Same rule as solid's .mode. A producer with no --changed arm records no mode, and the resolver's whole-project default is the right reading for exactly that producer. Which producers those are is derived, never named here: a name in this string is a claim nothing checks, and it would keep asserting the old answer after the producer gained a changed arm."
         },
         ".meta.skip_reason": {
           "when_producer_lacks": "changed-mode",
