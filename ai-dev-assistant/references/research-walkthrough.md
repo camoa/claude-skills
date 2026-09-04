@@ -27,6 +27,37 @@ Research existing solutions for a specific task (Phase 1 of a task).
 10. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `research.md` sections to the task's research questions + acceptance criteria
 11. **Invokes `session-context-writer` skill with the resolved project and task**
 
+## Creation-time material — `inputs/` (v5.55.0+)
+
+**Run `${CLAUDE_PLUGIN_ROOT}/scripts/task-inputs-read.sh "<task_folder>"` at the start of Phase 1
+and Read every file it names before authoring anything.**
+
+A task captured from a discussion often arrives with the analysis that made the ask worth making.
+That material predates the contract and predates the research, so it belongs to neither phase's
+output folder. It lives in `inputs/`.
+
+**`research/` is where Phase 1 writes. Creation-time material must not go there.** Put it there and
+a later `/research` run either collides with it or reads it as work already done and skips the work
+it was supposed to do.
+
+**Research reads `inputs/` and never writes into it.** The folder records what was known when the
+task was captured. A phase that writes into it turns that into a record of what we concluded later,
+and the next reader cannot tell which of the two they are holding. Phase 1 output goes to
+`research/` and `research.md`, exactly as before.
+
+The reader reports three states, and they are not interchangeable:
+
+| `status` | Means | What Phase 1 does |
+|---|---|---|
+| `absent` | no `inputs/` folder — nothing was captured with this task | nothing; this is the common case |
+| `empty` | the folder exists and holds no material | **say so.** Somebody captured evidence and it is gone |
+| `present` | `files[]` names the material | Read each one before authoring `research.md` |
+
+`README.md` is not counted as material, so a folder holding only its own description reads `empty`.
+
+Whoever captures the task writes `inputs/`. No command creates it, because a folder created
+speculatively at every task would make `empty` meaningless.
+
 ## Post-phase epic check (v3.13.5+)
 
 **Run after `research.md` has been authored and `task.md` / `project_state.md` updated, before the traceability walkthrough.**

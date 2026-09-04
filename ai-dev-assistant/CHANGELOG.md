@@ -1,5 +1,44 @@
 # Changelog
 
+## [5.55.0] - 2026-09-04
+
+The material a task is captured with has somewhere to live, and research reads it.
+
+### Added
+- **`inputs/` is a convention the plugin knows about.** A task captured from a discussion arrives
+  with the analysis that made the ask worth making. That material predates the contract AND the
+  research, so it belongs to neither phase's output folder — but `research/` was the only place to
+  put it, and `research/` is where Phase 1 WRITES. Material left there is either collided with by a
+  later `/research` run or read as work already done, so the work gets skipped.
+
+  `inputs/` was proposed on 2026-08-30 with one instance and a README saying it was a proposal.
+  Nothing in the plugin named it: no command, no reference, no script. A convention no code knows
+  about is a folder one person made once.
+
+- **`scripts/task-inputs-read.sh`** reports three states that are not interchangeable: `absent` (no
+  folder — nothing was captured), `empty` (the folder exists and holds nothing — somebody captured
+  evidence and it is gone), `present` (`files[]` names it). Collapsing the middle one into the first
+  says a loss never happened. `README.md` is not counted as material, so a folder holding only its
+  own description reads `empty` rather than making every `inputs/` `present` by construction.
+
+- **`/research` runs it at step 2 and Reads what it names**, before authoring anything, and never
+  writes into `inputs/`. A phase that writes there turns the record of what we knew at capture into
+  a record of what we concluded later, and the next reader cannot tell the two apart.
+
+### Fixed
+- **`/scope` stated a reason for its scaffolding that stopped being true in 5.51.0.** It said the
+  stub existed so `/next` could hand a brand-new task to `/scope` before `/research` created the
+  folder. `/next` has created the task itself since 5.51.0 and offers the contract after, so that
+  handoff does not happen. The scaffolding still earns its place — someone invoking `/scope <name>`
+  on a task that does not exist yet needs the conversation to have a home — and now says so, along
+  with the fact that scaffolding a stub has never been the same thing as requiring a contract.
+
+### Coverage
+- `tests/task-inputs-spec.sh`, 23 assertions. Four mutations, all applied and all killed: counting
+  `README.md` as material (6 failures), reporting `empty` as `absent` (2), reporting a missing task
+  folder as `absent` (1), and dropping the sort (1). Three of the assertions are wiring rather than
+  behaviour — a reader nothing calls is the state this change exists to end.
+
 ## [5.54.0] - 2026-09-04
 
 The stack axis of the gate-report contract is discovered instead of listed. `ai-dev-assistant` no
