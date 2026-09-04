@@ -98,53 +98,110 @@ set -eu
 die() { printf 'gate-verdict-resolve: %s\n' "$1" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------------------
-# THE FIELD PATHS, AND THE SCRIPT THAT MUST EMIT EACH ONE.
+# THE FIELD PATHS, AND THE PRODUCERS THAT MUST EMIT EACH ONE.
 #
 # This is the machine-readable half of the contract. `tests/gate-verdict-resolve-spec.sh`
-# reads it with `--field-paths` and checks every path against the named producer's own JSON
+# reads it with `--field-paths` and checks every path against each producer's own JSON
 # emitter, at the right nesting depth. A path added here without being emitted there fails
 # the suite; a path READ below but not declared here is caught by the same spec, which
 # greps this file's jq programs for `.`-paths and requires each to be declared.
 #
-# `optional_in` names a path that exists in only one of a gate's two report modes. It is
-# still checked for existence in the producer — the mode difference is about whether the
-# resolver may rely on it, not about whether it is real.
+# THE STACK AXIS IS DISCOVERED, NOT LISTED. Until 5.54.0 this block named
+# `scripts/drupal/<gate>-check.sh` as each gate's producer and carried `nextjs/` as an
+# `also` block beside it, so the set of stacks the spec could see was a list somebody had
+# to remember to extend. It was not extended: only the Drupal half of each gate was
+# declared until cqt 3.10.1, and the Next.js SOLID emitter — which carried no coverage
+# fields at all — was checked against nothing, so its all-analyzers-absent run resolved to
+# `pass`. `nextjs/security-check.sh` was still undeclared as of 5.53.0, and three paths
+# this file reads are not emitted by it.
 #
-# `also` names a SECOND producer for the same gate and the subset of paths it emits. A
-# gate has one resolver but a stack per framework, and until 3.10.1 only the Drupal half
-# was declared here — so the Next.js SOLID emitter, which carried no coverage fields at
-# all, was checked against nothing and its all-analyzers-absent run resolved to `pass`.
-# A stack whose producer is not declared is a stack this file cannot be held to.
+# `producer_layout` replaces the list with the convention code-quality-tools already owns
+# and already publishes: `core/detect-project.sh` emits `drupal` or `nextjs`, and the value
+# it emits IS the directory name under the audit `scripts/` root. So a stack is any
+# directory there that is not `core` or `tests`, and a producer is `<stack>/<file>`. Add a
+# stack to that plugin and this spec checks it on the next run with no edit here.
+#
+# What stays written down is the GATE axis, which this file resolves and therefore owns
+# (see the `case "$GATE" in` below), and the one gate whose filename breaks the pattern.
+#
+# `required` is what every discovered producer must emit. `optional` is what one may lack,
+# and each entry has to say WHY in a form that can be checked, or `optional` becomes the
+# escape hatch that makes this whole block unable to fail:
+#
+#   `when_producer_lacks: "changed-mode"` — the path exists only in a `--changed` run, so a
+#     producer with no `--changed` arm cannot emit it. DERIVED from the producer, naming no
+#     stack: give `nextjs/solid-check.sh` a changed mode and the path becomes required of it
+#     automatically.
+#   `absent_in: [...]` — a named exemption, for a per-producer fact with no observable to
+#     derive from. Falsifiable in BOTH directions: the spec fails when a producer NOT named
+#     lacks the path, and equally when a producer that IS named now emits it, so an
+#     exemption cannot outlive the reason it was written.
+#
+# `optional_in` is a different axis and is unchanged: it names a path that exists in only
+# one of a gate's two RUNTIME report modes. It is still required of the producer — the mode
+# difference is about whether the resolver may rely on the value, not about whether the
+# emitter has the field.
 # ---------------------------------------------------------------------------------------
 emit_field_paths() {
   cat <<'FIELDPATHS'
 {
-  "dry": {
-    "producer": "skills/code-quality-audit/scripts/drupal/dry-check.sh",
-    "paths": [".status", ".rating", ".mode", ".measured", ".skip_reason", ".tools_absent", ".generated_at"],
-    "also": {
-      "skills/code-quality-audit/scripts/nextjs/dry-check.sh": [".status", ".rating", ".mode", ".measured", ".skip_reason", ".tools_absent", ".generated_at"]
+  "producer_layout": {
+    "plugin": "code-quality-tools",
+    "root": "skills/code-quality-audit/scripts",
+    "exclude_dirs": ["core", "tests"],
+    "file_for_gate": {
+      "dry": "dry-check.sh",
+      "solid": "solid-check.sh",
+      "security": "security-check.sh",
+      "tdd": "tdd-workflow.sh"
     },
-    "note": "dry-report.json emits NO tools_failed and NO tools_unmeasured. Do not read them."
+    "changed_mode_probe": "a `--changed)` arm in the producer's own argument parsing",
+    "note": "A stack is a directory under root that is not in exclude_dirs. The names are code-quality-tools' own: core/detect-project.sh prints the directory name as the project type."
   },
-  "solid": {
-    "producer": "skills/code-quality-audit/scripts/drupal/solid-check.sh",
-    "paths": [".status", ".mode", ".analyzers_ran", ".binary_analyzers", ".tools_absent", ".tools_failed", ".tools_unmeasured", ".generated_at"],
-    "also": {
-      "skills/code-quality-audit/scripts/nextjs/solid-check.sh": [".status", ".analyzers_ran", ".binary_analyzers", ".tools_absent", ".tools_failed", ".tools_unmeasured", ".tools_skipped", ".generated_at"]
+  "gates": {
+    "dry": {
+      "required": [".status", ".rating", ".mode", ".measured", ".skip_reason", ".tools_absent", ".generated_at"],
+      "optional": {},
+      "note": "dry-report.json emits NO tools_failed and NO tools_unmeasured. Do not read them."
     },
-    "note": "analyzers_ran counts CHECKS, not analyzers: the always-on \\Drupal:: grep needs no binary and increments it. Never the coverage test. binary_analyzers[] is the producer naming the analyzers that DO need installing, so this file does not carry those names as a literal of its own."
-  },
-  "security": {
-    "producer": "skills/code-quality-audit/scripts/drupal/security-check.sh",
-    "paths": [".summary.overall_status", ".meta", ".meta.timestamp", ".meta.mode", ".meta.skip_reason", ".meta.tools_absent", ".meta.tools_failed", ".meta.tools_unmeasured", ".meta.tools_skipped", ".meta.analyzers_ran"],
-    "optional_in": {".meta.analyzers_ran": "changed", ".meta.mode": "changed", ".meta.skip_reason": "changed", ".meta.tools_skipped": "changed"},
-    "note": "There is NO top-level .status. meta.tools[] is whole-project-only AND its literal disagrees with the names the code pushes, so it is deliberately not read. meta.tools_absent[] means ONE thing since cqt 3.10.1 — the binary is not installed; layers the changed set scoped out are in meta.tools_skipped[] and are NOT a coverage gap."
-  },
-  "tdd": {
-    "producer": "skills/code-quality-audit/scripts/drupal/tdd-workflow.sh",
-    "paths": [],
-    "note": "Writes no JSON report on any path and says so in its own source. Resolved from the exit code alone."
+    "solid": {
+      "required": [".status", ".analyzers_ran", ".binary_analyzers", ".tools_absent", ".tools_failed", ".tools_unmeasured", ".generated_at"],
+      "optional": {
+        ".mode": {
+          "when_producer_lacks": "changed-mode",
+          "why": "A producer with no --changed arm always runs whole-project and records no mode. The resolver defaults MODE to whole-project, which is the right reading for exactly that producer."
+        },
+        ".tools_skipped": {
+          "absent_in": ["drupal/solid-check.sh"],
+          "why": "tools_skipped[] is the producer naming an analyzer it declined to run BY DESIGN. The Drupal solid gate declines none, so it emits no such list; the resolver reads it as `// []`, which is the same statement. Not derivable from a --changed arm: this producer HAS one."
+        }
+      },
+      "note": "analyzers_ran counts CHECKS, not analyzers: the always-on \\Drupal:: grep needs no binary and increments it. Never the coverage test. binary_analyzers[] is the producer naming the analyzers that DO need installing, so this file does not carry those names as a literal of its own."
+    },
+    "security": {
+      "required": [".summary.overall_status", ".meta", ".meta.timestamp", ".meta.tools_absent", ".meta.tools_failed", ".meta.tools_unmeasured", ".meta.tools_skipped"],
+      "optional": {
+        ".meta.mode": {
+          "when_producer_lacks": "changed-mode",
+          "why": "Same rule as solid's .mode. nextjs/security-check.sh has no --changed arm, so it records no mode and the whole-project default is correct for it."
+        },
+        ".meta.skip_reason": {
+          "when_producer_lacks": "changed-mode",
+          "why": "A skip_reason exists to say which layers a changed set scoped out. A whole-project-only producer scopes nothing out and has nothing to name."
+        },
+        ".meta.analyzers_ran": {
+          "when_producer_lacks": "changed-mode",
+          "why": "Emitted by the changed-mode envelope only. Its absence is safe here because coverage on this gate comes from the tool lists, never from a count of checks."
+        }
+      },
+      "optional_in": {".meta.analyzers_ran": "changed", ".meta.mode": "changed", ".meta.skip_reason": "changed", ".meta.tools_skipped": "changed"},
+      "note": "There is NO top-level .status. meta.tools[] is whole-project-only AND its literal disagrees with the names the code pushes, so it is deliberately not read. meta.tools_absent[] means ONE thing since cqt 3.10.1 — the binary is not installed; layers the changed set scoped out are in meta.tools_skipped[] and are NOT a coverage gap."
+    },
+    "tdd": {
+      "required": [],
+      "optional": {},
+      "note": "Writes no JSON report on any path and says so in its own source. Resolved from the exit code alone."
+    }
   }
 }
 FIELDPATHS
