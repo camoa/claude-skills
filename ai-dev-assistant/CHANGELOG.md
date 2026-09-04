@@ -1,5 +1,63 @@
 # Changelog
 
+## [5.54.0] - 2026-09-04
+
+The stack axis of the gate-report contract is discovered instead of listed. `ai-dev-assistant` no
+longer carries a list of `code-quality-tools`' stacks.
+
+### Changed
+- **`gate-verdict-resolve.sh --field-paths` declares a producer LAYOUT, not producer paths.** Each
+  gate used to name `skills/code-quality-audit/scripts/drupal/<gate>-check.sh` as its producer with
+  an `also` block naming the `nextjs/` equivalent, so the set of stacks the suite could see was
+  whatever somebody had remembered to add. It was not remembered. Only the Drupal half of each gate
+  was declared until cqt 3.10.1, and the Next.js SOLID emitter — carrying no coverage fields at all —
+  was checked against nothing while its all-analyzers-absent run resolved `pass`. The declaration now
+  gives the root, the excluded directories and the filename per gate, and the spec walks
+  `code-quality-tools` to find the stacks. A stack added to that plugin is checked here on the next
+  run with no edit to this one.
+
+  The layout is that plugin's own convention, not a new one: `core/detect-project.sh` prints `drupal`
+  or `nextjs` as the project type, and that string is the directory name under the audit `scripts/`
+  root.
+
+- **Field paths are declared once per gate rather than once per producer.** The `also` blocks
+  repeated each gate's list a second time, which is what let a second stack be declared with a
+  shorter list than the first. `required` is what every discovered producer must emit; `optional` is
+  what one may lack, and every entry is bounded and checked in both directions, because an
+  unbounded `optional` is how a check like this stops being able to fail:
+  - `when_producer_lacks: "changed-mode"` — the path exists only in a `--changed` run, so a producer
+    with no `--changed)` arm cannot emit it. Derived from the producer, naming no stack: give
+    `nextjs/solid-check.sh` a changed mode and the path becomes required of it automatically. Four
+    of the five exemptions.
+  - `absent_in: [...]` — one entry, `solid`'s `.tools_skipped` in `drupal/solid-check.sh`, which has
+    no observable to derive from. The spec fails when a producer NOT on the list omits the path, and
+    equally when a producer that IS on it starts emitting the path, so the exemption cannot outlive
+    its reason.
+
+- **The layer-name check discovers its roots too.** It ran a second `find` over a hardcoded
+  `drupal` + `nextjs` pair near the end of the same spec, with the identical exposure: a new stack
+  could push an unclassified tool name into a coverage list and be read by nothing.
+
+### Fixed
+- **`nextjs/security-check.sh` is reached by the suite.** It was a declared producer of nothing and
+  was checked against nothing; `code-quality-tools`' own changelog recorded that and it stayed
+  unowned across three releases. It passes the 7 required security paths. The 3 it does not emit are
+  the changed-mode set, exempted by the derived rule because it has no `--changed` arm at all.
+
+### Coverage
+- Producer checking went from 6 declared path-lists over 4 gates to **42 required-path checks across
+  6 producers, plus 10 optional-path comparisons in both directions.** Discovery has its own
+  negative cells: zero stacks fails, a stack whose producers are all missing fails, an excluded
+  directory is not a stack, a newly added directory is found, and a discovered stack shipping an
+  incomplete producer is caught rather than skipped.
+
+### Not changed
+- The runtime resolver's decision logic. It was re-measured before this work and carries no stack
+  literal outside the comments recording what used to be there — the `phpcpd` half of the original
+  finding shipped in 5.37.0, and the stack reasoning is gone.
+- `## Code-quality extensions` in the review recipe. Producer paths in a recipe would be the same
+  list in a different file.
+
 ## [5.53.0] - 2026-09-03
 
 The second halves of four tasks that had shipped a first half and stopped. Each was a specific named

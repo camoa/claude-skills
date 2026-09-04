@@ -95,64 +95,204 @@ else
   exit 1
 fi
 
-GATES=$(printf '%s' "$DECL" | jq -r 'keys[]')
+# ------------------------------------------------------------------------------------------
+# 1a. DISCOVER THE PRODUCERS. The resolver declares a LAYOUT, not a list of stacks, so this
+# walks code-quality-tools and finds them. Until 5.54.0 the declaration named
+# `drupal/<gate>-check.sh` with `nextjs/` as an `also` block, and the set of stacks this spec
+# could see was whatever somebody had remembered to add. It was not remembered: the Next.js
+# SOLID emitter went undeclared until cqt 3.10.1 and was checked against nothing while an
+# all-analyzers-absent run of it resolved `pass`, and `nextjs/security-check.sh` was still
+# undeclared at 5.53.0 with three read paths it does not emit.
+#
+# Discovering means a stack added to that plugin is checked here on the next run, with no
+# edit to this repo. It also means the discovery itself has to be able to fail: zero stacks,
+# or a stack with no producers, is not a pass. Section 1c mutates the tree and requires red.
+# ------------------------------------------------------------------------------------------
+LAYOUT=$(printf '%s' "$DECL" | jq -c '.producer_layout')
+SROOT="${CQT}/$(printf '%s' "$LAYOUT" | jq -r '.root')"
+mapfile -t EXCLUDES < <(printf '%s' "$LAYOUT" | jq -r '.exclude_dirs[]?')
+
+# discover_stacks <scripts-root> — prints one stack directory name per line.
+discover_stacks() {
+  local root="$1" d base skip x
+  [ -d "$root" ] || return 0
+  for d in "$root"/*/; do
+    [ -d "$d" ] || continue
+    base=$(basename "$d")
+    skip=0
+    for x in "${EXCLUDES[@]+"${EXCLUDES[@]}"}"; do
+      [ "$base" = "$x" ] && skip=1
+    done
+    [ "$skip" -eq 1 ] || printf '%s\n' "$base"
+  done
+}
+
+# producer_has_changed_mode <file> — the `--changed)` arm in its own argument parsing. This
+# is the observable behind every `when_producer_lacks: changed-mode` exemption, so an
+# exemption is derived from the producer rather than from a stack name somebody wrote down.
+producer_has_changed_mode() {
+  sed 's/#.*//' "$1" 2>/dev/null | grep -qE -- '--changed[[:space:]]*\)'
+}
+
+mapfile -t STACKS < <(discover_stacks "$SROOT")
+if [ "${#STACKS[@]}" -eq 0 ]; then
+  fail_check "no stack directories discovered under $SROOT — the field-path check has no producers and is checking nothing"
+  printf '\ngate-verdict-resolve-spec: FAILURES\n' >&2
+  exit 1
+fi
+pass_check "discovered ${#STACKS[@]} producer stacks under $(printf '%s' "$LAYOUT" | jq -r '.root') (${STACKS[*]})"
+
+# ------------------------------------------------------------------------------------------
+# 1b. EVERY DISCOVERED PRODUCER EMITS EVERY REQUIRED PATH.
+# ------------------------------------------------------------------------------------------
+GATES=$(printf '%s' "$DECL" | jq -r '.gates | keys[]')
 CHECKED_PATHS=0
+PRODUCERS_SEEN=0
 for gate in $GATES; do
-  PRODUCER=$(printf '%s' "$DECL" | jq -r --arg g "$gate" '.[$g].producer')
-  PFILE="${CQT}/${PRODUCER}"
-  if [ ! -f "$PFILE" ]; then
-    fail_check "$gate: declared producer $PRODUCER does not exist — the paths below are checked against nothing"
+  GFILE=$(printf '%s' "$LAYOUT" | jq -r --arg g "$gate" '.file_for_gate[$g] // empty')
+  if [ -z "$GFILE" ]; then
+    fail_check "$gate: the layout names no producer filename for this gate — it is resolved by the resolver and checked by nothing"
     continue
   fi
-  mapfile -t PLIST < <(printf '%s' "$DECL" | jq -r --arg g "$gate" '.[$g].paths[]?')
-  if [ "${#PLIST[@]}" -eq 0 ]; then
-    # tdd declares none, deliberately: it writes no report. That is a claim too.
-    if printf '%s' "$DECL" | jq -er --arg g "$gate" '.[$g].note' 2>/dev/null | grep -qi 'no JSON report'; then
+  mapfile -t REQ < <(printf '%s' "$DECL" | jq -r --arg g "$gate" '.gates[$g].required[]?')
+
+  # A gate declaring no required paths has to say why, or it is a gate that reads nothing.
+  if [ "${#REQ[@]}" -eq 0 ]; then
+    if printf '%s' "$DECL" | jq -er --arg g "$gate" '.gates[$g].note' 2>/dev/null | grep -qi 'no JSON report'; then
       pass_check "$gate declares no field paths and says why (it writes no report)"
     else
       fail_check "$gate declares no field paths and gives no reason — a gate that reads nothing decides on nothing"
     fi
     continue
   fi
-  if OUT=$(python3 "$PATHS_TOOL" "$PFILE" "${PLIST[@]}" 2>&1); then
-    pass_check "$gate: all ${#PLIST[@]} declared paths are emitted by $(basename "$PRODUCER")"
-    CHECKED_PATHS=$((CHECKED_PATHS + ${#PLIST[@]}))
-  else
-    fail_check "$gate: declared paths NOT emitted by $(basename "$PRODUCER") — $(printf '%s' "$OUT" | tr '\n' ' ')"
-  fi
 
-  # SECOND PRODUCERS. One resolver, one stack per framework. Only the Drupal half of
-  # each gate was declared until cqt 3.10.1, so the Next.js SOLID emitter — which carried
-  # no coverage fields at all, printed "[SKIP] madge not installed" and then set status
-  # "pass" — was checked against nothing, and a Next.js project with every analyzer
-  # missing resolved to pass / unresolved:false / coverage_partial:false. That is the
-  # original defect of this whole branch, surviving in the directory nobody declared.
-  mapfile -t ALSO < <(printf '%s' "$DECL" | jq -r --arg g "$gate" '.[$g].also // {} | keys[]?')
-  for other in "${ALSO[@]+"${ALSO[@]}"}"; do
-    OFILE="${CQT}/${other}"
-    mapfile -t OLIST < <(printf '%s' "$DECL" | jq -r --arg g "$gate" --arg o "$other" '.[$g].also[$o][]?')
-    if [ ! -f "$OFILE" ]; then
-      fail_check "$gate: declared second producer $other does not exist"
-      continue
-    fi
-    if [ "${#OLIST[@]}" -eq 0 ]; then
-      fail_check "$gate: second producer $other is declared with no paths — it is checked against nothing"
-      continue
-    fi
-    if OUT=$(python3 "$PATHS_TOOL" "$OFILE" "${OLIST[@]}" 2>&1); then
-      pass_check "$gate: all ${#OLIST[@]} declared paths are emitted by $(basename "$other") (the Next.js producer)"
-      CHECKED_PATHS=$((CHECKED_PATHS + ${#OLIST[@]}))
+  GATE_PRODUCERS=0
+  for stack in "${STACKS[@]}"; do
+    PFILE="${SROOT}/${stack}/${GFILE}"
+    # A stack need not implement every gate. It must implement at least one, which 1c checks.
+    [ -f "$PFILE" ] || continue
+    GATE_PRODUCERS=$((GATE_PRODUCERS + 1))
+    PRODUCERS_SEEN=$((PRODUCERS_SEEN + 1))
+    if OUT=$(python3 "$PATHS_TOOL" "$PFILE" "${REQ[@]}" 2>&1); then
+      pass_check "$gate/$stack: all ${#REQ[@]} required paths are emitted by $GFILE"
+      CHECKED_PATHS=$((CHECKED_PATHS + ${#REQ[@]}))
     else
-      fail_check "$gate: $(basename "$other") does not emit its declared paths — $(printf '%s' "$OUT" | tr '\n' ' ')"
+      fail_check "$gate/$stack: required paths NOT emitted by $GFILE — $(printf '%s' "$OUT" | tr '\n' ' ')"
+    fi
+  done
+  if [ "$GATE_PRODUCERS" -eq 0 ]; then
+    fail_check "$gate: no discovered stack ships $GFILE — this gate's paths were checked against nothing"
+  fi
+done
+
+# ------------------------------------------------------------------------------------------
+# 1b-ii. THE OPTIONAL PATHS, FALSIFIABLE IN BOTH DIRECTIONS.
+#
+# `optional` is where a check like this goes to die: make absence acceptable and every
+# producer passes by emitting nothing. So each optional path is checked twice.
+#
+#   `when_producer_lacks: changed-mode` — REQUIRED of every producer that has a --changed
+#     arm, and merely allowed to be absent in one that does not. Give a whole-project-only
+#     producer a changed mode and the path becomes required of it with no edit here.
+#   `absent_in: [...]` — allowed absent ONLY in the producers named. Absent anywhere else is
+#     a failure, AND present in a named one is also a failure, because an exemption that
+#     outlives its reason is how the old `also` blocks went stale in the first place.
+# ------------------------------------------------------------------------------------------
+OPT_CHECKED=0
+for gate in $GATES; do
+  GFILE=$(printf '%s' "$LAYOUT" | jq -r --arg g "$gate" '.file_for_gate[$g] // empty')
+  [ -n "$GFILE" ] || continue
+  mapfile -t OPTS < <(printf '%s' "$DECL" | jq -r --arg g "$gate" '.gates[$g].optional // {} | keys[]?')
+  for opath in "${OPTS[@]+"${OPTS[@]}"}"; do
+    RULE=$(printf '%s' "$DECL" | jq -c --arg g "$gate" --arg p "$opath" '.gates[$g].optional[$p]')
+    WHY=$(printf '%s' "$RULE" | jq -r '.why // ""')
+    if [ -z "$WHY" ]; then
+      fail_check "$gate: optional path $opath carries no reason — an unexplained exemption is an opt-out from this check"
+      continue
+    fi
+    LACKS=$(printf '%s' "$RULE" | jq -r '.when_producer_lacks // ""')
+    mapfile -t ABSENT_IN < <(printf '%s' "$RULE" | jq -r '.absent_in[]?')
+    if [ -z "$LACKS" ] && [ "${#ABSENT_IN[@]}" -eq 0 ]; then
+      fail_check "$gate: optional path $opath names neither when_producer_lacks nor absent_in — nothing bounds who may omit it"
+      continue
+    fi
+    BAD=""
+    for stack in "${STACKS[@]}"; do
+      PFILE="${SROOT}/${stack}/${GFILE}"
+      [ -f "$PFILE" ] || continue
+      EMITS=0
+      python3 "$PATHS_TOOL" "$PFILE" "$opath" >/dev/null 2>&1 && EMITS=1
+      if [ "$LACKS" = "changed-mode" ]; then
+        if producer_has_changed_mode "$PFILE"; then
+          [ "$EMITS" -eq 1 ] || BAD="${BAD} ${stack}/${GFILE}:has-a---changed-arm-but-omits-${opath}"
+        fi
+      else
+        NAMED=0
+        for n in "${ABSENT_IN[@]+"${ABSENT_IN[@]}"}"; do
+          [ "$n" = "${stack}/${GFILE}" ] && NAMED=1
+        done
+        if [ "$NAMED" -eq 1 ] && [ "$EMITS" -eq 1 ]; then
+          BAD="${BAD} ${stack}/${GFILE}:exempted-from-${opath}-but-now-emits-it"
+        elif [ "$NAMED" -eq 0 ] && [ "$EMITS" -eq 0 ]; then
+          BAD="${BAD} ${stack}/${GFILE}:omits-${opath}-and-is-not-on-its-absent_in-list"
+        fi
+      fi
+      OPT_CHECKED=$((OPT_CHECKED + 1))
+    done
+    if [ -z "$BAD" ]; then
+      pass_check "$gate: optional $opath holds in both directions across every discovered producer"
+    else
+      fail_check "$gate: optional $opath —$BAD"
     fi
   done
 done
 
-if [ "$CHECKED_PATHS" -ge 15 ]; then
-  pass_check "field-path check covered $CHECKED_PATHS paths across the producers"
+if [ "$PRODUCERS_SEEN" -ge 4 ] && [ "$CHECKED_PATHS" -ge 15 ] && [ "$OPT_CHECKED" -ge 1 ]; then
+  pass_check "field-path check covered $CHECKED_PATHS required paths across $PRODUCERS_SEEN producers, plus $OPT_CHECKED optional-path comparisons"
 else
-  fail_check "field-path check only covered $CHECKED_PATHS paths — it is not looking at enough to mean anything"
+  fail_check "field-path check covered $CHECKED_PATHS paths / $PRODUCERS_SEEN producers / $OPT_CHECKED optional comparisons — it is not looking at enough to mean anything"
 fi
+
+# ------------------------------------------------------------------------------------------
+# 1c. THE DISCOVERY ITSELF MUST BE ABLE TO FAIL. A check that found nothing has not passed,
+# and a discovery walk is exactly the kind that silently finds nothing. Point it at an empty
+# tree and at a tree whose only stack ships no producers, and require both to come back with
+# nothing found rather than with a clean result.
+# ------------------------------------------------------------------------------------------
+TMPD=$(mktemp -d)
+trap 'rm -rf "$TMPD"' EXIT
+mkdir -p "$TMPD/empty"
+mapfile -t GOT < <(discover_stacks "$TMPD/empty")
+if [ "${#GOT[@]}" -eq 0 ]; then
+  pass_check "discovery finds zero stacks in an empty tree (the caller fails on that, it is not a pass)"
+else
+  fail_check "discovery invented ${#GOT[@]} stacks in an empty tree"
+fi
+mkdir -p "$TMPD/only-excluded/core" "$TMPD/only-excluded/tests"
+mapfile -t GOT < <(discover_stacks "$TMPD/only-excluded")
+if [ "${#GOT[@]}" -eq 0 ]; then
+  pass_check "discovery excludes core/ and tests/ and reports no stack when they are all there is"
+else
+  fail_check "discovery counted an excluded directory as a stack (${GOT[*]})"
+fi
+mkdir -p "$TMPD/added/core" "$TMPD/added/python"
+mapfile -t GOT < <(discover_stacks "$TMPD/added")
+if [ "${#GOT[@]}" -eq 1 ] && [ "${GOT[0]}" = "python" ]; then
+  pass_check "a stack directory added to the plugin is discovered with no edit to the resolver's declaration"
+else
+  fail_check "a newly added stack directory was not discovered (got: ${GOT[*]-none})"
+fi
+# And an incomplete producer in a discovered stack is caught, not skipped.
+mkdir -p "$TMPD/added/python"
+printf '#!/usr/bin/env bash\njq -n "{status: 1}"\n' > "$TMPD/added/python/solid-check.sh"
+mapfile -t SREQ < <(printf '%s' "$DECL" | jq -r '.gates.solid.required[]?')
+if python3 "$PATHS_TOOL" "$TMPD/added/python/solid-check.sh" "${SREQ[@]}" >/dev/null 2>&1; then
+  fail_check "the path checker accepted a producer emitting only .status against solid's ${#SREQ[@]} required paths — a new stack could ship blind"
+else
+  pass_check "a discovered stack shipping an incomplete producer fails the required-path check"
+fi
+
+
 
 # The checker itself must be able to FAIL, or the block above is decoration. Ask it for
 # the three paths that burned us and require it to reject each one.
@@ -1004,7 +1144,7 @@ fi
 # reads BOTH: the helper calls with their full jq programs, and the quoted path arguments
 # on require_shape's continuation lines. Over-matching is safe — a path picked up that is
 # not really read still has to be declared and still gets checked against the producer.
-ALL_DECLARED=$(printf '%s' "$DECL" | jq -r '[.[].paths[]?, (.[].also // {} | .[][]?)] | unique | .[]')
+ALL_DECLARED=$(printf '%s' "$DECL" | jq -r '[.gates[].required[]?, (.gates[].optional // {} | keys[]?)] | unique | .[]')
 USED=$(sed -n "/jq\(r\|v\|c\|len\|join\) '/p; /^ *'\.[A-Za-z_]/p" "$R" \
        | grep -oE "\.[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*" | sort -u)
 NUSED=$(printf '%s\n' "$USED" | grep -c . || true)
@@ -1446,8 +1586,13 @@ trap 'rm -f "$CATALOG_NAMES" "$REPORTED_NAMES"' EXIT
 if [ -f "$CATALOG" ]; then
   jq -r '((.tools // {}) | keys[]), ((.layers // {}) | keys[])' "$CATALOG" | sort -u > "$CATALOG_NAMES"
 fi
-GATE_SCRIPTS=$(find "${CQT}/skills/code-quality-audit/scripts/drupal" \
-                    "${CQT}/skills/code-quality-audit/scripts/nextjs" \
+# DISCOVERED, not listed — the same reason section 1a discovers. This walk named `drupal`
+# and `nextjs` until 5.54.0, so a stack added to code-quality-tools could push an
+# unclassified tool name into a coverage list and never be read here. The roots come from
+# the resolver's declared layout, so there is one place that knows where stacks live.
+GATE_ROOTS=()
+for stack in "${STACKS[@]}"; do GATE_ROOTS+=("${SROOT}/${stack}"); done
+GATE_SCRIPTS=$(find "${GATE_ROOTS[@]}" \
                     -name '*-check.sh' -o -name '*-workflow.sh' 2>/dev/null | sort)
 if [ -z "$GATE_SCRIPTS" ]; then
   fail_check "found no gate scripts to read layer names out of — this check is looking at nothing"

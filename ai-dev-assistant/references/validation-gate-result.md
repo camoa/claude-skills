@@ -150,6 +150,15 @@ about a producer, checkable only by reading the producer, and
 resolver declares, plus fixture reports for each state of each mode. A table in
 a command file cannot be run, so it was never checked, so it was wrong.
 
+The producers it reads are **discovered, not listed**. The resolver declares a
+layout — the root under `code-quality-tools`, the directories that are not
+stacks, the filename per gate — and the spec walks that plugin to find the rest.
+Naming them was the same failure one level up: only the Drupal half of each gate
+was declared until cqt 3.10.1, so the Next.js emitters were checked against
+nothing, and `nextjs/security-check.sh` was still reached by nothing at 5.53.0.
+A stack added to that plugin is checked here on the next run with no edit to
+this one.
+
 **When it applies.** Whenever the gate was invoked and could not check the thing
 it exists to check. The resolver reads the gate's **JSON report**, located with
 `scripts/core/report-dir.sh --latest` — never the console text, and never a
