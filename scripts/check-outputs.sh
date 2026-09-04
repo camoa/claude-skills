@@ -32,10 +32,9 @@
 #
 # There are NO exemptions. Deprecated plugins are not exempt: what a
 # deprecated command does to your filesystem is exactly the thing you want
-# written down before you run it. The 44 symlinked command files in
-# drupal-dev-framework are not exempt either — awk reads through a symlink, so
-# they are satisfied by the section in the file they point at, which is
-# deduplication rather than an exception.
+# written down before you run it. Symlinked command files are not exempt
+# either — awk reads through a symlink, so they are satisfied by the section
+# in the file they point at, which is deduplication rather than an exception.
 #
 # Written for bash 3.2 so it behaves the same on macOS and CI.
 

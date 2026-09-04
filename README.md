@@ -69,8 +69,6 @@ The skills conform to the open [agentskills.io](https://agentskills.io/specifica
 
 ### Deprecated
 
-**drupal-dev-framework** is the old name of `ai-dev-assistant`, kept only as a one-time migration shell. If you are still on it, [its README](drupal-dev-framework/README.md) has the `/drupal-dev-framework:upgrade` steps; otherwise you can ignore it.
-
 ## Background
 
 I started building what I called "frameworks" over a year before Claude officially released Skills. Same concept, different name. The idea came from frustration: I was tired of repeating the same instructions every conversation, so I asked AI to analyze our successful interactions and capture the recurring requirements and preferences as reusable project knowledge. That produced real work: 3 published Drupal contrib modules, 17+ blog articles, automated social campaigns, and phase-based editorial workflows. When Claude released Skills officially, I recognized what I had been building, and this repository translates those frameworks into proper Skills with tooling. More on the methodology: [My Journey with AI Tools](https://adrupalcouple.us/my-journey-ai-tools-practical-tips-recent-discussion).

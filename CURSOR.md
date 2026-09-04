@@ -56,7 +56,6 @@ Your AI handles the mechanics. Re-run when Cursor updates its formats — your A
 
 ## Deterministic gates
 
-The reason this matters for `drupal-dev-framework` users: Cursor hooks preserve `drupal-dev-framework`'s deterministic gate enforcement. The `gate-audit-write.sh`, `coverage-mapping-check.sh`, `dev-guides-detect.sh`, and `playbook-load-deterministic.sh` scripts from `drupal-dev-framework/scripts/` run as-is from a Cursor `preToolUse` or `postToolUse` hook handler — pure bash + `jq`, no Claude-Code-specific runtime.
 
 In Cursor: the v4.0+ anti-bypass clauses, mandated wording, and audit-JSON outputs work. The gates remain non-bypassable.
 

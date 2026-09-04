@@ -8,7 +8,7 @@
 /.design-intelligence/
 /.design-intelligence-audit/
 
-# Git worktrees for parallel task execution (drupal-dev-framework /worktree).
+# Git worktrees for parallel task execution (ai-dev-assistant /worktree).
 /.worktrees/
 
 # Build output. These were committed by mistake before `make ci` existed.

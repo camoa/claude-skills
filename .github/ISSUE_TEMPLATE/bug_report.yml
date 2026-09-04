@@ -22,7 +22,6 @@ body:
         - drupal-htmx
         - drupal-ai-contrib
         - code-paper-test
-        - drupal-dev-framework
         - other / not sure
     validations:
       required: true
