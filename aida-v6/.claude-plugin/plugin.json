@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "aida-v6",
+  "displayName": "AIDA, the AI Dev Assistant",
+  "version": "6.0.0-dev",
+  "description": "Keeps AI coding work inside a process that produces better code. Every task runs through five stages: scope, research, design, implementation, review. Scope writes a contract of goals, non-goals, and the criteria that prove them, and every later stage is checked against it. Research finds prior art in your own code first, then outside, from current documentation rather than the model's memory. Design writes a spec you can build from. Implementation writes tests first. Review runs the blocking checks. The checks are scripts, not the model judging its own work. Stack knowledge lives in fetched recipes, so one process fits PHP, Python, Go, Drupal, or a Claude plugin.",
+  "author": {
+    "name": "camoa"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/camoa/claude-skills",
+  "keywords": [
+    "development",
+    "workflow",
+    "architecture",
+    "code-review",
+    "testing",
+    "tdd",
+    "solid",
+    "dry",
+    "security",
+    "prior-art",
+    "specification",
+    "agnostic"
+  ]
+}
