@@ -48,7 +48,9 @@ Accept task names in these forms:
 | Folder absent, name invalid | Report the validation error and abort. Do not scaffold. |
 | Ambiguous match (e.g., same name in two epics) | Report candidate matches and abort. |
 
-This scaffolding-on-miss is required so `/next`'s brand-new-task offer (`commands/next.md` v4.2.3+ "Scope offer for brand-new tasks") can hand off to `/scope` before `/research` creates the folder. Without scaffolding, `/scope` aborts and the user has to skip scope, then run `/research`, then accept the alignment retrofit prompt — which feels like the framework "forgot" the earlier scope offer.
+Scaffolding-on-miss stays, but **the reason changed in v5.51.0** and the old one is no longer true. It used to exist because `/next` handed a brand-new task to `/scope` before any folder existed. `/next` now creates the task itself and offers the contract after, so the handoff it was written for does not happen. What it still serves is a person invoking `/scope <name>` directly on a task that does not exist yet: the conversation needs a home, and aborting would send them to `/research` first, which is the order this command exists to avoid.
+
+**Scaffolding a stub is not the same as requiring a contract.** Since v5.51.0 a task may be captured with no `alignment.md` at all and stay that way until it is worked; the requirement moved to `/research`, which refuses to author `research.md` without one. `/scope` itself never blocks. Material a task was captured WITH goes in `inputs/`, not `research/` — see `references/research-walkthrough.md`, "Creation-time material".
 
 ### Stub scaffolding
 
