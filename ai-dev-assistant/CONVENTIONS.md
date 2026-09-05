@@ -80,8 +80,8 @@ The 7 hardened surfaces, by category:
 
 1. **Pre-analysis epic gate** at `/research` — always-on (was: signal-conditional). Invokes `analysis-agent` regardless of signals; user sees verbatim agent output before pick.
 2. **Coverage-mapping requirement** at end-of-`/research` — `## Coverage Mapping` H2 mandatory in research.md; verified by `scripts/coverage-mapping-check.sh`; refuses Phase 1 `[x]` on fail.
-3. **Skill-review** at `/complete` — fires when staged/branched changes include `skills/*/SKILL.md`; invokes `plugin-creation-tools:skill-quality-reviewer`.
-4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `/plugin-creation-tools:validate --strict` (the framework dogfoods strict validation on its own plugin changes). `--skip-plugin-validate <reason>` still bypasses by explicit declaration.
+3. **Skill-review** at `/complete` — fires when staged/branched changes include `skills/*/SKILL.md`; invokes `plugin-dev:skill-reviewer`.
+4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `claude-plugin-checks`' `check` skill with `--strict` (the framework dogfoods strict validation on its own plugin changes). `--skip-plugin-validate <reason>` still bypasses by explicit declaration.
 5. **Phase-command-bypass** detected by PreToolUse hook on Write to phase artifacts — non-blocking audit when no `/research` / `/design` / `/implement` slash command is active.
 
 **Deterministic surfaces (2)** — fire shell scripts that detect+act without user prompts; bypass-by-declaration is impossible:

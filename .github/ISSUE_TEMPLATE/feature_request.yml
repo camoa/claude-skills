@@ -15,7 +15,7 @@ body:
       description: Which plugin is this request for?
       options:
         - dev-guides-navigator
-        - plugin-creation-tools
+        - claude-plugin-checks
         - ai-dev-assistant
         - code-quality-tools
         - brand-content-design

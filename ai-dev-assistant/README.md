@@ -61,7 +61,7 @@ At no point did the framework choose anything for you. The scope contract is whe
 Reach for it for any task that creates code: a feature, a module, a component, a refactor, or a plugin. It is the default disciplined path, not a special-occasion tool.
 
 - **Any framework.** The engine is stack-agnostic. A *process recipe* supplies the framework-specific method for each phase (how to research, design, implement, and review on that stack), resolved through `dev-guides-navigator`. Drupal, Next.js, or any stack with a recipe runs the same flow, and adding a stack means authoring its recipe, not changing the engine.
-- **Claude Code plugins and skills too.** When a task touches plugin files, the review method adds `plugin-creation-tools` for skill, command, agent, and hook structure and `code-paper-test` for behavioral verification (mentally executing a skill or command to catch contract violations a structural check misses), so building a plugin runs the same Research → Architecture → Implementation → Review lifecycle as any other code.
+- **Claude Code plugins and skills too.** When a task touches plugin files, the review method adds `claude-plugin-checks` for structural checks and `code-paper-test` for behavioral verification (mentally executing a skill or command to catch contract violations a structural check misses), so building a plugin runs the same Research → Architecture → Implementation → Review lifecycle as any other code.
 - **Long or autonomous sessions**, where you need the discipline to hold while you are not watching every step.
 
 The only things that do not need it are a one-line fix or a throwaway spike. It is additive either way: flat tasks stay first-class, every scope prompt is a soft-nudge you can decline, and nothing blocks the lifecycle except the review gates you asked for.
@@ -104,7 +104,7 @@ Phases apply per task, not per project: a project can have tasks at different ph
 - `dev-guides-navigator`: online guide discovery with caching (1200+ atomic guides across frameworks, CSS, and dev practices).
 - `code-quality-tools` (minimum version 3.0.0): powers the `/validate:tdd|solid|dry|security` wrappers.
 
-**Recommended companions:** `superpowers` (TDD, brainstorming, verification), `code-quality-tools` (static analysis, security), `plugin-creation-tools` (invoked by the skill-review and plugin-validate gates when a task touches plugin files), `code-paper-test` (behavioral, mental-execution verification of skills and commands during plugin review).
+**Recommended companions:** `superpowers` (TDD, brainstorming, verification), `code-quality-tools` (static analysis, security), `claude-plugin-checks` (invoked by the plugin-validate gate when a task touches plugin files), `code-paper-test` (behavioral, mental-execution verification of skills and commands during plugin review).
 
 For `/validate:team` specifically: CLI v2.1.32+ and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. When unavailable it falls back to `/validate:all`.
 
