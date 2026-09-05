@@ -1,0 +1,79 @@
+// project.example.jsonc — a worked example of <projectPath>/project.json.
+//
+// This file is documentation, read by a person, never by a script. Real project files are plain
+// JSON with no comments, validated against project-schema.json in this same folder. The comments
+// below cite the decision (D<n>, from 02-decisions.md) or contract section that explains each
+// field. Delete this file's comments and its content is a valid project.json on its own.
+//
+// This example is a project just past creation, with two fields a later stage has since filled
+// in (processRecipes, agenticRecipes) so their real shape is visible too. A brand-new project has
+// those two as empty arrays instead.
+{
+  // The shape this file was written in. Repair reads format-changes.md by this number instead of
+  // guessing what an old file's shape was (D18).
+  "schemaVersion": 1,
+
+  // Where the code lives. Always set, never "docs-only" or "unknown" — a greenfield project names
+  // the path even before anything exists there (D2). One of the two facts creation asks for (D16).
+  "codePath": "/home/camoa/workspace/example-project",
+
+  // The stack. Drives every recipe and source lookup a later stage makes. The second of the two
+  // facts creation asks for (D16).
+  "frameworks": ["drupal"],
+
+  // Which recipe each stage adopted, and where it came from. Empty at creation; the recipe-
+  // adoption sweep fills one entry in the first time a stage needs a cell it does not have (D14).
+  // "fit" is free text set by the stage that adopted the recipe, not a fixed vocabulary.
+  "processRecipes": [
+    { "key": "research/drupal/prior-art", "source": "hosted-catalog", "fit": "fits" }
+  ],
+
+  // Where guides, playbooks, process recipes, and agentic recipes come from, in precedence order
+  // (D11, D14). Creation writes this one entry, naming the hosted catalog for every kind, so a
+  // project that configures nothing still resolves. "location" is a token or path a source
+  // resolver understands — this example is illustrative, not a literal value fixed by this part.
+  "sources": [
+    { "location": "hosted-catalog", "provides": ["guides", "playbooks", "processRecipes", "agenticRecipes"], "precedence": 1 }
+  ],
+
+  // Per-cell departures from the order in "sources" (D14) — a team's own method for one stage on
+  // one framework, without touching the answer for every other stage. Empty until the recipe-
+  // adoption sweep writes an override. Shown here with one override: research on drupal prefers a
+  // team folder over the catalog.
+  "sourceOverrides": {
+    "research": {
+      "drupal": [
+        { "location": "/home/camoa/workspace/team-playbooks/drupal", "provides": ["processRecipes"], "precedence": 1 }
+      ]
+    }
+  },
+
+  // Whether a task builds in a worktree without being asked first. Set at creation; false unless a
+  // project says otherwise.
+  "worktreeByDefault": false,
+
+  // Whether visual regression is set up, and the path to its surface registry. Null until a visual-
+  // regression setup skill (a later part) runs. Baseline images live in the code repository, beside
+  // the tests that read them — this field points at the registry, never at pixel data (D7).
+  "visualRegression": null,
+
+  // Whether end-to-end testing is set up. Null until an e2e setup skill (a later part) runs. The
+  // shape past "enabled" is intentionally open for that skill to extend.
+  "e2e": null,
+
+  // Whether the memory hook is installed, and which version — so a stale installed copy is a
+  // comparison, not a guess (D10). Not installed by default.
+  "memoryHook": { "installed": false, "version": null },
+
+  // Recipes found while researching this project's own problem, distinct from the stack-level
+  // processRecipes above. Written by the research stage, updated by review (D10). Empty at
+  // creation; shown here with one entry once research has run. Item shape past that is not
+  // decided by this part.
+  "agenticRecipes": [
+    { "topic": "existing rate-limiter in this codebase", "finding": "internal/RateLimiter reused as-is" }
+  ],
+
+  // Stops work starting in this repository without a task. Null until the offer is made; once
+  // made, the offer and the answer are recorded together, so a decline is never re-asked (D10).
+  "taskRule": null
+}
