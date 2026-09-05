@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# check-project.sh — the project check (ideal/project.md "The check" and "Readiness").
+# check-project.sh: the project check (ideal/project.md "The check" and "Readiness").
 #
 # A deterministic reader. It never asks a question, it never fetches anything, it never
 # repairs anything, and it never writes project.json or the registry. It compares one
@@ -11,27 +11,27 @@
 # what this script finds belongs to the skill that calls it, never to this script.
 #
 # Usage:
-#   check-project.sh <projectPath> [--autonomous]
+#   check-project.sh <path> [--autonomous]
 #
-# <projectPath> is the project's own folder, the one holding project.json, never the code
+# <path> is the project's own folder, the one holding project.json, never the code
 # folder. --autonomous marks this run as made with no person present; omit it for an
 # interactive run, the safe default (foundations.md, Run mode: a run that states no mode is
 # interactive).
 #
 # Reads:
-#   <projectPath>/project.json
-#   <plugin root>/scripts/project-schema.json  — the project field list, as data
-#   <plugin root>/scripts/registry-schema.json — the registry field list, as data
-#   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json) — the registry, if it exists
+#   <path>/project.json
+#   <plugin root>/scripts/project-schema.json: the project field list, as data
+#   <plugin root>/scripts/registry-schema.json: the registry field list, as data
+#   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json): the registry, if it exists
 #   whether the directory named by project.json's codePath still exists
 #   $HOME, to apply the code-path safety rules
-#   git -C <projectPath> status --porcelain=v1 --ignored — repository state and ignored files
+#   git -C <path> status --porcelain=v1 --ignored: repository state and ignored files
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
 #
 # Writes:
-#   <projectPath>/records/check-project.json — overwritten every run. See the final section
+#   <path>/records/check-project.json: overwritten every run. See the final section
 #   of this script for the exact shape.
 #
 # Exit codes, each one and only one meaning. When more than one condition is true at once,
@@ -42,9 +42,14 @@
 #      exists; codePath is not a refused location; the registry holds a row for this project
 #      that agrees with it, and no two registry rows share a name; the project folder is a
 #      git repository with no uncommitted work. Nothing more is said.
-#   1  One or more fields are missing from project.json, or present with the wrong shape.
-#      Each is named, on stdout, with the text that would produce it. Nothing is repaired; a
-#      repair is proposed.
+#   1  One or more fields are missing from project.json, present with the wrong shape, or
+#      fail one of the three cross-field checks project-schema.json's own descriptions
+#      promise (a schema checks one field at a time, never two fields against each other):
+#      a playbookSubscriptions key naming a framework this project never declared; a
+#      source's precedence keys not matching its own provides list; or a source's
+#      answersFor naming a framework this project never declared. Each is named, on
+#      stdout, with the text that would produce it. Nothing is repaired; a repair is
+#      proposed.
 #   2  codePath is present and well-formed, but the directory it names does not exist. A
 #      different fact from a missing field: no producer here fixes a code folder that moved
 #      or was deleted. This script cannot tell that case apart from a brand-new project whose
@@ -75,8 +80,9 @@
 #     inside `items` or inside a `$defs` object the property points to, is not checked here,
 #     and no line in this report claims that it was. This is why the registry's own
 #     comparison sees `projects` only as "an array, present", never checking that each row
-#     inside it carries its own required fields — that gap is exactly why the
-#     no-two-rows-share-a-name test below exists as its own, separate step;
+#     inside it carries its own required fields. That gap is exactly why the
+#     no-two-rows-share-a-name test below exists as its own, separate step, the same as the
+#     three project-level cross-field tests in step 4b below;
 #   - `description`, shown verbatim as the repair guidance for a field this script finds
 #     missing or the wrong shape, since neither schema carries a separate short "producer"
 #     string.
@@ -87,7 +93,7 @@
 #
 # A missing registry file is not an error: it is the same "nothing registered yet" state
 # registry.sh itself treats as an empty store. A registry file that exists but will not parse
-# as JSON is a different, worse fact — corrupt, not empty — and is reported as its own
+# as JSON is a different, worse fact, corrupt, not empty, and is reported as its own
 # finding rather than silently treated as empty, per the rule that missing and unreadable are
 # never the same value (foundations.md, Honesty).
 #
@@ -109,9 +115,9 @@ set -u -o pipefail
 
 usage() {
   cat <<'EOF'
-usage: check-project.sh <projectPath> [--autonomous]
+usage: check-project.sh <path> [--autonomous]
 
-  <projectPath>   the project's own folder (holds project.json), not the code folder
+  <path>   the project's own folder (holds project.json), not the code folder
   --autonomous    mark this run as made with no person present (default: interactive)
 EOF
 }
@@ -173,7 +179,16 @@ PROJECT_PATH="$(cd "$PROJECT_PATH_ARG" 2>/dev/null && pwd)" || \
 # 2. Locate the plugin root and the two schema files
 # ---------------------------------------------------------------------------
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# BASH_SOURCE is unset under a literal zsh interpreter, and referencing it under this
+# script's own `set -u` is itself a failure before the check can run. registry.sh's
+# lib/registry.sh branches on ZSH_VERSION for the same reason; this does the same, using
+# $0 under zsh (this script is always run directly, never sourced, so $0 names it there).
+if [ -n "${ZSH_VERSION:-}" ]; then
+  SCRIPT_SOURCE="$0"
+else
+  SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 PROJECT_SCHEMA_FILE="$PLUGIN_ROOT/scripts/project-schema.json"
 REGISTRY_SCHEMA_FILE="$PLUGIN_ROOT/scripts/registry-schema.json"
@@ -200,7 +215,7 @@ fi
 
 PROJECT_FILE="$PROJECT_PATH/project.json"
 
-[ -f "$PROJECT_FILE" ] || die3 "cannot read the project file: $PROJECT_FILE not found — this folder has no project.json yet"
+[ -f "$PROJECT_FILE" ] || die3 "cannot read the project file: $PROJECT_FILE not found. This folder has no project.json yet"
 jq empty "$PROJECT_FILE" 2>/dev/null || die3 "cannot read the project file: $PROJECT_FILE is not valid JSON"
 
 # ---------------------------------------------------------------------------
@@ -213,7 +228,7 @@ JQ_COMPARE='
   # Expected JSON-Schema type names for one property definition. Both schema files use only
   # three shapes for a field: a plain "type", a nullable "oneOf" of null plus one other
   # option, or a bare "$ref" (only ever to an object $def). A jq comparison, never a full
-  # JSON-Schema validator — this reads exactly the three shapes the files actually use.
+  # JSON-Schema validator. This reads exactly the three shapes the files actually use.
   def expected_types:
     if has("type") then
       (.type | if (type == "array") then . else [.] end)
@@ -287,7 +302,7 @@ JQ_COMPARE='
 # --- 4a. project.json against project-schema.json --------------------------
 
 COMPARE_JSON="$(jq -n --slurpfile schema "$PROJECT_SCHEMA_FILE" --slurpfile data "$PROJECT_FILE" "$JQ_COMPARE")" \
-  || die3 "the project field-list comparison itself failed to run — check $PROJECT_SCHEMA_FILE for a malformed entry"
+  || die3 "the project field-list comparison itself failed to run. Check $PROJECT_SCHEMA_FILE for a malformed entry"
 
 MISSING_JSON="$(echo "$COMPARE_JSON" | jq -c '.missing')"
 UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c '.unreadable')"
@@ -317,10 +332,68 @@ STATE_NAMED_IN_MISSING="$(field_named_in "$MISSING_JSON" "state")"
 STATE_NAMED_IN_UNREADABLE="$(field_named_in "$UNREADABLE_JSON" "state")"
 
 # ---------------------------------------------------------------------------
+# 4b. Three cross-field tests project-schema.json's own descriptions promise
+#     but a schema cannot express, since a JSON Schema checks one field at a
+#     time, never two fields against each other:
+#       - every playbookSubscriptions key names a framework this project
+#         declared;
+#       - every source's precedence keys are exactly that source's own
+#         provides list, neither more nor fewer;
+#       - every source's answersFor, where its extent is "frameworks", names
+#         only frameworks this project declared.
+#     Skipped, and said so, when frameworks itself failed the schema check
+#     above: there is nothing to compare the other three fields against.
+# ---------------------------------------------------------------------------
+
+CROSS_FIELD_JQ='
+  ($data[0]) as $p
+  | ($p.frameworks // []) as $fw
+  | (
+      [ (($p.playbookSubscriptions // {}) | keys_unsorted[]) as $k
+        | select(($fw | index($k)) == null)
+        | { field: "playbookSubscriptions",
+            reason: ("key \"" + $k + "\" names a framework this project never declared"),
+            detail: "Each key must be a name this project declared under frameworks." }
+      ]
+      +
+      [ (($p.sources // [])[]) as $s
+        | ($s.provides // []) as $prov
+        | (($s.precedence // {}) | keys_unsorted) as $prec
+        | (($prov - $prec) + ($prec - $prov)) as $diff
+        | select(($diff | length) > 0)
+        | { field: "sources",
+            reason: ("source \"" + ($s.location // "(no location)") + "\" has precedence keys that do not match its provides list: " + ($diff | join(", "))),
+            detail: "precedence must have exactly one key per entry in provides, and no other keys." }
+      ]
+      +
+      [ (($p.sources // [])[]) as $s
+        | ($s.answersFor // {}) as $af
+        | select(($af.extent // "") == "frameworks")
+        | (($af.frameworks // [])[]) as $f
+        | select(($fw | index($f)) == null)
+        | { field: "sources",
+            reason: ("source \"" + ($s.location // "(no location)") + "\" answersFor names framework \"" + $f + "\", which this project never declared"),
+            detail: "answersFor frameworks entries must be names this project declared under frameworks." }
+      ]
+    )
+'
+
+CROSS_FIELD_ISSUES_JSON='[]'
+CROSS_FIELD_TEST_NOTE="skipped: frameworks is missing or not well-formed above, so there is nothing to compare the other fields against"
+
+if [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREADABLE" = "false" ]; then
+  CROSS_FIELD_ISSUES_JSON="$(jq -n --slurpfile data "$PROJECT_FILE" "$CROSS_FIELD_JQ")" \
+    || die3 "the cross-field comparison itself failed to run. Check project.json for a malformed sources or playbookSubscriptions entry"
+  CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, source precedence against each source's own provides, and source answersFor frameworks against frameworks"
+fi
+
+CROSS_FIELD_COUNT="$(printf '%s' "$CROSS_FIELD_ISSUES_JSON" | jq 'length')"
+
+# ---------------------------------------------------------------------------
 # 5. codePath: does the directory it names still exist?
 # ---------------------------------------------------------------------------
 
-CODEPATH_EXISTS_JSON="null"   # unknown — codePath itself is missing or unreadable
+CODEPATH_EXISTS_JSON="null"   # unknown: codePath itself is missing or unreadable
 if [ "$CODEPATH_NAMED_IN_MISSING" = "false" ] && [ "$CODEPATH_NAMED_IN_UNREADABLE" = "false" ] \
    && [ "$CODEPATH_IS_STRING" = "true" ]; then
   CODEPATH_VALUE="$(echo "$CODEPATH_VALUE_JSON" | jq -r '.')"
@@ -427,7 +500,7 @@ if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
   : # nothing to compare; the report says so under "Registry:" below
 else
   REG_COMPARE_JSON="$(jq -n --slurpfile schema "$REGISTRY_SCHEMA_FILE" --slurpfile data <(printf '%s' "$REGISTRY_JSON") "$JQ_COMPARE")" \
-    || die3 "the registry field-list comparison itself failed to run — check $REGISTRY_SCHEMA_FILE for a malformed entry"
+    || die3 "the registry field-list comparison itself failed to run. Check $REGISTRY_SCHEMA_FILE for a malformed entry"
   REG_MISSING_JSON="$(echo "$REG_COMPARE_JSON" | jq -c '.missing')"
   REG_UNREADABLE_JSON="$(echo "$REG_COMPARE_JSON" | jq -c '.unreadable')"
   REG_MISSING_COUNT="$(echo "$REG_COMPARE_JSON" | jq '.missing | length')"
@@ -451,7 +524,7 @@ else
   DUPLICATE_NAMES_JSON="$(printf '%s' "$REGISTRY_JSON" | jq -c '
     [ .projects[]? | select((.name? // null) != null and (.name | type) == "string" and (.name | length) > 0) ]
     | group_by(.name)
-    | map(select(length > 1) | {name: .[0].name, count: length, projectPaths: (map(.projectPath // null))})
+    | map(select(length > 1) | {name: .[0].name, count: length, paths: (map(.path // null))})
   ')"
   UNNAMED_ROW_COUNT="$(printf '%s' "$REGISTRY_JSON" | jq '
     [ .projects[]? | select((.name? // null) == null or (.name | type) != "string" or (.name | length) == 0) ] | length
@@ -476,11 +549,11 @@ REGISTRY_ROW_NOTE="skipped: the registry file is corrupt"
 
 if [ "$REGISTRY_FILE_STATE" != "corrupt" ]; then
   REGISTRY_ROW_JSON="$(printf '%s' "$REGISTRY_JSON" | jq -c --arg pp "$PROJECT_PATH" '
-    [ .projects[]? | select((.projectPath // "" | sub("/+$"; "")) == ($pp | sub("/+$"; ""))) ] | first // null
+    [ .projects[]? | select((.path // "" | sub("/+$"; "")) == ($pp | sub("/+$"; ""))) ] | first // null
   ')"
   if [ "$REGISTRY_ROW_JSON" != "null" ]; then
     REGISTRY_ROW_FOUND="true"
-    REGISTRY_ROW_MATCHED_BY="projectPath"
+    REGISTRY_ROW_MATCHED_BY="path"
   elif [ "$CODEPATH_IS_STRING" = "true" ] && [ "$CODEPATH_NAMED_IN_MISSING" = "false" ] \
        && [ "$CODEPATH_NAMED_IN_UNREADABLE" = "false" ]; then
     REGISTRY_ROW_JSON="$(printf '%s' "$REGISTRY_JSON" | jq -c --arg cp "$CODEPATH_VALUE" '
@@ -527,7 +600,7 @@ $(jq -n -c --arg f "$field" --argjson pv "$proj_json" --argjson rv "$reg_json" '
       REGISTRY_MISMATCHES_JSON="$(printf '%s\n' "$MISMATCH_ITEMS" | jq -c -s '[.[] | select(. != null)]')"
     fi
   else
-    REGISTRY_ROW_NOTE="not found: no registry row's projectPath or codePath matches this project"
+    REGISTRY_ROW_NOTE="not found: no registry row's path or codePath matches this project"
   fi
 fi
 
@@ -579,7 +652,7 @@ fi
 # ---------------------------------------------------------------------------
 # 11. Readiness (ideal/project.md, "Readiness"): a code path, a framework,
 #     and the check passing on both. codePath naming a refused location
-#     also blocks readiness — a refused path is never ready for work, even
+#     also blocks readiness. A refused path is never ready for work, even
 #     when the directory happens to exist.
 # ---------------------------------------------------------------------------
 
@@ -611,7 +684,7 @@ case "$SAFETY_VERDICT" in
   *)
     if [ "$CODEPATH_EXISTS_JSON" = "false" ]; then
       EXIT_CODE=2
-    elif [ "$MISSING_COUNT" -gt 0 ] || [ "$UNREADABLE_COUNT" -gt 0 ]; then
+    elif [ "$MISSING_COUNT" -gt 0 ] || [ "$UNREADABLE_COUNT" -gt 0 ] || [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
       EXIT_CODE=1
     elif [ "$REG_MISSING_COUNT" -gt 0 ] || [ "$REG_UNREADABLE_COUNT" -gt 0 ] \
          || [ "$REGISTRY_ROW_FOUND" = "false" ] || [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ] \
@@ -631,7 +704,7 @@ if [ "$MODE" = "autonomous" ] && [ "$EXIT_CODE" -ne 0 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 13. Print the report (stdout, always non-empty — never exit 0 with nothing
+# 13. Print the report (stdout, always non-empty. Never exit 0 with nothing
 #     said)
 # ---------------------------------------------------------------------------
 
@@ -646,12 +719,12 @@ case "$CODEPATH_EXISTS_JSON" in
     echo "Code path: $(echo "$CODEPATH_VALUE_JSON" | jq -r '.') (exists)"
     ;;
   false)
-    echo "Code path: $(echo "$CODEPATH_VALUE_JSON" | jq -r '.') — this folder does not exist."
+    echo "Code path: $(echo "$CODEPATH_VALUE_JSON" | jq -r '.'). This folder does not exist."
     echo "  A new project's folder can be empty until the code is written there. If this project"
     echo "  is not new, only its owner can say where the code went. Nothing here fixes either case."
     ;;
   null)
-    echo "Code path: not set — see the missing or unreadable fields below."
+    echo "Code path: not set. See the missing or unreadable fields below."
     ;;
 esac
 
@@ -659,7 +732,7 @@ echo "Code path safety: $SAFETY_VERDICT"
 echo "  $SAFETY_DETAIL"
 echo
 
-echo "Project file against its schema — fields present and well-formed: $((FIELD_COUNT - MISSING_COUNT - UNREADABLE_COUNT))/$FIELD_COUNT"
+echo "Project file against its schema, fields present and well-formed: $((FIELD_COUNT - MISSING_COUNT - UNREADABLE_COUNT))/$FIELD_COUNT"
 echo
 
 if [ "$MISSING_COUNT" -gt 0 ]; then
@@ -678,11 +751,17 @@ else
 fi
 echo
 
+echo "Cross-field checks: $CROSS_FIELD_TEST_NOTE"
+if [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
+  echo "$CROSS_FIELD_ISSUES_JSON" | jq -r '.[] | "  - " + .field + ": " + .reason + ".\n      " + .detail'
+fi
+echo
+
 echo "Registry: $REGISTRY_PATH ($REGISTRY_FILE_STATE)"
 if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
   echo "  Exists but could not be read as JSON. Every registry test below was skipped."
 else
-  echo "  Registry file against its schema — fields present and well-formed: $((REG_FIELD_COUNT - REG_MISSING_COUNT - REG_UNREADABLE_COUNT))/$REG_FIELD_COUNT"
+  echo "  Registry file against its schema, fields present and well-formed: $((REG_FIELD_COUNT - REG_MISSING_COUNT - REG_UNREADABLE_COUNT))/$REG_FIELD_COUNT"
   if [ "$REG_MISSING_COUNT" -gt 0 ]; then
     echo "  Missing top-level fields:"
     echo "$REG_MISSING_JSON" | jq -r '.[] | "    - " + .field + ": not set.\n        " + .detail'
@@ -691,10 +770,10 @@ else
     echo "  Unreadable top-level fields:"
     echo "$REG_UNREADABLE_JSON" | jq -r '.[] | "    - " + .field + ": " + .reason'
   fi
-  echo "  No two registry rows share a name — $DUPLICATE_NAME_TEST_NOTE"
+  echo "  No two registry rows share a name. $DUPLICATE_NAME_TEST_NOTE"
   if [ "$DUPLICATE_NAME_COUNT" -gt 0 ]; then
     echo "    Duplicate names found:"
-    echo "$DUPLICATE_NAMES_JSON" | jq -r '.[] | "      - \"" + .name + "\" used by " + (.count|tostring) + " rows: " + (.projectPaths | join(", "))'
+    echo "$DUPLICATE_NAMES_JSON" | jq -r '.[] | "      - \"" + .name + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
   fi
   echo "  Registry row for this project: $REGISTRY_ROW_NOTE"
   if [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ]; then
@@ -751,6 +830,7 @@ jq -n \
   --argjson codePath "$CODEPATH_VALUE_JSON" \
   --argjson missingFields "$MISSING_JSON" \
   --argjson unreadableFields "$UNREADABLE_JSON" \
+  --argjson crossFieldIssues "$CROSS_FIELD_ISSUES_JSON" \
   --argjson codePathExists "$CODEPATH_EXISTS_JSON" \
   --arg codePathSafety "$SAFETY_VERDICT" \
   --arg codePathSafetyDetail "$SAFETY_DETAIL" \
@@ -777,6 +857,7 @@ jq -n \
     codePathSafety: {verdict: $codePathSafety, detail: $codePathSafetyDetail},
     missingFields: $missingFields,
     unreadableFields: $unreadableFields,
+    crossFieldIssues: $crossFieldIssues,
     ignoredFiles: $ignoredFiles,
     registry: {
       fileState: $registryFileState,

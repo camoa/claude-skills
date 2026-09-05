@@ -2,9 +2,9 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | unregister <name-or-path> | task-rule <name-or-path> [--remove] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-worktree-default <name-or-path> <true|false> | unregister <name-or-path> | task-rule <name-or-path> [--remove] | uninstall <name-or-path>]"
 arguments: [action, target]
-allowed-tools: Bash
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
 
 # Project
@@ -14,8 +14,10 @@ one: which project owns this directory, make one, switch to another, end one, or
 Read the argument once and follow the matching section below. Every section that touches a
 project runs the check before it finishes, and shows the whole report.
 
-Every command below is a Bash call, and none is pre-approved: each one asks for approval to run,
-in both run modes.
+Every command below runs one of two scripts, `project-actions.sh` or `detect-framework.sh`. Both
+are named in this skill's own grant, so they run without asking, in both run modes. Any other
+Bash command, such as canonicalizing a path by hand, is not covered by that grant and still asks
+for approval.
 
 ## Determine the run mode
 
@@ -157,7 +159,8 @@ Ending a project sets one of its three states. Every transition is reversible, s
 complete or archived project is just this same call with `active`.
 
 Ask for the reason first, in one line, unless it is already obvious from what was just said; it
-becomes the commit's own `Why`. Then run:
+becomes the commit's own `Why`. Autonomous: nobody is present to answer; use the reason already
+said, if any, or record it as `(autonomous run, no reason given)`, and continue. Then run:
 ```
 AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
   state "<target>" <active|complete|archived> -- <reason...>
@@ -167,6 +170,48 @@ reason, and reports what it found for `OPEN TASKS`. Show that line as-is: it say
 open when a task system exists, or says plainly that none has been built yet in this project when
 none does. Either way this call never refuses to close a project over what it finds there; it
 only reports it and lets the person decide. Finish by showing the check's report.
+
+## `set-code-path <name-or-path> [<new-code-path>]`
+
+Changing the code path detects and proposes a candidate the same way creation does, not only at
+creation.
+
+Given explicitly: canonicalize it by running `cd "<path>" 2>/dev/null && pwd -P`, then confirm it
+in one line ("Use `<path>` as the code path?"). Autonomous: accept it without asking, recording
+that this run made its own confirmation.
+
+Not given: run
+```
+"${CLAUDE_PLUGIN_ROOT}"/scripts/detect-framework.sh "$(pwd -P)"
+```
+Exit 0: the current directory looks like code. Propose it, naming what was detected, and confirm
+the same way as an explicit path. Exit 1 or 2: nothing to propose from here. Interactive: ask
+"Where does the code live now?" and wait. Autonomous: **halt.** Report that no new code path was
+given or could be proposed, and stop.
+
+Once the new path is known, run:
+```
+AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+  set-code-path "<target>" "<newCodePath>"
+```
+Looks the target up the same way `switch` does. Not found: say so and stop. The same path as
+before: prints `UNCHANGED` and stops there. Otherwise it writes the new code path into the
+project file and the registry copy, commits the change, and runs the check. Exit code 5 here
+means the same refused location it means at creation, and this action undoes the same way
+creation does: the script restores the old code path in both places before reporting the
+refusal, so nothing is left pointing at a location that was never accepted. Show the whole
+output either way.
+
+## `set-worktree-default <name-or-path> <true|false>`
+
+Whether a task builds in a worktree without being asked. Settable at creation and at any later
+time, the same as the task rule. Run:
+```
+AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+  set-worktree-default "<target>" <true|false>
+```
+This only ever touches AIDA's own project file, never the user's repository, so it needs no
+confirmation. It writes the field, commits the change, and runs the check. Show the whole output.
 
 ## `unregister <name-or-path>`
 
@@ -188,9 +233,11 @@ context; `CLAUDE.md` is an instruction the harness tells the model it must follo
 whole reason this exists as a separate, deliberate write.
 
 Confirm before writing: show what will change (a new block, or a refreshed one if already
-present) and ask for a plain yes or no. On yes, run:
+present) and ask for a plain yes or no. Autonomous: nobody is present to answer; invoking
+`task-rule` at all is itself the request, so skip the confirmation, record that this run made
+its own confirmation, and continue. On yes, or under an autonomous run, run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh task-rule "<target>" -- <reason...>
+AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh task-rule "<target>" -- <reason...>
 ```
 Refuses when the project has no code path, or the code path names a directory that does not
 exist yet, since either way there is no repository to write into; say so and stop rather than
@@ -205,7 +252,9 @@ asking again later in the same turn.
 
 Cleaning up removes AIDA's own instructions from the code repository, and nothing else: never
 tests, never test configuration, never any tooling. Confirm before running, since this touches
-the user's own repository:
+the user's own repository. Autonomous: nobody is present to answer; invoking `uninstall` at all
+is itself the request, so skip the confirmation, record that this run made its own confirmation,
+and continue:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh uninstall "<target>"
 ```
@@ -237,7 +286,7 @@ Read its exit code to decide what happens next, never its text alone:
 | 2 | The code path does not exist on disk. | Right after `create`, this is expected; say so and move on. Elsewhere, only the project's owner can say where the code went, and nothing here fixes it. Say that plainly and stop. |
 | 3 | The check itself could not run. | Show the error text and stop. |
 | 4 | The registry disagrees with the project file, has no row for it, or two rows share a name. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above; a shared name needs a person to rename one project. |
-| 5 | The code path names a refused location: a system root, the home directory, or anything above it. | Say why it was refused. Right after `create`, the script has already undone the creation; elsewhere, ask for a corrected code path. |
+| 5 | The code path names a refused location: a system root, the home directory, or anything above it. | Say why it was refused. Right after `create` or `set-code-path`, the script has already undone the change; elsewhere, ask for a corrected code path. |
 | 6 | The project folder is not yet a git repository, or holds uncommitted work. | Say which. Not a git repository yet only happens on a project that predates this check; running `git init` there is the repair, and this skill does not do it silently. Uncommitted work is worth showing before starting anything else on top of it. |
 
 The check never asks a question, in either mode. When the run is autonomous and a non-zero exit

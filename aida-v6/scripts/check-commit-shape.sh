@@ -38,6 +38,14 @@
 
 set -u -o pipefail
 
+# Under zsh, array indices start at 1 by default; bash always starts at 0. This script
+# indexes MSG_LINES the bash way throughout, so a literal zsh interpreter needs KSH_ARRAYS
+# to read the same index as the same element. Bash never sees this line run: the guard is
+# false for it, and the command itself is only ever reached under zsh.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  setopt KSH_ARRAYS 2>/dev/null
+fi
+
 usage() {
   cat <<'EOF'
 usage: check-commit-shape.sh <message-file>
@@ -97,12 +105,12 @@ esac
 # 2. Split into lines. Bash 3.2-safe: no mapfile.
 # ---------------------------------------------------------------------------
 
-LINES=()
+MSG_LINES=()
 while IFS= read -r line || [ -n "$line" ]; do
-  LINES+=("$line")
+  MSG_LINES+=("$line")
 done < <(printf '%s\n' "$MSG_TEXT")
 
-LINE_COUNT="${#LINES[@]}"
+LINE_COUNT="${#MSG_LINES[@]}"
 [ "$LINE_COUNT" -ge 1 ] || die3 "the message is empty"
 
 # ---------------------------------------------------------------------------
@@ -112,13 +120,13 @@ LINE_COUNT="${#LINES[@]}"
 MISSING=()
 UNREADABLE=()
 
-SUBJECT="${LINES[0]}"
+SUBJECT="${MSG_LINES[0]}"
 if [ -z "$SUBJECT" ]; then
   MISSING+=("What changed: line 1 is empty. This is the subject: what changed, in plain words.")
 fi
 
-if [ "$LINE_COUNT" -ge 2 ] && [ -n "${LINES[1]}" ]; then
-  UNREADABLE+=("(separator): line 2 must be blank, separating the subject from the fields below. Found: '${LINES[1]}'")
+if [ "$LINE_COUNT" -ge 2 ] && [ -n "${MSG_LINES[1]}" ]; then
+  UNREADABLE+=("(separator): line 2 must be blank, separating the subject from the fields below. Found: '${MSG_LINES[1]}'")
 fi
 
 # ---------------------------------------------------------------------------
@@ -155,7 +163,7 @@ strip_label() {
 
 i=2
 while [ "$i" -lt "$LINE_COUNT" ]; do
-  line="${LINES[$i]}"
+  line="${MSG_LINES[$i]}"
   idx="$(field_index_for_line "$line")"
 
   if [ "$idx" -eq -1 ]; then

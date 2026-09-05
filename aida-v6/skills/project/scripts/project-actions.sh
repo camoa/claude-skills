@@ -21,6 +21,8 @@
 #   project-actions.sh switch   <name-or-codePath>
 #   project-actions.sh list     [active|complete|archived]...
 #   project-actions.sh state    <name-or-codePath> <active|complete|archived> -- <why...>
+#   project-actions.sh set-code-path <name-or-codePath> <newCodePath>
+#   project-actions.sh set-worktree-default <name-or-codePath> <true|false>
 #   project-actions.sh unregister <name-or-codePath>
 #   project-actions.sh task-rule <name-or-codePath> -- <why...>
 #   project-actions.sh task-rule-remove <name-or-codePath>
@@ -75,6 +77,8 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh switch <name-or-codePath>
        project-actions.sh list [active|complete|archived]...
        project-actions.sh state <name-or-codePath> <active|complete|archived> -- <why...>
+       project-actions.sh set-code-path <name-or-codePath> <newCodePath>
+       project-actions.sh set-worktree-default <name-or-codePath> <true|false>
        project-actions.sh unregister <name-or-codePath>
        project-actions.sh task-rule <name-or-codePath> -- <why...>
        project-actions.sh task-rule-remove <name-or-codePath>
@@ -181,7 +185,7 @@ resolve_target() {
 # Renders the five-field commit shape from templates/project-commit.md, checks its own shape
 # before use (never trust an unrendered corner case to slip past silently), then commits it as
 # the project folder's own git identity. AIDA commits its own files in the project folder and
-# never in the code repository. Every git call below is "-C <projectPath>", and codePath is
+# never in the code repository. Every git call below is "-C <path>", and codePath is
 # never passed to git as a working directory anywhere in this file.
 commit_project() {
   local project_path="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
@@ -252,12 +256,20 @@ do_create() {
 
   code_path="$(canon_path "$code_path")"
 
-  if [ -r "$REGISTRY_FILE" ] && jq -e --arg c "$code_path" \
-      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c)' "$REGISTRY_FILE" >/dev/null 2>&1; then
+  # The library's own reader, not a raw read of REGISTRY_FILE: registry__current tells a missing
+  # store (fine, nothing registered yet) apart from a corrupt one (refuses and fails loudly), so
+  # a store that will not parse stops creation here, before the folder, the git init or the first
+  # commit, rather than surfacing only when registry_add_project makes the same read again at the
+  # end (foundations.md, Honesty: a reader that cannot read fails loudly).
+  local registry_snapshot
+  registry_snapshot="$(registry__current)" || die3 "the registry could not be read; nothing was written. See the error above."
+
+  if printf '%s' "$registry_snapshot" | jq -e --arg c "$code_path" \
+      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c)' >/dev/null 2>&1; then
     die3 "a project is already registered for $code_path. Nothing was written."
   fi
-  if [ -r "$REGISTRY_FILE" ] && jq -e --arg n "$name" \
-      'any(.projects[]?; .name == $n)' "$REGISTRY_FILE" >/dev/null 2>&1; then
+  if printf '%s' "$registry_snapshot" | jq -e --arg n "$name" \
+      'any(.projects[]?; .name == $n)' >/dev/null 2>&1; then
     die3 "the name '$name' is already registered. Choose a different name."
   fi
 
@@ -377,7 +389,7 @@ do_report() {
     echo "CASE: 1"
     echo "$match"
     local project_path
-    project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+    project_path="$(printf '%s' "$match" | jq -r '.path')"
     registry_touch_last_accessed "$project_path"
     run_check "$project_path"
     return $?
@@ -392,7 +404,7 @@ do_report() {
       echo "CASE: 2"
       echo "$match"
       local project_path
-      project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+      project_path="$(printf '%s' "$match" | jq -r '.path')"
       registry_touch_last_accessed "$project_path"
       run_check "$project_path"
       return $?
@@ -408,7 +420,9 @@ do_report() {
     echo "DECLINED: false"
   fi
   echo "PROJECTS:"
-  registry_list_projects
+  # Offered as work: complete stops being offered and archived is not in the list unless asked
+  # for (ideal/project.md, "New"). registry_list_projects filters to this when a state is named.
+  registry_list_projects active
   return 1
 }
 
@@ -421,7 +435,7 @@ do_switch() {
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
 
-  project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
   cwd="$(pwd -P)"
 
   # ideal/project.md, "Picking up work": a remembered choice exists for a directory that no
@@ -477,7 +491,7 @@ do_state() {
   local match project_path old_state
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
-  project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
   old_state="$(jq -r '.state' "$project_path/project.json" 2>/dev/null)"
 
   if [ "$old_state" = "$new_state" ]; then
@@ -518,6 +532,126 @@ do_state() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# set-code-path: changing the code path detects and proposes a candidate the same way creation
+# does, not only at creation (ideal/project.md, "What stands, from version 5"). The skill body
+# does the proposing and confirming; this does the write, the registry sync, and the same
+# undo-on-refusal that create already performs.
+# ------------------------------------------------------------------------------------------------
+
+do_set_code_path() {
+  local target="${1:?set-code-path: a name or a code path is required}"
+  local new_path="${2:?set-code-path: a new code path is required}"
+  local match project_path old_path
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  old_path="$(printf '%s' "$match" | jq -r '.codePath')"
+
+  new_path="$(canon_path "$new_path")"
+
+  if [ "$(strip_slash "$new_path")" = "$(strip_slash "$old_path")" ]; then
+    echo "UNCHANGED: ${project_path} already has this code path."
+    run_check "$project_path"
+    return $?
+  fi
+
+  local registry_snapshot
+  registry_snapshot="$(registry__current)" || die3 "the registry could not be read; nothing was changed. See the error above."
+  if printf '%s' "$registry_snapshot" | jq -e --arg c "$new_path" --arg p "$(strip_slash "$project_path")" \
+      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c and (.path // "" | sub("/+$"; "")) != $p)' \
+      >/dev/null 2>&1; then
+    die3 "a project is already registered for $new_path. Nothing was changed."
+  fi
+
+  local tmp
+  tmp="$(mktemp)" || die3 "cannot create a temp file"
+  jq --arg c "$new_path" '.codePath = $c' "$project_path/project.json" > "$tmp" \
+    && mv "$tmp" "$project_path/project.json" \
+    || { rm -f "$tmp"; die3 "could not update codePath in $project_path/project.json"; }
+
+  local new_registry
+  new_registry="$(printf '%s' "$registry_snapshot" | jq --arg p "$(strip_slash "$project_path")" --arg c "$new_path" '
+    (.projects[] | select((.path // "" | sub("/+$"; "")) == $p) | .codePath) = $c
+  ')" || die3 "could not compute the updated registry"
+  printf '%s' "$new_registry" | registry__write \
+    || printf 'project-actions: project.json now points at %s, but the registry copy could not be\n  updated. The check below will report the mismatch.\n' "$new_path" >&2
+
+  commit_project "$project_path" \
+    "Set code path to ${new_path}" \
+    "requested" \
+    "" \
+    "" \
+    "project" "code-path" \
+    || printf 'project-actions: the code-path change was written but not committed.\n' >&2
+
+  run_check "$project_path"
+  local check_rc=$?
+
+  # Exit 5 is the check's own safety refusal, the same one create undoes. A refused code path is
+  # never kept here either: both copies are restored to what they were before this call.
+  if [ "$check_rc" -eq 5 ]; then
+    local tmp2 restore_registry
+    tmp2="$(mktemp)" || die3 "cannot create a temp file"
+    jq --arg c "$old_path" '.codePath = $c' "$project_path/project.json" > "$tmp2" \
+      && mv "$tmp2" "$project_path/project.json" \
+      || { rm -f "$tmp2"; die3 "could not restore the previous codePath in $project_path/project.json"; }
+
+    restore_registry="$(registry__current)" && restore_registry="$(printf '%s' "$restore_registry" | jq --arg p "$(strip_slash "$project_path")" --arg c "$old_path" '
+      (.projects[] | select((.path // "" | sub("/+$"; "")) == $p) | .codePath) = $c
+    ')" && printf '%s' "$restore_registry" | registry__write
+
+    commit_project "$project_path" \
+      "Restore code path after a refused change" \
+      "the proposed code path named a refused location; see the safety report" \
+      "" \
+      "" \
+      "project" "code-path" \
+      || printf 'project-actions: the restore was written but not committed.\n' >&2
+
+    printf 'project-actions: %s names a refused location. The code path was restored to %s.\n' "$new_path" "$old_path" >&2
+    printf 'See the safety report above for the exact reason.\n' >&2
+    return 5
+  fi
+
+  return "$check_rc"
+}
+
+# ------------------------------------------------------------------------------------------------
+# set-worktree-default: whether a task builds in a worktree without being asked. Settable at
+# creation and, like the task rule, at any later time too.
+# ------------------------------------------------------------------------------------------------
+
+do_set_worktree_default() {
+  local target="${1:?set-worktree-default: a name or a code path is required}"
+  local value="${2:?set-worktree-default: true or false is required}"
+  case "$value" in
+    true|false) : ;;
+    *) die3 "set-worktree-default: must be true or false, got: $value" ;;
+  esac
+
+  local match project_path
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+
+  local tmp
+  tmp="$(mktemp)" || die3 "cannot create a temp file"
+  jq --argjson w "$value" '.worktreeByDefault = $w' "$project_path/project.json" > "$tmp" \
+    && mv "$tmp" "$project_path/project.json" \
+    || { rm -f "$tmp"; die3 "could not update worktreeByDefault in $project_path/project.json"; }
+
+  commit_project "$project_path" \
+    "Set worktreeByDefault to ${value}" \
+    "requested" \
+    "" \
+    "" \
+    "project" "worktree-default" \
+    || printf 'project-actions: worktreeByDefault was written but not committed.\n' >&2
+
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
 # unregister: drops the row, leaves both folders untouched
 # ------------------------------------------------------------------------------------------------
 
@@ -525,7 +659,7 @@ do_unregister() {
   local target="${1:?unregister: a name or a code path is required}" match project_path code_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
-  project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
 
   registry_remove_project "$project_path" || die3 "could not remove the registry row for $project_path"
@@ -572,11 +706,11 @@ do_task_rule() {
   local why="$*"
   [ -n "$why" ] || why="requested"
 
-  local match code_path project_path project_name claude_md present
+  local match code_path project_path project_name claude_md present tmp
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
-  project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
   project_name="$(printf '%s' "$match" | jq -r '.name')"
 
   # ideal/project.md, "Starting a new project": everything opted into can be set at any time, but
@@ -594,10 +728,21 @@ do_task_rule() {
   present="false"
   [ -f "$claude_md" ] && grep -qF "$TASK_RULE_BEGIN" "$claude_md" 2>/dev/null && present="true"
 
-  [ -f "$claude_md" ] || : > "$claude_md"
+  # Ported from version 5's task-rule-install.sh: check writability before writing, and report a
+  # distinct failure rather than printing WRITTEN or REFRESHED regardless of what happened.
+  if [ ! -f "$claude_md" ]; then
+    : > "$claude_md" || {
+      echo "REFUSED: ${claude_md} could not be created. Check permissions on ${code_path}." >&2
+      return 1
+    }
+  fi
+  [ -w "$claude_md" ] || {
+    echo "REFUSED: ${claude_md} is not writable. The task rule was not written." >&2
+    return 1
+  }
 
   if [ "$present" = "true" ]; then
-    local tmp block_file
+    local block_file
     tmp="$(mktemp)"
     block_file="$(mktemp)"
     task_rule_block "$project_name" > "$block_file"
@@ -616,7 +761,6 @@ do_task_rule() {
     echo "WRITTEN: ${claude_md}"
   fi
 
-  local tmp
   tmp="$(mktemp)" || die3 "cannot create a temp file"
   jq '.taskRule = {offered: true, accepted: true}' "$project_path/project.json" > "$tmp" \
     && mv "$tmp" "$project_path/project.json" \
@@ -638,7 +782,7 @@ do_task_rule_remove() {
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
-  project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   local claude_md="${code_path%/}/CLAUDE.md"
   if [ -f "$claude_md" ] && grep -qF "$TASK_RULE_BEGIN" "$claude_md" 2>/dev/null; then
@@ -683,7 +827,7 @@ do_uninstall() {
   local target="${1:?uninstall: a name or a code path is required}" match project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
-  project_path="$(printf '%s' "$match" | jq -r '.projectPath')"
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   local task_rule_state
   task_rule_state="$(jq -r '.taskRule' "$project_path/project.json" 2>/dev/null)"
@@ -745,6 +889,8 @@ case "$action" in
   switch) do_switch "$@" ;;
   list) do_list "$@" ;;
   state) do_state "$@" ;;
+  set-code-path) do_set_code_path "$@" ;;
+  set-worktree-default) do_set_worktree_default "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
   task-rule-remove) do_task_rule_remove "$@" ;;

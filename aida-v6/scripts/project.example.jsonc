@@ -1,4 +1,4 @@
-// project.example.jsonc: a worked example of <projectPath>/project.json.
+// project.example.jsonc: a worked example of <path>/project.json.
 //
 // This file is documentation, read by a person, never by a script. A real project.json is plain
 // JSON with no comments, validated against project-schema.json in this same folder. Delete every

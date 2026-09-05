@@ -9,8 +9,8 @@ switch to another, or close one out. Type `/project`, with or without arguments.
 
 You type it yourself. Creating, switching, and closing all change what is on disk or which
 project this conversation uses. Nothing here runs on Claude's own judgment: nothing invokes
-it for you. A later part may add an automatic report at the start of a session; until then,
-run `/project` yourself to see where you stand.
+it for you. A session-start hook says which project owns your directory before your first
+turn; run `/project` yourself for the full report, or to create, switch, or close one.
 
 ## What a project is
 
@@ -178,11 +178,14 @@ project surface non-destructive on your filesystem.
 Deleting a project's entry never touches your code, and unregistering never touches the
 project folder either.
 
-Uninstalling removes only AIDA's own instructions: the marker-delimited task-rule block, and
-the memory hook's primer, its script copy, and the settings entries it added. It never
-touches tests, test configuration, or any tooling. A harness AIDA scaffolded, once it lands,
-belongs to the code the same way a linter does, and removing it would be deleting your tests
-rather than tidying up after AIDA.
+Uninstalling removes only AIDA's own instructions: the marker-delimited task-rule block, when
+one was installed. It never touches tests, test configuration, or any tooling. A harness AIDA
+scaffolded, once it lands, belongs to the code the same way a linter does, and removing it
+would be deleting your tests rather than tidying up after AIDA.
+
+The memory hook has no installer yet in this build. Uninstalling reports what it would remove,
+the primer, its script copy, and the settings entries, once that installer exists; today it
+touches none of them, since none of them exist to touch.
 
 Cleanup is usually plural, once a project list carries a real last-used date and a real
 state: a project whose code path is gone, a duplicate entry, and one you have registered but
@@ -220,9 +223,11 @@ what it answers for, and where it ranks against every other source offering the 
 content. Mixing is the point: your playbooks can come from your own folder, your process
 recipes from the hosted catalog, and your guides from a site your team trusts, all at once.
 
-Every new project reads from the hosted catalog by default, for every kind of content, so a
-project that configures nothing still resolves. Pointing a kind at your own source instead,
-a local folder or a site you trust, makes that source win over the catalog for that kind.
+A new project declares no sources at all: the list starts empty, for every kind of content.
+Declaring is cheap and fetching is lazy, so nothing is fetched from the hosted catalog, or
+from anywhere else, until a later stage first needs a guide, a playbook, or a recipe and
+finds no source declared for that kind. Pointing a kind at your own source instead, a local
+folder or a site you trust, makes that source win over the catalog for that kind.
 You can set this per kind, per stage, and per framework: a team's own method for one stage
 can stand alongside the catalog's answer for every other stage.
 
