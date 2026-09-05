@@ -110,7 +110,9 @@ else
     echo "directory. Say no there and this paragraph stops appearing here."
   fi
 
-  OTHERS="$(registry_list_projects | grep -c .)"
+  # Count what the list would show, which excludes complete and archived. Counting every row and
+  # then showing fewer is a number that does not match what happens next.
+  OTHERS="$(registry_list_projects active | grep -c .)"
   if [ "${OTHERS:-0}" -gt 0 ] 2>/dev/null; then
     echo ""
     echo "_(You have ${OTHERS} project(s) set up elsewhere; \`/project\` lists them.)_"

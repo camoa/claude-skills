@@ -443,16 +443,23 @@ SAFETY_DETAIL="codePath is not set, or is not a well-formed string; the safety c
 if [ "$CODEPATH_IS_STRING" = "true" ] && [ "$CODEPATH_NAMED_IN_MISSING" = "false" ] \
    && [ "$CODEPATH_NAMED_IN_UNREADABLE" = "false" ]; then
   CODEPATH_NORM="$(strip_trailing_slash "$CODEPATH_VALUE")"
-  if [ -z "${HOME:-}" ]; then
+  # The system root list does not depend on $HOME, so it is tested first and on its own. It used
+  # to sit inside the branch that needs $HOME, so an environment with no $HOME accepted a code
+  # path of / or /etc and still reported the project ready.
+  case "$CODEPATH_NORM" in
+    "/"|"/etc"|"/usr"|"/bin"|"/sbin"|"/lib"|"/lib64"|"/boot"|"/sys"|"/proc"|"/dev"|"/var"|"/opt"|"/root")
+      SAFETY_VERDICT="refused-system-root"
+      SAFETY_DETAIL="$CODEPATH_NORM is a system root. Refused outright, the same as version 5's set-code-path filter."
+      ;;
+  esac
+
+  if [ "$SAFETY_VERDICT" != "refused-system-root" ]; then
+   if [ -z "${HOME:-}" ]; then
     SAFETY_VERDICT="not-evaluated"
-    SAFETY_DETAIL="\$HOME is not set in this environment; the safety check was not run."
-  else
-    HOME_NORM="$(strip_trailing_slash "$HOME")"
+    SAFETY_DETAIL="\$HOME is not set in this environment; only the system root list was checked."
+   else
+    HOME_NORM="$(strip_trailing_slash "${HOME:-}")"
     case "$CODEPATH_NORM" in
-      "/"|"/etc"|"/usr"|"/bin"|"/sbin"|"/lib"|"/lib64"|"/boot"|"/sys"|"/proc"|"/dev"|"/var"|"/opt"|"/root")
-        SAFETY_VERDICT="refused-system-root"
-        SAFETY_DETAIL="$CODEPATH_NORM is a system root. Refused outright, the same as version 5's set-code-path filter."
-        ;;
       *)
         if [ "$CODEPATH_NORM" = "$HOME_NORM" ]; then
           SAFETY_VERDICT="refused-home"
@@ -469,6 +476,7 @@ if [ "$CODEPATH_IS_STRING" = "true" ] && [ "$CODEPATH_NAMED_IN_MISSING" = "false
         fi
         ;;
     esac
+   fi
   fi
 fi
 
@@ -476,8 +484,16 @@ fi
 # 7. The registry: load it, or note why it could not be loaded
 # ---------------------------------------------------------------------------
 
-REGISTRY_PATH="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
-REGISTRY_EMPTY='{"version":1,"projects":[],"declinedOffers":[],"directoryChoices":[]}'
+# The store lives under the home directory unless a caller names another. Without $HOME there is
+# no default to fall back to, so say that rather than building a path out of an empty string.
+if [ -z "${AIDA_REGISTRY_PATH:-}" ] && [ -z "${HOME:-}" ]; then
+  printf 'check-project: neither AIDA_REGISTRY_PATH nor HOME is set, so the registry has no address.\n' >&2
+  exit 3
+fi
+REGISTRY_PATH="${AIDA_REGISTRY_PATH:-${HOME:-}/.claude/aida/registry.json}"
+# Must match registry.sh's own skeleton exactly, or a store this script invents fails the schema
+# it is checked against. Two skeletons for one file is the drift; there is no second one now.
+REGISTRY_EMPTY='{"version":1,"projects":[],"declinedOffers":[],"acceptedOffers":[],"directoryChoices":[]}'
 REGISTRY_FILE_STATE="empty"   # empty | present | corrupt
 REGISTRY_JSON="$REGISTRY_EMPTY"
 
@@ -661,9 +677,10 @@ READY_REASON=""
 if [ "$CODEPATH_EXISTS_JSON" = "true" ] \
    && [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREADABLE" = "false" ] \
    && [ "$SAFETY_VERDICT" != "refused-system-root" ] && [ "$SAFETY_VERDICT" != "refused-home" ] \
-   && [ "$SAFETY_VERDICT" != "refused-above-home" ]; then
+   && [ "$SAFETY_VERDICT" != "refused-above-home" ] \
+   && [ "${REGISTRY_MISMATCH_COUNT:-0}" -eq 0 ]; then
   READY_JSON="true"
-  READY_REASON="codePath exists, is not a refused location, and frameworks is set"
+  READY_REASON="codePath exists, is not a refused location, frameworks is set, and the registry row agrees with the project file"
 else
   reasons=()
   [ "$CODEPATH_EXISTS_JSON" != "true" ] && reasons+=("codePath does not exist or is not set")
@@ -671,6 +688,9 @@ else
   case "$SAFETY_VERDICT" in
     refused-*) reasons+=("codePath names a refused location ($SAFETY_VERDICT)") ;;
   esac
+  # A registry row that disagrees with the project file is a wrong answer a person acts on: the
+  # list shows one code path and the work happens against another. Readiness said true through it.
+  [ "${REGISTRY_MISMATCH_COUNT:-0}" -gt 0 ] && reasons+=("the registry row disagrees with the project file")
   READY_REASON="$(IFS='; '; echo "${reasons[*]}")"
 fi
 

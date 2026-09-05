@@ -273,13 +273,16 @@ do_create() {
   [ -d "$code_path" ] || printf 'project-actions: %s does not exist yet; it will when the code is written there.\n' "$code_path" >&2
 
   mkdir -p "$projects_home" || die3 "cannot create $projects_home"
-  local project_path="$projects_home/$name"
+  local project_path
+  project_path="$(canon_path "$projects_home/$name")"
   [ ! -e "$project_path" ] || die3 "the project folder $project_path already exists. Pick a different name or remove that folder first."
 
   # The project folder and the code path are never the same folder (ideal/project.md, "What a
-  # project is"). The projects-home base and a real code path rarely collide, but the rule is
-  # checked regardless of how unlikely a given run makes it.
-  if [ "$(strip_slash "$project_path")" = "$(strip_slash "$code_path")" ]; then
+  # project is"). Both sides are canonicalised before they are compared. Comparing a concatenated
+  # string against a canonicalised one let a trailing slash on the base slip past this guard, and
+  # then AIDA's own project folder was the code folder and it committed the user's CLAUDE.md into
+  # its own history.
+  if [ "$project_path" = "$code_path" ]; then
     die3 "the code path and the project folder resolve to the same place ($code_path). Pick a code path outside $projects_home."
   fi
 
@@ -708,14 +711,25 @@ do_task_rule() {
   local match code_path project_path project_name claude_md present tmp
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
-  code_path="$(printf '%s' "$match" | jq -r '.codePath')"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   project_name="$(printf '%s' "$match" | jq -r '.name')"
+  # The project file is authoritative and the registry is an index (ideal/project.md, "What a
+  # project is"). This writes into a repository the person owns, so it reads the code path from
+  # the file rather than from the index copy, which can be stale.
+  code_path="$(jq -r '.codePath // empty' "$project_path/project.json" 2>/dev/null)"
 
   # A decline is recorded and nothing is written, so the offer is never made again. It needs no
   # code path and no repository, because it writes into neither. Version 5 records the same answer
   # at creation, which is why a person is asked once rather than every session.
   if [ "$declining" = "true" ]; then
+    # Recording a decline while the block is actually installed would leave the file saying no and
+    # the repository saying yes. Removing it is a separate, explicit action.
+    claude_md="${code_path%/}/CLAUDE.md"
+    if [ -n "$code_path" ] && [ "$code_path" != "null" ] && [ -f "$claude_md" ] \
+       && grep -qF "$TASK_RULE_BEGIN" "$claude_md" 2>/dev/null; then
+      echo "REFUSED: the task rule is already installed in ${claude_md}. Use --remove to take it out." >&2
+      return 1
+    fi
     tmp="$(mktemp)" || die3 "cannot create a temp file"
     jq '.taskRule = {offered: true, accepted: false}' "$project_path/project.json" > "$tmp" \
       && mv "$tmp" "$project_path/project.json" \

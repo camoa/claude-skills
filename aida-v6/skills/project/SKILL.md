@@ -11,8 +11,9 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions
 
 A project ties one code path to AIDA's own work on it. This skill answers every question about
 one: which project owns this directory, make one, switch to another, end one, or clean one up.
-Read the argument once and follow the matching section below. Every section that touches a
-project runs the check before it finishes, and shows the whole report.
+Read the argument once and follow the matching section below. Every section that changes what a
+project is runs the check before it finishes and shows the whole report. Three do not, because
+they change nothing the check reads: unregistering, removing the task rule, and uninstalling.
 
 Every command below runs one of two scripts, `project-actions.sh` or `detect-framework.sh`. Both
 are named in this skill's own grant, so they run without asking, in both run modes. Any other
