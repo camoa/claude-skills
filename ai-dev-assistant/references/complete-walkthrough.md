@@ -91,11 +91,11 @@ If any matches → fire the gate. If none → skip silently (no audit; not a byp
 
 ### Steps
 
-1. **Invoke** `plugin-creation-tools:skill-quality-reviewer` agent via Task tool against the project's `skills/` directory. Capture full agent output verbatim.
+1. **Invoke** `plugin-dev:skill-reviewer` agent via Task tool against the project's `skills/` directory. Capture full agent output verbatim.
 2. **Display** the literal `prompts:skill-review-decision` template from `references/gate-hardening-prompts.md`. Substitutions: `{{skills_reviewed}}` (comma-list of skill names from the diff), `{{findings}}` (verbatim agent output).
 3. **Block** on user `[a]ccept / [r]emediate / [b]ypass` choice.
 4. **Write audit** to `<task>/_skill-review.json` via `gate-audit-write.sh`. `user_choice: "accepted"` for `[a]`, `"remediated"` for `[r]` (after the user has made remediation edits), `"bypassed"` for `[b]` (with `bypass_reason` from free-text prompt).
-5. **Refusal case:** if `plugin-creation-tools` is not installed, halt with: "Required gate `skill-quality-reviewer` (from plugin-creation-tools) not available. Install plugin-creation-tools or pass `--skip-skill-review <reason>` to bypass." Do NOT degrade silently.
+5. **Refusal case:** if `plugin-dev` is not installed, halt with: "Required gate `skill-reviewer` (from plugin-dev) not available. Install plugin-dev or pass `--skip-skill-review <reason>` to bypass." Do NOT degrade silently.
 
 ## Plugin-validate gate (v4.0.0+, hardened)
 
@@ -112,11 +112,11 @@ If any matches → fire the gate.
 
 ### Steps
 
-1. **Invoke** `/plugin-creation-tools:validate --strict` slash command (the framework dogfoods strict validation on its own plugin changes). Capture full output verbatim.
+1. **Invoke** `claude-plugin-checks`' `check` skill with `--strict` (the framework dogfoods strict validation on its own plugin changes). Capture full output verbatim.
 2. **Display** the literal `prompts:plugin-validate-decision` template. Substitutions: `{{plugins_validated}}` (comma-list), `{{findings}}` (verbatim slash-command output).
 3. **Block** on user `[a]ccept / [r]emediate / [b]ypass` choice.
 4. **Write audit** to `<task>/_plugin-validate.json` via `gate-audit-write.sh`.
-5. **Refusal case:** same as skill-review — halt if plugin-creation-tools not installed; explicit-skip-required.
+5. **Refusal case:** same as skill-review — halt if claude-plugin-checks not installed; explicit-skip-required.
 
 ## Candidate-play surface (v3.15.0+)
 

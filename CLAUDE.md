@@ -61,15 +61,21 @@ make `plugin.json` disagree with the catalog entry. `make manifests` and
 The short run does not do three things. Read them before you use it.
 
 **`make test-<plugin>` saves little time on an ai-dev-assistant branch.** The
-repo has 142 spec files. 134 of them are ai-dev-assistant. 6 are
-code-quality-tools. 1 is plugin-creation-tools. 1 is
+repo has 155 bash spec files. 147 of them are ai-dev-assistant. 6 are
+code-quality-tools. 1 is claude-plugin-checks. 1 is
 `scripts/tests/claim-check-spec.sh` at the repo root. So
 `make test-ai-dev-assistant` is almost the same as `make test`. You save real
-time only on a code-quality-tools or a plugin-creation-tools branch. The 366
+time only on a code-quality-tools or a claude-plugin-checks branch. The 366
 seconds is a serial-execution problem. It is not a scope problem.
 
+**Python tests are discovered too, and not by a written-down list.** Any tracked
+`*/tests/` directory holding `test_*.py` is run with pytest, one `run_one` entry
+per directory. There are two: `brand-content-design/scripts/slides/tests` and
+`claude-plugin-checks/tests`. Adding a suite means adding the files; nothing in
+`scripts/run-tests.sh` names them.
+
 **The specs cross plugin borders.** ai-dev-assistant specs make assertions
-about `code-quality-tools` and `plugin-creation-tools`. code-quality-tools
+about `code-quality-tools` and `claude-plugin-checks`. code-quality-tools
 specs make assertions about `ai-dev-assistant` and `drupal-ai-contrib`. The
 root `claim-check-spec.sh` is outside every plugin and tests
 code-quality-tools. So `make test-<plugin>` can miss a spec in a different

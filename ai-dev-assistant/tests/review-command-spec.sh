@@ -2,7 +2,7 @@
 # review-command-spec.sh — verify commands/review.md invariants (v4.1.0+).
 #
 # Checks the 5-mechanism markers + body line budget + frontmatter required fields.
-# Run pre-PR-merge or via /plugin-creation-tools:validate alongside.
+# Run pre-PR-merge or via claude-plugin-checks' run-checks.sh alongside.
 #
 # Exit 0 on all-pass; 1 on any fail.
 

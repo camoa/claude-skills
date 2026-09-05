@@ -17,7 +17,7 @@ Both modes verify external dependencies in two passes, existence (does the metho
 
 - Before deploying an AI-generated change, especially one with external calls (a library method, a service, an API response) you have not independently confirmed. AI-generated code sounds plausible whether or not the method it calls actually exists.
 - Reviewing unfamiliar or legacy code, or debugging without a debugger: tracing state by hand with concrete values surfaces what a skim misses.
-- Building or editing a Claude Code skill, command, or agent, where the failure mode is not a runtime crash but a trigger phrase that never fires or a step Claude silently skips under compaction. Pair it with `plugin-creation-tools`' deterministic `skill-quality-reviewer` first, then paper-test for the semantic pass.
+- Building or editing a Claude Code skill, command, or agent, where the failure mode is not a runtime crash but a trigger phrase that never fires or a step Claude silently skips under compaction. Pair it with `plugin-dev`'s `skill-reviewer` and `claude-plugin-checks`' structural checks first, then paper-test for the semantic pass.
 - Security-critical code, or a target large enough (300+ lines) that a single pass risks missing what a second, differently-motivated reader would catch. That is what the competing team buys you: the Red Team Attacker's job is to find what the Happy Path Validator was not looking for.
 
 It is not a substitute for actually running the code. It is what you do before that, to catch what a smooth read-through and a green test suite that only exercises the happy path both miss.
@@ -40,7 +40,7 @@ It is not a substitute for actually running the code. It is what you do before t
 ## Where it fits
 
 - **[ai-dev-assistant](../../ai-dev-assistant/README.md)** uses this plugin as part of its review method for Claude Code plugin and skill tasks: when a task touches plugin files, paper testing supplies the behavioral verification (does a skill or command actually do what it claims) that a structural check alone cannot. It is also the challenge tool that has been used to harden ai-dev-assistant's own plugin code.
-- **[plugin-creation-tools](../../plugin-creation-tools/README.md)** is the deterministic pairing: its `skill-quality-reviewer` catches stale SDK references, dropped imperatives, and frontmatter gaps first; paper testing then covers the semantic ground that check cannot, trigger-phrase coverage, instruction fidelity, and context budget.
+- **[claude-plugin-checks](../../claude-plugin-checks/README.md)** is the deterministic pairing: it runs every available validator plus its own structural checks, so mechanical defects are gone before a paper-test cycle is spent on them. Paper testing then covers the semantic ground no structural check reaches: trigger-phrase coverage, instruction fidelity, and context budget.
 - **[code-quality-tools](../../code-quality-tools/README.md)** covers static analysis and security scanning (Semgrep, Trivy, Gitleaks, and the SOLID/DRY/TDD gates). Paper testing is complementary rather than overlapping: it is mental execution with concrete values on the target code at test time, not a scan.
 - Not a marketplace plugin, but worth naming since the plugin's own docs draw the line explicitly: Claude Code's native security-guidance capability reviews Claude's own edits in real time as they happen. The Red Team Attacker lens here analyzes the target code for adversarial vulnerabilities at test time, before or after those edits. Different moments, not substitutes for each other.
 

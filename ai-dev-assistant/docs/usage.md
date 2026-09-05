@@ -8,7 +8,7 @@ It starts by pinning a **scope contract** you author, an interactive interview (
 
 ## When to reach for it
 
-Reach for it for any task that creates code: a feature, a module, a component, a refactor, or a Claude Code plugin or skill. When a task touches plugin files, the review gates pull in `plugin-creation-tools` to check skill, command, agent, and hook structure, so building a plugin runs the same lifecycle as application code. It works on any stack, not just the flagship one: a *process recipe* supplies the framework-specific method for each phase, resolved through `dev-guides-navigator`, so Drupal, Next.js, or any stack with a recipe runs the same flow, and adding a stack means authoring its recipe rather than changing the engine. The only things that do not need it are a one-line fix or a throwaway spike. It is additive either way: flat tasks stay first-class, scope prompts are soft-nudges you can decline, and nothing blocks the lifecycle except the review gates you opted into.
+Reach for it for any task that creates code: a feature, a module, a component, a refactor, or a Claude Code plugin or skill. When a task touches plugin files, the review gates pull in `claude-plugin-checks` to run the plugin validators and its own structural checks, so building a plugin runs the same lifecycle as application code. It works on any stack, not just the flagship one: a *process recipe* supplies the framework-specific method for each phase, resolved through `dev-guides-navigator`, so Drupal, Next.js, or any stack with a recipe runs the same flow, and adding a stack means authoring its recipe rather than changing the engine. The only things that do not need it are a one-line fix or a throwaway spike. It is additive either way: flat tasks stay first-class, scope prompts are soft-nudges you can decline, and nothing blocks the lifecycle except the review gates you opted into.
 
 ## Prerequisites
 
@@ -102,7 +102,7 @@ Each command's own `--help`-style detail lives in its `commands/*.md`, and the m
 
 - **[dev-guides-navigator](../../dev-guides-navigator/README.md)** is a required dependency: it supplies the domain guides each phase loads.
 - **[code-quality-tools](../../code-quality-tools/README.md)** powers the TDD/SOLID/DRY/security gates.
-- **[plugin-creation-tools](../../plugin-creation-tools/README.md)** is invoked by the skill-review and plugin-validate gates when a task touches Claude Code plugin files.
+- **[claude-plugin-checks](../../claude-plugin-checks/README.md)** is invoked by the plugin-validate gate when a task touches Claude Code plugin files. The skill-review gate uses `plugin-dev:skill-reviewer`.
 - **[code-paper-test](../../code-paper-test/README.md)** is part of the review method for Claude Code plugin and skill tasks: it mentally executes a skill or command to catch behavioral-contract violations that structural checks miss. It is also the challenge tool used to harden this framework itself (much of `references/` cites paper-test findings).
 
 For the reasoning behind the split between gates that enforce and guides that explain the why, and why this is a plugin with enforcement rather than advice-only skills, see [PHILOSOPHY.md](../../PHILOSOPHY.md).

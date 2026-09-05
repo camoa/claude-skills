@@ -5,7 +5,7 @@ SHELL := /bin/bash
 
 PLUGINS := ai-dev-assistant brand-content-design code-paper-test \
            code-quality-tools dev-guides-navigator drupal-ai-contrib \
-           drupal-dev-framework drupal-htmx plugin-creation-tools
+           drupal-dev-framework drupal-htmx claude-plugin-checks
 
 # Plugins that actually own tests. `make test-<plugin>` exists for all nine,
 # but run-tests.sh fails a run that executed nothing ("nothing ran, so

@@ -77,7 +77,7 @@ The marketplace catalog is `.claude-plugin/marketplace.json` — it is the **onl
 Before opening a PR that touches a plugin's structure (commands, skills, agents, hooks, frontmatter), run:
 
 ```
-/plugin-creation-tools:validate <plugin-path>
+bash claude-plugin-checks/scripts/run-checks.sh <plugin-path>
 ```
 
 This checks frontmatter, structure, and best practices, and should pass before you push.
