@@ -62,10 +62,20 @@ require_jq() {
 # holding for the same project — a relative path given on the command line must not become two
 # different strings depending on which file it landed in.
 canon_path() {
-  local input="$1" resolved
+  local input="$1" resolved parent base
   resolved="$(cd "$input" 2>/dev/null && pwd -P)" || resolved=""
   if [ -z "$resolved" ]; then
-    resolved="$(realpath -m -- "$input" 2>/dev/null)" || resolved="$input"
+    # "$input" does not exist yet. `realpath -m` is GNU-only and missing on BSD and macOS
+    # realpath, the same limit check-project.sh's header notes, so this resolves by hand
+    # instead: cd into the closest existing ancestor, read pwd, then append what is left.
+    case "$input" in
+      /*) : ;;
+      *) input="$(pwd -P)/$input" ;;
+    esac
+    parent="$(dirname -- "$input")"
+    base="$(basename -- "$input")"
+    resolved="$(cd "$parent" 2>/dev/null && pwd -P)" || resolved="$parent"
+    resolved="$resolved/$base"
   fi
   resolved="${resolved%/}"
   [ -n "$resolved" ] || resolved="/"
@@ -115,6 +125,17 @@ do_create() {
   local frameworks=("$@")
   require_jq
 
+  # Check the registration precondition before writing anything. registry_add_project (called
+  # near the end of this function) refuses a codePath already registered; checking only there
+  # would leave an already-built, already-committed project folder orphaned on a rejection. So
+  # this reads the raw store file first, the same way do_switch below reads it, and stops before
+  # any folder or file is written.
+  if [ -r "$REGISTRY_FILE" ] && jq -e --arg c "$code_path" \
+      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c)' "$REGISTRY_FILE" >/dev/null 2>&1; then
+    echo "ALREADY REGISTERED: a project already exists for ${code_path}. Nothing was written." >&2
+    exit 3
+  fi
+
   [ -d "$code_path" ] || echo "NOTE: ${code_path} does not exist yet; it will when the code is written there." >&2
 
   mkdir -p "$PROJECTS_HOME"
@@ -139,7 +160,7 @@ do_create() {
       frameworks: $frameworks,
       processRecipes: [],
       sources: [
-        {location: "hosted-catalog", provides: ["guides", "playbooks", "processRecipes"], precedence: 1}
+        {location: "hosted-catalog", provides: ["guides", "playbooks", "processRecipes", "agenticRecipes"], precedence: 1}
       ],
       sourceOverrides: {},
       worktreeByDefault: false,

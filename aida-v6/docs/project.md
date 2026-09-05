@@ -1,15 +1,16 @@
 # The project
 
-A project ties one code path to the work AIDA does on it. Everything else — tasks, stages,
-recipes — happens inside a project. This page covers how a project is found, created, and
+A project ties one code path to the work AIDA does on it. Everything else, tasks, stages,
+and recipes, happens inside a project. This page covers how a project is found, created, and
 switched, what the check does, and how both run modes affect these steps.
 
 One skill answers all three questions: which project owns this folder, create one, or switch to
 another. Type `/project`, with or without arguments.
 
-You type it yourself. Creating or switching a project changes what is on disk, so this never runs
-on Claude's own judgment — nothing invokes it for you. A later part may add an automatic report
-at the start of a session. Until then, run `/project` yourself to see where you stand.
+You type it yourself. Creating a project changes what is on disk, and switching changes which
+project this conversation uses. Neither runs on Claude's own judgment: nothing invokes it for
+you. A later part may add an automatic report at the start of a session. Until then, run
+`/project` yourself to see where you stand.
 
 ## What a project is
 
@@ -17,7 +18,7 @@ A project is three things:
 
 - **A folder**, holding a state file and a notes file. The state file holds facts a script reads:
   the code path, the frameworks, and settings that start empty and fill in as later stages run.
-  The notes file is yours. Write anything there — nothing ever parses it.
+  The notes file is yours. Write anything there, nothing ever parses it.
 - **An entry in AIDA's own list**, mapping the code path to that folder. This is how a session in
   a different working directory still finds the right project.
 - **A git repository of its own.** Every project gets one. It tracks text: the state file, the
@@ -36,14 +37,14 @@ when you are working in the other, even in the same repository.
 
 Run `/project` with no arguments. AIDA looks at the current directory and finds the most specific
 registered code path that contains it. When a directory sits inside more than one registered
-project, the closest match wins. Found or not, AIDA then runs the check (below) and reports what
-it sees.
+project, the closest match wins. Found, AIDA runs the check (below) and reports what it sees. Not
+found, AIDA offers to create a project here, described next.
 
 If nothing matches, AIDA offers to create a project here. Decline once, and it remembers: it will
 not ask again for this folder. Accept, and creation runs, described next.
 
-**A session identifies the project by code path only.** Stand in some other folder — neither the
-code nor the project's own folder — and AIDA finds no project. That is on purpose. Being inside
+**A session identifies the project by code path only.** Stand in some other folder, neither the
+code nor the project's own folder, and AIDA finds no project. That is on purpose. Being inside
 the code is one way to be recognized. It is not the only way: you can also switch to a project by
 name, described below.
 
@@ -56,7 +57,9 @@ Nothing else. Give both as arguments and nothing is asked. Give neither, and AID
 
 From those two facts, AIDA writes the project's state file, with defaults for everything else. It
 adds the project to its own list and turns the project folder into a git repository. Then the
-check runs once, and normally has nothing to report.
+check runs once. If the code already exists on disk, the check normally has nothing to report. If
+it does not exist yet, the check says so, and that is expected for a fresh project, not a
+problem.
 
 Later stages fill in the rest as they run:
 
@@ -91,7 +94,7 @@ Three things can come back:
 |---|---|
 | Everything present and well-formed | Nothing is said. |
 | A field missing, or present but the wrong shape | Named, with the step that produces it offered as the repair. |
-| The code path no longer exists on disk | Reported as a fact. Nobody but you can say where the code went, so nothing offers to fix this automatically. |
+| The code path does not exist on disk | Reported as a fact. Right after creating a project, this is expected: a fresh project can go without code for a while. Anywhere else, only you can say where the code went, and nothing here fixes it. |
 
 Repair means running the one step that produces that field again. It is never the whole creation
 interview, and never a guess. A field already present is never overwritten, so running the check
@@ -104,18 +107,19 @@ You do not have to run the check yourself first.
 ## Interactive and autonomous work
 
 AIDA runs in two modes: interactive, where a person is present to answer, and autonomous, where
-nobody is. Which mode applies belongs to the task doing the work, not to the project — a project
+nobody is. Which mode applies belongs to the task doing the work, not to the project: a project
 keeps no mode of its own. A task that states no mode is treated as interactive, because assuming a
 person is present is the safer of the two guesses.
 
-Two moments on this page would otherwise stop and ask:
+One moment on this page stops and asks: offering to create a project on a folder nothing is
+registered to. Interactively, AIDA asks. Under an autonomous task, AIDA records that the offer
+was made and declined, and moves on. Nothing is lost, no project was going to exist without an
+answer, either way.
 
-- **Offering to create a project** on a folder nothing is registered to. Interactively, AIDA asks.
-  Under an autonomous task, AIDA records that the offer was made and declined, and moves on.
-  Nothing is lost — no project was going to exist without an answer, either way.
-- **Offering to repair a field the check finds missing.** Interactively, AIDA asks. Under an
-  autonomous task, AIDA records that a repair was proposed with nobody present to answer, and
-  moves on. The field stays missing until something repairs it later.
+The check itself never asks, in either mode. When it finds a field missing, it names the field
+and the step that produces it, the same way whether a person is present or not. Under an
+autonomous task, it also records that nobody was present to decide on a repair. The field stays
+missing until its producer runs.
 
 One moment stops outright, in either mode: creating a project with no code path and no framework
 given, and nobody present to supply either. There is nothing to found the project on, so AIDA

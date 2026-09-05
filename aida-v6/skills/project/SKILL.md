@@ -4,7 +4,7 @@ description: This skill should be used when the user asks "which project", wants
 disable-model-invocation: true
 argument-hint: "[create <path> <framework>... | switch <name-or-path>]"
 arguments: [action, target]
-allowed-tools: Read, Write, Bash(${CLAUDE_PLUGIN_ROOT}/scripts/*), Bash(git *)
+allowed-tools: Read, Write
 ---
 
 # Project
@@ -14,6 +14,9 @@ which project owns this directory, make one, or switch to another. Read the argu
 and follow the matching section below. Every section runs the check before it finishes.
 
 Determine the action from the first argument: `create`, `switch`, or nothing.
+
+Every command below is a separate Bash call, and none is pre-approved. Each one asks the
+user for approval to run, in both run modes.
 
 ## Determine the run mode
 
@@ -77,6 +80,9 @@ The script writes the project's files, adds it to the registry, and prints the n
 path. It then runs the check itself and prints that report. Show the whole output, and read
 the check's exit code as described below.
 
+Exit code 2 here is normal, not a problem. The code path was just set from what you gave, and a
+brand-new project can go without code for a while (decision 2). Say so plainly and move on.
+
 ## `switch <name-or-path>`
 
 Run, with the same `AIDA_RUN_MODE` convention as create:
@@ -103,7 +109,7 @@ to decide what happens next, never its text alone:
 |---|---|---|
 | 0 | Every field is present and well-formed. | Nothing further. The report already said so. |
 | 1 | A field is missing or does not match its shape. | The report already names each one and what would produce it. Say nothing further; the field is filled in by its own producer, later, not by this skill. |
-| 2 | The code path no longer exists on disk. | Say plainly that only a person can say where the code went. Stop. This is true in both run modes: there is nothing to ask, and nothing here repairs it. |
+| 2 | The code path does not exist on disk. Two different things can cause this: a brand-new project whose code is not written yet (decision 2 allows this), or an existing project whose code path is gone. | Right after `create`, this is the first case. Say so plainly and move on; nothing is wrong. Everywhere else, read it as the second case: say plainly that only a person can say where the code went, and stop. Neither case is repaired here, in either run mode. |
 | 3 | The check itself could not run. | Show the error text and stop. |
 
 The check never asks a question, in either mode. When the run is autonomous and exit code 1
