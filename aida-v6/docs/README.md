@@ -9,8 +9,12 @@ variants, not the internals of any one command — read a command's own descript
 |---|---|
 | [The project](project.md) | Finding, creating, and switching a project. What the check does when something is missing. Interactive versus autonomous behavior. Using your own guides, playbooks, and recipes instead of the hosted catalog. |
 
-More pages arrive as more of AIDA is built: a task and its stages, the five stages themselves,
-the two build paths, and the two optional test harnesses.
+More pages arrive as more of AIDA is built:
+
+- a task and its stages
+- the five stages themselves
+- the two build paths
+- the two optional test harnesses
 
 ## Where to start
 
