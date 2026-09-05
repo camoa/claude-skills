@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA registry",
+  "description": "The structured file at $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json). The registry is an index, not a truth: it exists to answer two questions without opening every project file, which project owns this directory, and show me my projects so I can choose. One producer writes the project file and the matching registry row in the same operation; the project file wins any disagreement, and the check reports a mismatch rather than silently choosing one. Everything here is derivable by walking the registered project folders and reading each project file, so a lost or corrupt registry is an inconvenience, never a catastrophe.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "projects", "declinedOffers", "directoryChoices"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the registry's own equivalent of a project file's schemaVersion."
+    },
+    "projects": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/projectEntry" },
+      "description": "One row per registered project, holding copies of the five values this index answers on: where the code is, where the project folder is, the name, when it was last used, and its lifecycle state. A schema cannot express that no two rows share a name: JSON Schema checks one entry's own shape, not a relationship between two entries in the array, so this schema does not attempt uniqueness and the check runs a separate duplicate-name test instead of relying on this file for it."
+    },
+    "declinedOffers": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/declinedOffer" },
+      "description": "One row per directory that was offered a project and said no. Recording the decline is the point: an unrecorded no is re-asked every session, and the person who said it pays the same interruption every time. Answering again for the same directory replaces its row rather than appending a second one, so the last answer is the answer."
+    },
+    "directoryChoices": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/directoryChoice" },
+      "description": "One row per directory: the project last chosen from it. This is the memory 'picking up work' needs for the case where the directory is not itself a registered code path, for example a documentation folder or a Claude Code project folder whose code lives elsewhere. It is a different fact from ownership, not a weaker copy of it: a directory can have a remembered choice and no code path at all, and when both a code-path match and a remembered choice exist and disagree, the registered code path wins. Answering again for the same directory replaces its row rather than appending a second one."
+    }
+  },
+  "$defs": {
+    "projectEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codePath", "projectPath", "name", "lastAccessed", "state"],
+      "properties": {
+        "codePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/",
+          "description": "Where the project's code is. A copy of the project file's own `codePath`, kept here so a directory can be matched to a project without opening 31 files. The project file is authoritative; this is the index."
+        },
+        "projectPath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/",
+          "description": "Where the project's own folder is, the folder holding project.json. Never the same folder as codePath."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "A copy of the project file's own `name`, kept here so a project can be found by name, and so a remembered directory choice (see `directoryChoices`) can resolve to a real row, without opening every project file to look. Uniqueness across every row's name is not expressed by this schema; the check tests it separately."
+        },
+        "lastAccessed": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The date this project was last used, written at creation and updated on every later use, not written once and left stale. The list in 'picking up work' is ordered by this field, so a value that never changes is a defect this schema exists to catch."
+        },
+        "state": {
+          "type": "string",
+          "enum": ["active", "complete", "archived"],
+          "description": "A copy of the project file's own lifecycle state. The project file is authoritative for this value; this copy is what the list reads to decide whether a project is offered as work (active), still resolves but is not offered (complete), or is left out of the list unless asked for (archived)."
+        }
+      }
+    },
+    "declinedOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory", "declinedAt"],
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/",
+          "description": "The absolute directory that was offered a project and said no."
+        },
+        "declinedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The date the decline was recorded."
+        }
+      }
+    },
+    "directoryChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory", "project", "chosenAt"],
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/",
+          "description": "The absolute directory this choice was made from. Not necessarily, and usually not, a registered code path: this row exists precisely for the directory a code path cannot answer for."
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "The name of the project chosen from this directory, matching a row in `projects`. A name naming no row in `projects` is a mistake this schema does not catch; the check runs a separate test for it."
+        },
+        "chosenAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The date this choice was made or last confirmed."
+        }
+      }
+    }
+  }
+}

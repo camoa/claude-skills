@@ -1,79 +1,98 @@
-// project.example.jsonc — a worked example of <projectPath>/project.json.
+// project.example.jsonc: a worked example of <projectPath>/project.json.
 //
-// This file is documentation, read by a person, never by a script. Real project files are plain
-// JSON with no comments, validated against project-schema.json in this same folder. The comments
-// below cite the decision (D<n>, from 02-decisions.md) or contract section that explains each
-// field. Delete this file's comments and its content is a valid project.json on its own.
+// This file is documentation, read by a person, never by a script. A real project.json is plain
+// JSON with no comments, validated against project-schema.json in this same folder. Delete every
+// comment below and what remains is a valid project.json on its own; that is proved by running it
+// through the schema after stripping.
 //
-// This example is a project just past creation, with two fields a later stage has since filled
-// in (processRecipes, agenticRecipes) so their real shape is visible too. A brand-new project has
-// those two as empty arrays instead.
+// This example shows a project a little past creation, with fields a later stage has since filled
+// in (processRecipes, sources, playbookSubscriptions) so their real shape is visible. A brand-new
+// project has processRecipes and sources as empty arrays, and playbookSubscriptions as an empty
+// object, until something needs them.
 {
-  // The shape this file was written in. Repair reads format-changes.md by this number instead of
-  // guessing what an old file's shape was (D18).
+  // The shape this file was written in. A repair reads format-changes.md by this number instead
+  // of guessing what an old file's shape was.
   "schemaVersion": 1,
 
-  // Where the code lives. Always set, never "docs-only" or "unknown" — a greenfield project names
-  // the path even before anything exists there (D2). One of the two facts creation asks for (D16).
+  // Where the code lives. Always set, never "docs-only" or "unknown": a greenfield project names
+  // the path even before anything exists there. One of the two facts creation asks for directly.
   "codePath": "/home/camoa/workspace/example-project",
 
-  // The stack. Drives every recipe and source lookup a later stage makes. The second of the two
-  // facts creation asks for (D16).
+  // The project's name. Asked directly at creation, never derived from the code folder's own
+  // name, because deriving it saves one question and buys a collision problem. Also the value the
+  // registry copies, so a project can be found by name without opening this file.
+  "name": "example_project",
+
+  // The stack. Detected from the code at creation (a composer file, a package file, a go module,
+  // a Python project file, a Drupal info file) and asked only when detection finds nothing.
   "frameworks": ["drupal"],
 
-  // Which recipe each stage adopted, and where it came from. Empty at creation; the recipe-
-  // adoption sweep fills one entry in the first time a stage needs a cell it does not have (D14).
+  // Which source answered, for each stage, the process-recipe question. Empty at creation; the
+  // recipe-adoption sweep fills one entry in the first time a stage needs a cell it does not have.
   // "fit" is free text set by the stage that adopted the recipe, not a fixed vocabulary.
   "processRecipes": [
     { "key": "research/drupal/prior-art", "source": "hosted-catalog", "fit": "fits" }
   ],
 
-  // Where guides, playbooks, process recipes, and agentic recipes come from, in precedence order
-  // (D11, D14). Creation writes this one entry, naming the hosted catalog for every kind, so a
-  // project that configures nothing still resolves. "location" is a token or path a source
-  // resolver understands — this example is illustrative, not a literal value fixed by this part.
+  // Where guides, playbooks, process recipes and agentic recipes come from. A project declares as
+  // many sources as it wants, and mixing is the point: here the hosted catalog answers for guides
+  // and agentic recipes everywhere, while a team's own folder answers for playbooks and process
+  // recipes, but only for Drupal research and design. Each source's precedence is per kind, since
+  // a source's playbooks winning says nothing about whether its process recipes should too.
   "sources": [
-    { "location": "hosted-catalog", "provides": ["guides", "playbooks", "processRecipes", "agenticRecipes"], "precedence": 1 }
+    {
+      "location": "hosted-catalog",
+      "locationType": "catalog",
+      "provides": ["guides", "agenticRecipes"],
+      "answersFor": { "extent": "everything" },
+      "precedence": { "guides": 2, "agenticRecipes": 1 }
+    },
+    {
+      "location": "/home/camoa/workspace/team-playbooks/drupal",
+      "locationType": "folder",
+      "provides": ["playbooks", "processRecipes"],
+      "answersFor": { "extent": "stages", "stages": ["research", "design"] },
+      "precedence": { "playbooks": 1, "processRecipes": 1 }
+    },
+    {
+      "location": "hosted-catalog",
+      "locationType": "catalog",
+      "provides": ["playbooks", "processRecipes"],
+      "answersFor": { "extent": "everything" },
+      "precedence": { "playbooks": 2, "processRecipes": 2 }
+    }
   ],
 
-  // Per-cell departures from the order in "sources" (D14) — a team's own method for one stage on
-  // one framework, without touching the answer for every other stage. Empty until the recipe-
-  // adoption sweep writes an override. Shown here with one override: research on drupal prefers a
-  // team folder over the catalog.
-  "sourceOverrides": {
-    "research": {
-      "drupal": [
-        { "location": "/home/camoa/workspace/team-playbooks/drupal", "provides": ["processRecipes"], "precedence": 1 }
-      ]
-    }
+  // Which playbooks apply, recorded per framework, and never inferred from a source. A source
+  // says where playbooks can be found; this says which ones this project actually subscribes to
+  // for the "drupal" framework. Empty until a person decides, which can be any time.
+  "playbookSubscriptions": {
+    "drupal": ["drupal/best-practices/community"]
   },
 
-  // Whether a task builds in a worktree without being asked first. Set at creation; false unless a
-  // project says otherwise.
+  // Whether a task builds in a worktree without being asked first. Set at creation; false unless
+  // a project says otherwise.
   "worktreeByDefault": false,
 
-  // Whether visual regression is set up, and the path to its surface registry. Null until a visual-
-  // regression setup skill (a later part) runs. Baseline images live in the code repository, beside
-  // the tests that read them — this field points at the registry, never at pixel data (D7).
+  // The project's lifecycle state: active, complete, or archived. Set to "active" at creation and
+  // changed only by a later, explicit transition, each one reversible.
+  "state": "active",
+
+  // Whether visual regression is set up, and the path to its surface registry. Null until a
+  // visual-regression setup skill (a later part) runs. Baseline images live in the code
+  // repository, beside the tests that read them; this field points at the registry, never at
+  // pixel data.
   "visualRegression": null,
 
   // Whether end-to-end testing is set up. Null until an e2e setup skill (a later part) runs. The
   // shape past "enabled" is intentionally open for that skill to extend.
   "e2e": null,
 
-  // Whether the memory hook is installed, and which version — so a stale installed copy is a
-  // comparison, not a guess (D10). Not installed by default.
+  // Whether the memory hook is installed, and which version, so a stale installed copy is a
+  // comparison, not a guess. Not installed by default.
   "memoryHook": { "installed": false, "version": null },
 
-  // Recipes found while researching this project's own problem, distinct from the stack-level
-  // processRecipes above. Written by the research stage, updated by review (D10). Empty at
-  // creation; shown here with one entry once research has run. Item shape past that is not
-  // decided by this part.
-  "agenticRecipes": [
-    { "topic": "existing rate-limiter in this codebase", "finding": "internal/RateLimiter reused as-is" }
-  ],
-
   // Stops work starting in this repository without a task. Null until the offer is made; once
-  // made, the offer and the answer are recorded together, so a decline is never re-asked (D10).
+  // made, the offer and the answer are recorded together, so a decline is never re-asked.
   "taskRule": null
 }

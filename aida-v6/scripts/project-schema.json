@@ -1,97 +1,101 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA project file",
-  "description": "The structured file at <projectPath>/project.json. Every field a script reads lives here, in one place, so the check is a schema comparison rather than a parser (02-decisions.md D6). project_state.md sits beside this file and holds what a person writes; nothing here is derived from it, and no script parses it. A field present in a real project.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept — that is why `additionalProperties` is false.",
+  "description": "The structured file at <projectPath>/project.json. Every field a script reads lives here, in one place, so the check is a schema comparison rather than a parser. project_state.md sits beside this file and holds what a person writes; nothing here is derived from it, and no script parses it. A field present in a real project.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "codePath", "frameworks", "worktreeByDefault"],
+  "required": ["schemaVersion", "codePath", "name", "frameworks", "worktreeByDefault", "state"],
   "properties": {
     "schemaVersion": {
       "type": "integer",
       "minimum": 1,
       "default": 1,
-      "description": "The shape this file was written in. Repair reads format-changes.md by this number instead of inferring the old shape from what the file happens to contain (D18). Bumped only when a later change to this schema says so — never bumped for a value change inside an unchanged shape."
+      "description": "The shape this file was written in, not when it was last checked. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
     },
     "codePath": {
       "type": "string",
       "minLength": 1,
       "pattern": "^/",
-      "description": "Absolute path to where the project's code lives. A project always points at code; there is no docs-only state and no permanently-unknown state (D2) — a greenfield project names where the code will go even before the directory holds anything. Asked directly at creation, one of the two facts the interview requires (D16). The check reports exit code 2, not a missing field, when this path no longer exists on disk (D18) — a producer can write a field, but nothing rewrites a codebase that moved."
+      "description": "Absolute path to where the project's code lives, never the project's own folder. A project always points at code; there is no docs-only state and no permanently-unknown state, so a greenfield project names where the code will go even before the directory holds anything. Asked directly at creation. Safety on this value (refusing a system root, the home directory, or anything above it; warning outside the home directory) is enforced by whoever writes the file, not by this schema, which checks shape only. The check reports exit code 2, not a missing field, when this path no longer exists on disk: a producer can write a field, but nothing here rewrites a codebase that moved."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "The project's name. Asked directly at creation and never derived from the code folder: deriving it saves one question and buys a collision problem, so the interview asks. Lowercase letters, digits and underscores, starting with a letter, the same shape version 5 used, because this value doubles as the lookup key the registry copies and a folder-safe identifier is what makes that lookup deterministic."
     },
     "frameworks": {
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 },
-      "description": "The stack this project is written in, e.g. [\"drupal\"] or [\"python\", \"django\"]. Drives every recipe and source lookup a later stage makes. Asked directly at creation, the second of the two facts the interview requires (D16); repaired by re-running that same ask on its own, never the whole interview (D4)."
+      "description": "The stack this project is written in, e.g. [\"drupal\"] or [\"python\", \"django\"]. Drives every recipe and source lookup a later stage makes. Detected from the code at creation (a composer file, a package file, a go module, a Python project file, a Drupal info file) and asked only when detection finds nothing. Repaired by re-running that same detection on its own, never the whole interview."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["active", "complete", "archived"],
+      "default": "active",
+      "description": "The project's lifecycle state. Active is normal: it appears in the list and is offered as work. Complete means the work is done: it still resolves and is still readable, but stops being offered. Archived means parked: it still resolves, but is left out of the list unless asked for. This is the field version 5 never had, writing 'active' once at creation and never touching it again; every transition here is reversible, and reopening is another write. This project file is authoritative for this value; the registry carries a copy, and the reason for a change lives in the commit, never in this field."
     },
     "processRecipes": {
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/processRecipe" },
-      "description": "Which recipe each stage adopted, and where it came from. Written by the recipe-adoption sweep the first time a stage needs a cell it does not yet have (D14) — declaring is cheap and happens once; fetching the recipe body is lazy and happens when the stage actually runs. Not produced by this part; starts empty."
+      "description": "Which source answered, for each stage, the process-recipe question: the stack-specific method for that stage. Written the first time a stage needs a cell it does not yet have, one entry at a time. Declaring is cheap and happens once; fetching the recipe body is lazy and happens when the stage actually runs. Starts empty; not produced at creation."
     },
     "sources": {
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/source" },
-      "description": "Where guides, playbooks, process recipes, and agentic recipes come from, in precedence order (D10, D11, D14). The project's own source wins by default; the hosted catalog is the fallback where the project's own has nothing (D11). The project skill's create action writes this list with one entry naming the hosted catalog for every kind it offers, so a project that configures nothing still resolves. A surface for a project to add its own source and reorder precedence is not built by this part (see the schema for one `source` entry, `#/$defs/source`)."
+      "description": "Where guides, playbooks, process recipes and agentic recipes come from. Guides, playbooks, process recipes and agentic recipes are one mechanism, not one source: a project declares as many sources as it wants, and each says what it provides, what it answers for and its own per-kind precedence. Mixing is the point, not a special case: your playbooks can come from your folder, your process recipes from the hosted catalog, and your guides from a site you trust, all at once. A project that configures nothing still resolves once a source naming the hosted catalog for every kind is declared for it; that declaration is not made by this schema. Declared lazily, the first time a stage needs a kind it has no source for; starts empty."
     },
-    "sourceOverrides": {
+    "playbookSubscriptions": {
       "type": "object",
       "default": {},
-      "description": "Per-cell departures from the default order in `sources` (D14): a team's own method for one stage, on one framework, without changing every other stage's answer. Keyed first by stage name, then by framework name (as it appears in `frameworks`); each leaf is an ordered override list in the same shape as `sources`, naming which source wins for that one stage-and-framework pair. A stage or framework with no entry here falls back to the project-wide `sources` order. Written by the recipe-adoption sweep, the same producer as `processRecipes` — not produced by this part; starts empty.",
       "propertyNames": {
-        "enum": ["scope", "research", "design", "implementation", "review"]
+        "type": "string",
+        "minLength": 1
       },
       "additionalProperties": {
-        "type": "object",
-        "description": "Framework name to that stage's override list.",
-        "additionalProperties": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/source" }
-        }
-      }
+        "type": "array",
+        "minItems": 1,
+        "items": { "type": "string", "minLength": 1 }
+      },
+      "description": "Which playbooks apply, recorded per framework, and never inferred from a source declaration. A source says where playbooks can be found; matching a guide happens per task, but subscribing to a playbook is a standing choice, and this is the field that fixes version 5's defect of treating a framework and its playbook as two unrelated facts. Keyed by a name from `frameworks`; each value is the list of playbook locations this project subscribes to for that framework. A key here naming a framework this project never declared is a mistake this schema does not catch; the check runs a separate test for it. Starts empty; declared whenever a person decides, which can be any time."
     },
     "worktreeByDefault": {
       "type": "boolean",
       "default": false,
-      "description": "Whether a task builds in a worktree without being asked first. Set by the project skill's create action; a project that never says otherwise defaults to false."
+      "description": "Whether a task builds in a worktree without being asked first. Set at creation; a project that never says otherwise defaults to false. Settable again at any later time, the same as every other opt-in."
     },
     "visualRegression": {
       "default": null,
       "oneOf": [
         { "type": "null" },
-        { "$ref": "#/$defs/visualRegression" }
+        { "type": "object", "$ref": "#/$defs/visualRegression" }
       ],
-      "description": "Whether visual regression is set up, and the path to its surface registry. Null means not set up. Baseline images stay committed inside the code repository, beside the tests that read them, never inside the project folder (D7) — this field points at the registry, never at pixel data. Written by a visual-regression setup skill, a later part; not produced by this part."
+      "description": "Whether visual regression is set up, and the path to its surface registry. Null means not set up. Baseline images stay committed inside the code repository, beside the tests that read them, never inside the project folder; this field points at the registry, never at pixel data. Written by a visual-regression setup skill, a later part; not produced by this part."
     },
     "e2e": {
       "default": null,
       "oneOf": [
         { "type": "null" },
-        { "$ref": "#/$defs/e2e" }
+        { "type": "object", "$ref": "#/$defs/e2e" }
       ],
-      "description": "Whether end-to-end testing is set up. Null means not set up. Version 5 has a setup step and no field for it, so nothing could ask whether it had run (D10) — this field exists so that question is answerable. The shape past `enabled` is left open for the e2e setup skill that will write it, a later part; not produced by this part."
+      "description": "Whether end-to-end testing is set up. Null means not set up. Version 5 has a setup step and no field for it, so nothing could ask whether it had run; this field exists so that question is answerable. The shape past `enabled` is left open for the e2e setup skill that will write it, a later part; not produced by this part."
     },
     "memoryHook": {
       "default": { "installed": false, "version": null },
+      "type": "object",
       "$ref": "#/$defs/memoryHook",
-      "description": "Whether the memory hook is installed, and which version. Memory is opt-in per project, and an installed copy can go stale silently; recording the version is what lets the check notice (D10). Written by a memory-hook install skill, a later part; not produced by this part."
-    },
-    "agenticRecipes": {
-      "type": "array",
-      "default": [],
-      "items": { "type": "object" },
-      "description": "Recipes found while researching this project's own problem, as opposed to the stack-level process recipes in `processRecipes`. Written by the research stage, updated by the review stage, read by two later stages (D10). In version 5 this lived as prose outside the field contract entirely. Item shape is not decided by this part — the research stage that first writes here settles it; starts empty."
+      "description": "Whether the memory hook is installed, and which version it installed. The hook is a copy living in the code repository's own settings, never a reference to the plugin's path, because that path changes at release. Recording the version is what lets the check compare it against the current one and notice drift without guessing; the repair is re-running the installer, which is idempotent and preserves a person's own edits. Written by a memory-hook install skill, a later part; not produced by this part."
     },
     "taskRule": {
       "default": null,
       "oneOf": [
         { "type": "null" },
-        { "$ref": "#/$defs/taskRule" }
+        { "type": "object", "$ref": "#/$defs/taskRule" }
       ],
-      "description": "Stops work starting in this project's repository without a task. Null until the offer has been made; once made, the offer and the answer are recorded together, so a decline is never re-asked every session (D10). Version 5's block reaches further than a session, to a collaborator who clones the repository or a tool that is not Claude Code — worth knowing when this is written. Written by a task-rule offer step, a later part; not produced by this part."
+      "description": "Stops work starting in this project's repository without a task. Null until the offer has been made; once made, the offer and the answer are recorded together, so a decline is never re-asked every session. Written by a task-rule offer step, a later part; not produced by this part."
     }
   },
   "$defs": {
@@ -108,24 +112,28 @@
         "source": {
           "type": "string",
           "minLength": 1,
-          "description": "Which entry in `sources` (by its `location`) answered for this recipe (D13). The record says where the body came from instead of a verified flag, so the read-time rule for what to do with an unconfigured source lives in one place and does not get frozen into this record."
+          "description": "Which entry in `sources` (by its `location`) answered for this recipe. The record names the source instead of carrying a verified flag: a body from a source a person configured is used, and a body from an open search (the only source kind nobody configured) is shown to a person before it is used. That read-time rule lives in one place and is not frozen into this record."
         },
         "fit": {
           "type": "string",
           "minLength": 1,
-          "description": "A short free-text note on how well the recipe matched what the stage needed, written by whichever stage adopted it, e.g. \"fits\" or \"partial\". Not a fixed enum — this part does not decide the vocabulary of fit."
+          "description": "A short free-text note on how well the recipe matched what the stage needed, written by whichever stage adopted it, e.g. \"fits\" or \"partial\". Not a fixed enum; this part does not decide the vocabulary of fit."
         }
       }
     },
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["location", "provides", "precedence"],
+      "required": ["location", "locationType", "provides", "answersFor", "precedence"],
       "properties": {
         "location": {
           "type": "string",
           "minLength": 1,
-          "description": "Where this source lives: a local folder path, a URL, or the hosted catalog's own identifier. What a location string means is decided by whatever reads it, not by this schema."
+          "description": "Where this source lives: an absolute folder path, the hosted catalog's own identifier, a site's URL, or a live search's identifier. What the string means is fixed by `locationType`, never guessed from its shape."
+        },
+        "locationType": {
+          "enum": ["folder", "catalog", "site", "search"],
+          "description": "What kind of place `location` names. Each kind is read a different way, and that is the whole reason this field exists rather than one generic reader: a folder is a directory listing; the catalog goes through the navigator; a site and a search are neither, they can fail or return nothing, and what they return was written by nobody this project configured."
         },
         "provides": {
           "type": "array",
@@ -134,14 +142,65 @@
           "items": {
             "enum": ["guides", "playbooks", "processRecipes", "agenticRecipes"]
           },
-          "description": "Which of the four kinds this source supplies (D14). A source can supply more than one kind, e.g. a team folder holding both its playbooks and its process recipes."
+          "description": "Which of the four kinds this source supplies. A source can supply more than one kind, e.g. a team folder holding both its playbooks and its process recipes."
+        },
+        "answersFor": {
+          "$ref": "#/$defs/answersFor",
+          "description": "What this source answers for: everything, only certain stages, or only certain frameworks. The project's own source winning by default is a sensible rule applied per kind through `precedence`, not a claim about scope; this field is the separate answer to a separate question, which is why a source naming one framework and one naming everything can coexist without conflict on their own kinds."
         },
         "precedence": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Rank among sources offering the same kind; a lower number answers first. The list's own order already reads top-to-bottom — this field makes that order explicit and independent of position, so an entry can be inserted without renumbering the ones that do not compete with it."
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": ["guides", "playbooks", "processRecipes", "agenticRecipes"]
+          },
+          "additionalProperties": { "type": "integer", "minimum": 1 },
+          "description": "Rank among sources offering the same kind, one number per kind this source provides, because a source's own playbooks winning says nothing about whether its process recipes also win. A lower number answers first. \"The project's own source wins, the hosted catalog is the fallback\" is the sensible default applied here per kind, not one number covering everything a source happens to provide. A key here that does not also appear in `provides`, or a kind in `provides` with no matching key here, is a mistake this schema does not catch: it checks shape, not that the two lists agree, so the check runs a separate test for it."
         }
       }
+    },
+    "answersFor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["extent"],
+          "properties": {
+            "extent": { "const": "everything" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["extent", "stages"],
+          "properties": {
+            "extent": { "const": "stages" },
+            "stages": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": ["scope", "research", "design", "implementation", "review"]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["extent", "frameworks"],
+          "properties": {
+            "extent": { "const": "frameworks" },
+            "frameworks": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ],
+      "description": "One of three shapes: `{\"extent\":\"everything\"}`, `{\"extent\":\"stages\",\"stages\":[...]}` naming one or more of the five stage names, or `{\"extent\":\"frameworks\",\"frameworks\":[...]}` naming one or more entries from this project's own `frameworks`. A `stages` entry outside the five names, or a `frameworks` entry this project never declared, is a mistake this schema does not catch."
     },
     "visualRegression": {
       "type": "object",
@@ -154,7 +213,7 @@
         },
         "registryPath": {
           "type": ["string", "null"],
-          "description": "Path to the surface registry that names which surfaces and viewports are covered, e.g. \"<codePath>/.visual-review/registry.yml\". Null when not yet set up. This is the registry, never the baseline images: baselines are committed inside the code, beside the tests that consume them (D7)."
+          "description": "Path to the surface registry that names which surfaces and viewports are covered, e.g. \"<codePath>/.visual-review/registry.yml\". Null when not yet set up. This is the registry, never the baseline images: baselines are committed inside the code, beside the tests that consume them."
         }
       }
     },
@@ -168,7 +227,7 @@
           "description": "Whether end-to-end testing is set up for this project."
         }
       },
-      "description": "The build contract leaves this shape open past `enabled` (\"{enabled, ...}\") for the e2e setup skill that will extend it, a later part. Only `enabled` is fixed here."
+      "description": "The shape past `enabled` is left open (\"{enabled, ...}\") for the e2e setup skill that will extend it, a later part. Only `enabled` is fixed here."
     },
     "memoryHook": {
       "type": "object",

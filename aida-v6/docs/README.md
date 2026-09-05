@@ -8,7 +8,7 @@ not the internals of any one command: read a command's own description for that.
 | Page | Covers |
 |---|---|
 | [How AIDA works](overview.md) | The spine of the process, and where each variant changes it. |
-| [The project](project.md) | Finding, creating, and switching a project, and what the check does. |
+| [The project](project.md) | Creating, finding, switching, and ending a project, what the check does, and using your own sources. |
 | [A task](task.md) | What a task is, where it lives, and how a large task becomes an epic. |
 | [Scope](scope.md) | Naming goals and non-goals, and the contract later stages are judged against. |
 | [Research](research.md) | Finding what design needs, in your own code, outside it, and in the recipes that apply. |
@@ -25,9 +25,11 @@ not the internals of any one command: read a command's own description for that.
 ## Status
 
 The skeleton, this index and [How AIDA works](overview.md), was written first, so every page has
-a place. [The project](project.md) is the only topic page written since. Task through glossary
-above are placeholders: each names what it will cover and which part of the rewrite fills it in.
-A full pass over the whole set runs before release.
+a place. [The project](project.md) is the only topic page written since: creating, finding, and
+switching a project, the check, ending a project, cleaning up, and using your own sources.
+[A task](task.md) through [the glossary](glossary.md) are placeholders: each names what it will
+cover and which part of the rewrite fills it in. A full pass over the whole set runs before
+release.
 
 ## Where to start
 

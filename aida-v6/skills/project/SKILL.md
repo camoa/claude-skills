@@ -1,117 +1,245 @@
 ---
 name: project
-description: This skill should be used when the user asks "which project", wants to "create a project", "switch project", or "set up this code as a project". It reports the project that owns the current directory, creates a new one, switches to another, and runs the project check in every case.
+description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create <path> <framework>... | switch <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | unregister <name-or-path> | task-rule <name-or-path> [--remove] | uninstall <name-or-path>]"
 arguments: [action, target]
-allowed-tools: Read, Write
+allowed-tools: Bash
 ---
 
 # Project
 
-A project ties one code path to the work done on it. This skill answers three questions:
-which project owns this directory, make one, or switch to another. Read the arguments once
-and follow the matching section below. Every section runs the check before it finishes.
+A project ties one code path to AIDA's own work on it. This skill answers every question about
+one: which project owns this directory, make one, switch to another, end one, or clean one up.
+Read the argument once and follow the matching section below. Every section that touches a
+project runs the check before it finishes, and shows the whole report.
 
-Determine the action from the first argument: `create`, `switch`, or nothing.
-
-Every command below is a separate Bash call, and none is pre-approved. Each one asks the
-user for approval to run, in both run modes.
+Every command below is a Bash call, and none is pre-approved: each one asks for approval to run,
+in both run modes.
 
 ## Determine the run mode
 
-A task states its own run mode. This skill does not carry one.
+A task states its own run mode. This skill carries none of its own.
 
-Look for a stated run mode on the task active in this conversation. Found and it says
-`autonomous`: act autonomously through this whole invocation. Anything else, including no
-active task: act interactively. Deciding this once at the start avoids asking mid-flow.
+Look for a stated run mode on the task active in this conversation. Found, and it says
+`autonomous`: act autonomously through this whole invocation, setting `AIDA_RUN_MODE=autonomous`
+on every call to the scripts below. Anything else, including no active task: act interactively,
+the safe default. Decide this once, at the start, so nothing mid-flow has to ask again.
 
 ## No arguments: report
 
-1. Run, as one command (`registry.sh` is a library; source it, do not execute it):
-   ```
-   source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh" && registry_resolve_by_directory "$(pwd -P)"
-   ```
-   Exit 0 prints one JSON object for the matching project: `codePath`, `projectPath`,
-   `created`, `lastAccessed`. Exit 1 prints nothing — no registered project owns this
-   directory or an ancestor of it.
-2. **Exit 0 (a project was found).** Run the check, adding `--autonomous` when this run is
-   autonomous:
-   `"${CLAUDE_PLUGIN_ROOT}"/scripts/check-project.sh "<projectPath>" [--autonomous]`
-   Show its report — see "Reading the check's report" below. Then run:
-   ```
-   source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh" && registry_touch_last_accessed "<projectPath>"
-   ```
-   Stop here.
-3. **Exit 1 (no project found).** Read `~/.claude/aida/registry.json` with the Read tool, if
-   it exists, and look in its `declinedOffers` array for an entry whose `directory` equals
-   this directory (compare against `$(pwd -P)`; a missing file means nobody has ever been
-   asked).
-   - **Found.** Say this directory already declined a project and stop. Do not ask again.
-   - **Not found, and the run is interactive.** Ask whether to create a project here. A yes
-     runs the create steps below with no arguments, so they ask for the code path and the
-     framework in turn. A no runs:
-     ```
-     source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh" && registry_record_declined_offer "$(pwd -P)"
-     ```
-   - **Not found, and the run is autonomous.** Nobody is present to answer. Run
-     `registry_record_declined_offer` as above and continue. Nothing is lost: no project was
-     going to exist without an answer either way, and this is not the one step that halts.
-
-## `create <path> [framework...]`
-
-Two facts are required: the code path and the framework list. Take each from the arguments
-already given; ask for whichever is missing.
-
-- **Interactive, something missing.** Ask for it in plain language: "Where does the code
-  live?" for the path, "What is the stack?" for the frameworks. Wait for the answer.
-- **Autonomous, something missing.** There is nobody to ask. This is the one step in this
-  skill that halts in either mode when it cannot proceed: report exactly which of the two is
-  missing and stop. Do not guess a path or a framework.
-
-Once both are known, run, setting `AIDA_RUN_MODE=autonomous` first when this run is
-autonomous (its absence means interactive, the safe default):
-
+Run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/create-or-switch.sh create <path> <framework...>
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh report
 ```
 
-The script writes the project's files, adds it to the registry, and prints the new project's
-path. It then runs the check itself and prints that report. Show the whole output, and read
-the check's exit code as described below.
+Read the first line, `CASE: 1`, `CASE: 2`, or `CASE: 4`. This is ideal/project.md's "Picking up
+work", in the order it names, case 3 being case 1 winning when both would otherwise apply.
 
-Exit code 2 here is normal, not a problem. The code path was just set from what you gave, and a
-brand-new project can go without code for a while (decision 2). Say so plainly and move on.
+**`CASE: 1` or `CASE: 2`.** A project JSON object follows on the next line, then the check's own
+report. Show the report as described in "Reading the check's report" below. Stop here; this
+already touched `lastAccessed` and, for case 2, this is the remembered choice winning because
+nothing else answers.
+
+**`CASE: 4`.** Neither the directory nor a remembered choice resolves to a project. The output
+then carries `DECLINED: true` or `DECLINED: false`, then `PROJECTS:` followed by one JSON object
+per registered project, most recently used first (empty when none are registered yet).
+
+- **`DECLINED: false`, interactive.** Offer to create a project here, in one line: setting one up
+  gives findings and decisions somewhere to live past this session. Wait for a plain yes or no.
+  - **Yes.** Run the "create" section below with no facts already known, so it proposes and asks
+    for whatever it needs.
+  - **No.** Run:
+    ```
+    "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh record-declined "$(pwd -P)"
+    ```
+- **`DECLINED: false`, autonomous.** Nobody is present to answer. Run the same `record-declined`
+  call above and continue. Nothing is lost: no project was going to exist without an answer
+  either way, and this is not the one step that halts.
+- **`DECLINED: true`.** Do not offer again. Only an explicit `create` overrides it.
+
+Either way, once the offer is settled (or was never made), show the `PROJECTS:` list if it is
+non-empty: "Here is what you have registered, most recent first," each project's name, code
+path, and state. Ask which one to switch to, if any; picking one runs "switch" below with that
+name. An empty list needs no further comment beyond having said the directory is not set up.
+
+## `create`
+
+Creation needs three facts: the code path, the name, and the frameworks. It proposes what it
+can and confirms; only the name and, when nothing can be proposed or detected, the code path and
+the frameworks are asked outright.
+
+**1. Code path.** Given explicitly (an argument, or already known from context): canonicalize it
+by running `cd "<path>" 2>/dev/null && pwd -P`, then confirm it in one line before moving on
+("Use `<path>` as the code path?"). Autonomous: accept it without asking, recording that this run
+made its own confirmation.
+
+Not given: run
+```
+"${CLAUDE_PLUGIN_ROOT}"/scripts/detect-framework.sh "$(pwd -P)"
+```
+Exit 0: the current directory looks like code. Propose it, naming what was detected, and confirm
+the same way as an explicit path. Its output is also this step's framework detection; carry the
+list forward into step 3 rather than detecting twice.
+Exit 1 or 2: nothing to propose from here. Interactive: ask "Where does the code live?" and wait.
+Autonomous: **halt.** Report that the code path is missing and stop; this is one of the three
+facts creation cannot guess.
+
+**2. Name.** Always asked, whether or not one was already mentioned, because deriving it from the
+code folder saves one question and buys a collision problem the moment two projects share a
+folder name (ideal/project.md, "Considered and rejected"). Validate against
+`^[a-z][a-z0-9_]*$`; on a mismatch, say so and ask again. Autonomous with no name given: **halt**,
+report that the name is missing, stop.
+
+**3. Frameworks.** Skip this step's own detection when step 1 already ran it against this exact
+code path; otherwise, and only when the code path names a directory that exists, run
+```
+"${CLAUDE_PLUGIN_ROOT}"/scripts/detect-framework.sh "<codePath>"
+```
+Union whatever it prints with any framework names already given or mentioned, keeping the given
+ones first. Nothing given and nothing detected, or the code path does not exist yet: interactive
+asks "What is the stack?"; autonomous **halts**, reporting that the frameworks are missing.
+
+**4. The projects-folder base.** Run
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-projects-base
+```
+Exit 0: a base is already recorded. Use it silently; this is never asked a second time.
+Exit 1, interactive: ask once, "Where should project folders be stored? Default:
+`~/.claude/aida/projects`." Accept the default on an empty answer, or a typed absolute path.
+Exit 1, autonomous: use the default silently; this is not one of the three facts that halts.
+
+**5. Write it.** Once all four are known, run, with `AIDA_RUN_MODE` set as decided above:
+```
+AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+  create --name "<name>" --path "<codePath>" --projects-home "<base>" \
+  --framework "<fw1>" [--framework "<fw2>" ...]
+```
+It writes every file, makes the first commit, adds the registry row, records the projects-home
+base the first time only, and runs the check itself. Show the whole output.
+
+Exit code 2 from the check here is normal, not a problem: the code path was just set from what
+was confirmed, and a brand-new project can go without code for a while. Say so and move on.
+Exit code 5 means the code path named a refused location (see "Reading the check's report"); the
+script has already removed everything it wrote before reporting this, so nothing is left half
+registered. Say why it was refused and ask for a different code path.
 
 ## `switch <name-or-path>`
 
-Run, with the same `AIDA_RUN_MODE` convention as create:
-
+Run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/create-or-switch.sh switch <name-or-path>
+AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh switch "<target>"
 ```
 
-The script looks the target up by its exact code path or its exact project folder path,
-never by ancestry. Not found: say so and stop. Found: it prints the project's file and runs
-the check; show both.
+Looks the target up by its exact name or its exact code path, never by ancestry. Not found: say
+so and stop. Found: it may print a `NOTE:` line first, when this directory already belongs to
+another project by its own code path. That note means this switch applies to this conversation
+only and is not remembered, because a code-path match always wins over a remembered choice
+(ideal/project.md, "Picking up work", case 3). No note: the choice is now remembered for this
+directory, and a later plain `report` from here finds this project again on its own. Either way
+it then prints the project file and the check's report; show both.
 
-**Nothing is written to disk by switch.** The project just loaded applies to this
-conversation only. A new session started in the same directory resolves fresh from the
-registry, exactly as if switch had never run — the mapping switch used is not saved anywhere.
-If the same directory drives two projects across sessions, run switch again each time.
+## `list [active|complete|archived]...`
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh list [state...]
+```
+Prints one JSON object per registered project, most recently used first, each carrying
+`codePathExists`. With no state named, every project prints, whatever its state; naming one or
+more states filters to those. Use this for "show me my projects" and for cleanup: a project
+whose `codePathExists` is `false` names a code path that moved or was deleted, and one worth
+naming to the person rather than acting on alone.
+
+## `state <name-or-path> <active|complete|archived>`
+
+Ending a project sets one of its three states. Every transition is reversible, so reopening a
+complete or archived project is just this same call with `active`.
+
+Ask for the reason first, in one line, unless it is already obvious from what was just said; it
+becomes the commit's own `Why`. Then run:
+```
+AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+  state "<target>" <active|complete|archived> -- <reason...>
+```
+It writes the new state into the project file and its registry copy, commits the change with that
+reason, and reports what it found for `OPEN TASKS`. Show that line as-is: it says what is still
+open when a task system exists, or says plainly that none has been built yet in this project when
+none does. Either way this call never refuses to close a project over what it finds there; it
+only reports it and lets the person decide. Finish by showing the check's report.
+
+## `unregister <name-or-path>`
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh unregister "<target>"
+```
+Drops the registry row only. Both folders it names, the project folder and the code path, are
+printed back and never touched: this is recoverable by creating a fresh registration pointed at
+the same project folder, and there is a `rebuild-registry` action below for recovering every
+unregistered project at once from what is still on disk.
+
+## `task-rule <name-or-path> [--remove]`
+
+**This is opt-in and never runs without being asked for.** It writes a marker-delimited block
+into `<codePath>/CLAUDE.md`, in the user's own repository, saying that work producing findings or
+decisions belongs in a task and that a small fix does not need one. A `SessionStart` message is
+context; `CLAUDE.md` is an instruction the harness tells the model it must follow, which is the
+whole reason this exists as a separate, deliberate write.
+
+Confirm before writing: show what will change (a new block, or a refreshed one if already
+present) and ask for a plain yes or no. On yes, run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh task-rule "<target>" -- <reason...>
+```
+Refuses when the project has no code path, or the code path names a directory that does not
+exist yet, since either way there is no repository to write into; say so and stop rather than
+asking again later in the same turn.
+
+`--remove` takes the block back out and leaves the rest of the file untouched:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh task-rule-remove "<target>"
+```
+
+## `uninstall <name-or-path>`
+
+Cleaning up removes AIDA's own instructions from the code repository, and nothing else: never
+tests, never test configuration, never any tooling. Confirm before running, since this touches
+the user's own repository:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh uninstall "<target>"
+```
+Removes the task-rule block when one was installed. Reports on the memory hook rather than
+touching it: no part of this build installs one yet, so `memoryHook.installed` is always `false`
+today, and the honest answer is "nothing to remove," never a guess at files that do not exist.
+
+## `rebuild-registry [projectsHome]`
+
+The registry is an index, derivable from the project folders themselves. Run this after a
+corrupted or lost registry file, or after unregistering something by mistake:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh rebuild-registry ["<base>"]
+```
+Walks every immediate subdirectory of the projects-folder base (the recorded default when none is
+given) and reads each one's project file. Replaces the whole registry with what it found.
+`declinedOffers` and `directoryChoices` cannot be recovered this way and start empty again; say so
+plainly rather than letting it pass unremarked.
 
 ## Reading the check's report
 
-Every path above ends by running the check and showing what it printed. Read its exit code
-to decide what happens next, never its text alone:
+Every path above that touches a project ends by running the check and showing what it printed.
+Read its exit code to decide what happens next, never its text alone:
 
 | Exit code | What it means | What this skill does |
 |---|---|---|
-| 0 | Every field is present and well-formed. | Nothing further. The report already said so. |
-| 1 | A field is missing or does not match its shape. | The report already names each one and what would produce it. Say nothing further; the field is filled in by its own producer, later, not by this skill. |
-| 2 | The code path does not exist on disk. Two different things can cause this: a brand-new project whose code is not written yet (decision 2 allows this), or an existing project whose code path is gone. | Right after `create`, this is the first case. Say so plainly and move on; nothing is wrong. Everywhere else, read it as the second case: say plainly that only a person can say where the code went, and stop. Neither case is repaired here, in either run mode. |
+| 0 | Everything checked passed. | Nothing further; the report already said so. |
+| 1 | A project-file field is missing or the wrong shape. | The report names each one and the step that produces it. Say nothing further; that field is filled in by its own producer, later, not by this skill. |
+| 2 | The code path does not exist on disk. | Right after `create`, this is expected; say so and move on. Elsewhere, only the project's owner can say where the code went, and nothing here fixes it. Say that plainly and stop. |
 | 3 | The check itself could not run. | Show the error text and stop. |
+| 4 | The registry disagrees with the project file, has no row for it, or two rows share a name. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above; a shared name needs a person to rename one project. |
+| 5 | The code path names a refused location: a system root, the home directory, or anything above it. | Say why it was refused. Right after `create`, the script has already undone the creation; elsewhere, ask for a corrected code path. |
+| 6 | The project folder is not yet a git repository, or holds uncommitted work. | Say which. Not a git repository yet only happens on a project that predates this check; running `git init` there is the repair, and this skill does not do it silently. Uncommitted work is worth showing before starting anything else on top of it. |
 
-The check never asks a question, in either mode. When the run is autonomous and exit code 1
-came back, the check already recorded that nobody was present to answer; this skill does not
-repeat that offer.
+The check never asks a question, in either mode. When the run is autonomous and a non-zero exit
+code came back, the report already says `Autonomous run: ... Recorded, not performed.`; this
+skill does not repeat that offer.
