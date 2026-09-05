@@ -16,18 +16,15 @@
 #   { "version": 1,
 #     "projects": [ {codePath, path, name, lastAccessed, state} ],
 #     "declinedOffers": [ {directory, declinedAt} ],
-#     "acceptedOffers": [ {directory, project, acceptedAt} ],
-#     "directoryChoices": [ {directory, project, chosenAt} ] }
-#
 # `projects` is the index proper: which project owns a registered code path, and the copy of the
 # five values ideal/project.md names, "What a project holds": where the code is, where the project
 # folder is, the name, when it was last used, and its lifecycle state.
 #
-# `declinedOffers` and `acceptedOffers` together are "the offer"'s memory of a question already
+# `declinedOffers` is "the offer"'s memory of a question already
 # answered: was this directory offered a project, and what did it say. Three states, ported from
 # version 5's project-offer-read.sh and project-offer-write.sh, and not two: no row in either array
 # means nobody has been asked, so the proposal fires; a row in `declinedOffers` means the answer was
-# no; a row in `acceptedOffers` means a project was made, and names which one, since the directory
+# no. There is no record of a yes: once a project exists the directory resolves by code path, so
 # offered the question is not always the project's own codePath (a docs-only setup, or a different
 # code path entered at the prompt). A directory holds a row in at most one of the two arrays at
 # once: recording an answer for a directory removes any row for that same directory from the other
@@ -94,34 +91,13 @@
 #   registry_record_declined_offer <directory>
 #     Records that <directory> was offered a project and said no. Answering again for the same
 #     directory replaces the row rather than appending a second one. Also removes any row for
-#     <directory> from `acceptedOffers`, so a directory holds at most one answer at a time.
+#     <directory>, so a directory holds at most one answer.
 #
 #   registry_read_declined_offer <directory>
 #     Prints the declined-offer row that applies to <directory> and exits 0, or prints nothing and
 #     exits 1 when none applies. Matches the deepest recorded directory that is <directory> itself
 #     or an ancestor of it, the same boundary test registry_resolve_by_directory uses, so a decline
 #     recorded at a parent directory is remembered from every directory under it.
-#
-#   registry_record_accepted_offer <directory> <project>
-#     Records that <directory> was offered a project and a project named <project> was made.
-#     Answering again for the same directory replaces the row rather than appending a second one.
-#     Also removes any row for <directory> from `declinedOffers`, so a directory holds at most one
-#     answer at a time.
-#
-#   registry_read_accepted_offer <directory>
-#     Prints the accepted-offer row that applies to <directory> and exits 0, or prints nothing and
-#     exits 1 when none applies. Same deepest-match boundary test as registry_read_declined_offer.
-#
-#   registry_read_offer <directory>
-#     The combined answer for <directory>: whichever of a declined or an accepted row, across both
-#     arrays, is recorded at the deepest directory that is <directory> itself or an ancestor of it.
-#     Prints one JSON object, {directory, answer, project, recordedAt}, with `answer` "declined" or
-#     "accepted" and `project` null for a decline, and exits 0. Prints nothing and exits 1 when
-#     neither array holds a matching row, which is also what an unreadable or corrupt store prints,
-#     so a caller reads both the same way: nobody has answered, and the offer fires. Three states
-#     ported from version 5's project-offer-read.sh, where they lived as one field, `.offer`, on one
-#     store; registry_record_declined_offer and registry_record_accepted_offer are the two writes
-#     that were version 5's project-offer-write.sh with `--answer declined` and `--answer accepted`.
 #
 #   registry_record_directory_choice <directory> <project>
 #     Records that <project> is the project last chosen from <directory>. Answering again for the
@@ -143,7 +119,7 @@
 #     bounded rebuild never drops a project silently. lastAccessed cannot be recovered from
 #     project.json, which does not carry it: this rebuild uses the project folder's own last git
 #     commit date as the closest available fact, and today's date when the folder carries no git
-#     history yet. `declinedOffers`, `acceptedOffers` and `directoryChoices` are not derivable from
+#     history yet. `declinedOffers` and `directoryChoices` are not derivable from
 #     project files at all, so a rebuild always starts them empty; this is a real loss, stated here
 #     rather than hidden, not a bug. Always replaces the whole store; refuses only when it cannot
 #     write.
@@ -183,7 +159,7 @@ set -uo pipefail  # not -e: a sourced file must not exit the caller's shell on a
                    # instead report through a return code, e.g. no match in resolve-by-directory.
 
 REGISTRY_PATH="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
-REGISTRY_EMPTY='{"version":1,"projects":[],"declinedOffers":[],"acceptedOffers":[],"directoryChoices":[]}'
+REGISTRY_EMPTY='{"version":1,"projects":[],"declinedOffers":[],"directoryChoices":[]}'
 
 # ---------------------------------------------------------------------------------------------
 # Internal helpers (prefixed registry__, not part of the public functions above)
@@ -451,7 +427,6 @@ registry_record_declined_offer() {
         [ (.declinedOffers // [])[] | select((.directory // "" | sub("/+$"; "")) != $d) ]
         + [{directory: $d, declinedAt: $t}]
       )
-    | .acceptedOffers = [ (.acceptedOffers // [])[] | select((.directory // "" | sub("/+$"; "")) != $d) ]
   ')" || return 1
   printf '%s' "$new" | registry__write
 }
@@ -469,72 +444,6 @@ registry_read_declined_offer() {
       | select($d == $c or ($d | startswith($c + "/")))
       | $r + {_matchLen: ($c | length)}
     ]
-    | sort_by(._matchLen) | last // empty | del(._matchLen)
-  ' 2>/dev/null)" || return 1
-
-  [ -n "$match" ] || return 1
-  printf '%s\n' "$match"
-}
-
-registry_record_accepted_offer() {
-  registry__require_jq || return 1
-  local directory="${1:?registry_record_accepted_offer: a directory is required}"
-  local project="${2:?registry_record_accepted_offer: a project name is required}"
-  directory="$(registry__canon "$directory")"
-
-  local current
-  current="$(registry__current)" || return 1
-
-  local now new
-  now="$(date -u +%Y-%m-%d)"
-  new="$(printf '%s' "$current" | jq --arg d "$directory" --arg p "$project" --arg t "$now" '
-    .version = 1
-    | .acceptedOffers = (
-        [ (.acceptedOffers // [])[] | select((.directory // "" | sub("/+$"; "")) != $d) ]
-        + [{directory: $d, project: $p, acceptedAt: $t}]
-      )
-    | .declinedOffers = [ (.declinedOffers // [])[] | select((.directory // "" | sub("/+$"; "")) != $d) ]
-  ')" || return 1
-  printf '%s' "$new" | registry__write
-}
-
-registry_read_accepted_offer() {
-  registry__require_jq || return 1
-  local dir="${1:?registry_read_accepted_offer: a directory is required}" match
-  dir="$(registry__canon "$dir")"
-
-  match="$(registry__current | jq -c --arg d "$dir" '
-    [ (.acceptedOffers // [])[]?
-      | select((.directory // "") != "")
-      | . as $r
-      | ($r.directory | sub("/+$"; "")) as $c
-      | select($d == $c or ($d | startswith($c + "/")))
-      | $r + {_matchLen: ($c | length)}
-    ]
-    | sort_by(._matchLen) | last // empty | del(._matchLen)
-  ' 2>/dev/null)" || return 1
-
-  [ -n "$match" ] || return 1
-  printf '%s\n' "$match"
-}
-
-registry_read_offer() {
-  registry__require_jq || return 1
-  local dir="${1:?registry_read_offer: a directory is required}" match
-  dir="$(registry__canon "$dir")"
-
-  # Deepest match across both arrays: a decline recorded at a parent and an acceptance recorded
-  # at a child directory must not let the parent's answer shadow the more specific one, so both
-  # arrays are searched together and the single deepest row, whichever array it lives in, wins.
-  match="$(registry__current | jq -c --arg d "$dir" '
-    ( [ (.declinedOffers // [])[]? | select((.directory // "") != "")
-        | {directory, recordedAt: .declinedAt, answer: "declined", project: null} ]
-      + [ (.acceptedOffers // [])[]? | select((.directory // "") != "")
-          | {directory, recordedAt: .acceptedAt, answer: "accepted", project: (.project // null)} ]
-    )
-    | map(. as $r | ($r.directory | sub("/+$"; "")) as $c
-          | select($d == $c or ($d | startswith($c + "/")))
-          | $r + {_matchLen: ($c | length)})
     | sort_by(._matchLen) | last // empty | del(._matchLen)
   ' 2>/dev/null)" || return 1
 
@@ -622,7 +531,7 @@ registry_rebuild() {
 
   local new
   new="$(jq -n --argjson projects "$projects_json" \
-    '{version: 1, projects: $projects, declinedOffers: [], acceptedOffers: [], directoryChoices: []}')" || return 1
+    '{version: 1, projects: $projects, declinedOffers: [], directoryChoices: []}')" || return 1
   printf '%s' "$new" | registry__write || return 1
 
   if [ "$warned" -eq 1 ]; then

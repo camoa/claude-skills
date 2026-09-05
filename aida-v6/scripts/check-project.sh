@@ -493,7 +493,7 @@ fi
 REGISTRY_PATH="${AIDA_REGISTRY_PATH:-${HOME:-}/.claude/aida/registry.json}"
 # Must match registry.sh's own skeleton exactly, or a store this script invents fails the schema
 # it is checked against. Two skeletons for one file is the drift; there is no second one now.
-REGISTRY_EMPTY='{"version":1,"projects":[],"declinedOffers":[],"acceptedOffers":[],"directoryChoices":[]}'
+REGISTRY_EMPTY='{"version":1,"projects":[],"declinedOffers":[],"directoryChoices":[]}'
 REGISTRY_FILE_STATE="empty"   # empty | present | corrupt
 REGISTRY_JSON="$REGISTRY_EMPTY"
 

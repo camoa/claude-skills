@@ -4,7 +4,12 @@
   "description": "The structured file at $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json). The registry is an index, not a truth: it exists to answer two questions without opening every project file, which project owns this directory, and show me my projects so I can choose. One producer writes the project file and the matching registry row in the same operation; the project file wins any disagreement, and the check reports a mismatch rather than silently choosing one. Everything here is derivable by walking the registered project folders and reading each project file, so a lost or corrupt registry is an inconvenience, never a catastrophe.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "projects", "declinedOffers", "acceptedOffers", "directoryChoices"],
+  "required": [
+    "version",
+    "projects",
+    "declinedOffers",
+    "directoryChoices"
+  ],
   "properties": {
     "version": {
       "type": "integer",
@@ -15,25 +20,25 @@
     "projects": {
       "type": "array",
       "default": [],
-      "items": { "$ref": "#/$defs/projectEntry" },
+      "items": {
+        "$ref": "#/$defs/projectEntry"
+      },
       "description": "One row per registered project, holding copies of the five values this index answers on: where the code is, where the project folder is, the name, when it was last used, and its lifecycle state. A schema cannot express that no two rows share a name: JSON Schema checks one entry's own shape, not a relationship between two entries in the array, so this schema does not attempt uniqueness and the check runs a separate duplicate-name test instead of relying on this file for it."
     },
     "declinedOffers": {
       "type": "array",
       "default": [],
-      "items": { "$ref": "#/$defs/declinedOffer" },
-      "description": "One row per directory that was offered a project and said no. Recording the decline is the point: an unrecorded no is re-asked every session, and the person who said it pays the same interruption every time. Answering again for the same directory replaces its row rather than appending a second one, so the last answer is the answer. Together with `acceptedOffers` this is the three-state grammar the offer needs, ported from version 5's project-offer-read.sh and project-offer-write.sh: no row for a directory in either array means nobody has been asked, a row here means declined, a row in `acceptedOffers` means accepted. A directory holds a row in at most one of the two arrays; recording an answer removes any row for that directory from the other one."
-    },
-    "acceptedOffers": {
-      "type": "array",
-      "default": [],
-      "items": { "$ref": "#/$defs/acceptedOffer" },
-      "description": "One row per directory that was offered a project and a project was made. Records which project, because the directory the offer was made in is not always that project's own codePath: a docs-only setup, or a code path entered separately at the prompt, are both offers accepted from a directory the project never resolves to on its own. See `declinedOffers` for the three-state grammar the two arrays share. Answering again for the same directory replaces its row rather than appending a second one."
+      "items": {
+        "$ref": "#/$defs/declinedOffer"
+      },
+      "description": "One row per directory that was offered a project and said no. Recording the decline is the point: an unrecorded no is re-asked every session, and the person who said it pays the same interruption every time. Answering again for the same directory replaces its row rather than appending a second one, so the last answer is the answer. There is no matching record of a yes: once a project exists the directory resolves by its code path, so nothing would ever read one."
     },
     "directoryChoices": {
       "type": "array",
       "default": [],
-      "items": { "$ref": "#/$defs/directoryChoice" },
+      "items": {
+        "$ref": "#/$defs/directoryChoice"
+      },
       "description": "One row per directory: the project last chosen from it. This is the memory 'picking up work' needs for the case where the directory is not itself a registered code path, for example a documentation folder or a Claude Code project folder whose code lives elsewhere. It is a different fact from ownership, not a weaker copy of it: a directory can have a remembered choice and no code path at all, and when both a code-path match and a remembered choice exist and disagree, the registered code path wins. Answering again for the same directory replaces its row rather than appending a second one."
     }
   },
@@ -41,7 +46,13 @@
     "projectEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["codePath", "path", "name", "lastAccessed", "state"],
+      "required": [
+        "codePath",
+        "path",
+        "name",
+        "lastAccessed",
+        "state"
+      ],
       "properties": {
         "codePath": {
           "type": "string",
@@ -68,7 +79,11 @@
         },
         "state": {
           "type": "string",
-          "enum": ["active", "complete", "archived"],
+          "enum": [
+            "active",
+            "complete",
+            "archived"
+          ],
           "description": "A copy of the project file's own lifecycle state. The project file is authoritative for this value; this copy is what the list reads to decide whether a project is offered as work (active), still resolves but is not offered (complete), or is left out of the list unless asked for (archived)."
         }
       }
@@ -76,7 +91,10 @@
     "declinedOffer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["directory", "declinedAt"],
+      "required": [
+        "directory",
+        "declinedAt"
+      ],
       "properties": {
         "directory": {
           "type": "string",
@@ -91,34 +109,14 @@
         }
       }
     },
-    "acceptedOffer": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["directory", "project", "acceptedAt"],
-      "properties": {
-        "directory": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^/",
-          "description": "The absolute directory that was offered a project and said yes."
-        },
-        "project": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "description": "The name of the project made for this directory, matching a row in `projects`. A name naming no row in `projects` is a mistake this schema does not catch, and no script checks it yet either."
-        },
-        "acceptedAt": {
-          "type": "string",
-          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-          "description": "The date the acceptance was recorded."
-        }
-      }
-    },
     "directoryChoice": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["directory", "project", "chosenAt"],
+      "required": [
+        "directory",
+        "project",
+        "chosenAt"
+      ],
       "properties": {
         "directory": {
           "type": "string",
