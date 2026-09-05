@@ -2,7 +2,7 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-worktree-default <name-or-path> <true|false> | unregister <name-or-path> | task-rule <name-or-path> [--remove] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-worktree-default <name-or-path> <true|false> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -24,7 +24,7 @@ for approval.
 A task states its own run mode. This skill carries none of its own.
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
-`autonomous`: act autonomously through this whole invocation, setting `AIDA_RUN_MODE=autonomous`
+`autonomous`: act autonomously through this whole invocation, passing `--run-mode autonomous`
 on every call to the scripts below. Anything else, including no active task: act interactively,
 the safe default. Decide this once, at the start, so nothing mid-flow has to ask again.
 
@@ -55,15 +55,20 @@ per registered project, most recently used first (empty when none are registered
     ```
     "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh record-declined "$(pwd -P)"
     ```
-- **`DECLINED: false`, autonomous.** Nobody is present to answer. Run the same `record-declined`
-  call above and continue. Nothing is lost: no project was going to exist without an answer
-  either way, and this is not the one step that halts.
+- **`DECLINED: false`, autonomous.** Nobody is present to answer, so do not ask and do not record
+  anything. Silence is not a decline: recording one would suppress the offer forever on the
+  strength of nobody having been there. Say that the directory is not set up, and continue. This
+  is what version 5 does, and it is the rule in the specification.
 - **`DECLINED: true`.** Do not offer again. Only an explicit `create` overrides it.
 
 Either way, once the offer is settled (or was never made), show the `PROJECTS:` list if it is
 non-empty: "Here is what you have registered, most recent first," each project's name, code
 path, and state. Ask which one to switch to, if any; picking one runs "switch" below with that
 name. An empty list needs no further comment beyond having said the directory is not set up.
+
+Autonomously, do not ask which one. Show the list, say that no project owns this directory and
+that none was chosen, and continue. Choosing one for the person would bind every later step to a
+guess, and no later step is blocked by having no project: the one that needs one says so.
 
 ## `create`
 
@@ -111,9 +116,9 @@ Exit 1, interactive: ask once, "Where should project folders be stored? Default:
 `~/.claude/aida/projects`." Accept the default on an empty answer, or a typed absolute path.
 Exit 1, autonomous: use the default silently; this is not one of the three facts that halts.
 
-**5. Write it.** Once all four are known, run, with `AIDA_RUN_MODE` set as decided above:
+**5. Write it.** Once all four are known, run, with the run mode set as decided above:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   create --name "<name>" --path "<codePath>" --projects-home "<base>" \
   --framework "<fw1>" [--framework "<fw2>" ...]
 ```
@@ -126,11 +131,25 @@ Exit code 5 means the code path named a refused location (see "Reading the check
 script has already removed everything it wrote before reporting this, so nothing is left half
 registered. Say why it was refused and ask for a different code path.
 
+**6. Offer the task rule, once.** A new project has a code path, so there is a repository to
+write into. Say what the task rule is: a short block added to that repository's own `CLAUDE.md`
+saying work goes through a task. Ask for a plain yes or no.
+
+Yes runs the `task-rule` section below for this project. No records the refusal, so it is never
+offered again:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  task-rule "<name>" --decline
+```
+Autonomously, do not ask and do not record anything. The rule writes into a repository the person
+owns, so nobody's silence stands for a yes, and an unrecorded question is offered again next time
+while a recorded no is not. Say that the offer is waiting, and continue.
+
 ## `switch <name-or-path>`
 
 Run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh switch "<target>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> switch "<target>"
 ```
 
 Looks the target up by its exact name or its exact code path, never by ancestry. Not found: say
@@ -162,7 +181,7 @@ Ask for the reason first, in one line, unless it is already obvious from what wa
 becomes the commit's own `Why`. Autonomous: nobody is present to answer; use the reason already
 said, if any, or record it as `(autonomous run, no reason given)`, and continue. Then run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   state "<target>" <active|complete|archived> -- <reason...>
 ```
 It writes the new state into the project file and its registry copy, commits the change with that
@@ -191,7 +210,7 @@ given or could be proposed, and stop.
 
 Once the new path is known, run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-code-path "<target>" "<newCodePath>"
 ```
 Looks the target up the same way `switch` does. Not found: say so and stop. The same path as
@@ -207,7 +226,7 @@ output either way.
 Whether a task builds in a worktree without being asked. Settable at creation and at any later
 time, the same as the task rule. Run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh \
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-worktree-default "<target>" <true|false>
 ```
 This only ever touches AIDA's own project file, never the user's repository, so it needs no
@@ -224,7 +243,7 @@ printed back and never touched: this is recoverable by creating a fresh registra
 the same project folder, and there is a `rebuild-registry` action below for recovering every
 unregistered project at once from what is still on disk.
 
-## `task-rule <name-or-path> [--remove]`
+## `task-rule <name-or-path> [--remove | --decline]`
 
 **This is opt-in and never runs without being asked for.** It writes a marker-delimited block
 into `<codePath>/CLAUDE.md`, in the user's own repository, saying that work producing findings or
@@ -237,7 +256,7 @@ present) and ask for a plain yes or no. Autonomous: nobody is present to answer;
 `task-rule` at all is itself the request, so skip the confirmation, record that this run made
 its own confirmation, and continue. On yes, or under an autonomous run, run:
 ```
-AIDA_RUN_MODE=<interactive|autonomous> "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh task-rule "<target>" -- <reason...>
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule "<target>" -- <reason...>
 ```
 Refuses when the project has no code path, or the code path names a directory that does not
 exist yet, since either way there is no repository to write into; say so and stop rather than

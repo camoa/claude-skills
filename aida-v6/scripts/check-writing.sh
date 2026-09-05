@@ -55,14 +55,31 @@ while IFS= read -r file; do
     continue
   fi
 
-  result="$(awk '
+  # A fence opens or closes only on a line whose first non-blank characters are the fence itself.
+  # Testing for the marker anywhere on the line was wrong twice over: a line that merely mentions
+  # a fence flipped the state for the whole rest of the file, and that same line was skipped, so
+  # an em dash sitting on it was never reported. This script's own comments were the first
+  # casualty. Fences are a markdown idea, so only a markdown file gets the state machine at all.
+  case "$file" in
+    *.md|*.markdown) is_markdown=1 ;;
+    *) is_markdown=0 ;;
+  esac
+
+  # The character is built from its own bytes rather than written out, so this file does not
+  # contain the thing it searches for and does not report itself.
+  result="$(awk -v md="$is_markdown" '
+    BEGIN { EMDASH = sprintf("%c%c%c", 226, 128, 148) }
     {
       line = $0
-      if (index(line, "```") > 0 || index(line, "~~~") > 0) {
-        infence = !infence
-        next
+      if (md == 1) {
+        trimmed = line
+        sub(/^[ \t]*/, "", trimmed)
+        if (index(trimmed, "```") == 1 || index(trimmed, "~~~") == 1) {
+          infence = !infence
+          next
+        }
       }
-      if (!infence && index(line, "—") > 0) {
+      if (!infence && index(line, EMDASH) > 0) {
         print FNR
       }
     }

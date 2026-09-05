@@ -24,7 +24,7 @@
 #   project-actions.sh set-code-path <name-or-codePath> <newCodePath>
 #   project-actions.sh set-worktree-default <name-or-codePath> <true|false>
 #   project-actions.sh unregister <name-or-codePath>
-#   project-actions.sh task-rule <name-or-codePath> -- <why...>
+#   project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
 #   project-actions.sh task-rule-remove <name-or-codePath>
 #   project-actions.sh uninstall <name-or-codePath>
 #   project-actions.sh record-declined <directory>
@@ -41,9 +41,13 @@
 # passing a different `--projects-home` is a one-off choice for that one project, never a change
 # to the standing default.
 #
-# Set AIDA_RUN_MODE=autonomous in the environment before any of these to have the check that
-# runs at the end record that no person was present. Unset, or any other value, means
-# interactive, the safe default (foundations.md, Run mode).
+# Pass --run-mode autonomous as the first argument of any action to have the check that runs at
+# the end record that no person was present. Absent, or any other value, means interactive, the
+# safe default (foundations.md, Run mode). It is an argument rather than an environment variable
+# prefix because Claude Code matches a Bash permission rule against the whole command line and
+# strips only a fixed list of known-safe variable prefixes, so a command written as
+# AIDA_RUN_MODE=autonomous script.sh does not match a rule naming script.sh and asks for approval
+# every time. AIDA_RUN_MODE is still read as a fallback, for a caller that is not the skill.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints
 # why to stderr and exits 3. A miss that is a real, expected outcome (switch found nothing,
@@ -59,8 +63,15 @@ REGISTRY_FILE="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
 PROJECTS_HOME_DEFAULT="${AIDA_PROJECTS_HOME:-$HOME/.claude/aida/projects}"
 SETTINGS_FILE="${AIDA_SETTINGS_PATH:-$HOME/.claude/aida/settings.json}"
 
+RUN_MODE="${AIDA_RUN_MODE:-interactive}"
+if [ "${1:-}" = "--run-mode" ]; then
+  [ $# -ge 2 ] || { printf 'project-actions: --run-mode needs a value\n' >&2; exit 3; }
+  RUN_MODE="$2"
+  shift 2
+fi
+
 check_flags=()
-if [ "${AIDA_RUN_MODE:-interactive}" = "autonomous" ]; then
+if [ "$RUN_MODE" = "autonomous" ]; then
   check_flags=(--autonomous)
 fi
 
@@ -80,7 +91,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-code-path <name-or-codePath> <newCodePath>
        project-actions.sh set-worktree-default <name-or-codePath> <true|false>
        project-actions.sh unregister <name-or-codePath>
-       project-actions.sh task-rule <name-or-codePath> -- <why...>
+       project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
        project-actions.sh task-rule-remove <name-or-codePath>
        project-actions.sh uninstall <name-or-codePath>
        project-actions.sh record-declined <directory>
@@ -100,25 +111,11 @@ source "$REGISTRY_LIB"
 # Small, portable helpers shared by more than one action below.
 # ------------------------------------------------------------------------------------------------
 
-# Same resolution registry.sh applies internally, repeated here (not called across the library
-# boundary) so a relative path given on the command line always becomes the same string whether
-# it lands in project.json, the notes file, or the registry.
+# One canonicaliser, the library's. This file used to carry its own copy, and when the library's
+# was fixed for a symlinked ancestor the copy was not, so one real folder canonicalised two ways
+# depending on which script wrote it.
 canon_path() {
-  local input="$1" resolved parent base
-  resolved="$(cd "$input" 2>/dev/null && pwd -P)" || resolved=""
-  if [ -z "$resolved" ]; then
-    case "$input" in
-      /*) : ;;
-      *) input="$(pwd -P)/$input" ;;
-    esac
-    parent="$(dirname -- "$input")"
-    base="$(basename -- "$input")"
-    resolved="$(cd "$parent" 2>/dev/null && pwd -P)" || resolved="$parent"
-    resolved="$resolved/$base"
-  fi
-  resolved="${resolved%/}"
-  [ -n "$resolved" ] || resolved="/"
-  printf '%s' "$resolved"
+  registry__canon "$1"
 }
 
 strip_slash() { local p="$1"; [ "$p" = "/" ] && printf '/' || printf '%s' "${p%/}"; }
@@ -702,6 +699,8 @@ EOF
 do_task_rule() {
   local target="${1:?task-rule: a name or a code path is required}"
   shift
+  local declining="false"
+  [ "${1:-}" = "--decline" ] && { declining="true"; shift; }
   [ "${1:-}" = "--" ] && shift
   local why="$*"
   [ -n "$why" ] || why="requested"
@@ -712,6 +711,26 @@ do_task_rule() {
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   project_name="$(printf '%s' "$match" | jq -r '.name')"
+
+  # A decline is recorded and nothing is written, so the offer is never made again. It needs no
+  # code path and no repository, because it writes into neither. Version 5 records the same answer
+  # at creation, which is why a person is asked once rather than every session.
+  if [ "$declining" = "true" ]; then
+    tmp="$(mktemp)" || die3 "cannot create a temp file"
+    jq '.taskRule = {offered: true, accepted: false}' "$project_path/project.json" > "$tmp" \
+      && mv "$tmp" "$project_path/project.json" \
+      || { rm -f "$tmp"; die3 "could not record the declined task rule in $project_path/project.json"; }
+    commit_project "$project_path" \
+      "Record the task rule as offered and declined" \
+      "$why" \
+      "" \
+      "" \
+      "project" "task-rule" \
+      || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
+    echo "DECLINED: the task rule was offered for ${project_name} and will not be offered again."
+    run_check "$project_path"
+    return 0
+  fi
 
   # ideal/project.md, "Starting a new project": everything opted into can be set at any time, but
   # the task rule needs a repository to write into. There is no repository without a code path.
@@ -750,14 +769,21 @@ do_task_rule() {
       index($0,b){ while ((getline line < bf) > 0) print line; close(bf); skip=1; next }
       index($0,e){ skip=0; next }
       !skip{print}
-    ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md"
+    ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
+      rm -f "$tmp" "$block_file"
+      echo "REFUSED: rewriting ${claude_md} failed. The task rule was not refreshed." >&2
+      return 1
+    }
     rm -f "$block_file"
     echo "REFRESHED: ${claude_md}"
   else
     {
       [ -s "$claude_md" ] && printf '\n'
       task_rule_block "$project_name"
-    } >> "$claude_md"
+    } >> "$claude_md" || {
+      echo "REFUSED: appending to ${claude_md} failed. The task rule was not written." >&2
+      return 1
+    }
     echo "WRITTEN: ${claude_md}"
   fi
 
