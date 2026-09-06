@@ -167,11 +167,11 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh list [state...]
 ```
-Prints one JSON object per registered project, most recently used first, each carrying
-`codePathExists`. With no state named, every project prints, whatever its state; naming one or
-more states filters to those. Use this for "show me my projects" and for cleanup: a project
-whose `codePathExists` is `false` names a code path that moved or was deleted, and one worth
-naming to the person rather than acting on alone.
+Prints one JSON object per registered project, most recently used first. Each carries
+`codePathExists`. With no state named, every project prints, whatever its state. Naming one or
+more states filters to those. Use it for "show me my projects" and for cleanup. A project whose
+`codePathExists` is `false` names a code path that moved or was deleted. Name that project to
+the person rather than acting on it alone.
 
 ## `state <name-or-path> <active|complete|archived>`
 
@@ -217,8 +217,8 @@ Once the new path is known, run:
 Looks the target up the same way `switch` does. Not found: say so and stop. The same path as
 before: prints `UNCHANGED` and stops there. Otherwise it writes the new code path into the
 project file and the registry copy, commits the change, and runs the check. Exit code 5 here
-means the same refused location it means at creation, and this action undoes the same way
-creation does: the script restores the old code path in both places before reporting the
+means the same refused location it means at creation. This action undoes the same way. The
+script restores the old code path in both places before it reports the
 refusal, so nothing is left pointing at a location that was never accepted. Show the whole
 output either way.
 
@@ -239,10 +239,10 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh unregister "<target>"
 ```
-Drops the registry row only. Both folders it names, the project folder and the code path, are
-printed back and never touched: this is recoverable by creating a fresh registration pointed at
-the same project folder, and there is a `rebuild-registry` action below for recovering every
-unregistered project at once from what is still on disk.
+Drops the registry row only. It prints both folders it names, the project folder and the code
+path, and it touches neither. This is recoverable: create a fresh registration pointed at the
+same project folder. To recover every unregistered project at once, use `rebuild-registry`
+below.
 
 ## `task-rule <name-or-path> [--remove | --decline]`
 
@@ -259,9 +259,9 @@ its own confirmation, and continue. On yes, or under an autonomous run, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule "<target>" -- <reason...>
 ```
-Refuses when the project has no code path, or the code path names a directory that does not
-exist yet, since either way there is no repository to write into; say so and stop rather than
-asking again later in the same turn.
+Refuses when the project has no code path. It refuses too when the code path names a directory
+that does not exist yet. Either way there is no repository to write into. Say so and stop. Do
+not ask again later in the same turn.
 
 `--remove` takes the block back out and leaves the rest of the file untouched:
 ```
