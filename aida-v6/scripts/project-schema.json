@@ -192,7 +192,8 @@
               "guides",
               "playbooks",
               "processRecipes",
-              "agenticRecipes"
+              "agenticRecipes",
+              "toolingRecipes"
             ]
           },
           "description": "Which of the four kinds this source supplies. A source can supply more than one kind, e.g. a team folder holding both its playbooks and its process recipes."
@@ -209,7 +210,8 @@
               "guides",
               "playbooks",
               "processRecipes",
-              "agenticRecipes"
+              "agenticRecipes",
+              "toolingRecipes"
             ]
           },
           "additionalProperties": {

@@ -20,7 +20,13 @@ One paragraph. What this tool is and what a project gets by having it.
 
 ## Install
 
-The commands that add the tool, in order.
+The commands that add the tool, in order. One per line, in the first fenced block under this
+heading. A script reads that block, so nothing else here is read.
+
+```
+<first command>
+<second command>
+```
 
 Each one runs as arguments, never through a shell, so a shell metacharacter is refused rather than
 run to mean something its author did not intend. Write two steps instead of joining them with `&&`.
@@ -32,7 +38,13 @@ better than anything written here in advance.
 
 ## Run
 
-The command that invokes the tool, and where its result appears.
+The command that invokes the tool. One command, in the first fenced block under this heading.
+
+```
+<command>
+```
+
+Say below the block where the result appears, for a person reading it.
 
 This is also the check. Whoever needs the tool runs this command, and a "not found" is the answer
 that the tool is missing. Install, then run it again. Nothing records whether the tool is present,
