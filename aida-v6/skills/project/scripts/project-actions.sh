@@ -328,7 +328,9 @@ EOF
   # A whitelist, not a blacklist: everything is ignored until named back in. records/ is named
   # back in for .json only by the line above it, so it is re-ignored on its own line below.
   # the check overwrites records/check-project.json on every run, and a file that changes on
-  # every check is a derived value, never something to commit (foundations.md, State).
+  # every check is a derived value, never something to commit (foundations.md, State). The
+  # unanchored pattern covers a task's own records folder too: a task check writes one per task,
+  # and without it every check put a derived file into permanent history.
   cat > "$project_path/.gitignore" <<'EOF'
 *
 !*/
@@ -337,6 +339,7 @@ EOF
 !*.json
 !*.txt
 /records/
+records/
 EOF
 
   git -C "$project_path" init -q || die3 "git init failed in $project_path"

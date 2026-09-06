@@ -22,6 +22,7 @@
 #   <path>/project.json
 #   <plugin root>/scripts/project-schema.json: the project field list, as data
 #   <plugin root>/scripts/registry-schema.json: the registry field list, as data
+#   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json): the registry, if it exists
 #   whether the directory named by project.json's codePath still exists
 #   $HOME, to apply the code-path safety rules
@@ -192,6 +193,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 PROJECT_SCHEMA_FILE="$PLUGIN_ROOT/scripts/project-schema.json"
 REGISTRY_SCHEMA_FILE="$PLUGIN_ROOT/scripts/registry-schema.json"
+SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
+
+[ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
+# shellcheck source=/dev/null
+source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
 
 [ -f "$PROJECT_SCHEMA_FILE" ] || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE not found"
 jq empty "$PROJECT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE is not valid JSON"
@@ -219,89 +225,18 @@ PROJECT_FILE="$PROJECT_PATH/project.json"
 jq empty "$PROJECT_FILE" 2>/dev/null || die3 "cannot read the project file: $PROJECT_FILE is not valid JSON"
 
 # ---------------------------------------------------------------------------
-# 4. Compare a data file against a schema's top-level field list (a jq
-#    comparison, never a model's judgment). Shared between project.json
-#    against project-schema.json and the registry against registry-schema.json.
+# 4. Compare a data file against a schema's top-level field list. The
+#    comparison itself (a jq program, never a model's judgment) lives in
+#    schema-check.sh, sourced in section 2 above, so this same algorithm
+#    serves project.json against project-schema.json here, the registry
+#    against registry-schema.json below, and task.json against
+#    task-schema.json in check-task.sh, from one place rather than three
+#    copies drifting apart.
 # ---------------------------------------------------------------------------
-
-JQ_COMPARE='
-  # Expected JSON-Schema type names for one property definition. Both schema files use only
-  # three shapes for a field: a plain "type", a nullable "oneOf" of null plus one other
-  # option, or a bare "$ref" (only ever to an object $def). A jq comparison, never a full
-  # JSON-Schema validator. This reads exactly the three shapes the files actually use.
-  def expected_types:
-    if has("type") then
-      (.type | if (type == "array") then . else [.] end)
-    elif has("oneOf") then
-      [ .oneOf[] | if has("type") then .type else "object" end ]
-    elif has("$ref") then
-      ["object"]
-    else
-      []
-    end;
-  def type_matches($jsonType; $t; $v):
-    if $jsonType == "integer" then ($t == "number" and ($v == ($v | floor)))
-    elif $jsonType == "number" then $t == "number"
-    else $jsonType == $t
-    end;
-  # Constraints declared directly on one property definition, checked only once the value type
-  # already matches, so a string check never runs against a number, and so on. Checks exactly
-  # four keywords, because those are the only ones either schema declares directly on a
-  # property: minLength and pattern for strings, minItems for arrays, enum for any type.
-  def constraint_failures($def; $t; $v):
-    [
-      ( if $t == "string" and ($def | has("minLength")) and (($v | length) < $def.minLength)
-        then {constraint: "minLength", detail: ("must be at least " + ($def.minLength | tostring) + " character(s) long, found " + ($v | length | tostring))}
-        else empty end ),
-      ( if $t == "string" and ($def | has("pattern")) and (($v | test($def.pattern)) | not)
-        then {constraint: "pattern", detail: ("must match the pattern " + $def.pattern)}
-        else empty end ),
-      ( if $t == "array" and ($def | has("minItems")) and (($v | length) < $def.minItems)
-        then {constraint: "minItems", detail: ("must have at least " + ($def.minItems | tostring) + " item(s), found " + ($v | length | tostring))}
-        else empty end ),
-      ( if ($def | has("enum")) and (($def.enum | index($v)) == null)
-        then {constraint: "enum", detail: ("must be one of: " + ($def.enum | map(tostring) | join(", ")))}
-        else empty end )
-    ];
-  ($schema[0].properties // {}) as $props
-  | ($data[0]) as $p
-  | {
-      missing: [
-        ($props | keys_unsorted[]) as $name
-        | select(($p | has($name)) | not)
-        | {field: $name, detail: ($props[$name].description // "no description in the field list")}
-      ],
-      unreadable: [
-        ($props | keys_unsorted[]) as $name
-        | select($p | has($name))
-        | ($p[$name]) as $v
-        | ($v | type) as $t
-        | ($props[$name] | expected_types) as $expected
-        | (($expected | length) > 0 and ($expected | map(type_matches(.; $t; $v)) | any)) as $type_ok
-        | (if $type_ok then constraint_failures($props[$name]; $t; $v) else [] end) as $cfails
-        | select(($type_ok | not) or ($cfails | length) > 0)
-        | {
-            field: $name,
-            expectedType: ($expected | join(" or ")),
-            actualType: $t,
-            violatedConstraints: $cfails,
-            reason: (
-              if ($type_ok | not) then
-                "expected " + ($expected | join(" or ")) + ", found " + $t
-              else
-                "is a valid " + $t + " but violates " + ($cfails | map(.constraint) | join(", ")) + ": " + ($cfails | map(.detail) | join("; "))
-              end
-            ),
-            detail: ($props[$name].description // "no description in the field list")
-          }
-      ],
-      fieldCount: ($props | length)
-    }
-'
 
 # --- 4a. project.json against project-schema.json --------------------------
 
-COMPARE_JSON="$(jq -n --slurpfile schema "$PROJECT_SCHEMA_FILE" --slurpfile data "$PROJECT_FILE" "$JQ_COMPARE")" \
+COMPARE_JSON="$(schema_check_compare "$PROJECT_SCHEMA_FILE" "$PROJECT_FILE")" \
   || die3 "the project field-list comparison itself failed to run. Check $PROJECT_SCHEMA_FILE for a malformed entry"
 
 MISSING_JSON="$(echo "$COMPARE_JSON" | jq -c '.missing')"
@@ -310,26 +245,21 @@ MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
 UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
 FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
 
-field_named_in() {
-  # $1 = the field-list JSON (MISSING_JSON or UNREADABLE_JSON), $2 = field name.
-  echo "$1" | jq --arg f "$2" '[.[] | select(.field == $f)] | length > 0'
-}
-
 CODEPATH_VALUE_JSON="$(jq -c '.codePath // null' "$PROJECT_FILE")"
 CODEPATH_IS_STRING="$(echo "$CODEPATH_VALUE_JSON" | jq -r '. | type == "string"')"
-CODEPATH_NAMED_IN_MISSING="$(field_named_in "$MISSING_JSON" "codePath")"
-CODEPATH_NAMED_IN_UNREADABLE="$(field_named_in "$UNREADABLE_JSON" "codePath")"
+CODEPATH_NAMED_IN_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "codePath")"
+CODEPATH_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "codePath")"
 
-FRAMEWORKS_NAMED_IN_MISSING="$(field_named_in "$MISSING_JSON" "frameworks")"
-FRAMEWORKS_NAMED_IN_UNREADABLE="$(field_named_in "$UNREADABLE_JSON" "frameworks")"
+FRAMEWORKS_NAMED_IN_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "frameworks")"
+FRAMEWORKS_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "frameworks")"
 
 NAME_VALUE_JSON="$(jq -c '.name // null' "$PROJECT_FILE")"
-NAME_NAMED_IN_MISSING="$(field_named_in "$MISSING_JSON" "name")"
-NAME_NAMED_IN_UNREADABLE="$(field_named_in "$UNREADABLE_JSON" "name")"
+NAME_NAMED_IN_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "name")"
+NAME_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "name")"
 
 STATE_VALUE_JSON="$(jq -c '.state // null' "$PROJECT_FILE")"
-STATE_NAMED_IN_MISSING="$(field_named_in "$MISSING_JSON" "state")"
-STATE_NAMED_IN_UNREADABLE="$(field_named_in "$UNREADABLE_JSON" "state")"
+STATE_NAMED_IN_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "state")"
+STATE_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "state")"
 
 # ---------------------------------------------------------------------------
 # 4b. Three cross-field tests project-schema.json's own descriptions promise
@@ -515,7 +445,7 @@ REG_FIELD_COUNT="$REGISTRY_SCHEMA_FIELD_COUNT"
 if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
   : # nothing to compare; the report says so under "Registry:" below
 else
-  REG_COMPARE_JSON="$(jq -n --slurpfile schema "$REGISTRY_SCHEMA_FILE" --slurpfile data <(printf '%s' "$REGISTRY_JSON") "$JQ_COMPARE")" \
+  REG_COMPARE_JSON="$(schema_check_compare "$REGISTRY_SCHEMA_FILE" <(printf '%s' "$REGISTRY_JSON"))" \
     || die3 "the registry field-list comparison itself failed to run. Check $REGISTRY_SCHEMA_FILE for a malformed entry"
   REG_MISSING_JSON="$(echo "$REG_COMPARE_JSON" | jq -c '.missing')"
   REG_UNREADABLE_JSON="$(echo "$REG_COMPARE_JSON" | jq -c '.unreadable')"
@@ -678,7 +608,8 @@ if [ "$CODEPATH_EXISTS_JSON" = "true" ] \
    && [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREADABLE" = "false" ] \
    && [ "$SAFETY_VERDICT" != "refused-system-root" ] && [ "$SAFETY_VERDICT" != "refused-home" ] \
    && [ "$SAFETY_VERDICT" != "refused-above-home" ] \
-   && [ "${REGISTRY_MISMATCH_COUNT:-0}" -eq 0 ]; then
+   && [ "${REGISTRY_MISMATCH_COUNT:-0}" -eq 0 ] \
+   && [ "${MISSING_COUNT:-0}" -eq 0 ] && [ "${UNREADABLE_COUNT:-0}" -eq 0 ]; then
   READY_JSON="true"
   READY_REASON="codePath exists, is not a refused location, frameworks is set, and the registry row agrees with the project file"
 else
@@ -691,6 +622,11 @@ else
   # A registry row that disagrees with the project file is a wrong answer a person acts on: the
   # list shows one code path and the work happens against another. Readiness said true through it.
   [ "${REGISTRY_MISMATCH_COUNT:-0}" -gt 0 ] && reasons+=("the registry row disagrees with the project file")
+  # Any field the schema requires and the file does not have. Readiness used to name three fields
+  # and ignore the rest, so a project missing its name reported ready while the exit code said
+  # otherwise. Two answers to one question, and a person acts on the readable one.
+  [ "${MISSING_COUNT:-0}" -gt 0 ] && reasons+=("$MISSING_COUNT required field(s) missing")
+  [ "${UNREADABLE_COUNT:-0}" -gt 0 ] && reasons+=("$UNREADABLE_COUNT field(s) not well-formed")
   READY_REASON="$(IFS='; '; echo "${reasons[*]}")"
 fi
 

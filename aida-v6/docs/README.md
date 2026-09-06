@@ -9,7 +9,7 @@ not the internals of any one command: read a command's own description for that.
 |---|---|
 | [How AIDA works](overview.md) | The spine of the process, and where each variant changes it. |
 | [The project](project.md) | Creating, finding, switching, and ending a project, what the check does, and using your own sources. |
-| [A task](task.md) | What a task is, where it lives, and how a large task becomes an epic. |
+| [A task](task.md) | What a task is, starting one, picking up work, its three states, and splitting a large one. |
 | [Scope](scope.md) | Naming goals and non-goals, and the contract later stages are judged against. |
 | [Research](research.md) | Finding what design needs, in your own code, outside it, and in the recipes that apply. |
 | [Design](design.md) | Turning research into a specification, checked against the scope contract. |
@@ -25,13 +25,16 @@ not the internals of any one command: read a command's own description for that.
 ## Status
 
 The skeleton, this index and [How AIDA works](overview.md), was written first, so every page has
-a place. [The project](project.md) is the only topic page written since: creating, finding, and
-switching a project, the check, ending a project, cleaning up, and using your own sources.
-[A task](task.md) through [the glossary](glossary.md) are placeholders: each names what it will
+a place. [The project](project.md) and [a task](task.md) are the topic pages written since:
+creating, finding, and switching a project, the check, ending a project, cleaning up, and using
+your own sources; then what a task holds, starting one, picking up work, its three states,
+splitting a large one, and finishing it.
+[Scope](scope.md) through [the glossary](glossary.md) are placeholders: each names what it will
 cover and which part of the rewrite fills it in. A full pass over the whole set runs before
 release.
 
 ## Where to start
 
-New to AIDA, start with [How AIDA works](overview.md), then [The project](project.md). Every
-task lives inside a project, so a project is the first thing AIDA needs from you.
+New to AIDA, start with [How AIDA works](overview.md), then [The project](project.md), then
+[a task](task.md). Every task lives inside a project, so a project is the first thing AIDA needs
+from you.
