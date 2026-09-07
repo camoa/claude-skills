@@ -105,30 +105,48 @@ if [ -z "$RECIPE" ]; then
 fi
 
 # ------------------------------------------------------- read a fenced block
-# Install takes EVERY fenced block under its heading, in order, and Run takes only the first.
+# A fenced block says what it holds, in its own info string. Nothing is read by position.
 #
-# A real recipe splits its install steps across several blocks so the prose between them can say
-# why one step has to precede another. Both recipes in the catalog do exactly that. Reading only
-# the first block ran the first command, skipped the rest silently, and reported success.
+# Under Install, every block tagged `sh` is commands, read in order. A block tagged anything else
+# is not read at all, so a configuration example sits safely beside the commands that install the
+# tool. Under Run, exactly one block is tagged `sh`, and it holds one command; a worked example of
+# the same tool called another way is prose, not a second thing to run.
 #
-# A Run section carries the command, and then often a worked example of the same tool called
-# another way. An example is not a second thing to run, so Run stops at the first block.
+# The earlier rule was positional, "the first block under the heading", and it failed on the first
+# real recipe: both catalog recipes split their install across two blocks so the prose between
+# could explain the ordering, so the reader ran one command, skipped the other, and reported
+# success. A rule that counts blocks is the same kind of rule version 5 used for its criterion
+# markers, and it fails the same way.
+#
+# A recipe with no `sh` block where one is required is refused by name. That is a defect in the
+# recipe, and saying so is more useful than guessing which fence was meant.
 
-all_blocks_under() {
+sh_blocks_under() {
   awk -v want="$1" '
-    /^## / { inSection = ($0 == "## " want); inFence = 0; next }
+    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; next }
     !inSection { next }
-    /^```/ { inFence = !inFence; next }
-    inFence { print }
+    /^```/ {
+      if (inFence) { inFence = 0; taken = 0; next }
+      inFence = 1
+      taken = ($0 == "```sh")
+      next
+    }
+    inFence && taken { print }
   ' "$RECIPE"
 }
 
-first_block_under() {
+# How many `sh` blocks a heading has. Run requires exactly one, so the count is the check.
+sh_block_count_under() {
   awk -v want="$1" '
-    /^## / { inSection = ($0 == "## " want); fence = 0; next }
+    /^## / { inSection = ($0 == "## " want); inFence = 0; next }
     !inSection { next }
-    /^```/ { fence++; if (fence == 2) exit; next }
-    fence == 1 { print }
+    /^```/ {
+      if (inFence) { inFence = 0; next }
+      inFence = 1
+      if ($0 == "```sh") n++
+      next
+    }
+    END { print n + 0 }
   ' "$RECIPE"
 }
 
@@ -159,15 +177,16 @@ case "$ACTION" in
   show)
     printf 'RECIPE: %s\n' "$RECIPE"
     printf 'FRAMEWORK: %s\n' "$RECIPE_FRAMEWORK"
-    printf 'INSTALL:\n'; all_blocks_under Install | sed 's/^/  /'
-    printf 'RUN:\n';     first_block_under Run     | sed 's/^/  /'
+    printf 'INSTALL:\n'; sh_blocks_under Install | sed 's/^/  /'
+    printf 'RUN:\n';     sh_blocks_under Run     | sed 's/^/  /'
     exit 0
     ;;
 
   install)
-    STEPS="$(all_blocks_under Install)"
+    STEPS="$(sh_blocks_under Install)"
     if [ -z "$STEPS" ]; then
-      printf 'tool-actions: %s has no Install block\n' "$RECIPE" >&2
+      printf 'tool-actions: %s has no block tagged sh under Install\n' "$RECIPE" >&2
+      printf 'tool-actions: a command block opens with three backticks and sh, and this recipe has none\n' >&2
       exit 3
     fi
     if [ "$RUN_MODE" = "interactive" ]; then
@@ -183,9 +202,15 @@ case "$ACTION" in
     ;;
 
   run)
-    CMD="$(first_block_under Run | grep -v '^[[:space:]]*$' | head -1)"
+    N="$(sh_block_count_under Run)"
+    if [ "$N" != "1" ]; then
+      printf 'tool-actions: %s has %s blocks tagged sh under Run, and Run takes exactly one\n' "$RECIPE" "$N" >&2
+      printf 'tool-actions: a worked example belongs in the prose, because it is not a second thing to run\n' >&2
+      exit 3
+    fi
+    CMD="$(sh_blocks_under Run | grep -v '^[[:space:]]*$' | head -1)"
     if [ -z "$CMD" ]; then
-      printf 'tool-actions: %s has no Run block\n' "$RECIPE" >&2
+      printf 'tool-actions: %s has an empty sh block under Run\n' "$RECIPE" >&2
       exit 3
     fi
     run_line "$CMD" "${EXTRA[@]+"${EXTRA[@]}"}" || exit 4
