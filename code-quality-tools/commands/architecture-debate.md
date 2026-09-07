@@ -88,7 +88,7 @@ Spawn 3 teammates using the prompt templates below. After spawning:
 1. Tell the user: "Team spawned. Teammates are debating — I'll synthesize when they finish."
 2. Do NOT perform analysis yourself — wait for all teammates to complete.
 
-**Teammate model & monitoring.** Each spawn prompt pins `**Model:** sonnet` — explicit per-spawn values are intentional. To change the team's default model globally without editing these prompts, set `teammateDefaultModel` in settings (a per-spawn `Model:` still overrides it). Watch teammate progress with `claude agents` or `/tasks`. Do **not** dispatch the whole debate as a background session (`claude --bg`): the teammates already run in worktree isolation, so a backgrounded debate is a worktree-of-worktrees plus permission-auto-deny scenario that is untested — run debates in the foreground.
+**Teammate model & monitoring.** Each spawn prompt pins `**Model:** sonnet` — explicit per-spawn values are intentional, and naming the model in the prompt is the documented way to set a team's model. There is no global setting: `teammateDefaultModel` was removed in Claude Code v2.1.234 and a leftover value is ignored. To force one model across every subagent instead, set `CLAUDE_CODE_SUBAGENT_MODEL` together with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (v2.1.257+) — the second is a boolean that promotes the first above the per-spawn value, which otherwise wins. Watch teammate progress with `claude agents` or `/tasks`. Do **not** dispatch the whole debate as a background session (`claude --bg`): the teammates already run in worktree isolation, so a backgrounded debate is a worktree-of-worktrees plus permission-auto-deny scenario that is untested — run debates in the foreground.
 
 ### Step 6 — Synthesize
 

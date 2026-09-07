@@ -146,7 +146,7 @@ npm install --save-dev \
 
 ## Where this fits in defense-in-depth
 
-This plugin is the whole-codebase, CI-grade SAST stage. It is one layer among several Claude Code already gives you, not a replacement for the others: **security-guidance** (a separate plugin, offered during `/setup`) watches Claude's own edits in-session. Native `/security-review` is a one-shot, diff-scoped pass. **Code Review** (`/code-review ultra`) covers the PR with full-codebase context. This plugin adds the framework-aware, multi-tool SAST and the OWASP-mapped debate none of the others run:
+This plugin is the whole-codebase, CI-grade SAST stage. It is one layer among several Claude Code already gives you, not a replacement for the others: **security-guidance** (a separate plugin, offered during `/setup`) watches Claude's own edits in-session. Native `/security-review` is a one-shot, diff-scoped pass. The **Claude Security** plugin runs a multi-agent deep scan of the whole repository, emitting SARIF and reviewed patch files; it is complementary to this plugin, not a substitute, and its scans do not repeat exactly. **Code Review** (`/code-review ultra`) covers the PR with full-codebase context. This plugin adds the framework-aware, multi-tool SAST and the OWASP-mapped debate none of the others run:
 
 **Drupal, 10 layers:** Drush `pm:security`, Composer audit, PHPCS security rules (OWASP/CIS), Psalm taint analysis (XSS/SQLi data flow), custom Drupal patterns (raw `db_query`, form/access-callback checks), Security Review module, Semgrep (20,000+ rules), Trivy, Gitleaks, Roave Security Advisories.
 

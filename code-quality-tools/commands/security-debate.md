@@ -105,7 +105,7 @@ Spawn 3 teammates using the prompt templates below. After spawning:
 2. If running inside tmux, teammates appear in split panes (visible output). Otherwise they run in-process (background).
 3. Do NOT perform analysis yourself — wait for all teammates to complete before proceeding.
 
-**Teammate model & monitoring.** Each spawn prompt pins `**Model:** sonnet` — explicit per-spawn values are intentional. To change the team's default model globally without editing these prompts, set `teammateDefaultModel` in settings (a per-spawn `Model:` still overrides it). Watch teammate progress with `claude agents` or `/tasks`. Do **not** dispatch the whole debate as a background session (`claude --bg`): the teammates already run in worktree isolation, so a backgrounded debate is a worktree-of-worktrees plus permission-auto-deny scenario that is untested — run debates in the foreground.
+**Teammate model & monitoring.** Each spawn prompt pins `**Model:** sonnet` — explicit per-spawn values are intentional, and naming the model in the prompt is the documented way to set a team's model. There is no global setting: `teammateDefaultModel` was removed in Claude Code v2.1.234 and a leftover value is ignored. To force one model across every subagent instead, set `CLAUDE_CODE_SUBAGENT_MODEL` together with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (v2.1.257+) — the second is a boolean that promotes the first above the per-spawn value, which otherwise wins. Watch teammate progress with `claude agents` or `/tasks`. Do **not** dispatch the whole debate as a background session (`claude --bg`): the teammates already run in worktree isolation, so a backgrounded debate is a worktree-of-worktrees plus permission-auto-deny scenario that is untested — run debates in the foreground.
 
 ### Step 6 — Synthesize
 
@@ -370,7 +370,7 @@ The lead synthesizes into `{report_dir}/security-debate.md`:
 
 ## Where This Fits (defense in depth)
 
-This debate is the **whole-codebase, multi-agent OWASP** layer — it has **no native equivalent**. It sits above the native diff/in-session layers: the official **security-guidance** plugin reviews Claude's *own* edits in session (auto, no command; offered by `/code-quality-tools:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. Neither chains findings into attack scenarios, maps OWASP/CWE coverage, or challenges severity across competing perspectives. Run those native layers to reduce what reaches a scan; run this debate to pressure-test the whole-tree findings `/code-quality-tools:security` produced.
+This debate is the **whole-codebase, multi-agent OWASP** layer — it has **no native equivalent**. It sits above the native diff/in-session layers: the official **security-guidance** plugin reviews Claude's *own* edits in session (auto, no command; offered by `/code-quality-tools:setup`), native `/security-review` runs one generic, diff-scoped pass on demand, and the **Claude Security** plugin (`/plugin install claude-security@claude-plugins-official`) runs a multi-agent deep scan of a whole repository with independently reviewed findings and a SARIF log. None of the three chains findings into attack scenarios, maps OWASP/CWE coverage, or challenges severity across competing perspectives. Run those native layers to reduce what reaches a scan; run this debate to pressure-test the whole-tree findings `/code-quality-tools:security` produced.
 
 ## Related Commands
 

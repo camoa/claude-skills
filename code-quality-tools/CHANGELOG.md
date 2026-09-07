@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.5] - 2026-09-06
+
+### Fixed
+
+- **Both debate commands told you to set a setting Claude Code deleted.** `commands/architecture-debate.md` and `commands/security-debate.md` said the team's default model could be changed globally with `teammateDefaultModel`. That setting was removed in Claude Code v2.1.234 and a leftover value is now ignored, so anyone following the instruction changed nothing and had no way to tell. The replacement says what is actually true: naming the model in the spawn prompt is how a team's model is set, which is what both commands already do, and `CLAUDE_CODE_SUBAGENT_MODEL` with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (v2.1.257+) is what forces one model across every subagent. The second is a boolean that promotes the first above the per-spawn value; it does not name a model itself, and the earlier report of this defect had that backwards.
+- **The skill's version had been wrong for five releases.** `skills/code-quality-audit/SKILL.md` frontmatter read `3.9.6` against a plugin at `3.10.4`, breaking `CONVENTIONS.md`'s own lockstep rule while 3.10.0 through 3.10.4 changed gate scripts the skill documents. No check compares those two numbers — `make manifests` compares `plugin.json` to the catalog, and `make claims` never reads skill frontmatter — so nothing stops this reopening. The gap is recorded in the task's research; a check for it is separate work.
+
+### Added
+
+- **The Claude Security plugin is named in the defense-in-depth layering, in all five places that carry it.** `commands/security.md`, `commands/security-debate.md`, `skills/code-quality-audit/SKILL.md`, `README.md` and `commands/setup.md` described four layers and omitted the on-demand deep scan that sits between `/security-review` and PR-time Code Review. Each entry records what the plugin actually is rather than an approximation: it defaults to the whole repository rather than a diff, writes a SARIF 2.1.0 log alongside Markdown and JSONL, proposes patch files that a separate agent reviews and nothing auto-applies, needs a paid plan and `python3` 3.9+, and returns different findings between runs on the same tree. Its own documentation keeps existing scanners as a separate CI stage, so the text says the two are complementary rather than implying either replaces the other.
+- **The sandbox note covers the three things that can actually bite.** It previously described `allowedPaths` and nothing else. It now records that the setup command's git-hook install cannot work in a sandboxed session — sandboxing is enforced by the operating system for a Bash command and its child processes, `.git/hooks` is a protected path, and neither an `allowWrite` entry nor an `Edit` allow rule lifts it, so GrumPHP's `git:init` and Husky's install fail as `unable to unlink old ... Read-only file system` rather than with anything naming hooks. It documents `sandbox.credentials` `deny` and `mask` for auditing an untrusted tree, which is where this plugin's gates run `composer audit`, `npm audit` and `semgrep`. And it records that a `claude -p` or SDK session never shows the folder trust dialog and runs this plugin's `PreCompact`, `FileChanged` and `PermissionDenied` hooks against an unfamiliar clone regardless.
+
 ## [3.10.4] - 2026-08-30
 
 ### Fixed
