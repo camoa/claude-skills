@@ -186,10 +186,11 @@ See: `references/troubleshooting.md#security-scan-issues`
 |---|---|---|
 | In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Common vulns in code Claude writes, fixed the same session. `/code-quality-tools:setup` offers to install it. |
 | On demand — diff | native `/security-review` | One generic, diff-scoped vuln pass on the current branch |
+| On demand — deep scan | **Claude Security** plugin (`/plugin install claude-security@claude-plugins-official`) | Multi-agent scan of a whole repository, or of a diff when asked. Independently reviewed findings, `.patch` files it never auto-applies, and a SARIF 2.1.0 log (`CLAUDE-SECURITY-RESULTS.sarif`) beside Markdown and JSONL. Needs a paid plan and `python3` 3.9+. Scans are nondeterministic — two runs on the same tree can surface different findings. |
 | On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context; tune via `/code-quality-tools:generate-review-md` |
 | Whole-codebase / CI | **`/code-quality-tools:security`** (this command) + the debates | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
 
-The native diff-scoped layers reduce what reaches this scan — they do **not** replace it. `/security-review` is generic and diff-only; it cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run `/code-quality-tools:security` for the whole-tree, framework-specific coverage.
+Claude Security and this command are complementary, not alternatives: its own documentation keeps "your existing scanners" as a separate CI stage and says plainly that it does not replace static analysis or dependency scanning. It brings multi-agent judgement and SARIF; this command brings deterministic, framework-aware tooling. The native diff-scoped layers reduce what reaches this scan — they do **not** replace it. `/security-review` is generic and diff-only; it cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run `/code-quality-tools:security` for the whole-tree, framework-specific coverage.
 
 ## Related Commands
 

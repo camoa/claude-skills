@@ -177,6 +177,8 @@ The official **security-guidance** plugin reviews Claude's *own* code edits for 
 
 This plugin's audits scan the *whole tree*; security-guidance watches Claude's *live edits*. They complement each other.
 
+A third layer sits between them and the PR: the **Claude Security** plugin (`/plugin install claude-security@claude-plugins-official`) runs a multi-agent deep scan on demand, writing a SARIF 2.1.0 log and patch files a separate agent reviews and nothing auto-applies. It needs a paid plan and `python3` 3.9+, and its scans are nondeterministic. It does not replace this plugin's deterministic tooling — its own documentation lists existing scanners as their own CI stage.
+
 **Soft offer — never auto-install.** Ask the user (plain chat, not a silent install):
 
 > Install the in-session **security-guidance** plugin? It reviews Claude's own edits for vulnerabilities as it works, in addition to this plugin's whole-tree scans. [y/N]
