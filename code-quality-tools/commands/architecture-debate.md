@@ -1,12 +1,12 @@
 ---
-description: Debate architecture and SOLID findings with competing agent team (Pragmatist + Purist + Maintainer). Use when user says "debate architecture", "SOLID debate", "is this over-engineered", "should I refactor", "architecture review with debate", "code structure debate", "design review". Best for contentious design decisions where reasonable people disagree.
+description: Debate architecture and SOLID findings with three competing subagents (Pragmatist + Purist + Maintainer) across two rounds. Use when user says "debate architecture", "SOLID debate", "is this over-engineered", "should I refactor", "architecture review with debate", "code structure debate", "design review". Best for contentious design decisions where reasonable people disagree.
 allowed-tools: Read, Write, Glob, Grep, Bash
 argument-hint: <file-or-directory-path>
 ---
 
 # Architecture Debate
 
-Analyze code architecture from 3 competing perspectives using an agent team. A Pragmatist defends shipping, a Purist advocates clean architecture, and a Maintainer focuses on long-term readability. They debate and produce a balanced assessment.
+Analyze code architecture from 3 competing perspectives. A Pragmatist defends shipping, a Purist advocates clean architecture, and a Maintainer focuses on long-term readability. A second round has each of them dispute the other two, and the synthesis reports where they disagreed and where all three agreed.
 
 ## Usage
 
@@ -16,7 +16,7 @@ Analyze code architecture from 3 competing perspectives using an agent team. A P
 
 ## What This Does
 
-Spawns a 3-teammate agent team that debates the architecture of the specified code. Each teammate analyzes from a different perspective, then they cross-challenge. The lead synthesizes a balanced `architecture-debate.md` in the run's report directory, with agreed improvements and accepted trade-offs.
+Dispatches 3 competing subagents that debate the architecture of the specified code, in two rounds: each analyzes from a different perspective, then each reads and disputes the other two. The lead synthesizes a balanced `architecture-debate.md` in the run's report directory, with agreed improvements and accepted trade-offs.
 
 ## Instructions
 
@@ -31,7 +31,7 @@ REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core
   && REPORT_DIR="$(cd "$REPORT_DIR" && pwd)" && echo "$REPORT_DIR"
 ```
 
-Use that value as `{report_dir}` everywhere below, including in the spawn prompts. It must be **absolute**: teammates run in isolated worktrees, so a relative path would give each teammate its own private directory and the lead would find nothing to synthesize. The `cd`/`pwd` above is what guarantees that. `--ensure` creates the directory with the 0700 that keeps quoted source and matched-secret filenames off a shared machine, so do not `mkdir` it yourself.
+Use that value as `{report_dir}` everywhere below, including in the spawn prompts. It must be **absolute**: the analysts run in isolated worktrees, so a relative path would give each its own private directory, and neither the challenge round nor the lead would find anything to read. The `cd`/`pwd` above is what guarantees that. `--ensure` creates the directory with the 0700 that keeps quoted source and matched-secret filenames off a shared machine, so do not `mkdir` it yourself.
 
 ### Step 1 — Check Target Exists
 
@@ -49,9 +49,13 @@ If path doesn't exist:
 
 ### Step 2 — Check Prerequisites
 
-Verify agent teams are available by attempting to create a team. If creation fails:
+Nothing beyond the target itself. This command dispatches ordinary subagents with the Agent
+tool, which is always available; it needs no agent team, no experimental flag and no Task
+tools.
 
-> Agent teams are not available in this environment.
+If the Agent tool is unavailable in this session:
+
+> Subagents are not available in this environment.
 >
 > **Fallback:** Use `/code-quality-tools:solid` for automated SOLID analysis, or ask Claude to "review architecture of {path}".
 
@@ -67,42 +71,98 @@ If fewer than 30 lines total:
 
 Continue if user confirms or if 30+ lines.
 
-### Step 4 — Create Shared Task List
+### Step 4 — Plan the two rounds
 
-Create a team and these tasks:
+The debate runs in two rounds, and **you sequence them** — dispatch round 2 only after all
+three of round 1 have written their files. Nothing in the harness enforces this ordering.
+The shared task list that once did requires the Task tools, which current models exclude by
+default (v2.1.233+), so the order is yours to keep.
 
-| # | Task | Assign to | Depends on |
-|---|------|-----------|------------|
-| 1 | Defend current architecture — identify what works, why it ships | Pragmatist | — |
-| 2 | Identify SOLID/DRY violations — propose clean architecture | Purist | — |
-| 3 | Assess maintainability — what confuses a new developer in 6 months | Maintainer | — |
-| 4 | Cross-challenge — debate trade-offs, find consensus on what to fix | All three | 1, 2, 3 |
-| 5 | Synthesize balanced architecture assessment | Lead | 4 |
+| Round | Work | Who | Reads |
+|---|---|---|---|
+| 1 | Defend the current architecture — what works, why it ships | Pragmatist | the code |
+| 1 | Identify SOLID/DRY violations, propose clean architecture | Purist | the code |
+| 1 | Assess maintainability — what confuses a new developer in 6 months | Maintainer | the code |
+| 2 | Cross-challenge — dispute trade-offs, find real consensus on what to fix | all three, in parallel | their own round-1 file plus the other two |
+| 3 | Synthesize the balanced assessment | you | all six files |
 
-**Quality Gate:** Each agent must address ALL aspects of their perspective. If an agent skips areas (e.g., Purist only checks SRP but ignores OCP/LSP/ISP/DIP), the lead flags incomplete analysis.
+**Quality Gate:** Each agent must address ALL aspects of their perspective. If an agent skips areas (e.g., Purist only checks SRP but ignores OCP/LSP/ISP/DIP), note that in the synthesis and name what was not covered.
 
-### Step 5 — Spawn Teammates
+### Step 5 — Round 1: dispatch the three analysts
 
-Spawn 3 teammates using the prompt templates below. After spawning:
+Dispatch all three in **one message**, so they run concurrently. Each is an ordinary
+subagent: call the Agent tool with the prompt template below, `model: sonnet`, and
+`isolation: "worktree"`. Do **not** pass `name` — a `name` makes the agent a teammate, which
+needs `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and buys nothing here, because every analyst
+delivers by writing a file rather than by replying.
 
-1. Tell the user: "Team spawned. Teammates are debating — I'll synthesize when they finish."
-2. Do NOT perform analysis yourself — wait for all teammates to complete.
+After dispatching:
 
-**Teammate model & monitoring.** Each spawn prompt pins `**Model:** sonnet` — explicit per-spawn values are intentional, and naming the model in the prompt is the documented way to set a team's model. There is no global setting: `teammateDefaultModel` was removed in Claude Code v2.1.234 and a leftover value is ignored. To force one model across every subagent instead, set `CLAUDE_CODE_SUBAGENT_MODEL` together with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (v2.1.257+) — the second is a boolean that promotes the first above the per-spawn value, which otherwise wins. Watch teammate progress with `claude agents` or `/tasks`. Do **not** dispatch the whole debate as a background session (`claude --bg`): the teammates already run in worktree isolation, so a backgrounded debate is a worktree-of-worktrees plus permission-auto-deny scenario that is untested — run debates in the foreground.
+1. Tell the user: "Three analysts are working — I'll run the challenge round when they finish."
+2. Do NOT analyze anything yourself. Wait for all three.
+3. Confirm each file exists before continuing. An agent that returns prose but writes no file has delivered nothing, and reads exactly like one that found nothing.
+
+**Model & monitoring.** Each prompt below pins `**Model:** sonnet`; naming the model per dispatch is how it is set. There is no global default setting — `teammateDefaultModel` was removed in Claude Code v2.1.234 and a leftover value is ignored. To force one model across every subagent, set `CLAUDE_CODE_SUBAGENT_MODEL` with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (v2.1.257+); the second is a boolean that promotes the first above the per-dispatch value, which otherwise wins. Watch progress with `/tasks`. Do **not** run the whole debate as a background session (`claude --bg`): the analysts already run in worktree isolation, so that is a worktree-of-worktrees plus permission-auto-deny scenario that is untested.
+
+### Step 5b — Round 2: the cross-challenge
+
+This is the round that makes it a debate rather than three reports side by side. Dispatch all three again in one message, same models and isolation, each with this prompt:
+
+```
+You are the {role} in an architecture debate. Round 1 is finished.
+
+YOUR OWN ROUND-1 ANALYSIS:
+  {report_dir}/{your-file}.md
+
+THE OTHER TWO ANALYSES:
+  {report_dir}/{other-file-1}.md
+  {report_dir}/{other-file-2}.md
+
+YOUR MISSION:
+Read all three. Then dispute them.
+
+1. Which of their recommendations would you refuse to make, and why? Name the file and
+   the change.
+2. Where has one of them changed your own round-1 position? Say which, and why.
+3. Which proposed refactor costs more than the problem it solves? Which cheap fix did
+   they all miss?
+4. Where do all three of you agree? Agreement across a pragmatist, a purist and a
+   maintainer is either a genuine consensus or a shared blind spot. Say which, and why.
+
+Disagreement is the product here. If you find nothing to dispute, say so explicitly and
+explain why the other two were right. Do not manufacture a dispute, and do not stay quiet
+to avoid one.
+
+WRITE to: {report_dir}/{your-role}-challenge.md
+
+Format:
+# {Role} Challenge
+
+## Recommendations I would refuse
+| Their proposal | Why I refuse | What I would do instead |
+
+## Positions I changed
+## Unanimous — consensus or blind spot?
+## Summary
+```
+
+Wait for all three challenge files before synthesizing.
 
 ### Step 6 — Synthesize
 
-When all teammates finish:
+When all six files exist:
 
-- Read `{report_dir}/pragmatist-analysis.md`, `{report_dir}/purist-analysis.md`, `{report_dir}/maintainer-analysis.md`
-- Write `{report_dir}/architecture-debate.md` using the Output Format below
+- Read the three round-1 analyses: `{report_dir}/pragmatist-analysis.md`, `{report_dir}/purist-analysis.md`, `{report_dir}/maintainer-analysis.md`
+- Read the three round-2 challenges: `{report_dir}/pragmatist-challenge.md`, `{report_dir}/purist-challenge.md`, `{report_dir}/maintainer-challenge.md`
+- Write `{report_dir}/architecture-debate.md` using the Output Format below. Consensus, Accepted Trade-offs and Disputed Findings all come from round 2 — a "consensus" drawn from round 1 alone is three independent opinions that happen to agree, which is not the same thing.
+- A missing challenge file is reported, never silently skipped: say which lens did not challenge, so a reader knows the assessment rests on two perspectives rather than three.
 - Tell the user: "Architecture debate complete. Assessment saved to `{report_dir}/architecture-debate.md`"
 
 ---
 
 ## Spawn Prompts
 
-### Teammate 1: Pragmatist
+### Analyst 1: Pragmatist
 
 **Model:** sonnet
 **MaxTurns:** 10
@@ -160,11 +220,12 @@ Use this format:
 - Would push back on: {N}
 
 WHEN DONE:
-Message the other teammates: "Pragmatist analysis complete. Review pragmatist-analysis.md"
+When the file is written, you are done. Do not message anyone — the lead reads your
+file and dispatches the challenge round; there is no channel between you and the other two.
 Mark your task as completed.
 ```
 
-### Teammate 2: Purist
+### Analyst 2: Purist
 
 **Model:** sonnet
 **MaxTurns:** 10
@@ -241,11 +302,12 @@ Use this format:
 - Architecture score: {total}/35
 
 WHEN DONE:
-Message the other teammates: "Purist analysis complete. Review purist-analysis.md"
+When the file is written, you are done. Do not message anyone — the lead reads your
+file and dispatches the challenge round; there is no channel between you and the other two.
 Mark your task as completed.
 ```
 
-### Teammate 3: Maintainer
+### Analyst 3: Maintainer
 
 **Model:** sonnet
 **MaxTurns:** 10
@@ -322,7 +384,8 @@ Use this format:
 - Overall maintenance rating: {rating}
 
 WHEN DONE:
-Message the other teammates: "Maintainer analysis complete. Review maintainer-analysis.md"
+When the file is written, you are done. Do not message anyone — the lead reads your
+file and dispatches the challenge round; there is no channel between you and the other two.
 Mark your task as completed.
 ```
 
@@ -333,7 +396,8 @@ Mark your task as completed.
 Writes into `{report_dir}`, the audit report directory this run resolves:
 
 - `architecture-debate.md` — the lead's synthesis
-- `pragmatist-analysis.md`, `purist-analysis.md`, `maintainer-analysis.md` — one per teammate, left in place as the evidence behind the synthesis
+- `pragmatist-analysis.md`, `purist-analysis.md`, `maintainer-analysis.md` — one per analyst, round 1
+- `pragmatist-challenge.md`, `purist-challenge.md`, `maintainer-challenge.md` — one per analyst, round 2; left in place as the evidence behind the synthesis
 
 ## Output Format
 
@@ -346,7 +410,7 @@ The lead synthesizes into `{report_dir}/architecture-debate.md`:
 {file/directory path, total lines, total files}
 
 ## Debate Method
-Agent team with 3 competing perspectives.
+Three competing subagents, two rounds.
 Source: [pragmatist-analysis.md] | [purist-analysis.md] | [maintainer-analysis.md]
 
 ## Summary

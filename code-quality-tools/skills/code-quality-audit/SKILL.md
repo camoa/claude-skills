@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 3.10.5
+version: 3.11.0
 model: inherit
 allowed-tools: Read, Bash, Grep, Glob
 disallowed-tools: Write, Edit
@@ -56,7 +56,7 @@ This skill declares two skill-scoped hooks in its frontmatter — active ONLY wh
 | `FileChanged` | Linter config changes — exact filenames for common variants: `composer.json`, `package.json`, `phpstan.neon*` (3 variants), `phpcs.xml*` (3 variants), `psalm.xml*` (2 variants), `eslint.config.{js,mjs,cjs}`, `.eslintrc.{js,json,yml,yaml}`, `tsconfig.json` | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
 | `PermissionDenied` | `Read`, `Grep`, `Glob` denied in auto mode | Returns `{retry: true}` — retries non-destructive classifier denials during audits |
 
-**Scope discipline:** both hooks auto-disable when the skill isn't active. A `FileChanged` handler at plugin scope would fire on every file change across every conversation — noise, not value. Audit-contextual behaviors belong here.
+**Scope discipline:** these hooks are registered when the skill is invoked and keep running for the rest of the session — they do **not** switch off when the skill goes inactive. What skill scope buys is the invocation gate, not an off switch: a `FileChanged` handler at plugin scope is live from session start in every conversation where the plugin is enabled, firing on file changes for people who never asked for an audit. Declared here, nothing fires until somebody actually invokes the skill. Use `CLAUDE_CODE_QUALITY_WATCH=0` below to stop watch-mode within a session, and `once: true` on a hook handler if you want Claude Code to remove it after its first successful run — `once` is honored only in skill frontmatter, and is a poor fit for watch-mode linting, which is meant to fire repeatedly.
 
 **FileChanged matcher is literal, not glob.** Per the Hooks Reference, `FileChanged` matcher values are split on `|` and registered as **literal filenames** — not globs. To watch arbitrary source files (`*.php`, `*.tsx`), populate `watchPaths` dynamically from a `CwdChanged` hook, or add specific absolute paths to your project's `.claude/settings.json`. The default watch list here covers linter-config churn; broaden it in your settings if you want per-file watch on source edits.
 
@@ -68,7 +68,7 @@ export CLAUDE_CODE_QUALITY_WATCH=0
 
 Unset the variable (or set to anything other than `0`) to re-enable.
 
-**Why this isn't in `hooks/hooks.json`:** session-global hooks stay at plugin scope (only `PreCompact` there). Audit behaviors scoped to skill-active sessions avoid polluting unrelated work.
+**Why this isn't in `hooks/hooks.json`:** a plugin-scope hook needs no invocation — it is armed in every session the plugin is enabled in. Only `PreCompact` belongs there, because it should apply whether or not anyone ran an audit. Watch-mode linting should not fire for someone who never asked for it, which is what declaring it here prevents.
 
 ### Known limitations
 
