@@ -80,11 +80,16 @@ a file format often does.
 
 Typical search subjects, named by what they read, not by a fixed roster:
 
-- **Prior art inside this project.** Search by proximity of name over things already named:
-  class and service names, file and directory paths, the layer something sits in. Then read
-  each candidate's own docblock, the top of the file, never the whole file. Bounded to this
-  project's own custom code and its custom front end; core and contributed code are noise here.
-  A file with no docblock is reported as having none, which is itself a signal.
+- **Prior art inside this project.** Load the process recipe for this project's framework and
+  read where this project's own code lives, where its own configuration lives, and which paths
+  are out of bounds. The recipe derives those from the project's own manifest. Then search by
+  proximity of name over things already named: class and service names, file and directory
+  paths, the layer something sits in. Read each candidate's own docblock, the top of the file,
+  never the whole file. A file with no docblock is reported as having none, which is itself a
+  signal. Search the configuration store the same way where the framework has one, because an
+  existing view or content type is prior art that needs no code. A configuration file has no
+  docblock, so the recipe says what to read in its place. Core and contributed code are noise
+  here; the outside search covers those.
 - **Prior art outside this project.** A library, a module, a package that already does this.
   Apply the three-part test to anything found: is it maintained, is it used, is it supported. A
   process recipe for this project's own framework may refine that test; when none exists, apply
@@ -167,8 +172,13 @@ pass; it hands them over ranked by closeness and lets design decide fit.
 
 ## A missing process recipe
 
-When no process recipe covers this project's framework for a search that needed one, apply the
-plain three-part test (maintained, used, supported) and record that the recipe is missing.
+When no process recipe covers this project's framework for a search that needed one, record that
+the recipe is missing and fall back.
+
+The fallback depends on the search. For prior art outside this project, apply the plain
+three-part test: maintained, used, supported. For prior art inside this project, search from the
+project root and say in the finding that the bound on custom code was not enforced. Do not guess
+the framework's directory layout.
 
 Interactive: ask whether to create one, through the current create-on-miss path, before moving
 on.
