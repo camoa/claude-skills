@@ -61,7 +61,9 @@ one command.
 ```
 
 A worked example of the same tool called another way goes in the prose, or in an untagged block. It
-is not a second thing to run, and a recipe with two `sh` blocks here is refused.
+is not a second thing to run. A recipe with two `sh` blocks here is refused, and so is one whose
+`sh` block holds a second command line: running the first and dropping the rest would report a
+success nobody got.
 
 Say below the block where the result appears, for a person reading it.
 

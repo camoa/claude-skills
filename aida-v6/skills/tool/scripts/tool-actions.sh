@@ -121,14 +121,22 @@ fi
 # A recipe with no `sh` block where one is required is refused by name. That is a defect in the
 # recipe, and saying so is more useful than guessing which fence was meant.
 
+# The tag is read with the surrounding space removed, because a trailing space is invisible in an
+# editor and a block its author tagged correctly must not be skipped for one.
 sh_blocks_under() {
   awk -v want="$1" '
+    function tag(line,   t) {
+      t = line
+      sub(/^`+/, "", t)
+      gsub(/^[ \t]+|[ \t\r]+$/, "", t)
+      return t
+    }
     /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; next }
     !inSection { next }
     /^```/ {
       if (inFence) { inFence = 0; taken = 0; next }
       inFence = 1
-      taken = ($0 == "```sh")
+      taken = (tag($0) == "sh")
       next
     }
     inFence && taken { print }
@@ -138,16 +146,27 @@ sh_blocks_under() {
 # How many `sh` blocks a heading has. Run requires exactly one, so the count is the check.
 sh_block_count_under() {
   awk -v want="$1" '
+    function tag(line,   t) {
+      t = line
+      sub(/^`+/, "", t)
+      gsub(/^[ \t]+|[ \t\r]+$/, "", t)
+      return t
+    }
     /^## / { inSection = ($0 == "## " want); inFence = 0; next }
     !inSection { next }
     /^```/ {
       if (inFence) { inFence = 0; next }
       inFence = 1
-      if ($0 == "```sh") n++
+      if (tag($0) == "sh") n++
       next
     }
     END { print n + 0 }
   ' "$RECIPE"
+}
+
+# How many commands a heading's `sh` blocks hold. A blank line is not a command.
+sh_command_count_under() {
+  sh_blocks_under "$1" | grep -c '[^[:space:]]' || true
 }
 
 # A recipe is data written elsewhere. Refuse anything that would mean more than it says.
@@ -177,8 +196,27 @@ case "$ACTION" in
   show)
     printf 'RECIPE: %s\n' "$RECIPE"
     printf 'FRAMEWORK: %s\n' "$RECIPE_FRAMEWORK"
-    printf 'INSTALL:\n'; sh_blocks_under Install | sed 's/^/  /'
-    printf 'RUN:\n';     sh_blocks_under Run     | sed 's/^/  /'
+    # show is what a person runs to find out why install or run refused, so it says so here
+    # rather than printing an empty list and leaving the reason to be guessed at.
+    printf 'INSTALL:\n'
+    if [ "$(sh_block_count_under Install)" = "0" ]; then
+      printf '  no block tagged sh, so install refuses this recipe\n'
+    else
+      sh_blocks_under Install | sed 's/^/  /'
+    fi
+    printf 'RUN:\n'
+    NRUN="$(sh_block_count_under Run)"
+    NCMD="$(sh_command_count_under Run)"
+    if [ "$NRUN" = "0" ]; then
+      printf '  no block tagged sh, so run refuses this recipe\n'
+    elif [ "$NRUN" != "1" ]; then
+      printf '  %s blocks tagged sh, and run takes exactly one, so run refuses this recipe\n' "$NRUN"
+    elif [ "$NCMD" != "1" ]; then
+      printf '  %s commands in one sh block, and run takes exactly one, so run refuses this recipe\n' "$NCMD"
+      sh_blocks_under Run | sed 's/^/  /'
+    else
+      sh_blocks_under Run | sed 's/^/  /'
+    fi
     exit 0
     ;;
 
@@ -203,16 +241,29 @@ case "$ACTION" in
 
   run)
     N="$(sh_block_count_under Run)"
+    if [ "$N" = "0" ]; then
+      printf 'tool-actions: %s has no block tagged sh under Run\n' "$RECIPE" >&2
+      printf 'tool-actions: a command block opens with three backticks and sh, and this recipe has none\n' >&2
+      exit 3
+    fi
     if [ "$N" != "1" ]; then
       printf 'tool-actions: %s has %s blocks tagged sh under Run, and Run takes exactly one\n' "$RECIPE" "$N" >&2
       printf 'tool-actions: a worked example belongs in the prose, because it is not a second thing to run\n' >&2
       exit 3
     fi
-    CMD="$(sh_blocks_under Run | grep -v '^[[:space:]]*$' | head -1)"
-    if [ -z "$CMD" ]; then
+    # Exactly one block, and it holds exactly one command. Taking the first line and dropping the
+    # rest is the defect this whole reader was rewritten to remove, so a second line is refused.
+    NCMD="$(sh_command_count_under Run)"
+    if [ "$NCMD" = "0" ]; then
       printf 'tool-actions: %s has an empty sh block under Run\n' "$RECIPE" >&2
       exit 3
     fi
+    if [ "$NCMD" != "1" ]; then
+      printf 'tool-actions: %s has %s commands in its sh block under Run, and Run takes exactly one\n' "$RECIPE" "$NCMD" >&2
+      printf 'tool-actions: running the first and dropping the rest would report a success nobody got\n' >&2
+      exit 3
+    fi
+    CMD="$(sh_blocks_under Run | grep '[^[:space:]]' | head -1)"
     run_line "$CMD" "${EXTRA[@]+"${EXTRA[@]}"}" || exit 4
     exit 0
     ;;
