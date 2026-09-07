@@ -105,9 +105,25 @@ if [ -z "$RECIPE" ]; then
 fi
 
 # ------------------------------------------------------- read a fenced block
-# The first fenced block under an H2 heading. Nothing else under the heading is read.
+# Install takes EVERY fenced block under its heading, in order, and Run takes only the first.
+#
+# A real recipe splits its install steps across several blocks so the prose between them can say
+# why one step has to precede another. Both recipes in the catalog do exactly that. Reading only
+# the first block ran the first command, skipped the rest silently, and reported success.
+#
+# A Run section carries the command, and then often a worked example of the same tool called
+# another way. An example is not a second thing to run, so Run stops at the first block.
 
-block_under() {
+all_blocks_under() {
+  awk -v want="$1" '
+    /^## / { inSection = ($0 == "## " want); inFence = 0; next }
+    !inSection { next }
+    /^```/ { inFence = !inFence; next }
+    inFence { print }
+  ' "$RECIPE"
+}
+
+first_block_under() {
   awk -v want="$1" '
     /^## / { inSection = ($0 == "## " want); fence = 0; next }
     !inSection { next }
@@ -143,13 +159,13 @@ case "$ACTION" in
   show)
     printf 'RECIPE: %s\n' "$RECIPE"
     printf 'FRAMEWORK: %s\n' "$RECIPE_FRAMEWORK"
-    printf 'INSTALL:\n'; block_under Install | sed 's/^/  /'
-    printf 'RUN:\n';     block_under Run     | sed 's/^/  /'
+    printf 'INSTALL:\n'; all_blocks_under Install | sed 's/^/  /'
+    printf 'RUN:\n';     first_block_under Run     | sed 's/^/  /'
     exit 0
     ;;
 
   install)
-    STEPS="$(block_under Install)"
+    STEPS="$(all_blocks_under Install)"
     if [ -z "$STEPS" ]; then
       printf 'tool-actions: %s has no Install block\n' "$RECIPE" >&2
       exit 3
@@ -167,7 +183,7 @@ case "$ACTION" in
     ;;
 
   run)
-    CMD="$(block_under Run | grep -v '^[[:space:]]*$' | head -1)"
+    CMD="$(first_block_under Run | grep -v '^[[:space:]]*$' | head -1)"
     if [ -z "$CMD" ]; then
       printf 'tool-actions: %s has no Run block\n' "$RECIPE" >&2
       exit 3

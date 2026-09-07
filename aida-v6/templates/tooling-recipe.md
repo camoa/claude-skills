@@ -20,13 +20,24 @@ One paragraph. What this tool is and what a project gets by having it.
 
 ## Install
 
-The commands that add the tool, in order. One per line, in the first fenced block under this
-heading. A script reads that block, so nothing else here is read.
+The commands that add the tool, in order, one per line inside fenced blocks. A script reads every
+fenced block under this heading, in order, and reads nothing else here.
+
+Use as many blocks as the steps need. The prose between them is where you say why one step has to
+precede another, which is the whole reason for splitting them.
 
 ```
 <first command>
+```
+
+<why the next step comes after that one>
+
+```
 <second command>
 ```
+
+Put nothing but commands inside a fenced block under this heading. A configuration file example
+belongs in the prose, because a script will try to run whatever it finds in a fence here.
 
 Each one runs as arguments, never through a shell, so a shell metacharacter is refused rather than
 run to mean something its author did not intend. Write two steps instead of joining them with `&&`.
@@ -38,7 +49,9 @@ better than anything written here in advance.
 
 ## Run
 
-The command that invokes the tool. One command, in the first fenced block under this heading.
+The command that invokes the tool. One command, in the FIRST fenced block under this heading. Only
+that block is read, so a later block is safe for a worked example of the same tool called another
+way.
 
 ```
 <command>
