@@ -114,6 +114,22 @@ trap 'rm -f "$TMP_FILE"' EXIT
   printf '*This page is rendered from %s.json. No script reads it back, so an edit made here by hand records nothing. The design stage reads this page. To add a finding, use the research skill'"'"'s own record action.*\n\n' "$SEARCH"
   printf '# Research: %s\n\n' "$SEARCH"
 
+  # What this search searched for, printed before any finding, because it is the bound every
+  # finding below stands inside. A finding saying nothing was found means nothing without it.
+  SEARCHED_FOR_TYPE="$(jq -r 'if has("searchedFor") then (.searchedFor | type) else "absent" end' "$RESEARCH_FILE")"
+  if [ "$SEARCHED_FOR_TYPE" = "string" ]; then
+    SEARCHED_FOR="$(jq -r '.searchedFor' "$RESEARCH_FILE")"
+    if [ -n "$SEARCHED_FOR" ]; then
+      printf '*Searched for: %s.*\n\n' "$SEARCHED_FOR"
+    else
+      printf '*Searched for: (recorded, but empty). A finding below saying nothing was found states no bound, so it cannot be read as a negative result. Run check-research.sh against this task.*\n\n'
+    fi
+  elif [ "$SEARCHED_FOR_TYPE" = "absent" ]; then
+    printf '*Searched for: (not recorded). A finding below saying nothing was found states no bound, so it cannot be read as a negative result. Run check-research.sh against this task.*\n\n'
+  else
+    printf '*Searched for: (recorded as a %s, not a set of words, and could not be read here). This is not the same as not recorded. Run check-research.sh against this task.*\n\n' "$SEARCHED_FOR_TYPE"
+  fi
+
   FINDINGS_TYPE="$(jq -r '(.findings? // []) | type' "$RESEARCH_FILE")"
   if [ "$FINDINGS_TYPE" != "array" ]; then
     # Not the same fact as an empty, well-formed list: findings could be on disk and still not

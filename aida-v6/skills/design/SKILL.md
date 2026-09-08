@@ -4,7 +4,7 @@ description: This skill should be used when a task's criteria are grounded and i
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
 ---
 
 # Design
@@ -19,9 +19,11 @@ Design does not write code and does not run tests. It does not decide whether a 
 right; that was scope's conversation. It reads what research found, decides fit, and writes the
 orders that build it.
 
-Every write below goes through `design-actions.sh`, named in this skill's own grant, so it runs
-without asking. Any other Bash command still asks for approval. Dispatching an agent needs no
-approval either; it is also named in this skill's own grant.
+Design's own records go through `design-actions.sh`, named in this skill's own grant, so they run
+without asking. One write below goes elsewhere. A lookup is recorded through the research skill's
+`research-actions.sh`, because that script is the single producer of a research finding, and it is
+named in the grant too. Any other Bash command still asks for approval. Dispatching an agent needs
+no approval either; it is also named in this skill's own grant.
 
 ## Determine the run mode
 
@@ -132,6 +134,43 @@ A rejection that lives only in the conversation is not a rejection anyone can ch
 conversation to confirm it. Give it the written reasoning and the files it cites, never this
 conversation's own account, and ask it to agree, disagree, or downgrade the disposition. Record
 what it found the same way, appended to the same `reasoning` field.
+
+## Look up what you decided to use and research did not
+
+Design names things research had no reason to search for: a particular module, a framework API, a
+pattern. Those were not decisions yet when research ran, so no search covered them.
+
+First read what research already searched for. Every `research/<search>.json` carries
+`searchedFor`, the words that search used. A name inside those words was searched, and the answer
+is already in that file. Do not pay for it twice.
+
+For a name that was not searched, ask the navigator to identify guides and recipes covering it.
+Identify only. It returns names and never resolves a body, so one name costs one lookup. Read a
+body only when a match is worth reading.
+
+Record the answer through research's own record action. The research store keeps one producer
+that way, and the finding is checked the same way as every other:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh record "<task_folder>" \
+  --search design-lookup-<name> --searched-for "<the words this lookup searched for>" \
+  --text "<what was found, or that nothing was>" --source "<where it came from>" \
+  --criteria-served <id[,id...]>
+```
+
+**One lookup is one search, with a name of its own.** `<name>` is the thing you looked up, in
+lowercase letters, digits and single hyphens: `design-lookup-responsive-image`. Never put two
+lookups in one search. A search records one set of words, and a second set is refused.
+
+**Always give the criteria.** You are looking this up for a work order, and that order serves
+criteria, so give their ids. A finding attached to no criterion is reported as work nobody asked
+for, and it turns the research check red.
+
+Record a nothing too. A name looked up with no guide behind it is a fact the implementation stage
+needs, and it stops the same lookup running again there.
+
+Do this again while drafting, whenever an order names something new. A guide found late still costs
+less than a guide found after the code is written.
 
 ## Design never silently changes the scope
 

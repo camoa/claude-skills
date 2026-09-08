@@ -54,7 +54,8 @@
 #      code when the contract has no criteria at all: see "researchStarted" below.
 #   1  a research file exists but cannot be read as this format: it is not valid JSON, or is
 #      valid JSON but not an object; or a top-level field on a readable file is missing, the
-#      wrong shape, or not declared by the schema at all (schemaVersion, search, findings, or any
+#      wrong shape, or not declared by the schema at all (schemaVersion, search, searchedFor,
+#      findings, or any
 #      other key present). Each is named in the JSON on stdout against the file it came from. A
 #      missing or malformed `findings` field also stops that file's per-finding check (see exit 4)
 #      from running; the report says so under that file's own "checked" key instead of guessing,

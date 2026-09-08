@@ -131,7 +131,8 @@ not searched.
 For every finding an agent returns, record it under that search's own name:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh record "<task_folder>" \
-  --search <slug> --text "<what was found, or that nothing was>" \
+  --search <slug> --searched-for "<the words this search searched for>" \
+  --text "<what was found, or that nothing was>" \
   --source "<where it came from>" [--criteria-served <id[,id...]>]
 ```
 `<slug>` is lowercase letters, digits and single hyphens, and it names the file: a search called
@@ -141,14 +142,24 @@ the design stage to read. Call `record` once per finding; calling it again with 
 `--search` adds another finding to the same JSON file, and the rendered markdown with it, rather
 than replacing it.
 
+`--searched-for` holds the words this search searched for. Words, not a sentence about how the
+search ran: "responsive images, image styles, picture element". Give the same value on every
+`record` call for one search. A second value is refused, because the search is the unit. A search
+that broadens takes a new `--search` name of its own.
+
+Those words bound every finding in the file. A search that found nothing proves nothing outside
+the words it used. The design stage reads them to know what it must look up for itself, because
+design names modules and APIs that were not decisions yet when research ran.
+
 `--criteria-served` takes the criterion ids from the contract read above, comma separated, for
 example `c1,c3`. Attach every id this finding actually speaks to. Leave it out when a finding
 speaks to none: an empty list is allowed, and it is itself checked below, not silently accepted.
 
-A search that found nothing is still recorded, once, with `--text` saying so plainly, for
-example "looked and found nothing: no maintained package covers this without pulling in a whole
-framework". Silence and a negative result look identical from outside; only the recorded
-negative tells design it is safe to decide without searching again.
+A search that found nothing is still recorded, once. `--text` says so plainly, for example
+"looked and found nothing: no maintained package covers this without pulling in a whole
+framework", and `--searched-for` holds the words it used. Silence and a negative result look
+identical from outside; only the recorded negative tells design it is safe to decide without
+searching again.
 
 Never write a finding from memory. If nothing was dispatched to check something, it is not
 recorded as found; it is either dispatched or left for the next pass.

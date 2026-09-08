@@ -13,8 +13,8 @@
 #   research-actions.sh [--run-mode <interactive|autonomous>] read   <task_folder>
 #   research-actions.sh [--run-mode <interactive|autonomous>] start  <task_folder>
 #   research-actions.sh [--run-mode <interactive|autonomous>] record <task_folder> \
-#                          --search <slug> --text <text> --source <text> \
-#                          [--criteria-served <id[,id...]>]
+#                          --search <slug> --searched-for <text> --text <text> \
+#                          --source <text> [--criteria-served <id[,id...]>]
 #   research-actions.sh [--run-mode <interactive|autonomous>] check  <task_folder>
 #
 # --run-mode changes nothing this script does today. It is accepted, and rejected when it is
@@ -34,7 +34,8 @@
 # check-research.sh reports, not one this script repairs.
 #
 # A research file is plain JSON at <task_folder>/research/<search>.json: no fences, no markdown
-# (scripts/research-schema.json). Its fields are schemaVersion, search and findings; a finding
+# (scripts/research-schema.json). Its fields are schemaVersion, search, searchedFor and
+# findings; a finding
 # holds text, source, lookedAt and criteriaServed. `record` writes that JSON, then renders
 # <search>.md from it by calling research-render.sh, the same way scope-actions.sh writes
 # alignment.json and then calls alignment-render.sh. Nothing reads <search>.md back: it is for
@@ -68,7 +69,10 @@
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--search` that is not lowercase letters, digits and
 #      single hyphens; a `--criteria-served` entry that is not a valid criterion id shape; a
-#      research file already on disk that is not valid JSON or is not a JSON object; the plugin
+#      research file already on disk that is not valid JSON or is not a JSON object; a research
+#      file already on disk whose searchedFor is absent, empty, not a string, or a different set
+#      of words from the one this call gives (one search records one set of words, and this
+#      script never rewrites the field on a file that already exists); the plugin
 #      root could not be resolved; a write that failed; `record`'s own call to research-render.sh
 #      failing to produce <search>.md; or `check`'s own call to check-research.sh failing to run
 #      at all (check-research.sh's own exit 3, meaning it could not do its job either).
@@ -125,7 +129,8 @@ usage() {
   cat <<'EOF' >&2
 usage: research-actions.sh read   <task_folder>
        research-actions.sh start  <task_folder>
-       research-actions.sh record <task_folder> --search <slug> --text <text> --source <text> \
+       research-actions.sh record <task_folder> --search <slug> --searched-for <text> \
+                                   --text <text> --source <text> \
                                    [--criteria-served <id[,id...]>]
        research-actions.sh check  <task_folder>
 EOF
@@ -292,13 +297,17 @@ do_start() {
 # ------------------------------------------------------------------------------------------------
 
 do_record() {
-  local search="" text="" source_val="" criteria_served=""
+  local search="" searched_for="" text="" source_val="" criteria_served=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --search)
         [ $# -ge 2 ] || die3 "record: --search needs a value"
         looks_like_flag "$2" && die3 "record: --search needs a value, got the option $2 instead"
         search="$2"; shift 2 ;;
+      --searched-for)
+        [ $# -ge 2 ] || die3 "record: --searched-for needs a value"
+        looks_like_flag "$2" && die3 "record: --searched-for needs a value, got the option $2 instead"
+        searched_for="$2"; shift 2 ;;
       --text)
         [ $# -ge 2 ] || die3 "record: --text needs a value"
         looks_like_flag "$2" && die3 "record: --text needs a value, got the option $2 instead"
@@ -320,6 +329,7 @@ do_record() {
     *[!a-z0-9-]*|-*|*-)
       die3 "record: --search must be lowercase letters, digits and single hyphens, got '$search'" ;;
   esac
+  is_blank "$searched_for" && die3 "record: --searched-for is required and must not be blank. It holds the words this search searched for, and it is what bounds a finding that says nothing was found"
   is_blank "$text" && die3 "record: --text is required and must not be blank"
   is_blank "$source_val" && die3 "record: --source is required and must not be blank. Every finding names where it came from"
 
@@ -353,11 +363,36 @@ do_record() {
   if [ -f "$file" ]; then
     jq empty "$file" 2>/dev/null \
       || die3 "record: $file exists but is not valid JSON"
+    # The search is the unit, so one search records one set of words. A broadened search is a
+    # new search with its own name, not a widened record: merging the two would leave every
+    # finding already in the file claiming a bound only some of them were found under. So this
+    # script never writes searchedFor onto a file that already exists. It reads what is there and
+    # refuses anything that does not match, and a missing field, an unreadable one, an empty one
+    # and a conflicting one are four different facts with four different messages.
+    local stored_type stored_searched_for
+    stored_type="$(jq -r 'if has("searchedFor") then (.searchedFor | type) else "absent" end' "$file")"
+    case "$stored_type" in
+      string)
+        stored_searched_for="$(jq -r '.searchedFor' "$file")"
+        if [ -z "$stored_searched_for" ]; then
+          die3 "record: $file records searchedFor as an empty string, so its findings state no bound. This script does not repair that: record this search again under a new --search name"
+        fi
+        if [ "$stored_searched_for" != "$searched_for" ]; then
+          die3 "record: $file already records searchedFor as '$stored_searched_for', and this call gives '$searched_for'. One search records one set of words; give a new --search name for a different search"
+        fi
+        ;;
+      absent)
+        die3 "record: $file records no searchedFor at all, so the findings in it were found under a bound nobody wrote down. Stamping '$searched_for' on them here would claim a bound they were never found under; record this search again under a new --search name"
+        ;;
+      *)
+        die3 "record: $file has a searchedFor that is a $stored_type, not a string. A field that cannot be read is not the same fact as one that is absent, and neither is repaired here; fix the file, or record this search again under a new --search name"
+        ;;
+    esac
     doc="$(jq --argjson f "$finding_json" '.findings = ((.findings // []) + [$f])' "$file")" \
       || die3 "record: could not add the new finding to $file"
   else
-    doc="$(jq -n --arg search "$search" --argjson f "$finding_json" \
-        '{schemaVersion: 1, search: $search, findings: [$f]}')"
+    doc="$(jq -n --arg search "$search" --arg searchedFor "$searched_for" --argjson f "$finding_json" \
+        '{schemaVersion: 1, search: $search, searchedFor: $searchedFor, findings: [$f]}')"
   fi
 
   write_atomic "$file" "$doc"

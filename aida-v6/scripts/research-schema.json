@@ -4,7 +4,7 @@
   "description": "One file per search, at <task folder>/research/<search>.json (ideal/research.md, 'What research writes'). Plain JSON, no fences, no markdown. This is the only part a script reads; <search>.md, rendered from it by research-render.sh, is for the design stage to read and no script parses it. A field present in a real research file but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "search", "findings"],
+  "required": ["schemaVersion", "search", "searchedFor", "findings"],
   "properties": {
     "schemaVersion": {
       "type": "integer",
@@ -17,6 +17,11 @@
       "minLength": 1,
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
       "description": "The name of the search this file records, for example \"prior-art-internal\" or \"guides-and-recipes\". Lowercase letters, digits and single hyphens, since this value doubles as the file's own basename: <search>.md. There is no fixed roster of search names (ideal/research.md, 'How many run is set by what the criteria need, not by a standing roster'); a name is chosen when the search is dispatched and never reused for a different subject within the same task."
+    },
+    "searchedFor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The words this search actually searched for, as words, never prose about how it searched (ideal/research.md, 'Each agent gets a narrow brief'). It is what bounds every negative result in this file: foundations.md says a bounded search proves nothing outside its bounds, and without this field \"looked and found nothing\" states no bound at all, so a later stage cannot tell a subject that was searched and came back empty from one nobody searched. The design stage reads it to decide what it must look up itself, since it names things to use that did not exist as decisions when research ran. Set by the `record` action on every call for a search, and the same value each time: a second value for one search is refused rather than merged, because the search is the unit and a broadened search is a new search with its own name."
     },
     "findings": {
       "type": "array",
