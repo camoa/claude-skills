@@ -65,8 +65,25 @@ covering the work means the decision is already made: follow it. Two: read both,
 that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
 
-Also search how the framework itself does this, in its own source, when a process recipe for it
-exists. This search needs the recipe's own body, which is why research could not run it.
+## Read the process recipe for this project's framework
+
+This is what makes the work orders right, and no check below can replace it. Read it for what
+AIDA cannot know on its own:
+
+- What kinds of thing a work order can be about here. In Drupal a module, a service, a plugin, a
+  theme, a component, a configuration entity. This is what an order is sized around.
+- What is built with configuration rather than code. A view or a content type is a work order
+  with no code in it, and it still states a test.
+- What has to exist beside a class for it to work: a services entry, a route, a permission, a
+  schema. Name these in the order, or whoever builds it invents them.
+- What one unit exposes to another, which is what the `interface` field holds.
+- What the test levels are called and what each one observes. Use the cheapest level that can
+  still observe the outcome the criterion names.
+- What order the framework forces, where it forces one.
+
+**No recipe covers this framework:** say so, and write `written without framework input` into the
+`reasoning` of every order in this pass. Do not guess a test level. Do not invent a kind of unit.
+Interactive: ask whether to write the recipe first, before drafting anything.
 
 ## The stated approach
 
@@ -150,7 +167,7 @@ Then, one call per item, add what the order still needs:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
-  --id <woId> --level "<the recipe's own level name>" --description "<what this test observes>"
+  --id <woId> --level "<a level name from the framework's recipe>" --description "<what this test observes>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
 here; the check below refuses an order that skips this. A criterion whose `verifiedBy` is
