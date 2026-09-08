@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.13.0 (2026-09-08)
+
+### Added
+- **A fourth mode, `Identify`.** It reports what covers a topic and opens nothing: guides, agentic
+  recipes and tooling recipes, matched by search words and optionally filtered by framework,
+  returned as a structured list of name, kind, description, address and sha. No body is resolved,
+  nothing is fetched but the indexes, and nothing reaches the conversation except the report.
+
+  The caller it exists for is a stage that must name what is available without paying to read it.
+  AIDA version 6's research stage names every guide and recipe bearing on an acceptance criterion
+  and hands those names to a later stage, which is the reader. Guide search and recipe search both
+  resolve a body and apply it in place, so neither could serve that.
+
+  The four modes now read as two pairs: two that resolve a body and apply it, two that return a
+  report and never stream one.
+
+- **`searched` and `unavailable` in the identify report**, with every requested catalog appearing in
+  exactly one of them. A search that found nothing and a search that could not run look identical
+  from outside otherwise, and a caller that records the second as the first has a false negative it
+  can never tell from a real one. `tooling-recipes.txt` is not published yet, so today it is always
+  reported as unavailable rather than silently contributing no matches.
+
+### Notes
+- Identify deliberately does not search process recipes. One is resolved by lifecycle point and
+  framework, never by keyword, which is what `Process-Recipe Lookup` already does and what keeps a
+  process recipe out of free task routing.
+
 ## 0.12.0 (2026-09-01)
 
 ### Removed

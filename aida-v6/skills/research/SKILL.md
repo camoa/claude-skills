@@ -94,10 +94,12 @@ Typical search subjects, named by what they read, not by a fixed roster:
   Apply the three-part test to anything found: is it maintained, is it used, is it supported. A
   process recipe for this project's own framework may refine that test; when none exists, apply
   the plain three-part test and say the recipe is missing (see "A missing process recipe" below).
-- **Guides and recipes.** Search the catalog and any project source for a guide or a recipe
-  covering this criterion. Name what is found. Do not open or read it: identifying it is the
-  whole job, and design is the stage that reads it. Say which class a found recipe is: tooling,
-  process, or agentic.
+- **Guides and recipes.** Ask the navigator's identify mode what covers this criterion, and
+  search any source this project configured itself. Name what is found and say which kind it is:
+  a guide, a tooling recipe, or an agentic recipe. Do not open any of them. Identifying is the
+  whole job and design is the reader. The identify report says which catalogs it searched and
+  which it could not reach; a catalog it could not reach is not a catalog that held nothing, and
+  the finding says so.
 - **What reputable sources recommend.** A current, dated source, never the model's own recall
   stated as fact. A memory of "the right way to do this" is a lead: confirm it with one search,
   or record that nothing confirmed it.
@@ -151,6 +153,27 @@ negative tells design it is safe to decide without searching again.
 Never write a finding from memory. If nothing was dispatched to check something, it is not
 recorded as found; it is either dispatched or left for the next pass.
 
+## Reading the catalog
+
+Everything published in the catalog is read through the navigator: guides, tooling recipes,
+process recipes, agentic recipes. Research never fetches a catalog address itself and never reads
+a cached copy directly.
+
+**A process recipe is looked up, never searched.** Ask the navigator's process-recipe lookup for
+this project's framework at the research stage. It answers with whether one is available and, when
+it is, a path to the body on disk. Read the body from that path. The body is never streamed into
+the conversation, which is what keeps a recipe affordable.
+
+**Three answers, not one.** A recipe that does not exist for this framework, a listing that could
+not be reached, and a network that failed are three different things and only the first is a fact
+about the framework. Record which one happened, in those words. Treating the second or the third
+as "this framework has no recipe" writes a false finding that nothing later can tell from a true
+one.
+
+**A source this project configured itself is read directly.** The navigator serves the published
+catalog. A project pointing at its own folder is a different source and research reads it the
+ordinary way.
+
 ## What a found recipe means
 
 A found guide or recipe's `--text` says which class it is, since design's next step depends on
@@ -172,8 +195,11 @@ pass; it hands them over ranked by closeness and lets design decide fit.
 
 ## A missing process recipe
 
-When no process recipe covers this project's framework for a search that needed one, record that
-the recipe is missing and fall back.
+When the lookup answers that no process recipe covers this project's framework, record that the
+recipe is missing and fall back.
+
+When the lookup could not run at all, record that instead, in those words, and fall back the same
+way. The fallback is the same; the finding is not.
 
 The fallback depends on the search. For prior art outside this project, apply the plain
 three-part test: maintained, used, supported. For prior art inside this project, search from the

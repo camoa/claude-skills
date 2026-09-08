@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.12.0
+version: 0.13.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 disallowed-tools: WebFetch
 user-invocable: true
@@ -11,13 +11,16 @@ user-invocable: true
 
 Route to the correct online guide and enforce guide application.
 
-## Three modes
+## Four modes
 
-The navigator exposes **three independent routing modes** over three separate published catalogs:
+The navigator exposes **four independent routing modes** over the published catalogs:
 
 - **Guide search** (`llms.txt`) — atomic, mechanics-level decision guides. The original flow. See **Core Workflow** below.
 - **Recipe search** (`agentic-recipes.txt`) — goal-oriented, prescriptive capability deliveries that sequence existing guides/plays end-to-end and carry a verifier. See **Recipe Search** below.
 - **Process-recipe lookup** (`process-recipes.txt`) — resolved by `ai-dev-assistant` at lifecycle phase boundaries, keyed by `(phase, framework)`. See **Process-Recipe Lookup** below. Never matched during free task routing.
+- **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`) — report what covers a topic, and open nothing. See **Identify** below.
+
+**The four are two pairs.** Guide search and recipe search resolve a body and apply it in place, because applying a guide means reading it. Process-recipe lookup and identify return a structured report and never stream a body. A caller that must name what exists without paying to read it wants the second pair.
 
 The navigator does **not** hardcode an order. The **caller** owns ordering — typically recipe-search first (is there a prescriptive end-to-end recipe for this capability?), then guide-search (fall back to raw mechanics). Recipe search never fabricates a recipe: a miss cleanly defers to guide search. Process-recipe lookup is invoked only by `ai-dev-assistant`, not during free task routing.
 
@@ -449,6 +452,52 @@ and is **never** streamed into the conversation. The caller reads the file itsel
 `available:false`, only the JSON report is emitted (no body); the caller handles the miss.
 Source-routing (local-path lookup, research live, prompt to user) is entirely in
 `ai-dev-assistant`.
+
+## Identify
+
+**Invocation context:** a caller that needs to know what covers a topic, and must not read it. `ai-dev-assistant`'s research stage is the first: it names every guide and recipe bearing on an acceptance criterion, says which kind each is, and hands the names to a later stage that does the reading. Reading at research would pay for a body nobody has decided to use yet.
+
+This mode resolves no body, fetches nothing but the indexes, and puts nothing in the conversation except its report.
+
+### Which catalogs it searches, and which it does not
+
+Guides, agentic recipes and tooling recipes. **Not process recipes.** A process recipe is not found by topic: it is determined by where the caller is in the lifecycle and which framework the project uses, which is what **Process-Recipe Lookup** already takes. Searching for one by keyword would match it into free task routing, which that mode exists to prevent.
+
+### Catalog contract
+
+Each index is revalidated by its own `.hash` the same way every other mode does it, and read with `index-content`. Every line already carries what this mode returns: a name, a when-to-use description, a `(sha:…)` and a site-url.
+
+`tooling-recipes.txt` **does not exist yet.** Until the catalog publishes it, this mode reports the tooling catalog as unavailable rather than returning no tooling matches. Those two are not the same answer, and a caller told "no tooling recipe covers this" when nothing was searched will record a false negative it cannot later tell from a real one.
+
+### Flow
+
+**Step 1 — Revalidate each requested index.** One `revalidate` per catalog, then `index-content`. An index that errors is recorded as unavailable by name and does not stop the others.
+
+**Step 2 — Match the search words against each index's lines.** Match on the name and on the when-to-use description. When the caller supplied a framework, drop lines belonging to another one. Rank by how well the line matches; do not cut the list to one, because the caller is naming candidates rather than choosing.
+
+**Step 3 — Report.** Emit the JSON below. Do not fetch a body. Do not apply anything. Do not suggest what the caller should do with a match.
+
+### Output contract
+
+```json
+{
+  "query": "<the search words, as given>",
+  "framework": "<framework, or null when unfiltered>",
+  "matches": [
+    {"kind": "guide|agentic-recipe|tooling-recipe",
+     "name": "<name from the index line>",
+     "description": "<when-to-use, from the index line>",
+     "url": "<site-url>",
+     "sha": "<sha8>"}
+  ],
+  "searched": ["guides", "agentic-recipes"],
+  "unavailable": [{"catalog": "tooling-recipes", "reason": "no published index"}]
+}
+```
+
+`searched` and `unavailable` are both required, and every requested catalog appears in exactly one of them. An empty `matches` with a full `searched` list means the search ran and found nothing, which is a real answer. An empty `matches` with anything in `unavailable` means the search was incomplete, and the caller must not record it as a negative result.
+
+Nothing else is emitted. No prose, no recommendation, no body.
 
 ## Create-on-Miss (maintainer mode only)
 
