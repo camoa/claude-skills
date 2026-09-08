@@ -30,6 +30,7 @@
 #                        --id <woId> --level <text> --description <text>
 #   design-actions.sh [--run-mode <interactive|autonomous>] render     <task_folder> --id <woId>
 #   design-actions.sh [--run-mode <interactive|autonomous>] check      <task_folder>
+#   design-actions.sh [--run-mode <interactive|autonomous>] close      <task_folder>
 #
 # --run-mode is accepted on every action and changes nothing this script does today, the same
 # stance research-actions.sh takes for the same reason: a caller passes one run mode for a whole
@@ -40,8 +41,12 @@
 # holds; nothing here needs the run mode to hold it.
 #
 # Depends on, shipped by the same part and never edited here:
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/design-render.sh   called by `create`, `update` and `render`
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/check-design.sh    called by `check`
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/design-render.sh      called by `create`, `update` and `render`
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/check-design.sh       called by `check` and `close`
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/records-hash.sh   sourced; its records_hash_for is called by
+#                                                        `close`, and by implement-actions.sh's own
+#                                                        `start`, so the two always agree on the
+#                                                        same number for the same files.
 #
 # This script never runs the schema comparison itself. Every field it writes is validated before
 # the write, so what it produces is shaped correctly by construction; a stale or hand-edited work
@@ -65,9 +70,21 @@
 # reuse its id. Fix that by adding a counter, kept beside nextCriterionId's own precedent, the day
 # a real task needs to delete a work order.
 #
+# `close` records what design closed on (ideal/implementation.md, "Freezing, and what a freeze is
+# for"). It runs check-design.sh against the live files first, and writes
+# <task_folder>/design-closed.json only when that run exits 0. The record holds schemaVersion, the
+# UTC date, and one hash, computed by scripts/lib/records-hash.sh over alignment.json and every
+# design/*.json together, in work order id order (scripts/design-closed-schema.json). It sits at
+# the task's own root, beside task.json and alignment.json, never inside design/, because a record
+# inside the folder it hashes would hash itself. Implementation reads this file and refuses to
+# freeze anything when the hash it re-derives from the live files disagrees with the hash recorded
+# here; closing again after a further change, which this action always allows, is the supported
+# way to make the two agree again.
+#
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
-#      and that no work orders exist yet. For `check`, this is check-design.sh's own exit 0.
+#      and that no work orders exist yet. For `check`, this is check-design.sh's own exit 0. For
+#      `close`, this is check-design.sh's own exit 0 followed by a write of design-closed.json.
 #   1  the given path does not exist, is not a folder, or holds no task.json: not a task folder
 #      (ideal/scope.md, "Scope runs against a task that already exists"). This is the only meaning
 #      of exit 1 from this script, for every action, `check` included: check-design.sh's own exit
@@ -83,17 +100,20 @@
 #      a valid id shape in its own space; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
-#      <id>.md; or `check`'s own call to check-design.sh failing to run at all (check-design.sh's
-#      own exit 3, meaning it could not do its job either).
+#      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
+#      (check-design.sh's own exit 3, meaning it could not do its job either); the records-hash
+#      library could not be sourced; or `close`'s own call to records_hash_for failing, once
+#      design has already closed clean, to produce a hash.
 #   4  `check` ran and found a work order file that cannot be read as this format: not valid
 #      JSON, not an object, or a missing, malformed or unknown top-level field (check-design.sh's
 #      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
-#      folder").
+#      folder"). `close` refuses for the same reason, on the live files, before writing anything.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
 #      problem: a criterion with no serving order, a criterion owned by zero or by more than one
 #      work order, an order serving no criterion, an order missing a required test, a dependency
 #      cycle, an order that reaches no owner, overlapping owned files, or an id naming nothing
-#      real (check-design.sh's own exit 4).
+#      real (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
+#      files, before writing anything.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule research-actions.sh and
@@ -119,6 +139,7 @@ if [ -z "$PLUGIN_ROOT" ] || [ ! -d "$PLUGIN_ROOT" ]; then
 fi
 DESIGN_RENDER_SCRIPT="${PLUGIN_ROOT}/scripts/design-render.sh"
 CHECK_DESIGN_SCRIPT="${PLUGIN_ROOT}/scripts/check-design.sh"
+RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 
 RUN_MODE="interactive"
 if [ "${1:-}" = "--run-mode" ]; then
@@ -136,6 +157,12 @@ command -v jq >/dev/null 2>&1 || { printf 'design-actions: jq is required and wa
 die1() { printf 'design-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'design-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'design-actions: %s\n' "$1" >&2; exit 3; }
+die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
+die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
+
+[ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
+# shellcheck source=/dev/null
+source "$RECORDS_HASH_LIB" || die3 "the records-hash library failed to load: $RECORDS_HASH_LIB"
 
 usage() {
   cat <<'EOF' >&2
@@ -159,6 +186,7 @@ usage: design-actions.sh read           <task_folder>
                                          --description <text>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
+       design-actions.sh close          <task_folder>
 EOF
 }
 
@@ -731,6 +759,75 @@ do_check() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# close: records what design closed on. Runs check-design.sh against the live files, exactly as
+# `check` does, and only when that run exits 0 writes <task_folder>/design-closed.json: schemaVersion,
+# the UTC date, and one hash over alignment.json and every design/*.json together, computed by
+# records_hash_for (scripts/lib/records-hash.sh, sourced above). Never refuses a second close;
+# reopening, changing, and closing again is how a design is meant to change once implementation may
+# already have read the first close (ideal/implementation.md, "Freezing, and what a freeze is for").
+# ------------------------------------------------------------------------------------------------
+
+do_close() {
+  [ "$#" -eq 0 ] || die3 "close: unrecognized argument: $1"
+
+  [ -f "$CHECK_DESIGN_SCRIPT" ] \
+    || die3 "close: cannot find check-design.sh at $CHECK_DESIGN_SCRIPT"
+
+  local check_stderr_file check_report_json check_rc check_stderr_text
+  check_stderr_file="$(mktemp)" || die3 "close: could not create a temporary file"
+  check_report_json="$(bash "$CHECK_DESIGN_SCRIPT" "$TASK_PATH" 2>"$check_stderr_file")"
+  check_rc=$?
+  check_stderr_text="$(cat "$check_stderr_file" 2>/dev/null)"
+  rm -f "$check_stderr_file"
+
+  case "$check_rc" in
+    0) : ;;
+    1|4)
+      local open_summary
+      open_summary="$(printf '%s' "$check_report_json" | jq -r '
+          [
+            ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
+            ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
+            ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
+            ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
+            ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
+            ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
+            ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and reaches no owner"),
+            ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
+            ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape")
+          ] | join("; ")
+        ' 2>/dev/null)"
+      [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
+      if [ "$check_rc" -eq 1 ]; then
+        die4 "close: a work order file does not match the design shape. Fix it and close again. Open: $open_summary"
+      else
+        die5 "close: design has not closed cleanly. Finish design first. Open: $open_summary"
+      fi
+      ;;
+    3)
+      die3 "close: check-design.sh could not run: $check_stderr_text"
+      ;;
+    *)
+      die3 "close: check-design.sh exited with an unexpected code $check_rc"
+      ;;
+  esac
+
+  local hash
+  hash="$(records_hash_for "$TASK_PATH")" \
+    || die3 "close: could not compute the records hash for $TASK_PATH"
+
+  local closed_at doc
+  closed_at="$(date -u +%Y-%m-%d)"
+  doc="$(jq -n --arg closedAt "$closed_at" --arg hash "$hash" \
+    '{schemaVersion: 1, closedAt: $closedAt, hash: $hash}')"
+
+  write_atomic "$CLOSED_FILE" "$doc"
+  echo "CLOSED: $CLOSED_FILE"
+  printf '%s\n' "$doc"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -751,6 +848,7 @@ RESOLVE_RC=$?
 [ "$RESOLVE_RC" -eq 0 ] || exit "$RESOLVE_RC"
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
+CLOSED_FILE="$TASK_PATH/design-closed.json"
 
 case "$ACTION" in
   read)           do_read           "$@" ;;
@@ -762,5 +860,6 @@ case "$ACTION" in
   add-test)       do_add_test       "$@" ;;
   render)         do_render         "$@" ;;
   check)          do_check          "$@" ;;
+  close)          do_close          "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

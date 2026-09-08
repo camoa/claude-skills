@@ -1,0 +1,85 @@
+---
+name: implement
+description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, and refuses to land the build on the project's own trunk branch. It does not yet build a work order.
+disable-model-invocation: true
+argument-hint: "[<task-id>]"
+arguments: [taskId]
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *)
+---
+
+# Implement
+
+Implementation builds each work order design wrote, one at a time, against tests it cannot
+change once they are frozen. **Only the first step of that exists today: freezing the contract
+and the work orders into a snapshot, and opening the ledger that will track every order's
+progress.** Building a work order, writing a test, or closing an order is not built yet. Say this
+plainly once the report below is shown, so nobody expects more than this step did.
+
+## Find the task
+
+Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
+task is already active in this conversation. Neither known: say so in one line and name the task
+skill. Stop; there is nowhere to act.
+
+Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
+folder.
+
+## Read what is already there
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh read "<task_folder>"
+```
+This reports the contract's state, whether design has started and how many work order files it
+left, the task's project and its code repository, the repository's current branch and its trunk
+branch when derivable, the task's own run mode, and whether a snapshot or a ledger already exist.
+
+No contract, or design has not started: say so in one line and name the missing stage. Stop.
+
+## Start the build
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh start "<task_folder>"
+```
+
+This is the whole first step. It checks, in order: the task folder and its contract, that design
+closed cleanly, that the task's project is a git repository, that codePath is on a named branch,
+and that the build would not land on that repository's own trunk branch. Any one of these refuses
+before anything is written, and the message names what to fix. Read a refusal and act on it; do
+not repeat the same call unchanged.
+
+A first run also checks that design has formally closed: <task_folder>/design-closed.json must
+exist and its recorded hash must agree with a hash re-derived from the live contract and work
+orders. Missing means design has never closed; run the design skill's close action. A disagreeing
+hash means design closed once and something changed since, without closing again; close design
+again. Both are refusals, and both leave nothing written.
+
+A detached HEAD in codePath refuses outright, whether or not the trunk branch can even be derived.
+A commit made there belongs to no branch, which this build must never risk.
+
+When the trunk branch cannot be derived, because there is no `origin` remote or its head is
+unset, the script says so and continues. That is a check that could not look, not a pass and not
+a refusal. Tell the person plainly that the trunk was not confirmed, rather than reporting it as
+either.
+
+On success the script prints one report: whether this is a new run or a resumed one, the frozen
+snapshot's own counts, which order is in flight and at what step, what drifted since an earlier
+snapshot and which work orders that halted, which orders are ready to build, and what the trunk
+check could establish. Read the whole report to the person before doing anything else.
+
+A first run has no earlier snapshot to compare against. The report says the drift check did not
+apply, never that nothing changed; those are different facts and only the report's own `checked`
+field tells them apart. Say the same to the person: nothing was compared yet, not that a check
+found nothing.
+
+A resumed run that halts one or more work orders for drift is not a failure. Say plainly which
+orders halted and why. A halted order stays halted until a person looks at it; nothing here
+un-halts one automatically, and nothing here decides whether the drift is acceptable.
+
+## What this skill does not do yet
+
+It does not write a test, watch one fail, write a trace matrix row, freeze a test file, write
+code, run the deciding checks, run a review, or close a work order. There is no action for any of
+those yet. Once the report above is shown, the conversation for this stage is finished until the
+next part is built.

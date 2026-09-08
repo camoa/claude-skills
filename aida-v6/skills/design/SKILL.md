@@ -291,8 +291,36 @@ the specific order it names:
 Then check again. Exit 3: the script could not run the check at all. Read its stderr and fix the
 named problem, then check again.
 
-Design is done when this check reaches exit 0, or exit 5 with a reason you have deliberately left
-open, recorded in the relevant order's own `reasoning`.
+Design is done when this check comes back clean. Nothing else counts as done.
+
+An earlier version of this skill said a content or cross-order problem could be left open with a
+reason recorded in an order's own `reasoning`. It cannot. Every one of those problems is an
+assumption implementation builds on: a criterion with no order producing it, a criterion two orders
+both claim, and two orders declaring the same file. Implementation refuses to start on any of them
+and tells the person to finish design, so leaving one open only moves the stop to a later and more
+expensive place.
+
+## Close the design
+
+Once design is done, close it. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh close "<task_folder>"
+```
+
+This runs the design check again. It writes `design-closed.json` only when that check exits clean.
+Closing records what design closed on: a hash over the contract and every work order.
+
+A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
+Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and
+tell the person before you stop.
+
+Implementation reads this record before it freezes anything. It refuses to start on a contract or
+a work order that does not match the recorded hash. This is what catches a work order edited after
+design closed but before implementation started.
+
+Did a work order change after closing? Close again. A second close is allowed and expected. It
+replaces the old hash with the new one. Closing again is the supported way to change a design that
+already closed.
 
 ## What this skill never does
 

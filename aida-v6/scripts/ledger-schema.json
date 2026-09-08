@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation ledger",
+  "description": "The one store for what an implementation run has done, at <task folder>/implementation/ledger.json (ideal/implementation.md, 'The ledger is the state file, not a status log'). It exists so a person who was not watching can arrive afterwards and decide what to redo, and so a run that died mid-order knows where it got to. Plain JSON, no fences, no markdown. Nothing derivable is stored: which orders depend on which lives in the work orders, and which order is in flight is the one order with a step reached, no halt reason and no close, since orders run one at a time. A field present in a real ledger but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. This schema holds what exists, never what is planned. Two fields named in the specification are absent because no step writes them yet: the commit range an order produced, which arrives with the step that closes an order, and who judged a criterion's row, which arrives with the checkpoint. foundations.md: a new thing gets the least that works, and a field nobody has asked for is a field nobody can cut back.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "startedFrom",
+    "runMode",
+    "snapshotHash",
+    "orders",
+    "criteria"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "startedFrom": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit the build started from, captured by the first step before anything is written. Rollback is a reset to it, which is what replaces the isolated working copy version 6 decided against. Version 5 captures nothing of the kind and its own ledger needs one."
+    },
+    "runMode": {
+      "type": "string",
+      "enum": [
+        "interactive",
+        "autonomous"
+      ],
+      "description": "The mode this run started in, read from the task at the first step. A fact about the run, not about the task, which is why it is stored here and not read back from task.json: a task's mode can be changed between runs and the record of what a finished run actually did must not change with it."
+    },
+    "snapshotHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "The `hash` of the snapshot this ledger was opened against. Reopening compares it to the snapshot on disk and refuses when they disagree, so a ledger and a snapshot that do not belong together are never read as a pair. The failure this prevents is a resumed run recording progress against orders it was not built from."
+    },
+    "orders": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/orderEntry"
+      },
+      "description": "One entry per work order in the snapshot, opened by the first step at no step completed. Order-level state is the thing version 5 records nowhere, which is why a person arriving at one of its runs cannot list which orders finished."
+    },
+    "criteria": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/criterionEntry"
+      },
+      "description": "One entry per criterion in the snapshot's contract, opened by the first step as not judged. This holds whether the tests claiming to prove a criterion were confirmed to do so, never the criterion itself, which lives in the snapshot."
+    }
+  },
+  "$defs": {
+    "orderEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "lastStep",
+        "attemptsUsed",
+        "roundsUsed"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The work order's own id, minted by design. Joined on, never re-minted."
+        },
+        "lastStep": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "tests-written",
+            "red-observed",
+            "matrix-written",
+            "checkpoint-passed",
+            "tests-frozen",
+            "code-written",
+            "checks-passed",
+            "reviewed",
+            "fixed",
+            "closed"
+          ],
+          "description": "The last step of this order that finished, or null when none has. A resumed run redoes the step after this one, which is why every step must be safe to run again: the record names what completed, never what was in progress. The order's state derives from this and needs no field of its own. Null is not started, `closed` is done, anything between with a halt reason is halted and without one is in flight."
+        },
+        "haltedBecause": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this order stopped, in plain words, present only when it is halted. Absent means the order is not halted; it never holds an empty string, because absent and empty would be one value for two facts."
+        },
+        "attemptsUsed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "How many times a builder has been given this order. The loop stops on a counter and never on a reviewer being satisfied, so a counter that resets when a run is resumed is not a cap. Version 5 keeps the same count in a crash-atomic sidecar whose header warns never to reset it."
+        },
+        "roundsUsed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "How many fix rounds this order has had. One round is one fixer and one verification. Same reason as attemptsUsed."
+        }
+      }
+    },
+    "criterionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "rowState"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion id scope minted. Joined on, never re-minted, and never the criterion's text."
+        },
+        "rowState": {
+          "type": "string",
+          "enum": [
+            "not-judged",
+            "confirmed",
+            "rejected"
+          ],
+          "description": "Whether the tests claiming to prove this criterion were confirmed to observe what its verify clause describes. Three values, because unconfirmed reading the same as confirmed is how nobody can tell what is still owed. Opened at not-judged by the first step."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA design-closed record",
+  "description": "What design closed on, at <task folder>/design-closed.json, beside task.json and alignment.json, never inside design/ (ideal/implementation.md, 'Freezing, and what a freeze is for'). It sits at the task's own root because a record inside the folder it hashes would hash itself. Implementation reads this file before it freezes anything and refuses to start when the hash it re-derives from the live alignment.json and design/*.json disagrees with the hash recorded here. Closing again after a further change is the supported way to update it: a later close simply overwrites this file with the new hash. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "closedAt",
+    "hash"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field alignment.json, every design/*.json, task.json and project.json all carry. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
+    },
+    "closedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date design closed, YYYY-MM-DD. Set by the script at the moment of closing, never typed by hand. Closing is not one-shot the way implementation's own snapshot is: a design can be reopened, changed and closed again, and this date is the only trace of when the most recent close happened. It answers how old this close is when implementation refuses against it weeks later."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256 over the canonical form of alignment.json and every design/*.json together, in work order id order, computed at closing by scripts/lib/records-hash.sh. Implementation calls the same function against the live files and refuses to start when the two disagree, rather than freezing whatever it finds. This is the field that makes closing load-bearing: a design closed, then edited, then started without closing again is refused instead of silently frozen as if the edit had been what design closed on."
+    }
+  }
+}
