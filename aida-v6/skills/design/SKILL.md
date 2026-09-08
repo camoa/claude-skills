@@ -60,12 +60,24 @@ a reason to stop; it means design decides from nothing found, same as when resea
 
 ## Read the guides and recipes research found
 
-Research identified these without reading them, so design is the first read. One agentic recipe
+Research named these without opening them, so design is the first read. Research recorded an
+address for each; open it through the navigator the same way, and read a project's own source
+directly. One agentic recipe
 covering the work means the decision is already made: follow it. Two: read both, pick the one
 that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
 
 ## Read the process recipe for this project's framework
+
+Ask the navigator's process-recipe lookup for this project's framework at the design stage. It
+answers whether one is available and, when it is, a path to the body on disk. Read the body from
+that path. Never fetch a catalog address yourself and never read a cached copy behind the
+navigator's back. A source this project configured itself, a folder of its own, is read the
+ordinary way.
+
+**Three answers, not one.** No recipe for this framework, a listing that could not be reached, and
+a failed network are three different things, and only the first says anything about the framework.
+Record which one happened, in those words.
 
 This is what makes the work orders right, and no check below can replace it. Read it for what
 AIDA cannot know on its own:
@@ -77,12 +89,13 @@ AIDA cannot know on its own:
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
-- What the test levels are called and what each one observes. Use the cheapest level that can
-  still observe the outcome the criterion names.
+- What must exist beside a class for the unit to work: a services entry, a route, a permission,
+  a schema. Name these in the order, or whoever builds it invents them.
 - What order the framework forces, where it forces one.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
-`reasoning` of every order in this pass. Do not guess a test level. Do not invent a kind of unit.
+`reasoning` of every order in this pass. Do not invent a kind of unit and do not guess at a
+framework convention.
 Interactive: ask whether to write the recipe first, before drafting anything.
 
 ## The stated approach
@@ -167,7 +180,7 @@ Then, one call per item, add what the order still needs:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
-  --id <woId> --level "<a level name from the framework's recipe>" --description "<what this test observes>"
+  --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
 here; the check below refuses an order that skips this. A criterion whose `verifiedBy` is

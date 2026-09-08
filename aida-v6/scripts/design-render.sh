@@ -193,9 +193,15 @@ render_text_list() {
         printf -- '- (entry %d is not an object, is a %s: its fields cannot be rendered)\n' "$((N - 1))" "$ROW_TYPE"
         continue
       fi
-      T_LEVEL="$(printf '%s' "$row" | jq -r 'if (.level? | type) == "string" and (.level | length) > 0 then .level else "(no level recorded)" end')"
+      # A test with no level is the ordinary case, not a gap. Design says what the test observes;
+      # the stage that writes it picks the tier and may record it back here.
+      T_LEVEL="$(printf '%s' "$row" | jq -r 'if (.level? | type) == "string" and (.level | length) > 0 then .level else "" end')"
       T_DESC="$(printf '%s' "$row" | jq -r 'if (.description? | type) == "string" and (.description | length) > 0 then .description else "(no description recorded)" end')"
-      printf -- '- **%s.** %s\n' "$T_LEVEL" "$T_DESC"
+      if [ -n "$T_LEVEL" ]; then
+        printf -- '- **%s.** %s\n' "$T_LEVEL" "$T_DESC"
+      else
+        printf -- '- %s\n' "$T_DESC"
+      fi
     done < <(jq -c '.tests[]' "$WO_FILE")
     printf '\n'
   fi

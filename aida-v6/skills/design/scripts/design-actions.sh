@@ -665,14 +665,21 @@ do_add_test() {
     esac
   done
   require_wo_id_arg "add-test" "$id"
-  is_blank "$level" && die3 "add-test: --level is required and must not be blank"
   is_blank "$description" && die3 "add-test: --description is required and must not be blank"
 
+  # --level is accepted and optional, and design does not pass one. Selecting a tier belongs to the
+  # stage that writes the test, which is where the framework's own recipe puts it. Design says what
+  # the test must observe. The flag stays so that later stage can record what it chose.
   local file doc
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-test: $file exists but is not valid JSON"
-  doc="$(jq --arg l "$level" --arg d "$description" \
-    '.tests = ((.tests // []) + [{level: $l, description: $d}])' "$file")"
+  if is_blank "$level"; then
+    doc="$(jq --arg d "$description" \
+      '.tests = ((.tests // []) + [{description: $d}])' "$file")"
+  else
+    doc="$(jq --arg l "$level" --arg d "$description" \
+      '.tests = ((.tests // []) + [{level: $l, description: $d}])' "$file")"
+  fi
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   printf '%s\n' "$doc"

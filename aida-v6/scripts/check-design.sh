@@ -288,7 +288,7 @@ CONTENT_CHECK_JQ='
         else
           ( [ ($t | keys_unsorted[]) as $k | select(($allowed | index($k)) == null)
               | {problem: ("tests entry " + ($e.key | tostring) + ": unknown field " + $k + ". Not declared by design-schema.json")} ] )
-          + ( if str_present($t.level?) then [] else [ {problem: ("tests entry " + ($e.key | tostring) + ": level missing, empty, or not a string")} ] end )
+          + ( if ($t | has("level")) and (str_present($t.level?) | not) then [ {problem: ("tests entry " + ($e.key | tostring) + ": level is present but empty or not a string. Omit it rather than leaving it blank")} ] else [] end )
           + ( if str_present($t.description?) then [] else [ {problem: ("tests entry " + ($e.key | tostring) + ": description missing, empty, or not a string")} ] end )
         end
     ] | flatten;
@@ -373,8 +373,9 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             nonGoals: [ (.nonGoals // [])[] | select(type == "string" and test("^n[1-9][0-9]*$")) ],
             dependsOn: [ (.dependsOn // [])[] | select(type == "string" and test("^wo[1-9][0-9]*$")) ],
             ownedFiles: [ (.ownedFiles // [])[] | select(type == "string" and (length > 0)) ],
+            # A test counts on its description alone. The level is optional and design does not set
+            # one: choosing a tier belongs to the stage that writes the test.
             testsCount: ( [ (.tests // [])[]? | select(type == "object")
-                            | select((.level? | type) == "string" and (.level | length) > 0)
                             | select((.description? | type) == "string" and (.description | length) > 0) ] | length )
           }
         ' --arg path "$wfile" "$wfile")"

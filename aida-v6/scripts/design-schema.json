@@ -5,8 +5,19 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion", "id", "title", "criteriaServed", "criteriaOwned", "nonGoals",
-    "dependsOn", "ownedFiles", "interface", "tests", "doneWhen", "reasoning", "diffBudget"
+    "schemaVersion",
+    "id",
+    "title",
+    "criteriaServed",
+    "criteriaOwned",
+    "nonGoals",
+    "dependsOn",
+    "ownedFiles",
+    "interface",
+    "tests",
+    "doneWhen",
+    "reasoning",
+    "diffBudget"
   ],
   "properties": {
     "schemaVersion": {
@@ -28,31 +39,46 @@
     "criteriaServed": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "pattern": "^c[1-9][0-9]*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^c[1-9][0-9]*$"
+      },
       "description": "The criterion ids, minted by scope in alignment.json, this order contributes to. Usually several: one criterion often produces several work orders, and one order often serves several criteria (ideal/design.md, 'A work order names the criteria it serves, and the ones it owns'). Every work order must serve at least one criterion; a work order serving none is work nobody asked for, checked by check-design.sh rather than by this schema."
     },
     "criteriaOwned": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "pattern": "^c[1-9][0-9]*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^c[1-9][0-9]*$"
+      },
       "description": "The criterion ids whose observable outcome this order produces. Usually none: most orders support another order rather than producing an outcome a person can see directly. Exactly one order owns each criterion, never zero and never two (ideal/design.md, 'A work order names the criteria it serves, and the ones it owns'), checked across every work order by check-design.sh rather than by this schema."
     },
     "nonGoals": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "pattern": "^n[1-9][0-9]*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^n[1-9][0-9]*$"
+      },
       "description": "The non-goal ids, minted by scope in alignment.json, a critic needs beside this order to judge a finding that cites one (ideal/design.md, 'What a work order holds'). Empty for most orders: only named when this order sits close enough to a stated boundary that a critic reviewing it needs the boundary in view."
     },
     "dependsOn": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "pattern": "^wo[1-9][0-9]*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^wo[1-9][0-9]*$"
+      },
       "description": "The work order ids that must finish before this one starts. This is the build order (ideal/design.md, 'What a work order holds'). An order that owns no criterion reaches an owning order by walking this chain; a chain that reaches no owner, or that loops, fails check-design.sh (ideal/design.md, 'An order that owns nothing is a supporting order')."
     },
     "ownedFiles": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "description": "The paths or globs this order may write. They must not overlap another order's declared list, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared."
     },
     "interface": {
@@ -63,13 +89,18 @@
     "tests": {
       "type": "array",
       "default": [],
-      "items": { "$ref": "#/$defs/test" },
+      "items": {
+        "$ref": "#/$defs/test"
+      },
       "description": "Which tests must exist, and at which level, before the code that satisfies them is written (ideal/design.md, 'Tests are part of the work order, not a work order' and 'Why the order names the tests at all'). A work order that owns a criterion whose `verifiedBy` is `machine` must declare at least one test here, checked by check-design.sh. The level names are a recipe's own vocabulary, for example unit, kernel or functional in Drupal, so this field takes any non-empty string rather than a fixed enum."
     },
     "doneWhen": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "description": "What must be true for this order to be finished, in a person's words (ideal/design.md, 'What a work order holds'). Specific enough that whoever writes the tests and whoever writes the code do not have to ask what was meant."
     },
     "reasoning": {
@@ -87,12 +118,14 @@
     "test": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["level", "description"],
+      "required": [
+        "description"
+      ],
       "properties": {
         "level": {
           "type": "string",
           "minLength": 1,
-          "description": "The test level, in the recipe's own vocabulary for this project's framework, for example unit, kernel or functional. Not a fixed enum, because the names change by framework (ideal/design.md, 'Tests are part of the work order, not a work order')."
+          "description": "The test level, in the recipe's own vocabulary for this project's framework, for example unit, kernel or functional. Optional, and design does not set it. Selecting a tier belongs to the stage that writes the test, which is where the framework's own recipe puts it; design says what the test must observe. A level recorded here was written by that later stage (ideal/design.md, 'Why the order names the tests at all')."
         },
         "description": {
           "type": "string",
