@@ -96,7 +96,9 @@ AIDA cannot know on its own:
 **No recipe covers this framework:** say so, and write `written without framework input` into the
 `reasoning` of every order in this pass. Do not invent a kind of unit and do not guess at a
 framework convention.
-Interactive: ask whether to write the recipe first, before drafting anything.
+Interactive: ask whether to write the recipe first, before drafting anything. The shape is in
+`${CLAUDE_PLUGIN_ROOT}/templates/process-recipe-design.md`, which carries the sections the catalog
+requires and the five things design needs from a framework.
 
 ## The stated approach
 

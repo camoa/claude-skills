@@ -206,8 +206,10 @@ three-part test: maintained, used, supported. For prior art inside this project,
 project root and say in the finding that the bound on custom code was not enforced. Do not guess
 the framework's directory layout.
 
-Interactive: ask whether to create one, through the current create-on-miss path, before moving
-on.
+Interactive: ask whether to write one before moving on. The shape is in
+`${CLAUDE_PLUGIN_ROOT}/templates/process-recipe-research.md`, which carries the sections the
+catalog requires and what research asks at each one. Publishing it is the catalog's own
+create-on-miss path.
 
 Autonomous: record the missing recipe as a note in the finding's own text and continue. Do not
 invent a framework-specific rule in its place.
