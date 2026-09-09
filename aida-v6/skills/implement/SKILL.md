@@ -119,8 +119,12 @@ and writes what it found. It never hands a check to a shell.
 - **undeclared.** The recipe named no conditions. Say that, and never say met. A recipe that
   declared nothing was not checked.
 
-Only `met` continues. Anything else stops and the person decides. In an unattended run, anything
-else halts; nothing here judges an unmet condition acceptable.
+`met` and `undeclared` both continue. A recipe saying this framework needs nothing before a test
+runs has answered, and stopping on it would mean no project on that framework ever builds. Say
+which of the two happened; never report `undeclared` as conditions that passed.
+
+`unmet` and `unknown` stop, and the person decides. In an unattended run they halt. Nothing here
+judges an unmet condition acceptable.
 
 Say which frameworks were answered from a recipe and which were not. A framework whose recipe could
 not be reached was not checked, and reporting the run as clean would be false.

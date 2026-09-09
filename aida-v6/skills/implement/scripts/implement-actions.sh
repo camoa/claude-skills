@@ -190,10 +190,11 @@
 #      neither way: no --recipe and no --lookup-failed. Refused rather than guessed, because a
 #      lookup nobody ran recorded as a recipe that declared nothing is the exact defect the
 #      declaration exists to close.
-#  19  `preconditions` ran and the run did not come back met. The record is written first and
-#      names every condition and its reason, so this exit says do not proceed, never that nothing
-#      was learned. A verdict of unmet, unknown or undeclared all land here; the record tells them
-#      apart and this number does not.
+#  19  `preconditions` ran and something stops the build: a condition answered no, or nobody could
+#      tell. The record is written first and names every condition and its reason, so this exit
+#      says do not proceed, never that nothing was learned. `undeclared` does not land here: a
+#      recipe saying this framework needs nothing before a test runs has answered, and refusing on
+#      it would stop every project on that framework. It is reported, never counted as met.
 #  20  `preconditions` was asked to run on a task whose build has never started: no snapshot and
 #      no ledger. Run `start` first.
 #
@@ -1340,11 +1341,19 @@ EOF
         lookup: .lookup,
         verdict: .verdict,
         unmet:   [.entries[] | select(.verdict == "unmet")   | {id, what, owner}],
-        unknown: [.entries[] | select(.verdict == "unknown") | {id, what, reason}]
+        unknown: [.entries[] | select(.verdict == "unknown") | {id, what, owner, reason}]
       }))
     }'
 
-  [ "$run_verdict" = "met" ] || exit 19
+  # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a
+  # test runs has answered, and refusing on it would mean no project on that framework ever
+  # builds. The two never share a value in the record, and the report names which one happened,
+  # which is the whole of what "undeclared is not met" protects: a caller must not report a
+  # recipe that declared nothing as a set of conditions that passed.
+  case "$run_verdict" in
+    met|undeclared) ;;
+    *) exit 19 ;;
+  esac
 }
 
 # ------------------------------------------------------------------------------------------------
