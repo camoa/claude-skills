@@ -6,12 +6,21 @@
 # and never judges whether a criterion is really met. It performs the first step of the
 # implementation stage: freezing the contract and the work orders design left into a snapshot,
 # opening the ledger that will track every order's progress, and refusing before writing anything
-# when the task is not ready. Building a work order is not built yet; only `read` and `start`
-# exist.
+# when the task is not ready. It then performs the second step: establishing whether the code
+# repository can run a test at all, against the conditions each framework's recipe declares.
+# Building a work order is not built yet; only `read`, `start` and `preconditions` exist.
 #
 # Usage:
 #   implement-actions.sh read  <task_folder>
 #   implement-actions.sh start <task_folder>
+#   implement-actions.sh preconditions <task_folder> [--recipe <framework>=<path>]...
+#                                                    [--lookup-failed <framework>=<reason>]...
+#
+# `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
+# one belonging to this point and this framework, or reads a source the project configured itself,
+# and hands over a path. A framework whose lookup failed is passed with the reason it failed, and
+# the three reasons stay apart: no-recipe, listing-unreachable, fetch-failed. Only the first says
+# anything about the framework.
 #
 # There is no --run-mode flag on this script, deliberately. The mode is the task's own, read from
 # <task_folder>/task.json at `start` (task-schema.json, `runMode`), not something a caller passes
@@ -177,6 +186,16 @@
 #  17  a resumed run's snapshot.json does not agree with itself: a hash re-derived from its own
 #      copied alignment and work orders disagrees with its own stored hash field. The snapshot
 #      file was edited after it was written.
+#  18  `preconditions` was given a framework from project.json that the caller answered for
+#      neither way: no --recipe and no --lookup-failed. Refused rather than guessed, because a
+#      lookup nobody ran recorded as a recipe that declared nothing is the exact defect the
+#      declaration exists to close.
+#  19  `preconditions` ran and the run did not come back met. The record is written first and
+#      names every condition and its reason, so this exit says do not proceed, never that nothing
+#      was learned. A verdict of unmet, unknown or undeclared all land here; the record tells them
+#      apart and this number does not.
+#  20  `preconditions` was asked to run on a task whose build has never started: no snapshot and
+#      no ledger. Run `start` first.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -221,6 +240,8 @@ die14() { printf 'implement-actions: %s\n' "$1" >&2; exit 14; }
 die15() { printf 'implement-actions: %s\n' "$1" >&2; exit 15; }
 die16() { printf 'implement-actions: %s\n' "$1" >&2; exit 16; }
 die17() { printf 'implement-actions: %s\n' "$1" >&2; exit 17; }
+die18() { printf 'implement-actions: %s\n' "$1" >&2; exit 18; }
+die20() { printf 'implement-actions: %s\n' "$1" >&2; exit 20; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -230,6 +251,9 @@ usage() {
   cat <<'EOF' >&2
 usage: implement-actions.sh read  <task_folder>
        implement-actions.sh start <task_folder>
+       implement-actions.sh preconditions <task_folder>
+                            [--recipe <framework>=<path>]...
+                            [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
 EOF
 }
 
@@ -1032,6 +1056,297 @@ do_start() {
   exit 0
 }
 
+
+# ------------------------------------------------------------------------------------------------
+# Step two: preconditions. Can this repository build and test at all?
+#
+# The skill resolves each framework's recipe, through the guides navigator for anything the catalog
+# publishes and directly for a source the project configured itself, and hands the path here. This
+# script never fetches a catalog address and never reads the navigator's cache behind its back
+# (foundations.md, "Everything published in the catalog is read through the guides navigator").
+# That split is also what keeps this action exercisable against a file on disk.
+#
+# Four verdicts, and version 5 paid for every one of them. `undeclared` is not `met`: a recipe that
+# declared nothing was not checked, and a caller treating that as met has re-created the defect the
+# declaration exists to close. A heading with nothing readable under it is `unknown`, not
+# `undeclared`. A missing checker says nothing about the condition, so exit 127 is `unknown` and
+# never `unmet`, because reporting it unmet sends a person to fix the wrong thing.
+#
+# No timeout. `timeout` is not on a stock macOS and this script runs on bash 3.2 and zsh, so a
+# check that hangs hangs the step. Every check the catalog declares today is a filesystem probe or
+# a version print. A recipe that ever declares a check reaching the network needs this revisited,
+# and pretending to a timeout we cannot portably enforce would be worse than saying so here.
+# ------------------------------------------------------------------------------------------------
+
+pc_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+
+# True when a check value would mean something other than what its author read. A recipe body is
+# data written elsewhere, and nothing here reaches a shell: the value is split on whitespace and
+# run as arguments. A value carrying a shell metacharacter is refused by name rather than run with
+# that character passed through as a literal, because either reading surprises whoever wrote it.
+pc_check_is_unsafe() {
+  case "$1" in
+    *[\;\|\&\$\`\<\>\(\)\{\}\*\?\[\]\~\!\\\"\']*) return 0 ;;
+  esac
+  return 1
+}
+
+# Runs one check as arguments from inside $2, and prints only its exit status. Globbing is off for
+# the split, so a `*` that survived the refusal above could not expand against the working
+# directory anyway.
+pc_run_check() {
+  local value="$1" dir="$2"
+  (
+    cd "$dir" || exit 127
+    # zsh does not split an unquoted expansion on whitespace the way bash and every other
+    # POSIX-family shell do (foundations.md, Honesty: this script runs under both). Scoped to
+    # this subshell only, so it never changes how the rest of the script's own expansions behave.
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      setopt SH_WORD_SPLIT 2>/dev/null
+    fi
+    set -f
+    # shellcheck disable=SC2086
+    set -- $value
+    set +f
+    exec "$@"
+  ) >/dev/null 2>&1
+  printf '%s' "$?"
+}
+
+# The entry being read, held between lines. Bash 3.2 has no nameref, so the parse loop and its
+# flush share these rather than passing a record around.
+PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_ANY=0
+
+# Runs the held entry's check and appends one JSON object to $1. Clears the entry afterwards, so a
+# second call with nothing held writes nothing.
+pc_flush_entry() {
+  local out="$1" codepath="$2"
+  local verdict reason rc exitjson
+  [ -n "$PC_ID" ] || return 0
+  PC_ANY=1
+  verdict=""; reason=""; exitjson="null"
+  if [ -z "$PC_WHAT" ]; then
+    verdict="unknown"; reason="entry-unparseable"
+  elif [ -z "$PC_CHECK" ]; then
+    verdict="unknown"; reason="no-check-declared"
+  elif pc_check_is_unsafe "$PC_CHECK"; then
+    verdict="unknown"; reason="unsafe-check-shape"
+  else
+    rc="$(pc_run_check "$PC_CHECK" "$codepath")"
+    exitjson="$rc"
+    case "$rc" in
+      0)   verdict="met" ;;
+      127) verdict="unknown"; reason="check-command-not-found" ;;
+      *)   verdict="unmet" ;;
+    esac
+  fi
+  jq -n --arg id "$PC_ID" --arg what "$PC_WHAT" --arg owner "$PC_OWNER" --arg check "$PC_CHECK" \
+        --arg verdict "$verdict" --arg reason "$reason" --argjson exitCode "$exitjson" '
+    {id: $id, what: (if $what == "" then $id else $what end), verdict: $verdict}
+    + (if $check    == ""   then {} else {check: ([$check | splits("[ \t]+")] | map(select(length > 0)))} end)
+    + (if $owner    == ""   then {} else {owner: $owner} end)
+    + (if $reason   == ""   then {} else {reason: $reason} end)
+    + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+  ' >>"$out" || die3 "preconditions: could not record the entry $PC_ID"
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""
+}
+
+# Reads the `## Preconditions` section of the recipe at $1, runs each check from inside $3, and
+# appends one JSON object per entry to $2. Prints the section's own state: `undeclared` when the
+# heading is absent, `unparseable` when the heading is there with nothing readable under it, or
+# `ok`.
+pc_parse_recipe() {
+  local recipe_file="$1" out="$2" codepath="$3"
+  local section_file block_file line trimmed
+
+  section_file="$out.section"
+  sed -n '/^##[[:space:]]*Preconditions[[:space:]]*$/,/^##[[:space:]]/p' "$recipe_file" >"$section_file" 2>/dev/null
+  if [ ! -s "$section_file" ]; then
+    rm -f "$section_file"
+    printf 'undeclared'
+    return 0
+  fi
+
+  block_file="$out.block"
+  sed -n '/^preconditions:[[:space:]]*$/,$p' "$section_file" | sed '1d' >"$block_file"
+  rm -f "$section_file"
+  if [ ! -s "$block_file" ]; then
+    rm -f "$block_file"
+    printf 'unparseable'
+    return 0
+  fi
+
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_ANY=0
+  while IFS= read -r line; do
+    case "$line" in
+      '##'*) break ;;
+    esac
+    trimmed="$(pc_trim "$line")"
+    [ -n "$trimmed" ] || continue
+    case "$trimmed" in
+      '- id:'*)   pc_flush_entry "$out" "$codepath"; PC_ID="$(pc_trim "${trimmed#- id:}")" ;;
+      'what:'*)   PC_WHAT="$(pc_trim "${trimmed#what:}")" ;;
+      'check:'*)  PC_CHECK="$(pc_trim "${trimmed#check:}")" ;;
+      'owner:'*)  PC_OWNER="$(pc_trim "${trimmed#owner:}")" ;;
+    esac
+  done <"$block_file"
+  pc_flush_entry "$out" "$codepath"
+  rm -f "$block_file"
+
+  if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'unparseable'; fi
+}
+
+# The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared
+# nothing is a smaller hole than a check that could not answer, and a check that answered no is the
+# only one of the four that names something a person can fix.
+pc_rank() {
+  case "$1" in
+    met) printf '0' ;; undeclared) printf '1' ;; unknown) printf '2' ;; *) printf '3' ;;
+  esac
+}
+pc_worse() {
+  if [ "$(pc_rank "$1")" -ge "$(pc_rank "$2")" ]; then printf '%s' "$1"; else printf '%s' "$2"; fi
+}
+
+# The step. Every framework the project declares must be answered for, because the build runs in
+# one repository that is all of them at once.
+do_preconditions() {
+  local task_folder="" project_folder codepath project_state
+  local recipes="" failures="" arg fw val
+  local frameworks fw_count entries_file fw_json_file
+  local lookup recipe_path section_state fw_verdict entries_json run_verdict
+  local record_file record_json today
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --recipe)
+        [ "$#" -ge 2 ] || die3 "preconditions: --recipe needs <framework>=<path>"
+        case "$2" in *=*) ;; *) die3 "preconditions: --recipe takes <framework>=<path>, got: $2" ;; esac
+        recipes="$recipes$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      --lookup-failed)
+        [ "$#" -ge 2 ] || die3 "preconditions: --lookup-failed needs <framework>=<reason>"
+        case "$2" in *=*) ;; *) die3 "preconditions: --lookup-failed takes <framework>=<reason>, got: $2" ;; esac
+        val="${2#*=}"
+        case "$val" in
+          no-recipe|listing-unreachable|fetch-failed) ;;
+          *) die3 "preconditions: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $val" ;;
+        esac
+        failures="$failures$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      -*) die3 "preconditions: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_folder" ] || die3 "preconditions: more than one task folder given"
+        task_folder="$1"; shift ;;
+    esac
+  done
+
+  task_folder="$(resolve_task_folder "$task_folder" "preconditions")"
+
+  # This step belongs to a run, so a run must have opened. Writing a record for a build that never
+  # started would leave a file nothing can be read against.
+  [ -f "$task_folder/implementation/snapshot.json" ] && [ -f "$task_folder/implementation/ledger.json" ] \
+    || die20 "preconditions: this task has no started build; run \`start\` first"
+
+  project_folder="$(resolve_project_folder "$task_folder")" \
+    || die3 "preconditions: the task folder is not inside a project, so no framework is known"
+  project_state="$(project_code_path_state "$project_folder")"
+  case "$project_state" in
+    unreadable) die14 "preconditions: $project_folder/project.json is not valid JSON" ;;
+    missing)    die3  "preconditions: $project_folder has no project.json" ;;
+  esac
+  codepath="$(project_code_path_value "$project_folder")"
+  [ -n "$codepath" ] || die3 "preconditions: project.json records no codePath, so no check has anywhere to run"
+  [ -d "$codepath" ] || die15 "preconditions: the recorded codePath does not exist on disk: $codepath"
+
+  frameworks="$(jq -r '.frameworks // [] | .[]' "$project_folder/project.json" 2>/dev/null)"
+  [ -n "$frameworks" ] || die14 "preconditions: project.json records no frameworks, so no recipe can be chosen"
+
+  entries_file="$task_folder/implementation/.preconditions-entries.$$"
+  fw_json_file="$task_folder/implementation/.preconditions-frameworks.$$"
+  : >"$fw_json_file"
+  run_verdict="met"
+
+  # A framework the caller answered for neither way is a caller that did not look. Guessing here
+  # would turn a lookup nobody ran into a recipe that declared nothing.
+  printf '%s\n' "$frameworks" | while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    recipe_path="$(printf '%s' "$recipes" | grep "^$fw	" | head -n 1 | cut -f2-)"
+    lookup=""
+    if [ -n "$recipe_path" ]; then
+      lookup="resolved"
+    else
+      lookup="$(printf '%s' "$failures" | grep "^$fw	" | head -n 1 | cut -f2-)"
+      [ -n "$lookup" ] || die18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
+    fi
+
+    : >"$entries_file"
+    if [ "$lookup" = "resolved" ]; then
+      [ -f "$recipe_path" ] || die3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
+      section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
+      case "$section_state" in
+        undeclared)  fw_verdict="undeclared" ;;
+        unparseable) fw_verdict="unknown" ;;
+        *)           fw_verdict="met" ;;
+      esac
+    else
+      # Nobody looked. That is a different fact from a recipe that looked and declared nothing.
+      section_state="not-looked"
+      fw_verdict="unknown"
+    fi
+
+    entries_json="$(jq -s '.' "$entries_file" 2>/dev/null)" || entries_json="[]"
+    if [ "$section_state" = "ok" ]; then
+      fw_verdict="$(jq -r '
+        def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
+        (map(.verdict) + ["met"]) | max_by(rank)
+      ' <<EOF
+$entries_json
+EOF
+)"
+    fi
+
+    jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
+          --arg verdict "$fw_verdict" --argjson entries "$entries_json" '
+      {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries}
+      + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
+    ' >>"$fw_json_file" || die3 "preconditions: could not record the result for framework $fw"
+  done || exit $?
+
+  rm -f "$entries_file"
+
+  run_verdict="$(jq -s -r '
+    def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
+    (map(.verdict) + ["met"]) | max_by(rank)
+  ' "$fw_json_file")"
+
+  today="$(date -u +%Y-%m-%d)"
+  record_json="$(jq -s --arg takenAt "$today" --arg verdict "$run_verdict" '
+    {schemaVersion: 1, takenAt: $takenAt, verdict: $verdict, frameworks: .}
+  ' "$fw_json_file")" || die3 "preconditions: could not assemble the record"
+  rm -f "$fw_json_file"
+
+  record_file="$task_folder/implementation/preconditions.json"
+  write_atomic "$record_file" "$record_json"
+
+  jq -n --arg verdict "$run_verdict" --arg record "$record_file" --argjson report "$record_json" '
+    {
+      verdict: $verdict,
+      record: $record,
+      frameworks: ($report.frameworks | map({
+        framework: .framework,
+        lookup: .lookup,
+        verdict: .verdict,
+        unmet:   [.entries[] | select(.verdict == "unmet")   | {id, what, owner}],
+        unknown: [.entries[] | select(.verdict == "unknown") | {id, what, reason}]
+      }))
+    }'
+
+  [ "$run_verdict" = "met" ] || exit 19
+}
+
 # ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
@@ -1047,5 +1362,6 @@ shift
 case "$ACTION" in
   read)  do_read  "$@" ;;
   start) do_start "$@" ;;
+  preconditions) do_preconditions "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

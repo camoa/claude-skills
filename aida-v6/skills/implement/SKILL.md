@@ -1,6 +1,6 @@
 ---
 name: implement
-description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, and refuses to land the build on the project's own trunk branch. It does not yet build a work order.
+description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, and then establishes whether this repository can build and test at all. It does not yet build a work order.
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
@@ -10,10 +10,11 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-act
 # Implement
 
 Implementation builds each work order design wrote, one at a time, against tests it cannot
-change once they are frozen. **Only the first step of that exists today: freezing the contract
-and the work orders into a snapshot, and opening the ledger that will track every order's
-progress.** Building a work order, writing a test, or closing an order is not built yet. Say this
-plainly once the report below is shown, so nobody expects more than this step did.
+change once they are frozen. **Only the first two steps of that exist today. One freezes the
+contract and the work orders into a snapshot and opens the ledger that will track every order's
+progress. Two establishes whether this repository can run a test at all.** Building a work order,
+writing a test, or closing an order is not built yet. Say this plainly once the reports below are
+shown, so nobody expects more than these two steps did.
 
 ## Find the task
 
@@ -77,9 +78,60 @@ A resumed run that halts one or more work orders for drift is not a failure. Say
 orders halted and why. A halted order stays halted until a person looks at it; nothing here
 un-halts one automatically, and nothing here decides whether the drift is acceptable.
 
+## Check the preconditions
+
+The build has started. Now find out whether this repository can run a test at all. This step runs
+once per build, not once per work order.
+
+### Resolve one recipe per framework
+
+Read the project's own `frameworks`. For each one, ask the navigator's process-recipe lookup for
+the `test-execution` point and that framework. It answers whether one is available and, when it
+is, a path to the body on disk. Never fetch a catalog address yourself and never read a cached copy
+behind the navigator's back. A source this project configured itself, a folder of its own, is read
+the ordinary way and wins over the catalog.
+
+**Three answers, not one.** No recipe for this framework, a listing that could not be reached, and
+a failed network are three different things, and only the first says anything about the framework.
+Pass the one that happened, in its own word.
+
+### Run the checks
+
+Run, with one flag per framework:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh preconditions "<task_folder>" \
+  --recipe <framework>=<path to the recipe body> \
+  --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>
+```
+Every framework the project declares needs one flag or the other. The script refuses rather than
+guess, because a lookup nobody ran must never be recorded as a recipe that declared nothing.
+
+The script reads each recipe's declared conditions, runs each check inside the code repository,
+and writes what it found. It never hands a check to a shell.
+
+### Read the four verdicts to the person
+
+- **met.** Every declared condition answered yes. The build can go on.
+- **unmet.** A condition answered no. Name it, name the framework, and name the owner the recipe
+  gave. An owner is the action; without one the person has to work out what to do.
+- **unknown.** Nobody could tell. A checker that is not installed says nothing about the condition
+  it was meant to probe, so this is never reported as a failure of the condition.
+- **undeclared.** The recipe named no conditions. Say that, and never say met. A recipe that
+  declared nothing was not checked.
+
+Only `met` continues. Anything else stops and the person decides. In an unattended run, anything
+else halts; nothing here judges an unmet condition acceptable.
+
+Say which frameworks were answered from a recipe and which were not. A framework whose recipe could
+not be reached was not checked, and reporting the run as clean would be false.
+
 ## What this skill does not do yet
 
-It does not write a test, watch one fail, write a trace matrix row, freeze a test file, write
-code, run the deciding checks, run a review, or close a work order. There is no action for any of
-those yet. Once the report above is shown, the conversation for this stage is finished until the
+It does not resolve the commands that run tests, take a baseline, write a test, watch one fail,
+write a trace row, freeze a test file, write code, run the deciding checks, run a review, or close
+a work order. There is no action for any of those yet.
+
+The commands and the baseline wait on one thing outside this plugin: the catalog has no
+declaration that holds a test command, so no framework can yet say how to run one file, one test,
+or the tests covering a change. Until it does, this step establishes the conditions and stops. Once the report above is shown, the conversation for this stage is finished until the
 next part is built.
