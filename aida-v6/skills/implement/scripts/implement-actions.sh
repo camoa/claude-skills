@@ -1168,14 +1168,20 @@ pc_parse_recipe() {
     return 0
   fi
 
-  block_file="$out.block"
-  sed -n '/^preconditions:[[:space:]]*$/,$p' "$section_file" | sed '1d' >"$block_file"
-  rm -f "$section_file"
-  if [ ! -s "$block_file" ]; then
-    rm -f "$block_file"
+  # The key's presence and the entries under it are two facts. A recipe that wrote the key and put
+  # nothing in it has declared there are none. A recipe with no key at all may have misspelled it,
+  # and nobody can tell that from a recipe that meant to declare nothing, so it is unknown. That
+  # difference is the only thing standing between a misspelled `check:` and a run that reads clean
+  # while checking less than its author wrote.
+  if ! grep -q '^preconditions:' "$section_file"; then
+    rm -f "$section_file"
     printf 'unparseable'
     return 0
   fi
+
+  block_file="$out.block"
+  sed -n '/^preconditions:/,$p' "$section_file" | sed '1d' >"$block_file"
+  rm -f "$section_file"
 
   PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_ANY=0
   while IFS= read -r line; do
@@ -1194,7 +1200,7 @@ pc_parse_recipe() {
   pc_flush_entry "$out" "$codepath"
   rm -f "$block_file"
 
-  if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'unparseable'; fi
+  if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'declared-empty'; fi
 }
 
 # The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared
@@ -1288,9 +1294,10 @@ do_preconditions() {
       [ -f "$recipe_path" ] || die3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
       section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
       case "$section_state" in
-        undeclared)  fw_verdict="undeclared" ;;
-        unparseable) fw_verdict="unknown" ;;
-        *)           fw_verdict="met" ;;
+        undeclared)     fw_verdict="undeclared" ;;
+        declared-empty) fw_verdict="undeclared" ;;
+        unparseable)    fw_verdict="unknown" ;;
+        *)              fw_verdict="met" ;;
       esac
     else
       # Nobody looked. That is a different fact from a recipe that looked and declared nothing.
