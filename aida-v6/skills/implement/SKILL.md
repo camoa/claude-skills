@@ -109,6 +109,13 @@ guess, because a lookup nobody ran must never be recorded as a recipe that decla
 The script reads each recipe's declared conditions, runs each check inside the code repository,
 and writes what it found. It never hands a check to a shell.
 
+### Supply a value where a command needs one
+
+A framework's cheapest test command may carry a placeholder, such as the runner a Python project
+declares. Pass it with `--value <name>=<value>`. The script never guesses one and never reads a
+default out of a recipe's prose: an unsupplied placeholder makes the run undecidable and names
+which one had no value.
+
 ### Read the four verdicts to the person
 
 - **met.** Every declared condition answered yes. The build can go on.
@@ -135,5 +142,11 @@ It does not resolve the commands that run tests, take a baseline, write a test, 
 write a trace row, freeze a test file, write code, run the deciding checks, run a review, or close
 a work order. There is no action for any of those yet.
 
-This step establishes the conditions and stops there. Once the report above is shown, the
+After the conditions, the step runs each framework's cheapest test command, the one that proves the
+harness reports at all. It runs only where that framework's conditions came back satisfied or
+undeclared, because running it after a condition answered no would fail for a reason already known.
+Its result folds into the same verdict, and where it did not succeed the record keeps what the
+command printed.
+
+This step stops there. Once the report above is shown, the
 conversation for this stage is finished until the next part is built.

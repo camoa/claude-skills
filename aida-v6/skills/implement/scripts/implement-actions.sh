@@ -15,6 +15,7 @@
 #   implement-actions.sh start <task_folder>
 #   implement-actions.sh preconditions <task_folder> [--recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
+#                                                    [--value <name>=<value>]...
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -190,11 +191,13 @@
 #      neither way: no --recipe and no --lookup-failed. Refused rather than guessed, because a
 #      lookup nobody ran recorded as a recipe that declared nothing is the exact defect the
 #      declaration exists to close.
-#  19  `preconditions` ran and something stops the build: a condition answered no, or nobody could
-#      tell. The record is written first and names every condition and its reason, so this exit
-#      says do not proceed, never that nothing was learned. `undeclared` does not land here: a
-#      recipe saying this framework needs nothing before a test runs has answered, and refusing on
-#      it would stop every project on that framework. It is reported, never counted as met.
+#  19  `preconditions` ran and something stops the build: a condition answered no, nobody could
+#      tell, or a framework's own smoke run came back the same way. The record is written first
+#      and names every condition, every smoke run, and its reason, so this exit says do not
+#      proceed, never that nothing was learned. `undeclared` does not land here: a recipe saying
+#      this framework needs nothing before a test runs, or nothing before a smoke command proves
+#      one, has answered, and refusing on it would stop every project on that framework. It is
+#      reported, never counted as met.
 #  20  `preconditions` was asked to run on a task whose build has never started: no snapshot and
 #      no ledger. Run `start` first.
 #
@@ -255,6 +258,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh preconditions <task_folder>
                             [--recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
+                            [--value <name>=<value>]...
 EOF
 }
 
@@ -1089,8 +1093,33 @@ do_start() {
 # `nearest`); the folded prose carried by `trap:`, `id_form:` and `absent:`'s own text is for a
 # person and a model reading the recipe itself, never parsed here. An `argv` or `nearest` value
 # that does not parse as a JSON array of strings is a defect in the recipe: the row is kept, named
-# `unreadable`, rather than dropped. None of this changes the run's verdict; a framework with no
-# test commands at all is unrelated to whether its preconditions are met.
+# `unreadable`, rather than dropped. None of this changes the run's verdict for four of the five
+# rows; a framework with no test commands at all is unrelated to whether its preconditions are
+# met. The fifth, `smoke`, is different: once every declared condition comes back `met` or
+# `undeclared`, this step runs that row and folds what it found into the same worst-of verdict the
+# conditions already compute, on the same terms — `met` and `undeclared` continue, `unmet` and
+# `unknown` stop the run.
+#
+# The fifth row, `smoke`, is run rather than merely recorded, once every declared condition for
+# that framework has already come back `met` or `undeclared`: running it before that would only
+# fail for a reason a condition already named, and teach nothing new. A token in its `argv` that
+# is exactly one placeholder (`{runner}`, `{file}`, ...) is replaced whole by a value the caller
+# supplies with a repeatable `--value <name>=<value>` flag; nothing else in a token is touched, and
+# a placeholder nobody supplied a value for makes the run `unknown`, naming which one. A recipe
+# documenting a default for a placeholder in its own prose, the way python-cli documents one for
+# `{runner}`, is never read here as a fallback: the caller supplies it or the run says so. The
+# command runs the same way a condition's own check runs, as arguments from inside the code
+# repository and never through a shell. `met` on exit 0, `unmet` on any other exit the command
+# actually returned, `unknown` when it could not be run at all (the conditions did not permit it,
+# the recipe carries no readable smoke row, or a placeholder went unsupplied) with a reason saying
+# why, and `undeclared` when the recipe's own smoke row is one of its `absent:` rows, which
+# `claude-code-plugins` writes for all five. Standard output and standard error are captured
+# together and recorded, trimmed to the last 2000 characters with a flag saying so, whenever the
+# verdict is not `met`; a `met` run records none. This is the one row where the discipline changes:
+# every other row here is read and never run, because this step still resolves nothing else and
+# substitutes nothing else. Effect on the run is the same rule the conditions already follow: `met`
+# and `undeclared` continue, `unmet` and `unknown` stop with the same exit 19 a condition itself
+# would stop it with; no new exit code exists for this.
 # ------------------------------------------------------------------------------------------------
 
 pc_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -1391,14 +1420,67 @@ tc_parse_recipe() {
   printf 'ok'
 }
 
+# The value a caller's --value flags supplied for placeholder $2, read from $1, the same
+# tab-separated multi-line shape --recipe and --lookup-failed already build. Prints nothing and
+# returns 1 when no --value named it, so a caller can tell "supplied, empty" from "never supplied";
+# tc_run_smoke below only ever calls this after already confirming the name is present.
+tc_value_for() {
+  printf '%s' "$1" | grep "^$2	" | head -n 1 | cut -f2-
+}
+
+# Runs the smoke row's own argv, a JSON array of tokens, as arguments from inside $2, after
+# replacing every token that is exactly one placeholder with the value $4 supplies for it under
+# that name. This is a second runner rather than a reuse of pc_run_check: that helper discards
+# standard error, because a condition's own check is judged on its exit status and, on the rare
+# entry carrying `expect`, a substring test against standard output alone; a smoke run needs
+# whatever the command wrote on either stream, so the two are captured together here instead. It
+# still runs the command the same way pc_run_check does otherwise: as arguments, never through a
+# shell, from inside the code repository, with nothing here reaching a shell to be unsafe in.
+# Prints one of two tab-separated results on stdout, never dies: `UNRESOLVED<TAB><name>` when a
+# token still held a placeholder $4 supplied no value for, naming it; or `RAN<TAB><exit status>`
+# once the command actually ran, whatever it exited with. $3 receives standard output and standard
+# error together, exactly as the command wrote them, for the caller to trim and record.
+tc_run_smoke() {
+  local argv_json="$1" dir="$2" outfile="$3" values="$4"
+  local count i tok name
+  set --
+  count="$(printf '%s' "$argv_json" | jq 'length' 2>/dev/null)"
+  case "$count" in ''|*[!0-9]*) count=0 ;; esac
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    tok="$(printf '%s' "$argv_json" | jq -r --argjson i "$i" '.[$i]' 2>/dev/null)"
+    case "$tok" in
+      '{'*'}')
+        name="${tok#\{}"; name="${name%\}}"
+        if printf '%s' "$values" | grep -q "^$name	"; then
+          tok="$(tc_value_for "$values" "$name")"
+        else
+          printf 'UNRESOLVED\t%s' "$name"
+          return 0
+        fi
+        ;;
+    esac
+    set -- "$@" "$tok"
+    i=$((i + 1))
+  done
+  (
+    cd "$dir" || exit 127
+    exec "$@"
+  ) >"$outfile" 2>&1
+  printf 'RAN\t%s' "$?"
+}
+
 # The step. Every framework the project declares must be answered for, because the build runs in
 # one repository that is all of them at once.
 do_preconditions() {
   local task_folder="" project_folder codepath project_state
-  local recipes="" failures="" arg fw val
+  local recipes="" failures="" values="" arg fw val
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
   local tc_state tc_rows_json
+  local smoke_verdict smoke_reason smoke_output smoke_truncated smoke_exit_code_json
+  local smoke_row_json smoke_argv_json smoke_out_file smoke_result smoke_kind smoke_payload
+  local smoke_raw_len smoke_json
   local record_file record_json today
 
   while [ "$#" -gt 0 ]; do
@@ -1418,6 +1500,12 @@ do_preconditions() {
           *) die3 "preconditions: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $val" ;;
         esac
         failures="$failures$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      --value)
+        [ "$#" -ge 2 ] || die3 "preconditions: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die3 "preconditions: --value takes <name>=<value>, got: $2" ;; esac
+        values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
       -*) die3 "preconditions: unrecognized argument: $1" ;;
@@ -1501,20 +1589,99 @@ EOF
 )"
     fi
 
+    # The smoke row is run, never merely recorded, and only once this framework's own conditions
+    # have already answered `met` or `undeclared`. Running it any earlier would only fail for a
+    # reason a condition already named.
+    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false
+    smoke_exit_code_json="null"
+    case "$fw_verdict" in
+      met|undeclared)
+        if [ "$tc_state" = "undeclared" ]; then
+          # No `## Test commands` heading at all is the recipe declaring nothing about a smoke
+          # command, the same fact `undeclared` already names at the framework's own conditions.
+          smoke_verdict="undeclared"
+        elif [ "$tc_state" != "ok" ]; then
+          smoke_verdict="unknown"
+          smoke_reason="the recipe's test commands section could not be read (state: $tc_state), so there is no smoke row to run"
+        else
+          smoke_row_json="$(printf '%s' "$tc_rows_json" | jq -c '[ .[] | select(.id == "smoke") ][0] // null')"
+          if [ "$smoke_row_json" = "null" ]; then
+            smoke_verdict="unknown"
+            smoke_reason="the recipe's test commands carry no row with id smoke"
+          elif [ "$(printf '%s' "$smoke_row_json" | jq -r '.absent // false')" = "true" ]; then
+            smoke_verdict="undeclared"
+          elif printf '%s' "$smoke_row_json" | jq -e '(.unreadable // []) | index("argv")' >/dev/null 2>&1; then
+            smoke_verdict="unknown"
+            smoke_reason="the smoke row's argv did not parse as a JSON array of strings"
+          else
+            smoke_argv_json="$(printf '%s' "$smoke_row_json" | jq -c '.argv // empty')"
+            if [ -z "$smoke_argv_json" ] || [ "$smoke_argv_json" = "null" ]; then
+              smoke_verdict="unknown"
+              smoke_reason="the smoke row declares no argv to run"
+            else
+              smoke_out_file="$task_folder/implementation/.preconditions-smoke.$$"
+              smoke_result="$(tc_run_smoke "$smoke_argv_json" "$codepath" "$smoke_out_file" "$values")"
+              smoke_kind="$(printf '%s' "$smoke_result" | cut -f1)"
+              smoke_payload="$(printf '%s' "$smoke_result" | cut -f2-)"
+              if [ "$smoke_kind" = "UNRESOLVED" ]; then
+                smoke_verdict="unknown"
+                smoke_reason="the token {$smoke_payload} in the smoke command has no supplied value; pass --value $smoke_payload=<value>"
+              else
+                smoke_exit_code_json="$smoke_payload"
+                case "$smoke_payload" in
+                  0)   smoke_verdict="met" ;;
+                  127) smoke_verdict="unknown"; smoke_reason="the smoke command could not be found (exit 127)" ;;
+                  *)   smoke_verdict="unmet" ;;
+                esac
+              fi
+              if [ "$smoke_verdict" != "met" ] && [ -f "$smoke_out_file" ]; then
+                smoke_raw_len="$(wc -c <"$smoke_out_file" 2>/dev/null | tr -d '[:space:]')"
+                case "$smoke_raw_len" in ''|*[!0-9]*) smoke_raw_len=0 ;; esac
+                if [ "$smoke_raw_len" -gt 2000 ]; then
+                  smoke_output="$(tail -c 2000 "$smoke_out_file" 2>/dev/null)"
+                  smoke_truncated=true
+                else
+                  smoke_output="$(cat "$smoke_out_file" 2>/dev/null)"
+                fi
+              fi
+              rm -f "$smoke_out_file"
+            fi
+          fi
+        fi
+        ;;
+      *)
+        smoke_verdict="unknown"
+        smoke_reason="this framework's own conditions did not come back met or undeclared, so the smoke command was not run: it would only fail for a reason already known"
+        ;;
+    esac
+
+    smoke_json="$(jq -n --arg verdict "$smoke_verdict" --arg reason "$smoke_reason" \
+          --arg output "$smoke_output" --argjson truncated "$smoke_truncated" \
+          --argjson exitCode "$smoke_exit_code_json" '
+      {verdict: $verdict}
+      + (if $reason == "" then {} else {reason: $reason} end)
+      + (if $output == "" then {} else {output: $output} end)
+      + (if $truncated == true then {truncated: true} else {} end)
+      + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+    ')"
+
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
-          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" '
+          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
-       testCommands: {state: $tcState, rows: $tcRows}}
+       testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
     ' >>"$fw_json_file" || die3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
   rm -f "$entries_file" "$tc_rows_file"
 
+  # The worst of every framework's own verdict AND its own smoke run's verdict: the run's answer
+  # is never met while a framework's smoke command is unmet or unknown, the same way it is never
+  # met while a condition is.
   run_verdict="$(jq -s -r '
     def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
-    (map(.verdict) + ["met"]) | max_by(rank)
+    ([ .[] | .verdict, .smoke.verdict ] + ["met"]) | max_by(rank)
   ' "$fw_json_file")"
 
   today="$(date -u +%Y-%m-%d)"
@@ -1539,15 +1706,17 @@ EOF
         testCommands: {
           state: .testCommands.state,
           unreadable: [ .testCommands.rows[] | select((.unreadable // []) | length > 0) | {id, unreadable} ]
-        }
+        },
+        smoke: .smoke
       }))
     }'
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a
-  # test runs has answered, and refusing on it would mean no project on that framework ever
-  # builds. The two never share a value in the record, and the report names which one happened,
-  # which is the whole of what "undeclared is not met" protects: a caller must not report a
-  # recipe that declared nothing as a set of conditions that passed.
+  # test runs, or nothing before a smoke command proves one, has answered, and refusing on it
+  # would mean no project on that framework ever builds. The two never share a value in the
+  # record, and the report names which one happened, which is the whole of what "undeclared is
+  # not met" protects: a caller must not report a recipe that declared nothing as a set of
+  # conditions that passed.
   case "$run_verdict" in
     met|undeclared) ;;
     *) exit 19 ;;

@@ -20,7 +20,7 @@
     "verdict": {
       "type": "string",
       "enum": ["met", "unmet", "unknown", "undeclared"],
-      "description": "The run's answer, taken as the worst of every framework's own verdict. `met` only when every framework reached `met`. It is never derived a second time by a reader: one producer, one value. The order from best to worst is met, undeclared, unknown, unmet, because a recipe that declared nothing is a smaller hole than a check that could not answer, and a check that answered no is the only one that names something to fix."
+      "description": "The run's answer, taken as the worst of every framework's own verdict and its own smoke run's verdict. `met` only when every framework's conditions and every framework's smoke run both reached `met` (or `undeclared`, for whichever of the two the recipe declared nothing of). It is never derived a second time by a reader: one producer, one value. The order from best to worst is met, undeclared, unknown, unmet, because a recipe that declared nothing is a smaller hole than a check that could not answer, and a check that answered no is the only one that names something to fix."
     },
     "frameworks": {
       "type": "array",
@@ -33,7 +33,7 @@
     "frameworkResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["framework", "lookup", "verdict", "entries", "testCommands"],
+      "required": ["framework", "lookup", "verdict", "entries", "testCommands", "smoke"],
       "properties": {
         "framework": {
           "type": "string",
@@ -63,7 +63,11 @@
         },
         "testCommands": {
           "$ref": "#/$defs/testCommands",
-          "description": "What the recipe's own `## Test commands` block declared for this framework, read alongside its preconditions and never affecting this framework's `verdict`: a framework can decline every test command and still build. Resolves nothing and substitutes nothing, the same restraint `entries[].check` observes for a condition."
+          "description": "What the recipe's own `## Test commands` block declared for this framework, read alongside its preconditions and never affecting this framework's `verdict`: a framework can decline every test command and still build. Resolves nothing and substitutes nothing, the same restraint `entries[].check` observes for a condition. Its `smoke` row is the one exception: `smoke` below is what came of actually running it."
+        },
+        "smoke": {
+          "$ref": "#/$defs/smoke",
+          "description": "What running this framework's own `smoke` test-command row established, once its own `verdict` above allowed it. This is the one row `testCommands` records that is also run, and what it found feeds the top-level `verdict` the same way this framework's own `verdict` does."
         }
       }
     },
@@ -169,6 +173,35 @@
           "type": "array",
           "items": { "type": "string", "enum": ["argv", "nearest"] },
           "description": "Which of `argv:` or `nearest:` the recipe wrote but this step could not parse as a JSON array of strings, present only when at least one failed. The row is kept rather than dropped, because a malformed row is a defect in the recipe worth reporting, and dropping it would report fewer rows than the recipe actually declared."
+        }
+      }
+    },
+    "smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict"],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "What running this framework's own `smoke` test-command row established, the cheapest thing that proves the harness runs and reports. `met` on exit 0, `unmet` on any other exit the command actually returned, `unknown` when it could not be run at all, and `undeclared` when the recipe's own smoke row is one of its `absent:` rows, which `claude-code-plugins` writes for all five. It runs only when this framework's own `verdict` above already came back `met` or `undeclared`: a condition that answered no or could not be decided already explains a failure this run would only rediscover, so it is left `unknown` and never attempted."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the run is `unknown`, present only on that verdict. Free text rather than a closed set, unlike `entry.reason`: one of its causes is a placeholder token no `--value` supplied a value for, and naming which one is the point, so the name is written into the sentence rather than filed apart from it."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, present only when `verdict` is not `met` and the command actually ran (never for a run blocked before it started, such as by its own conditions or an unsupplied placeholder). Trimmed to at most the last 2000 characters: a person acting on a failed smoke run needs the message, not the whole log. A `met` run records none."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when `output` is the trimmed tail of a longer capture, absent entirely otherwise, the same convention `testCommandRow.absent` follows for a fact that only ever needs recording when true."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the smoke command exited with, present whenever it actually ran: `met`, `unmet`, and the `unknown` that comes from exit 127. Absent when nothing ran at all, because the conditions did not permit it, the recipe declared no readable smoke row, or a placeholder went unsupplied."
         }
       }
     }
