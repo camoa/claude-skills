@@ -135,7 +135,5 @@ It does not resolve the commands that run tests, take a baseline, write a test, 
 write a trace row, freeze a test file, write code, run the deciding checks, run a review, or close
 a work order. There is no action for any of those yet.
 
-The commands and the baseline wait on one thing outside this plugin: the catalog has no
-declaration that holds a test command, so no framework can yet say how to run one file, one test,
-or the tests covering a change. Until it does, this step establishes the conditions and stops. Once the report above is shown, the conversation for this stage is finished until the
-next part is built.
+This step establishes the conditions and stops there. Once the report above is shown, the
+conversation for this stage is finished until the next part is built.
