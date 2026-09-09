@@ -147,8 +147,9 @@
 #      scripts/lib/records-hash.sh), the plugin root, check-design.sh or the records-hash library
 #      could not be resolved or loaded, check-design.sh itself failed to run (its own exit 3), a
 #      file that must already be valid JSON on disk is not (snapshot.json present but unreadable,
-#      ledger.json present but unreadable, or a design/*.json file that check-design.sh itself did
-#      not refuse on but this script still could not parse), task.json declaring a runMode value
+#      ledger.json present but unreadable, baseline.json present but unreadable, or a design/*.json
+#      file that check-design.sh itself did not refuse on but this script still could not parse),
+#      task.json declaring a runMode value
 #      this schema never writes, a ledger.json missing a required field or holding one of the
 #      wrong type on reopen, a write that failed, or an internal state this script's own logic
 #      should have already ruled out (a ledger existing with no snapshot beside it; a snapshot
@@ -200,6 +201,10 @@
 #      reported, never counted as met.
 #  20  `preconditions` was asked to run on a task whose build has never started: no snapshot and
 #      no ledger. Run `start` first.
+#  21  `preconditions` found <task_folder>/implementation/baseline.json already recorded at a
+#      commit other than the one this run's own ledger started from. A baseline is taken once, at
+#      the commit the build started from, and this refuses rather than overwrite a different one.
+#      The message names both commits.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -246,6 +251,7 @@ die16() { printf 'implement-actions: %s\n' "$1" >&2; exit 16; }
 die17() { printf 'implement-actions: %s\n' "$1" >&2; exit 17; }
 die18() { printf 'implement-actions: %s\n' "$1" >&2; exit 18; }
 die20() { printf 'implement-actions: %s\n' "$1" >&2; exit 20; }
+die21() { printf 'implement-actions: %s\n' "$1" >&2; exit 21; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -1120,6 +1126,27 @@ do_start() {
 # substitutes nothing else. Effect on the run is the same rule the conditions already follow: `met`
 # and `undeclared` continue, `unmet` and `unknown` stop with the same exit 19 a condition itself
 # would stop it with; no new exit code exists for this.
+#
+# Once every framework's own verdict and its own smoke run both land on `met` or `undeclared`, this
+# step takes the baseline: what was already broken at the commit the build starts from, read from
+# the ledger's own `startedFrom` rather than a fresh `git rev-parse`, so the commit this baseline
+# claims and the commit the ledger would roll back to are always the same value. It is a separate
+# record, <task_folder>/implementation/baseline.json (baseline-schema.json), taken once per commit:
+# a second `preconditions` run at the same commit leaves it alone, and a run whose ledger started
+# from a different commit refuses rather than overwrite it, naming both commits (exit 21). Four
+# parts. The suite runs whole and unscoped, from the same `suite` test-command row this step
+# already resolved for each framework; a placeholder none of the caller's `--value` flags supplied
+# makes it `unknown`, naming the placeholder, the same rule the smoke row already follows, and its
+# exit code and output are kept whenever the command actually ran, `met` or not, because a baseline
+# is a record of the whole state and not only of what pointed at a defect. Coding standards, static
+# analysis and the security tool have no recipe naming a tool for any of them yet, so all three are
+# recorded `undeclared` with a reason saying so, never guessed from the project and never invented.
+# The scope, the union of every work order's own `ownedFiles` from the snapshot, is recorded too,
+# even though nothing here reads it yet: it is what the three undeclared tools will scope to once a
+# recipe names one, and it is deliberately not what the suite scopes to, because at this point the
+# orders' own tests do not exist and no framework declares a command mapping paths to the tests
+# that cover them. The baseline never changes this run's own verdict or its exit code: a suite that
+# is already red here is a fact worth recording, not a reason to refuse.
 # ------------------------------------------------------------------------------------------------
 
 pc_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -1470,6 +1497,117 @@ tc_run_smoke() {
   printf 'RAN\t%s' "$?"
 }
 
+# ------------------------------------------------------------------------------------------------
+# The baseline: what was already broken at the commit the build starts from. Taken once, at the
+# end of `preconditions`, only when that run's own verdict permits the build to continue.
+# ------------------------------------------------------------------------------------------------
+
+# Prints one of: missing, unreadable, ok, for <task_folder>/implementation/baseline.json
+# ($BASELINE_FILE). Never dies. "unreadable" covers not valid JSON, not an object, and a commit
+# field that is absent, null, or the wrong shape: the same one-word-per-fact split
+# design_closed_state uses for a close record.
+bl_state() {
+  [ -f "$BASELINE_FILE" ] || { printf 'missing'; return; }
+  [ -r "$BASELINE_FILE" ] || { printf 'unreadable'; return; }
+  jq empty "$BASELINE_FILE" 2>/dev/null || { printf 'unreadable'; return; }
+  local shape
+  shape="$(jq -r '
+      if type != "object" then "no"
+      elif (has("commit") | not) then "no"
+      elif ((.commit | type) != "string") then "no"
+      elif (.commit | test("^[0-9a-f]{7,40}$") | not) then "no"
+      else "yes"
+      end
+    ' "$BASELINE_FILE" 2>/dev/null)"
+  if [ "$shape" = "yes" ]; then printf 'ok'; else printf 'unreadable'; fi
+}
+
+# The commit recorded in baseline.json. Call only after bl_state prints "ok".
+bl_commit_of() {
+  jq -r '.commit' "$BASELINE_FILE" 2>/dev/null
+}
+
+# Runs the `suite` test-command row for every framework in the preconditions record $1 (the same
+# object this run already assembled, before it is written), the whole suite and unscoped, and
+# appends one JSON object per framework to $4. Reuses tc_run_smoke rather than a third runner: the
+# same placeholder substitution from $3's --value flags, the same "as arguments, never through a
+# shell, from inside $2" discipline, and the same UNRESOLVED/RAN split. The one difference from the
+# smoke row is what gets recorded: the suite's own exit code and output are kept whenever the
+# command actually ran, met or not, because a baseline is a record of the whole state and not only
+# of what pointed at a defect.
+bl_run_suite() {
+  local record_json="$1" codepath="$2" values="$3" out="$4"
+  local count i fw_obj fw tc_state row_json argv_json
+  local out_file result kind payload verdict reason exit_code_json output truncated raw_len
+  count="$(printf '%s' "$record_json" | jq '.frameworks | length' 2>/dev/null)"
+  case "$count" in ''|*[!0-9]*) count=0 ;; esac
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    fw_obj="$(printf '%s' "$record_json" | jq -c --argjson i "$i" '.frameworks[$i]' 2>/dev/null)"
+    fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
+    tc_state="$(printf '%s' "$fw_obj" | jq -r '.testCommands.state')"
+    verdict=""; reason=""; exit_code_json="null"; output=""; truncated=false
+    if [ "$tc_state" != "ok" ]; then
+      verdict="unknown"
+      reason="this framework's own test-commands section could not be read (state: $tc_state), so there is no suite row to run"
+    else
+      row_json="$(printf '%s' "$fw_obj" | jq -c '[ .testCommands.rows[] | select(.id == "suite") ][0] // null')"
+      if [ "$row_json" = "null" ]; then
+        verdict="unknown"
+        reason="this framework's recipe carries no test-commands row with id suite"
+      elif [ "$(printf '%s' "$row_json" | jq -r '.absent // false')" = "true" ]; then
+        verdict="unknown"
+        reason="this framework's recipe declares its suite row absent; there is nothing whole to run"
+      elif printf '%s' "$row_json" | jq -e '(.unreadable // []) | index("argv")' >/dev/null 2>&1; then
+        verdict="unknown"
+        reason="the suite row's argv did not parse as a JSON array of strings"
+      else
+        argv_json="$(printf '%s' "$row_json" | jq -c '.argv // empty')"
+        if [ -z "$argv_json" ] || [ "$argv_json" = "null" ]; then
+          verdict="unknown"
+          reason="this framework's suite row declares no argv to run"
+        else
+          out_file="$(dirname -- "$out")/.baseline-suite-run.$$"
+          result="$(tc_run_smoke "$argv_json" "$codepath" "$out_file" "$values")"
+          kind="$(printf '%s' "$result" | cut -f1)"
+          payload="$(printf '%s' "$result" | cut -f2-)"
+          if [ "$kind" = "UNRESOLVED" ]; then
+            verdict="unknown"
+            reason="the token {$payload} in the suite command has no supplied value; pass --value $payload=<value>"
+          else
+            exit_code_json="$payload"
+            case "$payload" in
+              0)   verdict="met" ;;
+              127) verdict="unknown"; reason="the suite command could not be found (exit 127)" ;;
+              *)   verdict="unmet" ;;
+            esac
+            if [ -f "$out_file" ]; then
+              raw_len="$(wc -c <"$out_file" 2>/dev/null | tr -d '[:space:]')"
+              case "$raw_len" in ''|*[!0-9]*) raw_len=0 ;; esac
+              if [ "$raw_len" -gt 4000 ]; then
+                output="$(tail -c 4000 "$out_file" 2>/dev/null)"
+                truncated=true
+              else
+                output="$(cat "$out_file" 2>/dev/null)"
+              fi
+            fi
+          fi
+          rm -f "$out_file"
+        fi
+      fi
+    fi
+    jq -n --arg framework "$fw" --arg verdict "$verdict" --arg reason "$reason" \
+          --arg output "$output" --argjson truncated "$truncated" --argjson exitCode "$exit_code_json" '
+      {framework: $framework, verdict: $verdict}
+      + (if $reason   == ""   then {} else {reason: $reason} end)
+      + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+      + (if $output   == ""   then {} else {output: $output} end)
+      + (if $truncated == true then {truncated: true} else {} end)
+    ' >>"$out" || die3 "preconditions: could not record the baseline suite result for framework $fw"
+    i=$((i + 1))
+  done
+}
+
 # The step. Every framework the project declares must be answered for, because the build runs in
 # one repository that is all of them at once.
 do_preconditions() {
@@ -1482,6 +1620,9 @@ do_preconditions() {
   local smoke_row_json smoke_argv_json smoke_out_file smoke_result smoke_kind smoke_payload
   local smoke_raw_len smoke_json
   local record_file record_json today
+  local baseline_status baseline_note baseline_commit_report baseline_summary_json
+  local ledger_doc ledger_started_from
+  local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -1693,7 +1834,85 @@ EOF
   record_file="$task_folder/implementation/preconditions.json"
   write_atomic "$record_file" "$record_json"
 
-  jq -n --arg verdict "$run_verdict" --arg record "$record_file" --argjson report "$record_json" '
+  # ---- the baseline: only when this run's own verdict permits the build to continue -------------
+  # A baseline taken after a condition answered no would measure a broken environment, so
+  # `unmet`/`unknown` skip this whole section and the fields below stay at their "not attempted"
+  # defaults. Read from the ledger's own startedFrom, never a fresh git call, so the commit this
+  # baseline claims and the commit the ledger would roll back to are always the same value.
+  BASELINE_FILE="$task_folder/implementation/baseline.json"
+  baseline_status="not-attempted"
+  baseline_note="this run's own verdict ($run_verdict) does not permit the build to continue; a baseline taken now would measure a broken environment"
+  baseline_commit_report=""
+  baseline_summary_json='null'
+
+  case "$run_verdict" in
+    met|undeclared)
+      LEDGER_FILE="$task_folder/implementation/ledger.json"
+      ledger_doc="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
+      [ -n "$ledger_doc" ] \
+        || die3 "preconditions: $LEDGER_FILE exists but could not be read as JSON, though \`start\` already wrote it. Repair or remove it by hand before running this again."
+      ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
+        || die3 "preconditions: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+      baseline_commit_report="$ledger_started_from"
+
+      case "$(bl_state)" in
+        missing)
+          snapshot_doc="$(jq -c '.' "$task_folder/implementation/snapshot.json" 2>/dev/null)"
+          [ -n "$snapshot_doc" ] \
+            || die3 "preconditions: $task_folder/implementation/snapshot.json exists but could not be read as JSON, though \`start\` already wrote it. Repair or remove it by hand before running this again."
+          scope_json="$(printf '%s' "$snapshot_doc" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique')"
+
+          suite_json_file="$task_folder/implementation/.baseline-suite.$$"
+          : >"$suite_json_file"
+          bl_run_suite "$record_json" "$codepath" "$values" "$suite_json_file"
+          suite_json="$(jq -s '.' "$suite_json_file" 2>/dev/null)" || suite_json="[]"
+          rm -f "$suite_json_file"
+
+          baseline_json="$(jq -n \
+            --arg takenAt "$today" --arg commit "$ledger_started_from" \
+            --argjson scope "$scope_json" --argjson suite "$suite_json" \
+            --arg csReason "no recipe names a coding-standards tool for this framework, at this point in the process" \
+            --arg saReason "no recipe names a static-analysis tool for this framework, at this point in the process" \
+            --arg secReason "no recipe names a security tool for this framework, at this point in the process" \
+            '{
+              schemaVersion: 1, takenAt: $takenAt, commit: $commit, scope: $scope, suite: $suite,
+              codingStandards: {verdict: "undeclared", reason: $csReason},
+              staticAnalysis:  {verdict: "undeclared", reason: $saReason},
+              security:        {verdict: "undeclared", reason: $secReason}
+            }')" || die3 "preconditions: could not assemble the baseline record"
+          write_atomic "$BASELINE_FILE" "$baseline_json"
+
+          baseline_status="written"
+          baseline_note="taken at commit $ledger_started_from"
+          ;;
+        ok)
+          existing_commit="$(bl_commit_of)"
+          if [ "$existing_commit" = "$ledger_started_from" ]; then
+            baseline_status="already-recorded"
+            baseline_note="a baseline already exists for commit $ledger_started_from; a baseline retaken after code is written measures nothing, so it was left alone"
+          else
+            die21 "preconditions: $BASELINE_FILE already holds a baseline taken at commit $existing_commit, but this run's own ledger started from a different commit, $ledger_started_from. A baseline is taken once, at the commit the build started from, and never retaken after that: retaking it here would measure the wrong repository state. Investigate before proceeding; remove $BASELINE_FILE by hand only if this task's baseline is meant to start over."
+          fi
+          ;;
+        unreadable)
+          die3 "preconditions: $BASELINE_FILE exists but could not be read as a baseline record (not valid JSON, not an object, or its commit field is missing or malformed). Repair or remove it by hand before running this again."
+          ;;
+      esac
+
+      [ "$baseline_status" = "not-attempted" ] \
+        || baseline_summary_json="$(jq -c '{
+             suite: [ .suite[] | {framework, verdict} ],
+             codingStandards: {verdict: .codingStandards.verdict},
+             staticAnalysis: {verdict: .staticAnalysis.verdict},
+             security: {verdict: .security.verdict}
+           }' "$BASELINE_FILE")"
+      ;;
+  esac
+
+  jq -n --arg verdict "$run_verdict" --arg record "$record_file" --argjson report "$record_json" \
+        --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
+        --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
+        --argjson baselineSummary "$baseline_summary_json" '
     {
       verdict: $verdict,
       record: $record,
@@ -1708,7 +1927,14 @@ EOF
           unreadable: [ .testCommands.rows[] | select((.unreadable // []) | length > 0) | {id, unreadable} ]
         },
         smoke: .smoke
-      }))
+      })),
+      baseline: {
+        file: $baselineFile,
+        status: $baselineStatus,
+        note: $baselineNote,
+        commit: (if $baselineCommit == "" then null else $baselineCommit end),
+        summary: $baselineSummary
+      }
     }'
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a

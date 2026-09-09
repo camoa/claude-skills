@@ -148,5 +148,14 @@ undeclared, because running it after a condition answered no would fail for a re
 Its result folds into the same verdict, and where it did not succeed the record keeps what the
 command printed.
 
+Last, it records what was already broken at the commit the build started from. The suite runs
+whole, because the orders' tests do not exist yet and no framework maps changed paths to the tests
+covering them. The three tools that take paths have no recipe naming them at this point, so each
+records that none is declared. A suite that is already red is recorded, never refused: knowing it
+is the point, because a builder chasing a failure it did not cause spends every attempt it has.
+
+The baseline is taken once, at that commit. A second run at the same commit leaves it alone. One
+recorded at a different commit refuses rather than overwrites, and names both commits.
+
 This step stops there. Once the report above is shown, the
 conversation for this stage is finished until the next part is built.
