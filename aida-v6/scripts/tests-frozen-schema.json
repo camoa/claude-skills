@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation tests-frozen record",
+  "description": "What `tests-freeze` verified and froze for one unit, at <task folder>/implementation/tests-<unit_id>.json (ideal/implementation.md, 'The split between the script and the model'). The model that writes a test chooses the level, writes the file, and runs it; this record is the script's own half, verifying what came back rather than writing or judging a test itself. One record per unit. Taken once per commit: a second `tests-freeze` run for this unit at the same commit and the same inputs leaves this file untouched, and a run at a different commit refuses rather than overwrite it, naming both commits. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "takenAt", "unit", "commit", "testGlobs", "rows"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date this record was written, YYYY-MM-DD. Set by the script, never typed. Left unchanged by a rerun at the same commit whose inputs did not change, the same as the rest of this file: that rerun leaves the file byte-identical rather than only updating this one field."
+    },
+    "unit": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "The work order id this record belongs to, the same id `tests-brief` was given and the file's own basename encodes (tests-<unit_id>.json). Joined on, never re-minted."
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit `tests-freeze` ran at, read fresh from the code repository rather than from the ledger's own startedFrom: unlike a baseline, which is pinned to the commit the whole build began from, a unit's own tests may be frozen after other units have already advanced the branch. A second run for this unit at a different commit refuses rather than overwrite this field."
+    },
+    "testGlobs": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The `--test-glob` patterns this run was given, copied verbatim. They come from the framework's own `implement` recipe declaration, resolved by the skill and pinned here rather than fetched again; every `--test` path in `rows` matched at least one of them, which is the check that keeps a test written outside the framework's own pattern from being protected by anything later."
+    },
+    "rows": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/row" },
+      "description": "One entry per criterion the unit serves or owns, the same set `tests-brief` exposed in its own `criteria`. A criterion the unit neither serves nor owns never gets a row, whatever a `--test` might have claimed for it: that claim is refused before this file is ever written."
+    }
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["criterion", "kind"],
+      "properties": {
+        "criterion": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion id, minted by scope in alignment.json and copied into the frozen snapshot. Joined on, never renamed."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["machine", "person"],
+          "description": "Copied from this criterion's own frozen `verifiedBy`, so a reader of this file never has to look the criterion back up to know which of `tests` or `checklist` it carries."
+        },
+        "tests": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/test" },
+          "description": "Present only when `kind` is `machine`. Every `--test` this run was given that named this criterion, however many; a test naming several criteria appears once in each criterion's own row. Never empty when present, because a machine-verified criterion with no test is refused before this file is written (exit 29)."
+        },
+        "checklist": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present only when `kind` is `person`: the verification text from this criterion's own `--checklist` row, copied rather than summarised, because a person judging this criterion later reads exactly what the recipe was asked to confirm."
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "name", "sha256", "red"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the test lives, relative to the project's own codePath, never absolute: a frozen path must still mean the same file once the checkout moves, the same reason baseline.json's own `scope` field is repository-relative. A `--test` flag may name the file by an absolute path or one already relative to codePath; either is resolved against codePath and refused (exit 36) when it names something outside it, before this file is ever written. Checked to exist on disk and, in this relative form, to match one of `testGlobs`."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The test's own name, as the `--test` flag named it. Checked to carry, at its own end, the criterion id (or ids, chained from the right) it claims, so a person or a later step can tell what a test is meant to prove without opening the file."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "sha256 over the whole file at `path`, computed at freeze. This is the freeze itself: nothing else in the plugin may change a file whose hash is recorded here. A file naming several tests carries the same hash in each of its tests' own entries, since the hash covers the file, not one test inside it."
+        },
+        "red": {
+          "type": "string",
+          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Never empty and never synthesised: a test with no red run at all is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either."
+        }
+      }
+    }
+  }
+}

@@ -7,8 +7,13 @@
 # implementation stage: freezing the contract and the work orders design left into a snapshot,
 # opening the ledger that will track every order's progress, and refusing before writing anything
 # when the task is not ready. It then performs the second step: establishing whether the code
-# repository can run a test at all, against the conditions each framework's recipe declares.
-# Building a work order is not built yet; only `read`, `start` and `preconditions` exist.
+# repository can run a test at all, against the conditions each framework's recipe declares. It
+# then performs the two halves of the third step: `tests-brief` assembles exactly what a model
+# writing one unit's tests may see, from the frozen snapshot, and `tests-freeze` verifies what that
+# model wrote and freezes it. The script never writes a test and never judges one; the model that
+# writes a test chooses the level, writes the file, and runs it.
+# Building a work order is not built yet; only `read`, `start`, `preconditions`, `tests-brief` and
+# `tests-freeze` exist.
 #
 # Usage:
 #   implement-actions.sh read  <task_folder>
@@ -16,6 +21,13 @@
 #   implement-actions.sh preconditions <task_folder> [--recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--value <name>=<value>]...
+#   implement-actions.sh tests-brief  <task_folder> <unit_id>
+#   implement-actions.sh tests-freeze <task_folder> <unit_id> \
+#                            [--test <path>::<test name>=<criterion id>[,<criterion id>...]]...
+#                            [--red <test name>=<path to a file holding what the run printed>]...
+#                            [--test-glob <glob>]...
+#                            [--checklist <criterion id>=<verification text>]...
+#                            [--green-on-arrival <test name>=<reason>]...
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -205,6 +217,36 @@
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
 #      The message names both commits.
+#  22  `tests-brief` or `tests-freeze` was given a unit id that is not in the frozen snapshot.
+#  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
+#      ledger (its lastStep is not "closed"), so that unit's interface record does not exist yet.
+#  24  `tests-brief` found the given unit owns a criterion whose verifiedBy is machine while its
+#      own frozen tests field is empty. check-design.sh should already have refused this at design
+#      close; this is a second reading against the frozen copy, never a live one.
+#  25  `tests-brief` or `tests-freeze` ran before `start`, so <task_folder>/implementation/
+#      snapshot.json does not exist. Run `start` first.
+#  26  `tests-freeze` was given a --test whose path does not exist on disk.
+#  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
+#      A test written outside the framework's own pattern is not protected by anything later.
+#  28  `tests-freeze` was given a --test whose test name does not carry, at its own end, the
+#      criterion id (or ids, chained from the right) it claims.
+#  29  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is machine with no
+#      --test row naming it.
+#  30  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is person with no
+#      --checklist row.
+#  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
+#  32  `tests-freeze` was given a --red whose file is missing or empty, or that names a test with
+#      no --test row.
+#  33  `tests-freeze` found a test with no --red at all.
+#  34  `tests-freeze` was given a --green-on-arrival. Not a defect in the script: it stops the step
+#      and says the test proves nothing, which is the escalation this stage requires.
+#  35  `tests-freeze` found <task_folder>/implementation/tests-<unit_id>.json already recorded at a
+#      commit other than the one this run is at. The message names both commits.
+#  36  `tests-freeze` was given a --test whose path, once resolved against codePath, names
+#      something outside codePath altogether. The message names the path and the code root. Every
+#      path this step records is relative to codePath (baseline.json's own `scope` field is
+#      relative for the same reason: a frozen path must survive the checkout moving), so a path
+#      that cannot be made relative to it at all cannot be recorded either.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -252,6 +294,21 @@ die17() { printf 'implement-actions: %s\n' "$1" >&2; exit 17; }
 die18() { printf 'implement-actions: %s\n' "$1" >&2; exit 18; }
 die20() { printf 'implement-actions: %s\n' "$1" >&2; exit 20; }
 die21() { printf 'implement-actions: %s\n' "$1" >&2; exit 21; }
+die22() { printf 'implement-actions: %s\n' "$1" >&2; exit 22; }
+die23() { printf 'implement-actions: %s\n' "$1" >&2; exit 23; }
+die24() { printf 'implement-actions: %s\n' "$1" >&2; exit 24; }
+die25() { printf 'implement-actions: %s\n' "$1" >&2; exit 25; }
+die26() { printf 'implement-actions: %s\n' "$1" >&2; exit 26; }
+die27() { printf 'implement-actions: %s\n' "$1" >&2; exit 27; }
+die28() { printf 'implement-actions: %s\n' "$1" >&2; exit 28; }
+die29() { printf 'implement-actions: %s\n' "$1" >&2; exit 29; }
+die30() { printf 'implement-actions: %s\n' "$1" >&2; exit 30; }
+die31() { printf 'implement-actions: %s\n' "$1" >&2; exit 31; }
+die32() { printf 'implement-actions: %s\n' "$1" >&2; exit 32; }
+die33() { printf 'implement-actions: %s\n' "$1" >&2; exit 33; }
+die34() { printf 'implement-actions: %s\n' "$1" >&2; exit 34; }
+die35() { printf 'implement-actions: %s\n' "$1" >&2; exit 35; }
+die36() { printf 'implement-actions: %s\n' "$1" >&2; exit 36; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -265,6 +322,13 @@ usage: implement-actions.sh read  <task_folder>
                             [--recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
+       implement-actions.sh tests-brief  <task_folder> <unit_id>
+       implement-actions.sh tests-freeze <task_folder> <unit_id>
+                            [--test <path>::<test name>=<criterion id>[,<criterion id>...]]...
+                            [--red <test name>=<path to a file holding what the run printed>]...
+                            [--test-glob <glob>]...
+                            [--checklist <criterion id>=<verification text>]...
+                            [--green-on-arrival <test name>=<reason>]...
 EOF
 }
 
@@ -1950,6 +2014,762 @@ EOF
 }
 
 # ------------------------------------------------------------------------------------------------
+# Step three: tests-brief and tests-freeze. The model that writes a test chooses the level, writes
+# the file, and runs it. This script never writes a test and never judges one. `tests-brief`
+# assembles exactly what that model may see, from the frozen snapshot, and refuses when the inputs
+# are not ready. `tests-freeze` verifies what came back and freezes it.
+#
+# Both actions read only <task_folder>/implementation/snapshot.json and, for a dependency's
+# completion, ledger.json: the frozen copies `start` already wrote and hash-verified. Neither ever
+# reads alignment.json or design/*.json live, for the same reason `start`, once a snapshot exists,
+# never reads design-closed.json again: the frozen copy is what the build is frozen against, and
+# only the frozen copy governs a resumed or later step.
+#
+# `tb_` and `tt_` are this section's own helper prefixes, kept apart from `pc_` and `tc_` above,
+# which belong to a different step and read a different kind of document (a recipe, not a snapshot).
+# ------------------------------------------------------------------------------------------------
+
+# The ids in $1 (served) followed by the new ids in $2 (owned), each id kept once, in the order it
+# was first seen. Not `unique`, which sorts: a criterion's own authoring order is worth keeping,
+# and c10 sorting before c2 would be a cosmetic defect nobody asked for.
+tt_ordered_union() {
+  jq -cn --argjson a "$1" --argjson b "$2" '
+    ($a + $b) | reduce .[] as $x ([]; if index($x) then . else . + [$x] end)
+  '
+}
+
+# Loads the frozen work order $2 from the frozen snapshot document $1, and the frozen record of
+# every criterion it serves or owns, in that first-seen order. Sets three globals a caller reads
+# afterward: UNIT_JSON (the whole frozen work order object), CRITERIA_IDS_JSON (the ordered id
+# list), and CRITERIA_JSON (the full frozen criterion record for each). Exits directly (die22 or
+# die3) rather than returning a code, because every caller of this helper treats both problems as
+# fatal and would only turn around and exit itself.
+UNIT_JSON=""; CRITERIA_IDS_JSON="[]"; CRITERIA_JSON="[]"
+tt_load_unit_and_criteria() {
+  local snapshot_doc="$1" unit_id="$2" who="$3"
+  UNIT_JSON="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$unit_id" \
+    '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$UNIT_JSON" != "null" ] || die22 "$who: $unit_id is not in the frozen copy."
+
+  local served_json owned_json count j id one
+  served_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaServed // []')"
+  owned_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')"
+  CRITERIA_IDS_JSON="$(tt_ordered_union "$served_json" "$owned_json")"
+
+  CRITERIA_JSON='[]'
+  count="$(printf '%s' "$CRITERIA_IDS_JSON" | jq 'length')"
+  j=0
+  while [ "$j" -lt "$count" ]; do
+    id="$(printf '%s' "$CRITERIA_IDS_JSON" | jq -r --argjson j "$j" '.[$j]')"
+    one="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$id" \
+      '(.alignment.criteria // []) | map(select(.id == $id)) | .[0] // null')"
+    [ "$one" != "null" ] \
+      || die3 "$who: $unit_id names criterion $id, which is not in the frozen contract."
+    CRITERIA_JSON="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson c "$one" '. + [$c]')"
+    j=$((j + 1))
+  done
+}
+
+# Reads the frozen snapshot beside <task_folder>/implementation, dying (die25 missing, die3
+# unreadable) when it is not ready. Sets SNAPSHOT_DOC. Shared by tests-brief and tests-freeze,
+# which both refuse for the same reason on the same missing file.
+SNAPSHOT_DOC=""
+tt_load_snapshot() {
+  local who="$1"
+  local snapshot_file="$IMPL_DIR/snapshot.json"
+  [ -f "$snapshot_file" ] \
+    || die25 "$who: $snapshot_file not found. This step ran before start, so there is no frozen copy. Run start on this task first."
+  SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
+  [ -n "$SNAPSHOT_DOC" ] \
+    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+}
+
+do_tests_brief() {
+  [ "$#" -ge 2 ] || die3 "tests-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die3 "tests-brief: unrecognized extra argument: $3"
+  local resolve_rc unit_id="$2"
+  TASK_PATH="$(resolve_task_folder "$1" "tests-brief")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  tt_load_snapshot "tests-brief"
+  local ledger_file="$IMPL_DIR/ledger.json"
+  [ -f "$ledger_file" ] \
+    || die3 "tests-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+  local ledger_doc
+  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
+  [ -n "$ledger_doc" ] \
+    || die3 "tests-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-brief"
+
+  # --- exit 23: every dependency needs a completion record before its interface is handed over ----
+  local depends_json dep_count i dep_id dep_entry dep_step dependency_interfaces_json='[]'
+  depends_json="$(printf '%s' "$UNIT_JSON" | jq -c '.dependsOn // []')"
+  dep_count="$(printf '%s' "$depends_json" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$dep_count" ]; do
+    dep_id="$(printf '%s' "$depends_json" | jq -r --argjson i "$i" '.[$i]')"
+    dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
+      '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+    [ "$dep_entry" != "null" ] \
+      || die3 "tests-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
+    dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
+    if [ "$dep_step" = "closed" ]; then
+      local dep_interface
+      dep_interface="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$dep_id" \
+        '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
+      dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
+        --arg id "$dep_id" --arg iface "$dep_interface" '. + [{id: $id, interface: $iface}]')"
+    else
+      die23 "tests-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+    fi
+    i=$((i + 1))
+  done
+
+  # --- exit 24: an owned, machine-verified criterion with no declared test at all ------------------
+  local unit_tests_count owned_json owned_machine_unmet
+  unit_tests_count="$(printf '%s' "$UNIT_JSON" | jq '(.tests // []) | length')"
+  if [ "$unit_tests_count" -eq 0 ]; then
+    owned_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')"
+    owned_machine_unmet="$(printf '%s' "$CRITERIA_JSON" | jq -r --argjson owned "$owned_json" '
+        [ .[] | select(.verifiedBy == "machine") | select(.id as $i | $owned | index($i) != null) | .id ]
+        | join(", ")
+      ')"
+    [ -z "$owned_machine_unmet" ] \
+      || die24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
+  fi
+
+  # --- assemble the brief: exactly these four keys, and nothing else ------------------------------
+  local non_goal_ids_json non_goals_out unit_out
+  non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
+  non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
+    '(.alignment.nonGoals // []) | map(select(.id as $i | $ids | index($i) != null))')"
+  local criteria_out
+  criteria_out="$(printf '%s' "$CRITERIA_JSON" | jq -c \
+    '[ .[] | {id, text, verification, verifiedBy} ]')"
+  unit_out="$(printf '%s' "$UNIT_JSON" | jq -c \
+    '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
+
+  jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
+        --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
+    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces}'
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# tests-freeze helpers. Every parsing helper reads its raw multi-line argument through a heredoc,
+# never a pipe: a pipe puts the loop in a subshell, where a die below would only end the subshell,
+# and the exit code this whole file promises for that die would never reach the caller.
+# ------------------------------------------------------------------------------------------------
+
+# True when test name $1 ends with every criterion id in comma list $2, chained from the right: the
+# last-listed id must be the name's own trailing characters, the id before it must trail what is
+# left once that is stripped, and so on. A test naming only one criterion is the common case and
+# this degrades to it directly. The leading letter of an id may appear as c or C in the name, since
+# a test method's own naming convention may capitalise it; every other character, all digits, must
+# match exactly, which is also what keeps `c3` from matching a trailing `c30`: the last two
+# characters of `c30` are `3` and `0`, never equal to the two characters of `c3`. Prints nothing;
+# returns 1 on the first id that does not fit and 0 once every id has been stripped from the end.
+# Never uses `for x in $unquoted` or `set -- $unquoted`: zsh does not word-split those by default,
+# so every list here is walked by peeling one comma-separated token off the front instead.
+tf_name_carries() {
+  # A `local` statement's own assignment words are all evaluated before any of them takes effect
+  # (true in bash and zsh alike), so declaring and reading a value back in the same statement (as
+  # `remaining="$name"` would be here) is never safe; and zsh separately reports a variable declared
+  # and initialised to an empty string in the very same `local` statement as "parameter not set" on
+  # its first `-z`/`-n` test under this file's own `set -u` and `KSH_ARRAYS` (Honesty: proven while
+  # building tf_segments_match). Every local below is therefore declared bare, then assigned.
+  local name csv remaining reversed id first rest lower upper
+  name="$1"
+  csv="$2"
+  remaining="$name"
+  reversed=""
+  while [ -n "$csv" ]; do
+    case "$csv" in
+      *,*) id="${csv%%,*}"; csv="${csv#*,}" ;;
+      *)   id="$csv"; csv="" ;;
+    esac
+    [ -n "$id" ] || continue
+    reversed="$id${reversed:+,$reversed}"
+  done
+  while [ -n "$reversed" ]; do
+    case "$reversed" in
+      *,*) id="${reversed%%,*}"; reversed="${reversed#*,}" ;;
+      *)   id="$reversed"; reversed="" ;;
+    esac
+    lower="$id"
+    first="$(printf '%s' "$id" | cut -c1 | tr '[:lower:]' '[:upper:]')"
+    rest="$(printf '%s' "$id" | cut -c2-)"
+    upper="${first}${rest}"
+    case "$remaining" in
+      *"$lower") remaining="${remaining%$lower}" ;;
+      *"$upper") remaining="${remaining%$upper}" ;;
+      *) return 1 ;;
+    esac
+  done
+  return 0
+}
+
+# Parses --test values, one per line of $1 (`<path>::<test name>=<criterion id>[,<criterion
+# id>...]`), appending one `{path, name, criteria}` JSON object per line to file $2. `criteria` is
+# always a JSON array, however many ids the line named.
+tf_parse_tests() {
+  local raw="$1" out="$2" line p rest name csv ids_json
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      *"::"*) : ;;
+      *) die3 "tests-freeze: --test value has no '::' separating the path from the test name: $line" ;;
+    esac
+    p="${line%%::*}"
+    rest="${line#*::}"
+    case "$rest" in
+      *"="*) : ;;
+      *) die3 "tests-freeze: --test value has no '=' separating the test name from its criteria: $line" ;;
+    esac
+    name="${rest%%=*}"
+    csv="${rest#*=}"
+    [ -n "$p" ]    || die3 "tests-freeze: --test value has an empty path: $line"
+    [ -n "$name" ] || die3 "tests-freeze: --test value has an empty test name: $line"
+    [ -n "$csv" ]  || die3 "tests-freeze: --test value names no criterion: $line"
+    ids_json="$(printf '%s' "$csv" | tr ',' '\n' | jq -R -s 'split("\n") | map(select(length>0))')"
+    jq -n --arg path "$p" --arg name "$name" --argjson criteria "$ids_json" \
+      '{path: $path, name: $name, criteria: $criteria}' >>"$out" \
+      || die3 "tests-freeze: could not record the --test row for $name"
+  done <<TF_EOF
+$raw
+TF_EOF
+}
+
+# Parses --red values, one per line of $1 (`<test name>=<path>`), appending one `{name, path}` JSON
+# object per line to file $2.
+tf_parse_reds() {
+  local raw="$1" out="$2" line name p
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      *"="*) : ;;
+      *) die3 "tests-freeze: --red value has no '=' separating the test name from the file path: $line" ;;
+    esac
+    name="${line%%=*}"
+    p="${line#*=}"
+    [ -n "$name" ] || die3 "tests-freeze: --red value has an empty test name: $line"
+    [ -n "$p" ]    || die3 "tests-freeze: --red value has an empty file path: $line"
+    jq -n --arg name "$name" --arg path "$p" '{name: $name, path: $path}' >>"$out" \
+      || die3 "tests-freeze: could not record the --red row for $name"
+  done <<TF_EOF
+$raw
+TF_EOF
+}
+
+# Parses --checklist values, one per line of $1 (`<criterion id>=<verification text>`), appending
+# one `{id, text}` JSON object per line to file $2.
+tf_parse_checklists() {
+  local raw="$1" out="$2" line id text
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      *"="*) : ;;
+      *) die3 "tests-freeze: --checklist value has no '=' separating the criterion id from the verification text: $line" ;;
+    esac
+    id="${line%%=*}"
+    text="${line#*=}"
+    [ -n "$id" ]   || die3 "tests-freeze: --checklist value has an empty criterion id: $line"
+    [ -n "$text" ] || die3 "tests-freeze: --checklist value has empty verification text: $line"
+    jq -n --arg id "$id" --arg text "$text" '{id: $id, text: $text}' >>"$out" \
+      || die3 "tests-freeze: could not record the --checklist row for $id"
+  done <<TF_EOF
+$raw
+TF_EOF
+}
+
+# Parses --green-on-arrival values, one per line of $1 (`<test name>=<reason>`), appending one
+# `{name, reason}` JSON object per line to file $2.
+tf_parse_goa() {
+  local raw="$1" out="$2" line name reason
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      *"="*) : ;;
+      *) die3 "tests-freeze: --green-on-arrival value has no '=' separating the test name from the reason: $line" ;;
+    esac
+    name="${line%%=*}"
+    reason="${line#*=}"
+    [ -n "$name" ]   || die3 "tests-freeze: --green-on-arrival value has an empty test name: $line"
+    [ -n "$reason" ] || die3 "tests-freeze: --green-on-arrival value has an empty reason: $line"
+    jq -n --arg name "$name" --arg reason "$reason" '{name: $name, reason: $reason}' >>"$out" \
+      || die3 "tests-freeze: could not record the --green-on-arrival row for $name"
+  done <<TF_EOF
+$raw
+TF_EOF
+}
+
+# The sha256 of file $1, lowercase hex, through the same tool records-hash.sh already resolved into
+# RECORDS_HASH_SHA256_CMD: one place decides which of sha256sum or `shasum -a 256` exists, and nothing
+# here carries a second copy of that decision.
+tf_sha256_of() {
+  "${RECORDS_HASH_SHA256_CMD[@]}" <"$1" 2>/dev/null | cut -d' ' -f1
+}
+
+# True when path $1 matches the case glob $2. bash always treats an unquoted variable used as a
+# case pattern as a glob; zsh, by default, does not, and matches it as the literal text instead
+# (Honesty: this script runs under both). GLOB_SUBST restores the glob reading, scoped to the
+# subshell this runs in only, the same discipline pc_run_check already applies to SH_WORD_SPLIT, so
+# it never changes how the rest of the script's own case statements behave.
+tf_path_matches_glob() {
+  (
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      setopt GLOB_SUBST 2>/dev/null
+    fi
+    case "$1" in
+      $2) exit 0 ;;
+      *)  exit 1 ;;
+    esac
+  )
+}
+
+# The text of $1 up to its first "/", or all of $1 when it holds none.
+tf_first_segment() {
+  case "$1" in
+    */*) printf '%s' "${1%%/*}" ;;
+    *)   printf '%s' "$1" ;;
+  esac
+}
+
+# The text of $1 after its first "/", or empty when it holds none. Paired with tf_first_segment to
+# peel a "/"-joined string apart one segment at a time without ever word-splitting an unquoted
+# expansion, the same reasoning tf_name_carries already states for its own comma list.
+tf_rest_segments() {
+  case "$1" in
+    */*) printf '%s' "${1#*/}" ;;
+    *)   printf '%s' "" ;;
+  esac
+}
+
+# True when path (a "/"-joined list of segments, $1) matches glob (the same shape, $2) under the
+# catalog's own `**` semantics (drupal/standards-and-tests.md: a leading `**/` is an optional path
+# prefix, added so the same pattern also covers a test tree at the repository root). Plain `case`
+# cannot express this on its own: there, `**` is nothing more than one `*`, and a lone `*` there
+# crosses `/` freely, both wrong for what the catalog declares. So a `**` segment is handled here,
+# once, before either string ever reaches a `case`: it may consume zero path segments or, when at
+# least one remains, one more and try again, which is why this recurses rather than looping. Every
+# other segment consumes exactly one path segment and is matched against it, alone, through
+# tf_path_matches_glob, which is where a bounded `*` (one that cannot cross `/`, because there is
+# none left inside a single segment) is exactly the semantics `case` already gives for free.
+tf_segments_match() {
+  # Never named "path": zsh ties that exact name to $PATH as a special array (Honesty: this script
+  # runs under zsh too), and that tie, combined with this file's own KSH_ARRAYS and nounset, made a
+  # bare `[ -z "$path" ]` on this variable report "parameter not set" even immediately after it was
+  # plainly assigned. "walk" is the segments still left to match; every other local name here is
+  # checked against zsh's own special-parameter list before use.
+  local walk glob gseg grest wseg wrest
+  walk="$1"
+  glob="$2"
+  if [ -z "$glob" ]; then
+    [ -z "$walk" ]
+    return $?
+  fi
+  gseg="$(tf_first_segment "$glob")"
+  grest="$(tf_rest_segments "$glob")"
+  if [ "$gseg" = "**" ]; then
+    tf_segments_match "$walk" "$grest" && return 0
+    [ -n "$walk" ] || return 1
+    wrest="$(tf_rest_segments "$walk")"
+    tf_segments_match "$wrest" "$glob"
+    return $?
+  fi
+  [ -n "$walk" ] || return 1
+  wseg="$(tf_first_segment "$walk")"
+  wrest="$(tf_rest_segments "$walk")"
+  tf_path_matches_glob "$wseg" "$gseg" || return 1
+  tf_segments_match "$wrest" "$grest"
+}
+
+# True when path $1 matches catalog glob $2, stripping a leading or trailing "/" from each first so
+# an incidental one never creates a spurious empty segment before the two are compared segment by
+# segment through tf_segments_match. Parameter kept out of a variable named "path" for the same
+# zsh-special-parameter reason tf_segments_match states.
+tf_path_matches_catalog_glob() {
+  local walk glob
+  walk="$1"
+  glob="$2"
+  case "$walk" in /*) walk="${walk#/}" ;; esac
+  case "$walk" in */) walk="${walk%/}" ;; esac
+  case "$glob" in /*) glob="${glob#/}" ;; esac
+  case "$glob" in */) glob="${glob%/}" ;; esac
+  tf_segments_match "$walk" "$glob"
+}
+
+# Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
+# recipe's own `## Test commands` rows are resolved: this step never carries a second, absolute
+# copy of a path that belongs to the repository, for the same reason baseline.json's own `scope`
+# field is repository-relative and not absolute (scripts/baseline-schema.json, `scope`) — a frozen
+# path must still mean the same file once the checkout moves. An absolute $1 is relativised against
+# $2; anything else is taken as already relative to $2. Checked as a declared string only, the same
+# bound the overlap check on ownedFiles already accepts (`start`'s own step 10 comment): this never
+# resolves a symlink and never requires $1 to exist yet, which is what lets exit 26 tell "does not
+# exist" apart from this. Prints one tab-separated result: `REL<TAB><path relative to $2>` on
+# success, or `OUTSIDE<TAB><the absolute form>` when $1 names something outside $2 altogether.
+tf_relativize_path() {
+  local raw="$1" root="$2" abs rootlen
+  case "$raw" in
+    /*) abs="$raw" ;;
+    *)  abs="$root/$raw" ;;
+  esac
+  if [ "$abs" = "$root" ]; then
+    printf 'REL\t.'
+    return 0
+  fi
+  rootlen=${#root}
+  # zsh reads a bare name after the second ":" as a history-style modifier, not a length, unless it
+  # is itself a "$"-expansion (Honesty: this script runs under both); bash accepts either form, so
+  # every offset and length below is written as an explicit "$" or arithmetic expansion.
+  if [ "${abs:0:$rootlen}" = "$root" ] && [ "${abs:$rootlen:1}" = "/" ]; then
+    printf 'REL\t%s' "${abs:$((rootlen + 1))}"
+    return 0
+  fi
+  printf 'OUTSIDE\t%s' "$abs"
+}
+
+do_tests_freeze() {
+  local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --test)
+        [ "$#" -ge 2 ] || die3 "tests-freeze: --test needs <path>::<test name>=<criterion id>[,<criterion id>...]"
+        test_raw="$test_raw$2
+"
+        shift 2 ;;
+      --red)
+        [ "$#" -ge 2 ] || die3 "tests-freeze: --red needs <test name>=<path to a file holding what the run printed>"
+        red_raw="$red_raw$2
+"
+        shift 2 ;;
+      --test-glob)
+        [ "$#" -ge 2 ] || die3 "tests-freeze: --test-glob needs <glob>"
+        glob_raw="$glob_raw$2
+"
+        shift 2 ;;
+      --checklist)
+        [ "$#" -ge 2 ] || die3 "tests-freeze: --checklist needs <criterion id>=<verification text>"
+        checklist_raw="$checklist_raw$2
+"
+        shift 2 ;;
+      --green-on-arrival)
+        [ "$#" -ge 2 ] || die3 "tests-freeze: --green-on-arrival needs <test name>=<reason>"
+        goa_raw="$goa_raw$2
+"
+        shift 2 ;;
+      -*) die3 "tests-freeze: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die3 "tests-freeze: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die3 "tests-freeze: a task folder is required"
+  [ -n "$unit_id" ]  || die3 "tests-freeze: a unit id is required"
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "tests-freeze")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  tt_load_snapshot "tests-freeze"
+  tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-freeze"
+
+  # --- turn every raw --flag value into JSON, through temporary files beside the implementation dir
+  local tests_tmp reds_tmp checklists_tmp goa_tmp
+  tests_tmp="$IMPL_DIR/.tests-freeze-tests.$$"
+  reds_tmp="$IMPL_DIR/.tests-freeze-reds.$$"
+  checklists_tmp="$IMPL_DIR/.tests-freeze-checklists.$$"
+  goa_tmp="$IMPL_DIR/.tests-freeze-goa.$$"
+  : >"$tests_tmp"; : >"$reds_tmp"; : >"$checklists_tmp"; : >"$goa_tmp"
+  tf_parse_tests      "$test_raw"      "$tests_tmp"
+  tf_parse_reds       "$red_raw"       "$reds_tmp"
+  tf_parse_checklists "$checklist_raw" "$checklists_tmp"
+  tf_parse_goa        "$goa_raw"       "$goa_tmp"
+
+  local tests_json reds_json checklists_json goa_json test_globs_json
+  tests_json="$(jq -s '.' "$tests_tmp")"
+  reds_json="$(jq -s '.' "$reds_tmp")"
+  checklists_json="$(jq -s '.' "$checklists_tmp")"
+  goa_json="$(jq -s '.' "$goa_tmp")"
+  rm -f "$tests_tmp" "$reds_tmp" "$checklists_tmp" "$goa_tmp"
+  test_globs_json="$(printf '%s' "$glob_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
+
+  # --- the task's own project, resolved the same way start and preconditions already resolve it --
+  local project_folder codepath
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die3 "tests-freeze: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+  case "$(project_code_path_state "$project_folder")" in
+    unreadable) die14 "tests-freeze: $project_folder/project.json exists but is not valid JSON, so its codePath cannot be read." ;;
+    missing)    die3  "tests-freeze: $project_folder/project.json not found, though it was found moments ago." ;;
+  esac
+  codepath="$(project_code_path_value "$project_folder")"
+  [ -n "$codepath" ] || die3 "tests-freeze: $project_folder/project.json is valid JSON but has no usable codePath field."
+  [ -d "$codepath" ] || die15 "tests-freeze: the recorded codePath does not exist on disk: $codepath"
+  command -v git >/dev/null 2>&1 || die3 "tests-freeze: git is required and was not found on PATH"
+  is_git_repo "$codepath" \
+    || die5 "tests-freeze: this task's project code at $codepath is not a git repository."
+  local current_commit
+  current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
+  [ -n "$current_commit" ] \
+    || die3 "tests-freeze: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+
+  # --- 36: every --test path must resolve inside codePath, and is stored relative to it -----------
+  local codepath_canon
+  codepath_canon="$(cd "$codepath" 2>/dev/null && pwd -P)"
+  [ -n "$codepath_canon" ] \
+    || die3 "tests-freeze: could not resolve $codepath to a canonical path, though it was already checked to be a directory."
+
+  local norm_tmp norm_count nk raw_path row_json rel_result rel_kind rel_value abs_path outside_paths=""
+  norm_tmp="$IMPL_DIR/.tests-freeze-norm.$$"
+  : >"$norm_tmp"
+  norm_count="$(printf '%s' "$tests_json" | jq 'length')"
+  nk=0
+  while [ "$nk" -lt "$norm_count" ]; do
+    row_json="$(printf '%s' "$tests_json" | jq -c --argjson nk "$nk" '.[$nk]')"
+    raw_path="$(printf '%s' "$row_json" | jq -r '.path')"
+    rel_result="$(tf_relativize_path "$raw_path" "$codepath_canon")"
+    rel_kind="$(printf '%s' "$rel_result" | cut -f1)"
+    rel_value="$(printf '%s' "$rel_result" | cut -f2-)"
+    if [ "$rel_kind" = "OUTSIDE" ]; then
+      outside_paths="$outside_paths$raw_path, "
+      abs_path="$rel_value"
+      rel_value=""
+    else
+      abs_path="$codepath_canon/$rel_value"
+    fi
+    jq -c -n --argjson row "$row_json" --arg abs "$abs_path" --arg rel "$rel_value" \
+      '$row + {absPath: $abs, relPath: $rel}' >>"$norm_tmp" \
+      || die3 "tests-freeze: could not record the resolved path for $raw_path"
+    nk=$((nk + 1))
+  done
+  [ -z "$outside_paths" ] \
+    || die36 "tests-freeze: these --test paths are outside the code root $codepath_canon: ${outside_paths%, }"
+  tests_json="$(jq -s '.' "$norm_tmp")"
+  rm -f "$norm_tmp"
+
+  # --- 26: every --test path must exist on disk ----------------------------------------------------
+  local unique_paths missing_paths=""
+  unique_paths="$(printf '%s' "$tests_json" | jq -r '[.[].absPath] | unique | .[]')"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -f "$p" ] || missing_paths="$missing_paths$p, "
+  done <<TF_EOF
+$unique_paths
+TF_EOF
+  [ -z "$missing_paths" ] \
+    || die26 "tests-freeze: these --test paths do not exist on disk: ${missing_paths%, }"
+
+  # --- 27: every --test path (relative to codePath) must match at least one --test-glob, under the
+  # catalog's own `**` semantics -----------------------------------------------------------------
+  local unique_rel_paths glob_count unmatched_paths="" matched gi g
+  unique_rel_paths="$(printf '%s' "$tests_json" | jq -r '[.[].relPath] | unique | .[]')"
+  glob_count="$(printf '%s' "$test_globs_json" | jq 'length')"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    matched=false
+    gi=0
+    while [ "$gi" -lt "$glob_count" ]; do
+      g="$(printf '%s' "$test_globs_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+      tf_path_matches_catalog_glob "$p" "$g" && matched=true
+      [ "$matched" = "true" ] && break
+      gi=$((gi + 1))
+    done
+    [ "$matched" = "true" ] || unmatched_paths="$unmatched_paths$p, "
+  done <<TF_EOF
+$unique_rel_paths
+TF_EOF
+  [ -z "$unmatched_paths" ] \
+    || die27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
+
+  # --- 28: a test name must carry, at its own end, the criterion id(s) it claims -------------------
+  local test_rows_count ti name id_list bad_carry=""
+  test_rows_count="$(printf '%s' "$tests_json" | jq 'length')"
+  ti=0
+  while [ "$ti" -lt "$test_rows_count" ]; do
+    name="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" '.[$ti].name')"
+    id_list="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" '.[$ti].criteria | join(",")')"
+    tf_name_carries "$name" "$id_list" || bad_carry="$bad_carry$name (claims $id_list), "
+    ti=$((ti + 1))
+  done
+  [ -z "$bad_carry" ] \
+    || die28 "tests-freeze: these test names do not carry, at the end, the criterion id they claim: ${bad_carry%, }"
+
+  # --- 29: every machine-verified criterion the unit serves or owns needs a --test row -------------
+  local missing_machine
+  missing_machine="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" '
+      ($tests | map(.criteria) | add // []) as $named
+      | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid
+          | select(($named | index($cid)) == null) | $cid ]
+      | join(", ")
+    ')"
+  [ -z "$missing_machine" ] \
+    || die29 "tests-freeze: these machine-verified criteria have no --test row naming them: $missing_machine"
+
+  # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
+  local missing_person
+  missing_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson checklists "$checklists_json" '
+      ($checklists | map(.id)) as $named
+      | [ $criteria[] | select(.verifiedBy == "person") | .id as $cid
+          | select(($named | index($cid)) == null) | $cid ]
+      | join(", ")
+    ')"
+  [ -z "$missing_person" ] \
+    || die30 "tests-freeze: these person-verified criteria have no --checklist row: $missing_person"
+
+  # --- 31: a --test must never name a criterion the unit does not serve or own ---------------------
+  local bad_criteria
+  bad_criteria="$(jq -nr --argjson allowed "$CRITERIA_IDS_JSON" --argjson tests "$tests_json" '
+      ($tests | map(.criteria) | add // []) as $named
+      | [ $named[] as $cid | select(($allowed | index($cid)) == null) | $cid ] | unique | join(", ")
+    ')"
+  [ -z "$bad_criteria" ] \
+    || die31 "tests-freeze: a --test names criteria $unit_id does not serve or own: $bad_criteria"
+
+  # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
+  local bad_red_names
+  bad_red_names="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" '
+      ($tests | map(.name)) as $known
+      | [ $reds[] | .name as $n | select(($known | index($n)) == null) | $n ] | unique | join(", ")
+    ')"
+  [ -z "$bad_red_names" ] \
+    || die32 "tests-freeze: these --red rows name a test with no --test row: $bad_red_names"
+
+  local red_count ri red_name red_path bad_red_files=""
+  red_count="$(printf '%s' "$reds_json" | jq 'length')"
+  ri=0
+  while [ "$ri" -lt "$red_count" ]; do
+    red_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].name')"
+    red_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
+    [ -s "$red_path" ] || bad_red_files="$bad_red_files$red_name ($red_path), "
+    ri=$((ri + 1))
+  done
+  [ -z "$bad_red_files" ] \
+    || die32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
+
+  # --- 33: every declared test needs a --red -------------------------------------------------------
+  local missing_red
+  missing_red="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" '
+      ($reds | map(.name)) as $named
+      | [ $tests[] | .name as $n | select(($named | index($n)) == null) | $n ] | unique | join(", ")
+    ')"
+  [ -z "$missing_red" ] \
+    || die33 "tests-freeze: these tests have no --red at all: $missing_red"
+
+  # --- 34: a green-on-arrival stops the step outright -----------------------------------------------
+  if [ "$(printf '%s' "$goa_json" | jq 'length')" -gt 0 ]; then
+    local goa_text
+    goa_text="$(printf '%s' "$goa_json" | jq -r 'map(.name + ": " + .reason) | join("; ")')"
+    die34 "tests-freeze: reported green on arrival, which proves nothing: $goa_text. Fix the test or the code until it fails for the right reason, then run tests-freeze again."
+  fi
+
+  # --- 35: a record already exists for this unit at a different commit -----------------------------
+  local record_file existing_doc existing_commit
+  record_file="$IMPL_DIR/tests-$unit_id.json"
+  if [ -f "$record_file" ]; then
+    existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
+    [ -n "$existing_doc" ] \
+      || die3 "tests-freeze: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
+    [ -n "$existing_commit" ] \
+      || die3 "tests-freeze: $record_file exists but has no usable commit field."
+    [ "$existing_commit" = "$current_commit" ] \
+      || die35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit. A record is taken once per commit; investigate before proceeding."
+  fi
+
+  # --- every check passed: build the rows, one per criterion the unit serves or owns ---------------
+  local need_sha
+  need_sha="$(printf '%s' "$CRITERIA_JSON" | jq -r 'map(select(.verifiedBy == "machine")) | length > 0')"
+  if [ "$need_sha" = "true" ]; then
+    records_hash__resolve_sha256_cmd \
+      || die3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  fi
+
+  local rows_tmp crit_count ci cid ckind
+  rows_tmp="$IMPL_DIR/.tests-freeze-rows.$$"
+  : >"$rows_tmp"
+  crit_count="$(printf '%s' "$CRITERIA_JSON" | jq 'length')"
+  ci=0
+  while [ "$ci" -lt "$crit_count" ]; do
+    cid="$(printf '%s' "$CRITERIA_JSON" | jq -r --argjson ci "$ci" '.[$ci].id')"
+    ckind="$(printf '%s' "$CRITERIA_JSON" | jq -r --argjson ci "$ci" '.[$ci].verifiedBy')"
+    if [ "$ckind" = "machine" ]; then
+      local names_json ntests tj tpath trelpath tname tsha tredpath tredtext tests_out_tmp tests_out_json
+      names_json="$(printf '%s' "$tests_json" | jq -c --arg cid "$cid" \
+        '[ .[] | select(.criteria | index($cid) != null) ]')"
+      ntests="$(printf '%s' "$names_json" | jq 'length')"
+      tests_out_tmp="$IMPL_DIR/.tests-freeze-rowtests.$$"
+      : >"$tests_out_tmp"
+      tj=0
+      while [ "$tj" -lt "$ntests" ]; do
+        tpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].absPath')"
+        tname="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].name')"
+        trelpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].relPath')"
+        tsha="$(tf_sha256_of "$tpath")"
+        [ -n "$tsha" ] || die3 "tests-freeze: could not compute a sha256 for $tpath"
+        tredpath="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].path // empty')"
+        tredtext="$(cat "$tredpath" 2>/dev/null)"
+        # The record stores the path relative to codePath, never the absolute form: a frozen path
+        # must still mean the same file once the checkout moves (see exit 36's own reasoning).
+        jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" \
+          '{path: $path, name: $name, sha256: $sha, red: $red}' >>"$tests_out_tmp" \
+          || die3 "tests-freeze: could not record the test row for $tname"
+        tj=$((tj + 1))
+      done
+      tests_out_json="$(jq -s '.' "$tests_out_tmp")"
+      rm -f "$tests_out_tmp"
+      jq -n --arg cid "$cid" --argjson tests "$tests_out_json" \
+        '{criterion: $cid, kind: "machine", tests: $tests}' >>"$rows_tmp" \
+        || die3 "tests-freeze: could not record the row for $cid"
+    else
+      local checklist_text
+      checklist_text="$(printf '%s' "$checklists_json" | jq -r --arg id "$cid" \
+        '[ .[] | select(.id == $id) ][0].text // empty')"
+      jq -n --arg cid "$cid" --arg text "$checklist_text" \
+        '{criterion: $cid, kind: "person", checklist: $text}' >>"$rows_tmp" \
+        || die3 "tests-freeze: could not record the row for $cid"
+    fi
+    ci=$((ci + 1))
+  done
+  local rows_json
+  rows_json="$(jq -s '.' "$rows_tmp")"
+  rm -f "$rows_tmp"
+
+  local today record_json
+  today="$(date -u +%Y-%m-%d)"
+  record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
+    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" \
+    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows}')"
+
+  if [ -f "$record_file" ]; then
+    local existing_no_date new_no_date
+    existing_no_date="$(jq -cS 'del(.takenAt)' "$record_file" 2>/dev/null)"
+    new_no_date="$(printf '%s' "$record_json" | jq -cS 'del(.takenAt)')"
+    if [ "$existing_no_date" = "$new_no_date" ]; then
+      echo "TESTS-FREEZE: unchanged (already frozen at commit $current_commit with the same tests)"
+      printf '%s\n' "$record_file"
+      exit 0
+    fi
+  fi
+
+  write_atomic "$record_file" "$record_json"
+  echo "TESTS-FREEZE: written (commit $current_commit)"
+  printf '%s\n' "$record_file"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -1965,5 +2785,7 @@ case "$ACTION" in
   read)  do_read  "$@" ;;
   start) do_start "$@" ;;
   preconditions) do_preconditions "$@" ;;
+  tests-brief)  do_tests_brief  "$@" ;;
+  tests-freeze) do_tests_freeze "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac
