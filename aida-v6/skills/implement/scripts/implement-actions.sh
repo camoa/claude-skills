@@ -252,6 +252,21 @@
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
 # where one is checked, uses a `case` glob, never a regular expression.
+#
+# Four zsh traps have each cost a round of debugging in this file. They are listed here because
+# three of them were re-introduced by somebody who had already been told about them, and a warning
+# that has to be repeated is not a control.
+#   1. Never name a variable `path`. zsh ties that exact name to $PATH as a special array. Under
+#      this file's own nounset the tie makes a plain assignment unreadable, and every external
+#      command inside that function stops resolving. Check any new name against zsh's own special
+#      parameters with `typeset -p <name>` before using it.
+#   2. zsh does not word-split an unquoted expansion. Anything that relies on splitting sets
+#      SH_WORD_SPLIT inside its own subshell first, and never leaks the option to the caller.
+#   3. zsh does not expand an unquoted variable used as a `case` pattern. It matches the literal
+#      text instead. GLOB_SUBST fixes it, scoped the same way.
+#   4. A `local a=X b="$a"` statement evaluates every assignment word before any of them takes
+#      effect, in bash and zsh alike, so `b` reads the value from before the call. Declare bare,
+#      then assign in a statement of its own.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
 

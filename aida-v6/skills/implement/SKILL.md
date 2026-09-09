@@ -1,6 +1,6 @@
 ---
 name: implement
-description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, and then establishes whether this repository can build and test at all. It does not yet build a work order.
+description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, and then writes the tests for one work order and freezes them. It does not yet write the code.
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
@@ -10,11 +10,12 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-act
 # Implement
 
 Implementation builds each work order design wrote, one at a time, against tests it cannot
-change once they are frozen. **Only the first two steps of that exist today. One freezes the
+change once they are frozen. **Only the first three steps of that exist today. One freezes the
 contract and the work orders into a snapshot and opens the ledger that will track every order's
-progress. Two establishes whether this repository can run a test at all.** Building a work order,
-writing a test, or closing an order is not built yet. Say this plainly once the reports below are
-shown, so nobody expects more than these two steps did.
+progress. Two establishes whether this repository can run a test at all. Three writes the tests
+for one work order, watches each one fail, and freezes them.** Writing the code, running the
+deciding checks, reviewing, fixing and closing an order are not built yet. Say this plainly once
+the reports below are shown, so nobody expects more than these three steps did.
 
 ## Find the task
 
@@ -136,11 +137,127 @@ judges an unmet condition acceptable.
 Say which frameworks were answered from a recipe and which were not. A framework whose recipe could
 not be reached was not checked, and reporting the run as clean would be false.
 
+
+## Write the tests for one work order
+
+This step runs once per work order, not once per build. An order is ready when every order it
+depends on is finished.
+
+The tests are the reference the whole build is measured against. Everything below exists to keep
+that reference outside the thing it judges.
+
+### Resolve the recipes for this step
+
+Ask the navigator's process-recipe lookup twice, for each framework the project declares.
+
+**The `test-authoring` point.** This answers where a test file goes, which levels exist and when
+each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
+The same three answers apply as in the step before: no recipe for this framework, a listing that
+could not be reached, and a failed network are different things, and only the first says anything
+about the framework.
+
+**The `implement` point, for one thing only.** Take the file patterns its declaration names for
+tests, and pass them to the freeze below. Do not give this recipe to the context that writes the
+tests. It carries the standards and the steps that write production code, and that context may
+write neither.
+
+Resolve the patterns once, here, and let them be recorded. The rule that later refuses a write to a
+frozen test reads the record and never the catalog, because a lookup in a write path is a lookup
+that can fail open, and a pattern that changed during a build would change what is protected
+halfway through it.
+
+### Assemble what the test author may see
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
+```
+
+It reads the frozen copy and never the live files, and it emits exactly four things: this order's
+own record, the criteria it serves and owns with their verification and who verifies each, the
+boundaries it names, and the declared interface of every order it depends on.
+
+That list is the withheld list, decided once rather than at each dispatch. Pass what it emits and
+nothing else. Adding an input here is a change to the role, not a judgement made in the moment.
+
+An interface record is prose a builder wrote about its own code. It is not the code, and that is
+the line.
+
+### Dispatch the test author
+
+One context writes the tests. It is not the context that will write the code.
+
+**It may not read production source.** Not this order's, and not any order already built. If it
+sees the code, the tests describe the code instead of the intent, which is the same failure one
+step earlier.
+
+**It may not write production code.** It writes the test, watches it fail, and stops.
+
+**Set the tier on the dispatch.** A mid tier where a person will read the rows before anything is
+frozen. The top tier where the run is unattended, because then nobody reads them and the whole
+build is measured against work nothing checked first.
+
+Give it the recipe body for its framework, what `tests-brief` emitted, and nothing else. Ask it to
+return, for each test, the path, the name, the criterion the name carries, and what the run
+printed when the test failed. Ask it to return a checklist line for each criterion a person
+verifies, copying the verification sentence whole.
+
+**A test that passes before any code exists proves nothing.** It is corrected once. If it still
+passes, it is reported by name and the step stops. It is never deleted quietly and never weakened
+into failing.
+
+**A failure is read from the framework's own signal, never from the exit status.** Three of five
+frameworks exit zero when a filter selects nothing. Only an assertion that ran and did not hold is
+a red run. A harness that never reached the behaviour is a setup gap, and a run that selected
+nothing looks like success and is the dangerous one.
+
+### Put the rows to the person, before anything is frozen
+
+Show one row per criterion: the criterion, its verification sentence, and the names of the tests
+that prove it. Show the rows and not the test code. The question is whether the tests named
+exercise the sentence beside them, and test code invites a review of the code instead.
+
+A row the person sends back goes to the test author again. A row they accept is ready to freeze.
+
+Unattended, there is nobody to ask. Record that the rows were not read, and freeze. This is the one
+place where the person is the only check on whether a test asserts deeply enough, so a run that
+skips it is saying so out loud.
+
+### Freeze what came back
+
+Run, with one flag per test, per failure output, and per pattern:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-freeze "<task_folder>" <order id> \
+  --test <path>::<test name>=<criterion id> \
+  --red <test name>=<path to a file holding what the run printed> \
+  --test-glob <pattern from the implement recipe> \
+  --checklist <criterion id>=<the verification sentence>
+```
+
+The script checks the file exists, sits inside the code repository, matches the framework's own
+declared pattern, and carries at the end of its name the criterion it claims. It checks every
+criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
+It checks every test has the output of the run that failed.
+
+Then it records a hash for each test file. That hash is the freeze. From here nothing that writes
+or fixes code may change one of those files.
+
+Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The script
+stops the step rather than recording it, which is the right outcome: a test nobody watched fail is
+not a reference.
+
+A record is taken once per commit. A second run at the same commit leaves it alone. One taken at a
+different commit refuses and names both.
+
 ## What this skill does not do yet
 
-It does not resolve the commands that run tests, take a baseline, write a test, watch one fail,
-write a trace row, freeze a test file, write code, run the deciding checks, run a review, or close
-a work order. There is no action for any of those yet.
+It does not write code, run the deciding checks, run a review, fix a finding, or close a work
+order. There is no action for any of those yet.
+
+Two permissions this step describes are not enforced yet. Nothing stops the test author reading
+production source, and nothing stops a later context writing to a file this step froze. Both are
+rules the runtime has to apply, and prompt text is not enforcement. Say so rather than letting the
+report imply otherwise.
 
 After the conditions, the step runs each framework's cheapest test command, the one that proves the
 harness reports at all. It runs only where that framework's conditions came back satisfied or
