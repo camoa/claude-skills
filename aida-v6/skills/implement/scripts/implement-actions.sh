@@ -1077,6 +1077,20 @@ do_start() {
 # check that hangs hangs the step. Every check the catalog declares today is a filesystem probe or
 # a version print. A recipe that ever declares a check reaching the network needs this revisited,
 # and pretending to a timeout we cannot portably enforce would be worse than saying so here.
+#
+# The same recipe carries a second machine-readable block, `## Test commands` / `test_commands:`,
+# five rows per framework (suite, file, test, changed, smoke). This step reads and records it
+# alongside the conditions, in the same record, but resolves nothing and substitutes nothing: a
+# row's `argv` or `nearest` tokens are copied verbatim, placeholders included, for the part of the
+# step that will one day run them. Three states, the same discipline as the conditions section:
+# no `## Test commands` heading and no `test_commands:` key is `undeclared`; the heading present
+# with no key (indistinguishable from a misspelled key) is `unparseable`; the key present with
+# rows, however many, is `ok`. A row answers with `argv` and `cost`, or with `absent` (optionally
+# `nearest`); the folded prose carried by `trap:`, `id_form:` and `absent:`'s own text is for a
+# person and a model reading the recipe itself, never parsed here. An `argv` or `nearest` value
+# that does not parse as a JSON array of strings is a defect in the recipe: the row is kept, named
+# `unreadable`, rather than dropped. None of this changes the run's verdict; a framework with no
+# test commands at all is unrelated to whether its preconditions are met.
 # ------------------------------------------------------------------------------------------------
 
 pc_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -1251,13 +1265,140 @@ pc_worse() {
   if [ "$(pc_rank "$1")" -ge "$(pc_rank "$2")" ]; then printf '%s' "$1"; else printf '%s' "$2"; fi
 }
 
+# ------------------------------------------------------------------------------------------------
+# `## Test commands`: read alongside the conditions, from the same recipe, resolving nothing.
+# ------------------------------------------------------------------------------------------------
+
+# The count of leading whitespace characters in $1. Used only to tell a folded scalar's own
+# continuation lines (indented further than the key that opened them) from the line that ends it
+# (indented the same or less). A bracket-expression glob against a parameter expansion, never a
+# regular expression, so it stays inside this file's own portability rule.
+tc_indent() {
+  local line="$1" lead
+  lead="${line%%[^[:space:]]*}"
+  printf '%s' "${#lead}"
+}
+
+# The entry being read, held between lines, the same reason PC_* is held between lines above.
+TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+
+# Appends one JSON object to $1 for the held row and clears it, so a second call with nothing held
+# writes nothing. `argv` and `nearest` are read as JSON, through jq, never split by hand; a value
+# that is present but does not parse as an array of strings is not dropped, it is named in
+# `unreadable`, because a malformed row in a recipe is a defect worth reporting, not a reason to
+# report fewer rows than the recipe wrote. `absent` is a boolean fact, true whenever the row
+# carried an `absent:` key at all; its own folded prose is never read here, only its presence.
+tc_flush_entry() {
+  local out="$1"
+  [ -n "$TC_ID" ] || return 0
+  local argv_json='null' cost="$TC_COST" nearest_json='null' unreadable='[]' parsed
+  if [ -n "$TC_ARGV_RAW" ]; then
+    parsed="$(printf '%s' "$TC_ARGV_RAW" | jq -e -c 'if (type == "array") and (all(.[]; type == "string")) then . else empty end' 2>/dev/null)"
+    if [ -n "$parsed" ]; then
+      argv_json="$parsed"
+    else
+      unreadable="$(printf '%s' "$unreadable" | jq -c '. + ["argv"]')"
+    fi
+  fi
+  if [ -n "$TC_NEAREST_RAW" ]; then
+    parsed="$(printf '%s' "$TC_NEAREST_RAW" | jq -e -c 'if (type == "array") and (all(.[]; type == "string")) then . else empty end' 2>/dev/null)"
+    if [ -n "$parsed" ]; then
+      nearest_json="$parsed"
+    else
+      unreadable="$(printf '%s' "$unreadable" | jq -c '. + ["nearest"]')"
+    fi
+  fi
+  jq -n --arg id "$TC_ID" --argjson argv "$argv_json" --arg cost "$cost" \
+        --argjson absent "$([ "$TC_ABSENT" = "1" ] && printf true || printf false)" \
+        --argjson nearest "$nearest_json" --argjson unreadable "$unreadable" '
+    {id: $id}
+    + (if $argv       == null  then {} else {argv: $argv} end)
+    + (if $cost       == ""    then {} else {cost: $cost} end)
+    + (if $absent     == false then {} else {absent: true} end)
+    + (if $nearest    == null  then {} else {nearest: $nearest} end)
+    + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
+  ' >>"$out" || die3 "preconditions: could not record the test-command row $TC_ID"
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+}
+
+# Reads the `## Test commands` section of the recipe at $1, appending one JSON object per row to
+# $2. Prints the section's own state: `undeclared` when the heading is absent (no key either,
+# because there is nowhere for one to be), `unparseable` when the heading is there but
+# `test_commands:` never opens under it (the same shape a misspelled key leaves), or `ok` when the
+# key is there, however many rows it holds. Never runs a check and never substitutes a placeholder;
+# this function only reads what the recipe wrote.
+tc_parse_recipe() {
+  local recipe_file="$1" out="$2"
+  local section_file block_file line trimmed indent skip_indent
+
+  section_file="$out.tcsection"
+  sed -n '/^##[[:space:]]*Test commands[[:space:]]*$/,/^##[[:space:]]/p' "$recipe_file" >"$section_file" 2>/dev/null
+  if [ ! -s "$section_file" ]; then
+    rm -f "$section_file"
+    printf 'undeclared'
+    return 0
+  fi
+
+  if ! grep -q '^test_commands:' "$section_file"; then
+    rm -f "$section_file"
+    printf 'unparseable'
+    return 0
+  fi
+
+  block_file="$out.tcblock"
+  sed -n '/^test_commands:/,$p' "$section_file" | sed '1d' >"$block_file"
+  rm -f "$section_file"
+
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+  skip_indent=-1
+  while IFS= read -r line; do
+    trimmed="$(pc_trim "$line")"
+    # A folded scalar (`trap:`, `id_form:`, or `absent:`'s own text) continues on every following
+    # line indented further than the key that opened it. Those lines are prose for a person and a
+    # model reading the recipe itself; they are skipped here, never parsed as a new field or a new
+    # row. A blank line inside or around the block stays in skip mode rather than ending it, since
+    # a folded scalar may carry a paragraph break.
+    if [ "$skip_indent" -ge 0 ]; then
+      [ -n "$trimmed" ] || continue
+      indent="$(tc_indent "$line")"
+      if [ "$indent" -gt "$skip_indent" ]; then continue; fi
+      skip_indent=-1
+    fi
+    [ -n "$trimmed" ] || continue
+    case "$trimmed" in
+      '##'*) break ;;
+    esac
+    case "$trimmed" in
+      '- id:'*)   tc_flush_entry "$out"; TC_ID="$(pc_trim "${trimmed#- id:}")" ;;
+      'argv:'*)   TC_ARGV_RAW="$(pc_trim "${trimmed#argv:}")" ;;
+      'cost:'*)   TC_COST="$(pc_trim "${trimmed#cost:}")" ;;
+      'nearest:'*) TC_NEAREST_RAW="$(pc_trim "${trimmed#nearest:}")" ;;
+      'absent:'*)
+        TC_ABSENT=1
+        case "$trimmed" in *'>-') skip_indent="$(tc_indent "$line")" ;; esac
+        ;;
+      'trap:'*)
+        case "$trimmed" in *'>-') skip_indent="$(tc_indent "$line")" ;; esac
+        ;;
+      'id_form:'*)
+        case "$trimmed" in *'>-') skip_indent="$(tc_indent "$line")" ;; esac
+        ;;
+    esac
+  done <"$block_file"
+  tc_flush_entry "$out"
+  rm -f "$block_file"
+
+  printf 'ok'
+}
+
 # The step. Every framework the project declares must be answered for, because the build runs in
 # one repository that is all of them at once.
 do_preconditions() {
   local task_folder="" project_folder codepath project_state
   local recipes="" failures="" arg fw val
-  local frameworks fw_count entries_file fw_json_file
+  local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
+  local tc_state tc_rows_json
   local record_file record_json today
 
   while [ "$#" -gt 0 ]; do
@@ -1308,6 +1449,7 @@ do_preconditions() {
   [ -n "$frameworks" ] || die14 "preconditions: project.json records no frameworks, so no recipe can be chosen"
 
   entries_file="$task_folder/implementation/.preconditions-entries.$$"
+  tc_rows_file="$task_folder/implementation/.preconditions-testcommands.$$"
   fw_json_file="$task_folder/implementation/.preconditions-frameworks.$$"
   : >"$fw_json_file"
   run_verdict="met"
@@ -1326,6 +1468,7 @@ do_preconditions() {
     fi
 
     : >"$entries_file"
+    : >"$tc_rows_file"
     if [ "$lookup" = "resolved" ]; then
       [ -f "$recipe_path" ] || die3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
       section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
@@ -1335,13 +1478,19 @@ do_preconditions() {
         unparseable)    fw_verdict="unknown" ;;
         *)              fw_verdict="met" ;;
       esac
+      # The test-commands block never affects a verdict; it is read here only because it lives in
+      # the same recipe file this framework already resolved, and the record already has a place
+      # for the rest of what that recipe declared.
+      tc_state="$(tc_parse_recipe "$recipe_path" "$tc_rows_file")"
     else
       # Nobody looked. That is a different fact from a recipe that looked and declared nothing.
       section_state="not-looked"
       fw_verdict="unknown"
+      tc_state="not-looked"
     fi
 
     entries_json="$(jq -s '.' "$entries_file" 2>/dev/null)" || entries_json="[]"
+    tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
     if [ "$section_state" = "ok" ]; then
       fw_verdict="$(jq -r '
         def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
@@ -1353,13 +1502,15 @@ EOF
     fi
 
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
-          --arg verdict "$fw_verdict" --argjson entries "$entries_json" '
-      {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries}
+          --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
+          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" '
+      {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
+       testCommands: {state: $tcState, rows: $tcRows}}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
     ' >>"$fw_json_file" || die3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
-  rm -f "$entries_file"
+  rm -f "$entries_file" "$tc_rows_file"
 
   run_verdict="$(jq -s -r '
     def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
@@ -1384,7 +1535,11 @@ EOF
         lookup: .lookup,
         verdict: .verdict,
         unmet:   [.entries[] | select(.verdict == "unmet")   | {id, what, owner}],
-        unknown: [.entries[] | select(.verdict == "unknown") | {id, what, owner, reason}]
+        unknown: [.entries[] | select(.verdict == "unknown") | {id, what, owner, reason}],
+        testCommands: {
+          state: .testCommands.state,
+          unreadable: [ .testCommands.rows[] | select((.unreadable // []) | length > 0) | {id, unreadable} ]
+        }
       }))
     }'
 
