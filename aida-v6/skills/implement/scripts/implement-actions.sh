@@ -1096,7 +1096,7 @@ pc_check_is_unsafe() {
 # the split, so a `*` that survived the refusal above could not expand against the working
 # directory anyway.
 pc_run_check() {
-  local value="$1" dir="$2"
+  local value="$1" dir="$2" outfile="$3"
   (
     cd "$dir" || exit 127
     # zsh does not split an unquoted expansion on whitespace the way bash and every other
@@ -1110,13 +1110,35 @@ pc_run_check() {
     set -- $value
     set +f
     exec "$@"
-  ) >/dev/null 2>&1
+  ) >"$outfile" 2>/dev/null
   printf '%s' "$?"
+}
+
+# Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the
+# value can carry quotes of its own, and the outer pair belongs to the document rather than to the
+# string being looked for.
+pc_unquote() {
+  case "$1" in
+    "'"*"'") printf '%s' "$1" | sed "s/^'//; s/'$//" ;;
+    '"'*'"') printf '%s' "$1" | sed 's/^"//; s/"$//' ;;
+    *)       printf '%s' "$1" ;;
+  esac
+}
+
+# True when the file at $1 holds the literal string $2 anywhere in it. The needle is quoted inside
+# the pattern, so nothing in it is read as a glob.
+pc_output_holds() {
+  local haystack
+  haystack="$(cat "$1" 2>/dev/null)"
+  case "$haystack" in
+    *"$2"*) return 0 ;;
+  esac
+  return 1
 }
 
 # The entry being read, held between lines. Bash 3.2 has no nameref, so the parse loop and its
 # flush share these rather than passing a record around.
-PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_ANY=0
+PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
 
 # Runs the held entry's check and appends one JSON object to $1. Clears the entry afterwards, so a
 # second call with nothing held writes nothing.
@@ -1133,23 +1155,36 @@ pc_flush_entry() {
   elif pc_check_is_unsafe "$PC_CHECK"; then
     verdict="unknown"; reason="unsafe-check-shape"
   else
-    rc="$(pc_run_check "$PC_CHECK" "$codepath")"
+    rc="$(pc_run_check "$PC_CHECK" "$codepath" "$out.stdout")"
     exitjson="$rc"
     case "$rc" in
       0)   verdict="met" ;;
       127) verdict="unknown"; reason="check-command-not-found" ;;
       *)   verdict="unmet" ;;
     esac
+    # The exit status is read first and keeps every meaning it has. Only on a zero exit does an
+    # expected string decide, and it decides one way: the string is in what the command wrote, or
+    # the condition answered no. A substring test and nothing more, for the same reason the command
+    # never reaches a shell. An unmet carrying exit code 0 and an expected string is this test
+    # deciding, which is why it needs no reason of its own.
+    if [ "$verdict" = "met" ] && [ -n "$PC_EXPECT" ]; then
+      if ! pc_output_holds "$out.stdout" "$PC_EXPECT"; then
+        verdict="unmet"
+      fi
+    fi
+    rm -f "$out.stdout"
   fi
   jq -n --arg id "$PC_ID" --arg what "$PC_WHAT" --arg owner "$PC_OWNER" --arg check "$PC_CHECK" \
+        --arg expect "$PC_EXPECT" \
         --arg verdict "$verdict" --arg reason "$reason" --argjson exitCode "$exitjson" '
     {id: $id, what: (if $what == "" then $id else $what end), verdict: $verdict}
     + (if $check    == ""   then {} else {check: ([$check | splits("[ \t]+")] | map(select(length > 0)))} end)
+    + (if $expect   == ""   then {} else {expect: $expect} end)
     + (if $owner    == ""   then {} else {owner: $owner} end)
     + (if $reason   == ""   then {} else {reason: $reason} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode} end)
   ' >>"$out" || die3 "preconditions: could not record the entry $PC_ID"
-  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""
 }
 
 # Reads the `## Preconditions` section of the recipe at $1, runs each check from inside $3, and
@@ -1183,7 +1218,7 @@ pc_parse_recipe() {
   sed -n '/^preconditions:/,$p' "$section_file" | sed '1d' >"$block_file"
   rm -f "$section_file"
 
-  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_ANY=0
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
   while IFS= read -r line; do
     case "$line" in
       '##'*) break ;;
@@ -1195,6 +1230,7 @@ pc_parse_recipe() {
       'what:'*)   PC_WHAT="$(pc_trim "${trimmed#what:}")" ;;
       'check:'*)  PC_CHECK="$(pc_trim "${trimmed#check:}")" ;;
       'owner:'*)  PC_OWNER="$(pc_trim "${trimmed#owner:}")" ;;
+      'expect:'*) PC_EXPECT="$(pc_unquote "$(pc_trim "${trimmed#expect:}")")" ;;
     esac
   done <"$block_file"
   pc_flush_entry "$out" "$codepath"
