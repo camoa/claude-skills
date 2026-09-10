@@ -632,6 +632,14 @@ do_add_owned_file() {
   done
   require_wo_id_arg "add-owned-file" "$id"
   is_blank "$path_val" && die3 "add-owned-file: --path is required and must not be blank"
+  # A path, never a glob. Implementation derives the test author's denied reads from these entries
+  # and compares them as paths, so a glob would deny nothing while the dispatch still reads as
+  # enforced. Refusing here is where the model finds out; check-design.sh repeats the rule for a
+  # file edited by hand.
+  case "$path_val" in
+    *'*'*|*'?'*|*'['*)
+      die3 "add-owned-file: an owned file is a path and not a glob, and $path_val carries a wildcard. Name the directory, such as src/thing/, or add each file. A glob denies nothing when implementation derives what the test author may not read." ;;
+  esac
 
   local file doc
   file="$(wo_file_for "$id")"

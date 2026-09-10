@@ -302,9 +302,11 @@ do it, and both report through a message when they cannot find what they need ra
 silence. Neither has run inside a live dispatch yet, so say that plainly rather than reporting them
 as proven.
 
-The read denial covers the Read tool and not the shell. The test author holds Bash, so a `cat` of a
-denied file is not refused today. Say so when the person asks what the dispatch enforces, rather
-than describing the denial as complete.
+The read denial covers Read and Grep, and not the shell. The test author runs its own tests, so it
+holds Bash, so a `cat` of a denied file is not refused. That is deliberate: the rule exists to stop
+the role opening the source because reading the code is the obvious way to write a test about it,
+and a role working around the rule on purpose has already failed in ways no hook catches. Say that
+when the person asks what the dispatch enforces, rather than describing the denial as complete.
 
 After the conditions, the step runs each framework's cheapest test command, the one that proves the
 harness reports at all. It runs only where that framework's conditions came back satisfied or

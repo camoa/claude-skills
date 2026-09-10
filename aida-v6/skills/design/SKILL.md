@@ -223,7 +223,7 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 Then, one call per item, add what the order still needs:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-owned-file "<task_folder>" \
-  --id <woId> --path "<path or glob this order may write>"
+  --id <woId> --path "<a file or a directory this order may write, never a glob>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
@@ -292,6 +292,8 @@ the specific order it names:
     or it is dead work and should be dropped;
   - a cycle needs one of the `dependsOn` edges in it removed;
   - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat;
+  - a wildcard in an owned file needs the directory named instead, or each file added, because
+    implementation derives what the test author may not read from this list and reads it as paths;
   - an unknown id needs correcting to one that actually exists.
 
 Then check again. Exit 3: the script could not run the check at all. Read its stderr and fix the

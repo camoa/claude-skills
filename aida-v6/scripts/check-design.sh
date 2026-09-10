@@ -130,7 +130,8 @@
 #              unknownDependsOnIds: [ {path, id} ],
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
-#              overlappingOwnedFiles: [ {ids: [id, id], path} ] },
+#              overlappingOwnedFiles: [ {ids: [id, id], path} ],
+#              globbedOwnedFiles: [ {id, path} ] },
 #     fileIssueCount, contentIssueCount,
 #     notChecked: [...]
 #   }
@@ -531,6 +532,7 @@ UNKNOWN_DEPENDS_ON_IDS_JSON='[]'
 DEPENDENCY_CYCLES_JSON='[]'
 ORPHAN_SUPPORT_ORDERS_JSON='[]'
 OVERLAPPING_OWNED_FILES_JSON='[]'
+GLOBBED_OWNED_FILES_JSON='[]'
 GRAPH_ISSUE_COUNT=0
 
 if [ "$DESIGN_STARTED" != "true" ]; then
@@ -588,11 +590,23 @@ else
     ]
   ')"
 
+  # An owned file must be a path and never a glob. Implementation derives the test author's denied
+  # reads from these entries and compares them as paths, so a glob would deny nothing while the
+  # dispatch still reads as enforced (stages/08-invariant-audit.md, section 9). The rule is here,
+  # at the producer, rather than as glob matching in the hook that reads them.
+  GLOBBED_OWNED_FILES_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
+    [ $orders[] | .id as $id | (.ownedFiles // [])[]
+      | select(test("[*?\\[]"))
+      | {id: $id, path: .}
+    ]
+  ')"
+
   UNKNOWN_DEPENDS_COUNT="$(printf '%s' "$UNKNOWN_DEPENDS_ON_IDS_JSON" | jq 'length')"
   CYCLE_COUNT="$(printf '%s' "$DEPENDENCY_CYCLES_JSON" | jq 'length')"
   ORPHAN_COUNT="$(printf '%s' "$ORPHAN_SUPPORT_ORDERS_JSON" | jq 'length')"
   OVERLAP_COUNT="$(printf '%s' "$OVERLAPPING_OWNED_FILES_JSON" | jq 'length')"
-  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT))
+  GLOBBED_COUNT="$(printf '%s' "$GLOBBED_OWNED_FILES_JSON" | jq 'length')"
+  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT))
   GRAPH_NOTE="ran: $(printf '%s' "$WORK_ORDERS_JSON" | jq 'length') work order(s) in the graph"
 fi
 
@@ -605,7 +619,7 @@ CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + GRAPH_ISSUE_COUNT))
 NOT_CHECKED_ITEMS=()
 NOT_CHECKED_ITEMS+=("schema-check.sh, the shared comparison this script sources, evaluates only minLength, pattern, minItems and enum by its own header; it does not evaluate minimum at all. design-schema.json's schemaVersion carries \"minimum\": 1, and a value of 0 or of -7 both pass that shared comparison undetected. This script does not add a schemaVersion-specific check, since alignment.json, task.json, project.json and research files carry the identical gap against their own schemaVersion and a fix scoped to this file only would misstate the others as fixed.")
 NOT_CHECKED_ITEMS+=("this script does not read design/<id>.md, the rendered file. Nothing here parses it and nothing here judges whether it reads clearly; that is a person's read, not this check's.")
-NOT_CHECKED_ITEMS+=("overlapping ownedFiles is compared as declared strings only, never as a glob intersection, and a declared list is not a fact about what a builder actually touches (ideal/design.md, \"What a work order holds\").")
+NOT_CHECKED_ITEMS+=("overlapping ownedFiles is compared as declared strings only, and a declared list is not a fact about what a builder actually touches (ideal/design.md, \"What a work order holds\"). A glob intersection is not compared because a glob is refused outright.")
 NOT_CHECKED_ITEMS+=("whether a work order that owns a criterion actually produces the outcome that criterion describes, and whether its declared tests actually observe that outcome, is judgment and is not decidable from shape (ideal/design.md, \"Serving a criterion is not completing it\").")
 if [ "$CONTRACT_READABLE" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the coverage joins against the contract: $CONTRACT_NOTE")
@@ -659,6 +673,7 @@ jq -n \
   --argjson dependencyCycles "$DEPENDENCY_CYCLES_JSON" \
   --argjson orphanSupportOrders "$ORPHAN_SUPPORT_ORDERS_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
+  --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
   --argjson contentIssueCount "$CONTENT_ISSUE_COUNT" \
   --argjson notChecked "$NOT_CHECKED_JSON" \
@@ -688,7 +703,8 @@ jq -n \
       unknownDependsOnIds: $unknownDependsOnIds,
       dependencyCycles: $dependencyCycles,
       orphanSupportOrders: $orphanSupportOrders,
-      overlappingOwnedFiles: $overlappingOwnedFiles
+      overlappingOwnedFiles: $overlappingOwnedFiles,
+      globbedOwnedFiles: $globbedOwnedFiles
     },
     fileIssueCount: $fileIssueCount,
     contentIssueCount: $contentIssueCount,

@@ -28,7 +28,9 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || { echo '{}'; exit 0; }
 INPUT="$(cat 2>/dev/null)" || { echo '{}'; exit 0; }
 TOOL="$(jq -r '.tool_name // empty' <<<"$INPUT" 2>/dev/null)"; [ -n "$TOOL" ] || { echo '{}'; exit 0; }
-[ "$TOOL" = "Read" ] || { echo '{}'; exit 0; }
+# Grep is here because grepping for a function name is what a test author does without meaning
+# anything by it, and a Grep that returns content returns the source as surely as opening the file.
+case "$TOOL" in Read|Grep) ;; *) echo '{}'; exit 0 ;; esac
 
 AGENT="$(jq -r '.agent_type // empty' <<<"$INPUT" 2>/dev/null)"
 case "$AGENT" in
@@ -76,8 +78,13 @@ DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
 [ "$DENY_COUNT" -gt 0 ] 2>/dev/null \
   || not_enforced "the dispatch open at $DISPATCH_FILE denies no path, so this read was allowed without being checked against anything"
 
-TARGET="$(jq -r '.tool_input.file_path // empty' <<<"$INPUT" 2>/dev/null)"
-[ -n "$TARGET" ] || { echo '{}'; exit 0; }
+# Read names its target `file_path`; Grep names it `path` and leaves it out to search the whole
+# working directory, which is the case that reads the most.
+TARGET="$(jq -r '.tool_input.file_path // .tool_input.path // empty' <<<"$INPUT" 2>/dev/null)"
+if [ -z "$TARGET" ]; then
+  [ "$TOOL" = "Grep" ] || { echo '{}'; exit 0; }
+  TARGET="$CODE_CANON"
+fi
 
 # Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
 # drops a trailing slash. Never touches the filesystem, so it works on a path that does not exist
@@ -128,11 +135,14 @@ i=0
 while [ "$i" -lt "$DENY_COUNT" ]; do
   rel="$(printf '%s' "$DENY_JSON" | jq -r --argjson i "$i" '.[$i]')"
   deny_abs="$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")"
-  if is_under "$TARGET_ABS" "$deny_abs"; then
+  # A search reads everything below where it starts, so a root holding a denied path reads that
+  # path. A Read has one file for a target and only the first test can apply to it.
+  if is_under "$TARGET_ABS" "$deny_abs" \
+     || { [ "$TOOL" = "Grep" ] && is_under "$deny_abs" "$TARGET_ABS"; }; then
     # A denied path under codePath is production source, and there is somewhere else to look. A
     # denied path outside it is not, so pointing at an interface record would be wrong advice.
     if is_under "$TARGET_ABS" "$CODE_CANON"; then
-      REASON="test-author may not read $TARGET_ABS: this dispatch denies this role that path. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
+      REASON="test-author may not read $TARGET_ABS: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
     else
       REASON="test-author may not read $TARGET_ABS: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
     fi
