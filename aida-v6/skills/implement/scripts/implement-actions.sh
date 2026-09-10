@@ -11,9 +11,13 @@
 # then performs the two halves of the third step: `tests-brief` assembles exactly what a model
 # writing one unit's tests may see, from the frozen snapshot, and `tests-freeze` verifies what that
 # model wrote and freezes it. The script never writes a test and never judges one; the model that
-# writes a test chooses the level, writes the file, and runs it.
-# Building a work order is not built yet; only `read`, `start`, `preconditions`, `tests-brief` and
-# `tests-freeze` exist.
+# writes a test chooses the level, writes the file, and runs it. `dispatch-open` and
+# `dispatch-close` open and clear the one record, <project path>/dispatch.json, that the two
+# permission hooks (hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh) read to tell a
+# dispatched role apart from a person working their own repository. Neither hook is this script's
+# own concern past that one file; this script only opens and closes the record.
+# Building a work order is not built yet; only `read`, `start`, `preconditions`, `tests-brief`,
+# `tests-freeze`, `dispatch-open` and `dispatch-close` exist.
 #
 # Usage:
 #   implement-actions.sh read  <task_folder>
@@ -28,6 +32,10 @@
 #                            [--test-glob <glob>]...
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--green-on-arrival <test name>=<reason>]...
+#   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
+#                            [--deny-read <path relative to codePath>]... \
+#                            [--allow-write <path relative to codePath>]...
+#   implement-actions.sh dispatch-close <task_folder>
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -53,6 +61,8 @@
 #                                                        a second copy of that formula.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot-schema.json   the shape `start` writes to snapshot.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-schema.json     the shape `start` writes to ledger.json
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-schema.json   the shape `dispatch-open` writes to
+#                                                        <project path>/dispatch.json
 #
 # This script never runs a schema comparison against snapshot-schema.json or ledger-schema.json
 # itself. Every field it writes is built from those two schemas' own field lists by construction;
@@ -247,6 +257,9 @@
 #      path this step records is relative to codePath (baseline.json's own `scope` field is
 #      relative for the same reason: a frozen path must survive the checkout moving), so a path
 #      that cannot be made relative to it at all cannot be recorded either.
+#  37  `dispatch-open` found <project path>/dispatch.json already open. The build is serial, so a
+#      project has at most one active dispatch; the message names the role, task and unit that
+#      already hold it. `dispatch-close` clears it.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -324,6 +337,7 @@ die33() { printf 'implement-actions: %s\n' "$1" >&2; exit 33; }
 die34() { printf 'implement-actions: %s\n' "$1" >&2; exit 34; }
 die35() { printf 'implement-actions: %s\n' "$1" >&2; exit 35; }
 die36() { printf 'implement-actions: %s\n' "$1" >&2; exit 36; }
+die37() { printf 'implement-actions: %s\n' "$1" >&2; exit 37; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -344,6 +358,10 @@ usage: implement-actions.sh read  <task_folder>
                             [--test-glob <glob>]...
                             [--checklist <criterion id>=<verification text>]...
                             [--green-on-arrival <test name>=<reason>]...
+       implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
+                            [--deny-read <path relative to codePath>]...
+                            [--allow-write <path relative to codePath>]...
+       implement-actions.sh dispatch-close <task_folder>
 EOF
 }
 
@@ -1182,7 +1200,7 @@ do_start() {
 # rows; a framework with no test commands at all is unrelated to whether its preconditions are
 # met. The fifth, `smoke`, is different: once every declared condition comes back `met` or
 # `undeclared`, this step runs that row and folds what it found into the same worst-of verdict the
-# conditions already compute, on the same terms — `met` and `undeclared` continue, `unmet` and
+# conditions already compute, on the same terms: `met` and `undeclared` continue, `unmet` and
 # `unknown` stop the run.
 #
 # The fifth row, `smoke`, is run rather than merely recorded, once every declared condition for
@@ -2420,7 +2438,7 @@ tf_path_matches_catalog_glob() {
 # Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
 # recipe's own `## Test commands` rows are resolved: this step never carries a second, absolute
 # copy of a path that belongs to the repository, for the same reason baseline.json's own `scope`
-# field is repository-relative and not absolute (scripts/baseline-schema.json, `scope`) — a frozen
+# field is repository-relative and not absolute (scripts/baseline-schema.json, `scope`). A frozen
 # path must still mean the same file once the checkout moves. An absolute $1 is relativised against
 # $2; anything else is taken as already relative to $2. Checked as a declared string only, the same
 # bound the overlap check on ownedFiles already accepts (`start`'s own step 10 comment): this never
@@ -2785,6 +2803,121 @@ TF_EOF
 }
 
 # ------------------------------------------------------------------------------------------------
+# dispatch-open, dispatch-close: open and clear <project path>/dispatch.json
+# (scripts/dispatch-schema.json), the one record hooks/deny-prior-source.sh and
+# hooks/deny-frozen-test-writes.sh read to tell a dispatched role apart from a person working
+# their own repository. The build is serial, so a project has at most one active dispatch;
+# dispatch-open refuses to overwrite one already there (die37), and dispatch-close removes it,
+# safe to call when none is open.
+# ------------------------------------------------------------------------------------------------
+
+do_dispatch_open() {
+  local task_arg="" role="" unit_id="" deny_raw="" allow_raw=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --deny-read)
+        [ "$#" -ge 2 ] || die3 "dispatch-open: --deny-read needs a path relative to codePath"
+        deny_raw="$deny_raw$2
+"
+        shift 2 ;;
+      --allow-write)
+        [ "$#" -ge 2 ] || die3 "dispatch-open: --allow-write needs a path relative to codePath"
+        allow_raw="$allow_raw$2
+"
+        shift 2 ;;
+      -*) die3 "dispatch-open: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$role" ]; then
+          role="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die3 "dispatch-open: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die3 "dispatch-open: a task folder is required"
+  [ -n "$role" ]     || die3 "dispatch-open: a role is required"
+  [ -n "$unit_id" ]  || die3 "dispatch-open: a unit id is required"
+  case "$unit_id" in
+    wo[1-9]*) ;;
+    *) die3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
+  esac
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "dispatch-open")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+
+  local task_id
+  task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  [ -n "$task_id" ] || die3 "dispatch-open: $TASK_PATH/task.json has no usable id field"
+
+  local project_folder codepath
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die3 "dispatch-open: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+  case "$(project_code_path_state "$project_folder")" in
+    unreadable) die14 "dispatch-open: $project_folder/project.json exists but is not valid JSON" ;;
+    missing)    die3  "dispatch-open: $project_folder/project.json not found, though it was found moments ago" ;;
+  esac
+  codepath="$(project_code_path_value "$project_folder")"
+  [ -n "$codepath" ] || die3 "dispatch-open: $project_folder/project.json is valid JSON but has no usable codePath field"
+  [ -d "$codepath" ] || die15 "dispatch-open: the recorded codePath does not exist on disk: $codepath"
+
+  local dispatch_file="$project_folder/dispatch.json"
+  if [ -f "$dispatch_file" ]; then
+    jq empty "$dispatch_file" 2>/dev/null \
+      || die3 "dispatch-open: $dispatch_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    local held_role held_task held_unit
+    held_role="$(jq -r '.role // "?"' "$dispatch_file" 2>/dev/null)"
+    held_task="$(jq -r '.task // "?"' "$dispatch_file" 2>/dev/null)"
+    held_unit="$(jq -r '.unit // "?"' "$dispatch_file" 2>/dev/null)"
+    die37 "dispatch-open: $dispatch_file is already open, for role $held_role on task $held_task, unit $held_unit. Run dispatch-close first."
+  fi
+
+  local deny_json allow_json
+  deny_json="$(printf '%s' "$deny_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
+  allow_json="$(printf '%s' "$allow_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
+
+  local record_json
+  record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
+    --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
+    '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
+      denyRead: $denyRead, allowWrite: $allowWrite}')"
+
+  write_atomic "$dispatch_file" "$record_json"
+  echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
+  printf '%s\n' "$dispatch_file"
+  exit 0
+}
+
+do_dispatch_close() {
+  [ "$#" -ge 1 ] || die3 "dispatch-close: a task folder is required"
+  [ "$#" -le 1 ] || die3 "dispatch-close: unrecognized extra argument: $2"
+  local task_path="$1"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_path" "dispatch-close")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+
+  local project_folder
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die3 "dispatch-close: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+
+  local dispatch_file="$project_folder/dispatch.json"
+  if [ -f "$dispatch_file" ]; then
+    rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
+    echo "DISPATCH-CLOSE: removed $dispatch_file"
+  else
+    echo "DISPATCH-CLOSE: nothing was open"
+  fi
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -2802,5 +2935,7 @@ case "$ACTION" in
   preconditions) do_preconditions "$@" ;;
   tests-brief)  do_tests_brief  "$@" ;;
   tests-freeze) do_tests_freeze "$@" ;;
+  dispatch-open)  do_dispatch_open  "$@" ;;
+  dispatch-close) do_dispatch_close "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

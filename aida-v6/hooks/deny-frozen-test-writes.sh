@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# deny-frozen-test-writes.sh. A PreToolUse hook on Write, Edit, MultiEdit, NotebookEdit and Bash:
+# refuses a write to a test file this task has already frozen (scripts/tests-frozen-schema.json,
+# <task folder>/implementation/tests-<unit_id>.json).
+#
+# Unlike hooks/deny-prior-source.sh, this rule is not gated to one role first. A frozen test is
+# protected from everyone: the main thread, a builder, a critic, all of them, because changing a
+# frozen test needs the design reopened, never a direct edit. The one exception is narrow and
+# role-specific: a test author dispatched for a unit may still write that same unit's own frozen
+# file, and never an earlier unit's (ideal/implementation.md's freeze). That exception is checked
+# per write, below, not as an upfront gate the way deny-prior-source.sh gates on agent_type.
+#
+# The Bash door carries forward, unmodified in structure, the write-position parsing from
+# version 5's deny-reviewer-test-writes.sh (frozen, camoa-skills/ai-dev-assistant/hooks/): a path
+# in the WRITE POSITION only, meaning the target of a stdout redirect, the operand of a deleting or
+# touching verb, the last operand of a copying verb, or a `cd` into it on a line that also
+# redirects. Reading a frozen test, running it, or copying it OUT to scratch all pass; only that
+# door's own KNOWN LIMITATIONS are carried forward too: it is token-shaped, friction against the
+# plain forms rather than a boundary, and a path assembled from a variable, an interpreter, an
+# editor, or a symlink all pass it.
+#
+# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name: allow, silent.
+# No project registered for this working directory, no dispatch.json, dispatch.json unreadable,
+# or no unit has frozen anything yet for this task: allow, through `systemMessage` naming why.
+# Nothing is frozen before the third step of implementation runs, and that is a real state, not a
+# fault, the same distinction dispatch-schema.json's own header draws.
+#
+# Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
+# the model), on exit 0, so the reason reaches whoever attempted the write.
+set -uo pipefail
+# zsh indexes an array from 1 by default; KSH_ARRAYS makes it agree with bash's own 0-based
+# indexing, scoped to this whole script since every array below is indexed the bash way
+# throughout (the same discipline implement-actions.sh and its siblings already apply).
+if [ -n "${ZSH_VERSION:-}" ]; then
+  setopt KSH_ARRAYS 2>/dev/null
+fi
+command -v jq >/dev/null 2>&1 || { echo '{}'; exit 0; }
+INPUT="$(cat 2>/dev/null)" || { echo '{}'; exit 0; }
+TOOL="$(jq -r '.tool_name // empty' <<<"$INPUT" 2>/dev/null)"; [ -n "$TOOL" ] || { echo '{}'; exit 0; }
+case "$TOOL" in
+  Write|Edit|MultiEdit|NotebookEdit|Bash) ;;
+  *) echo '{}'; exit 0 ;;
+esac
+
+not_enforced() {
+  jq -nc --arg r "deny-frozen-test-writes: not_enforced: $1" '{systemMessage:$r}'
+  exit 0
+}
+
+AGENT="$(jq -r '.agent_type // empty' <<<"$INPUT" 2>/dev/null)"
+is_test_author() {
+  case "$1" in test-author|*:test-author) return 0 ;; esac
+  return 1
+}
+
+# ---- resolve the project the same way hooks/session-start.sh's own resolution does -------------
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+[ -n "$PLUGIN_ROOT" ] \
+  || not_enforced "CLAUDE_PLUGIN_ROOT is not set, so this hook cannot reach the project registry. Nothing was checked."
+REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
+# shellcheck source=/dev/null
+source "$REGISTRY_LIB" 2>/dev/null \
+  || not_enforced "the project registry library at $REGISTRY_LIB could not be read. Nothing was checked."
+
+CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
+[ -n "$CWD" ] || CWD="$(pwd -P)"
+
+MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" \
+  || not_enforced "no registered project owns $CWD, so no dispatch record could be found"
+PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
+[ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
+
+DISPATCH_FILE="$PROJECT_PATH/dispatch.json"
+[ -f "$DISPATCH_FILE" ] \
+  || not_enforced "no dispatch.json at $DISPATCH_FILE; nothing is dispatched right now"
+jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
+  || not_enforced "$DISPATCH_FILE could not be read as JSON"
+
+TASK_ID="$(jq -r '.task // empty' "$DISPATCH_FILE" 2>/dev/null)"
+UNIT="$(jq -r '.unit // empty' "$DISPATCH_FILE" 2>/dev/null)"
+CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
+[ -n "$TASK_ID" ] && [ -n "$UNIT" ] && [ -n "$CODE_PATH" ] \
+  || not_enforced "$DISPATCH_FILE is missing task, unit or codePath"
+
+CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
+[ -n "$CODE_CANON" ] \
+  || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
+
+IMPL_DIR="$PROJECT_PATH/tasks/$TASK_ID/implementation"
+
+# Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
+# drops a trailing slash. Never touches the filesystem, so it works on a path about to be
+# created. $1 must already be absolute. Walks the string one "/"-segment at a time rather than
+# word-splitting it, so this needs neither SH_WORD_SPLIT nor GLOB_SUBST scoped for zsh.
+normalize_abs() {
+  local input="$1" remainder comp out=""
+  case "$input" in /*) ;; *) input="/$input" ;; esac
+  remainder="${input#/}"
+  while [ -n "$remainder" ]; do
+    case "$remainder" in
+      */*) comp="${remainder%%/*}"; remainder="${remainder#*/}" ;;
+      *)   comp="$remainder"; remainder="" ;;
+    esac
+    case "$comp" in
+      ''|'.') : ;;
+      '..') out="${out%/*}" ;;
+      *) out="$out/$comp" ;;
+    esac
+  done
+  [ -n "$out" ] || out="/"
+  printf '%s' "$out"
+}
+
+resolve_against() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *)  printf '%s' "$2/$1" ;;
+  esac
+}
+
+# Reads whitespace-separated words from $1 into array w. bash's read takes -a for an array
+# target; zsh's own read refuses -a ("bad option") and takes -A instead.
+read_words() {
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    read -r -A w <<<"$1"
+  else
+    read -r -a w <<<"$1"
+  fi
+}
+
+# ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test ---------------
+FROZEN=""
+for f in "$IMPL_DIR"/tests-*.json; do
+  [ -e "$f" ] || continue
+  jq empty "$f" >/dev/null 2>&1 || continue
+  base="$(basename -- "$f")"
+  rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"
+  paths="$(jq -r '.rows[]?.tests[]?.path // empty' "$f" 2>/dev/null)"
+  [ -n "$paths" ] || continue
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    abs="$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")"
+    FROZEN="$FROZEN$rec_unit	$abs
+"
+  done <<FROZEN_EOF
+$paths
+FROZEN_EOF
+done
+
+[ -n "$FROZEN" ] || not_enforced "no unit has frozen tests yet for this task"
+
+# Prints the unit that owns frozen path $1, or nothing when $1 is not frozen.
+owner_of() {
+  local target="$1" line u p
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    u="${line%%	*}"
+    p="${line#*	}"
+    if [ "$p" = "$target" ]; then
+      printf '%s' "$u"
+      return 0
+    fi
+  done <<OWNER_EOF
+$FROZEN
+OWNER_EOF
+  return 1
+}
+
+deny() {
+  jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  exit 0
+}
+# A payload with no agent type at all is the person, on the main thread, and the person is allowed.
+# A freeze is not a lock. The stage it belongs to lists a person editing a file among the changes a
+# build has to survive, and the hash in the frozen record is what notices one. A dispatched role has
+# no reason to touch a frozen test. A person may be repairing a defect in the test itself, and the
+# next move is to reopen design, which nobody can do if the tool refuses them first. An unrecognised
+# role is not the same as no role: only the second is the person, and only the second passes here.
+allow_person() {
+  jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $1 is frozen for unit $2 by this task. The recorded hash will no longer match it. Reopen design if the test itself is wrong." '{systemMessage:$m}'
+  exit 0
+}
+frozen_reason() {
+  printf 'this task froze this test for unit %s. Changing it needs the design reopened. If the test is wrong, stop and report it. Do not edit it.' "$1"
+}
+
+case "$TOOL" in
+  Write|Edit|MultiEdit|NotebookEdit)
+    TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
+    [ -n "$TARGET" ] || { echo '{}'; exit 0; }
+    TARGET_ABS="$(normalize_abs "$(resolve_against "$TARGET" "$CWD")")"
+    OWNER="$(owner_of "$TARGET_ABS")" || { echo '{}'; exit 0; }
+    if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ]; then
+      echo '{}'; exit 0
+    fi
+    [ -n "$AGENT" ] || allow_person "$TARGET_ABS" "$OWNER"
+    deny "$TARGET_ABS: $(frozen_reason "$OWNER")"
+    ;;
+  Bash)
+    CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
+    [ -n "$CMD" ] || { echo '{}'; exit 0; }
+    # A frozen path in the WRITE POSITION only, version 5's own boundary carried forward as it
+    # stands (this file's own header states the limitations that come with it).
+    HIT=""; HIT_OWNER=""
+    while IFS= read -r seg; do
+      [ -n "$HIT" ] && break
+      set -f; read_words "$(printf '%s' "$seg" | tr '`$"()' '     ' | tr -d "'")"; set +f
+      [ "${#w[@]}" -gt 0 ] || continue
+      i=0
+      while [ "$i" -lt "${#w[@]}" ]; do
+        t="${w[$i]}"; n=$((i + 1))
+        case "$t" in
+          '>'|'>>'|'1>'|'1>>'|'&>'|'&>>'|'>|')
+            if [ "$n" -lt "${#w[@]}" ]; then
+              cand="$(normalize_abs "$(resolve_against "${w[$n]}" "$CWD")")"
+              if HIT_OWNER="$(owner_of "$cand")"; then HIT="${w[$n]}"; break; fi
+            fi ;;
+          '2>'*) ;;
+          '>'*|'1>'*|'&>'*)
+            x="${t#&}"; x="${x#1}"; x="${x#>>}"; x="${x#>}"; x="${x#|}"
+            if [ -n "$x" ]; then
+              cand="$(normalize_abs "$(resolve_against "$x" "$CWD")")"
+              if HIT_OWNER="$(owner_of "$cand")"; then HIT="$x"; break; fi
+            fi ;;
+        esac
+        i=$n
+      done
+      [ -n "$HIT" ] && break
+      case "${w[0]}" in
+        rm|touch|truncate|chmod|mkdir|rmdir|tee|unlink)
+          for t in "${w[@]:1}"; do
+            case "$t" in -*) continue ;; esac
+            cand="$(normalize_abs "$(resolve_against "$t" "$CWD")")"
+            if HIT_OWNER="$(owner_of "$cand")"; then HIT="$t"; break; fi
+          done ;;
+        git) case "${w[1]:-}" in rm|mv|checkout|restore|stash|apply|clean|reset)
+               for t in "${w[@]:2}"; do
+                 case "$t" in -*) continue ;; esac
+                 cand="$(normalize_abs "$(resolve_against "$t" "$CWD")")"
+                 if HIT_OWNER="$(owner_of "$cand")"; then HIT="$t"; break; fi
+               done ;; esac ;;
+        sed) case "${w[1]:-}" in -i*)
+               for t in "${w[@]:2}"; do
+                 cand="$(normalize_abs "$(resolve_against "$t" "$CWD")")"
+                 if HIT_OWNER="$(owner_of "$cand")"; then HIT="$t"; break; fi
+               done ;; esac ;;
+        cp|mv|ln|install|rsync)
+          last="${w[$((${#w[@]} - 1))]}"
+          cand="$(normalize_abs "$(resolve_against "$last" "$CWD")")"
+          if HIT_OWNER="$(owner_of "$cand")"; then HIT="$last"; fi ;;
+        cd)
+          cand="$(normalize_abs "$(resolve_against "${w[1]:-}" "$CWD")")"
+          if HIT_OWNER="$(owner_of "$cand")" && printf '%s' "$CMD" | grep -q '>'; then HIT="${w[1]}"; fi ;;
+      esac
+    done < <(printf '%s\n' "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
+    if [ -n "$HIT" ]; then
+      if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ]; then
+        echo '{}'; exit 0
+      fi
+      [ -n "$AGENT" ] || allow_person "$HIT" "$HIT_OWNER"
+      deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"
+    fi
+    ;;
+esac
+echo '{}'
+exit 0
