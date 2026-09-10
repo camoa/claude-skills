@@ -183,13 +183,27 @@ nothing else. Adding an input here is a change to the role, not a judgement made
 An interface record is prose a builder wrote about its own code. It is not the code, and that is
 the line.
 
-### Dispatch the test author
+### Open the dispatch record, then dispatch the test author
+
+The two rules below are applied by the runtime. Both read one record, and the build is serial, so a
+project has at most one open dispatch at a time.
+
+Open it first:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" test-author <order id> \
+  --deny-read <path the role may not read> --allow-write <path it may write>
+```
+Close it as soon as the role returns, whether it succeeded or not:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
+```
+A record left open makes the next dispatch refuse, and it names the role and order still holding it.
 
 One context writes the tests. It is not the context that will write the code.
 
 **It may not read production source.** Not this order's, and not any order already built. If it
 sees the code, the tests describe the code instead of the intent, which is the same failure one
-step earlier.
+step earlier. A hook refuses the read while the dispatch record is open.
 
 **It may not write production code.** It writes the test, watches it fail, and stops.
 
@@ -239,8 +253,13 @@ declared pattern, and carries at the end of its name the criterion it claims. It
 criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
 It checks every test has the output of the run that failed.
 
-Then it records a hash for each test file. That hash is the freeze. From here nothing that writes
-or fixes code may change one of those files.
+Then it records a hash for each test file. That hash is the freeze. From here a hook refuses a
+write to one of those files from every dispatched role except the test author of the order that
+froze it.
+
+A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is
+noticed, and the hash is what notices one. The hook allows the write and says which file changed and
+which order froze it.
 
 Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The script
 stops the step rather than recording it, which is the right outcome: a test nobody watched fail is
@@ -254,10 +273,10 @@ different commit refuses and names both.
 It does not write code, run the deciding checks, run a review, fix a finding, or close a work
 order. There is no action for any of those yet.
 
-Two permissions this step describes are not enforced yet. Nothing stops the test author reading
-production source, and nothing stops a later context writing to a file this step froze. Both are
-rules the runtime has to apply, and prompt text is not enforcement. Say so rather than letting the
-report imply otherwise.
+The permissions this step describes are applied by the runtime, not by the words above. Two hooks
+do it, and both report through a message when they cannot find what they need rather than passing in
+silence. Neither has run inside a live dispatch yet, so say that plainly rather than reporting them
+as proven.
 
 After the conditions, the step runs each framework's cheapest test command, the one that proves the
 harness reports at all. It runs only where that framework's conditions came back satisfied or
