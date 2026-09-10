@@ -781,7 +781,28 @@ do_close() {
   rm -f "$check_stderr_file"
 
   case "$check_rc" in
-    0) : ;;
+    0)
+      # Exit 0 means nothing the check could reach was wrong. It does not mean everything was
+      # reached. A contract it could not read leaves the coverage joins un-run, and a task with no
+      # design/ folder leaves the graph checks un-run, and both still exit 0 because the check
+      # reports what it could not do rather than guessing. Closing on that would freeze a hash over
+      # a design nothing compared against the contract, and implementation refuses to start without
+      # exactly that hash. Unanswered is not a pass (ideal/design.md, "Design's own checks run, they
+      # do not read"), and version 5 required a recorded not_run rather than an un-run check
+      # (stages/07-design-coverage.md).
+      local coverage_checked graph_checked skipped_note
+      coverage_checked="$(printf '%s' "$check_report_json" | jq -r '.coverage.checked // false' 2>/dev/null)"
+      graph_checked="$(printf '%s' "$check_report_json" | jq -r '.graph.checked // false' 2>/dev/null)"
+      skipped_note=""
+      if [ "$coverage_checked" != "true" ]; then
+        skipped_note="$(printf '%s' "$check_report_json" | jq -r '.coverage.note // "the contract could not be read"' 2>/dev/null)"
+        die5 "close: the coverage checks against the contract never ran, so nothing compared this design to the criteria it must serve. Reason: $skipped_note"
+      fi
+      if [ "$graph_checked" != "true" ]; then
+        skipped_note="$(printf '%s' "$check_report_json" | jq -r '.graph.note // "design has not started"' 2>/dev/null)"
+        die5 "close: the checks between work orders never ran, so nothing walked this design's own dependencies. Reason: $skipped_note"
+      fi
+      ;;
     1|4)
       local open_summary
       open_summary="$(printf '%s' "$check_report_json" | jq -r '
