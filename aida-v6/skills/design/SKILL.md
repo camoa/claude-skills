@@ -130,10 +130,16 @@ the disposition, and why, with:
 ```
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
-**Autonomous:** after recording a disposition, dispatch a fresh agent with no memory of this
-conversation to confirm it. Give it the written reasoning and the files it cites, never this
-conversation's own account, and ask it to agree, disagree, or downgrade the disposition. Record
-what it found the same way, appended to the same `reasoning` field.
+**Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it. Name
+the role; a dispatch that names none runs as the general agent with write tools and this session's
+model, and this one has to be read-only to mean anything.
+
+Give it the written reasoning and the files it cites, and nothing else. Never this conversation's
+own account: being denied that is the entire reason the role exists, and handing it over turns the
+check into the decision reading itself. It answers agree, disagree, or downgrade, with what it
+compared. Record what it found the same way, appended to the same `reasoning` field.
+
+Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
 ## Look up what you decided to use and research did not
 

@@ -113,18 +113,33 @@ that all rest on the same library may need one search, not three.
 
 ## Dispatch one agent per search
 
-For each search decided above, dispatch one agent with a narrow brief: the words to search, the
-bound (this project's own code, a package registry, the guide catalog, the open web), and the
-shape of what to return, findings with a source and nothing else. The agent never sees this
-conversation and this conversation never sees what the agent read, only what it reports back.
-That isolation is what keeps the cost bounded.
+**Name the role on every dispatch.** Three roles cover every search subject above, and each one
+carries its own tool set and its own limits, applied by the runtime:
 
-Tell the agent plainly: recall is not a finding. If it already believes it knows the answer,
-it still runs the search and reports what the search found, not what it remembered.
+| Search subject | Role |
+|---|---|
+| Prior art inside this project | `internal-searcher` |
+| Prior art outside this project | `outward-searcher` |
+| Guides and recipes | `catalog-identifier` |
+| What reputable sources recommend | `outward-searcher` |
+| An assumption that needs checking | `outward-searcher` |
 
-An agent that comes back with prose about how it searched, rather than findings with a source
-and a date, has not done the job. Ask it again, or record what it did find and note the rest as
-not searched.
+A dispatch that names no role runs as the general agent, with every tool and this session's own
+model, and nothing the roles promise holds. `internal-searcher` has no web tools at all, which is
+what makes "prior art in this project" a claim about this project rather than about the internet.
+
+For each search decided above, dispatch its role with a narrow brief: the words to search, the
+bound, and the shape of what to return, findings with a source and nothing else. The agent never
+sees this conversation and this conversation never sees what the agent read, only what it reports
+back. That isolation is what keeps the cost bounded.
+
+Do not restate the role's own rules in the brief. That recall is not a finding, and that an
+account of how it searched is not the answer, are in the role's own definition and reach it on
+every dispatch. Repeating them here means two copies that drift.
+
+What is this step's job is what to do with a bad return. An agent that comes back with prose
+instead of findings with a source and a date has not done the job. Ask it again, or record what it
+did find and note the rest as not searched.
 
 ## Record each finding
 
