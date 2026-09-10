@@ -747,12 +747,16 @@ do_set_run_mode() {
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
   if [ "$value" = "autonomous" ]; then
-    jq '.runMode = "autonomous"' "$task_json" > "$tmp"
+    jq '.runMode = "autonomous"' "$task_json" > "$tmp" \
+      || { rm -f "$tmp"; die3 "set-run-mode: could not read $task_json"; }
   else
     # There is no "interactive" value to write: absence already means that
     # (task-schema.json, runMode).
-    jq 'del(.runMode)' "$task_json" > "$tmp"
+    jq 'del(.runMode)' "$task_json" > "$tmp" \
+      || { rm -f "$tmp"; die3 "set-run-mode: could not read $task_json"; }
   fi
+  # jq is tested before the move. Without that test an unreadable task.json makes jq write
+  # nothing, the move succeeds on an empty file, and the task loses everything it held.
   mv "$tmp" "$task_json" || { rm -f "$tmp"; die3 "set-run-mode: could not update $task_json"; }
 
   commit_task_change "$project_path" \
