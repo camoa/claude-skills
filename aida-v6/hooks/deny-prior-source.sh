@@ -16,8 +16,10 @@
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name: allow, silent.
 # Not the test-author role: allow, silent. No project registered for this working directory, no
-# dispatch.json, or dispatch.json unreadable: allow, but through `systemMessage`, the one
-# hook-output channel the model sees on exit 0, naming why this rule could not be applied.
+# dispatch.json, dispatch.json unreadable, or a dispatch whose denyRead list is empty: allow, but
+# through `systemMessage`, the one hook-output channel the model sees on exit 0, naming why this
+# rule could not be applied. An empty list was the exception here until 2026-09-10, and it was the
+# worst one: a dispatch open with nothing denied looks exactly like a dispatch being enforced.
 # Nothing wrongly allowed here is a silent gap: a rule that cannot find its own record says so.
 #
 # Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
@@ -71,7 +73,8 @@ CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
 DENY_JSON="$(jq -c '.denyRead // []' "$DISPATCH_FILE" 2>/dev/null)"
 DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
 [ -n "$DENY_COUNT" ] || DENY_COUNT=0
-[ "$DENY_COUNT" -gt 0 ] 2>/dev/null || { echo '{}'; exit 0; }
+[ "$DENY_COUNT" -gt 0 ] 2>/dev/null \
+  || not_enforced "the dispatch open at $DISPATCH_FILE denies no path, so this read was allowed without being checked against anything"
 
 TARGET="$(jq -r '.tool_input.file_path // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$TARGET" ] || { echo '{}'; exit 0; }
@@ -126,7 +129,14 @@ while [ "$i" -lt "$DENY_COUNT" ]; do
   rel="$(printf '%s' "$DENY_JSON" | jq -r --argjson i "$i" '.[$i]')"
   deny_abs="$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")"
   if is_under "$TARGET_ABS" "$deny_abs"; then
-    jq -nc --arg r "test-author may not read $TARGET_ABS: this dispatch denies this role that path. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works." \
+    # A denied path under codePath is production source, and there is somewhere else to look. A
+    # denied path outside it is not, so pointing at an interface record would be wrong advice.
+    if is_under "$TARGET_ABS" "$CODE_CANON"; then
+      REASON="test-author may not read $TARGET_ABS: this dispatch denies this role that path. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
+    else
+      REASON="test-author may not read $TARGET_ABS: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
+    fi
+    jq -nc --arg r "$REASON" \
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
     exit 0
   fi

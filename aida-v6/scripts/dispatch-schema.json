@@ -36,7 +36,7 @@
       "type": "array",
       "default": [],
       "items": { "type": "string", "minLength": 1 },
-      "description": "Paths under codePath a test author may not read, relative to codePath. hooks/deny-prior-source.sh denies a Read whose target falls under one of these, or under one of these itself, for the dispatched role only. Empty means nothing is denied, which is not the same as no dispatch being open: an open dispatch with an empty list still answers hook queries, and the hook allows every read."
+      "description": "Paths under codePath a test author may not read, relative to codePath. hooks/deny-prior-source.sh denies a Read whose target falls under one of these, or under one of these itself, for the dispatched role only. Empty means nothing is denied, which is not the same as no dispatch being open: an open dispatch with an empty list still answers hook queries, the hook allows every read, and it reports that it could enforce nothing rather than passing in silence. For the test-author role the list is never assembled by a caller: `dispatch-open` derives it from the owned files every work order in the frozen snapshot declares, and refuses when that set is empty."
     },
     "allowWrite": {
       "type": "array",

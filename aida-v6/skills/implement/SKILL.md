@@ -4,7 +4,7 @@ description: This skill should be used when a task's design has closed cleanly a
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Agent
 ---
 
 # Implement
@@ -86,11 +86,15 @@ once per build, not once per work order.
 
 ### Resolve one recipe per framework
 
-Read the project's own `frameworks`. For each one, ask the navigator's process-recipe lookup for
-the `test-execution` point and that framework. It answers whether one is available and, when it
-is, a path to the body on disk. Never fetch a catalog address yourself and never read a cached copy
-behind the navigator's back. A source this project configured itself, a folder of its own, is read
-the ordinary way and wins over the catalog.
+Read the project's own `frameworks`. For each one, dispatch `catalog-identifier` to ask the
+navigator's process-recipe lookup for the `test-execution` point and that framework. It answers
+whether one is available and, when it is, a path to the body on disk.
+
+**Name the role.** A dispatch that names none runs as the general agent, with every tool and this
+session's own model. The role exists so a catalog listing lands in the agent and not here: it
+identifies and returns a path, and it never opens the body. Never fetch a catalog address yourself
+and never read a cached copy behind the navigator's back. A source this project configured itself,
+a folder of its own, is read the ordinary way and wins over the catalog.
 
 **Three answers, not one.** No recipe for this framework, a listing that could not be reached, and
 a failed network are three different things, and only the first says anything about the framework.
@@ -148,7 +152,8 @@ that reference outside the thing it judges.
 
 ### Resolve the recipes for this step
 
-Ask the navigator's process-recipe lookup twice, for each framework the project declares.
+Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup twice, for each
+framework the project declares. Name the role, for the reason the step before gives.
 
 **The `test-authoring` point.** This answers where a test file goes, which levels exist and when
 each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
@@ -160,10 +165,11 @@ about the framework.
 tests, and pass them to the freeze below. This is the one recipe this step reads itself, because it
 needs the patterns as data rather than as instruction.
 
-Do not give this recipe to the context that writes the tests. It carries the standards and the
-steps that write production code, and that context may write neither. Put its path in the dispatch
-record's denied reads, so the rule is a permission the runtime applies and not a sentence asking a
-model to leave a file alone.
+Do not give this recipe to the test author. It carries the standards and the steps that write
+production code, and that role may write neither. Pass its path to `dispatch-open` as
+`--deny-read`, so the rule is a permission the runtime applies and not a sentence asking a model to
+leave a file alone. It is the one path this step names by hand; the production source is derived
+from the snapshot, below.
 
 Resolve the patterns once, here, and let them be recorded. The rule that later refuses a write to a
 frozen test reads the record and never the catalog, because a lookup in a write path is a lookup
@@ -195,15 +201,25 @@ project has at most one open dispatch at a time.
 Open it first:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" test-author <order id> \
-  --deny-read <path the role may not read> --allow-write <path it may write>
+  --deny-read <path of the recipe that carries the coding standards> \
+  --allow-write <path the tests go in>
 ```
+The script refuses a role name that matches no agent this plugin ships, and for this role it adds
+the production source to the denied reads itself, taken from the owned files every work order in
+the frozen snapshot declares. Never type those paths here. It prints what it denied; read that
+list, because it is the whole of what separates the tests from the code they judge.
+
 Close it as soon as the role returns, whether it succeeded or not:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
 ```
 A record left open makes the next dispatch refuse, and it names the role and order still holding it.
 
-One context writes the tests. It is not the context that will write the code.
+**Then dispatch `test-author`.** Name the role. It is not the context that writes the code, and it
+is not this conversation either: a dispatch that names no role runs as the general agent, with
+every tool and this session's own model, and the record just opened matches nothing. Both hooks
+recognise a role by the agent's own type, so writing the tests here instead of dispatching leaves
+every rule below unenforced while the record on disk says otherwise.
 
 **It may not read production source.** Not this order's, and not any order already built. If it
 sees the code, the tests describe the code instead of the intent, which is the same failure one
@@ -285,6 +301,10 @@ The permissions this step describes are applied by the runtime, not by the words
 do it, and both report through a message when they cannot find what they need rather than passing in
 silence. Neither has run inside a live dispatch yet, so say that plainly rather than reporting them
 as proven.
+
+The read denial covers the Read tool and not the shell. The test author holds Bash, so a `cat` of a
+denied file is not refused today. Say so when the person asks what the dispatch enforces, rather
+than describing the denial as complete.
 
 After the conditions, the step runs each framework's cheapest test command, the one that proves the
 harness reports at all. It runs only where that framework's conditions came back satisfied or

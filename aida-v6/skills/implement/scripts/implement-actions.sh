@@ -52,6 +52,12 @@
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]...
+#
+# `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
+# that matches none of them. For the test-author role it also derives the denied reads itself, from
+# the owned files every work order in the frozen snapshot declares, so that denial is never a list
+# a caller assembles per dispatch. `--deny-read` adds to what was derived; it is how a path outside
+# codePath is denied, such as the recipe that carries the coding standards.
 #   implement-actions.sh dispatch-close <task_folder>
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
@@ -303,6 +309,14 @@
 #      the same commit and the same attempt number this call would write. The message names both,
 #      because a caller who calls this twice for one attempt is not shown a stale success silently.
 #
+#  46  `dispatch-open` was given a role that names no agent under ${CLAUDE_PLUGIN_ROOT}/agents, or
+#      found that folder empty. A role nothing checks opens a record no agent's own `agent_type`
+#      can match, and both hooks then allow every read and every write in silence, so this refuses
+#      rather than writing a record that looks like a permission and is not one.
+#  47  `dispatch-open` was asked to open a test-author dispatch on a snapshot whose work orders
+#      declare no owned file between them. That role's denied reads are derived from those files,
+#      so an empty set means the one denial the role exists for would apply to nothing.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -388,6 +402,8 @@ die42() { printf 'implement-actions: %s\n' "$1" >&2; exit 42; }
 die43() { printf 'implement-actions: %s\n' "$1" >&2; exit 43; }
 die44() { printf 'implement-actions: %s\n' "$1" >&2; exit 44; }
 die45() { printf 'implement-actions: %s\n' "$1" >&2; exit 45; }
+die46() { printf 'implement-actions: %s\n' "$1" >&2; exit 46; }
+die47() { printf 'implement-actions: %s\n' "$1" >&2; exit 47; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -3355,6 +3371,24 @@ do_dispatch_open() {
   done
   [ -n "$task_arg" ] || die3 "dispatch-open: a task folder is required"
   [ -n "$role" ]     || die3 "dispatch-open: a role is required"
+
+  # A role must name an agent this plugin ships. The agents/ folder is that list, read here rather
+  # than copied into this file, because a copy goes stale the first time a role is added. Nothing
+  # else validates the name: a misspelled role opens a record no agent's payload can ever match,
+  # and both hooks then allow everything in silence (ideal/agents.md, rule 3). The runtime reports
+  # an agent type in two forms, `<plugin>:<role>` and the bare name, so both are accepted and only
+  # the part after the last colon is compared.
+  local role_bare agents_dir known_list
+  role_bare="${role##*:}"
+  agents_dir="$PLUGIN_ROOT/agents"
+  known_list="$(find "$agents_dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null \
+    | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' ')"
+  [ -n "$known_list" ] \
+    || die46 "dispatch-open: no agent definitions were found in $agents_dir, so no role name can be checked. This plugin's own files are incomplete; nothing about the task is wrong."
+  case " $known_list" in
+    *" $role_bare "*) ;;
+    *) die46 "dispatch-open: $role names no agent this plugin ships, so a dispatch under it would run with no permission applied. The roles that exist are: $known_list" ;;
+  esac
   [ -n "$unit_id" ]  || die3 "dispatch-open: a unit id is required"
   case "$unit_id" in
     wo[1-9]*) ;;
@@ -3381,6 +3415,26 @@ do_dispatch_open() {
   [ -n "$codepath" ] || die3 "dispatch-open: $project_folder/project.json is valid JSON but has no usable codePath field"
   [ -d "$codepath" ] || die15 "dispatch-open: the recorded codePath does not exist on disk: $codepath"
 
+  # The test author's one denial is that it cannot read production source, and production source is
+  # what every work order declares it owns. The list is derived here, from the frozen snapshot,
+  # rather than typed on the command line: a denial assembled per dispatch is a judgement made in
+  # the moment, which is what the withheld list exists to stop, and an empty denyRead makes the
+  # read hook allow every path. Every order's owned files are denied, this unit's included: the
+  # test author may not read the source it is writing tests for either (ideal/agents.md,
+  # test-author). Reading its own tests back is untouched, because a test file is not an owned file.
+  if [ "$role_bare" = "test-author" ]; then
+    IMPL_DIR="$TASK_PATH/implementation"
+    tt_load_snapshot "dispatch-open"
+    local owned_json owned_count
+    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
+    owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
+    [ -n "$owned_count" ] || owned_count=0
+    [ "$owned_count" -gt 0 ] 2>/dev/null \
+      || die47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a test author would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+    deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
+"
+  fi
+
   local dispatch_file="$project_folder/dispatch.json"
   if [ -f "$dispatch_file" ]; then
     jq empty "$dispatch_file" 2>/dev/null \
@@ -3404,6 +3458,15 @@ do_dispatch_open() {
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
+  local deny_count
+  deny_count="$(printf '%s' "$deny_json" | jq 'length' 2>/dev/null)"
+  [ -n "$deny_count" ] || deny_count=0
+  if [ "$deny_count" -gt 0 ] 2>/dev/null; then
+    echo "DISPATCH-OPEN: reads denied to this role, resolved against $codepath:"
+    printf '%s' "$deny_json" | jq -r '.[] | "  " + .'
+  else
+    echo "DISPATCH-OPEN: this dispatch denies no read. Every path under $codepath stays readable."
+  fi
   printf '%s\n' "$dispatch_file"
   exit 0
 }
