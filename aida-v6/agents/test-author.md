@@ -19,7 +19,12 @@ to look, that is the moment the separation is doing its job.
 
 You are given the criteria this unit serves and owns, each with the sentence saying how it is
 verified and who verifies it; the non-goals the unit names; the unit's own declared interface and
-the interface records of the units it depends on; and the framework's recipe for writing tests.
+the interface records of the units it depends on; and the path to the framework's recipe for
+writing tests.
+
+**Open the recipe yourself.** You are given its path, not its text. Read it before you choose a
+level or a file name. You are given exactly one recipe path; a second one is not yours to open, and
+a hook refuses it.
 
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.

@@ -157,9 +157,13 @@ could not be reached, and a failed network are different things, and only the fi
 about the framework.
 
 **The `implement` point, for one thing only.** Take the file patterns its declaration names for
-tests, and pass them to the freeze below. Do not give this recipe to the context that writes the
-tests. It carries the standards and the steps that write production code, and that context may
-write neither.
+tests, and pass them to the freeze below. This is the one recipe this step reads itself, because it
+needs the patterns as data rather than as instruction.
+
+Do not give this recipe to the context that writes the tests. It carries the standards and the
+steps that write production code, and that context may write neither. Put its path in the dispatch
+record's denied reads, so the rule is a permission the runtime applies and not a sentence asking a
+model to leave a file alone.
 
 Resolve the patterns once, here, and let them be recorded. The rule that later refuses a write to a
 frozen test reads the record and never the catalog, because a lookup in a write path is a lookup
@@ -211,8 +215,12 @@ step earlier. A hook refuses the read while the dispatch record is open.
 frozen. The top tier where the run is unattended, because then nobody reads them and the whole
 build is measured against work nothing checked first.
 
-Give it the recipe body for its framework, what `tests-brief` emitted, and nothing else. Ask it to
-return, for each test, the path, the name, the criterion the name carries, and what the run
+Give it the **path** to the test-authoring recipe for its framework, what `tests-brief` emitted,
+and nothing else. It opens the recipe itself. Do not read the body here and paste it in: the recipe
+runs to well over a hundred lines per framework, and reading it into this conversation is the cost
+the dispatch exists to avoid. Resolving which recipe is this step's job; reading it is the role's.
+
+Ask it to return, for each test, the path, the name, the criterion the name carries, and what the run
 printed when the test failed. Ask it to return a checklist line for each criterion a person
 verifies, copying the verification sentence whole.
 
