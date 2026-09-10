@@ -845,7 +845,11 @@ do_task_rule_remove() {
         for (i = 1; i < start; i++) print lines[i]
         for (i = ei + 1; i <= NR; i++) print lines[i]
       }
-    ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md"
+    ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
+      rm -f "$tmp"
+      echo "REFUSED: rewriting ${claude_md} failed. The task rule was not removed." >&2
+      return 1
+    }
     echo "REMOVED: ${claude_md}"
   else
     echo "ABSENT: no task-rule block was found in ${claude_md}"
