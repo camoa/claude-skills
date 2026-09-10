@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation build record",
+  "description": "What `build-record` verified for one attempt at one unit, at <task folder>/implementation/build-<unit_id>.json (docs/implementation.md, 'The deciding checks run before anything judges'). One file per unit, holding only the latest attempt: a later attempt overwrites it, and `build-record` refuses to write it again for an attempt already recorded at the same commit (exit 45). This record runs four of the eight deciding checks: every test of this order passes, no test outside the baseline fails, the realized diff touches only files this order owns, and every frozen test file is unchanged. The other four (coding standards, static analysis, security, the interface record) belong to a later step and are never claimed here. The model writes the code; this file is the script's own half, verifying what came back rather than judging whether a criterion is met. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "unit",
+    "startedAt",
+    "commit",
+    "attempt",
+    "interfaceRecord",
+    "reportPath",
+    "checks",
+    "decidingChecks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date this attempt was recorded, YYYY-MM-DD. Set by the script at the moment of writing, never typed by hand."
+    },
+    "unit": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "The work order id this record belongs to, the same id `build-brief` was given and the file's own basename encodes (build-<unit_id>.json). Joined on, never re-minted."
+    },
+    "startedAt": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit this attempt began from, the full form of the `--started-at` value `build-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). Check three's own diff runs from here to `commit`."
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The code repository's HEAD at the moment `build-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `attempt`, this is what exit 45 compares a new call against to refuse recording the same attempt twice."
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Which attempt at this unit this is, one more than the ledger's own attemptsUsed before this call. `build-record` increments attemptsUsed after writing this record, whether the checks below were met or not: an attempt is a dispatch that ended, not a dispatch that succeeded."
+    },
+    "interfaceRecord": {
+      "type": "string",
+      "description": "The text at the path `--interface` named, copied verbatim and not judged here: comparing it against the unit's own declared interface is check eight, which belongs to a later step because both sides are prose a person wrote. Required to be present and non-empty only when the unit's own frozen interface is non-empty (exit 44); otherwise this may be empty, including when no file was there to read."
+    },
+    "reportPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the builder's own report lives, copied from `--report` as given. Only the path is kept here, never the report's content: docs/implementation.md refuses the builder's account of what it did as authority, so this record never carries it as though it were evidence."
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/check" },
+      "description": "The four deciding checks this step runs, in a fixed order: order-tests, suite-regression, owned-files, frozen-tests. Each carries its own verdict, so nothing downstream has to re-derive one from an exit code this file does not store on its own."
+    },
+    "decidingChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "ranHere"],
+      "description": "States plainly that this step ran four of the eight deciding checks docs/implementation.md names, and which four, so nothing downstream reads this record's own pass as a whole one.",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "const": 8,
+          "description": "The number of deciding checks docs/implementation.md names in total. Always 8; a constant rather than a count of `checks`, because the four this step does not run are the point of this field."
+        },
+        "ranHere": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "string" },
+          "description": "The `id` of each check in `checks`, in the same order, copied rather than re-derived, so a reader who only wants coverage never has to open `checks` to get it."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verdict", "detail"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["order-tests", "suite-regression", "owned-files", "frozen-tests"],
+          "description": "Which of the four checks this is. order-tests and suite-regression correspond to deciding checks 1 and 2 in docs/implementation.md ('Every test of this order passes' and 'No test outside the baseline fails'); owned-files and frozen-tests correspond to deciding checks 6 and 7 ('The realized diff touches only files this order owns' and 'Every frozen test file is unchanged')."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "The same four words every verdict in this stage uses. undeclared means the command this check needed was never supplied (--order-tests or --suite absent); undeclared is never satisfied. unknown means the command ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or, for suite-regression, the suite failed while the baseline already recorded a framework unmet, which this check cannot tell apart from that same old failure plus a new one this order introduced. Neither reads as met."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this verdict, in plain words naming what was compared: an exit code, a set of file paths that did not match, or which marker or file could not be read."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the check's own command exited with, present only for order-tests and suite-regression, and only when a command was actually supplied and run. Absent for owned-files and frozen-tests, which compare files rather than run a command, and absent for a check left undeclared."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode. Kept whole and unmodified so a person or a later step can see exactly what the --nothing-ran marker check itself saw."
+        }
+      }
+    }
+  }
+}

@@ -11,13 +11,22 @@
 # then performs the two halves of the third step: `tests-brief` assembles exactly what a model
 # writing one unit's tests may see, from the frozen snapshot, and `tests-freeze` verifies what that
 # model wrote and freezes it. The script never writes a test and never judges one; the model that
-# writes a test chooses the level, writes the file, and runs it. `dispatch-open` and
-# `dispatch-close` open and clear the one record, <project path>/dispatch.json, that the two
-# permission hooks (hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh) read to tell a
-# dispatched role apart from a person working their own repository. Neither hook is this script's
-# own concern past that one file; this script only opens and closes the record.
-# Building a work order is not built yet; only `read`, `start`, `preconditions`, `tests-brief`,
-# `tests-freeze`, `dispatch-open` and `dispatch-close` exist.
+# writes a test chooses the level, writes the file, and runs it. It then performs the two halves of
+# the fourth step: `build-brief` assembles exactly what a model writing one unit's code may see, and
+# `build-record` verifies what came back and moves the attempt counter. `build-record` runs four of
+# the eight deciding checks named in docs/implementation.md ("The deciding checks run before
+# anything judges"): every test of this order passes, no test outside the baseline fails, the
+# realized diff touches only files this order owns, and every frozen test file is unchanged. The
+# other four (coding standards, static analysis, security, the interface record) belong to a later
+# step. The script never writes code and never judges whether a criterion is met; it only decides
+# whether this attempt stayed inside the bounds a script can check without reading anyone's prose.
+# `dispatch-open` and `dispatch-close` open and clear the one record, <project path>/dispatch.json,
+# that the two permission hooks (hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh) read
+# to tell a dispatched role apart from a person working their own repository. Neither hook is this
+# script's own concern past that one file; this script only opens and closes the record.
+# The critique and repair steps after step four are not built yet; only `read`, `start`,
+# `preconditions`, `tests-brief`, `tests-freeze`, `build-brief`, `build-record`, `dispatch-open` and
+# `dispatch-close` exist.
 #
 # Usage:
 #   implement-actions.sh read  <task_folder>
@@ -32,6 +41,14 @@
 #                            [--test-glob <glob>]...
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--green-on-arrival <test name>=<reason>]...
+#   implement-actions.sh build-brief  <task_folder> <unit_id>
+#   implement-actions.sh build-record <task_folder> <unit_id> \
+#                            --interface <path to the record the builder wrote> \
+#                            --report <path to the builder's report> \
+#                            --started-at <commit the attempt began from> \
+#                            [--suite <argv token>...] \
+#                            [--order-tests <argv token>...] \
+#                            [--nothing-ran <literal substring>]
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]...
@@ -169,8 +186,9 @@
 #      scripts/lib/records-hash.sh), the plugin root, check-design.sh or the records-hash library
 #      could not be resolved or loaded, check-design.sh itself failed to run (its own exit 3), a
 #      file that must already be valid JSON on disk is not (snapshot.json present but unreadable,
-#      ledger.json present but unreadable, baseline.json present but unreadable, or a design/*.json
-#      file that check-design.sh itself did not refuse on but this script still could not parse),
+#      ledger.json present but unreadable, baseline.json present but unreadable, tests-<unit_id>.json
+#      or build-<unit_id>.json present but unreadable, or a design/*.json file that check-design.sh
+#      itself did not refuse on but this script still could not parse),
 #      task.json declaring a runMode value
 #      this schema never writes, a ledger.json missing a required field or holding one of the
 #      wrong type on reopen, a write that failed, or an internal state this script's own logic
@@ -227,7 +245,8 @@
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
 #      The message names both commits.
-#  22  `tests-brief` or `tests-freeze` was given a unit id that is not in the frozen snapshot.
+#  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
+#      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
 #      ledger (its lastStep is not "closed"), so that unit's interface record does not exist yet.
 #  24  `tests-brief` found the given unit owns a criterion whose verifiedBy is machine while its
@@ -260,6 +279,29 @@
 #  37  `dispatch-open` found <project path>/dispatch.json already open. The build is serial, so a
 #      project has at most one active dispatch; the message names the role, task and unit that
 #      already hold it. `dispatch-close` clears it.
+#  38  `build-brief` was given a unit id that is not in the frozen snapshot. The same fact exit 22
+#      already names for `tests-brief` and `tests-freeze`; `build-brief` shares the number rather
+#      than minting a second one for the same meaning.
+#  39  `build-brief` found no <task_folder>/implementation/tests-<unit_id>.json for this unit. Step
+#      three (`tests-brief` and `tests-freeze`) has not run for it yet.
+#  40  `build-brief` found an order in the given unit's dependsOn with no completion record in the
+#      ledger (its lastStep is not "closed"), so that order's interface record does not exist yet.
+#      The same fact exit 23 names for `tests-brief`, kept apart because the two actions read the
+#      dependency for two different reasons: `tests-brief` needs the interface to write tests
+#      against it, `build-brief` needs it to hand to the model writing the code.
+#  41  `build-brief` found the given unit's attempt counter already at its allowed limit. Nothing is
+#      handed over; the order is exhausted.
+#  42  `build-brief` ran before `start`, so <task_folder>/implementation/snapshot.json does not
+#      exist. A different number from exit 25, which `tests-brief` and `tests-freeze` share for the
+#      same fact: `build-brief` gets its own so a caller can tell which step never started without
+#      inspecting the message text.
+#  43  `build-record` was given a --started-at that is not a commit in the code repository.
+#  44  `build-record` found the interface record file named by --interface missing or empty while
+#      the given unit declares a non-empty interface. A file present for a unit that declares no
+#      interface is read and recorded without complaint; nothing here judges its content.
+#  45  `build-record` found <task_folder>/implementation/build-<unit_id>.json already recorded at
+#      the same commit and the same attempt number this call would write. The message names both,
+#      because a caller who calls this twice for one attempt is not shown a stale success silently.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -338,10 +380,24 @@ die34() { printf 'implement-actions: %s\n' "$1" >&2; exit 34; }
 die35() { printf 'implement-actions: %s\n' "$1" >&2; exit 35; }
 die36() { printf 'implement-actions: %s\n' "$1" >&2; exit 36; }
 die37() { printf 'implement-actions: %s\n' "$1" >&2; exit 37; }
+die38() { printf 'implement-actions: %s\n' "$1" >&2; exit 38; }
+die39() { printf 'implement-actions: %s\n' "$1" >&2; exit 39; }
+die40() { printf 'implement-actions: %s\n' "$1" >&2; exit 40; }
+die41() { printf 'implement-actions: %s\n' "$1" >&2; exit 41; }
+die42() { printf 'implement-actions: %s\n' "$1" >&2; exit 42; }
+die43() { printf 'implement-actions: %s\n' "$1" >&2; exit 43; }
+die44() { printf 'implement-actions: %s\n' "$1" >&2; exit 44; }
+die45() { printf 'implement-actions: %s\n' "$1" >&2; exit 45; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
 source "$RECORDS_HASH_LIB" || die3 "the records-hash library failed to load: $RECORDS_HASH_LIB"
+
+# How many times `build-brief` will hand one order to a builder before refusing (exit 41). Two, not
+# version 5's three: nothing in version 5 justifies three beyond a clamp guarding a corrupted
+# counter, never the cap itself. A constant here rather than a project or task field, because
+# nothing yet gives it a producer of its own; a later stage may compute it instead.
+BUILD_ATTEMPTS_ALLOWED=2
 
 usage() {
   cat <<'EOF' >&2
@@ -358,6 +414,14 @@ usage: implement-actions.sh read  <task_folder>
                             [--test-glob <glob>]...
                             [--checklist <criterion id>=<verification text>]...
                             [--green-on-arrival <test name>=<reason>]...
+       implement-actions.sh build-brief  <task_folder> <unit_id>
+       implement-actions.sh build-record <task_folder> <unit_id>
+                            --interface <path to the record the builder wrote>
+                            --report <path to the builder's report>
+                            --started-at <commit the attempt began from>
+                            [--suite <argv token>...]
+                            [--order-tests <argv token>...]
+                            [--nothing-ran <literal substring>]
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
@@ -2803,6 +2867,456 @@ TF_EOF
 }
 
 # ------------------------------------------------------------------------------------------------
+# Step four: build-brief and build-record. The model writes the code; this script never does.
+# `build-brief` assembles exactly what that model may see, from the frozen snapshot, the frozen
+# test record for one unit, and the ledger. `build-record` verifies what came back: it runs four of
+# the eight deciding checks docs/implementation.md names ("The deciding checks run before anything
+# judges") and moves the attempt counter. The other four (coding standards, static analysis,
+# security, the interface record) belong to a later step; this one never claims to have run them.
+#
+# `bb_` and `br_` are this section's own helper prefixes, kept apart from `pc_`, `tc_`, `tf_` and
+# `tt_` above, which each belong to a different step. `build-record` still reuses `tf_` directly
+# rather than carrying a second copy: `tf_path_matches_catalog_glob` for the owned-files check, and
+# `tf_sha256_of` (with `records_hash__resolve_sha256_cmd`) for the frozen-tests check, because both
+# are exactly the same computation `tests-freeze` already made, and a second matcher or a second
+# hash function would be a second producer for one fact.
+# ------------------------------------------------------------------------------------------------
+
+# The frozen work order $2 from frozen snapshot $1. Sets BB_UNIT_JSON. Dies (die38) when the unit is
+# not in the frozen copy, rather than returning a code: every caller of this helper treats that as
+# fatal and would only turn around and exit itself. Kept apart from tt_load_unit_and_criteria, which
+# dies on the same fact with die22, because build-brief's own refusal list names this fact as exit
+# 38 rather than sharing tests-brief and tests-freeze's number (see exit 38's own comment above).
+BB_UNIT_JSON=""
+bb_load_unit() {
+  local snapshot_doc="$1" unit_id="$2"
+  BB_UNIT_JSON="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$unit_id" \
+    '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$BB_UNIT_JSON" != "null" ] || die38 "build-brief: $unit_id is not in the frozen copy."
+}
+
+do_build_brief() {
+  [ "$#" -ge 2 ] || die3 "build-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die3 "build-brief: unrecognized extra argument: $3"
+  local unit_id="$2"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "build-brief")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  # --- exit 42: this step ran before start, so there is no frozen copy to read from ---------------
+  local snapshot_file="$IMPL_DIR/snapshot.json"
+  [ -f "$snapshot_file" ] \
+    || die42 "build-brief: $snapshot_file not found. This step ran before start, so there is no frozen copy. Run start on this task first."
+  local snapshot_doc
+  snapshot_doc="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
+  [ -n "$snapshot_doc" ] \
+    || die3 "build-brief: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+
+  # --- exit 38: the unit itself must be in the frozen copy -----------------------------------------
+  bb_load_unit "$snapshot_doc" "$unit_id"
+
+  # --- exit 39: step three (tests-brief, tests-freeze) must already have run for this unit ---------
+  local tests_file="$IMPL_DIR/tests-$unit_id.json"
+  [ -f "$tests_file" ] \
+    || die39 "build-brief: $tests_file not found. Step three has not run for $unit_id yet; run tests-brief and tests-freeze on it first."
+  local tests_doc
+  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  [ -n "$tests_doc" ] \
+    || die3 "build-brief: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  # --- the ledger: needed for the dependency check and the attempt count ---------------------------
+  local ledger_file="$IMPL_DIR/ledger.json"
+  [ -f "$ledger_file" ] \
+    || die3 "build-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+  local ledger_doc
+  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
+  [ -n "$ledger_doc" ] \
+    || die3 "build-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  # --- exit 40: every dependency needs a completion record before its interface is handed over ------
+  local depends_json dep_count i dep_id dep_entry dep_step dependency_interfaces_json='[]'
+  depends_json="$(printf '%s' "$BB_UNIT_JSON" | jq -c '.dependsOn // []')"
+  dep_count="$(printf '%s' "$depends_json" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$dep_count" ]; do
+    dep_id="$(printf '%s' "$depends_json" | jq -r --argjson i "$i" '.[$i]')"
+    dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
+      '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+    [ "$dep_entry" != "null" ] \
+      || die3 "build-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
+    dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
+    if [ "$dep_step" = "closed" ]; then
+      local dep_interface
+      dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
+        '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
+      dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
+        --arg id "$dep_id" --arg iface "$dep_interface" '. + [{id: $id, interface: $iface}]')"
+    else
+      die40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+    fi
+    i=$((i + 1))
+  done
+
+  # --- exit 41: the attempt counter for this unit must still have room -----------------------------
+  local order_entry attempts_used
+  order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die3 "build-brief: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+  attempts_used="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
+  case "$attempts_used" in ''|*[!0-9]*) attempts_used=0 ;; esac
+  [ "$attempts_used" -lt "$BUILD_ATTEMPTS_ALLOWED" ] \
+    || die41 "build-brief: $unit_id has already used $attempts_used of $BUILD_ATTEMPTS_ALLOWED allowed attempts. Nothing more is handed over."
+
+  # --- assemble the brief: exactly these five keys, and nothing else -------------------------------
+  local unit_out tests_out
+  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
+    '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
+      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // "")}')"
+  # One entry per (row, test): a test naming several criteria appears once in each criterion's own
+  # row in the frozen record, and this keeps that same shape rather than collapsing it.
+  tests_out="$(printf '%s' "$tests_doc" | jq -c \
+    '[ (.rows // [])[] | select(.kind == "machine") | .criterion as $c | (.tests // [])[]
+       | {path, name, criterion: $c} ]')"
+
+  jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" \
+        --argjson dependencyInterfaces "$dependency_interfaces_json" \
+        --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$BUILD_ATTEMPTS_ALLOWED" \
+    '{unit: $unit, tests: $tests, dependencyInterfaces: $dependencyInterfaces,
+      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}'
+  exit 0
+}
+
+# Runs $1, a newline-separated list of argv tokens (one repeated --flag occurrence per line, never
+# a string split on whitespace), as arguments from inside $2, after cd'ing there. This is a third
+# runner alongside pc_run_check and tc_run_smoke, needed because this call site's own tokens already
+# arrive pre-split as separate argv elements (the caller passes --suite or --order-tests once per
+# token), so there is nothing here to split and no shell to split it unsafely: `set --` is rebuilt
+# one already-whole token at a time from the heredoc, never through `set -- $value` or a `for` over
+# an unquoted expansion, so this needs neither pc_run_check's SH_WORD_SPLIT nor GLOB_SUBST. Standard
+# output and standard error are captured together in $3, the same as tc_run_smoke, because a
+# --nothing-ran marker may land on either stream and the caller records the output verbatim either
+# way. Prints the exit status on stdout; never dies.
+br_run_argv() {
+  local raw="$1" dir="$2" outfile="$3"
+  (
+    cd "$dir" || exit 127
+    set --
+    while IFS= read -r tok; do
+      set -- "$@" "$tok"
+    done <<BR_TOKENS
+$raw
+BR_TOKENS
+    exec "$@"
+  ) >"$outfile" 2>&1
+  printf '%s' "$?"
+}
+
+do_build_record() {
+  local task_arg="" unit_id="" interface_path="" report_path="" started_at=""
+  local suite_raw="" order_tests_raw="" nothing_ran=""
+  local have_suite=false have_order_tests=false have_nothing_ran=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --interface)
+        [ "$#" -ge 2 ] || die3 "build-record: --interface needs a path to the record the builder wrote"
+        interface_path="$2"; shift 2 ;;
+      --report)
+        [ "$#" -ge 2 ] || die3 "build-record: --report needs a path to the builder's report"
+        report_path="$2"; shift 2 ;;
+      --started-at)
+        [ "$#" -ge 2 ] || die3 "build-record: --started-at needs a commit"
+        started_at="$2"; shift 2 ;;
+      --suite)
+        [ "$#" -ge 2 ] || die3 "build-record: --suite needs an argv token"
+        have_suite=true
+        suite_raw="$suite_raw$2
+"
+        shift 2 ;;
+      --order-tests)
+        [ "$#" -ge 2 ] || die3 "build-record: --order-tests needs an argv token"
+        have_order_tests=true
+        order_tests_raw="$order_tests_raw$2
+"
+        shift 2 ;;
+      --nothing-ran)
+        [ "$#" -ge 2 ] || die3 "build-record: --nothing-ran needs a literal substring"
+        have_nothing_ran=true
+        nothing_ran="$2"
+        shift 2 ;;
+      -*) die3 "build-record: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die3 "build-record: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ]        || die3 "build-record: a task folder is required"
+  [ -n "$unit_id" ]         || die3 "build-record: a unit id is required"
+  [ -n "$interface_path" ]  || die3 "build-record: --interface is required"
+  [ -n "$report_path" ]     || die3 "build-record: --report is required"
+  [ -n "$started_at" ]      || die3 "build-record: --started-at is required"
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "build-record")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  tt_load_snapshot "build-record"
+  tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "build-record"
+
+  local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
+  [ -f "$tests_file" ] \
+    || die3 "build-record: $tests_file not found, though a build attempt implies tests-brief and tests-freeze already ran for $unit_id. Run tests-freeze on it first."
+  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  [ -n "$tests_doc" ] \
+    || die3 "build-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  local ledger_file="$IMPL_DIR/ledger.json" ledger_doc
+  [ -f "$ledger_file" ] \
+    || die3 "build-record: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
+  [ -n "$ledger_doc" ] \
+    || die3 "build-record: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  local order_entry attempts_used_before attempt_number
+  order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die3 "build-record: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+  attempts_used_before="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
+  case "$attempts_used_before" in ''|*[!0-9]*) attempts_used_before=0 ;; esac
+  attempt_number=$((attempts_used_before + 1))
+
+  # --- the task's own project, resolved the same way every earlier step already resolves it --------
+  local project_folder codepath
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die3 "build-record: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+  case "$(project_code_path_state "$project_folder")" in
+    unreadable) die14 "build-record: $project_folder/project.json exists but is not valid JSON, so its codePath cannot be read." ;;
+    missing)    die3  "build-record: $project_folder/project.json not found, though it was found moments ago." ;;
+  esac
+  codepath="$(project_code_path_value "$project_folder")"
+  [ -n "$codepath" ] || die3 "build-record: $project_folder/project.json is valid JSON but has no usable codePath field."
+  [ -d "$codepath" ] || die15 "build-record: the recorded codePath does not exist on disk: $codepath"
+  command -v git >/dev/null 2>&1 || die3 "build-record: git is required and was not found on PATH"
+  is_git_repo "$codepath" \
+    || die5 "build-record: this task's project code at $codepath is not a git repository."
+
+  # --- exit 43: --started-at must be a real commit in this repository ------------------------------
+  local started_at_full current_commit
+  started_at_full="$(git -C "$codepath" rev-parse --verify --quiet "${started_at}^{commit}" 2>/dev/null)"
+  [ -n "$started_at_full" ] \
+    || die43 "build-record: --started-at ($started_at) is not a commit in the code repository at $codepath."
+  current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
+  [ -n "$current_commit" ] \
+    || die3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+
+  # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
+  local record_file="$IMPL_DIR/build-$unit_id.json"
+  if [ -f "$record_file" ]; then
+    local existing_doc existing_commit existing_attempt
+    existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
+    [ -n "$existing_doc" ] \
+      || die3 "build-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
+    existing_attempt="$(printf '%s' "$existing_doc" | jq -r '.attempt // empty')"
+    if [ "$existing_commit" = "$current_commit" ] && [ "$existing_attempt" = "$attempt_number" ]; then
+      die45 "build-record: $record_file already holds attempt $attempt_number at commit $current_commit. Nothing has changed since that record was written."
+    fi
+  fi
+
+  # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
+  local unit_interface_declared interface_text=""
+  unit_interface_declared="$(printf '%s' "$UNIT_JSON" | jq -r '.interface // ""')"
+  if [ -n "$unit_interface_declared" ]; then
+    [ -s "$interface_path" ] \
+      || die44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path is missing or empty."
+  fi
+  [ -f "$interface_path" ] && interface_text="$(cat "$interface_path" 2>/dev/null)"
+
+  records_hash__resolve_sha256_cmd \
+    || die3 "build-record: neither sha256sum nor 'shasum -a 256' was found on PATH"
+
+  # --- check one: every test of this order passes ---------------------------------------------------
+  local check1_id="order-tests" check1_verdict="" check1_detail="" check1_exit_json="null" check1_output=""
+  if [ "$have_order_tests" = "false" ]; then
+    check1_verdict="undeclared"
+    check1_detail="no --order-tests command was given, so whether this order's own tests pass was not checked."
+  else
+    local out1 rc1
+    out1="$(mktemp)" || die3 "build-record: could not create a temporary file"
+    rc1="$(br_run_argv "$order_tests_raw" "$codepath" "$out1")"
+    check1_exit_json="$rc1"
+    check1_output="$(cat "$out1" 2>/dev/null)"
+    if [ "$have_nothing_ran" = "true" ] && pc_output_holds "$out1" "$nothing_ran"; then
+      check1_verdict="unknown"
+      check1_detail="the order-tests command's output holds the nothing-ran marker ('$nothing_ran'); an exit status cannot decide a green run when nothing was selected."
+    elif [ "$rc1" = "0" ]; then
+      check1_verdict="met"
+      check1_detail="the order-tests command exited 0."
+    else
+      check1_verdict="unmet"
+      check1_detail="the order-tests command exited $rc1."
+    fi
+    rm -f "$out1"
+  fi
+
+  # --- check two: no test outside the baseline fails -------------------------------------------------
+  local check2_id="suite-regression" check2_verdict="" check2_detail="" check2_exit_json="null" check2_output=""
+  if [ "$have_suite" = "false" ]; then
+    check2_verdict="undeclared"
+    check2_detail="no --suite command was given, so whether this order broke anything outside itself was not checked."
+  else
+    local out2 rc2
+    out2="$(mktemp)" || die3 "build-record: could not create a temporary file"
+    rc2="$(br_run_argv "$suite_raw" "$codepath" "$out2")"
+    check2_exit_json="$rc2"
+    check2_output="$(cat "$out2" 2>/dev/null)"
+    if [ "$have_nothing_ran" = "true" ] && pc_output_holds "$out2" "$nothing_ran"; then
+      check2_verdict="unknown"
+      check2_detail="the suite command's output holds the nothing-ran marker ('$nothing_ran'); an exit status cannot decide a green run when nothing was selected."
+    elif [ "$rc2" = "0" ]; then
+      check2_verdict="met"
+      check2_detail="the whole suite exited 0; nothing outside this order failed."
+    else
+      # The baseline records one verdict per framework, taken whole, not which test failed
+      # (baseline-schema.json, suite[].verdict); that is the finest grain step two's own record
+      # holds. A suite failing now, with the baseline already unmet, is not the same fact as a
+      # suite that is clean: this cannot tell an old failure from an old failure plus a new one
+      # this order introduced, so it says so rather than reading a red baseline as a pass. Only a
+      # baseline whose every framework was met, with the suite failing now, is decidable, because
+      # then every failure is new. A test-level comparison is a documented bound this stage does
+      # not close, the same kind of bound the ownedFiles overlap check already accepts elsewhere
+      # in this file; the bound is honest about what it cannot decide rather than defaulting to met.
+      local baseline_file="$IMPL_DIR/baseline.json" baseline_doc baseline_unmet_frameworks
+      if [ -f "$baseline_file" ] && baseline_doc="$(jq -c '.' "$baseline_file" 2>/dev/null)" && [ -n "$baseline_doc" ]; then
+        baseline_unmet_frameworks="$(printf '%s' "$baseline_doc" | jq -r \
+          '[ (.suite // [])[] | select(.verdict == "unmet") | .framework ] | join(", ")')"
+        if [ -n "$baseline_unmet_frameworks" ]; then
+          check2_verdict="unknown"
+          check2_detail="the suite exited $rc2, and the baseline recorded $baseline_unmet_frameworks unmet at the commit the build started from. The baseline records one verdict per framework rather than which tests failed, so this cannot tell an old failure from an old failure plus a new one."
+        else
+          check2_verdict="unmet"
+          check2_detail="the suite exited $rc2, and the baseline recorded every framework met at the commit the build started from; this order introduced the failure."
+        fi
+      else
+        check2_verdict="unknown"
+        check2_detail="the suite exited $rc2, and $baseline_file could not be read to tell whether this failure predates this order."
+      fi
+    fi
+    rm -f "$out2"
+  fi
+
+  # --- check three: the realized diff touches only the files this order owns -------------------------
+  local check3_id="owned-files" check3_verdict="" check3_detail=""
+  local diff_output owned_files_json owned_count unmatched="" p matched gi g
+  diff_output="$(git -C "$codepath" diff --name-only "$started_at_full" "$current_commit" 2>/dev/null)"
+  owned_files_json="$(printf '%s' "$UNIT_JSON" | jq -c '.ownedFiles // []')"
+  owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    matched=false
+    gi=0
+    while [ "$gi" -lt "$owned_count" ]; do
+      g="$(printf '%s' "$owned_files_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+      tf_path_matches_catalog_glob "$p" "$g" && matched=true
+      [ "$matched" = "true" ] && break
+      gi=$((gi + 1))
+    done
+    [ "$matched" = "true" ] || unmatched="$unmatched$p, "
+  done <<BR_DIFF
+$diff_output
+BR_DIFF
+  if [ -n "$unmatched" ]; then
+    check3_verdict="unmet"
+    check3_detail="these changed files match none of $unit_id's own ownedFiles: ${unmatched%, }"
+  else
+    check3_verdict="met"
+    check3_detail="every file changed between $started_at_full and $current_commit matches this order's own ownedFiles."
+  fi
+
+  # --- check four: every frozen test file is unchanged -------------------------------------------------
+  local check4_id="frozen-tests" check4_verdict="" check4_detail=""
+  local frozen_paths frozen_count fi fpath fsha current_sha changed_tests=""
+  frozen_paths="$(printf '%s' "$tests_doc" | jq -c \
+    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ] | unique_by(.path)')"
+  frozen_count="$(printf '%s' "$frozen_paths" | jq 'length')"
+  fi=0
+  while [ "$fi" -lt "$frozen_count" ]; do
+    fpath="$(printf '%s' "$frozen_paths" | jq -r --argjson fi "$fi" '.[$fi].path')"
+    fsha="$(printf '%s' "$frozen_paths" | jq -r --argjson fi "$fi" '.[$fi].sha256')"
+    if [ -f "$codepath/$fpath" ]; then
+      current_sha="$(tf_sha256_of "$codepath/$fpath")"
+    else
+      current_sha=""
+    fi
+    [ "$current_sha" = "$fsha" ] || changed_tests="$changed_tests$fpath, "
+    fi=$((fi + 1))
+  done
+  if [ -n "$changed_tests" ]; then
+    check4_verdict="unmet"
+    check4_detail="these frozen test files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
+  else
+    check4_verdict="met"
+    check4_detail="every frozen test file for $unit_id is unchanged."
+  fi
+
+  # --- assemble and write the record -----------------------------------------------------------------
+  local checks_json
+  checks_json="$(jq -n \
+    --arg id1 "$check1_id" --arg v1 "$check1_verdict" --arg d1 "$check1_detail" \
+    --argjson e1 "$check1_exit_json" --arg o1 "$check1_output" \
+    --arg id2 "$check2_id" --arg v2 "$check2_verdict" --arg d2 "$check2_detail" \
+    --argjson e2 "$check2_exit_json" --arg o2 "$check2_output" \
+    --arg id3 "$check3_id" --arg v3 "$check3_verdict" --arg d3 "$check3_detail" \
+    --arg id4 "$check4_id" --arg v4 "$check4_verdict" --arg d4 "$check4_detail" \
+    '[
+      {id: $id1, verdict: $v1, detail: $d1} + (if $e1 == null then {} else {exitCode: $e1, output: $o1} end),
+      {id: $id2, verdict: $v2, detail: $d2} + (if $e2 == null then {} else {exitCode: $e2, output: $o2} end),
+      {id: $id3, verdict: $v3, detail: $d3},
+      {id: $id4, verdict: $v4, detail: $d4}
+    ]')"
+
+  local today record_json
+  today="$(date -u +%Y-%m-%d)"
+  record_json="$(jq -n \
+    --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
+    --arg commit "$current_commit" --argjson attempt "$attempt_number" \
+    --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
+    --argjson checks "$checks_json" \
+    '{
+      schemaVersion: 1,
+      takenAt: $takenAt,
+      unit: $unit,
+      startedAt: $startedAt,
+      commit: $commit,
+      attempt: $attempt,
+      interfaceRecord: $interfaceRecord,
+      reportPath: $reportPath,
+      checks: $checks,
+      decidingChecks: { total: 8, ranHere: [ $checks[0].id, $checks[1].id, $checks[2].id, $checks[3].id ] }
+    }')"
+
+  write_atomic "$record_file" "$record_json"
+
+  local new_ledger_doc
+  new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+    '.orders = (.orders | map(if .id == $id then .attemptsUsed = (.attemptsUsed + 1) else . end))')"
+  write_atomic "$ledger_file" "$new_ledger_doc"
+
+  printf '%s\n' "$record_json"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # dispatch-open, dispatch-close: open and clear <project path>/dispatch.json
 # (scripts/dispatch-schema.json), the one record hooks/deny-prior-source.sh and
 # hooks/deny-frozen-test-writes.sh read to tell a dispatched role apart from a person working
@@ -2935,6 +3449,8 @@ case "$ACTION" in
   preconditions) do_preconditions "$@" ;;
   tests-brief)  do_tests_brief  "$@" ;;
   tests-freeze) do_tests_freeze "$@" ;;
+  build-brief)  do_build_brief  "$@" ;;
+  build-record) do_build_record "$@" ;;
   dispatch-open)  do_dispatch_open  "$@" ;;
   dispatch-close) do_dispatch_close "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
