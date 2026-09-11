@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA implementation ledger",
-  "description": "The one store for what an implementation run has done, at <task folder>/implementation/ledger.json (ideal/implementation.md, 'The ledger is the state file, not a status log'). It exists so a person who was not watching can arrive afterwards and decide what to redo, and so a run that died mid-order knows where it got to. Plain JSON, no fences, no markdown. Nothing derivable is stored: which orders depend on which lives in the work orders, and which order is in flight is the one order with a step reached, no halt reason and no close, since orders run one at a time. A field present in a real ledger but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. This schema holds what exists, never what is planned. One field named in the specification is still absent because no step writes it yet: who judged a criterion's row, which arrives with the checkpoint. The commit range an order produced arrived on 2026-09-11 with `close`, the step that writes it. foundations.md: a new thing gets the least that works, and a field nobody has asked for is a field nobody can cut back.",
+  "description": "The one store for what an implementation run has done, at <task folder>/implementation/ledger.json (ideal/implementation.md, 'The ledger is the state file, not a status log'). It exists so a person who was not watching can arrive afterwards and decide what to redo, and so a run that died mid-order knows where it got to. Plain JSON, no fences, no markdown. Nothing derivable is stored: which orders depend on which lives in the work orders, and which order is in flight is the one order with a step reached, no halt reason and no close, since orders run one at a time. A field present in a real ledger but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. This schema holds what exists, never what is planned. The commit range an order produced arrived on 2026-09-11 with `close`, the step that writes it. The checkpoint's own judgements, and the person's grant of another attempt, arrived the same day with `tests-freeze` and `grant-attempt`. foundations.md: a new thing gets the least that works, and a field nobody has asked for is a field nobody can cut back.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -111,6 +111,18 @@
           "type": "string",
           "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$",
           "description": "The commits this order produced, the first commit of its own build attempt and the code repository's HEAD when it closed, joined by two dots. Written by `close` and by nothing else, so its presence is a second reading of a closed order beside lastStep. The left side is the build record's own startedAt for this order rather than the ledger's startedFrom: orders build one after another, so the ledger's value would sweep every earlier order's commits into this one's range, and a range that names work the order did not do is worse than no range at all."
+        },
+        "attemptsAllowed": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many attempts this order is allowed, present only when a person has granted one beyond the default. Absent means the script's own BUILD_ATTEMPTS_ALLOWED. `grant-attempt` writes it, one higher than it was, and never lowers it. The grant raises the allowance rather than lowering attemptsUsed, so the count of what a builder already spent stays a fact about the past (ideal/implementation.md, 'What a halt at the attempt cap leads to')."
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/grant"
+          },
+          "description": "One entry per attempt a person has granted on this order, in the order they were granted. Present only when at least one was. A grant with no record of who asked for what is a cap nobody can audit afterwards."
         }
       }
     },
@@ -135,6 +147,77 @@
             "rejected"
           ],
           "description": "Whether the tests claiming to prove this criterion were confirmed to observe what its verify clause describes. Three values, because unconfirmed reading the same as confirmed is how nobody can tell what is still owed. Opened at not-judged by the first step."
+        },
+        "judgements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/judgement"
+          },
+          "description": "One entry per order serving this criterion, appended by `tests-freeze` when that order's rows are frozen. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
+        }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "grantedAt",
+        "allowedAfter"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the person granted another attempt, in their own words. Required, because a grant with no reason reads as the cap never having meant anything."
+        },
+        "grantedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date the grant was made, YYYY-MM-DD. Set by the script, never typed."
+        },
+        "allowedAfter": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "What attemptsAllowed became with this grant. Recorded per grant so a reader sees the sequence rather than only the total."
+        }
+      }
+    },
+    "judgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "verdict",
+        "judgedBy",
+        "note"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The work order whose rows this judgement answers. One order judges one criterion once: a second freeze of the same order replaces its entry rather than adding one, so a row is never counted twice."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "rejected"
+          ],
+          "description": "Whether these tests observe the part of the verify clause this order is responsible for. A rejected row never reaches this file today, because `tests-freeze` refuses the freeze on one and sends the row back to the test author; the value exists so `close` can derive a rejection rather than assume it away."
+        },
+        "judgedBy": {
+          "type": "string",
+          "enum": [
+            "person",
+            "model"
+          ],
+          "description": "Who answered. `model` marks a row an unattended run judged with a context that did not write the tests, which is weaker evidence than a person reading it. The record says so rather than marking the row passed, so a person returning can list exactly those rows and judge them again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the judge saw, in their own words. Required with every verdict, because a verdict with nothing to read beside it cannot be re-judged."
         }
       }
     }

@@ -111,27 +111,65 @@ Show one row per criterion: the criterion, its verification sentence, and the na
 that prove it. Show the rows and not the test code. The question is whether the tests named
 exercise the sentence beside them, and test code invites a review of the code instead.
 
-A row the person sends back goes to the test author again. A row they accept is ready to freeze.
+**Interactive, ask row by row.** Each answer becomes one
+`--row <criterion id>=confirmed::person::<the person's words>` or
+`--row <criterion id>=rejected::person::<the person's words>` for the freeze below. A row the
+person rejects goes back to the test author before any freeze runs. Never run the freeze with a
+rejected row still standing. `tests-freeze` refuses it and writes nothing. Send that row back
+first, and freeze once every row for this order reads confirmed.
 
-Unattended, there is nobody to ask. Record that the rows were not read, and freeze. This is the one
-place where the person is the only check on whether a test asserts deeply enough, so a run that
-skips it is saying so out loud.
+**Unattended, there is nobody to ask.** Dispatch `row-checker`. This reading stands in for the one
+place a person is the only check on whether a test asserts deeply enough. Pay the top tier for what
+is left. Open the dispatch record first, the same way every other role gets one:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id>
+```
+The script derives the denied reads itself, the same way it does for the test author: every order's
+owned files. So `row-checker` cannot open the production source behind a hook. Without this record
+open, the hook denies nothing. The checker's own instructions to stay off the implementation are
+then just words, with nothing enforcing them.
+
+**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's rows
+and the path its verdict file goes to, under the task folder, and nothing else. It reads the verify
+clause and each named test, never the implementation, and answers confirmed or rejected with a note
+for each row. Close the dispatch record as soon as it returns, whether it succeeded or not:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
+```
+
+Turn its answers into `--row <criterion id>=<verdict>::model::<its note>` for the freeze. A row it
+rejects is not sent back to the test author the way a person's rejection is. Nobody is present to
+judge the correction, so `tests-freeze` writes the halt onto the order, with the checker's own note
+as the reason. Then it refuses. Report the halt, and take the next ready order instead.
+
+**The judge has to match the run mode.** A row judged `person` on an autonomous run, or judged
+`model` on an interactive one, refuses. The freeze exists to record who actually looked, and a
+mismatched row would let one stand in for the other silently.
 
 ## Freeze what came back
 
-Run, with one flag per test, per failure output, and per pattern:
+Run, with one flag per test, per failure output, per pattern, and per row:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-freeze "<task_folder>" <order id> \
   --test <path>::<test name>=<criterion id> \
   --red <test name>=<path to a file holding what the run printed> \
   --test-glob <pattern from the implement recipe> \
-  --checklist <criterion id>=<the verification sentence>
+  --checklist <criterion id>=<the verification sentence> \
+  --row <criterion id>=<confirmed|rejected>::<person|model>::<note>
 ```
 
 The script checks the file exists, sits inside the code repository, matches the framework's own
 declared pattern, and carries at the end of its name the criterion it claims. It checks every
 criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
 It checks every test has the output of the run that failed.
+
+**Every machine-verified criterion this order serves or owns needs exactly one row**, naming
+whether it was confirmed or rejected and who judged it. A criterion a person verifies carries a
+checklist instead, never a row: it has no judgement, and completion is what confirms it. A row for
+a criterion this order does not serve or own refuses the freeze, the same way a missing row does.
+So does a row for a criterion a person verifies. Every accepted row is appended to that criterion's
+own record in the ledger. `close` is what decides the criterion from it, once every order serving
+it has closed.
 
 Then it records a hash for each test file. That hash is the freeze. From here a hook refuses a
 write to one of those files from every dispatched role except the test author of the order that

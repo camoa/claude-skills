@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation finished record",
+  "description": "What the implementation stage produced for one task, at <task folder>/implementation/finished.json, written by `finish` once every order is closed and every machine-verified criterion is confirmed. `finish` ends the implementation stage and ends nothing else: the task itself stays open and goes to the review stage next, and this record is what that stage receives. It holds the commits this stage produced, what each criterion's row state came to and who decided it, the checklists a person still has to work through, and the findings a person ruled deferred. `finish` never touches task.json. A task's own state belongs to the stage that owns it, and a stage that writes another stage's field is how two producers for one fact begin. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. Every field here is derived from the ledger, the frozen records and the code repository's HEAD, so a later `finish` at a later commit rewrites the file rather than refusing: nothing in it is a judgement this step made and could lose.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "task",
+    "commitRange",
+    "orders",
+    "criteria",
+    "checklists",
+    "deferred",
+    "rowsJudgedByModel"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date this record was written, YYYY-MM-DD. Set by the script, never typed."
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The task's own id, read from task.json. Joined on, never re-minted."
+    },
+    "commitRange": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$",
+      "description": "Every commit this stage produced: the ledger's own startedFrom, which is the commit the build began from, and the code repository's HEAD when `finish` ran, joined by two dots. `finish` refuses a dirty working tree, because this range is a claim about what is in the repository and uncommitted work makes it a claim about something else."
+    },
+    "orders": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/orderRow"
+      },
+      "description": "One entry per work order, in the ledger's own order. Each one is closed, because `finish` refuses while any order is not."
+    },
+    "criteria": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/criterionRow"
+      },
+      "description": "One entry per criterion in the frozen contract. Every machine-verified one is confirmed, because `finish` refuses otherwise; a person-verified one stays not-judged here and is answered later, by a person reading the checklists below."
+    },
+    "checklists": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/checklistRow"
+      },
+      "description": "What a person must look at, one entry per person-verified criterion per order serving it, copied from that order's own frozen test record rather than pointed at. The review stage reads this one file, and the frozen records are per order."
+    },
+    "deferred": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/deferredRow"
+      },
+      "description": "Every finding a person ruled deferred at the fix round cap, with the reason they gave. Real, not fixed, and recorded here so deferring a finding is not the same as the finding disappearing. Findings ruled wrong are not carried: a ruling of wrong says there was nothing to carry."
+    },
+    "rowsJudgedByModel": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many of the checkpoint's judgements a model made rather than a person, across every criterion. An unattended run's evidence is weaker than an attended one's, and this number is what a person returning reads first to decide which rows to judge again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
+    }
+  },
+  "$defs": {
+    "orderRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "commitRange",
+        "roundsUsed"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The work order's own id, minted by design. Joined on, never re-minted."
+        },
+        "commitRange": {
+          "type": "string",
+          "description": "The commits this one order produced, copied from its ledger entry, which `close` wrote. Empty only for an order closed before that field existed."
+        },
+        "roundsUsed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many fix rounds this order took. Copied from the ledger. It is the cheapest reading of which orders were hard, which is what a person deciding where to look next wants first."
+        }
+      }
+    },
+    "criterionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "verifiedBy",
+        "rowState",
+        "judgedBy"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion id scope minted. Joined on, never the criterion's text."
+        },
+        "verifiedBy": {
+          "type": "string",
+          "description": "Copied from the frozen contract, so a reader never has to look the criterion back up to know why a row state is not-judged."
+        },
+        "rowState": {
+          "type": "string",
+          "enum": [
+            "not-judged",
+            "confirmed",
+            "rejected"
+          ],
+          "description": "What `close` derived when the last order serving this criterion closed. Copied from the ledger, never re-derived here: one producer for one fact."
+        },
+        "judgedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "person",
+              "model"
+            ]
+          },
+          "description": "Who judged this criterion's rows, each value once. Two orders serving one criterion can be judged by a person and by a model, and both are named rather than folded into one answer."
+        }
+      }
+    },
+    "checklistRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "criterion",
+        "unit",
+        "checklist"
+      ],
+      "properties": {
+        "criterion": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion this checklist confirms."
+        },
+        "unit": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The order whose frozen test record carried it."
+        },
+        "checklist": {
+          "type": "string",
+          "description": "What a person must look at, written by that order's test author from the verify clause and copied here verbatim rather than summarised."
+        }
+      }
+    },
+    "deferredRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "finding",
+        "severity",
+        "linkedTo",
+        "evidence",
+        "reason"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The order whose review record holds this finding."
+        },
+        "finding": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "The finding's own id inside that review record. Joined on, never re-minted."
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "description": "What the reviewer called it. A high-severity finding ruled deferred is the row a person reads first."
+        },
+        "linkedTo": {
+          "type": "string",
+          "description": "The criterion or non-goal the finding cites."
+        },
+        "evidence": {
+          "type": "string",
+          "description": "What the reviewer saw, copied verbatim."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the person deferred it, in their own words, copied from the ruling."
+        }
+      }
+    }
+  }
+}

@@ -172,4 +172,18 @@ Run:
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
 the last record left it. On success it writes `lastStep = "closed"` and the commit range the order
-produced. Say plainly that the order is done, and move to whichever order is next ready.
+produced.
+
+**Close also decides the criteria this order serves or owns.** A machine-verified criterion reads
+confirmed once every order serving it is closed and every judgement on it reads confirmed.
+Otherwise it stays not-judged. A rejected judgement cannot reach here, since `tests-freeze` already
+refused it, but the state is still derived from the judgements every time, never assumed. A
+person-verified criterion stays at not-judged too: it carries a checklist instead of a judgement,
+and completion is what confirms it.
+
+It prints `{order, criteria, rowsJudgedByModel}`: the closed order's own ledger entry and each
+affected criterion's row state and judge. It also reports how many rows across the whole ledger a
+model judged rather than a person. Read that count to the person before moving on, so they can find
+and re-judge exactly those rows.
+
+Say plainly that the order is done, and move to whichever order is next ready.

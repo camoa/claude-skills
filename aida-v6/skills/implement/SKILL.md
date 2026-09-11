@@ -1,6 +1,6 @@
 ---
 name: implement
-description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, writes the tests for one work order and freezes them, writes the code for that order until it passes all eight deciding checks, reviews the diff, repairs what the review finds, and closes the order.
+description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, writes the tests for one work order and freezes them, writes the code for that order until it passes all eight deciding checks, reviews the diff, repairs what the review finds, closes the order, and once every order is closed records the task's implementation as finished.
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
@@ -14,7 +14,8 @@ change once they are frozen. One freezes the contract and the work orders into a
 opens the ledger that will track every order's progress. Two establishes whether this repository
 can run a test at all. Three writes the tests for one work order, watches each one fail, and
 freezes them. Four writes the code until it passes all eight deciding checks. Five reviews the
-diff, repairs what the review finds, verifies each repair, and closes the order.
+diff, repairs what the review finds, verifies each repair, and closes the order. Once every order
+closes, `finish` records the task's own implementation as done and hands it to the review stage.
 
 ## Find the task
 
@@ -34,7 +35,7 @@ Run:
 This reports the contract's state, whether design has started and how many work order files it
 left, the task's project and its code repository, the repository's current branch and its trunk
 branch when derivable, the task's own run mode, whether a snapshot, a ledger and a preconditions
-record already exist, and each order's last step from the ledger.
+record already exist, and each order's last step and halt reason from the ledger.
 
 No contract, or design has not started: say so in one line and name the missing stage. Stop.
 
@@ -54,6 +55,9 @@ being run is in this conversation.
 | An order `reviewed` or `fixed`, with an open actionable finding and a fix round left | Fix, then verify | `references/review.md` |
 | An order `reviewed` or `fixed`, with nothing open | Close the order | `references/review.md` |
 | An order `closed` | Nothing left to do on it. Take the next ready order | |
+| Every order closed, no `finished` record | Finish the task | `references/finish.md` |
+| An order whose `haltedBecause` holds a `design drift...` segment, anywhere in it | Offer the restart | `references/finish.md` |
+| An order whose `haltedBecause` holds an `attempts spent...` segment and no `design drift...` one, a person present | Offer the grant | `references/finish.md` |
 
 A resumed run starts at `start` regardless, because that is where drift since the snapshot is
 checked, and it says which orders halted. Then the table applies.
@@ -70,6 +74,10 @@ puts that to the person, who decides from the recorded attempts which of three t
 test is wrong, the order is wrong, or the code is hard and a person writes it. Unattended, the run
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
+
+A halt beginning `attempts spent` or `design drift` has its own next step in `references/finish.md`:
+the grant of one more attempt, or the restart after a design change. Offer either only when a
+person is present to decide it.
 
 Read the file with the Read tool from the plugin's own folder, at
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/`. A step run from memory of an earlier

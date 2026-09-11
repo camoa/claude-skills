@@ -47,6 +47,60 @@
 # to tell a dispatched role apart from a person working their own repository. Neither hook is this
 # script's own concern past that one file; this script only opens and closes the record.
 #
+# The checkpoint over the trace matrix writes its verdict here (ideal/implementation.md, "The trace
+# matrix and its checkpoint"). `tests-freeze` takes one `--row` per criterion the order serves or
+# owns whose frozen verifiedBy is machine, and each row carries a verdict, who judged it, and a
+# note. A machine criterion with no row refuses, and so does a row for a criterion this order does
+# not serve or own, or for one a person verifies: a person-verified criterion carries a checklist
+# and never a judgement, and completion is what confirms it. A rejected row stops the freeze and
+# writes no test record, because that row goes back to the test author. Unattended, a row the
+# checker rejected halts the order on the way out, the same way a dirty tree already halts one at
+# `build-record`. Every accepted row is appended to
+# the criterion's own `judgements` list in the ledger, one per order serving it, and `rowState`
+# stays where it is until `close`. `close` then decides the criterion: confirmed when every order
+# serving it is closed and every one of their judgements is confirmed, rejected when any judgement
+# is rejected, and not-judged otherwise. A criterion several orders split has no honest answer
+# before the last of them closes, which is why the decision waits. `read` and `close` both report
+# how many rows a model judged rather than a person, so a person returning can list exactly those.
+#
+# `finish <task_folder>` ends the implementation stage for one task, and ends nothing else. The task
+# itself stays open and goes to the review stage next. `finish` refuses unless every order is closed
+# and unhalted and every machine-verified criterion is confirmed, and it refuses a dirty tree,
+# because the range it records is a claim about the repository. A halt survives a close, and an
+# order halted for drift after it closed is the case the closed check alone would miss. It writes <task_folder>/implementation/finished.json
+# (finished-schema.json), which is what the review stage reads: the commit range this stage
+# produced, each order's own range and rounds, each criterion's row state and who judged it, the
+# checklists for the criteria a person verifies, the findings ruled deferred with their reasons, and
+# the number of rows a model judged. It never touches task.json. A task's own state belongs to the
+# stage that owns it, and a stage that writes another stage's field is how two producers for one
+# fact begin.
+#
+# `grant-attempt <task_folder> <unit_id> --reason <text>` is the person's grant of one more attempt
+# on one order. It raises that order's own `attemptsAllowed` by one and records the grant with its
+# reason, so the used counter never goes down. It clears the halt only when the halt text begins
+# with "attempts spent"; a closed order and any other halt both refuse, because a grant answers a
+# spent counter and answers nothing else. It refuses under an autonomous run: the grant is a person's judgement and an
+# unattended run has none to offer. `build-brief` and `build-record` read the order's own
+# `attemptsAllowed` when it carries one, and the constant below when it does not.
+#
+# `restart <task_folder> --reason <text>` is what follows a design change mid-build. `start` halts
+# every drifted order on a resumed run, and every order that depends on one, directly or through
+# another, because rebuilding against an interface that moved is the same unbounded work. `restart`
+# then moves <task_folder>/implementation/ aside to implementation-<UTC date>-<short commit>/ and
+# prints that path, so the next `start` takes a fresh snapshot from the live design. It reads every
+# segment of a halt reason, so a halt landing later and sitting in front of the drift one never
+# hides it. It refuses when no order is halted for drift, when the tree is dirty, and under an
+# autonomous run. Redoing one
+# order alone is not built: the whole implementation folder moves or nothing does.
+#
+# One function writes every halt: `start` on drift, `tests-freeze` on a rejected row, and
+# `build-record` on a dirty tree and on a spent attempt counter. A halt never writes over a reason
+# the order already carries. The new reason goes first and the older ones follow, joined by
+# "; earlier: ", and a reason already there is moved to the front rather than written twice. So
+# every reader that looks for one kind of halt splits on that separator and tests each segment:
+# `restart` looks for a drift reason anywhere in the text, and `grant-attempt` removes only the
+# spent-counter segment and leaves the order halted for whatever else stood.
+#
 # Two of these steps halt an order rather than refuse. A halt is the run continuing correctly, so
 # it exits 0, writes the reason into the ledger and says so on standard error, the same way
 # `build-record` already halts an order at its attempt cap. The one exception is an unattended run
@@ -77,6 +131,7 @@
 #                            [--red <test name>=<path to a file holding what the run printed>]...
 #                            [--test-glob <glob>]...
 #                            [--checklist <criterion id>=<verification text>]...
+#                            [--row <criterion id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
@@ -123,15 +178,19 @@
 #   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
 #   implement-actions.sh close <task_folder> <unit_id>
+#   implement-actions.sh finish <task_folder>
+#   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
+#   implement-actions.sh restart <task_folder> --reason <text>
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]...
 #
 # `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
-# that matches none of them. For the three roles that write code, it also derives the path lists
-# itself from the frozen snapshot, so none is a list a caller assembles per dispatch: a test author
-# is denied every order's owned files, and an implementer is denied every order's but its own and
-# is allowed its own. A fixer takes the implementer's derivation exactly, because a fix round
+# that matches none of them. For the four roles that read or write the code, it also derives the
+# path lists itself from the frozen snapshot, so none is a list a caller assembles per dispatch: a
+# test author is denied every order's owned files, a row-checker takes that same derivation because
+# it must answer from the test and never from the implementation, and an implementer is denied every
+# order's but its own and is allowed its own. A fixer takes the implementer's derivation exactly, because a fix round
 # writes the same order's files for the same reason (decision 8 of step five). `--deny-read` adds to what was derived; it is how a path outside codePath is
 # denied, such as the recipe each role may not open.
 #   implement-actions.sh dispatch-close <task_folder>
@@ -162,6 +221,8 @@
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-schema.json     the shape `start` writes to ledger.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-schema.json   the shape `dispatch-open` writes to
 #                                                        <project path>/dispatch.json
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/finished-schema.json   the shape `finish` writes to
+#                                                        <task_folder>/implementation/finished.json
 #
 # This script never runs a schema comparison against snapshot-schema.json or ledger-schema.json
 # itself. Every field it writes is built from those two schemas' own field lists by construction;
@@ -225,8 +286,11 @@
 #      orders and refuse if it disagrees with the snapshot's own stored hash: the snapshot file
 #      was edited after it was written. Otherwise compare the live hash from step 3 against the
 #      same stored hash. A difference is worked out order by order: only a work order whose own
-#      design file actually changed is drifted, and only a drifted order's ledger entry is halted
-#      at the end of this run. A contract that changed with no work order affected halts nothing
+#      design file actually changed is drifted. A drifted order's ledger entry is halted at the end
+#      of this run, and so is every order that depends on it, directly or through another order,
+#      because that order would build against an interface that moved. Every one of those halt
+#      reasons begins with "design drift: ", which is what `restart` reads later. A contract that
+#      changed with no work order affected halts nothing
 #      and is reported. A new run has nothing to compare against and reports that plainly, never
 #      as "nothing changed".
 #  11. From here on, every read of the criteria and the work orders is from the snapshot, never
@@ -395,7 +459,8 @@
 #      can match, and both hooks then allow every read and every write in silence, so this refuses
 #      rather than writing a record that looks like a permission and is not one.
 #  47  `dispatch-open` was asked to open a dispatch whose derived path list would be empty: a test
-#      author on a snapshot whose work orders declare no owned file between them, or an implementer
+#      author or a row-checker on a snapshot whose work orders declare no owned file between them,
+#      or an implementer
 #      or a fixer on an order that declares none of its own. A role's lists are derived from those
 #      files, so an empty set means the denial the role exists for would apply to nothing, or the
 #      role would be dispatched with nowhere it is meant to write.
@@ -443,9 +508,10 @@
 #      role's work is committed before the record is written. Unattended, the two record steps write
 #      the halt onto the order before refusing, because an order left in flight with no reason is a
 #      halt nobody sees until they ask; interactive they only refuse, since a person is there to
-#      commit and run the step again. `close` refuses on the same fact and
-#      shares this number, because a commit range is a claim about a repository and a dirty tree
-#      makes it a claim about something else. `review-record` names a related fact with exit 51,
+#      commit and run the step again. `close`, `finish` and `restart` refuse on the same fact and
+#      share this number, because a commit range is a claim about a repository and a dirty tree
+#      makes it a claim about something else. A restart with uncommitted work would move the record
+#      of that work aside and leave the work itself behind. `review-record` names a related fact with exit 51,
 #      and the two stay apart: 51 says the code moved after a record was already written, and 61
 #      says it was never committed at all.
 #  62  `fix-brief` or `fix-record` was asked for a round while the last one has no verification.
@@ -456,12 +522,41 @@
 #      order was written at: the build record when no fix round ran, the last fix record otherwise.
 #      The range this would write would name work nothing in this stage judged.
 #
+# The exit codes the checkpoint, the finish, the grant and the restart add.
+#  64  `tests-freeze`'s own `--row` flags and this order's criteria do not correspond: a
+#      machine-verified criterion the order serves or owns with no row, a row naming a criterion the
+#      order neither serves nor owns, a row naming a criterion a person verifies, or two rows naming
+#      one criterion. The message names which. A row set this script half understands would put a
+#      judgement on the wrong criterion, which nothing later could tell from a real one.
+#  65  `tests-freeze` was given a `--row` that answers rejected. Not a defect in the script: the
+#      freeze stops, writes no test record, and the row goes back to the test author, the same way
+#      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
+#      itself rejected halts the order first, because a refusal nobody is there to read leaves the
+#      order in flight with no reason on it. A row a person rejected never halts anything: the
+#      person is already there.
+#  66  `finish` found implementation is not finished for this task: an order that is not closed, an
+#      order carrying a halt whether or not it closed, or a machine-verified criterion whose row
+#      state is not confirmed. The message names every one of them.
+#  67  `grant-attempt` was asked for an attempt it cannot grant: the order is already closed, so
+#      there is nothing left to attempt, or it is halted for something other than a spent attempt
+#      counter. A grant answers a spent counter and answers nothing else, so the message names what
+#      it found and nothing is written. One number, because both are the same fact: this order is
+#      not waiting on another attempt.
+#  68  `grant-attempt` or `restart` was called on an autonomous run. Both are a person's judgement,
+#      and an unattended run has none to offer. The same number for both, because it is one fact.
+#  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
+#      restart that moved the implementation folder anyway would throw away a build that is fine.
+#  70  `tests-freeze` was given a `--row` whose judge does not match the run. An autonomous run has
+#      no person to judge a row, so `person` there is a claim nobody made; an interactive run has a
+#      person, so `model` there records weaker evidence than the run actually had. The residue the
+#      record keeps is only worth keeping when it is true, so both refuse and nothing is written.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
 # where one is checked, uses a `case` glob, never a regular expression.
 #
-# Four zsh traps have each cost a round of debugging in this file. They are listed here because
+# Five zsh traps have each cost a round of debugging in this file. They are listed here because
 # three of them were re-introduced by somebody who had already been told about them, and a warning
 # that has to be repeated is not a control.
 #   1. Never name a variable `path`. zsh ties that exact name to $PATH as a special array. Under
@@ -475,6 +570,12 @@
 #   4. A `local a=X b="$a"` statement evaluates every assignment word before any of them takes
 #      effect, in bash and zsh alike, so `b` reads the value from before the call. Declare bare,
 #      then assign in a statement of its own.
+#   5. Never put `local` inside a loop body. zsh prints a parameter when `local` names one that
+#      already exists in the same scope, with no option asking it to, so the second round of the
+#      loop writes `name=<the previous round's value>` to standard output. Every action here prints
+#      JSON on standard output, so that line corrupts what the caller parses, and it appears only
+#      when the loop runs more than once: a fixture with one criterion per order never sees it.
+#      Declare every name the loop uses above the loop, and assign inside it.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
 
@@ -559,6 +660,13 @@ die60() { printf 'implement-actions: %s\n' "$1" >&2; exit 60; }
 die61() { printf 'implement-actions: %s\n' "$1" >&2; exit 61; }
 die62() { printf 'implement-actions: %s\n' "$1" >&2; exit 62; }
 die63() { printf 'implement-actions: %s\n' "$1" >&2; exit 63; }
+die64() { printf 'implement-actions: %s\n' "$1" >&2; exit 64; }
+die65() { printf 'implement-actions: %s\n' "$1" >&2; exit 65; }
+die66() { printf 'implement-actions: %s\n' "$1" >&2; exit 66; }
+die67() { printf 'implement-actions: %s\n' "$1" >&2; exit 67; }
+die68() { printf 'implement-actions: %s\n' "$1" >&2; exit 68; }
+die69() { printf 'implement-actions: %s\n' "$1" >&2; exit 69; }
+die70() { printf 'implement-actions: %s\n' "$1" >&2; exit 70; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -569,6 +677,17 @@ source "$RECORDS_HASH_LIB" || die3 "the records-hash library failed to load: $RE
 # counter, never the cap itself. A constant here rather than a project or task field, because
 # nothing yet gives it a producer of its own; a later stage may compute it instead.
 BUILD_ATTEMPTS_ALLOWED=2
+
+# The default above is what an order gets when its own ledger entry carries no `attemptsAllowed`.
+# `grant-attempt` writes that field, one higher, when a person grants another attempt. The count
+# used never goes down, so the grant raises the allowance instead (ideal/implementation.md, "What a
+# halt at the attempt cap leads to"). $1 the order's own ledger entry. Prints the number.
+attempts_allowed_for() {
+  local entry="$1" value
+  value="$(printf '%s' "$entry" | jq -r --argjson d "$BUILD_ATTEMPTS_ALLOWED" '.attemptsAllowed // $d')"
+  case "$value" in ''|*[!0-9]*) value="$BUILD_ATTEMPTS_ALLOWED" ;; esac
+  printf '%s' "$value"
+}
 
 # How many fix rounds one order gets after a review, before every still-open finding needs a ruling.
 # Two, for the same reason the build gets two attempts: a third round is a model repeating itself
@@ -602,6 +721,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--red <test name>=<path to a file holding what the run printed>]...
                             [--test-glob <glob>]...
                             [--checklist <criterion id>=<verification text>]...
+                            [--row <criterion id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
@@ -648,6 +768,9 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
                             [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
        implement-actions.sh close <task_folder> <unit_id>
+       implement-actions.sh finish <task_folder>
+       implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
+       implement-actions.sh restart <task_folder> --reason <text>
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
@@ -677,6 +800,35 @@ write_atomic() {
     || die3 "could not create a temporary file in $dir"
   printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
   mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
+}
+
+# The one definition of how a halt reason is written, as a jq function every caller prepends to its
+# own program. The new reason goes first and the older ones follow, joined by "; earlier: ", so a
+# second halt never erases the first and the newest is what a reader sees first. A segment already
+# in the text is moved to the front rather than added again, so running a step twice repeats no
+# text. Every reader that looks for one kind of halt splits on the same separator and tests each
+# segment, never only the front (`restart` and `grant-attempt` below).
+#
+# The separator is literal text inside a reason, so a reason carrying "; earlier: " of its own would
+# split into two segments. Every reason this script writes is its own words plus a tool's output or
+# a checker's note, and none has carried it; the alternative, a list field on the order, is a shape
+# no reader outside this file asks for yet.
+HALT_MERGE_JQ='def halt_merge($old; $new):
+  (($old // "") | if . == "" then [] else split("; earlier: ") end) as $segments
+  | ([$new] + ($segments | map(select(. != $new)))) | join("; earlier: ");
+'
+
+# Every segment of halt reason $1, one per line. Empty prints nothing.
+halt_segments() {
+  printf '%s' "$1" | jq -r 'if . == "" then empty else split("; earlier: ")[] end' 2>/dev/null
+}
+
+# Applies a halt to one order in ledger document $1. $2 the unit id, $3 the reason. Prints the
+# updated document, or nothing when the update failed; never dies, because one caller refuses
+# afterwards and another carries on.
+halt_order_in() {
+  printf '%s' "$1" | jq -c --arg id "$2" --arg why "$3" "$HALT_MERGE_JQ
+    .orders = (.orders | map(if .id == \$id then (.haltedBecause = halt_merge(.haltedBecause; \$why)) else . end))"
 }
 
 # Prints one of: missing, unreadable, ok. Never dies. "unreadable" covers every way the file
@@ -981,7 +1133,10 @@ do_read() {
           orderCount: ((.orders // []) | length),
           ordersByLastStep: ((.orders // []) | group_by(.lastStep // "null") | map({key: (.[0].lastStep // "null"), value: length}) | from_entries),
           criteriaCount: ((.criteria // []) | length),
-          criteriaByRowState: ((.criteria // []) | group_by(.rowState) | map({key: .[0].rowState, value: length}) | from_entries)
+          criteriaByRowState: ((.criteria // []) | group_by(.rowState) | map({key: .[0].rowState, value: length}) | from_entries),
+          orderStates: [ (.orders // [])[] | {id: .id, lastStep: .lastStep, haltedBecause: (.haltedBecause // null)} ],
+          rowsJudgedByModel: ([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length),
+          rowsJudgedByModelCriteria: ([ (.criteria // [])[] | select((.judgements // []) | map(.judgedBy == "model") | any) | .id ])
         }' "$LEDGER_FILE" 2>/dev/null)"
       [ -n "$ledger_summary" ] || ledger_summary='null'
     else
@@ -999,6 +1154,19 @@ do_read() {
       precon_readable=true; precon_note="ok"
     else
       precon_note="present but could not be read as JSON"
+    fi
+  fi
+
+  # The skill routes the end of the stage on this: a task with every order closed and no finished
+  # record is waiting for `finish`. Reported the same way the three records above are.
+  local finished_exists finished_readable finished_note
+  finished_exists=false; finished_readable=false; finished_note="not recorded"
+  if [ -f "$IMPL_DIR/finished.json" ]; then
+    finished_exists=true
+    if [ -r "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null; then
+      finished_readable=true; finished_note="ok"
+    else
+      finished_note="present but could not be read as JSON"
     fi
   fi
 
@@ -1063,6 +1231,9 @@ do_read() {
     --argjson preconditionsExists "$precon_exists" \
     --argjson preconditionsReadable "$precon_readable" \
     --arg preconditionsNote "$precon_note" \
+    --argjson finishedExists "$finished_exists" \
+    --argjson finishedReadable "$finished_readable" \
+    --arg finishedNote "$finished_note" \
     --argjson reviews "$reviews_json" \
     '{
       taskPath: $taskPath,
@@ -1081,6 +1252,7 @@ do_read() {
       snapshot: { exists: $snapshotExists, readable: $snapshotReadable, note: $snapshotNote, summary: $snapshot },
       ledger: { exists: $ledgerExists, readable: $ledgerReadable, note: $ledgerNote, summary: $ledger },
       preconditions: { exists: $preconditionsExists, readable: $preconditionsReadable, note: $preconditionsNote },
+      finished: { exists: $finishedExists, readable: $finishedReadable, note: $finishedNote },
       reviews: $reviews
     }'
   exit 0
@@ -1134,6 +1306,7 @@ do_start() {
             ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
             ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
             ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
+            ((.coverage.criteriaWithUnusableVerifiedBy // [])[] | "criterion " + .id + " has a verifiedBy of " + (.verifiedBy | tostring) + ", which is neither machine nor person"),
             ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
             ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
             ((.coverage.unknownCriteriaIds // [])[] | "file " + .path + " names an unknown criterion id " + .id + " in " + .field),
@@ -1254,6 +1427,7 @@ do_start() {
 
   local run_kind snapshot_hash_on_disk snapshot_alignment_json snapshot_workorders_json
   local drifted_orders_json='[]' contract_changed=false new_live_order_ids_json='[]'
+  local dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
 
   if [ "$snapshot_present" = "false" ]; then
@@ -1317,19 +1491,52 @@ do_start() {
     if [ "$live_hash" != "$snapshot_hash_on_disk" ]; then
       contract_changed="$(jq -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
         'if $a == $b then false else true end')"
+      # Every drift halt reason begins with "design drift: ", which is what `restart` reads to tell
+      # an order halted by a design change from one halted for a spent attempt counter or a
+      # load-bearing finding. A prefix rather than a field of its own, the same way the attempt cap
+      # already writes "attempts spent" and `grant-attempt` already reads it.
       drifted_orders_json="$(jq -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | [ $snap[] | . as $s
               | ($liveMap[$s.id]) as $l
               | if ($l == null) then
-                  {id: $s.id, reason: ("the design file for " + $s.id + " no longer exists, or could not be read, since the snapshot was taken")}
+                  {id: $s.id, reason: ("design drift: the design file for " + $s.id + " no longer exists, or could not be read, since the snapshot was taken")}
                 elif ($l != $s) then
-                  {id: $s.id, reason: ("the design file for " + $s.id + " has changed since the snapshot was taken")}
+                  {id: $s.id, reason: ("design drift: the design file for " + $s.id + " has changed since the snapshot was taken")}
                 else
                   empty
                 end
             ]
         ')"
+      # An order that depends on a drifted one, directly or through another order, is halted too.
+      # It would otherwise build against an interface that moved, which is the same unbounded work
+      # the drifted order itself is halted for (ideal/implementation.md, the unattended-answers
+      # table: "Halt every order the change touches"). The reason names the drifted orders it
+      # reaches, so a person reads what to look at without walking the graph themselves. An order
+      # that drifted itself keeps its own reason and never takes this one.
+      dependent_halts_json="$(jq -n --argjson orders "$snapshot_workorders_json" --argjson drifted "$drifted_orders_json" '
+          def reach($adj; $start):
+            def go($frontier; $visited):
+              if ($frontier | length) == 0 then $visited
+              else
+                ($frontier[0]) as $node
+                | ($frontier[1:]) as $rest
+                | (($adj[$node] // []) - $visited) as $new
+                | go($rest + $new; ($visited + $new))
+              end;
+            go(($adj[$start] // []); ($adj[$start] // []));
+          ($drifted | map(.id)) as $bad
+          | ($orders | map({id: .id, dependsOn: (.dependsOn // [])})) as $trimmed
+          | (reduce $trimmed[] as $o ({}; .[$o.id] = $o.dependsOn)) as $adj
+          | [ $trimmed[] | .id as $x
+              | select(($bad | index($x)) == null)
+              | (reach($adj; $x)) as $r
+              | ([ $r[] | select(($bad | index(.)) != null) ]) as $hits
+              | select(($hits | length) > 0)
+              | {id: $x, reason: ("design drift: " + $x + " depends on " + ($hits | join(", ")) + ", directly or through another order, and that design file changed since the snapshot was taken")}
+            ]
+        ')"
+      drift_halts_json="$(jq -cn --argjson a "$drifted_orders_json" --argjson b "$dependent_halts_json" '$a + $b')"
       new_live_order_ids_json="$(jq -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
         '([ $live[].id ]) - ([ $snap[].id ])')"
     fi
@@ -1415,11 +1622,14 @@ do_start() {
     ledger_run_mode="$(ledger_required_string "$ledger_doc" "runMode")" \
       || die3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
 
-    final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drifted_orders_json" '
+    # A drift halt never writes over a reason the order already carries. The old text is kept after
+    # the new one, joined by "; earlier: ", so nothing loses a reason; and a start run repeated on
+    # the same drift adds nothing, because the reason it would write is already at the front.
+    final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drift_halts_json" "$HALT_MERGE_JQ"'
         .orders | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
-          | if $r != null then ($o + {haltedBecause: $r}) else $o end
+          | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
         )
       ')"
     final_criteria_json="$(printf '%s' "$ledger_doc" | jq -c '.criteria')"
@@ -1430,11 +1640,13 @@ do_start() {
 
     local base_orders_json
     base_orders_json="$(printf '%s' "$snapshot_workorders_json" | jq -c '[ .[] | {id: .id, lastStep: null, attemptsUsed: 0, roundsUsed: 0} ]')"
-    final_orders_json="$(jq -n --argjson orders "$base_orders_json" --argjson drifted "$drifted_orders_json" '
+    # A ledger opened here carries no halt yet, so there is nothing to keep. The same expression is
+    # written anyway, so the two paths cannot drift into halting two different ways.
+    final_orders_json="$(jq -n --argjson orders "$base_orders_json" --argjson drifted "$drift_halts_json" "$HALT_MERGE_JQ"'
         $orders | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
-          | if $r != null then ($o + {haltedBecause: $r}) else $o end
+          | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
         )
       ')"
     final_criteria_json="$(printf '%s' "$snapshot_criteria_json" | jq -c '[ .[] | {id: .id, rowState: "not-judged"} ]')"
@@ -1487,6 +1699,7 @@ do_start() {
     --argjson driftChecked "$drift_checked" \
     --argjson contractChanged "$contract_changed_json" \
     --argjson driftedOrders "$drifted_orders_json" \
+    --argjson haltedDependents "$dependent_halts_json" \
     --argjson newLiveOrderIds "$new_live_order_ids_json" \
     --arg ledgerFile "$LEDGER_FILE" --arg ledgerOpenedAs "$opened_as" --arg startedFrom "$started_from" \
     --argjson readyToBuild "$ready_ids_json" --argjson halted "$halted_json" --argjson inFlight "$in_flight_json" \
@@ -1498,7 +1711,8 @@ do_start() {
                     currentBranch: $currentBranch,
                     note: $trunkNote },
       snapshot: { file: $snapshotFile, hash: $snapshotHash, workOrderCount: $workOrderCount, criteriaCount: $criteriaCount },
-      drift: { checked: $driftChecked, contractChanged: $contractChanged, driftedOrders: $driftedOrders, newLiveOrdersNotInSnapshot: $newLiveOrderIds },
+      drift: { checked: $driftChecked, contractChanged: $contractChanged, driftedOrders: $driftedOrders,
+               haltedDependents: $haltedDependents, newLiveOrdersNotInSnapshot: $newLiveOrderIds },
       ledger: { file: $ledgerFile, openedAs: $ledgerOpenedAs, startedFrom: $startedFrom, halted: $halted, inFlight: $inFlight },
       readyToBuild: $readyToBuild
     }'
@@ -2693,7 +2907,11 @@ do_tests_brief() {
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-brief"
 
   # --- exit 23: every dependency needs a completion record before its interface is handed over ----
-  local depends_json dep_count i dep_id dep_entry dep_step dependency_interfaces_json='[]'
+  # dep_interface is declared here and not inside the loop below. zsh prints a parameter when
+  # `local` names one that already exists in the same scope, so a `local` inside a loop body writes
+  # the previous round's value to standard output on every round after the first (trap 5 in this
+  # file's own header).
+  local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
   depends_json="$(printf '%s' "$UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
@@ -2705,7 +2923,6 @@ do_tests_brief() {
       || die3 "tests-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
     dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
     if [ "$dep_step" = "closed" ]; then
-      local dep_interface
       dep_interface="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$dep_id" \
         '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
       dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
@@ -2873,6 +3090,51 @@ $raw
 TF_EOF
 }
 
+# Parses --row values, one per line of $1
+# (`<criterion id>=<confirmed|rejected>::<person|model>::<note>`), appending one
+# `{criterion, verdict, judgedBy, note}` JSON object per line to file $2. The three parts after the
+# id are split on "::" from the left, so a note holding "::" of its own keeps it: only the first two
+# separators are read as separators, and everything after them is the note.
+tf_parse_rows() {
+  local raw="$1" out="$2" line id rest verdict judged note
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      *"="*) : ;;
+      *) die3 "tests-freeze: --row value has no '=' separating the criterion id from the verdict: $line" ;;
+    esac
+    id="${line%%=*}"
+    rest="${line#*=}"
+    case "$rest" in
+      *"::"*) : ;;
+      *) die3 "tests-freeze: --row value has no '::' separating the verdict from who judged it: $line" ;;
+    esac
+    verdict="${rest%%::*}"
+    rest="${rest#*::}"
+    case "$rest" in
+      *"::"*) : ;;
+      *) die3 "tests-freeze: --row value has no '::' separating who judged it from the note: $line" ;;
+    esac
+    judged="${rest%%::*}"
+    note="${rest#*::}"
+    [ -n "$id" ] || die3 "tests-freeze: --row value has an empty criterion id: $line"
+    case "$verdict" in
+      confirmed|rejected) ;;
+      *) die3 "tests-freeze: --row value answers '$verdict'. The two answers are confirmed and rejected: $line" ;;
+    esac
+    case "$judged" in
+      person|model) ;;
+      *) die3 "tests-freeze: --row value says '$judged' judged it. The two words are person and model: $line" ;;
+    esac
+    [ -n "$note" ] || die3 "tests-freeze: --row value for $id carries no note. A verdict with nothing to read beside it is not a verdict."
+    jq -n --arg id "$id" --arg v "$verdict" --arg j "$judged" --arg n "$note" \
+      '{criterion: $id, verdict: $v, judgedBy: $j, note: $n}' >>"$out" \
+      || die3 "tests-freeze: could not record the --row for $id"
+  done <<TF_EOF
+$raw
+TF_EOF
+}
+
 # Parses --green-on-arrival values, one per line of $1 (`<test name>=<reason>`), appending one
 # `{name, reason}` JSON object per line to file $2.
 tf_parse_goa() {
@@ -3022,7 +3284,7 @@ tf_relativize_path() {
 }
 
 do_tests_freeze() {
-  local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw=""
+  local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --test)
@@ -3043,6 +3305,11 @@ do_tests_freeze() {
       --checklist)
         [ "$#" -ge 2 ] || die3 "tests-freeze: --checklist needs <criterion id>=<verification text>"
         checklist_raw="$checklist_raw$2
+"
+        shift 2 ;;
+      --row)
+        [ "$#" -ge 2 ] || die3 "tests-freeze: --row needs <criterion id>=<confirmed|rejected>::<person|model>::<note>"
+        row_raw="$row_raw$2
 "
         shift 2 ;;
       --green-on-arrival)
@@ -3075,23 +3342,26 @@ do_tests_freeze() {
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-freeze"
 
   # --- turn every raw --flag value into JSON, through temporary files beside the implementation dir
-  local tests_tmp reds_tmp checklists_tmp goa_tmp
+  local tests_tmp reds_tmp checklists_tmp goa_tmp rows_meta_tmp
   tests_tmp="$IMPL_DIR/.tests-freeze-tests.$$"
   reds_tmp="$IMPL_DIR/.tests-freeze-reds.$$"
   checklists_tmp="$IMPL_DIR/.tests-freeze-checklists.$$"
   goa_tmp="$IMPL_DIR/.tests-freeze-goa.$$"
-  : >"$tests_tmp"; : >"$reds_tmp"; : >"$checklists_tmp"; : >"$goa_tmp"
+  rows_meta_tmp="$IMPL_DIR/.tests-freeze-rowmeta.$$"
+  : >"$tests_tmp"; : >"$reds_tmp"; : >"$checklists_tmp"; : >"$goa_tmp"; : >"$rows_meta_tmp"
   tf_parse_tests      "$test_raw"      "$tests_tmp"
   tf_parse_reds       "$red_raw"       "$reds_tmp"
   tf_parse_checklists "$checklist_raw" "$checklists_tmp"
   tf_parse_goa        "$goa_raw"       "$goa_tmp"
+  tf_parse_rows       "$row_raw"       "$rows_meta_tmp"
 
-  local tests_json reds_json checklists_json goa_json test_globs_json
+  local tests_json reds_json checklists_json goa_json test_globs_json rows_meta_json
   tests_json="$(jq -s '.' "$tests_tmp")"
   reds_json="$(jq -s '.' "$reds_tmp")"
   checklists_json="$(jq -s '.' "$checklists_tmp")"
   goa_json="$(jq -s '.' "$goa_tmp")"
-  rm -f "$tests_tmp" "$reds_tmp" "$checklists_tmp" "$goa_tmp"
+  rows_meta_json="$(jq -s '.' "$rows_meta_tmp")"
+  rm -f "$tests_tmp" "$reds_tmp" "$checklists_tmp" "$goa_tmp" "$rows_meta_tmp"
   test_globs_json="$(printf '%s' "$glob_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
 
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
@@ -3225,6 +3495,109 @@ TF_EOF
   [ -z "$bad_criteria" ] \
     || die31 "tests-freeze: a --test names criteria $unit_id does not serve or own: $bad_criteria"
 
+  # --- the run's own mode, read once: the row checks below and the rejected-row halt both use it ---
+  # A ledger that is present and unreadable refuses here rather than further down. The mode decides
+  # which judge a row may carry, so reading it as interactive because the file would not parse would
+  # refuse an autonomous run with a sentence about a run it is not on. A ledger that is absent is a
+  # different fact, left to the steps below, which refuse on it by name.
+  local tf_ledger_file tf_ledger_doc tf_run_mode
+  tf_ledger_file="$IMPL_DIR/ledger.json"
+  tf_ledger_doc=""
+  if [ -f "$tf_ledger_file" ]; then
+    tf_ledger_doc="$(jq -c '.' "$tf_ledger_file" 2>/dev/null)"
+    [ -n "$tf_ledger_doc" ] \
+      || die3 "tests-freeze: $tf_ledger_file exists but could not be read as JSON. This step reads the run's own mode from it, and every row below is judged against that mode. Repair or remove it by hand before running this again."
+  fi
+  tf_run_mode="interactive"
+  [ -n "$tf_ledger_doc" ] && tf_run_mode="$(printf '%s' "$tf_ledger_doc" | jq -r '.runMode // "interactive"')"
+
+  # --- 64: a criterion whose frozen verifiedBy is neither word answers nothing ----------------------
+  # Such a criterion needs no test (exit 29 reads machine), no checklist (exit 30 reads person) and
+  # no row, so it would be frozen with nothing at all behind it. scripts/check-alignment.sh refuses
+  # the value when scope closes, and scripts/check-design.sh refuses it again when design closes.
+  # This is a third reading, against the frozen copy rather than the live file: a snapshot taken
+  # before either check carried the rule still holds whatever it froze.
+  local bad_kinds
+  bad_kinds="$(printf '%s' "$CRITERIA_JSON" | jq -r '
+      [ .[] | select((.verifiedBy // "") != "machine") | select((.verifiedBy // "") != "person")
+        | .id + " (verifiedBy " + ((.verifiedBy // null) | tostring) + ")" ] | join(", ")')"
+  [ -z "$bad_kinds" ] \
+    || die64 "tests-freeze: $unit_id serves or owns criteria whose verifiedBy is neither machine nor person: $bad_kinds. Such a criterion takes no test, no checklist and no row, so freezing it would record nothing at all. Fix the contract and close design again."
+
+  # --- 70: the judge of a row must match the run this task is on -----------------------------------
+  local wrong_judge
+  if [ "$tf_run_mode" = "autonomous" ]; then
+    wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
+        [ .[] | select(.judgedBy == "person") | .criterion ] | join(", ")')"
+    [ -z "$wrong_judge" ] \
+      || die70 "tests-freeze: these rows say a person judged them, and this run is autonomous: $wrong_judge. No person is here to read a row, and a row recorded as a person's is one nobody can list again later. Nothing is written."
+  else
+    wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
+        [ .[] | select(.judgedBy == "model") | .criterion ] | join(", ")')"
+    [ -z "$wrong_judge" ] \
+      || die70 "tests-freeze: these rows say a model judged them, and this run is interactive: $wrong_judge. A person is here, and their reading is the stronger evidence, so the record must not say a checker stood in for them. Nothing is written."
+  fi
+
+  # --- 64: the --row set and this order's criteria must correspond, in all four ways ---------------
+  # A machine-verified criterion this order serves or owns needs exactly one row: the checkpoint
+  # asks, per order, whether these tests observe the part of the verify clause this order is
+  # responsible for. A person-verified criterion never gets one, because it carries a checklist and
+  # completion is what confirms it (ideal/implementation.md, "A criterion a person inspects has no
+  # tests").
+  local rows_missing rows_unknown rows_person rows_twice
+  rows_missing="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
+      ($rows | map(.criterion)) as $named
+      | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid
+          | select(($named | index($cid)) == null) | $cid ]
+      | join(", ")
+    ')"
+  [ -z "$rows_missing" ] \
+    || die64 "tests-freeze: these machine-verified criteria have no --row: $rows_missing. Every row of the trace matrix is judged before the tests are frozen."
+  rows_unknown="$(jq -nr --argjson allowed "$CRITERIA_IDS_JSON" --argjson rows "$rows_meta_json" '
+      [ $rows[] | .criterion as $cid | select(($allowed | index($cid)) == null) | $cid ]
+      | unique | join(", ")
+    ')"
+  [ -z "$rows_unknown" ] \
+    || die64 "tests-freeze: a --row names criteria $unit_id does not serve or own: $rows_unknown"
+  rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
+      ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
+      | [ $rows[] | .criterion as $cid | select(($people | index($cid)) != null) | $cid ]
+      | unique | join(", ")
+    ')"
+  [ -z "$rows_person" ] \
+    || die64 "tests-freeze: a --row names $rows_person, which a person verifies. Such a criterion carries a checklist and never a judgement; completion confirms it."
+  rows_twice="$(jq -nr --argjson rows "$rows_meta_json" '
+      [ $rows | group_by(.criterion)[] | select(length > 1) | .[0].criterion ] | join(", ")
+    ')"
+  [ -z "$rows_twice" ] \
+    || die64 "tests-freeze: these criteria have more than one --row: $rows_twice. One order judges one criterion once."
+
+  # --- 65: a rejected row stops the freeze, and no test record is written ---------------------------
+  # Unattended, a row the checker rejected also halts the order before the refusal, the same way a
+  # dirty tree already halts one at `build-record`. A refusal is a message to whoever ran the step,
+  # and unattended nobody is reading it: the order would sit in flight with no reason on it. A row a
+  # person rejected refuses without a halt either way, because the person is already there and the
+  # row goes straight back to the test author.
+  local rejected_rows rejected_by_model
+  rejected_rows="$(printf '%s' "$rows_meta_json" | jq -r '
+      [ .[] | select(.verdict == "rejected") | .criterion + " (" + .judgedBy + "): " + .note ] | join("; ")')"
+  if [ -n "$rejected_rows" ]; then
+    rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
+        [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
+          | .criterion + ": " + .note ] | join("; ")')"
+    if [ -n "$rejected_by_model" ]; then
+      local tf_why tf_halted_doc
+      if [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
+        tf_why="row rejected by the checker: $rejected_by_model"
+        tf_halted_doc="$(halt_order_in "$tf_ledger_doc" "$unit_id" "$tf_why")"
+        [ -n "$tf_halted_doc" ] || die3 "tests-freeze: the ledger update for $unit_id failed."
+        write_atomic "$tf_ledger_file" "$tf_halted_doc"
+        echo "TESTS-FREEZE: $unit_id is halted. $tf_why" >&2
+      fi
+    fi
+    die65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
+  fi
+
   # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
   local bad_red_names
   bad_red_names="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" '
@@ -3284,7 +3657,13 @@ TF_EOF
       || die3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
   fi
 
+  # Every name the loop below uses is declared here, never inside it. zsh prints a parameter when
+  # `local` names one that already exists in the same scope, so a `local` inside a loop body puts
+  # the previous round's value on standard output from the second round on, which corrupts this
+  # action's own output for any order serving two criteria (trap 5 in this file's own header).
   local rows_tmp crit_count ci cid ckind
+  local names_json ntests tj tpath trelpath tname tsha tredpath tredtext tests_out_tmp tests_out_json
+  local checklist_text
   rows_tmp="$IMPL_DIR/.tests-freeze-rows.$$"
   : >"$rows_tmp"
   crit_count="$(printf '%s' "$CRITERIA_JSON" | jq 'length')"
@@ -3293,7 +3672,6 @@ TF_EOF
     cid="$(printf '%s' "$CRITERIA_JSON" | jq -r --argjson ci "$ci" '.[$ci].id')"
     ckind="$(printf '%s' "$CRITERIA_JSON" | jq -r --argjson ci "$ci" '.[$ci].verifiedBy')"
     if [ "$ckind" = "machine" ]; then
-      local names_json ntests tj tpath trelpath tname tsha tredpath tredtext tests_out_tmp tests_out_json
       names_json="$(printf '%s' "$tests_json" | jq -c --arg cid "$cid" \
         '[ .[] | select(.criteria | index($cid) != null) ]')"
       ntests="$(printf '%s' "$names_json" | jq 'length')"
@@ -3321,7 +3699,6 @@ TF_EOF
         '{criterion: $cid, kind: "machine", tests: $tests}' >>"$rows_tmp" \
         || die3 "tests-freeze: could not record the row for $cid"
     else
-      local checklist_text
       checklist_text="$(printf '%s' "$checklists_json" | jq -r --arg id "$cid" \
         '[ .[] | select(.id == $id) ][0].text // empty')"
       jq -n --arg cid "$cid" --arg text "$checklist_text" \
@@ -3333,6 +3710,35 @@ TF_EOF
   local rows_json
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
+
+  # --- the checkpoint's verdict goes into the ledger, one judgement per order per criterion --------
+  # Written before the record below, and on both paths through it, because a second freeze at the
+  # same commit with the same tests writes no record and must still carry the judgement a person or
+  # a checker just made. A judgement this order already left is replaced rather than added to: one
+  # order judges one criterion once, and two entries under one unit would count that row twice.
+  local judgement_count ledger_file_now ledger_doc_now ledger_with_judgements
+  judgement_count="$(printf '%s' "$rows_meta_json" | jq 'length')"
+  if [ "$judgement_count" -gt 0 ]; then
+    ledger_file_now="$IMPL_DIR/ledger.json"
+    [ -f "$ledger_file_now" ] \
+      || die3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
+    ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
+    [ -n "$ledger_doc_now" ] \
+      || die3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
+      --arg unit "$unit_id" --argjson rows "$rows_meta_json" '
+      .criteria = ((.criteria // []) | map(
+        . as $c
+        | ([ $rows[] | select(.criterion == $c.id) ][0]) as $r
+        | if $r == null then $c
+          else ($c + {judgements: (
+                  (($c.judgements // []) | map(select(.unit != $unit)))
+                  + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
+          end))')"
+    [ -n "$ledger_with_judgements" ] \
+      || die3 "tests-freeze: the ledger update for $unit_id's judgements failed."
+    write_atomic "$ledger_file_now" "$ledger_with_judgements"
+  fi
 
   local today record_json
   today="$(date -u +%Y-%m-%d)"
@@ -3432,7 +3838,9 @@ do_build_brief() {
     || die3 "build-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   # --- exit 40: every dependency needs a completion record before its interface is handed over ------
-  local depends_json dep_count i dep_id dep_entry dep_step dependency_interfaces_json='[]'
+  # dep_interface is declared here, never inside the loop, for the reason tests-brief states above
+  # and this file's own header records as trap 5.
+  local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
   depends_json="$(printf '%s' "$BB_UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
@@ -3444,7 +3852,6 @@ do_build_brief() {
       || die3 "build-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
     dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
     if [ "$dep_step" = "closed" ]; then
-      local dep_interface
       dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
         '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
       dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
@@ -3463,8 +3870,10 @@ do_build_brief() {
     || die3 "build-brief: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
   attempts_used="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
   case "$attempts_used" in ''|*[!0-9]*) attempts_used=0 ;; esac
-  [ "$attempts_used" -lt "$BUILD_ATTEMPTS_ALLOWED" ] \
-    || die41 "build-brief: $unit_id has already used $attempts_used of $BUILD_ATTEMPTS_ALLOWED allowed attempts. Nothing more is handed over."
+  local attempts_allowed
+  attempts_allowed="$(attempts_allowed_for "$order_entry")"
+  [ "$attempts_used" -lt "$attempts_allowed" ] \
+    || die41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
   # --- assemble the brief: exactly these five keys, and nothing else -------------------------------
   local unit_out tests_out
@@ -3479,7 +3888,7 @@ do_build_brief() {
 
   jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
-        --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$BUILD_ATTEMPTS_ALLOWED" \
+        --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
     '{unit: $unit, tests: $tests, dependencyInterfaces: $dependencyInterfaces,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}'
   exit 0
@@ -3626,8 +4035,7 @@ br_require_clean_tree() {
   [ -z "$dirty" ] && return 0
   why="uncommitted changes in the code repository: $(printf '%s' "$dirty" | tr '\n' ' ')"
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
-    halted_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --arg why "$why" \
-      '.orders = (.orders | map(if .id == $id then (.haltedBecause = $why) else . end))')"
+    halted_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$why")"
     [ -n "$halted_doc" ] || die3 "$who: the ledger update for $unit_id failed."
     write_atomic "$ledger_file" "$halted_doc"
     echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is halted. $why" >&2
@@ -4164,6 +4572,8 @@ do_build_record() {
   attempts_used_before="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
   case "$attempts_used_before" in ''|*[!0-9]*) attempts_used_before=0 ;; esac
   attempt_number=$((attempts_used_before + 1))
+  local attempts_allowed
+  attempts_allowed="$(attempts_allowed_for "$order_entry")"
 
   # --- the task's own project, resolved the same way every earlier step already resolves it --------
   local project_folder codepath
@@ -4304,23 +4714,31 @@ do_build_record() {
     [ .[] | select(.verdict == "unmet" or (.verdict == "unknown" and .id != "interface-record")) ]
     | .[0] // {id:"none",verdict:"",detail:""}
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)')"
-  local step_expr
+  # The counter and the step move in one update; the halt, when there is one, goes through the one
+  # helper that writes every halt, so this reason never erases a reason the order already carried.
+  local step_expr halt_why
+  halt_why=""
   if [ "$all_met" = "true" ]; then
     step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "checks-passed"'
-  elif [ "$attempt_number" -ge "$BUILD_ATTEMPTS_ALLOWED" ]; then
-    step_expr=".attemptsUsed = (.attemptsUsed + 1) | .lastStep = \"code-written\" | .haltedBecause = \"attempts spent: $attempt_number of $BUILD_ATTEMPTS_ALLOWED, and the last was stopped by \" + \$stopper"
   else
     step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "code-written"'
+    if [ "$attempt_number" -ge "$attempts_allowed" ]; then
+      halt_why="attempts spent: $attempt_number of $attempts_allowed, and the last was stopped by $first_stopper"
+    fi
   fi
   local new_ledger_doc
-  new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --arg stopper "$first_stopper" \
+  new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger_doc" ] || die3 "build-record: the ledger update for $unit_id failed."
+  if [ -n "$halt_why" ]; then
+    new_ledger_doc="$(halt_order_in "$new_ledger_doc" "$unit_id" "$halt_why")"
+    [ -n "$new_ledger_doc" ] || die3 "build-record: the halt on $unit_id could not be written."
+  fi
   write_atomic "$ledger_file" "$new_ledger_doc"
 
   printf '%s\n' "$record_json"
-  if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$BUILD_ATTEMPTS_ALLOWED" ]; then
-    echo "BUILD-RECORD: $unit_id is halted. Attempts spent: $attempt_number of $BUILD_ATTEMPTS_ALLOWED. The last was stopped by $first_stopper" >&2
+  if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$attempts_allowed" ]; then
+    echo "BUILD-RECORD: $unit_id is halted. Attempts spent: $attempt_number of $attempts_allowed. The last was stopped by $first_stopper" >&2
   fi
   exit 0
 }
@@ -5456,7 +5874,8 @@ rv_write_verification() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# close: the order is done, and the ledger says what it produced.
+# close: the order is done, the ledger says what it produced, and every criterion this order serves
+# is decided here, because a criterion split across orders is answered once, by the last of them.
 # ------------------------------------------------------------------------------------------------
 
 do_close() {
@@ -5525,9 +5944,371 @@ do_close() {
     --arg range "$started_at..$head_now" '
     .orders = (.orders | map(if .id == $id then (.lastStep = "closed" | .commitRange = $range) else . end))')"
   [ -n "$new_ledger" ] || die3 "close: the ledger update for $unit_id failed."
+
+  # Every criterion this order serves or owns is decided now, and only now. A criterion design split
+  # across several orders has no honest answer before the last of them closes, so confirmed needs
+  # every serving order closed, a judgement from every one of them, and every one of those
+  # judgements confirmed. One rejected judgement decides it the other way, whichever order left it.
+  # Two of the three clauses are defensive, and neither is reachable through the actions. The
+  # rejection cannot arrive, because `tests-freeze` refuses a rejected row outright. A serving order
+  # closed without leaving a judgement cannot arrive either, because the freeze refuses a machine
+  # criterion with no row and an order reaches `close` only through the freeze. Both are derived
+  # rather than assumed: a state nothing can produce today is still a state to read correctly, and a
+  # hand-edited ledger can produce either. A criterion a person verifies is left where it is, at not-judged. It carries a
+  # checklist and no judgement, and completion is what confirms it (ideal/implementation.md, "A
+  # criterion a person inspects has no tests"). The kind is read from the frozen contract, which is
+  # the one producer of it; the frozen test record's own `kind` is a copy of that same field.
+  local served_json serving_map_json kinds_json
+  served_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '((.criteriaServed // []) + (.criteriaOwned // [])) | unique')"
+  serving_map_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
+    '[ .workOrders[]? | {id: .id, serves: (((.criteriaServed // []) + (.criteriaOwned // [])) | unique)} ]')"
+  kinds_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]')"
+  new_ledger="$(printf '%s' "$new_ledger" | jq -c \
+    --argjson served "$served_json" --argjson serving "$serving_map_json" --argjson kinds "$kinds_json" '
+    . as $l
+    | .criteria = ((.criteria // []) | map(
+        . as $c
+        | if (($served | index($c.id)) == null) then $c
+          elif (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) != "machine") then $c
+          else
+            ([ $serving[] | select((.serves | index($c.id)) != null) | .id ]) as $servers
+            | ([ $l.orders[] | select((.id as $i | $servers | index($i)) != null) ]) as $entries
+            | (($c.judgements // [])) as $js
+            | if ($js | map(.verdict) | index("rejected")) != null then ($c + {rowState: "rejected"})
+              elif ((($entries | map(.lastStep == "closed")) | all)
+                     and (($servers - ([ $js[] | .unit ])) | length) == 0
+                     and (($js | map(.verdict == "confirmed")) | all))
+                then ($c + {rowState: "confirmed"})
+              else ($c + {rowState: "not-judged"}) end
+          end))')"
+  [ -n "$new_ledger" ] || die3 "close: deriving the row states for $unit_id failed."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
+  # The model-judged count is over the whole ledger, not this order alone: it is what a person
+  # returning to a finished run reads to list every row no person ever looked at.
+  printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --argjson served "$served_json" '{
+      order: ((.orders // []) | map(select(.id == $id)) | .[0]),
+      criteria: [ (.criteria // [])[] | select((.id as $i | $served | index($i)) != null)
+                  | {id: .id, rowState: .rowState,
+                     judgedBy: ([ (.judgements // [])[] | .judgedBy ] | unique)} ],
+      rowsJudgedByModel: ([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
+    }'
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# finish, grant-attempt, restart: the three actions that act on the task rather than on one order.
+#
+# `fn_` is this section's own helper prefix. The three read the ledger without a unit id, so they
+# cannot use rv_load_state, which reads one order and refuses when that order is halted. Two of
+# these three exist precisely to act on a halted order.
+# ------------------------------------------------------------------------------------------------
+
+# The ledger and the frozen snapshot for a task. $1 the action's own name. Sets FN_LEDGER_FILE,
+# FN_LEDGER_DOC and SNAPSHOT_DOC. Same three facts rv_load_state separates, with the same numbers:
+# neither file is exit 20, one without the other is exit 3.
+FN_LEDGER_FILE=""; FN_LEDGER_DOC=""
+fn_load_task_state() {
+  local who="$1" snapshot_file
+  FN_LEDGER_FILE="$IMPL_DIR/ledger.json"
+  snapshot_file="$IMPL_DIR/snapshot.json"
+  if [ ! -f "$FN_LEDGER_FILE" ]; then
+    [ -f "$snapshot_file" ] \
+      && die3 "$who: $FN_LEDGER_FILE not found, though $snapshot_file exists. A snapshot with no ledger beside it is not a supported state; run start again."
+    die20 "$who: this task's build has never started. There is no $FN_LEDGER_FILE and no $snapshot_file. Run start on this task first."
+  fi
+  FN_LEDGER_DOC="$(jq -c '.' "$FN_LEDGER_FILE" 2>/dev/null)"
+  [ -n "$FN_LEDGER_DOC" ] \
+    || die3 "$who: $FN_LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  [ -f "$snapshot_file" ] \
+    || die3 "$who: $snapshot_file not found, though $FN_LEDGER_FILE exists. A ledger with no snapshot beside it is not a supported state; run start again."
+  SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
+  [ -n "$SNAPSHOT_DOC" ] \
+    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+}
+
+# Exit 68. Both the grant and the restart are a person's judgement, so an autonomous run refuses.
+# $1 the action's own name, $2 what the caller would have been deciding.
+fn_require_interactive() {
+  local who="$1" what="$2"
+  [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.runMode // "interactive"')" = "autonomous" ] || return 0
+  die68 "$who: this run is autonomous, and $what is a person's judgement. Nothing is written. Run this action again with a person present, or let the halt stand."
+}
+
+# finish: the implementation stage is done for this task. The task is not. It goes to the review
+# stage next, and finished.json is what that stage receives.
+do_finish() {
+  [ "$#" -ge 1 ] || die3 "finish: a task folder is required"
+  [ "$#" -le 1 ] || die3 "finish: unrecognized extra argument: $2"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "finish")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  fn_load_task_state "finish"
+
+  # --- exit 66: every order closed, and every machine-verified criterion confirmed ----------------
+  local open_orders unconfirmed
+  open_orders="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '
+      [ (.orders // [])[] | select(.lastStep != "closed")
+        | .id + " (" + (.lastStep // "not started") + (if (.haltedBecause // "") == "" then "" else ", halted: " + .haltedBecause end) + ")" ]
+      | join("; ")')"
+  [ -z "$open_orders" ] \
+    || die66 "finish: these orders are not closed: $open_orders. Every order closes before implementation finishes."
+
+  # A halt survives a close. `start` writes a drift halt onto every order the change touches,
+  # whatever step each had reached, so an order closed before the design moved carries one
+  # afterwards. Reading lastStep alone would finish a task whose design has moved under it, and hand
+  # the review stage a commit range for a design that is gone. `restart` is what follows such a halt.
+  local halted_orders
+  halted_orders="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '
+      [ (.orders // [])[] | select((.haltedBecause // "") != "") | .id + ": " + .haltedBecause ]
+      | join("; ")')"
+  [ -z "$halted_orders" ] \
+    || die66 "finish: these orders are halted, closed or not: $halted_orders. Implementation does not finish while a reason to stop stands on an order."
+  unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" '
+      ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]) as $machine
+      | [ ($ledger.criteria // [])[] | select((.id as $i | $machine | index($i)) != null)
+          | select(.rowState != "confirmed") | .id + " (" + .rowState + ")" ]
+      | join("; ")')"
+  [ -z "$unconfirmed" ] \
+    || die66 "finish: these machine-verified criteria are not confirmed: $unconfirmed. A criterion a machine verifies is confirmed by the checkpoint over its own rows, and implementation does not finish without it."
+
+  # --- exit 61: the range below is a claim about the repository, so the tree has to be clean ------
+  rv_load_codepath "finish"
+  br_require_clean_tree "finish" "$RV_CODEPATH"
+  local head_now started_from
+  head_now="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+  [ -n "$head_now" ] \
+    || die3 "finish: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+  started_from="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // ""')"
+  [ -n "$started_from" ] \
+    || die3 "finish: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
+
+  # --- the checklists a person still has to work through, copied from the frozen records ----------
+  # They are copied rather than pointed at, because the review stage reads this one file and the
+  # frozen records are per order. A criterion two orders serve carries one entry per order, the same shape
+  # the frozen records themselves keep.
+  local order_ids order_count oi one_id one_tests checklists_json='[]' deferred_json='[]' one_review
+  order_ids="$(printf '%s' "$FN_LEDGER_DOC" | jq -c '[ (.orders // [])[] | .id ]')"
+  order_count="$(printf '%s' "$order_ids" | jq 'length')"
+  oi=0
+  while [ "$oi" -lt "$order_count" ]; do
+    one_id="$(printf '%s' "$order_ids" | jq -r --argjson i "$oi" '.[$i]')"
+    if [ -f "$IMPL_DIR/tests-$one_id.json" ]; then
+      one_tests="$(jq -c '.' "$IMPL_DIR/tests-$one_id.json" 2>/dev/null)"
+      [ -n "$one_tests" ] \
+        || die3 "finish: $IMPL_DIR/tests-$one_id.json exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      checklists_json="$(jq -cn --argjson have "$checklists_json" --argjson doc "$one_tests" --arg unit "$one_id" '
+          $have + [ ($doc.rows // [])[] | select(.kind == "person")
+                    | {criterion: .criterion, unit: $unit, checklist: (.checklist // "")} ]')"
+    fi
+    if [ -f "$IMPL_DIR/review-$one_id.json" ]; then
+      one_review="$(jq -c '.' "$IMPL_DIR/review-$one_id.json" 2>/dev/null)"
+      [ -n "$one_review" ] \
+        || die3 "finish: $IMPL_DIR/review-$one_id.json exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      deferred_json="$(jq -cn --argjson have "$deferred_json" --argjson doc "$one_review" --arg unit "$one_id" '
+          $have + [ ($doc.findings // [])[] | select(.ruling == "deferred")
+                    | {unit: $unit, finding: .id, severity: .severity, linkedTo: (.linkedTo // ""),
+                       evidence: (.evidence // ""), reason: (.rulingReason // "")} ]')"
+    fi
+    oi=$((oi + 1))
+  done
+
+  local task_id today record_json record_file
+  task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  [ -n "$task_id" ] || die3 "finish: $TASK_PATH/task.json has no usable id field"
+  today="$(date -u +%Y-%m-%d)"
+  record_file="$IMPL_DIR/finished.json"
+  record_json="$(jq -n --arg takenAt "$today" --arg task "$task_id" \
+    --arg range "$started_from..$head_now" \
+    --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
+    --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" '
+    ([ ($snap.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]) as $kinds
+    | {
+      schemaVersion: 1,
+      takenAt: $takenAt,
+      task: $task,
+      commitRange: $range,
+      orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)} ],
+      criteria: [ ($ledger.criteria // [])[] | . as $c
+                  | {id: $c.id,
+                     verifiedBy: (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) // ""),
+                     rowState: $c.rowState,
+                     judgedBy: ([ ($c.judgements // [])[] | .judgedBy ] | unique)} ],
+      checklists: $checklists,
+      deferred: $deferred,
+      rowsJudgedByModel: ([ ($ledger.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
+    }')"
+  [ -n "$record_json" ] || die3 "finish: could not assemble the finished record for $task_id."
+  write_atomic "$record_file" "$record_json"
+
+  # The record alone on standard output, the way `build-record` prints its own. The path is named on
+  # standard error instead of after it, so a caller can read this whole stream as one JSON document.
+  printf '%s\n' "$record_json"
+  echo "FINISH: implementation is finished for this task; the review stage reads $record_file" >&2
+  exit 0
+}
+
+do_grant_attempt() {
+  local task_arg="" unit_id="" reason=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --reason)
+        [ "$#" -ge 2 ] || die3 "grant-attempt: --reason needs the reason this order gets another attempt"
+        reason="$2"; shift 2 ;;
+      -*) die3 "grant-attempt: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die3 "grant-attempt: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die3 "grant-attempt: a task folder is required"
+  [ -n "$unit_id" ]  || die3 "grant-attempt: a unit id is required"
+  [ -n "$reason" ]   || die3 "grant-attempt: --reason is required. A grant with no reason is a cap nobody can audit."
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "grant-attempt")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  fn_load_task_state "grant-attempt"
+  fn_require_interactive "grant-attempt" "another attempt on one order"
+
+  local unit_present order_entry
+  unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
+  [ "$unit_present" = "0" ] && die22 "grant-attempt: $unit_id is not in the frozen copy."
+  order_entry="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die3 "grant-attempt: $unit_id has no entry in $FN_LEDGER_FILE, though start opens one entry per snapshot work order."
+
+  # Exit 67, twice over. A closed order has nothing left to attempt, so raising its allowance would
+  # record a grant against work that is already judged and closed.
+  local last_step
+  last_step="$(printf '%s' "$order_entry" | jq -r '.lastStep // ""')"
+  [ "$last_step" != "closed" ] \
+    || die67 "grant-attempt: $unit_id is closed, so there is no attempt left to grant. Nothing is written."
+
+  # A grant answers one reason and only one: the attempt counter is spent. A halt can hold several
+  # reasons, newest first, so this looks at every segment rather than the front of the text. The
+  # grant then removes that one segment. Any other reason stays, and the order stays halted with it,
+  # because clearing a reason a grant does not answer would hide it behind an attempt nobody needed.
+  local halt halt_spent halt_rest
+  halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  halt_spent="$(printf '%s' "$halt" | jq -Rr '
+      if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent"))) | join("; earlier: ")) end')"
+  halt_rest="$(printf '%s' "$halt" | jq -Rr '
+      if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent") | not)) | join("; earlier: ")) end')"
+  if [ -n "$halt" ] && [ -z "$halt_spent" ]; then
+    die67 "grant-attempt: $unit_id is halted for something a grant does not answer: $halt. Nothing is written."
+  fi
+
+  local allowed_before allowed_after today expr new_ledger
+  allowed_before="$(attempts_allowed_for "$order_entry")"
+  allowed_after=$((allowed_before + 1))
+  today="$(date -u +%Y-%m-%d)"
+  # attemptsUsed is never touched. The count of what a builder has already spent is a fact about the
+  # past, and a cap that can be lowered by editing that count is not a cap at all.
+  expr='.attemptsAllowed = $allowedAfter
+        | .grants = ((.grants // []) + [{reason: $reason, grantedAt: $today, allowedAfter: $allowedAfter}])'
+  if [ -n "$halt_spent" ] && [ -z "$halt_rest" ]; then
+    expr="$expr | del(.haltedBecause)"
+  elif [ -n "$halt_spent" ]; then
+    expr="$expr | .haltedBecause = \$rest"
+  fi
+  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$reason" \
+    --arg today "$today" --argjson allowedAfter "$allowed_after" --arg rest "$halt_rest" \
+    ".orders = (.orders | map(if .id == \$id then ($expr) else . end))")"
+  [ -n "$new_ledger" ] || die3 "grant-attempt: the ledger update for $unit_id failed."
+  write_atomic "$FN_LEDGER_FILE" "$new_ledger"
+
+  echo "GRANT-ATTEMPT: $unit_id may now use $allowed_after attempts, one more than before."
+  if [ -n "$halt_spent" ] && [ -z "$halt_rest" ]; then
+    echo "GRANT-ATTEMPT: the halt is cleared. It read: $halt_spent"
+  elif [ -n "$halt_spent" ]; then
+    echo "GRANT-ATTEMPT: the spent-attempts reason is cleared. It read: $halt_spent" >&2
+    echo "GRANT-ATTEMPT: $unit_id stays halted, because this reason still holds: $halt_rest" >&2
+  fi
   printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" '(.orders // []) | map(select(.id == $id)) | .[0]'
+  exit 0
+}
+
+do_restart() {
+  local task_arg="" reason=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --reason)
+        [ "$#" -ge 2 ] || die3 "restart: --reason needs the reason this build starts again"
+        reason="$2"; shift 2 ;;
+      -*) die3 "restart: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        else
+          die3 "restart: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die3 "restart: a task folder is required"
+  [ -n "$reason" ]   || die3 "restart: --reason is required. A restart with no reason leaves the next reader guessing what design changed."
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "restart")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  fn_load_task_state "restart"
+  fn_require_interactive "restart" "restarting a build against a changed design"
+
+  # Exit 69. Every drift halt `start` writes begins with "design drift: ", so this reads the halt
+  # reasons rather than re-deriving the drift itself: the drift was already worked out, order by
+  # order, by the run that halted them. A halt written later puts its own reason first and the drift
+  # after "; earlier: ", so this tests every segment and never only the front of the text.
+  local drifted
+  drifted="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '
+      [ (.orders // [])[]
+        | select(((.haltedBecause // "") | split("; earlier: ")) | map(startswith("design drift: ")) | any)
+        | .id ] | join(", ")')"
+  [ -n "$drifted" ] \
+    || die69 "restart: no order in $FN_LEDGER_FILE is halted for design drift, so there is nothing to restart from. Run start again to check the live design against the frozen copy."
+
+  rv_load_codepath "restart"
+  br_require_clean_tree "restart" "$RV_CODEPATH"
+
+  local head_short today target
+  head_short="$(git -C "$RV_CODEPATH" rev-parse --short HEAD 2>/dev/null)"
+  [ -n "$head_short" ] \
+    || die3 "restart: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+  today="$(date -u +%Y-%m-%d)"
+  target="$TASK_PATH/implementation-$today-$head_short"
+  [ ! -e "$target" ] \
+    || die3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
+
+  # The reason is written inside the folder being moved aside, because that folder is what it
+  # explains. Nothing reads this file yet; a person does.
+  local restart_json
+  restart_json="$(jq -n --arg restartedAt "$today" --arg reason "$reason" --arg head "$head_short" \
+    --arg drifted "$drifted" \
+    '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
+      ordersHaltedForDrift: ($drifted | split(", "))}')"
+  write_atomic "$IMPL_DIR/restarted.json" "$restart_json"
+
+  mv "$IMPL_DIR" "$target" || die3 "restart: could not move $IMPL_DIR to $target"
+
+  echo "RESTART: $IMPL_DIR moved aside. Orders halted for drift: $drifted"
+  echo "RESTART: run start on this task to take a fresh snapshot from the live design."
+  printf '%s\n' "$target"
   exit 0
 }
 
@@ -5624,7 +6405,8 @@ do_dispatch_open() {
   # Both building roles take their path lists from the frozen snapshot, so both need the unit to be
   # in it. A unit that is not says so in those words: without this check a mistyped id reports as an
   # order that declares no owned file, which sends a reader to design to fix something that is fine.
-  if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "implementer" ] || [ "$role_bare" = "fixer" ]; then
+  if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "row-checker" ] \
+     || [ "$role_bare" = "implementer" ] || [ "$role_bare" = "fixer" ]; then
     IMPL_DIR="$TASK_PATH/implementation"
     tt_load_snapshot "dispatch-open"
     local unit_present
@@ -5634,13 +6416,18 @@ do_dispatch_open() {
       && die22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
   fi
 
-  if [ "$role_bare" = "test-author" ]; then
+  # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause
+  # and the test named against it, and answers whether the one observes the other. Reading the
+  # implementation would let it answer from the code rather than from the test, which is the whole
+  # failure the checkpoint exists to catch (ideal/implementation.md, "The trace matrix and its
+  # checkpoint").
+  if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "row-checker" ]; then
     local owned_json owned_count
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
     owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \
-      || die47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a test author would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+      || die47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi
@@ -5756,6 +6543,9 @@ case "$ACTION" in
   fix-record)     do_fix_record     "$@" ;;
   verify-record)  do_verify_record  "$@" ;;
   close)          do_close          "$@" ;;
+  finish)         do_finish         "$@" ;;
+  grant-attempt)  do_grant_attempt  "$@" ;;
+  restart)        do_restart        "$@" ;;
   dispatch-open)  do_dispatch_open  "$@" ;;
   dispatch-close) do_dispatch_close "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;

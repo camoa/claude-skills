@@ -36,8 +36,9 @@ Run:
 
 It reads the frozen copy and the frozen tests, and it emits five things: this order's own record
 with the files it owns, the frozen tests for it with the criterion each carries, the declared
-interface of every order it depends on, and how many attempts this order has used of the two it is
-allowed.
+interface of every order it depends on, and how many attempts this order has used of the count it
+is allowed. That count is two unless a person has granted this order one more; see
+`references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
@@ -146,8 +147,9 @@ This step runs all eight deciding checks. The record holds every one.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks.
 
-A failed check is not a failed order. It is this attempt's result, and the order has two attempts.
-Say which check failed and what it printed, and let the person decide whether to spend the second.
+A failed check is not a failed order. It is this attempt's result, and the order has as many
+attempts as its own allowed count says, two unless a person has granted more. Say which check
+failed and what it printed, and let the person decide whether to spend the next one.
 
 An unknown on interface-record does not spend the attempt. The declaration named no backticked
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every

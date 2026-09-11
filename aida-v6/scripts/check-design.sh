@@ -15,6 +15,11 @@
 #   - every criterion is owned by exactly one work order, never zero and never two;
 #   - every work order serves at least one criterion;
 #   - a work order that owns a criterion whose verifiedBy is machine declares at least one test;
+#   - every criterion's verifiedBy is machine or person, and never a third value: a criterion whose
+#     verifiedBy is neither needs no test, no checklist and no checkpoint row, so implementation
+#     would freeze it with nothing at all behind it. scripts/check-alignment.sh already refuses the
+#     value when scope closes; this reads it again here, because implementation runs this check and
+#     not that one;
 #   - a work order that owns nothing reaches an owning work order by walking dependsOn edges
 #     through its own dependents (ideal/design.md, "An order that owns nothing is a supporting
 #     order": "it reaches a criterion through the orders that depend on it"); a chain that reaches
@@ -122,6 +127,7 @@
 #                 criteriaWithNoServingOrder: [ {id, text} ],
 #                 criteriaWithNoOwner: [ {id, text} ],
 #                 criteriaWithMultipleOwners: [ {id, text, owners} ],
+#                 criteriaWithUnusableVerifiedBy: [ {id, text, verifiedBy} ],
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
@@ -428,6 +434,7 @@ CRITERIA_WITH_NO_OWNER_JSON='[]'
 CRITERIA_WITH_MULTIPLE_OWNERS_JSON='[]'
 ORDERS_SERVING_NOTHING_JSON='[]'
 ORDERS_MISSING_REQUIRED_TESTS_JSON='[]'
+CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
 COVERAGE_ISSUE_COUNT=0
@@ -470,6 +477,16 @@ else
         | {id: $o.id, path: $o.path, criterionId: $cid} ]
   ')"
 
+  # A fact about the contract alone, so it needs no work order and is never withheld when one
+  # cannot be read: it reports a value that is present and wrong, not something absent.
+  CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON="$(jq -c -n --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --argjson criteria "$CRITERIA_WITH_TEXT_JSON" '
+    ($criteria | map({(.id): .text}) | add // {}) as $textOf
+    | [ $verifiedBy[] | select(.verifiedBy != "machine") | select(.verifiedBy != "person")
+        | {id: .id,
+           text: (($textOf[.id] // "") | if length > 120 then (.[0:117] + "...") else . end),
+           verifiedBy: .verifiedBy} ]
+  ')"
+
   UNKNOWN_CRITERIA_IDS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$CRITERION_IDS_JSON" '
     [ $orders[] | . as $o
       | ( ( ($o.criteriaServed // [])[] | {field: "criteriaServed", id: .} ),
@@ -487,6 +504,7 @@ else
   NO_SERVE_COUNT="$(printf '%s' "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" | jq 'length')"
   NO_OWNER_COUNT="$(printf '%s' "$CRITERIA_WITH_NO_OWNER_JSON" | jq 'length')"
   MULTI_OWNER_COUNT="$(printf '%s' "$CRITERIA_WITH_MULTIPLE_OWNERS_JSON" | jq 'length')"
+  UNUSABLE_VERIFIED_BY_COUNT="$(printf '%s' "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" | jq 'length')"
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
@@ -511,7 +529,7 @@ else
     COVERAGE_WITHHELD="false"
   fi
 
-  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT))
+  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
   if [ "$DESIGN_STARTED" = "true" ] && [ "$COVERAGE_WITHHELD" = "true" ]; then
     COVERAGE_NOTE="ran in part: $FILE_COUNT file(s), $COUNTED_ORDERS work order(s) counted, $EXCLUDED_COUNT excluded as unreadable, against $(printf '%s' "$CRITERION_IDS_JSON" | jq 'length') criterion/criteria. Every finding that reports something absent is withheld, because an excluded work order and a missing one look the same from here. Repair the files listed above and run this again."
   elif [ "$DESIGN_STARTED" = "true" ]; then
@@ -663,6 +681,7 @@ jq -n \
   --argjson criteriaWithNoServingOrder "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" \
   --argjson criteriaWithNoOwner "$CRITERIA_WITH_NO_OWNER_JSON" \
   --argjson criteriaWithMultipleOwners "$CRITERIA_WITH_MULTIPLE_OWNERS_JSON" \
+  --argjson criteriaWithUnusableVerifiedBy "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" \
   --argjson ordersServingNothing "$ORDERS_SERVING_NOTHING_JSON" \
   --argjson ordersMissingRequiredTests "$ORDERS_MISSING_REQUIRED_TESTS_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
@@ -692,6 +711,7 @@ jq -n \
       criteriaWithNoServingOrder: $criteriaWithNoServingOrder,
       criteriaWithNoOwner: $criteriaWithNoOwner,
       criteriaWithMultipleOwners: $criteriaWithMultipleOwners,
+      criteriaWithUnusableVerifiedBy: $criteriaWithUnusableVerifiedBy,
       ordersServingNothing: $ordersServingNothing,
       ordersMissingRequiredTests: $ordersMissingRequiredTests,
       unknownCriteriaIds: $unknownCriteriaIds,
