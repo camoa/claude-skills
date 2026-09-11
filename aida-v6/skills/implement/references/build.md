@@ -106,5 +106,8 @@ report the four as all of them.
 A failed check is not a failed order. It is this attempt's result, and the order has two attempts.
 Say which check failed and what it printed, and let the person decide whether to spend the second.
 
-The attempt counter lives in the ledger and is incremented here. An order out of attempts is
-halted, and nothing here un-halts one.
+The attempt counter lives in the ledger and is incremented here, and the order's state moves with
+it: `checks-passed` when no check answered unmet or unknown, `code-written` otherwise. An
+undeclared check continues, the same rule step two applies. When the attempt that did not pass was
+the last one allowed, the script writes the halt and its reason into the ledger at that moment, and
+says so. Nothing here un-halts one. Go back to the skill body for what happens to the run.

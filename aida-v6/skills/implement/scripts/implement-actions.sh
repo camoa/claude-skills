@@ -2205,6 +2205,19 @@ tt_load_unit_and_criteria() {
 # unreadable) when it is not ready. Sets SNAPSHOT_DOC. Shared by tests-brief and tests-freeze,
 # which both refuse for the same reason on the same missing file.
 SNAPSHOT_DOC=""
+# Writes one order's state into the ledger. $1 the ledger file, $2 the unit id, $3 a jq expression
+# applied to that order's entry with `.` bound to it. The ledger is the state file, and until
+# 2026-09-11 no step after start wrote anything into it but the attempt counter, so the ready list
+# and the resume logic both read a lastStep that never moved.
+tt_ledger_update() {
+  local ledger_file="$1" unit_id="$2" expr="$3" doc
+  [ -f "$ledger_file" ] || die3 "the ledger at $ledger_file is missing, though start writes it. Run start again."
+  doc="$(jq -c --arg id "$unit_id" \
+    ".orders = (.orders | map(if .id == \$id then ($expr) else . end))" "$ledger_file" 2>/dev/null)"
+  [ -n "$doc" ] || die3 "the ledger at $ledger_file could not be read as JSON, or the update to $unit_id failed."
+  write_atomic "$ledger_file" "$doc"
+}
+
 tt_load_snapshot() {
   local who="$1"
   local snapshot_file="$IMPL_DIR/snapshot.json"
@@ -2895,6 +2908,10 @@ TF_EOF
   fi
 
   write_atomic "$record_file" "$record_json"
+  # The freeze is one step in this version: red was watched, the rows exist, and the hash is taken,
+  # all checked above. So the order moves straight to tests-frozen and not through the four steps
+  # the ledger's vocabulary keeps for a finer grain.
+  tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.lastStep = "tests-frozen"'
   echo "TESTS-FREEZE: written (commit $current_commit)"
   printf '%s\n' "$record_file"
   exit 0
@@ -3341,12 +3358,34 @@ BR_DIFF
 
   write_atomic "$record_file" "$record_json"
 
+  # The attempt is spent whatever the checks said. Then the order's state: checks-passed when no
+  # check answered unmet or unknown, code-written otherwise. Undeclared continues, the same rule
+  # step two applies to a precondition: a check nobody declared was not run, and the record says so
+  # in that word, but it is not a check that answered no. And when the attempt that did not pass was the last
+  # one allowed, the order halts here, at the moment the fact becomes true, rather than when the
+  # next build-brief refuses. A halt written only on refusal is a halt nobody sees until they ask,
+  # and unattended nobody asks: the run would leave the order "in flight" with no reason on it.
+  local all_met first_stopper
+  all_met="$(printf '%s' "$checks_json" | jq -r 'all(.[]; .verdict == "met" or .verdict == "undeclared")')"
+  first_stopper="$(printf '%s' "$checks_json" | jq -r '[ .[] | select(.verdict == "unmet" or .verdict == "unknown") ] | .[0] // {id:"none",verdict:"",detail:""} | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)')"
+  local step_expr
+  if [ "$all_met" = "true" ]; then
+    step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "checks-passed"'
+  elif [ "$attempt_number" -ge "$BUILD_ATTEMPTS_ALLOWED" ]; then
+    step_expr=".attemptsUsed = (.attemptsUsed + 1) | .lastStep = \"code-written\" | .haltedBecause = \"attempts spent: $attempt_number of $BUILD_ATTEMPTS_ALLOWED, and the last was stopped by \" + \$stopper"
+  else
+    step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "code-written"'
+  fi
   local new_ledger_doc
-  new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
-    '.orders = (.orders | map(if .id == $id then .attemptsUsed = (.attemptsUsed + 1) else . end))')"
+  new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --arg stopper "$first_stopper" \
+    ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
+  [ -n "$new_ledger_doc" ] || die3 "build-record: the ledger update for $unit_id failed."
   write_atomic "$ledger_file" "$new_ledger_doc"
 
   printf '%s\n' "$record_json"
+  if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$BUILD_ATTEMPTS_ALLOWED" ]; then
+    echo "BUILD-RECORD: $unit_id is halted. Attempts spent: $attempt_number of $BUILD_ATTEMPTS_ALLOWED. The last was stopped by $first_stopper" >&2
+  fi
   exit 0
 }
 

@@ -50,11 +50,25 @@ being run is in this conversation.
 |---|---|---|
 | No snapshot, or a snapshot with no ledger | Start the build | `references/start.md` |
 | A ledger, and `preconditions.exists` is false | Check the preconditions | `references/preconditions.md` |
-| Preconditions recorded, and an order whose last step is null or earlier than `tests-frozen` | Write the tests for one work order | `references/tests.md` |
-| An order whose last step is `tests-frozen`, or `code-written` with attempts remaining | Write the code for one work order | `references/build.md` |
+| Preconditions recorded, and a ready order whose last step is null | Write the tests for one work order | `references/tests.md` |
+| An order whose last step is `tests-frozen`, or `code-written` with attempts remaining and no halt reason | Write the code for one work order | `references/build.md` |
+| An order at `checks-passed` | Nothing yet. Review is not built. Say so and leave it | |
 
 A resumed run starts at `start` regardless, because that is where drift since the snapshot is
 checked, and it says which orders halted. Then the table applies.
+
+## One order halting does not stop the run
+
+When an order halts, at its attempt cap or for drift, only the orders that depend on it wait.
+Everything else that is ready still builds. Run `start` again: it is safe on a resumed run, and it
+reports which orders are ready, which halted and why, and which are in flight. Take the next ready
+order and apply the table. Stop only when nothing is ready.
+
+Then report what halted, with the reason the ledger holds, and what is waiting on it. Interactive
+puts that to the person, who decides from the recorded attempts which of three things is true: the
+test is wrong, the order is wrong, or the code is hard and a person writes it. Unattended, the run
+ends there with the report, and decides none of the three. A model ruling that a test is wrong,
+with nobody watching, is the test describing the code again.
 
 Read the file with the Read tool from the plugin's own folder, at
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/`. A step run from memory of an earlier
