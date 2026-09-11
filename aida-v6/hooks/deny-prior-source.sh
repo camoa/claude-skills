@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
-# deny-prior-source.sh: PreToolUse hook on Read. Denies the test author reading production
-# source outside what its own dispatch names.
+# deny-prior-source.sh: PreToolUse hook on Read and Grep. Denies a dispatched role the reads its
+# own dispatch record names.
 #
 # Version 5's deny-reviewer-test-writes.sh (frozen, camoa-skills/ai-dev-assistant/hooks/) allows
 # anything it cannot name: a reviewer denied by matching agent_type, everyone else silent-allow.
-# This hook inverts that default for one role only. A test author dispatched onto a unit reads
-# that unit's own interface record, not the source it will test against; codePath's own
-# denyRead list is what dispatch-open recorded for this dispatch (scripts/dispatch-schema.json,
-# hooks/deny-frozen-test-writes.sh's own header carries the fuller reasoning for the record
-# itself). Inverting for every agent_type would deny the main thread too, since a person working
-# their own repository carries no agent_type at all and would never match anything permitted
-# either. So this hook narrows to the one role first, before it denies anything: a payload
-# carrying no agent_type, or an agent_type other than test-author, is not this hook's concern and
-# passes silently, same as it does for a reviewer under deny-reviewer-test-writes.sh.
+# This hook inverts that default for the role the open dispatch names, and for no other. The list
+# is that record's own denyRead (scripts/dispatch-schema.json; deny-frozen-test-writes.sh's header
+# carries the fuller reasoning for the record itself). Two roles reach it today. A test author is
+# denied every work order's owned files, because a test that has read the code describes the code
+# instead of the intent. An implementer is denied every order's but its own, because what another
+# unit exposes is its interface record and never its source.
 #
-# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name: allow, silent.
-# Not the test-author role: allow, silent. No project registered for this working directory, no
-# dispatch.json, dispatch.json unreadable, or a dispatch whose denyRead list is empty: allow, but
+# It compares the payload's agent_type against the record's role rather than naming a role in its
+# own source. Naming one meant a second role with denied reads needed a second hook, and meant the
+# record's role field enforced nothing, which the invariant audit found and dispatch-contracts.md
+# requires. Inverting for every agent_type instead would deny the main thread too, since a person
+# working their own repository carries no agent_type at all.
+#
+# Grep is covered because grepping for a function name is what these roles do without meaning
+# anything by it, and a Grep that returns content returns the source as surely as opening the file.
+# Bash is not covered and cannot be: a test author runs its own tests, so it holds Bash, and a shell
+# assembles any path at run time where this hook sees only text. A parser was built for it on
+# 2026-09-10 and reverted the same day (stages/08-invariant-audit.md, section 9). What survives is
+# the accidental read, which is the failure this rule exists to prevent.
+#
+# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, a tool that is
+# neither Read nor Grep, a payload with no agent_type, or an agent that is not the dispatched role:
+# allow, silent. No project registered for this working directory, no dispatch.json, dispatch.json
+# unreadable, a record naming no role, or a dispatch whose denyRead list is empty: allow, but
 # through `systemMessage`, the one hook-output channel the model sees on exit 0, naming why this
 # rule could not be applied. An empty list was the exception here until 2026-09-10, and it was the
 # worst one: a dispatch open with nothing denied looks exactly like a dispatch being enforced.
 # Nothing wrongly allowed here is a silent gap: a rule that cannot find its own record says so.
 #
 # Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
-# the model), on exit 0, so the reason reaches the test author.
+# the model), on exit 0, so the reason reaches the role.
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || { echo '{}'; exit 0; }
 INPUT="$(cat 2>/dev/null)" || { echo '{}'; exit 0; }
@@ -32,11 +43,11 @@ TOOL="$(jq -r '.tool_name // empty' <<<"$INPUT" 2>/dev/null)"; [ -n "$TOOL" ] ||
 # anything by it, and a Grep that returns content returns the source as surely as opening the file.
 case "$TOOL" in Read|Grep) ;; *) echo '{}'; exit 0 ;; esac
 
+# A payload with no agent_type is a person working their own repository. It can never match a role
+# in the record, so it leaves here before the record is even looked for, and pays nothing.
 AGENT="$(jq -r '.agent_type // empty' <<<"$INPUT" 2>/dev/null)"
-case "$AGENT" in
-  test-author|*:test-author) ;;
-  *) echo '{}'; exit 0 ;;
-esac
+[ -n "$AGENT" ] || { echo '{}'; exit 0; }
+AGENT_BARE="${AGENT##*:}"
 
 not_enforced() {
   jq -nc --arg r "deny-prior-source: not_enforced: $1" '{systemMessage:$r}'
@@ -71,6 +82,17 @@ CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
 CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
 [ -n "$CODE_CANON" ] \
   || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
+
+# The record says which role is dispatched, and this hook applies that record's denials to that role
+# and to nothing else. It used to name test-author in its own source, which meant a second role with
+# denied reads needed a second hook, and the record's own role field enforced nothing
+# (stages/08-invariant-audit.md: "neither hook compares the payload's agent_type to the role in
+# dispatch.json"). Both forms the runtime reports are accepted, `<plugin>:<role>` and the bare name.
+ROLE="$(jq -r '.role // empty' "$DISPATCH_FILE" 2>/dev/null)"
+[ -n "$ROLE" ] \
+  || not_enforced "$DISPATCH_FILE names no role, so this agent cannot be matched against the dispatch"
+ROLE_BARE="${ROLE##*:}"
+[ "$AGENT_BARE" = "$ROLE_BARE" ] || { echo '{}'; exit 0; }
 
 DENY_JSON="$(jq -c '.denyRead // []' "$DISPATCH_FILE" 2>/dev/null)"
 DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
@@ -142,9 +164,9 @@ while [ "$i" -lt "$DENY_COUNT" ]; do
     # A denied path under codePath is production source, and there is somewhere else to look. A
     # denied path outside it is not, so pointing at an interface record would be wrong advice.
     if is_under "$TARGET_ABS" "$CODE_CANON"; then
-      REASON="test-author may not read $TARGET_ABS: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
+      REASON="$ROLE_BARE may not read $TARGET_ABS: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
     else
-      REASON="test-author may not read $TARGET_ABS: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
+      REASON="$ROLE_BARE may not read $TARGET_ABS: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
     fi
     jq -nc --arg r "$REASON" \
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'

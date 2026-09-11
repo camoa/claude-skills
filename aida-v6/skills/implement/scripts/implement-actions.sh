@@ -54,10 +54,11 @@
 #                            [--allow-write <path relative to codePath>]...
 #
 # `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
-# that matches none of them. For the test-author role it also derives the denied reads itself, from
-# the owned files every work order in the frozen snapshot declares, so that denial is never a list
-# a caller assembles per dispatch. `--deny-read` adds to what was derived; it is how a path outside
-# codePath is denied, such as the recipe that carries the coding standards.
+# that matches none of them. For the two roles that build, it also derives the path lists itself
+# from the frozen snapshot, so neither is a list a caller assembles per dispatch: a test author is
+# denied every order's owned files, and an implementer is denied every order's but its own and is
+# allowed its own. `--deny-read` adds to what was derived; it is how a path outside codePath is
+# denied, such as the recipe each role may not open.
 #   implement-actions.sh dispatch-close <task_folder>
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
@@ -3422,9 +3423,20 @@ do_dispatch_open() {
   # read hook allow every path. Every order's owned files are denied, this unit's included: the
   # test author may not read the source it is writing tests for either (ideal/agents.md,
   # test-author). Reading its own tests back is untouched, because a test file is not an owned file.
-  if [ "$role_bare" = "test-author" ]; then
+  # Both building roles take their path lists from the frozen snapshot, so both need the unit to be
+  # in it. A unit that is not says so in those words: without this check a mistyped id reports as an
+  # order that declares no owned file, which sends a reader to design to fix something that is fine.
+  if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "implementer" ]; then
     IMPL_DIR="$TASK_PATH/implementation"
     tt_load_snapshot "dispatch-open"
+    local unit_present
+    unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" \
+      '[ .workOrders[]? | select(.id == $u) ] | length')"
+    [ "$unit_present" = "0" ] \
+      && die22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
+  fi
+
+  if [ "$role_bare" = "test-author" ]; then
     local owned_json owned_count
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
     owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
@@ -3432,6 +3444,28 @@ do_dispatch_open() {
     [ "$owned_count" -gt 0 ] 2>/dev/null \
       || die47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a test author would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
+"
+  fi
+
+  # The implementer is the mirror of the test author. It writes this unit's own files and may not
+  # read another unit's, because what a unit exposes is its interface record and never its code
+  # (ideal/agents.md, implementer). Both lists come from the snapshot for the same reason the test
+  # author's does: assembled per dispatch they would be a judgement made in the moment.
+  # An empty denial is a real state here and is not refused: a task with one work order has no
+  # other unit to withhold, which is different from a test author having nothing to withhold.
+  if [ "$role_bare" = "implementer" ]; then
+    local mine_json others_json mine_count
+    mine_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
+      '[ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] | unique')"
+    mine_count="$(printf '%s' "$mine_json" | jq 'length' 2>/dev/null)"
+    [ -n "$mine_count" ] || mine_count=0
+    [ "$mine_count" -gt 0 ] 2>/dev/null \
+      || die47 "dispatch-open: $unit_id declares no owned file in $IMPL_DIR/snapshot.json, so an implementer would be dispatched with nowhere it is meant to write. Design has to name what this order owns before its code is written."
+    others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
+      '[ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] | unique')"
+    deny_raw="$deny_raw$(printf '%s' "$others_json" | jq -r '.[]')
+"
+    allow_raw="$allow_raw$(printf '%s' "$mine_json" | jq -r '.[]')
 "
   fi
 
