@@ -780,6 +780,19 @@ do_read() {
     fi
   fi
 
+  # The skill routes on this: a ledger with no preconditions record means step two has not run.
+  # Reported the same way the snapshot and the ledger are, so the three read alike.
+  local precon_exists precon_readable precon_note
+  precon_exists=false; precon_readable=false; precon_note="not recorded"
+  if [ -f "$IMPL_DIR/preconditions.json" ]; then
+    precon_exists=true
+    if [ -r "$IMPL_DIR/preconditions.json" ] && jq empty "$IMPL_DIR/preconditions.json" 2>/dev/null; then
+      precon_readable=true; precon_note="ok"
+    else
+      precon_note="present but could not be read as JSON"
+    fi
+  fi
+
   jq -n \
     --arg taskPath "$TASK_PATH" \
     --arg alignmentFile "$ALIGNMENT_FILE" \
@@ -806,6 +819,9 @@ do_read() {
     --argjson ledgerReadable "$ledger_readable" \
     --arg ledgerNote "$ledger_note" \
     --argjson ledger "$ledger_summary" \
+    --argjson preconditionsExists "$precon_exists" \
+    --argjson preconditionsReadable "$precon_readable" \
+    --arg preconditionsNote "$precon_note" \
     '{
       taskPath: $taskPath,
       alignmentFile: $alignmentFile, alignmentState: $alignmentState,
@@ -821,7 +837,8 @@ do_read() {
       runMode: $runMode,
       implementationDir: $implementationDir,
       snapshot: { exists: $snapshotExists, readable: $snapshotReadable, note: $snapshotNote, summary: $snapshot },
-      ledger: { exists: $ledgerExists, readable: $ledgerReadable, note: $ledgerNote, summary: $ledger }
+      ledger: { exists: $ledgerExists, readable: $ledgerReadable, note: $ledgerNote, summary: $ledger },
+      preconditions: { exists: $preconditionsExists, readable: $preconditionsReadable, note: $preconditionsNote }
     }'
   exit 0
 }
