@@ -26,7 +26,7 @@
       "type": "array",
       "default": [],
       "items": { "type": "string", "minLength": 1 },
-      "description": "The union of every work order's own ownedFiles from the snapshot, sorted once with duplicates removed. Recorded even though nothing here reads it yet: it is what codingStandards, staticAnalysis and security will scope to once a recipe names a tool for one of them. suite is never scoped by it, because at this point the orders' own tests do not exist yet and no framework declares a command mapping paths to the tests that cover them."
+      "description": "The union of every work order's own ownedFiles from the snapshot, sorted once with duplicates removed. This is what a {paths} token in any of the three tool commands expands to, one argv token per path, narrowed first by that tool's own extensions list where it declares one. suite is never scoped by it, because at this point the orders' own tests do not exist yet and no framework declares a command mapping paths to the tests that cover them."
     },
     "suite": {
       "type": "array",
@@ -35,16 +35,16 @@
       "description": "One entry per framework the project declares, running that framework's own `suite` test-command row whole and unscoped, exactly as preconditions.json already resolved and recorded it. A project on two frameworks gets two runs, because the build runs in one repository that is both."
     },
     "codingStandards": {
-      "$ref": "#/$defs/undeclaredTool",
-      "description": "What the coding-standards tool found across the scope above. Always undeclared today: no recipe names a coding-standards tool at this point in the process. A real field rather than an omitted one, so a later recipe that starts naming one has somewhere to write met, unmet or unknown without this file's shape changing."
+      "$ref": "#/$defs/toolResult",
+      "description": "What the coding-standards command the caller supplied with --standards found across the scope above. Undeclared when no --standards flag was given. This is the value build-record's own coding-standards check compares a later failure against: a baseline that was met makes a later failure this order's own."
     },
     "staticAnalysis": {
-      "$ref": "#/$defs/undeclaredTool",
-      "description": "What static analysis found across the scope above. Always undeclared today, for the same reason codingStandards is: no recipe names a static-analysis tool at this point in the process."
+      "$ref": "#/$defs/toolResult",
+      "description": "What the static-analysis command the caller supplied with --static-analysis found across the scope above. Undeclared when no --static-analysis flag was given, and read later the same way codingStandards is."
     },
     "security": {
-      "$ref": "#/$defs/undeclaredTool",
-      "description": "What the security tool found across the scope above. Always undeclared today, for the same reason codingStandards is: no recipe names a security tool at this point in the process."
+      "$ref": "#/$defs/toolResult",
+      "description": "What the security command the caller supplied with --security found across the scope above. Undeclared when no --security flag was given, and read later the same way codingStandards is."
     }
   },
   "$defs": {
@@ -82,7 +82,7 @@
         }
       }
     },
-    "undeclaredTool": {
+    "toolResult": {
       "type": "object",
       "additionalProperties": false,
       "required": ["verdict"],
@@ -90,12 +90,39 @@
         "verdict": {
           "type": "string",
           "enum": ["met", "unmet", "unknown", "undeclared"],
-          "description": "The same four words every verdict in this stage uses. Only undeclared is ever written today."
+          "description": "The same four words every verdict in this stage uses. met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all (it was not found, exit 127, or the command holds {paths} while no work order declares an owned file), and undeclared when the caller supplied no command for this tool or when the tool's own extensions list matched no file in the scope, which means the row did not apply rather than that it passed. A row declaring the signal empty-stdout is unmet on a zero exit that printed on standard output. The baseline has nothing earlier to compare itself against, which is why unmet here is a plain record of a red tool and never a refusal."
+        },
+        "absent": {
+          "type": "boolean",
+          "description": "True when the recipe row for this tool was declared absent, and the reason in `reason` is the recipe's own. Absent from the record otherwise. It exists because undeclared covers two facts that must not read alike: a framework that says it has no such tool answered the question, and a caller who passed no flag answered nothing. Both stay undeclared, because undeclared is never satisfied either way, and this field is what tells a reader which happened."
         },
         "reason": {
           "type": "string",
           "minLength": 1,
-          "description": "Why: today always because no recipe names a tool for this at this point in the process. Never guessed from the project and never an invented tool name."
+          "description": "Why this verdict, present on undeclared and on unknown, and on the unmet a signal decided. Free text rather than a closed set, the same convention suite[].reason follows."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the tool exited with, present whenever it actually ran."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, present whenever it actually ran, met or not, for the same reason suite[].output is kept on a met run. Trimmed to at most the last 4000 characters. A row carrying the signal empty-stdout has the two streams read apart and then joined, standard output first, so their interleaving is not preserved for that row."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when output is the trimmed tail of a longer capture, absent entirely otherwise."
+        },
+        "signal": {
+          "type": "string",
+          "enum": ["empty-stdout"],
+          "description": "Present only when the recipe's own check-commands row declares it (dev-guides, process-recipes, '## Check commands' is parsed). empty-stdout marks a tool that cannot fail by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard output is unmet, and a caller that ignores the key has a green light wired to nothing. A non-zero exit is unread by this key and keeps its own meaning."
+        },
+        "extensions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Present only when the recipe's own check-commands row declares it. The file extensions this tool reads; {paths} expanded to only the files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply here."
         }
       }
     }

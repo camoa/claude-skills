@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation fix record",
+  "description": "What `fix-record` verified for one fix round on one order, at <task folder>/implementation/fix-<unit_id>-<round>.json (ideal/implementation.md, 'The fix rounds re-run the first two checks'). One file per round, so a second round never overwrites the first and a person reading a halted order can see both. The same shape as the build record with `round` in place of `attempt`, because the two steps verify the same code the same way and a reader who knows one must not have to learn another. Seven checks here, not eight: a fix round does not rewrite the interface record, so `interface-record` is never re-run. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "takenAt", "unit", "startedAt", "commit", "round", "reportPath", "diffPath", "checks", "decidingChecks"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date this round was recorded, YYYY-MM-DD. Set by the script at the moment of writing, never typed by hand."
+    },
+    "unit": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "The work order id this record belongs to, the same id `fix-brief` was given and the file's own basename encodes. Joined on, never re-minted."
+    },
+    "startedAt": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit this round began from, the full form of the `--started-at` value `fix-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). The owned-files check and the diff both run from here to `commit`."
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The code repository's HEAD at the moment `fix-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `round`, this is what exit 45 compares a new call against to refuse recording the same round twice."
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Which fix round this is, one more than the ledger's own roundsUsed before this call. `fix-record` increments roundsUsed after writing this record, whether the checks below were met or not: a round is a fixer that ended, not a fixer that succeeded. The cap is FIX_ROUNDS_ALLOWED, two, and at the cap a round that did not pass halts the order."
+    },
+    "reportPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the fixer's own report lives, copied from `--report` as given. Only the path is kept here, never the report's content, for the same reason the build record keeps only a path: a fixer's account of what it did is never read as authority. A fixer reporting that its scope was too small is read by whichever mode is running, and that is the skill's conversation, not this file's."
+    },
+    "diffPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where this round's own diff was written, from `startedAt` to `commit`. The verification reads its verdicts against this diff only, which is what keeps one round from growing into the next."
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "$ref": "#/$defs/check" },
+      "description": "The seven computable deciding checks this step re-runs, in the same fixed order the build record holds them: order-tests, suite-regression, coding-standards, static-analysis, security, owned-files, frozen-tests. The eighth, interface-record, is absent by design and not by omission."
+    },
+    "decidingChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "ranHere"],
+      "description": "States plainly which of the deciding checks ideal/implementation.md names this step ran. Seven of the eight, and the field exists so a reader never has to count `checks` to learn what a pass here covered.",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "const": 8,
+          "description": "The number of deciding checks in total. Always 8, the same constant the build record carries, so the seven below read as seven of eight rather than as a complete set."
+        },
+        "ranHere": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": { "type": "string" },
+          "description": "The `id` of each check in `checks`, in the same order, copied rather than re-derived."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verdict", "detail"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["order-tests", "suite-regression", "coding-standards", "static-analysis", "security", "owned-files", "frozen-tests"],
+          "description": "Which of the seven checks this is. The same ids the build record uses for the same checks, because both steps call one function and neither may drift into checking something the other does not."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "The same four words every verdict in this stage uses. undeclared means the command this check needed was never supplied, and undeclared is never satisfied. unknown means the check ran and nothing here can decide from it. Both unmet and unknown spend the round and leave every finding open. There is no exception here: the one unknown that does not spend an attempt belongs to interface-record, which this step never runs."
+        },
+        "absent": {
+          "type": "boolean",
+          "description": "True when the recipe row for this tool was declared absent, and the reason in `detail` is the recipe's own. Absent from the entry otherwise. It exists because undeclared covers two facts that must not read alike: a framework that says it has no such tool answered the question, and a caller who passed no flag answered nothing. Both stay undeclared, because undeclared is never satisfied either way, and this field is what tells a reader which happened."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this verdict, in plain words naming what was compared: an exit code, a set of file paths that did not match, or which marker or file could not be read."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the check's own command exited with, present only for order-tests, suite-regression, coding-standards, static-analysis and security, and only when a command was actually supplied and run."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode."
+        }
+      }
+    }
+  }
+}

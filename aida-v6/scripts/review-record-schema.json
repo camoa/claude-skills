@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation review record",
+  "description": "What one order's review found, and what every fix round after it did about each finding, at <task folder>/implementation/review-<unit_id>.json (ideal/implementation.md, 'What a review is given, and what it is refused'). One file per order, written once by `review-record` and updated by `verify-record`, never by anything else. One review per order, ever: `review-brief` and `review-record` both refuse when this file already exists, because a second pass is where a loop that cannot end comes from. The reviewer writes its findings to a file of its own, at the path the brief gave; this record is the script's own half, holding what that file said plus what the script decided about it. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "takenAt", "unit", "reviewedAt", "findingsPath", "findings", "rounds"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date the review was recorded, YYYY-MM-DD. Set by the script at the moment of writing, never typed by hand."
+    },
+    "unit": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "The work order id this record belongs to, the same id `review-brief` was given and the file's own basename encodes. Joined on, never re-minted."
+    },
+    "reviewedAt": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit the review read. `review-record` refuses unless the code repository is still at the commit the build record named and its working tree is clean (exit 51), so this value is always that same commit. The reviewer holds Write for one purpose, its own findings file under the task folder, and that refusal is what enforces it: a probe test left inside the reviewed code stops the step rather than becoming a finding later."
+    },
+    "findingsPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the reviewer's own findings file lives, copied from `--findings` as given. Kept so a reader can compare what the reviewer wrote against what this record decided about it."
+    },
+    "findings": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/finding" },
+      "description": "Every finding this order carries, in the order they arrived: the review's own first, then anything a verification found newly broken. An empty list is a real state and it is what a clean review looks like."
+    },
+    "rounds": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/round" },
+      "description": "One entry per verified fix round, appended by `verify-record`. A round that a check stopped has no entry here, because nothing verified it, and `close` compares the highest round number here against the ledger's own roundsUsed for exactly that reason (exit 60): a round whose findings only the fixer called addressed is not a round this stage takes as finished."
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "file", "lines", "linkedTo", "evidence", "fixScope", "actionable", "actionableBecause", "status", "origin"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "The finding's own id, `f` followed by a number with no leading zero. The reviewer mints the ids in its own findings file. A finding a verification adds is re-minted here, one past the highest id this record already holds, because the verifier numbers its own list from f1 and would otherwise collide with the review's."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "How bad the reviewer judged it. The fix brief hands a fixer every open finding in this order, high first, because one fixer takes the whole set in one round (ideal/implementation.md, 'One fixer per round, verification per finding'). Nothing here lowers a severity for a reason the builder's report gave."
+        },
+        "file": {
+          "type": "string",
+          "description": "Where the finding is, as the reviewer wrote it, relative to codePath. May be empty: a finding about something absent has no file to name."
+        },
+        "lines": {
+          "type": "string",
+          "description": "Which lines, as the reviewer wrote it. A string rather than two numbers, because a reviewer writes a range, a list or a single number and none of the three is worth normalizing for a reader."
+        },
+        "linkedTo": {
+          "type": "string",
+          "description": "The one criterion id or non-goal id this finding cites. Every finding cites exactly one, and a finding that cites neither is recorded and never acted on (ideal/implementation.md, 'Every finding cites a criterion or a non-goal'). Non-goals are where a boundary or a security finding with no criterion attaches, which is why they carry ids of their own."
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the reviewer saw. Required, because a finding with nothing to read is not a finding. Three rules govern what belongs here, each one a measured incident: a number states an outside threshold and never a bare ratio; a finding that a check let something through enumerates every way in; and there is no field for what was looked at and found clean."
+        },
+        "fixScope": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "description": "How far a fix should reach, as the reviewer wrote it. Mandatory in the review's own instruction and recorded here even when empty. `fix-brief` hands a fixer the union of these across every open finding."
+        },
+        "actionable": {
+          "type": "boolean",
+          "description": "Whether this finding may reach a fixer. True when `linkedTo` names a criterion or a non-goal the frozen contract holds. False otherwise, and a false finding is recorded and goes to the end of the task rather than into a round."
+        },
+        "actionableBecause": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why that answer, naming the id and where it was looked for. Present on every finding, actionable or not, so a reader never has to re-derive the decision from the contract."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "addressed", "ruled"],
+          "description": "Where this finding stands. Open until a verification calls it addressed or a person rules on it at the cap. A finding recorded with actionable false opens like any other and stays open, because nothing can close it: no fixer ever sees it. Every count that gates a step counts the open actionable findings only, so such a finding blocks nothing while staying visibly unanswered."
+        },
+        "origin": {
+          "type": "string",
+          "pattern": "^(review|round[1-9][0-9]*)$",
+          "description": "Where this finding came from: `review` for the review's own, `round<N>` for something a verification found newly broken in that round. Kept because a finding the fix itself introduced reads differently from one the review raised, and a reader must not have to guess which is which."
+        },
+        "addressedInRound": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Which round's verification called this finding addressed. Present only on an addressed finding."
+        },
+        "addressedEvidence": {
+          "type": "string",
+          "description": "What the verifier saw in the fix diff, verbatim. A verdict is read against the fix diff only, and attempted is not addressed."
+        },
+        "addressedFile": {
+          "type": "string",
+          "description": "Where the verifier looked, as it wrote it. Present only on an addressed finding, and may be empty."
+        },
+        "addressedLines": {
+          "type": "string",
+          "description": "Which lines the verifier looked at, as it wrote it. Present only on an addressed finding, and may be empty."
+        },
+        "scopeInsufficientInRound": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Which round's fixer reported that the scope it was given was too small for this finding. Present only when a fixer reported it. A fixer does not widen its own scope and does not fix what is not in its findings: it reports, and `fix-record` records the report here (ideal/implementation.md, 'One fixer per round, verification per finding')."
+        },
+        "scopeInsufficientBecause": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the fixer said it would have needed, in its own words. Interactive, the skill puts this to the person, who rules. Unattended, the order halts with this text as the halt's reason, because widening a scope with nobody present is unbounded work. Recorded in both modes, so an interactive run that answers the report still leaves the fact on the finding."
+        },
+        "ruling": {
+          "type": "string",
+          "enum": ["wrong", "deferred", "load-bearing"],
+          "description": "A person's answer at the round cap, on a finding still open after the last allowed round (ideal/implementation.md, 'The loop stops on a counter'). `load-bearing` is an escalation and halts the order with this finding as the reason. `wrong` and `deferred` let the order close with the finding recorded. An unattended run never writes this field: it has no person, so it halts instead (exit 55 and exit 56)."
+        },
+        "rulingReason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why that ruling, in the person's own words. Required with every ruling, because a ruling with no reason is the finding disappearing rather than being answered."
+        }
+      }
+    },
+    "round": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["round", "fixRecord", "addressed", "notAddressed", "newBreakage", "outOfScope"],
+      "properties": {
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Which fix round this verification read. It matches the ledger's own roundsUsed at the moment `verify-record` ran, and a round is verified once: a second call on the same round refuses (exit 45)."
+        },
+        "fixRecord": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where that round's own fix record lives, which holds the seven checks the round re-ran and the path to its diff."
+        },
+        "addressed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The findings this round's verification closed, by id."
+        },
+        "notAddressed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The findings this round's verification left open, by id. Attempted is not addressed, which is why this list exists separately from anything counting what the fixer said it did."
+        },
+        "newBreakage": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The ids this record minted for what the verification found newly broken by the fix. They open as findings like any other and are actionable by the same rule."
+        },
+        "outOfScope": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Whatever the verifier noticed outside the fix diff, in its own words. Recorded and never opened: it must not extend the round (ideal/implementation.md, 'One fixer per round, verification per finding')."
+        }
+      }
+    }
+  }
+}

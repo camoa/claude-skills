@@ -34,6 +34,9 @@ Do not add a test you think is missing. Report it instead, and say what it would
 
 Do not refactor code you did not touch. It widens the diff and nothing asked for it.
 
+**Commit every change before you return.** Use a one-line message naming this unit, on the branch
+already checked out. `build-record` refuses when the tree is not clean.
+
 Return under fifteen lines: what you changed, one line on the tests, where the interface record is,
 and any concern.
 
