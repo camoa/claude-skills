@@ -76,9 +76,14 @@ never a clean one**, and version 5 paid for that four times.
 - **A finding citing a non-goal** is this task's work the other way. The task did what it said it
   would not do.
 - **A finding citing neither** is recorded with `disposition: follow-up`, and named in the report,
-  whatever the run mode. Interactive, offer to run the task skill once per finding, so a person
-  creates it. No producer exists that creates a task without interviewing a person, which is why this
-  step records rather than creates. Folding a finding in silently is what scope exists to prevent.
+  whatever the run mode. Interactive, offer one task per finding, and for each yes run:
+  ```
+  "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh follow-ups "<task_folder>" \
+    --create <finding id>
+  ```
+  That script owns the task id, `<source task>-<finding id>`, and writes the goal from the evidence.
+  Completion later finds the task by its folder, so no field is added. Autonomous, nothing is
+  created here. Folding a finding in silently is what scope exists to prevent.
 - **Severity overrides the third case only.** A high severity security fault is raised at once, to the
   person, because leaving it queued ships it. The severity words are high, medium and low.
 

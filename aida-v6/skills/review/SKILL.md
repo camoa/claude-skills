@@ -4,7 +4,7 @@ description: This skill should be used when a task's implementation has finished
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Agent
 ---
 
 # Review
