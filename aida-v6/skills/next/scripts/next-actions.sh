@@ -166,9 +166,26 @@ sort_key() {
 # New-format tasks: <project>/tasks/<id>/task.json, read whole, filtered to not-complete.
 # ------------------------------------------------------------------------------------------------
 
+# What the task's review record says, in one of four words: passed or failed from its verdict,
+# unfinished for a record with no verdict yet, none when there is no record. An open task that
+# review has closed shows as reviewed here, so a person knows it is ready for completion. A record
+# that will not read is named on stderr and reads none; a reviewed task is then listed, never
+# dropped. $1 the task folder.
+review_verdict_of() {
+  local rj="$1/review/review.json"
+  [ -e "$rj" ] || { printf 'none'; return; }
+  if [ ! -r "$rj" ] || ! jq empty "$rj" >/dev/null 2>&1; then
+    printf 'next-actions: %s could not be read as JSON; the review verdict reads none.\n' "$rj" >&2
+    WARNED=1
+    printf 'none'
+    return
+  fi
+  jq -r '.verdict // "unfinished"' "$rj"
+}
+
 gather_new_tasks() {
   local project_path="$1"
-  local tasks_dir="$project_path/tasks" d tj state key line
+  local tasks_dir="$project_path/tasks" d tj state key line review
   [ -d "$tasks_dir" ] || return 0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
@@ -191,9 +208,10 @@ gather_new_tasks() {
     state="$(jq -r '.state // "new"' "$tj" 2>/dev/null)"
     [ "$state" != "complete" ] || continue
     key="$(sort_key "$project_path" "$d")"
-    line="$(jq -c --arg p "$d" \
+    review="$(review_verdict_of "$d")"
+    line="$(jq -c --arg p "$d" --arg review "$review" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
-        children:(.children // []), runMode:(.runMode // null), path:$p}' "$tj")"
+        children:(.children // []), runMode:(.runMode // null), review:$review, path:$p}' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
     printf '%s\t%s\n' "$key" "$line"
   done < <(find "$tasks_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
@@ -301,6 +319,7 @@ do_open() {
       "parent: " + (.parent // "none"),
       "children: " + ((.children // []) | join(" ")),
       "runMode: " + (.runMode // "interactive")' "$tj"
+    echo "review: $(review_verdict_of "$project_path/tasks/$target")"
     return 0
   fi
 
