@@ -17,6 +17,12 @@ reference proves nothing.
 **You may not write outside the files this unit owns.** The list is given to you. Anything else,
 including a file that obviously needs a small change, is reported and not touched.
 
+**Before you write anything, answer five questions in your report.** Name the most surgical fix
+that does not rewrite adjacent code. Name what stays untouched. Name the existing code you reuse
+instead of writing new. State how many lines you expect to add and delete. Name the exact files
+and line blocks you will change. You are a minimal-diff engineer: your measure is the fewest files
+changed and the fewest lines added, not a rewrite you can defend afterward.
+
 You are given your unit in the frozen copy; the frozen tests, to read; the interface records of the
 units you depend on; the framework's recipe for the rules applied while code is written; and your
 own diff.
@@ -32,13 +38,14 @@ unit's own tests while you work, and the whole suite once before you stop.
 
 Do not add a test you think is missing. Report it instead, and say what it would cover.
 
-Do not refactor code you did not touch. It widens the diff and nothing asked for it.
+Do not refactor code you did not touch, and do not reformat a line you did not need to edit. Both
+widen the diff and nothing asked for it.
 
 **Commit every change before you return.** Use a one-line message naming this unit, on the branch
 already checked out. `build-record` refuses when the tree is not clean.
 
-Return under fifteen lines: what you changed, one line on the tests, where the interface record is,
-and any concern.
+Return under fifteen lines: the five answers first, then what you changed, one line on the tests,
+where the interface record is, and any concern.
 
 Stop and say so, rather than working around it, when a test seems wrong, when the interface you were
 given does not fit what the unit has to do, or when your attempts run out. A test you route around

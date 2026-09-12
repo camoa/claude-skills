@@ -5,16 +5,13 @@ finds, and closes the order once nothing actionable is left open.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `review` point
-and this order's framework. Name the role: a dispatch that names none runs as the general agent
-with every tool, and the role exists so a catalog listing lands in the agent and not here. When
-this recipe carries a `check_commands` data block, it names the three tool commands,
-coding-standards, static-analysis, security, as an argv per tool. Read each row's own `signal` and
-`extensions` keys where present, from that same block.
-
-When the recipe carries no such block, pass no tool flag for it below. The three checks then
-record undeclared, and the report says the recipe declares no tool for that check. Never read a
-tool's name out of the recipe's own prose.
+Dispatch `catalog-identifier` for the `test-execution` point and the `review` point, both for this
+order's framework. Name the role: a dispatch that names none runs as the general agent with every
+tool, and the role exists so a catalog listing lands in the agent and not here. These are the same
+two files `references/build.md` already resolved for this order, and `references/preconditions.md`
+resolved for the baseline. Pass both paths straight through to `fix-record` below, in the fix
+section; do not open either here. The script reads `## Test commands` and `## Check commands`
+itself, and refuses (exit 72) when two frameworks each command one tool.
 
 ## Review
 
@@ -40,21 +37,41 @@ A met verdict only means every backticked element is present verbatim. It does n
 deeper disagreement between the two texts. Catching that is the reviewer's job, from both texts
 already in the brief.
 
+Open a dispatch record for the reviewer before dispatching it, with nothing denied and nothing
+allowed:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" reviewer <order id>
+```
+The reviewer holds Write, for its own findings file, and the frozen-test write hook only enforces
+the freeze while a dispatch record is open. With no record open, that hook reports itself
+not enforced for the whole review, and a write into a frozen test is caught only afterward, as a
+dirty tree. The empty lists still let the hook see this dispatch and protect every frozen test
+against it, the same way the freeze protects it against everyone else.
+
 **Dispatch `reviewer`.** Name the role: an unnamed dispatch runs as the general agent and matches
 no record. Set the model to opus. Give it the brief and nothing else, and tell it plainly that this
-is review mode. The reviewer opens no dispatch record: its read is wide by design, one named file
-outside the diff for one named risk. Its write is refused by the script, not by a hook, when the
-code moved or the tree is dirty. Leaving a probe file behind is a refusal, not a finding.
+is review mode. Its read is wide by design, one named file outside the diff for one named risk.
+Close the dispatch record as soon as it returns, whether it succeeded or not:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
+```
+It refuses (exit 75) when the open record names a different task: closing another task's record
+would leave that task's own role holding every permission the record withheld. Its write is also
+refused by the script, not by a hook, when the code moved or the tree is dirty.
+Leaving a probe file behind is a refusal, not a finding.
 
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh review-record "<task_folder>" <order id> \
   --findings <path to the reviewer's findings file>
 ```
-It refuses when a review record already exists for this order. It also refuses when the code path
-moved, or its tree is dirty, since the build record. And it refuses when the findings file named
-by `--findings` is missing, empty, or not the shape it reads. A finding citing neither a criterion
-nor a non-goal, or an id the contract does not hold, is recorded but never reaches a fixer.
+It refuses when a review record already exists for this order, unless the ledger never moved past
+`checks-passed`: a crash between writing the record and writing the ledger leaves that one state,
+and this call then finishes the write rather than refusing forever. It also refuses when the code
+path moved, or its tree is dirty, since the build record. And it refuses when the findings file
+named by `--findings` is missing, empty, or not the shape it reads. A finding citing neither a
+criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
+fixer.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. Interactive,
 it is actionable like any other finding, and it goes to the person with the rest. No open
@@ -68,9 +85,12 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh fix-brief "<task_folder>" <order id>
 ```
-It refuses when nothing is open, when the rounds are spent, or when the order is halted. It emits
-the open findings in severity order, the union of their fix scope, the frozen tests, the report
-path, and the round number.
+It refuses when nothing is open, when the rounds are spent, when the order is halted, or when the
+last fix round has not been verified yet. A resumed run hits that last refusal most. A round
+recorded but never carried through `verify-record` still counts as open, so the next round may not
+start over it. It emits the open findings in severity order, the union of their fix scope, the
+frozen tests, the report path, the round number, and `headNow`, the code repository's own commit
+at the moment of this call.
 
 Open the dispatch record before dispatching:
 ```
@@ -100,41 +120,60 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh fix-record "<task_folder>" <order id> \
   --report <path to the fixer's report> \
   --started-at <the commit the round began from> \
-  --suite <argv token>... \
-  --order-tests <argv token>... \
-  --standards <argv token>... \
-  --static-analysis <argv token>... \
-  --security <argv token>... \
-  [--standards-signal empty-stdout] [--standards-extensions <comma list>] \
-  [--static-analysis-signal empty-stdout] [--static-analysis-extensions <comma list>] \
-  [--security-signal empty-stdout] [--security-extensions <comma list>] \
-  [--standards-absent <reason>] [--static-analysis-absent <reason>] [--security-absent <reason>] \
+  --test-recipe <framework>=<path to the test-execution recipe> \
+  --check-recipe <framework>=<path to the review recipe> \
+  [--value <name>=<value>]... \
+  [--nothing-ran <literal substring>] \
   [--scope-insufficient <finding id>=<reason>]...
 ```
-The `signal` and `extensions` flags are the same keys from the `review` recipe's `check_commands`
-block, passed the same way build-record does. Pass `--standards-absent <reason>` (and the same for
-the other two) when the recipe's row is declared absent, with the recipe's own reason text.
+`--test-recipe` and `--check-recipe` are the two paths resolved above, one pair per framework. The
+script parses both itself, the same way `build-record` does. It refuses (exit 72) when two
+frameworks command one tool. It refuses (exit 73) when the check recipe it resolves is not the one
+the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person. Unattended halts the order, naming the
-finding.
+finding. Its reason may not hold the text `; earlier: `, the same refusal every halt reason
+applies: that text is how one halt is joined to another, and a reason carrying it would forge one.
+
+The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
+not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
 
 **`fix-record` refuses when the code repository's tree is not clean.** The fixer commits its own
 work before it returns. A dirty tree means that commit did not happen. This round is not recorded.
 Interactive puts that to the person. Unattended halts the order with that reason.
 
-This re-runs seven of the eight checks. Not interface-record: a fix round does not rewrite that
-record. A check answering unmet or unknown spends the round and leaves every finding open. At the
-round cap, the script halts the order itself, naming the check that stopped it. `review-brief` is
-never run again for this order.
+This re-runs seven of the eight checks, with the same order-tests floor build.md names: undeclared
+or unknown there still spends the round, even when every other check is undeclared. Not
+interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
+spends the round and leaves every finding open. At the round cap, the script halts the order
+itself, naming the check that stopped it. `review-brief` is never run again for this order.
+
+A repeat call at a commit this round already recorded finishes the write when the ledger never
+moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
+(exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
+unchanged code is a round nobody worked.
 
 **When `fix-record` halted the order this way, stop here.** Do not dispatch the reviewer in verify
 mode: `verify-record` refuses on a halted order. Report the halt instead, naming the check it
 stopped on, the same way a halt at the build step is reported.
 
+Open a dispatch record for the reviewer again, the same way review mode did, with nothing denied
+and nothing allowed:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" reviewer <order id>
+```
+The reviewer holds Write in verify mode too, for its verdict file, and the frozen-test hook still
+only enforces the freeze while a record is open. The same reasoning applies: without a record, a
+write into a frozen test is caught afterward as a dirty tree, not stopped as it happens.
+
 **Dispatch `reviewer` again, in verify mode.** Give it the open findings the fixer received, the
 fix diff as a file, and the fixer's report. Choose the path its verdicts go to yourself, the same
 way review-brief names its findings path, for example `<impl>/verify-<order id>-<round>.json`.
-Nothing else: not the original diff, not an earlier round's verdicts.
+Nothing else: not the original diff, not an earlier round's verdicts. Close the dispatch record as
+soon as it returns, whether it succeeded or not:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
+```
 
 Run:
 ```
@@ -144,6 +183,9 @@ Run:
 Addressed closes a finding. Not addressed keeps it open; attempted is not addressed. New breakage
 inside the fix diff opens as a finding under the same rule. Anything the reviewer notices outside
 the fix diff is recorded and opens nothing.
+
+A repeat call over a round already verified reports the verification on record rather than
+refusing: nothing was verified twice.
 
 ## Rulings, at the cap only
 
@@ -161,7 +203,9 @@ Run the same call again, with one `--ruling` flag added per open finding:
 ```
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
 order, the finding named as the reason. Interactive, this reaches the person as an escalation, not
-a question with an obvious answer. A ruling missing for an open finding at the cap refuses.
+a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
+ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
+takes, for the same reason.
 
 ## Close
 

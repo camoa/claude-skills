@@ -4,7 +4,7 @@ description: This skill should be used when a task's design has closed cleanly a
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Read(/${CLAUDE_PLUGIN_ROOT}/skills/implement/references/*), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Agent
 ---
 
 # Implement
@@ -45,19 +45,19 @@ The report from `read` says where this task is. Match it to one step, open that 
 and follow it. Each file holds everything for its step and nothing for another, so only the step
 being run is in this conversation.
 
-| The report says | The step | Read |
+| The report says | The step | Step name |
 |---|---|---|
-| No snapshot, or a snapshot with no ledger | Start the build | `references/start.md` |
-| A ledger, and `preconditions.exists` is false | Check the preconditions | `references/preconditions.md` |
-| Preconditions recorded, and a ready order whose last step is null | Write the tests for one work order | `references/tests.md` |
-| An order whose last step is `tests-frozen`, or `code-written` with attempts remaining and no halt reason | Write the code for one work order | `references/build.md` |
-| An order at `checks-passed` | Review the order | `references/review.md` |
-| An order `reviewed` or `fixed`, with an open actionable finding and a fix round left | Fix, then verify | `references/review.md` |
-| An order `reviewed` or `fixed`, with nothing open | Close the order | `references/review.md` |
+| No snapshot, or a snapshot with no ledger | Start the build | `start` |
+| A ledger, and `preconditions.exists` is false | Check the preconditions | `preconditions` |
+| Preconditions recorded, and a ready order whose last step is null | Write the tests for one work order | `tests` |
+| An order whose last step is `tests-frozen`, or `code-written` with attempts remaining and no halt reason | Write the code for one work order | `build` |
+| An order at `checks-passed` | Review the order | `review` |
+| An order `reviewed` or `fixed`, with an open actionable finding and a fix round left | Fix, then verify | `review` |
+| An order `reviewed` or `fixed`, with nothing open | Close the order | `review` |
 | An order `closed` | Nothing left to do on it. Take the next ready order | |
-| Every order closed, no `finished` record | Finish the task | `references/finish.md` |
-| An order whose `haltedBecause` holds a `design drift...` segment, anywhere in it | Offer the restart | `references/finish.md` |
-| An order whose `haltedBecause` holds an `attempts spent...` segment and no `design drift...` one, a person present | Offer the grant | `references/finish.md` |
+| Every order closed, no `finished` record | Finish the task | `finish` |
+| An order whose `haltedBecause` holds a `design drift...` segment, anywhere in it | Offer the restart | `finish` |
+| An order whose `haltedBecause` holds an `attempts spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 
 A resumed run starts at `start` regardless, because that is where drift since the snapshot is
 checked, and it says which orders halted. Then the table applies.
@@ -79,9 +79,14 @@ A halt beginning `attempts spent` or `design drift` has its own next step in `re
 the grant of one more attempt, or the restart after a design change. Offer either only when a
 person is present to decide it.
 
-Read the file with the Read tool from the plugin's own folder, at
-`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/`. A step run from memory of an earlier
-invocation is a step run against rules that may have changed.
+Open the step file through the script, not through the Read tool:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh step <step name>
+```
+This prints `references/<step name>.md`. A `Read` rule naming that folder does not reliably
+expand `${CLAUDE_PLUGIN_ROOT}`, which is why this skill grants only the one Bash rule above. Run
+`step` every time this table sends you to a file, even a file already read this turn. A step run
+from memory of an earlier invocation is a step run against rules that may have changed.
 
 ## What this skill does
 
@@ -95,3 +100,13 @@ holds Bash, so a `cat` of a denied file is not refused. That is deliberate: the 
 the role opening the source because reading the code is the obvious way to write a test about it,
 and a role working around the rule on purpose has already failed in ways no hook catches. Say that
 when the person asks what the dispatch enforces, rather than describing the denial as complete.
+
+`dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and the shell
+door above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
+whether a path is frozen, never by this flag. Say the same about it that you say about the other
+two: recorded, not enforced.
+
+The tool grants in this file's own frontmatter hold for one turn. The runtime clears them at your
+next message to the person, so a multi-turn build asks again for the Bash rule after that message.
+That is how a skill's grants work, not a fault in this one. Say so when a person asks why the same
+command prompts again partway through a build.

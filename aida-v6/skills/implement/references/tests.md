@@ -17,9 +17,11 @@ each is right, what a test may not do in this framework, and how a criterion id 
 Three answers, not one: no recipe for this framework, a listing that could not be reached, and a
 failed network are different things, and only the first says anything about the framework.
 
-**The `implement` point, for one thing only.** Take the file patterns its declaration names for
-tests, and pass them to the freeze below. This is the one recipe this step reads itself, because it
-needs the patterns as data rather than as instruction.
+**The `implement` point, for one thing only.** Take the file patterns from its `## Oracle files`
+block, the same globs the `test_delete` row names. The catalog index designates that block for
+naming test files, so this is not a guess at what the block is for. Pass those globs to the freeze
+below. This is the one recipe this step reads itself, because it needs the patterns as data rather
+than as instruction.
 
 Do not give this recipe to the test author. It carries the standards and the steps that write
 production code, and that role may write neither. Pass its path to `dispatch-open` as
@@ -51,8 +53,10 @@ the line.
 
 ## Open the dispatch record, then dispatch the test author
 
-The two rules below are applied by the runtime. Both read one record, and the build is serial, so a
-project has at most one open dispatch at a time.
+`--deny-read` below is applied by the runtime, through the read-denial hook. `--allow-write` is
+not: no hook reads it. It is recorded for a person reading the dispatch record later, the same as
+the read denial and the shell door named under "What this skill does" in `SKILL.md`. The build is
+serial, so a project has at most one open dispatch at a time.
 
 Open it first:
 ```
@@ -70,6 +74,9 @@ Close it as soon as the role returns, whether it succeeded or not:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
 ```
 A record left open makes the next dispatch refuse, and it names the role and order still holding it.
+It also refuses (exit 75) when the open record names a different task than this one: closing
+another task's record would leave that task's own role holding every permission the record
+withheld.
 
 **Then dispatch `test-author`.** Name the role. It is not the context that writes the code, and it
 is not this conversation either: a dispatch that names no role runs as the general agent, with
@@ -92,9 +99,11 @@ and nothing else. It opens the recipe itself. Do not read the body here and past
 runs to well over a hundred lines per framework, and reading it into this conversation is the cost
 the dispatch exists to avoid. Resolving which recipe is this step's job; reading it is the role's.
 
-Ask it to return, for each test, the path, the name, the criterion the name carries, and what the run
-printed when the test failed. Ask it to return a checklist line for each criterion a person
-verifies, copying the verification sentence whole.
+Ask it to return, for each test, the path, the name, and the criterion the name carries. For each
+test, it writes what the run printed when the test failed to its own file, under the task folder's
+`implementation/` folder, one file per test, and returns that file's path in its report. `--red`
+below reads that path. Ask it to return a checklist line for each criterion a person verifies,
+copying the verification sentence whole.
 
 **A test that passes before any code exists proves nothing.** It is corrected once. If it still
 passes, it is reported by name and the step stops. It is never deleted quietly and never weakened
@@ -116,7 +125,9 @@ exercise the sentence beside them, and test code invites a review of the code in
 `--row <criterion id>=rejected::person::<the person's words>` for the freeze below. A row the
 person rejects goes back to the test author before any freeze runs. Never run the freeze with a
 rejected row still standing. `tests-freeze` refuses it and writes nothing. Send that row back
-first, and freeze once every row for this order reads confirmed.
+first, and freeze once every row for this order reads confirmed. A note may not hold the text
+`; earlier: `, the text this stage joins one halt reason to another with; a note carrying it would
+forge a halt nobody wrote, so `tests-freeze` refuses the flag rather than write it.
 
 **Unattended, there is nobody to ask.** Dispatch `row-checker`. This reading stands in for the one
 place a person is the only check on whether a test asserts deeply enough. Pay the top tier for what
@@ -158,10 +169,19 @@ Run, with one flag per test, per failure output, per pattern, and per row:
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note>
 ```
 
+This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
+nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
+step. It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
+would rewind the step and leave a spent attempt counter and a stale build record for tests that no
+longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
+from here, not back.
+
 The script checks the file exists, sits inside the code repository, matches the framework's own
 declared pattern, and carries at the end of its name the criterion it claims. It checks every
 criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
-It checks every test has the output of the run that failed.
+It checks every test has the output of the run that failed. That check is a bound, not a proof: it
+confirms the file is not empty, and nothing in it confirms the framework's own failure signal
+appears there. A file holding "0 tests ran" passes the same way a real assertion failure does.
 
 **Every machine-verified criterion this order serves or owns needs exactly one row**, naming
 whether it was confirmed or rejected and who judged it. A criterion a person verifies carries a
@@ -181,7 +201,8 @@ which order froze it.
 
 Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The script
 stops the step rather than recording it, which is the right outcome: a test nobody watched fail is
-not a reference.
+not a reference. This is a bound, not a rule the script enforces on its own: nothing here notices a
+green-on-arrival test the caller does not flag, so the flag is on you.
 
 A record is taken once per commit. A second run at the same commit leaves it alone. One taken at a
 different commit refuses and names both.

@@ -4,7 +4,19 @@
   "description": "What `build-record` verified for one attempt at one unit, at <task folder>/implementation/build-<unit_id>.json (docs/implementation.md, 'The deciding checks run before anything judges'). One file per unit, holding only the latest attempt: a later attempt overwrites it, and `build-record` refuses to write it again for an attempt already recorded at the same commit (exit 45). This record runs all eight deciding checks: every test of this order passes, no test outside the baseline fails, the coding-standards tool is clean, static analysis is clean, the security tool is clean, the realized diff touches only files this order owns, every frozen test file is unchanged, and the interface record names every element the order's own declared interface names in backticks. A review only ever sees code that passed all eight, which is why none of them waits for a later step. The model writes the code; this file is the script's own half, verifying what came back rather than judging whether a criterion is met. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "takenAt", "unit", "startedAt", "commit", "attempt", "interfaceRecord", "reportPath", "checks", "decidingChecks"],
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "unit",
+    "startedAt",
+    "commit",
+    "attempt",
+    "interfaceRecord",
+    "reportPath",
+    "checks",
+    "decidingChecks",
+    "executed"
+  ],
   "properties": {
     "schemaVersion": {
       "type": "integer",
@@ -50,13 +62,23 @@
       "type": "array",
       "minItems": 8,
       "maxItems": 8,
-      "items": { "$ref": "#/$defs/check" },
+      "items": {
+        "$ref": "#/$defs/check"
+      },
       "description": "The eight deciding checks this step runs, in a fixed order: order-tests, suite-regression, coding-standards, static-analysis, security, owned-files, frozen-tests, interface-record. Each carries its own verdict, so nothing downstream has to re-derive one from an exit code this file does not store on its own."
+    },
+    "executed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many of the checks in `checks` actually executed: they ran a command, which is every check carrying an exitCode, or they computed a diff or a hash, which is owned-files and frozen-tests. interface-record compares two texts the caller handed over and runs nothing, so it is never counted. The field exists because a record saying every check answered, without saying how many of them ran, reads the same whether the code was tested or nothing was."
     },
     "decidingChecks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["total", "ranHere"],
+      "required": [
+        "total",
+        "ranHere"
+      ],
       "description": "States plainly which of the deciding checks docs/implementation.md names this step ran. All eight of them, since 2026-09-11; the field stays because a reader must never have to count `checks` to learn what a pass here covered.",
       "properties": {
         "total": {
@@ -68,7 +90,9 @@
           "type": "array",
           "minItems": 8,
           "maxItems": 8,
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "The `id` of each check in `checks`, in the same order, copied rather than re-derived, so a reader who only wants coverage never has to open `checks` to get it."
         }
       }
@@ -78,17 +102,35 @@
     "check": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "verdict", "detail"],
+      "required": [
+        "id",
+        "verdict",
+        "detail"
+      ],
       "properties": {
         "id": {
           "type": "string",
-          "enum": ["order-tests", "suite-regression", "coding-standards", "static-analysis", "security", "owned-files", "frozen-tests", "interface-record"],
+          "enum": [
+            "order-tests",
+            "suite-regression",
+            "coding-standards",
+            "static-analysis",
+            "security",
+            "owned-files",
+            "frozen-tests",
+            "interface-record"
+          ],
           "description": "Which of the eight checks this is. The ids are in the same order docs/implementation.md names the checks in: order-tests and suite-regression are 'Every test of this order passes' and 'No test outside the baseline fails'; coding-standards, static-analysis and security are the three tool checks; owned-files and frozen-tests are 'The realized diff touches only files this order owns' and 'Every frozen test file is unchanged'; interface-record is 'The interface record matches what the order declared'."
         },
         "verdict": {
           "type": "string",
-          "enum": ["met", "unmet", "unknown", "undeclared"],
-          "description": "The same four words every verdict in this stage uses. undeclared means the command this check needed was never supplied (--order-tests, --suite, --standards, --static-analysis or --security absent), or that a tool row's own extensions list matched no file this order owns, so the row did not apply here; undeclared is never satisfied and never a pass. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the suite or a tool failed while the baseline already recorded that same framework or tool unmet, unknown or undeclared, which this check cannot tell apart from that old finding plus a new one this order introduced; or the command holds {paths} while this order declares no ownedFiles; or, for interface-record, the declaration names no element in backticks. Neither reads as met. unknown on interface-record is the one unknown that does not spend the attempt: it is a question for the reviewer, not a fault in the code. Every other unmet or unknown does."
+          "enum": [
+            "met",
+            "unmet",
+            "unknown",
+            "undeclared"
+          ],
+          "description": "The same four words every verdict in this stage uses. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or a tool row's own extensions list matched no file this order owns, so the row did not apply here; undeclared is never satisfied and never a pass. order-tests carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the suite or a tool failed while the baseline already recorded that same framework or tool unmet, unknown or undeclared, which this check cannot tell apart from that old finding plus a new one this order introduced; or the command holds {paths} while this order declares no ownedFiles; or, for interface-record, the declaration names no element in backticks. Neither reads as met. unknown on interface-record is the one unknown that does not spend the attempt: it is a question for the reviewer, not a fault in the code. Every other unmet or unknown does."
         },
         "absent": {
           "type": "boolean",
@@ -99,19 +141,59 @@
           "minLength": 1,
           "description": "Why this verdict, in plain words naming what was compared: an exit code, a set of file paths that did not match, or which marker or file could not be read."
         },
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The framework whose resolved check recipe carried this tool row, present only on a tool check that had a command to run. One tool row may carry a command from one framework only: two frameworks each declaring one is refused before any check runs, because nothing here may choose between two answers to one question."
+        },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "framework",
+              "verdict"
+            ],
+            "properties": {
+              "framework": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The framework this run belongs to, as project.json records it."
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "met",
+                  "unmet",
+                  "unknown",
+                  "undeclared"
+                ],
+                "description": "What this framework alone answered, before the verdicts were folded into the one above."
+              }
+            }
+          },
+          "description": "One entry per framework, present only on order-tests and suite-regression, which run once per framework the task resolved a test recipe for, because the build runs in one repository that is all of them at once. The check's own verdict is the worst of these, with undeclared ranking lowest so a framework that declared nothing never drags down one that ran and passed."
+        },
         "exitCode": {
           "type": "integer",
           "description": "What the check's own command exited with, present only for order-tests, suite-regression, coding-standards, static-analysis and security, and only when a command was actually supplied and run. Absent for owned-files, frozen-tests and interface-record, which compare files or text rather than run a command, and absent for a check left undeclared."
         },
         "signal": {
           "type": "string",
-          "enum": ["empty-stdout"],
+          "enum": [
+            "empty-stdout"
+          ],
           "description": "Present only on a tool check whose recipe row declares it (dev-guides, process-recipes, '## Check commands' is parsed). empty-stdout marks a tool that cannot fail by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard output counts as a failure, and a caller that ignores the key has a green light wired to nothing. That failure then goes through the same baseline comparison a non-zero exit does, because a finding the tool already reported at the commit the build started from is not one this order introduced."
         },
         "extensions": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "description": "Present only on a tool check whose recipe row declares it. The file extensions this tool reads; {paths} expanded to only the order's own owned files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply to this order."
         },
         "output": {

@@ -17,15 +17,11 @@ the path. Do not read the body here.
 Do not give the test-authoring recipe to the implementer. It chooses a level and names a test, and
 this reader may do neither. Pass its path to `dispatch-open` as `--deny-read`.
 
-Dispatch `catalog-identifier` a second time, for the `review` point and this order's framework.
-When that recipe carries a `check_commands` data block, it names three tool commands,
-coding-standards, static-analysis and security. Each is an argv per tool, with `{paths}` as a
-placeholder. Each row also carries its own `signal` and `extensions` keys, where present.
-These are what `build-record` runs below, the same commands the baseline already ran against.
-
-When the recipe carries no such block, pass no tool flag for it. The three checks then record
-undeclared, and the report says the recipe declares no tool for that check. Never read a tool's
-name out of the recipe's own prose.
+Dispatch `catalog-identifier` twice more, for the `test-execution` point and the `review` point,
+each for this order's framework. These are two more recipes, neither the `implement` one above.
+Pass both paths straight through to `build-record` below; do not open either here. The script
+reads the `## Test commands` block of the first and the `## Check commands` block of the second
+itself, the same two files preconditions already resolved for the baseline.
 
 ## Assemble what the implementer may see
 
@@ -34,11 +30,17 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests, and it emits five things: this order's own record
-with the files it owns, the frozen tests for it with the criterion each carries, the declared
-interface of every order it depends on, and how many attempts this order has used of the count it
-is allowed. That count is two unless a person has granted this order one more; see
-`references/finish.md`. It is the order's own recorded allowance, never the constant alone.
+It reads the frozen copy and the frozen tests, and it emits six things: this order's own record
+with the files it owns, the frozen tests for it with the criterion each carries, every order it
+depends on with its declared interface, how many attempts this order has used of the count it is
+allowed, and `headNow`, the code repository's own commit at the moment of this call. That count is
+two unless a person has granted this order one more; see `references/finish.md`. It is the order's
+own recorded allowance, never the constant alone.
+
+**A dependency that has closed carries a second text beside the declared one, `interfaceRecord`:**
+what its own builder actually wrote about what it exposes. When it exists, it is what this unit's
+code is written against, not the declaration alone. Three files once said the record carries
+forward and none of them did; `build-brief` is what actually forwards it now.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
@@ -85,6 +87,8 @@ Close the record as soon as the role returns, whether it succeeded or not:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
 ```
+It refuses (exit 75) when the open record names a different task than this one: closing another
+task's record would leave that task's own role holding every permission the record withheld.
 
 ## Record the attempt
 
@@ -94,43 +98,41 @@ Run:
   --interface <path to the record the builder wrote> \
   --report <path to the builder's report> \
   --started-at <the commit the attempt began from> \
-  --suite <argv token>... \
-  --order-tests <argv token>... \
-  --standards <argv token>... \
-  --static-analysis <argv token>... \
-  --security <argv token>... \
-  [--standards-signal empty-stdout] [--standards-extensions <comma list>] \
-  [--static-analysis-signal empty-stdout] [--static-analysis-extensions <comma list>] \
-  [--security-signal empty-stdout] [--security-extensions <comma list>] \
-  [--standards-absent <reason>] [--static-analysis-absent <reason>] [--security-absent <reason>]
+  --test-recipe <framework>=<path to the test-execution recipe> \
+  --check-recipe <framework>=<path to the review recipe> \
+  [--value <name>=<value>]... \
+  [--nothing-ran <literal substring>]
 ```
 
-The commit the attempt began from is read before the implementer starts, not after. Without it
-nothing can tell this order's changes from what was already there.
+The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
+starts, not after. Without it nothing can tell this order's changes from what was already there.
+Equal to the code repository's own current commit, or not an ancestor of it, refuses (exit 71):
+either makes the range this attempt claims false.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not
 recorded. Interactive puts that to the person. Unattended halts the order with that reason.
 
-`--suite` and `--order-tests` are the commands from the framework's `implement` recipe, one argv
-token per flag. `--standards`, `--static-analysis` and `--security` are the three tool commands
-from the `review` recipe, resolved above, one argv token per flag. A token that is exactly
-`{paths}` is a placeholder. The script expands it itself, to this order's own owned files, one
-argv token per file, relative to codePath. Never expand it here, and never hand any of the five to
-a shell.
+`--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
+`references/preconditions.md` already resolved for the baseline. The script parses `## Test
+commands` and `## Check commands` itself: the suite command, the command that runs this order's
+own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
+`signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
+command. A `{paths}` token expands to this order's own owned files, relative to codePath, and never
+reaches a shell.
 
-Each tool takes two more flags, straight from the same `check_commands` row in the `review`
-recipe, its own `signal` and `extensions` keys. Pass `--standards-signal empty-stdout` (and the
-same for the other two) only when the recipe's row names that signal. It marks a tool that exits 0
-whether it found something or not, `gofmt -l` among them. A clean run and a dirty one are then told
-apart by whether anything landed on standard output, not by the exit code.
+**Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit
+72) applies here: a project whose two frameworks each carry a coding-standards row, say, gives
+nothing here two answers to choose between.
 
-Pass `--standards-extensions <comma list>` (and the same for the other two) when the row names one.
-`{paths}` then expands to only this order's owned files carrying one of those extensions. An order
-with none of them records that tool's row as undeclared, with the reason, rather than met.
+**The check recipe must be the one the baseline used.** A check recipe that resolves to a
+different file than the baseline read refuses (exit 73), naming both: a tool's own result is
+compared against the baseline it ran against, and a changed recipe makes that comparison false.
 
-Pass `--standards-absent <reason>` (and the same for the other two) when the recipe's row is
-declared absent, with the recipe's own reason text.
+Pass `--value <name>=<value>` for a placeholder a command carries, the same as
+`references/preconditions.md` does. Pass `--nothing-ran <literal substring>` only when the
+framework's own recipe names no `silent_pass` marker of its own; where it does, the script reads
+that marker and this flag is not read.
 
 ## Read the eight checks to the person
 
@@ -155,9 +157,19 @@ An unknown on interface-record does not spend the attempt. The declaration named
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
 other unmet or unknown does.
 
+**order-tests is the floor.** Every other check may answer undeclared and still let the order go on
+to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
+may not. It is the one check that says this order's own code does what its tests ask. Undeclared or
+unknown there means nothing here ran, so the order stays at `code-written`, whatever the other
+seven answered.
+
+The record carries `executed`, how many of the eight actually ran a command, a diff or a hash
+rather than reading undeclared. Say that count to the person: eight checks answering does not by
+itself say the code was tested.
+
 The attempt counter lives in the ledger and is incremented here, and the order's state moves with
-it: `checks-passed` when no check answered unmet or unknown (interface-record's own unknown
-excepted), `code-written` otherwise. An undeclared check continues, the same rule step two
-applies. When the failing attempt was the last one allowed, the script writes the halt and its
-reason into the ledger at that moment. It says so. Nothing here un-halts one. Go back to the skill
-body for what happens to the run.
+it: `checks-passed` when every check but order-tests answered met or undeclared (interface-record's
+own unknown excepted) and order-tests itself answered met, `code-written` otherwise. When the
+failing attempt was the last one allowed, the script writes the halt and its reason into the ledger
+at that moment. It says so. Nothing here un-halts one. Go back to the skill body for what happens
+to the run.

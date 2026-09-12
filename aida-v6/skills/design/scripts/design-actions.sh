@@ -640,6 +640,13 @@ do_add_owned_file() {
     *'*'*|*'?'*|*'['*)
       die3 "add-owned-file: an owned file is a path and not a glob, and $path_val carries a wildcard. Name the directory, such as src/thing/, or add each file. A glob denies nothing when implementation derives what the test author may not read." ;;
   esac
+  # A path never begins with a dash. Implementation expands these entries into the argument list of
+  # whatever tool the framework recipe names, so a leading dash reaches that tool as an option, and
+  # a tool with a fixing mode rewrites what it is pointed at.
+  case "$path_val" in
+    -*)
+      die3 "add-owned-file: an owned file never begins with a dash, and $path_val does. Implementation hands these entries to the coding-standards, static-analysis and security tools as arguments, where a leading dash reads as an option and not as a path. Write ./$path_val, or rename the file." ;;
+  esac
 
   local file doc
   file="$(wo_file_for "$id")"

@@ -4,7 +4,17 @@
   "description": "What was already broken at the commit the build starts from, at <task folder>/implementation/baseline.json (ideal/implementation.md, 'The deciding checks run before anything judges'). Taken once, by the same `preconditions` step that resolves the recipes, and only when that run's own verdict permits the build to continue: a baseline taken after a condition answered no would measure a broken environment. Every deciding check later in the stage excludes this file's own findings from its own verdict, because a repository with one pre-existing failure would otherwise block every work order forever. Recording a red suite here changes nothing about that recording run's own verdict or exit code; knowing it is the whole point. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "takenAt", "commit", "scope", "suite", "codingStandards", "staticAnalysis", "security"],
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "commit",
+    "scope",
+    "suite",
+    "codingStandards",
+    "staticAnalysis",
+    "security",
+    "checkRecipes"
+  ],
   "properties": {
     "schemaVersion": {
       "type": "integer",
@@ -25,13 +35,18 @@
     "scope": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "description": "The union of every work order's own ownedFiles from the snapshot, sorted once with duplicates removed. This is what a {paths} token in any of the three tool commands expands to, one argv token per path, narrowed first by that tool's own extensions list where it declares one. suite is never scoped by it, because at this point the orders' own tests do not exist yet and no framework declares a command mapping paths to the tests that cover them."
     },
     "suite": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/suiteResult" },
+      "items": {
+        "$ref": "#/$defs/suiteResult"
+      },
       "description": "One entry per framework the project declares, running that framework's own `suite` test-command row whole and unscoped, exactly as preconditions.json already resolved and recorded it. A project on two frameworks gets two runs, because the build runs in one repository that is both."
     },
     "codingStandards": {
@@ -45,13 +60,47 @@
     "security": {
       "$ref": "#/$defs/toolResult",
       "description": "What the security command the caller supplied with --security found across the scope above. Undeclared when no --security flag was given, and read later the same way codingStandards is."
+    },
+    "checkRecipes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "framework",
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "framework": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The framework name as project.json records it, the same value suite[].framework carries."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The check recipe file this baseline read for that framework, as the caller handed it over."
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A sha256 over that file. Every tool check later in the stage compares its own result against this baseline, and that comparison is only honest while both ran the same command, so a later run resolving a recipe whose hash differs refuses rather than compare one tool output against another tool baseline."
+          }
+        }
+      },
+      "description": "The check recipe each framework resolved to when this baseline was taken, with a hash of the file. Empty when no --check-recipe named a framework. The three tool fields below hold what those recipes' rows found across the scope."
     }
   },
   "$defs": {
     "suiteResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["framework", "verdict"],
+      "required": [
+        "framework",
+        "verdict"
+      ],
       "properties": {
         "framework": {
           "type": "string",
@@ -60,7 +109,11 @@
         },
         "verdict": {
           "type": "string",
-          "enum": ["met", "unmet", "unknown"],
+          "enum": [
+            "met",
+            "unmet",
+            "unknown"
+          ],
           "description": "met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all: the recipe named no suite row, the row is one of the recipe's own absent rows, its argv did not parse, a placeholder had no supplied --value, or the command could not be found (exit 127). undeclared is not here: a whole framework declining to say how it runs its own tests at all is not a fact this stage has seen yet, and adding the word before a recipe ever needs it would be a guess."
         },
         "reason": {
@@ -85,11 +138,18 @@
     "toolResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["verdict"],
+      "required": [
+        "verdict"
+      ],
       "properties": {
         "verdict": {
           "type": "string",
-          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "enum": [
+            "met",
+            "unmet",
+            "unknown",
+            "undeclared"
+          ],
           "description": "The same four words every verdict in this stage uses. met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all (it was not found, exit 127, or the command holds {paths} while no work order declares an owned file), and undeclared when the caller supplied no command for this tool or when the tool's own extensions list matched no file in the scope, which means the row did not apply rather than that it passed. A row declaring the signal empty-stdout is unmet on a zero exit that printed on standard output. The baseline has nothing earlier to compare itself against, which is why unmet here is a plain record of a red tool and never a refusal."
         },
         "absent": {
@@ -115,13 +175,18 @@
         },
         "signal": {
           "type": "string",
-          "enum": ["empty-stdout"],
+          "enum": [
+            "empty-stdout"
+          ],
           "description": "Present only when the recipe's own check-commands row declares it (dev-guides, process-recipes, '## Check commands' is parsed). empty-stdout marks a tool that cannot fail by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard output is unmet, and a caller that ignores the key has a green light wired to nothing. A non-zero exit is unread by this key and keeps its own meaning."
         },
         "extensions": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "description": "Present only when the recipe's own check-commands row declares it. The file extensions this tool reads; {paths} expanded to only the files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply here."
         }
       }

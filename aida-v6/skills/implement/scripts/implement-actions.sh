@@ -111,20 +111,9 @@
 #   implement-actions.sh read  <task_folder>
 #   implement-actions.sh start <task_folder>
 #   implement-actions.sh preconditions <task_folder> [--recipe <framework>=<path>]...
+#                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--value <name>=<value>]...
-#                                                    [--standards <argv token>]...
-#                                                    [--static-analysis <argv token>]...
-#                                                    [--security <argv token>]...
-#                                                    [--standards-signal empty-stdout]
-#                                                    [--static-analysis-signal empty-stdout]
-#                                                    [--security-signal empty-stdout]
-#                                                    [--standards-absent <reason>]
-#                                                    [--static-analysis-absent <reason>]
-#                                                    [--security-absent <reason>]
-#                                                    [--standards-extensions <.a,.b>]
-#                                                    [--static-analysis-extensions <.a,.b>]
-#                                                    [--security-extensions <.a,.b>]
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
 #   implement-actions.sh tests-freeze <task_folder> <unit_id> \
 #                            [--test <path>::<test name>=<criterion id>[,<criterion id>...]]...
@@ -138,20 +127,9 @@
 #                            --interface <path to the record the builder wrote> \
 #                            --report <path to the builder's report> \
 #                            --started-at <commit the attempt began from> \
-#                            [--suite <argv token>...] \
-#                            [--order-tests <argv token>...] \
-#                            [--standards <argv token>...] \
-#                            [--static-analysis <argv token>...] \
-#                            [--security <argv token>...] \
-#                            [--standards-signal empty-stdout] \
-#                            [--static-analysis-signal empty-stdout] \
-#                            [--security-signal empty-stdout] \
-#                            [--standards-absent <reason>] \
-#                            [--static-analysis-absent <reason>] \
-#                            [--security-absent <reason>] \
-#                            [--standards-extensions <.a,.b>] \
-#                            [--static-analysis-extensions <.a,.b>] \
-#                            [--security-extensions <.a,.b>] \
+#                            [--test-recipe <framework>=<path>]... \
+#                            [--check-recipe <framework>=<path>]... \
+#                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
 #   implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
@@ -159,20 +137,9 @@
 #   implement-actions.sh fix-record    <task_folder> <unit_id> \
 #                            --report <path to the fixer's report> \
 #                            --started-at <commit the round began from> \
-#                            [--suite <argv token>...] \
-#                            [--order-tests <argv token>...] \
-#                            [--standards <argv token>...] \
-#                            [--static-analysis <argv token>...] \
-#                            [--security <argv token>...] \
-#                            [--standards-signal empty-stdout] \
-#                            [--static-analysis-signal empty-stdout] \
-#                            [--security-signal empty-stdout] \
-#                            [--standards-absent <reason>] \
-#                            [--static-analysis-absent <reason>] \
-#                            [--security-absent <reason>] \
-#                            [--standards-extensions <.a,.b>] \
-#                            [--static-analysis-extensions <.a,.b>] \
-#                            [--security-extensions <.a,.b>] \
+#                            [--test-recipe <framework>=<path>]... \
+#                            [--check-recipe <framework>=<path>]... \
+#                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>] \
 #                            [--scope-insufficient <finding id>=<reason>]...
 #   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
@@ -194,6 +161,14 @@
 # writes the same order's files for the same reason (decision 8 of step five). `--deny-read` adds to what was derived; it is how a path outside codePath is
 # denied, such as the recipe each role may not open.
 #   implement-actions.sh dispatch-close <task_folder>
+#   implement-actions.sh step <name>
+#
+# `step` prints one of this skill's own step files, from
+# ${CLAUDE_PLUGIN_ROOT}/skills/implement/references/<name>.md. The skill reads them through this
+# action rather than with Read: the documentation mirror scopes ${CLAUDE_PLUGIN_ROOT} substitution
+# in `allowed-tools` to Bash rules, so a Read rule naming that variable never matches and every
+# step-file read raises a prompt an unattended run cannot answer. A name carrying a slash, and a
+# name no file matches, both refuse with exit 3 and name the steps that exist.
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -367,7 +342,8 @@
 #      A different fact from exit 3's "no usable codePath", which is a valid file with the field
 #      absent or empty.
 #  15  the codePath recorded in project.json does not exist on disk. A different fact from exit 5,
-#      where codePath exists but is not a git repository.
+#      where codePath exists but is not a git repository. Exit 77 names a third fact: a valid
+#      project.json that records no framework at all.
 #  16  codePath is not currently on a named branch: a detached HEAD, or the branch could not be
 #      read for any other reason. Refused before the trunk check runs, because a commit landing
 #      nowhere is worse than one landing on trunk.
@@ -551,6 +527,30 @@
 #      person, so `model` there records weaker evidence than the run actually had. The residue the
 #      record keeps is only worth keeping when it is true, so both refuse and nothing is written.
 #
+# The codes the paper test added. Each one is a fact nothing refused before.
+#  71  `build-record` or `fix-record` was given a `--started-at` that cannot be the commit the work
+#      began from: it is the commit HEAD is at now, so the diff would be empty and every check would
+#      answer about nothing, or it is not an ancestor of HEAD, so the range between the two is not
+#      this order's own work. Exit 43 stays the separate fact that the value is not a commit at all.
+#  72  two frameworks each declare a command for one check row, and nothing here may choose between
+#      two answers to one question. The message names both frameworks and the row.
+#  73  the check recipe resolved for a framework now is not the one the baseline was taken with: its
+#      sha256 differs. Every tool check compares its own result against that baseline, so a changed
+#      recipe compares one tool's output against another tool's baseline. Take the baseline again.
+#  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all. Every
+#      guard in that step reads a per-criterion list, so an order with none passes all of them and
+#      freezes a reference that proves nothing.
+#  75  `dispatch-close` was given a task folder that is not the one the open record names. The
+#      record lives at the project root and two tasks in one project is a supported state, so a
+#      second task's close would clear the first task's live permission record. The message names
+#      the record's own task and the folder given.
+#  76  `tests-freeze` was asked to re-freeze an order that has already left the frozen state. A
+#      re-freeze rewinds the step and leaves the spent attempt counter and the stale build record
+#      where they are, so the order would rebuild with no attempts and a record for tests that no
+#      longer exist.
+#  77  `preconditions` read a valid project.json that records no framework, so no recipe can be
+#      chosen for it. Exit 14 stays the separate fact that the file is not valid JSON at all.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -594,6 +594,7 @@ if [ -z "$PLUGIN_ROOT" ] || [ ! -d "$PLUGIN_ROOT" ]; then
   exit 3
 fi
 CHECK_DESIGN_SCRIPT="${PLUGIN_ROOT}/scripts/check-design.sh"
+STEPS_DIR="${PLUGIN_ROOT}/skills/implement/references"
 RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 
 command -v jq >/dev/null 2>&1 || { printf 'implement-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
@@ -667,6 +668,13 @@ die67() { printf 'implement-actions: %s\n' "$1" >&2; exit 67; }
 die68() { printf 'implement-actions: %s\n' "$1" >&2; exit 68; }
 die69() { printf 'implement-actions: %s\n' "$1" >&2; exit 69; }
 die70() { printf 'implement-actions: %s\n' "$1" >&2; exit 70; }
+die71() { printf 'implement-actions: %s\n' "$1" >&2; exit 71; }
+die72() { printf 'implement-actions: %s\n' "$1" >&2; exit 72; }
+die73() { printf 'implement-actions: %s\n' "$1" >&2; exit 73; }
+die74() { printf 'implement-actions: %s\n' "$1" >&2; exit 74; }
+die75() { printf 'implement-actions: %s\n' "$1" >&2; exit 75; }
+die76() { printf 'implement-actions: %s\n' "$1" >&2; exit 76; }
+die77() { printf 'implement-actions: %s\n' "$1" >&2; exit 77; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -701,20 +709,9 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh start <task_folder>
        implement-actions.sh preconditions <task_folder>
                             [--recipe <framework>=<path>]...
+                            [--check-recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
-                            [--standards <argv token>]...
-                            [--static-analysis <argv token>]...
-                            [--security <argv token>]...
-                            [--standards-signal empty-stdout]
-                            [--static-analysis-signal empty-stdout]
-                            [--security-signal empty-stdout]
-                            [--standards-absent <reason>]
-                            [--static-analysis-absent <reason>]
-                            [--security-absent <reason>]
-                            [--standards-extensions <.a,.b>]
-                            [--static-analysis-extensions <.a,.b>]
-                            [--security-extensions <.a,.b>]
        implement-actions.sh tests-brief  <task_folder> <unit_id>
        implement-actions.sh tests-freeze <task_folder> <unit_id>
                             [--test <path>::<test name>=<criterion id>[,<criterion id>...]]...
@@ -728,20 +725,9 @@ usage: implement-actions.sh read  <task_folder>
                             --interface <path to the record the builder wrote>
                             --report <path to the builder's report>
                             --started-at <commit the attempt began from>
-                            [--suite <argv token>...]
-                            [--order-tests <argv token>...]
-                            [--standards <argv token>...]
-                            [--static-analysis <argv token>...]
-                            [--security <argv token>...]
-                            [--standards-signal empty-stdout]
-                            [--static-analysis-signal empty-stdout]
-                            [--security-signal empty-stdout]
-                            [--standards-absent <reason>]
-                            [--static-analysis-absent <reason>]
-                            [--security-absent <reason>]
-                            [--standards-extensions <.a,.b>]
-                            [--static-analysis-extensions <.a,.b>]
-                            [--security-extensions <.a,.b>]
+                            [--test-recipe <framework>=<path>]...
+                            [--check-recipe <framework>=<path>]...
+                            [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
        implement-actions.sh review-brief  <task_folder> <unit_id>
        implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
@@ -749,20 +735,9 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh fix-record    <task_folder> <unit_id>
                             --report <path to the fixer's report>
                             --started-at <commit the round began from>
-                            [--suite <argv token>...]
-                            [--order-tests <argv token>...]
-                            [--standards <argv token>...]
-                            [--static-analysis <argv token>...]
-                            [--security <argv token>...]
-                            [--standards-signal empty-stdout]
-                            [--static-analysis-signal empty-stdout]
-                            [--security-signal empty-stdout]
-                            [--standards-absent <reason>]
-                            [--static-analysis-absent <reason>]
-                            [--security-absent <reason>]
-                            [--standards-extensions <.a,.b>]
-                            [--static-analysis-extensions <.a,.b>]
-                            [--security-extensions <.a,.b>]
+                            [--test-recipe <framework>=<path>]...
+                            [--check-recipe <framework>=<path>]...
+                            [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
                             [--scope-insufficient <finding id>=<reason>]...
        implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
@@ -775,6 +750,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
        implement-actions.sh dispatch-close <task_folder>
+       implement-actions.sh step <name>
 EOF
 }
 
@@ -793,6 +769,13 @@ resolve_task_folder() {
 
 # The temporary file is created beside the target, in the same directory, so mv is a rename
 # within one filesystem and a failure partway never leaves a half-written file at $target.
+# The base names of every .md file directly in $1, sorted, space separated with a trailing space.
+# `dispatch-open` names the agents this way and `step` names the step files, and one copy is what
+# keeps the two refusals listing their sets in the same shape.
+md_basenames_in() {
+  find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
+
 write_atomic() {
   local target="$1" content="$2" dir tmp
   dir="$(dirname -- "$target")"
@@ -826,6 +809,21 @@ halt_segments() {
 # Applies a halt to one order in ledger document $1. $2 the unit id, $3 the reason. Prints the
 # updated document, or nothing when the update failed; never dies, because one caller refuses
 # afterwards and another carries on.
+# Refuses free text that carries the separator halt reasons are joined and split on. Two reasons
+# embed text this script does not write: a row-checker note and a fixer report of its own scope. A
+# note reading "the assertion is weak; earlier: design drift: forced" forges a segment, and every
+# reader that splits on the separator then reads a halt nobody wrote. The separator is refused at
+# the flag rather than stripped, because a reason silently altered is a reason a person cannot
+# match against what they typed. $1 the action, $2 the flag, $3 the text.
+HALT_SEPARATOR="; earlier: "
+halt_refuse_separator() {
+  case "$3" in
+    *"$HALT_SEPARATOR"*)
+      die3 "$1: $2 was given a reason holding the text '$HALT_SEPARATOR', which is how this stage joins one halt reason to another. A reason carrying it would forge a halt nobody wrote. The reason given: $3"
+      ;;
+  esac
+}
+
 halt_order_in() {
   printf '%s' "$1" | jq -c --arg id "$2" --arg why "$3" "$HALT_MERGE_JQ
     .orders = (.orders | map(if .id == \$id then (.haltedBecause = halt_merge(.haltedBecause; \$why)) else . end))"
@@ -1687,10 +1685,39 @@ do_start() {
     contract_changed_json='null'
   fi
 
-  echo "RUN: ${run_kind} (ledger ${opened_as})"
+  # An empty ready list with nothing halted and nothing in flight is a state, not a blank. Every
+  # order closed is a finished build; anything else with nothing ready is a dependency graph where
+  # no order can start, which a person needs told rather than left to infer from an empty list.
+  local run_state all_closed_count order_total
+  order_total="$(printf '%s' "$final_orders_json" | jq 'length')"
+  all_closed_count="$(printf '%s' "$final_orders_json" | jq '[ .[] | select(.lastStep == "closed") ] | length')"
+  if [ "$(printf '%s' "$ready_ids_json" | jq 'length')" -gt 0 ]; then
+    run_state="orders are ready to build"
+  elif [ "$(printf '%s' "$in_flight_json" | jq 'length')" -gt 0 ]; then
+    run_state="an order is in flight; continue it at the step the ledger records"
+  elif [ "$(printf '%s' "$halted_json" | jq 'length')" -gt 0 ]; then
+    run_state="every order that is not closed is halted; read the halt reasons and use grant-attempt or restart"
+  elif [ "$order_total" -gt 0 ] && [ "$all_closed_count" -eq "$order_total" ]; then
+    run_state="every order is closed; run finish on this task"
+  else
+    run_state="no order is ready, none is in flight and none is halted. Every remaining order waits on a dependency that is not closed, so nothing can start; read the order states below."
+  fi
+  # The ledger is the authority on the run mode, and every later step reads it there
+  # (ledger-schema.json). A task.json edited between runs would otherwise give a resumed run a
+  # report saying interactive while every refusal, halt and row check applied the autonomous rule.
+  local reported_run_mode run_mode_source
+  reported_run_mode="$run_mode"
+  run_mode_source="task.json"
+  if [ "$opened_as" = "reopened" ]; then
+    reported_run_mode="$ledger_run_mode"
+    run_mode_source="the ledger, which is the authority every later step reads"
+  fi
+  # One line before the report, not two: a caller strips the first line to parse the JSON, and a
+  # second line here would break every one of them.
+  echo "RUN: ${run_kind} (ledger ${opened_as}), run mode ${reported_run_mode}, from ${run_mode_source}. STATE: ${run_state}"
   jq -n \
     --arg taskPath "$TASK_PATH" --arg codePath "$code_path" \
-    --arg runMode "$run_mode" --arg runKind "$run_kind" \
+    --arg runMode "$reported_run_mode" --arg runModeSource "$run_mode_source" --arg runKind "$run_kind" \
     --argjson trunkDerived "$trunk_derived" --arg trunkBranch "$trunk_branch" --arg trunkNote "$trunk_note" \
     --arg currentBranch "$current_branch" \
     --arg snapshotFile "$SNAPSHOT_FILE" --arg snapshotHash "$snapshot_hash_on_disk" \
@@ -1703,9 +1730,10 @@ do_start() {
     --argjson newLiveOrderIds "$new_live_order_ids_json" \
     --arg ledgerFile "$LEDGER_FILE" --arg ledgerOpenedAs "$opened_as" --arg startedFrom "$started_from" \
     --argjson readyToBuild "$ready_ids_json" --argjson halted "$halted_json" --argjson inFlight "$in_flight_json" \
+    --arg runState "$run_state" \
     '{
       taskPath: $taskPath, codePath: $codePath,
-      runMode: $runMode, runKind: $runKind,
+      runMode: $runMode, runModeSource: $runModeSource, runKind: $runKind,
       trunkCheck: { derived: $trunkDerived,
                     branch: (if $trunkBranch == "" then null else $trunkBranch end),
                     currentBranch: $currentBranch,
@@ -1714,6 +1742,7 @@ do_start() {
       drift: { checked: $driftChecked, contractChanged: $contractChanged, driftedOrders: $driftedOrders,
                haltedDependents: $haltedDependents, newLiveOrdersNotInSnapshot: $newLiveOrderIds },
       ledger: { file: $ledgerFile, openedAs: $ledgerOpenedAs, startedFrom: $startedFrom, halted: $halted, inFlight: $inFlight },
+      runState: $runState,
       readyToBuild: $readyToBuild
     }'
   exit 0
@@ -1836,6 +1865,9 @@ pc_run_check() {
     # shellcheck disable=SC2086
     set -- $value
     set +f
+    # An `exec` with no operands returns 0 without replacing the shell, so a check whose command
+    # came out empty would read as a condition that passed. Exit 126 instead.
+    [ "$#" -gt 0 ] || exit 126
     exec "$@"
   ) >"$outfile" 2>/dev/null
   printf '%s' "$?"
@@ -1844,6 +1876,23 @@ pc_run_check() {
 # Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the
 # value can carry quotes of its own, and the outer pair belongs to the document rather than to the
 # string being looked for.
+# Refuses a --value whose name or value carries a newline or a tab. The value table this script
+# builds is newline and tab delimited, so either character inside a value forges a row and answers
+# a placeholder the caller never supplied. $1 the action, $2 the flag value as given.
+pc_refuse_forged_value() {
+  local who="$1" pair="$2"
+  case "$pair" in
+    *"$(printf '\t')"*)
+      die3 "$who: --value was given text holding a tab, and the table this builds is tab delimited, so a tab inside a value forges a row: $pair"
+      ;;
+  esac
+  # Counted, never matched as a pattern: command substitution strips trailing newlines, so
+  # `*"$(printf '\n')"*` is `*""*`, which matches every value and refused all of them.
+  [ "$(printf '%s' "$pair" | wc -l | tr -d '[:space:]')" = "0" ] \
+    || die3 "$who: --value was given text holding a newline, and the table this builds is newline delimited, so a newline inside a value forges a row: $pair"
+  [ -n "${pair%%=*}" ] || die3 "$who: --value was given no name: $pair"
+}
+
 pc_unquote() {
   case "$1" in
     "'"*"'") printf '%s' "$1" | sed "s/^'//; s/'$//" ;;
@@ -1992,6 +2041,39 @@ tc_indent() {
   printf '%s' "${#lead}"
 }
 
+# The state the two recipe parsers last read: undeclared, unparseable or ok. A global rather than a
+# printed value, because a `$(...)` capture runs the parser in a subshell, and the refusal each one
+# makes on a row it cannot record would exit that subshell alone and let the caller carry on with a
+# tool recorded undeclared. That is the same rule br_seven_checks states, and both parsers were
+# written the wrong way round.
+RECIPE_STATE=""
+
+# Cuts the YAML block a recipe writes under one H2 into the file $4, and prints the section own
+# state: `undeclared` when the heading is absent, `unparseable` when the heading is there but the
+# key never opens under it, or `ok`. $1 the recipe file, $2 the heading text, $3 the key.
+#
+# `## Test commands` and `## Check commands` are the same shape read the same way, and the three
+# state words are the same three, so the cut lives here once rather than in each parser. Each
+# parser then holds only its own per-line field dispatch, which is the half that really differs.
+recipe_block_into() {
+  local recipe_file="$1" heading="$2" key="$3" block_file="$4" section_file
+  section_file="$block_file.section"
+  sed -n "/^##[[:space:]]*$heading[[:space:]]*\$/,/^##[[:space:]]/p" "$recipe_file" >"$section_file" 2>/dev/null
+  if [ ! -s "$section_file" ]; then
+    rm -f "$section_file"
+    printf 'undeclared'
+    return 0
+  fi
+  if ! grep -q "^$key:" "$section_file"; then
+    rm -f "$section_file"
+    printf 'unparseable'
+    return 0
+  fi
+  sed -n "/^$key:/,\$p" "$section_file" | sed '1d' >"$block_file"
+  rm -f "$section_file"
+  printf 'ok'
+}
+
 # The entry being read, held between lines, the same reason PC_* is held between lines above.
 TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
 
@@ -2042,25 +2124,11 @@ tc_flush_entry() {
 # this function only reads what the recipe wrote.
 tc_parse_recipe() {
   local recipe_file="$1" out="$2"
-  local section_file block_file line trimmed indent skip_indent
-
-  section_file="$out.tcsection"
-  sed -n '/^##[[:space:]]*Test commands[[:space:]]*$/,/^##[[:space:]]/p' "$recipe_file" >"$section_file" 2>/dev/null
-  if [ ! -s "$section_file" ]; then
-    rm -f "$section_file"
-    printf 'undeclared'
-    return 0
-  fi
-
-  if ! grep -q '^test_commands:' "$section_file"; then
-    rm -f "$section_file"
-    printf 'unparseable'
-    return 0
-  fi
+  local block_file line trimmed indent skip_indent
 
   block_file="$out.tcblock"
-  sed -n '/^test_commands:/,$p' "$section_file" | sed '1d' >"$block_file"
-  rm -f "$section_file"
+  RECIPE_STATE="$(recipe_block_into "$recipe_file" "Test commands" "test_commands" "$block_file")"
+  [ "$RECIPE_STATE" = "ok" ] || return 0
 
   TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
   skip_indent=-1
@@ -2100,17 +2168,8 @@ tc_parse_recipe() {
   done <"$block_file"
   tc_flush_entry "$out"
   rm -f "$block_file"
-
-  printf 'ok'
 }
 
-# The value a caller's --value flags supplied for placeholder $2, read from $1, the same
-# tab-separated multi-line shape --recipe and --lookup-failed already build. Prints nothing and
-# returns 1 when no --value named it, so a caller can tell "supplied, empty" from "never supplied";
-# tc_run_smoke below only ever calls this after already confirming the name is present.
-tc_value_for() {
-  printf '%s' "$1" | grep "^$2	" | head -n 1 | cut -f2-
-}
 
 # Runs the smoke row's own argv, a JSON array of tokens, as arguments from inside $2, after
 # replacing every token that is exactly one placeholder with the value $4 supplies for it under
@@ -2136,9 +2195,8 @@ tc_run_smoke() {
     case "$tok" in
       '{'*'}')
         name="${tok#\{}"; name="${name%\}}"
-        if printf '%s' "$values" | grep -q "^$name	"; then
-          tok="$(tc_value_for "$values" "$name")"
-        else
+        tok="$(cr_lookup "$values" "$name")"
+        if [ -z "$tok" ]; then
           printf 'UNRESOLVED\t%s' "$name"
           return 0
         fi
@@ -2147,6 +2205,7 @@ tc_run_smoke() {
     set -- "$@" "$tok"
     i=$((i + 1))
   done
+  [ "$#" -gt 0 ] || { printf 'EMPTY\t'; return 0; }
   (
     cd "$dir" || exit 127
     exec "$@"
@@ -2155,9 +2214,358 @@ tc_run_smoke() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# The `## Check commands` block, and the recipe resolution every commanded check now runs from
+# (dev-guides, process-recipes, "`## Check commands` is parsed, and it fails closed").
+#
+# The five commanded checks used to arrive as argv flags a model typed while reading a recipe's
+# prose. Nothing compared them against the recipe, so a dropped `signal` key turned a tool that
+# cannot fail by exit status into a check that always passed, and a dropped `--order-tests` turned
+# an order nobody tested into one that passed. Every command is read from the recipe file here
+# instead, and the caller hands over the recipe path rather than the command.
+# ------------------------------------------------------------------------------------------------
+
+# The entry being read, held between lines, the same way PC_* and TC_* are held above.
+CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
+
+# Appends one JSON object to $1 for the held row and clears it. `argv` and `extensions` are read as
+# JSON through jq, never split by hand, and a value that does not parse as an array of strings is
+# named in `unreadable` rather than dropped: a malformed row is a defect worth reporting, not a
+# reason to report fewer rows than the recipe wrote. `absent` carries its own folded reason text,
+# because that text is what a person reads when they ask why this check never ran.
+cc_flush_entry() {
+  local out="$1"
+  [ -n "$CC_ID" ] || return 0
+  local argv_json='null' exts_json='null' unreadable='[]' parsed
+  if [ -n "$CC_ARGV_RAW" ]; then
+    parsed="$(printf '%s' "$CC_ARGV_RAW" | jq -e -c 'if (type == "array") and (all(.[]; type == "string")) then . else empty end' 2>/dev/null)"
+    if [ -n "$parsed" ]; then
+      argv_json="$parsed"
+    else
+      unreadable="$(printf '%s' "$unreadable" | jq -c '. + ["argv"]')"
+    fi
+  fi
+  if [ -n "$CC_EXTS_RAW" ]; then
+    parsed="$(printf '%s' "$CC_EXTS_RAW" | jq -e -c 'if (type == "array") and (all(.[]; type == "string")) and (length > 0) then . else empty end' 2>/dev/null)"
+    if [ -n "$parsed" ]; then
+      exts_json="$parsed"
+    else
+      unreadable="$(printf '%s' "$unreadable" | jq -c '. + ["extensions"]')"
+    fi
+  fi
+  jq -n --arg id "$CC_ID" --argjson argv "$argv_json" --argjson exts "$exts_json" \
+        --argjson absent "$([ "$CC_ABSENT" = "1" ] && printf true || printf false)" \
+        --arg absentText "$CC_ABSENT_TEXT" --arg signal "$CC_SIGNAL" \
+        --argjson unreadable "$unreadable" '
+    {id: $id}
+    + (if $argv   == null  then {} else {argv: $argv} end)
+    + (if $exts   == null  then {} else {extensions: $exts} end)
+    + (if $absent == false then {} else {absent: true, absentReason: $absentText} end)
+    + (if $signal == ""    then {} else {signal: $signal} end)
+    + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
+  ' >>"$out" || die3 "the check-command row $CC_ID could not be recorded"
+  CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
+}
+
+# Reads the `## Check commands` section of the recipe at $1, appending one JSON object per row to
+# $2. Prints the section's own state: `undeclared` when the heading is absent, `unparseable` when
+# the heading is there but `check_commands:` never opens under it, or `ok` when the key is there.
+# The same three words, and the same folded-scalar handling, tc_parse_recipe already uses: one
+# block shape, read one way, so the two parsers cannot drift.
+cc_parse_recipe() {
+  local recipe_file="$1" out="$2"
+  local block_file line trimmed indent skip_indent
+
+  block_file="$out.ccblock"
+  RECIPE_STATE="$(recipe_block_into "$recipe_file" "Check commands" "check_commands" "$block_file")"
+  [ "$RECIPE_STATE" = "ok" ] || return 0
+
+  CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
+  skip_indent=-1
+  while IFS= read -r line; do
+    trimmed="$(pc_trim "$line")"
+    # A folded scalar continues on every line indented further than the key that opened it. For
+    # `absent:` those lines are the reason itself, so they are kept rather than skipped.
+    if [ "$skip_indent" -ge 0 ]; then
+      if [ -z "$trimmed" ]; then continue; fi
+      indent="$(tc_indent "$line")"
+      if [ "$indent" -gt "$skip_indent" ]; then
+        if [ "$CC_ABSENT" = "1" ]; then
+          if [ -z "$CC_ABSENT_TEXT" ]; then
+            CC_ABSENT_TEXT="$trimmed"
+          else
+            CC_ABSENT_TEXT="$CC_ABSENT_TEXT $trimmed"
+          fi
+        fi
+        continue
+      fi
+      skip_indent=-1
+    fi
+    [ -n "$trimmed" ] || continue
+    case "$trimmed" in
+      '##'*) break ;;
+    esac
+    case "$trimmed" in
+      '- id:'*)   cc_flush_entry "$out"; CC_ID="$(pc_trim "${trimmed#- id:}")" ;;
+      'argv:'*)   CC_ARGV_RAW="$(pc_trim "${trimmed#argv:}")" ;;
+      'signal:'*) CC_SIGNAL="$(pc_trim "${trimmed#signal:}")" ;;
+      'extensions:'*) CC_EXTS_RAW="$(pc_trim "${trimmed#extensions:}")" ;;
+      'absent:'*)
+        CC_ABSENT=1
+        CC_ABSENT_TEXT="$(pc_trim "${trimmed#absent:}")"
+        case "$CC_ABSENT_TEXT" in '>-'|'>'|'|-'|'|') CC_ABSENT_TEXT="" ;; esac
+        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")" ;; esac
+        ;;
+    esac
+  done <"$block_file"
+  cc_flush_entry "$out"
+  rm -f "$block_file"
+}
+
+# Prints, one per line, the literal markers the recipe at $1 declares for a run that passed while
+# nothing was selected (`failure_signal:`, `silent_pass:`). A marker is a backtick-quoted token in
+# that folded text. A token holding a `<placeholder>` is not printed: it is a shape for a person to
+# read, never a literal substring anything can search for. Prints nothing when the recipe declares
+# no silent-pass text, which is when the caller's own `--nothing-ran` flag still applies.
+cc_silent_pass_markers() {
+  local recipe_file="$1" block
+  # Bounded twice, because one bound is not enough. The range ends at the closing fence, and
+  # inside it the first line that opens another key ends the scalar. Without the second bound the
+  # range ran to the next key at column 0, which is past the fence, and the Drupal recipe then
+  # returned twelve markers harvested from its own prose, one of them ", ": every passing test run
+  # held it, so every green read unknown.
+  block="$(sed -n '/^[[:space:]]*silent_pass:/,/^```/p' "$recipe_file" 2>/dev/null \
+    | sed -n '1p; 1!{ /^```/q; /^[[:space:]]*[a-z_][a-z_]*:/q; p; }')"
+  [ -n "$block" ] || return 0
+  printf '%s' "$block" | tr '\n' ' ' \
+    | grep -o '`[^`]*`' 2>/dev/null \
+    | sed 's/^`//; s/`$//' \
+    | grep -v '<' \
+    | grep -v '^$'
+  return 0
+}
+
+# Parses one `<framework>=<path>` flag value and sets CR_PAIR to the tab-separated line the caller
+# appends to its own list. $1 the action, $2 the flag, $3 the value.
+#
+# A global rather than a printed value, because a `$(...)` capture runs this in a subshell and a
+# refusal inside it would exit that subshell alone, leaving the caller to carry on with an empty
+# entry. That is the same rule br_seven_checks states above, and this function was written the
+# wrong way round once already.
+CR_PAIR=""
+cr_recipe_pair() {
+  local who="$1" flag="$2" value="$3" fw rp
+  case "$value" in *=*) ;; *) die3 "$who: $flag takes <framework>=<path>, got: $value" ;; esac
+  fw="${value%%=*}"
+  rp="${value#*=}"
+  [ -n "$fw" ] || die3 "$who: $flag was given no framework name: $value"
+  [ -n "$rp" ] || die3 "$who: $flag was given no path for framework $fw."
+  [ -f "$rp" ] || die3 "$who: the recipe handed over for $fw is not a file: $rp"
+  CR_PAIR="$(printf '%s\t%s' "$fw" "$rp")"
+}
+
+# Resolves the recipes into the commands the checks run. The caller sets these globals first,
+# because a `$(...)` capture would run this in a subshell and a refusal inside it would exit that
+# subshell alone, which is the rule br_seven_checks already states.
+#   CR_WHO              the action's own name, for a message
+#   CR_TEST_RECIPES     newline list of <framework><TAB><path>, the `## Test commands` source
+#   CR_CHECK_RECIPES    the same, for `## Check commands`
+#   CR_SELECTED_JSON    a JSON array of the paths the selected-tests row runs, empty array when
+#                       this caller has none (the baseline, which runs the suite whole)
+# Sets CR_DOC.
+#
+# One tool row may carry a command from one framework only. A project on two frameworks whose
+# recipes both name a coding-standards tool has two answers to one question, and nothing here may
+# choose between them (exit 72). A row every framework declares absent is absent, and its reasons
+# are joined.
+CR_WHO=""; CR_TEST_RECIPES=""; CR_CHECK_RECIPES=""; CR_SELECTED_JSON="[]"; CR_DOC=""
+# The tab-separated --value list bl_tool_result reads. A global, because that function already
+# takes five arguments and a sixth read only by one caller is a list read wrong sooner than right.
+PC_VALUES=""
+cr_resolve() {
+  local work fw_file tools_file fw names
+  local test_path check_path tc_rows cc_rows rows_file
+  local tc_state cc_state markers marker_json
+  local suite_json order_json tool_id tool_row
+  local test_sha check_sha
+  local all_tools tools_out commanded count absent_rows
+
+  records_hash__resolve_sha256_cmd \
+    || die3 "$CR_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  work="$(mktemp -d)" || die3 "$CR_WHO: could not create a temporary folder"
+  fw_file="$work/frameworks"
+  tools_file="$work/tools"
+  rows_file="$work/rows"
+  : >"$fw_file"
+  : >"$tools_file"
+
+  names="$(printf '%s\n%s' "$CR_TEST_RECIPES" "$CR_CHECK_RECIPES" | cut -f1 | grep -v '^$' | sort -u)"
+  while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    test_path="$(cr_lookup "$CR_TEST_RECIPES" "$fw")"
+    check_path="$(cr_lookup "$CR_CHECK_RECIPES" "$fw")"
+
+    tc_rows='[]'; tc_state="not-given"; test_sha=""; marker_json='[]'
+    suite_json='{"missing":"no --test-recipe named this framework, so no suite command was read"}'
+    order_json='{"missing":"no --test-recipe named this framework, so no selected-tests command was read"}'
+    if [ -n "$test_path" ]; then
+      test_sha="$(tf_sha256_of "$test_path")"
+      : >"$rows_file"
+      tc_parse_recipe "$test_path" "$rows_file"
+      tc_state="$RECIPE_STATE"
+      tc_rows="$(jq -s '.' "$rows_file" 2>/dev/null)" || tc_rows='[]'
+      markers="$(cc_silent_pass_markers "$test_path")"
+      marker_json="$(printf '%s' "$markers" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+      [ -n "$marker_json" ] || marker_json='[]'
+      if [ "$tc_state" != "ok" ]; then
+        suite_json="$(jq -nc --arg s "$tc_state" '{missing: ("the recipe test-commands section could not be read (state: " + $s + ")")}')"
+        order_json="$suite_json"
+      else
+        suite_json="$(cr_row_command "$tc_rows" "suite" "suite")"
+        # Two rows can run a named set of tests. `changed` takes a path list whole and is the exact
+        # shape this needs, so it is read first; `file` is the fallback where a framework declares
+        # `changed` absent. A framework declaring both absent leaves order-tests undeclared, and an
+        # order whose own tests nothing runs never passes its checks.
+        order_json="$(cr_row_command "$tc_rows" "changed" "selected-tests")"
+        case "$order_json" in
+          '{"missing"'*|'{"absent"'*) order_json="$(cr_row_command "$tc_rows" "file" "selected-tests")" ;;
+        esac
+      fi
+    fi
+
+    cc_rows='[]'; cc_state="not-given"; check_sha=""
+    if [ -n "$check_path" ]; then
+      check_sha="$(tf_sha256_of "$check_path")"
+      : >"$rows_file"
+      cc_parse_recipe "$check_path" "$rows_file"
+      cc_state="$RECIPE_STATE"
+      cc_rows="$(jq -s '.' "$rows_file" 2>/dev/null)" || cc_rows='[]'
+      printf '%s' "$cc_rows" | jq -c --arg fw "$fw" '.[] | . + {framework: $fw}' >>"$tools_file"
+    fi
+
+    jq -nc --arg framework "$fw" --arg tcState "$tc_state" --arg ccState "$cc_state" \
+      --arg testSha "$test_sha" --arg checkSha "$check_sha" \
+      --arg testRecipe "$test_path" --arg checkRecipe "$check_path" \
+      --argjson suite "$suite_json" --argjson orderTests "$order_json" \
+      --argjson silentPass "$marker_json" --argjson testRows "$tc_rows" '
+      {framework: $framework,
+       testRecipe: $testRecipe, testRecipeSha256: $testSha, testCommandsState: $tcState,
+       testCommandsRows: $testRows,
+       checkRecipe: $checkRecipe, checkRecipeSha256: $checkSha, checkCommandsState: $ccState,
+       suite: $suite, orderTests: $orderTests, silentPass: $silentPass}' >>"$fw_file" \
+      || die3 "$CR_WHO: the resolved recipe entry for $fw could not be recorded"
+  done <<CR_NAMES
+$names
+CR_NAMES
+  rm -f "$rows_file"
+
+  # --- one command per tool row, across every framework -------------------------------------------
+  all_tools="$(jq -s '.' "$tools_file" 2>/dev/null)" || all_tools='[]'
+  tools_out='[]'
+  for tool_id in coding-standards static-analysis security; do
+    commanded="$(printf '%s' "$all_tools" | jq -c --arg id "$tool_id" \
+      '[ .[] | select(.id == $id and (has("argv")) and (((.unreadable // []) | index("argv")) == null)) ]')"
+    count="$(printf '%s' "$commanded" | jq 'length')"
+    if [ "$count" -gt 1 ]; then
+      die72 "$CR_WHO: $(printf '%s' "$commanded" | jq -r '[ .[].framework ] | join(" and ")') each declare a $tool_id command, and nothing here may choose between two answers to one question. Resolve one check recipe for this task, or split the frameworks into two tasks."
+    fi
+    if [ "$count" -eq 1 ]; then
+      tools_out="$(jq -nc --argjson out "$tools_out" --argjson row "$(printf '%s' "$commanded" | jq -c '.[0]')" '$out + [$row]')"
+      continue
+    fi
+    absent_rows="$(printf '%s' "$all_tools" | jq -c --arg id "$tool_id" \
+      '[ .[] | select(.id == $id and (.absent // false)) ]')"
+    if [ "$(printf '%s' "$absent_rows" | jq 'length')" -gt 0 ]; then
+      tools_out="$(jq -nc --argjson out "$tools_out" --arg id "$tool_id" --argjson rows "$absent_rows" '
+        $out + [{id: $id, absent: true,
+                 absentReason: ([ $rows[] | (.framework + ": " + (.absentReason // "no reason given")) ] | join(" ")) }]')"
+      continue
+    fi
+    tools_out="$(jq -nc --argjson out "$tools_out" --arg id "$tool_id" '
+      $out + [{id: $id, missing: "no resolved check recipe carries a row for this tool"}]')"
+  done
+
+  CR_DOC="$(jq -s --argjson tools "$tools_out" '{frameworks: ., tools: $tools}' "$fw_file")" \
+    || die3 "$CR_WHO: the resolved recipe document could not be assembled"
+  rm -rf "$work"
+}
+
+# The path $2 was given for in the tab-separated list $1, compared as whole text. Prints it, or
+# nothing when the name is not there. A `grep` pattern built from a framework name reads a
+# metacharacter in that name as a regular expression and matches the wrong row or none, which is
+# why every lookup over a name this script does not control is a string comparison instead.
+cr_lookup() {
+  local list="$1" want="$2" line name
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    name="${line%%	*}"
+    if [ "$name" = "$want" ]; then
+      printf '%s' "${line#*	}"
+      return 0
+    fi
+  done <<CR_LOOKUP
+$list
+CR_LOOKUP
+  return 0
+}
+
+# The command one test-command row declares, as the object cr_resolve records. $1 the parsed rows,
+# $2 the row id to read, $3 a word for the message. Prints one of three shapes: a command, an
+# absent row with its own reason, or missing with why.
+cr_row_command() {
+  local rows="$1" row_id="$2" label="$3" row argv
+  row="$(printf '%s' "$rows" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
+  if [ "$row" = "null" ]; then
+    jq -nc --arg l "$label" --arg r "$row_id" '{missing: ("the recipe carries no test-commands row with id " + $r + ", so there is no " + $l + " command")}'
+    return 0
+  fi
+  if [ "$(printf '%s' "$row" | jq -r '.absent // false')" = "true" ]; then
+    jq -nc --arg r "$row_id" '{absent: ("the recipe declares its " + $r + " row absent")}'
+    return 0
+  fi
+  if printf '%s' "$row" | jq -e '(.unreadable // []) | index("argv")' >/dev/null 2>&1; then
+    jq -nc --arg r "$row_id" '{missing: ("the " + $r + " row argv did not parse as a JSON array of strings")}'
+    return 0
+  fi
+  argv="$(printf '%s' "$row" | jq -c '.argv // empty')"
+  if [ -z "$argv" ] || [ "$argv" = "null" ]; then
+    jq -nc --arg r "$row_id" '{missing: ("the " + $r + " row declares no argv to run")}'
+    return 0
+  fi
+  jq -nc --argjson argv "$argv" --arg r "$row_id" '{row: $r, argv: $argv}'
+}
+
+# ------------------------------------------------------------------------------------------------
 # The baseline: what was already broken at the commit the build starts from. Taken once, at the
 # end of `preconditions`, only when that run's own verdict permits the build to continue.
 # ------------------------------------------------------------------------------------------------
+
+# The ledger and the snapshot of a task whose build has started, from $IMPL_DIR. Sets
+# STARTED_LEDGER_FILE, STARTED_LEDGER_DOC and SNAPSHOT_DOC. $1 the action, for the message.
+#
+# Four facts, and they must not read alike: neither file present is a build that never started
+# (exit 20, "run start first"); one present without the other is a state this script own logic
+# rules out; and either file present but unparseable is a third. `preconditions`, every step-five
+# action and `finish` all ask this one question, and asking it in three places is how one of them
+# ends up sending a reader to the wrong repair, which is the defect this replaced.
+STARTED_LEDGER_FILE=""; STARTED_LEDGER_DOC=""
+require_started_build() {
+  local who="$1" snapshot_file
+  STARTED_LEDGER_FILE="$IMPL_DIR/ledger.json"
+  snapshot_file="$IMPL_DIR/snapshot.json"
+  if [ ! -f "$STARTED_LEDGER_FILE" ]; then
+    [ -f "$snapshot_file" ] \
+      && die3 "$who: $STARTED_LEDGER_FILE not found, though $snapshot_file exists. A snapshot with no ledger beside it is not a supported state; run start again."
+    die20 "$who: this task's build has never started. There is no $STARTED_LEDGER_FILE and no $snapshot_file. Run start on this task first."
+  fi
+  STARTED_LEDGER_DOC="$(jq -c '.' "$STARTED_LEDGER_FILE" 2>/dev/null)"
+  [ -n "$STARTED_LEDGER_DOC" ] \
+    || die3 "$who: $STARTED_LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  [ -f "$snapshot_file" ] \
+    || die3 "$who: $snapshot_file not found, though $STARTED_LEDGER_FILE exists. A ledger with no snapshot beside it is not a supported state; run start again."
+  SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
+  [ -n "$SNAPSHOT_DOC" ] \
+    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+}
 
 # Prints one of: missing, unreadable, ok, for <task_folder>/implementation/baseline.json
 # ($BASELINE_FILE). Never dies. "unreadable" covers not valid JSON, not an object, and a commit
@@ -2208,49 +2616,44 @@ bl_run_suite() {
       verdict="unknown"
       reason="this framework's own test-commands section could not be read (state: $tc_state), so there is no suite row to run"
     else
-      row_json="$(printf '%s' "$fw_obj" | jq -c '[ .testCommands.rows[] | select(.id == "suite") ][0] // null')"
-      if [ "$row_json" = "null" ]; then
+      # The same reader every other caller of a test-command row uses: a row absent, a row whose
+      # argv did not parse, a row with no argv and a row that is simply not there each have their
+      # own answer, and one copy of that chain is what keeps the four worded alike.
+      row_json="$(cr_row_command "$(printf '%s' "$fw_obj" | jq -c '.testCommands.rows')" "suite" "suite")"
+      if [ "$(printf '%s' "$row_json" | jq -r 'has("argv")')" != "true" ]; then
         verdict="unknown"
-        reason="this framework's recipe carries no test-commands row with id suite"
-      elif [ "$(printf '%s' "$row_json" | jq -r '.absent // false')" = "true" ]; then
-        verdict="unknown"
-        reason="this framework's recipe declares its suite row absent; there is nothing whole to run"
-      elif printf '%s' "$row_json" | jq -e '(.unreadable // []) | index("argv")' >/dev/null 2>&1; then
-        verdict="unknown"
-        reason="the suite row's argv did not parse as a JSON array of strings"
+        reason="$(printf '%s' "$row_json" | jq -r '.absent // .missing')"
       else
-        argv_json="$(printf '%s' "$row_json" | jq -c '.argv // empty')"
-        if [ -z "$argv_json" ] || [ "$argv_json" = "null" ]; then
+        argv_json="$(printf '%s' "$row_json" | jq -c '.argv')"
+        out_file="$(dirname -- "$out")/.baseline-suite-run.$$"
+        result="$(tc_run_smoke "$argv_json" "$codepath" "$out_file" "$values")"
+        kind="$(printf '%s' "$result" | cut -f1)"
+        payload="$(printf '%s' "$result" | cut -f2-)"
+        if [ "$kind" = "UNRESOLVED" ]; then
           verdict="unknown"
-          reason="this framework's suite row declares no argv to run"
+          reason="the token {$payload} in the suite command has no supplied value; pass --value $payload=<value>"
+        elif [ "$kind" = "EMPTY" ]; then
+          verdict="unknown"
+          reason="the suite row's argv holds no token at all, so there was nothing to run"
         else
-          out_file="$(dirname -- "$out")/.baseline-suite-run.$$"
-          result="$(tc_run_smoke "$argv_json" "$codepath" "$out_file" "$values")"
-          kind="$(printf '%s' "$result" | cut -f1)"
-          payload="$(printf '%s' "$result" | cut -f2-)"
-          if [ "$kind" = "UNRESOLVED" ]; then
-            verdict="unknown"
-            reason="the token {$payload} in the suite command has no supplied value; pass --value $payload=<value>"
-          else
-            exit_code_json="$payload"
-            case "$payload" in
-              0)   verdict="met" ;;
-              127) verdict="unknown"; reason="the suite command could not be found (exit 127)" ;;
-              *)   verdict="unmet" ;;
-            esac
-            if [ -f "$out_file" ]; then
-              raw_len="$(wc -c <"$out_file" 2>/dev/null | tr -d '[:space:]')"
-              case "$raw_len" in ''|*[!0-9]*) raw_len=0 ;; esac
-              if [ "$raw_len" -gt 4000 ]; then
-                output="$(tail -c 4000 "$out_file" 2>/dev/null)"
-                truncated=true
-              else
-                output="$(cat "$out_file" 2>/dev/null)"
-              fi
+          exit_code_json="$payload"
+          case "$payload" in
+            0)   verdict="met" ;;
+            127) verdict="unknown"; reason="the suite command could not be found (exit 127)" ;;
+            *)   verdict="unmet" ;;
+          esac
+          if [ -f "$out_file" ]; then
+            raw_len="$(wc -c <"$out_file" 2>/dev/null | tr -d '[:space:]')"
+            case "$raw_len" in ''|*[!0-9]*) raw_len=0 ;; esac
+            if [ "$raw_len" -gt 4000 ]; then
+              output="$(tail -c 4000 "$out_file" 2>/dev/null)"
+              truncated=true
+            else
+              output="$(cat "$out_file" 2>/dev/null)"
             fi
           fi
-          rm -f "$out_file"
         fi
+        rm -f "$out_file"
       fi
     fi
     jq -n --arg framework "$fw" --arg verdict "$verdict" --arg reason "$reason" \
@@ -2266,40 +2669,45 @@ bl_run_suite() {
 }
 
 # Runs one baseline tool command over the baseline scope and prints the field object baseline.json
-# holds for it. $1 the flag that supplies it, $2 the argv token list, $3 whether the flag was given,
-# $4 a word for the message, $5 the reason an absent flag carries, $6 the code repository, $7 the
-# scope as a JSON array of paths, $8 a file to capture output in, $9 the row's own signal
-# (empty-stdout, or empty), ${10} the extensions the row reads as a JSON array (or empty).
+# holds for it. $1 the check id, $2 a word for the message, $3 the code repository, $4 the scope as
+# a JSON array of paths, $5 a file to capture output in. The command, its signal and its extensions
+# come from the resolved recipe in CR_DOC, never from a flag a caller typed.
 #
-# The baseline has nothing earlier to compare itself against, so the rule is the suite's own: met on
-# exit 0, unknown when the command could not be found at all (exit 127) with a reason saying so,
-# unmet on any other exit it actually returned. An absent flag stays undeclared and keeps the reason
-# this record has always carried. The exit code and the output are kept met or not, the same as the
-# suite's, because a baseline is a record of the whole state and not only of what pointed at a
-# defect. A `{paths}` token expands to the scope, one argv token per path.
-#
-# The two optional keys work here exactly as they do in a build check. `extensions` narrows the
-# scope, and a scope that comes out empty makes the row undeclared, because it did not apply.
-# `empty-stdout` reads a zero exit with anything on standard output as unmet.
+# The baseline has nothing earlier to compare itself against, so the rule is the suite own: met on
+# exit 0, unknown when the command could not be run at all with a reason saying so, unmet on any
+# other exit it actually returned. A row the recipe declares absent stays undeclared and carries
+# the recipe own reason. The exit code and the output are kept met or not, because a baseline is a
+# record of the whole state and not only of what pointed at a defect.
 bl_tool_result() {
-  local flag="$1" raw="$2" have="$3" label="$4" absent_reason="$5"
-  local codepath="$6" paths_json="$7" outfile="$8" signal="$9" exts_json="${10}"
-  local absent_declared="${11:-}"
-  local verdict reason exit_json output truncated expanded rc raw_len
-  local has_paths scoped_json scoped_count errfile stdout_len
+  local check_id="$1" label="$2" codepath="$3" paths_json="$4" outfile="$5"
+  local row argv_json signal exts_json absent_declared missing_why
+  local verdict reason exit_json output truncated rc raw_len
+  local has_paths scoped_json scoped_count errfile stdout_len result kind payload
   verdict=""; reason=""; exit_json="null"; output=""; truncated=false
-  if [ "$have" != "true" ]; then
-    # A recipe row declared absent carries its own reason, and `absent` marks it, so a framework
-    # that says it has no such tool never reads the same as a caller who forgot the flag.
-    if [ -n "$absent_declared" ]; then
-      jq -n --arg reason "$absent_declared" '{verdict: "undeclared", reason: $reason, absent: true}'
-    else
-      jq -n --arg reason "$absent_reason" '{verdict: "undeclared", reason: $reason}'
-    fi
+
+  row="$(printf '%s' "$CR_DOC" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
+  absent_declared=""; missing_why=""
+  if [ "$row" = "null" ]; then
+    missing_why="no check recipe was resolved for this task, so $label was not checked"
+  else
+    absent_declared="$(printf '%s' "$row" | jq -r 'if (.absent // false) then (.absentReason // "the recipe declares this row absent") else "" end')"
+    missing_why="$(printf '%s' "$row" | jq -r '.missing // ""')"
+  fi
+  if [ -n "$absent_declared" ]; then
+    jq -n --arg reason "$absent_declared" '{verdict: "undeclared", reason: $reason, absent: true}'
     return 0
   fi
+  if [ -n "$missing_why" ]; then
+    jq -n --arg reason "$missing_why" '{verdict: "undeclared", reason: $reason}'
+    return 0
+  fi
+
+  argv_json="$(printf '%s' "$row" | jq -c '.argv // []')"
+  signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
+  exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
+
   has_paths=false
-  printf '%s' "$raw" | grep -q '^{paths}$' && has_paths=true
+  printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
   scoped_json="$paths_json"
   if [ -n "$exts_json" ]; then
     scoped_json="$(br_filter_extensions "$paths_json" "$exts_json")"
@@ -2311,49 +2719,63 @@ bl_tool_result() {
     # whole repository while this record claims it answered about the scope. That is a wrong verdict,
     # not a missing one.
     verdict="unknown"
-    reason="the $flag command holds {paths}, and no work order declares an owned file, so the command would run over no path at all"
+    reason="the $label command holds a path placeholder, and no work order declares an owned file, so the command would run over no path at all"
   elif [ "$has_paths" = "true" ] && [ -n "$exts_json" ] && [ "$scoped_count" -eq 0 ]; then
     verdict="undeclared"
-    reason="the $flag command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and the scope holds no file with one of those extensions, so the row does not apply"
+    reason="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and the scope holds no file with one of those extensions, so the row does not apply"
   else
-    expanded="$(br_expand_paths "$raw" "$scoped_json")"
     stdout_len=0
+    errfile=""
     if [ -n "$signal" ]; then
       errfile="$outfile.err"
-      rc="$(br_run_argv_split "$expanded" "$codepath" "$outfile" "$errfile")"
-      stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
-      case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
-      cat "$errfile" >>"$outfile" 2>/dev/null
-      rm -f "$errfile"
+      result="$(br_run_resolved "$argv_json" "$codepath" "$outfile" "$scoped_json" "$PC_VALUES" "$errfile")"
     else
-      rc="$(br_run_argv "$expanded" "$codepath" "$outfile")"
+      result="$(br_run_resolved "$argv_json" "$codepath" "$outfile" "$scoped_json" "$PC_VALUES")"
     fi
-    exit_json="$rc"
-    if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
-      verdict="unmet"
-      reason="the $label command exited 0 and printed on standard output, and its row declares signal empty-stdout"
+    kind="$(printf '%s' "$result" | cut -f1)"
+    payload="$(printf '%s' "$result" | cut -f2-)"
+    if [ "$kind" = "UNRESOLVED" ]; then
+      verdict="unknown"
+      reason="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>"
+    elif [ "$kind" = "EMPTY" ]; then
+      verdict="unknown"
+      reason="the $label command came out with no token at all, so nothing ran and nothing was decided"
     else
-      case "$rc" in
-        0)   verdict="met" ;;
-        127) verdict="unknown"; reason="the $label command could not be found (exit 127)" ;;
-        *)   verdict="unmet" ;;
-      esac
-    fi
-    if [ -f "$outfile" ]; then
-      raw_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
-      case "$raw_len" in ''|*[!0-9]*) raw_len=0 ;; esac
-      if [ "$raw_len" -gt 4000 ]; then
-        output="$(tail -c 4000 "$outfile" 2>/dev/null)"
-        truncated=true
+      rc="$payload"
+      if [ -n "$signal" ]; then
+        stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
+        case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
+        cat "$errfile" >>"$outfile" 2>/dev/null
+      fi
+      [ -z "$errfile" ] || rm -f "$errfile"
+      exit_json="$rc"
+      if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
+        verdict="unmet"
+        reason="the $label command exited 0 and printed on standard output, and its row declares signal empty-stdout"
       else
-        output="$(cat "$outfile" 2>/dev/null)"
+        case "$rc" in
+          0)   verdict="met" ;;
+          126) verdict="unknown"; reason="the $label command list came out empty, so nothing ran" ;;
+          127) verdict="unknown"; reason="the $label command could not be found (exit 127)" ;;
+          *)   verdict="unmet" ;;
+        esac
+      fi
+      if [ -f "$outfile" ]; then
+        raw_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
+        case "$raw_len" in ''|*[!0-9]*) raw_len=0 ;; esac
+        if [ "$raw_len" -gt 4000 ]; then
+          output="$(tail -c 4000 "$outfile" 2>/dev/null)"
+          truncated=true
+        else
+          output="$(cat "$outfile" 2>/dev/null)"
+        fi
       fi
     fi
     rm -f "$outfile"
   fi
   jq -n --arg verdict "$verdict" --arg reason "$reason" --arg output "$output" \
         --argjson truncated "$truncated" --argjson exitCode "$exit_json" \
-        --arg signal "$signal" --arg exts "$exts_json" '
+        --arg signal "$signal" --arg exts "${exts_json:-}" '
     {verdict: $verdict}
     + (if $reason   == ""   then {} else {reason: $reason} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode} end)
@@ -2368,12 +2790,7 @@ bl_tool_result() {
 # one repository that is all of them at once.
 do_preconditions() {
   local task_folder="" project_folder codepath project_state
-  local recipes="" failures="" values="" arg fw val
-  local standards_raw="" static_raw="" security_raw=""
-  local have_standards=false have_static=false have_security=false
-  local standards_signal="" static_signal="" security_signal=""
-  local standards_exts="" static_exts="" security_exts=""
-  local standards_absent="" static_absent="" security_absent=""
+  local recipes="" failures="" values="" check_recipes="" arg fw val
   local tool_out_file cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
@@ -2383,7 +2800,7 @@ do_preconditions() {
   local smoke_raw_len smoke_json
   local record_file record_json today
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
-  local ledger_doc ledger_started_from
+  local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
 
   while [ "$#" -gt 0 ]; do
@@ -2391,12 +2808,21 @@ do_preconditions() {
       --recipe)
         [ "$#" -ge 2 ] || die3 "preconditions: --recipe needs <framework>=<path>"
         case "$2" in *=*) ;; *) die3 "preconditions: --recipe takes <framework>=<path>, got: $2" ;; esac
+        [ -n "${2%%=*}" ] || die3 "preconditions: --recipe was given no framework name: $2"
+        [ -n "${2#*=}" ] || die3 "preconditions: --recipe was given no path: $2"
         recipes="$recipes$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      --check-recipe)
+        [ "$#" -ge 2 ] || die3 "preconditions: --check-recipe needs <framework>=<path>"
+        cr_recipe_pair "preconditions" "--check-recipe" "$2"
+        check_recipes="$check_recipes$CR_PAIR
 "
         shift 2 ;;
       --lookup-failed)
         [ "$#" -ge 2 ] || die3 "preconditions: --lookup-failed needs <framework>=<reason>"
         case "$2" in *=*) ;; *) die3 "preconditions: --lookup-failed takes <framework>=<reason>, got: $2" ;; esac
+        [ -n "${2%%=*}" ] || die3 "preconditions: --lookup-failed was given no framework name: $2"
         val="${2#*=}"
         case "$val" in
           no-recipe|listing-unreachable|fetch-failed) ;;
@@ -2408,63 +2834,10 @@ do_preconditions() {
       --value)
         [ "$#" -ge 2 ] || die3 "preconditions: --value needs <name>=<value>"
         case "$2" in *=*) ;; *) die3 "preconditions: --value takes <name>=<value>, got: $2" ;; esac
+        pc_refuse_forged_value "preconditions" "$2"
         values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
-      --standards)
-        [ "$#" -ge 2 ] || die3 "preconditions: --standards needs an argv token"
-        have_standards=true
-        standards_raw="$standards_raw$2
-"
-        shift 2 ;;
-      --static-analysis)
-        [ "$#" -ge 2 ] || die3 "preconditions: --static-analysis needs an argv token"
-        have_static=true
-        static_raw="$static_raw$2
-"
-        shift 2 ;;
-      --security)
-        [ "$#" -ge 2 ] || die3 "preconditions: --security needs an argv token"
-        have_security=true
-        security_raw="$security_raw$2
-"
-        shift 2 ;;
-      --standards-signal)
-        [ "$#" -ge 2 ] || die3 "preconditions: --standards-signal needs a value"
-        br_check_signal "preconditions" "--standards-signal" "$2"
-        standards_signal="$2"; shift 2 ;;
-      --static-analysis-signal)
-        [ "$#" -ge 2 ] || die3 "preconditions: --static-analysis-signal needs a value"
-        br_check_signal "preconditions" "--static-analysis-signal" "$2"
-        static_signal="$2"; shift 2 ;;
-      --security-signal)
-        [ "$#" -ge 2 ] || die3 "preconditions: --security-signal needs a value"
-        br_check_signal "preconditions" "--security-signal" "$2"
-        security_signal="$2"; shift 2 ;;
-      --standards-absent)
-        [ "$#" -ge 2 ] || die3 "preconditions: --standards-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "preconditions: --standards-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        standards_absent="$2"; shift 2 ;;
-      --static-analysis-absent)
-        [ "$#" -ge 2 ] || die3 "preconditions: --static-analysis-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "preconditions: --static-analysis-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        static_absent="$2"; shift 2 ;;
-      --security-absent)
-        [ "$#" -ge 2 ] || die3 "preconditions: --security-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "preconditions: --security-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        security_absent="$2"; shift 2 ;;
-      --standards-extensions)
-        [ "$#" -ge 2 ] || die3 "preconditions: --standards-extensions needs a comma separated list"
-        br_set_exts "preconditions" "--standards-extensions" "$2"
-        standards_exts="$BR_EXTS_JSON"; shift 2 ;;
-      --static-analysis-extensions)
-        [ "$#" -ge 2 ] || die3 "preconditions: --static-analysis-extensions needs a comma separated list"
-        br_set_exts "preconditions" "--static-analysis-extensions" "$2"
-        static_exts="$BR_EXTS_JSON"; shift 2 ;;
-      --security-extensions)
-        [ "$#" -ge 2 ] || die3 "preconditions: --security-extensions needs a comma separated list"
-        br_set_exts "preconditions" "--security-extensions" "$2"
-        security_exts="$BR_EXTS_JSON"; shift 2 ;;
       -*) die3 "preconditions: unrecognized argument: $1" ;;
       *)
         [ -z "$task_folder" ] || die3 "preconditions: more than one task folder given"
@@ -2472,28 +2845,13 @@ do_preconditions() {
     esac
   done
 
-  br_require_tool_flag "preconditions" "--standards-signal" "$standards_signal" "--standards" "$have_standards"
-  br_require_tool_flag "preconditions" "--static-analysis-signal" "$static_signal" "--static-analysis" "$have_static"
-  br_require_tool_flag "preconditions" "--security-signal" "$security_signal" "--security" "$have_security"
-  br_require_tool_flag "preconditions" "--standards-extensions" "$standards_exts" "--standards" "$have_standards"
-  br_require_tool_flag "preconditions" "--static-analysis-extensions" "$static_exts" "--static-analysis" "$have_static"
-  br_require_tool_flag "preconditions" "--security-extensions" "$security_exts" "--security" "$have_security"
-
-  # A tool declared absent by its recipe and commanded on the same call is two answers to one
-  # question, and nothing here may choose between them.
-  [ -n "$standards_absent" ] && [ "$have_standards" = "true" ] \
-    && die3 "preconditions: --standards-absent and --standards were both given. A row is declared absent or it carries a command, never both."
-  [ -n "$static_absent" ] && [ "$have_static" = "true" ] \
-    && die3 "preconditions: --static-analysis-absent and --static-analysis were both given. A row is declared absent or it carries a command, never both."
-  [ -n "$security_absent" ] && [ "$have_security" = "true" ] \
-    && die3 "preconditions: --security-absent and --security were both given. A row is declared absent or it carries a command, never both."
-
   task_folder="$(resolve_task_folder "$task_folder" "preconditions")"
 
   # This step belongs to a run, so a run must have opened. Writing a record for a build that never
-  # started would leave a file nothing can be read against.
-  [ -f "$task_folder/implementation/snapshot.json" ] && [ -f "$task_folder/implementation/ledger.json" ] \
-    || die20 "preconditions: this task has no started build; run \`start\` first"
+  # started would leave a file nothing can be read against. The same reader every step-five action
+  # and `finish` use, so the four name the same four facts in the same words.
+  IMPL_DIR="$task_folder/implementation"
+  require_started_build "preconditions"
 
   project_folder="$(resolve_project_folder "$task_folder")" \
     || die3 "preconditions: the task folder is not inside a project, so no framework is known"
@@ -2507,7 +2865,28 @@ do_preconditions() {
   [ -d "$codepath" ] || die15 "preconditions: the recorded codePath does not exist on disk: $codepath"
 
   frameworks="$(jq -r '.frameworks // [] | .[]' "$project_folder/project.json" 2>/dev/null)"
-  [ -n "$frameworks" ] || die14 "preconditions: project.json records no frameworks, so no recipe can be chosen"
+  [ -n "$frameworks" ] \
+    || die77 "preconditions: $project_folder/project.json is valid and records no frameworks, so no recipe can be chosen for this project. Exit 14 is the separate fact that the file is not valid JSON."
+
+  # Every commanded check the build runs later comes from a recipe, resolved once here so a
+  # framework that can never answer is named now rather than at the first build-record. An order
+  # whose own tests nothing runs never reaches checks-passed, so a framework declaring both rows
+  # that run a named set of tests absent stops the run here, with the framework named.
+  PC_VALUES="$values"
+  CR_WHO="preconditions"
+  CR_TEST_RECIPES="$recipes"
+  CR_CHECK_RECIPES="$check_recipes"
+  cr_resolve
+  order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
+    [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
+    | join(", ")')"
+  if [ -n "$order_tests_absent" ]; then
+    printf 'implement-actions: preconditions: %s\n' "these frameworks declare no test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent" >&2
+    exit 19
+  fi
+  check_recipes_json="$(printf '%s' "$CR_DOC" | jq -c '
+    [ (.frameworks // [])[] | select(.checkRecipe != "")
+      | {framework: .framework, path: .checkRecipe, sha256: .checkRecipeSha256} ]')"
 
   entries_file="$task_folder/implementation/.preconditions-entries.$$"
   tc_rows_file="$task_folder/implementation/.preconditions-testcommands.$$"
@@ -2519,12 +2898,12 @@ do_preconditions() {
   # would turn a lookup nobody ran into a recipe that declared nothing.
   printf '%s\n' "$frameworks" | while IFS= read -r fw; do
     [ -n "$fw" ] || continue
-    recipe_path="$(printf '%s' "$recipes" | grep "^$fw	" | head -n 1 | cut -f2-)"
+    recipe_path="$(cr_lookup "$recipes" "$fw")"
     lookup=""
     if [ -n "$recipe_path" ]; then
       lookup="resolved"
     else
-      lookup="$(printf '%s' "$failures" | grep "^$fw	" | head -n 1 | cut -f2-)"
+      lookup="$(cr_lookup "$failures" "$fw")"
       [ -n "$lookup" ] || die18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
     fi
 
@@ -2541,8 +2920,12 @@ do_preconditions() {
       esac
       # The test-commands block never affects a verdict; it is read here only because it lives in
       # the same recipe file this framework already resolved, and the record already has a place
-      # for the rest of what that recipe declared.
-      tc_state="$(tc_parse_recipe "$recipe_path" "$tc_rows_file")"
+      # for the rest of what that recipe declared. cr_resolve above already parsed it, so this
+      # reads that result rather than opening the same file a second time.
+      tc_state="$(printf '%s' "$CR_DOC" | jq -r --arg f "$fw" \
+        '[ (.frameworks // [])[] | select(.framework == $f) ][0].testCommandsState // "not-given"')"
+      printf '%s' "$CR_DOC" | jq -c --arg f "$fw" \
+        '[ (.frameworks // [])[] | select(.framework == $f) ][0].testCommandsRows // [] | .[]' >"$tc_rows_file"
     else
       # Nobody looked. That is a different fact from a recipe that looked and declared nothing.
       section_state="not-looked"
@@ -2599,6 +2982,9 @@ EOF
               if [ "$smoke_kind" = "UNRESOLVED" ]; then
                 smoke_verdict="unknown"
                 smoke_reason="the token {$smoke_payload} in the smoke command has no supplied value; pass --value $smoke_payload=<value>"
+              elif [ "$smoke_kind" = "EMPTY" ]; then
+                smoke_verdict="unknown"
+                smoke_reason="the smoke row's argv holds no token at all, so there was nothing to run"
               else
                 smoke_exit_code_json="$smoke_payload"
                 case "$smoke_payload" in
@@ -2679,19 +3065,15 @@ EOF
 
   case "$run_verdict" in
     met|undeclared)
-      LEDGER_FILE="$task_folder/implementation/ledger.json"
-      ledger_doc="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
-      [ -n "$ledger_doc" ] \
-        || die3 "preconditions: $LEDGER_FILE exists but could not be read as JSON, though \`start\` already wrote it. Repair or remove it by hand before running this again."
+      LEDGER_FILE="$STARTED_LEDGER_FILE"
+      ledger_doc="$STARTED_LEDGER_DOC"
       ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
         || die3 "preconditions: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
       baseline_commit_report="$ledger_started_from"
 
       case "$(bl_state)" in
         missing)
-          snapshot_doc="$(jq -c '.' "$task_folder/implementation/snapshot.json" 2>/dev/null)"
-          [ -n "$snapshot_doc" ] \
-            || die3 "preconditions: $task_folder/implementation/snapshot.json exists but could not be read as JSON, though \`start\` already wrote it. Repair or remove it by hand before running this again."
+          snapshot_doc="$SNAPSHOT_DOC"
           scope_json="$(printf '%s' "$snapshot_doc" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique')"
 
           suite_json_file="$task_folder/implementation/.baseline-suite.$$"
@@ -2704,21 +3086,9 @@ EOF
           # recorded above. A caller that passed no flag for one of them leaves it undeclared, with
           # the reason this record has always carried.
           tool_out_file="$task_folder/implementation/.baseline-tool.$$"
-          cs_json="$(bl_tool_result "--standards" "$standards_raw" "$have_standards" \
-            "coding-standards" \
-            "no recipe names a coding-standards tool for this framework, at this point in the process" \
-            "$codepath" "$scope_json" "$tool_out_file" "$standards_signal" "$standards_exts" \
-            "$standards_absent")"
-          sa_json="$(bl_tool_result "--static-analysis" "$static_raw" "$have_static" \
-            "static-analysis" \
-            "no recipe names a static-analysis tool for this framework, at this point in the process" \
-            "$codepath" "$scope_json" "$tool_out_file" "$static_signal" "$static_exts" \
-            "$static_absent")"
-          sec_json="$(bl_tool_result "--security" "$security_raw" "$have_security" \
-            "security" \
-            "no recipe names a security tool for this framework, at this point in the process" \
-            "$codepath" "$scope_json" "$tool_out_file" "$security_signal" "$security_exts" \
-            "$security_absent")"
+          cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$tool_out_file")"
+          sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$tool_out_file")"
+          sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$tool_out_file")"
           rm -f "$tool_out_file"
 
           baseline_json="$(jq -n \
@@ -2727,11 +3097,13 @@ EOF
             --argjson codingStandards "$cs_json" \
             --argjson staticAnalysis "$sa_json" \
             --argjson security "$sec_json" \
+            --argjson checkRecipes "$check_recipes_json" \
             '{
               schemaVersion: 1, takenAt: $takenAt, commit: $commit, scope: $scope, suite: $suite,
               codingStandards: $codingStandards,
               staticAnalysis:  $staticAnalysis,
-              security:        $security
+              security:        $security,
+              checkRecipes:    $checkRecipes
             }')" || die3 "preconditions: could not assemble the baseline record"
           write_atomic "$BASELINE_FILE" "$baseline_json"
 
@@ -2912,6 +3284,7 @@ do_tests_brief() {
   # the previous round's value to standard output on every round after the first (trap 5 in this
   # file's own header).
   local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
+  local dep_record_file dep_record_text
   depends_json="$(printf '%s' "$UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
@@ -2925,8 +3298,19 @@ do_tests_brief() {
     if [ "$dep_step" = "closed" ]; then
       dep_interface="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$dep_id" \
         '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
+      # Both texts, each labelled. The declaration is what design promised; the record is what the
+      # builder says it exposed, and the two can differ. The next order writes its tests and its
+      # code against the record where one exists, which is what build.md and the two agent files
+      # already say and what neither brief carried.
+      dep_record_file="$IMPL_DIR/build-$dep_id.json"
+      dep_record_text=""
+      if [ -f "$dep_record_file" ]; then
+        dep_record_text="$(jq -r '.interfaceRecord // ""' "$dep_record_file" 2>/dev/null)"
+      fi
       dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
-        --arg id "$dep_id" --arg iface "$dep_interface" '. + [{id: $id, interface: $iface}]')"
+        --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
+        . + [ {id: $id, declaredInterface: $iface, interface: $iface}
+              + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
     else
       die23 "tests-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
     fi
@@ -3249,7 +3633,19 @@ tf_path_matches_catalog_glob() {
   case "$walk" in */) walk="${walk%/}" ;; esac
   case "$glob" in /*) glob="${glob#/}" ;; esac
   case "$glob" in */) glob="${glob%/}" ;; esac
-  tf_segments_match "$walk" "$glob"
+  tf_segments_match "$walk" "$glob" && return 0
+  # design-schema.json lets an owned entry be a file or a directory. A directory covers its own
+  # subtree, which is the rule hooks/deny-prior-source.sh already applies to the same values; this
+  # matcher read it as one path and answered no to every file under it, so an order owning a
+  # directory failed owned-files on every attempt. A pattern holding a glob character keeps the
+  # segment behaviour above and never takes this branch, because a glob names a set, not a root.
+  case "$glob" in
+    *'*'*|*'?'*|*'['*) return 1 ;;
+  esac
+  case "$walk" in
+    "$glob"/*) return 0 ;;
+  esac
+  return 1
 }
 
 # Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
@@ -3309,6 +3705,8 @@ do_tests_freeze() {
         shift 2 ;;
       --row)
         [ "$#" -ge 2 ] || die3 "tests-freeze: --row needs <criterion id>=<confirmed|rejected>::<person|model>::<note>"
+        [ -n "$2" ] || die3 "tests-freeze: --row was given an empty value."
+        halt_refuse_separator "tests-freeze" "--row" "$2"
         row_raw="$row_raw$2
 "
         shift 2 ;;
@@ -3340,6 +3738,29 @@ do_tests_freeze() {
 
   tt_load_snapshot "tests-freeze"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-freeze"
+
+  # --- 74: an order that serves and owns no criterion ---------------------------------------------
+  # Every guard below iterates a per-criterion list, so an order with none passes all of them and
+  # freezes a record with no test and no glob in it. The reference then proves nothing, and the
+  # frozen-tests check later hashes nothing and answers met.
+  [ "$(printf '%s' "$CRITERIA_IDS_JSON" | jq 'length')" -gt 0 ] \
+    || die74 "tests-freeze: $unit_id serves and owns no criterion, so there is nothing for a test to prove and nothing for this step to freeze. Design left this order with no criteriaServed and no criteriaOwned; repair the work order and close design again."
+
+  # --- 76: a re-freeze after the order has already left the frozen state ---------------------------
+  # A re-freeze rewinds lastStep and leaves attemptsUsed and the build record where they are, so the
+  # order would rebuild with a spent counter and a record for tests that no longer exist.
+  local tf_prior_step tf_prior_ledger
+  if [ -f "$IMPL_DIR/ledger.json" ]; then
+    tf_prior_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+    if [ -n "$tf_prior_ledger" ]; then
+      tf_prior_step="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
+        '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')"
+      case "$tf_prior_step" in
+        ""|null|tests-frozen) ;;
+        *) die76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved; otherwise this order goes forward, not back." ;;
+      esac
+    fi
+  fi
 
   # --- turn every raw --flag value into JSON, through temporary files beside the implementation dir
   local tests_tmp reds_tmp checklists_tmp goa_tmp rows_meta_tmp
@@ -3841,6 +4262,7 @@ do_build_brief() {
   # dep_interface is declared here, never inside the loop, for the reason tests-brief states above
   # and this file's own header records as trap 5.
   local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
+  local dep_record_file dep_record_text
   depends_json="$(printf '%s' "$BB_UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
@@ -3854,8 +4276,19 @@ do_build_brief() {
     if [ "$dep_step" = "closed" ]; then
       dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
         '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
+      # Both texts, each labelled. The declaration is what design promised; the record is what the
+      # builder says it exposed, and the two can differ. The next order writes its tests and its
+      # code against the record where one exists, which is what build.md and the two agent files
+      # already say and what neither brief carried.
+      dep_record_file="$IMPL_DIR/build-$dep_id.json"
+      dep_record_text=""
+      if [ -f "$dep_record_file" ]; then
+        dep_record_text="$(jq -r '.interfaceRecord // ""' "$dep_record_file" 2>/dev/null)"
+      fi
       dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
-        --arg id "$dep_id" --arg iface "$dep_interface" '. + [{id: $id, interface: $iface}]')"
+        --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
+        . + [ {id: $id, declaredInterface: $iface, interface: $iface}
+              + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
     else
       die40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
     fi
@@ -3886,67 +4319,80 @@ do_build_brief() {
     '[ (.rows // [])[] | select(.kind == "machine") | .criterion as $c | (.tests // [])[]
        | {path, name, criterion: $c} ]')"
 
-  jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" \
+  # The caller needs the commit this attempt begins from, for --started-at when it records. It was
+  # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry.
+  local bb_project bb_codepath bb_head
+  bb_head=""
+  bb_project="$(resolve_project_folder "$TASK_PATH" 2>/dev/null)" || bb_project=""
+  if [ -n "$bb_project" ]; then
+    bb_codepath="$(project_code_path_value "$bb_project")"
+    if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
+      bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
+    fi
+  fi
+  jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
-    '{unit: $unit, tests: $tests, dependencyInterfaces: $dependencyInterfaces,
+    '{unit: $unit, tests: $tests, headNow: $headNow, dependencyInterfaces: $dependencyInterfaces,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}'
   exit 0
 }
 
-# Runs $1, a newline-separated list of argv tokens (one repeated --flag occurrence per line, never
-# a string split on whitespace), as arguments from inside $2, after cd'ing there. This is a third
-# runner alongside pc_run_check and tc_run_smoke, needed because this call site's own tokens already
-# arrive pre-split as separate argv elements (the caller passes --suite or --order-tests once per
-# token), so there is nothing here to split and no shell to split it unsafely: `set --` is rebuilt
-# one already-whole token at a time from the heredoc, never through `set -- $value` or a `for` over
-# an unquoted expansion, so this needs neither pc_run_check's SH_WORD_SPLIT nor GLOB_SUBST. Standard
-# output and standard error are captured together in $3, the same as tc_run_smoke, because a
-# --nothing-ran marker may land on either stream and the caller records the output verbatim either
-# way. Prints the exit status on stdout; never dies.
-#
-# An empty line is skipped rather than passed on. The list every caller builds ends with a newline,
-# and the heredoc below adds one more, so an unskipped empty line handed the command one extra
-# empty argument at the end of every run. A linter given an empty path argument reads it as its own
-# default scope, which is a verdict about the whole repository under this order's name, so the skip
-# is a correctness fix and not a tidy-up. No argv token in this file is ever meant to be empty.
-br_run_argv() {
-  local raw="$1" dir="$2" outfile="$3"
-  (
-    cd "$dir" || exit 127
-    set --
-    while IFS= read -r tok; do
-      [ -n "$tok" ] || continue
-      set -- "$@" "$tok"
-    done <<BR_TOKENS
-$raw
-BR_TOKENS
-    exec "$@"
-  ) >"$outfile" 2>&1
-  printf '%s' "$?"
-}
 
-# Prints $1, a newline-separated argv token list, with every line that is exactly `{paths}`
-# replaced by one line per entry of $2, a JSON array of paths. Every other line is printed
-# unchanged. A path holding a newline cannot survive this list shape, the same bound every
-# repeated argv flag in this file already carries, because a token is one line.
-br_expand_paths() {
-  local raw="$1" paths_json="$2" line count i
-  count="$(printf '%s' "$paths_json" | jq 'length' 2>/dev/null)"
+# Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
+# array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry. $5 is
+# the tab-separated `--value` list every other single-placeholder token is read from. $6, when
+# given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
+#
+# Prints one of three tab-separated results and never dies:
+#   UNRESOLVED<TAB><name>  a placeholder token nothing supplied a value for, naming it
+#   EMPTY<TAB>             the argv holds no token at all. An exec with no operands returns 0
+#                          without replacing the shell, so this is a refusal and never a run
+#   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
+br_run_resolved() {
+  local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}"
+  local count i tok name pcount pi rc
+  set --
+  count="$(printf '%s' "$argv_json" | jq 'length' 2>/dev/null)"
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
-  while IFS= read -r line; do
-    if [ "$line" = "{paths}" ]; then
-      i=0
-      while [ "$i" -lt "$count" ]; do
-        printf '%s' "$paths_json" | jq -r --argjson i "$i" '.[$i]'
-        i=$((i + 1))
-      done
-    else
-      printf '%s\n' "$line"
-    fi
-  done <<BR_EXPAND
-$raw
-BR_EXPAND
+  pcount="$(printf '%s' "$paths_json" | jq 'length' 2>/dev/null)"
+  case "$pcount" in ''|*[!0-9]*) pcount=0 ;; esac
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    tok="$(printf '%s' "$argv_json" | jq -r --argjson i "$i" '.[$i]' 2>/dev/null)"
+    case "$tok" in
+      '{paths}'|'{file}')
+        pi=0
+        while [ "$pi" -lt "$pcount" ]; do
+          set -- "$@" "$(printf '%s' "$paths_json" | jq -r --argjson pi "$pi" '.[$pi]')"
+          pi=$((pi + 1))
+        done
+        ;;
+      '{'*'}')
+        name="${tok#\{}"; name="${name%\}}"
+        tok="$(cr_lookup "$values" "$name")"
+        if [ -z "$tok" ]; then
+          printf 'UNRESOLVED\t%s' "$name"
+          return 0
+        fi
+        set -- "$@" "$tok"
+        ;;
+      *) set -- "$@" "$tok" ;;
+    esac
+    i=$((i + 1))
+  done
+  if [ "$#" -eq 0 ]; then
+    printf 'EMPTY\t'
+    return 0
+  fi
+  if [ -n "$errfile" ]; then
+    ( cd "$dir" || exit 127; exec "$@" ) >"$outfile" 2>"$errfile"
+    rc=$?
+  else
+    ( cd "$dir" || exit 127; exec "$@" ) >"$outfile" 2>&1
+    rc=$?
+  fi
+  printf 'RAN\t%s' "$rc"
 }
 
 # Prints the entries of $1, a JSON array of paths, that end in one of the extensions in $2, a JSON
@@ -3959,58 +4405,42 @@ br_filter_extensions() {
   '
 }
 
-# Sets BR_EXTS_JSON from $3, a comma-separated extension list. $1 names the action and $2 the flag,
-# for the message. Refuses a list that holds no extension at all: a tool declared to read nothing
-# would make every row not applicable, which is a caller's mistake and not a fact about the code.
-#
-# A global rather than a printed value, because a `$(...)` capture runs the function in a subshell
-# and a refusal inside it would exit that subshell alone, leaving the caller to carry on with an
-# empty list. That is the same rule br_seven_checks states above.
-BR_EXTS_JSON=""
-br_set_exts() {
-  local who="$1" flag="$2" csv="$3"
-  BR_EXTS_JSON="$(printf '%s' "$csv" | jq -Rc 'split(",") | map(ltrimstr(" ") | rtrimstr(" ")) | map(select(length > 0))' 2>/dev/null)"
-  [ -n "$BR_EXTS_JSON" ] && [ "$BR_EXTS_JSON" != "[]" ] \
-    || die3 "$who: $flag must name at least one extension, and this list names none: $csv"
+# Exit 71. A base commit that is HEAD itself makes the diff empty, so the owned-files check answers
+# met over nothing, the round writes an empty patch, and a reviewer reads no findings on it. A base
+# commit that is not an ancestor of HEAD names a range that is not this order own work at all.
+# Exit 43 stays the separate fact that the value is not a commit in this repository.
+# $1 the action, $2 the code repository, $3 the value as given, $4 it peeled to a commit, $5 HEAD.
+br_require_real_base() {
+  local who="$1" repo="$2" given="$3" full="$4" head_now="$5"
+  [ "$full" != "$head_now" ] \
+    || die71 "$who: --started-at ($given) is the commit $repo is at now. The range between them is empty, so every check would answer about no change at all. Pass the commit the work began from."
+  git -C "$repo" merge-base --is-ancestor "$full" "$head_now" >/dev/null 2>&1 \
+    || die71 "$who: --started-at ($given, $full) is not an ancestor of HEAD ($head_now) in $repo, so the range between the two is not this order own work."
 }
 
-# Refuses a key that says how to read a tool's result when no command for that tool was given. $1
-# the action, $2 the key's own flag, $3 its value (empty when absent), $4 the tool's flag, $5
-# whether that tool flag was given.
-br_require_tool_flag() {
-  local who="$1" dep_flag="$2" dep_value="$3" tool_flag="$4" have_tool="$5"
-  [ -n "$dep_value" ] || return 0
-  [ "$have_tool" = "true" ] \
-    || die3 "$who: $dep_flag says how to read what $tool_flag returned, and no $tool_flag command was given."
-}
-
-# Refuses a signal this script does not understand. $1 the action, $2 the flag, $3 the value.
-br_check_signal() {
-  case "$3" in
-    empty-stdout) ;;
-    *) die3 "$1: the only value $2 takes is empty-stdout, not: $3" ;;
-  esac
-}
-
-# br_run_argv, with standard output and standard error kept apart, for a row whose recipe declares
-# `signal: empty-stdout`: that tool cannot fail by exit status, so its standard output has to be
-# read on its own. $4 receives standard error. The caller joins the two back together for the
-# record, which loses the order the two streams interleaved in; that is the price of reading one of
-# them alone, and only a row carrying the signal pays it.
-br_run_argv_split() {
-  local raw="$1" dir="$2" outfile="$3" errfile="$4"
-  (
-    cd "$dir" || exit 127
-    set --
-    while IFS= read -r tok; do
-      [ -n "$tok" ] || continue
-      set -- "$@" "$tok"
-    done <<BR_SPLIT
-$raw
-BR_SPLIT
-    exec "$@"
-  ) >"$outfile" 2>"$errfile"
-  printf '%s' "$?"
+# Exit 73. Every tool check compares its own result against the baseline that step two took, and
+# that comparison is only honest while both ran the same command. The baseline records the check
+# recipe it read and a sha256 of that file, per framework; a later run resolving a different file
+# refuses rather than compare one tool output against another tool baseline.
+# $1 the action, $2 the baseline file. Reads CR_DOC.
+cr_require_baseline_recipes() {
+  local who="$1" baseline_file="$2" baseline_doc count idx fw now_sha was_sha was_path
+  [ -f "$baseline_file" ] || return 0
+  baseline_doc="$(jq -c '.' "$baseline_file" 2>/dev/null)"
+  [ -n "$baseline_doc" ] || return 0
+  count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
+  case "$count" in ''|*[!0-9]*) count=0 ;; esac
+  idx=0
+  while [ "$idx" -lt "$count" ]; do
+    fw="$(printf '%s' "$CR_DOC" | jq -r --argjson i "$idx" '.frameworks[$i].framework')"
+    now_sha="$(printf '%s' "$CR_DOC" | jq -r --argjson i "$idx" '.frameworks[$i].checkRecipeSha256')"
+    was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
+    was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
+    if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
+      die73 "$who: the check recipe resolved for $fw is not the one the baseline was taken with. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline, so take the baseline again before recording this."
+    fi
+    idx=$((idx + 1))
+  done
 }
 
 # Exit 61. Every check but one reads the working tree: the tools run over the files on disk, the
@@ -4031,9 +4461,19 @@ BR_SPLIT
 br_require_clean_tree() {
   local who="$1" repo="$2" unit_id="${3:-}" run_mode="${4:-}" ledger_file="${5:-}" ledger_doc="${6:-}"
   local dirty why halted_doc
+  # Not --ignored. A gitignored file an implementer wrote can change a test outcome while leaving
+  # a clean tree, and that is a real gap, but --ignored lists node_modules and every other build
+  # product a repository ignores on purpose, so every record step refused. The gap stands.
   dirty="$(git -C "$repo" status --porcelain 2>/dev/null)"
   [ -z "$dirty" ] && return 0
-  why="uncommitted changes in the code repository: $(printf '%s' "$dirty" | tr '\n' ' ')"
+  # The reason never carries the filenames. A path holding the text this stage joins halt reasons
+  # with would forge a segment, and the reason is read back by split. The count is the fact a halt
+  # needs; the names go to standard error, where nothing parses them.
+  local dirty_count
+  dirty_count="$(printf '%s' "$dirty" | grep -c '.' 2>/dev/null)"
+  case "$dirty_count" in ''|*[!0-9]*) dirty_count=0 ;; esac
+  why="uncommitted changes in the code repository ($dirty_count paths, listed on stderr)"
+  printf '%s: the uncommitted paths in %s are:\n%s\n' "$who" "$repo" "$dirty" >&2
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
     halted_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$why")"
     [ -n "$halted_doc" ] || die3 "$who: the ledger update for $unit_id failed."
@@ -4063,75 +4503,78 @@ br_require_clean_tree() {
 #   BRC_UNIT_JSON       the frozen work order
 #   BRC_TESTS_DOC       the frozen test record for this order
 #   BRC_BASELINE_FILE   where step two wrote the baseline
-#   BRC_ORDER_TESTS_RAW, BRC_SUITE_RAW, BRC_STANDARDS_RAW, BRC_STATIC_RAW, BRC_SECURITY_RAW
-#                       one newline-separated argv token list per commanded check
-#   BRC_HAVE_ORDER_TESTS, BRC_HAVE_SUITE, BRC_HAVE_STANDARDS, BRC_HAVE_STATIC, BRC_HAVE_SECURITY
-#                       "true" when the caller passed that flag at all
-#   BRC_STANDARDS_SIGNAL, BRC_STATIC_SIGNAL, BRC_SECURITY_SIGNAL
-#                       empty-stdout for a tool that cannot fail by exit status, empty otherwise
-#   BRC_STANDARDS_ABSENT, BRC_STATIC_ABSENT, BRC_SECURITY_ABSENT
-#                       the reason a recipe row declared that tool absent, empty when none did
-#   BRC_STANDARDS_EXTS, BRC_STATIC_EXTS, BRC_SECURITY_EXTS
-#                       a JSON array of the extensions that tool reads, empty string when the row
-#                       names none
-#   BRC_NOTHING_RAN, BRC_HAVE_NOTHING_RAN   the marker that makes a green run undecidable
+#   BRC_RECIPES         the resolved recipe document cr_resolve wrote (CR_DOC): one entry per
+#                       framework with its suite and selected-tests commands, and one entry per
+#                       tool row with its argv, its signal and its extensions. Every command this
+#                       function runs comes from here, never from a flag a caller typed
+#   BRC_SELECTED_JSON   the paths a `{paths}` or `{file}` token in the selected-tests row expands
+#                       to: this order's own frozen test files, relative to codePath
+#   BRC_VALUES          the tab-separated `--value` list every other placeholder is read from
+#   BRC_NOTHING_RAN, BRC_HAVE_NOTHING_RAN   the caller's own marker for a green run that selected
+#                       nothing, used only where the framework's recipe declares none of its own
 # ------------------------------------------------------------------------------------------------
 BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
-BRC_ORDER_TESTS_RAW=""; BRC_SUITE_RAW=""; BRC_STANDARDS_RAW=""; BRC_STATIC_RAW=""; BRC_SECURITY_RAW=""
-BRC_HAVE_ORDER_TESTS=false; BRC_HAVE_SUITE=false; BRC_HAVE_STANDARDS=false
-BRC_HAVE_STATIC=false; BRC_HAVE_SECURITY=false
-BRC_STANDARDS_SIGNAL=""; BRC_STATIC_SIGNAL=""; BRC_SECURITY_SIGNAL=""
-BRC_STANDARDS_EXTS=""; BRC_STATIC_EXTS=""; BRC_SECURITY_EXTS=""
-BRC_STANDARDS_ABSENT=""; BRC_STATIC_ABSENT=""; BRC_SECURITY_ABSENT=""
+BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 
 # One tool check: coding standards, static analysis, or the security tool. $1 the check id, $2 the
-# flag that supplies it, $3 the argv token list, $4 whether the flag was given, $5 the baseline
-# field holding the same tool's own verdict, $6 a word for the message, $7 the row's own signal
-# (empty-stdout, or empty), $8 the extensions the row reads as a JSON array (or empty). Prints the
-# check object.
+# baseline field holding the same tool's own verdict, $3 a word for the message. The command itself
+# comes from the resolved recipe in BRC_RECIPES, never from a flag: a caller retyping a recipe row
+# drops a key, and a dropped `signal` key turns a tool that cannot fail by exit status into a check
+# that always passes. Prints the check object.
 #
 # Exit 0 is met. Any other exit is compared against the baseline for that tool, the same rule
 # suite-regression already applies: a baseline that was met makes this unmet, because this order
 # introduced the finding; a baseline that was unmet, unknown or undeclared makes this unknown,
 # naming which, because nothing here can tell an old finding from an old one plus a new one.
 #
-# Two keys change that (dev-guides, process-recipes, `## Check commands` is parsed). `extensions`
-# narrows what {paths} expands to; a row whose expansion comes out empty did not apply to this
-# order and is recorded undeclared, never met. `empty-stdout` marks a tool that cannot fail by exit
-# status, gofmt -l being the case it was written for: a zero exit with anything on standard output
-# counts as a failure. Both ways of failing then go through the same baseline comparison, because a
-# finding this tool already reported at the commit the build started from is not one this order
-# introduced, and which of the two ways the tool used to say so changes nothing about that.
+# Two optional keys change that (dev-guides, process-recipes, `## Check commands` is parsed).
+# `extensions` narrows what {paths} expands to; a row whose expansion comes out empty did not apply
+# to this order and is recorded undeclared, never met. `empty-stdout` marks a tool that cannot fail
+# by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard
+# output counts as a failure. Both ways of failing then go through the same baseline comparison,
+# because a finding this tool already reported at the commit the build started from is not one this
+# order introduced, and which of the two ways the tool used to say so changes nothing about that.
 br_tool_check() {
-  local check_id="$1" flag="$2" raw="$3" have="$4" field="$5" label="$6" signal="$7" exts_json="$8"
-  local absent_declared="${9:-}"
+  local check_id="$1" field="$2" label="$3"
+  local row argv_json signal exts_json absent_declared missing_why
   local verdict detail exit_json output expanded outfile errfile rc has_paths
   local owned_json owned_count scoped_json scoped_count stdout_len failed how
-  local baseline_doc baseline_verdict
+  local baseline_doc baseline_verdict result kind payload
   verdict=""; detail=""; exit_json="null"; output=""
-  if [ "$have" != "true" ]; then
-    # Two ways a tool goes unchecked, and they must not read alike. A recipe that declares this
-    # framework has no such tool answered the question, and its own reason text is what a person
-    # reads when they ask why the check never ran. A caller who simply passed no flag answered
-    # nothing. Both are undeclared, because undeclared is never satisfied either way, and `absent`
-    # is what tells the two apart.
-    verdict="undeclared"
-    if [ -n "$absent_declared" ]; then
-      detail="$absent_declared"
-      jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
-        '{id: $id, verdict: $verdict, detail: $detail, absent: true}'
-    else
-      detail="no $flag command was given, so $label was not checked."
-      jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
-        '{id: $id, verdict: $verdict, detail: $detail}'
-    fi
+
+  row="$(printf '%s' "$BRC_RECIPES" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
+  absent_declared=""
+  missing_why=""
+  if [ "$row" = "null" ]; then
+    missing_why="no check recipe was resolved for this task, so $label was not checked."
+  else
+    absent_declared="$(printf '%s' "$row" | jq -r 'if (.absent // false) then (.absentReason // "the recipe declares this row absent") else "" end')"
+    missing_why="$(printf '%s' "$row" | jq -r '.missing // ""')"
+  fi
+
+  if [ -n "$absent_declared" ]; then
+    # A recipe that declares this framework has no such tool answered the question, and its own
+    # reason text is what a person reads when they ask why the check never ran. A row nobody
+    # resolved answered nothing. Both are undeclared, because undeclared is never satisfied either
+    # way, and `absent` is what tells the two apart.
+    jq -n --arg id "$check_id" --arg detail "$absent_declared" \
+      '{id: $id, verdict: "undeclared", detail: $detail, absent: true}'
+    return 0
+  fi
+  if [ -n "$missing_why" ]; then
+    jq -n --arg id "$check_id" --arg detail "$missing_why" \
+      '{id: $id, verdict: "undeclared", detail: $detail}'
     return 0
   fi
 
+  argv_json="$(printf '%s' "$row" | jq -c '.argv // []')"
+  signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
+  exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
+
   has_paths=false
-  printf '%s' "$raw" | grep -q '^{paths}$' && has_paths=true
+  printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
   owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
   owned_count="$(printf '%s' "$owned_json" | jq 'length')"
   scoped_json="$owned_json"
@@ -4144,154 +4587,248 @@ br_tool_check() {
     # A tool handed no path at all reads that as its own default scope, so it would answer about
     # the whole repository under this order's name. That is a wrong verdict, not a missing one.
     verdict="unknown"
-    detail="the $flag command holds {paths}, and this order declares no ownedFiles, so the command would run over no path at all."
+    detail="the $label command holds a path placeholder, and this order declares no ownedFiles, so the command would run over no path at all."
   elif [ "$has_paths" = "true" ] && [ -n "$exts_json" ] && [ "$scoped_count" -eq 0 ]; then
     # The order owns files, and none of them is a file this tool reads. The row did not apply here.
     verdict="undeclared"
-    detail="the $flag command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions, so the row does not apply to it."
+    detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions, so the row does not apply to it."
   else
-    expanded="$(br_expand_paths "$raw" "$scoped_json")"
+    outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+    errfile=""
+    stdout_len=0
     if [ -n "$signal" ]; then
-      outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
       errfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-      rc="$(br_run_argv_split "$expanded" "$BRC_CODEPATH" "$outfile" "$errfile")"
-      stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
-      case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
-      output="$(cat "$outfile" "$errfile" 2>/dev/null)"
-      rm -f "$outfile" "$errfile"
+      result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$scoped_json" "$BRC_VALUES" "$errfile")"
     else
-      outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-      rc="$(br_run_argv "$expanded" "$BRC_CODEPATH" "$outfile")"
-      stdout_len=0
-      output="$(cat "$outfile" 2>/dev/null)"
-      rm -f "$outfile"
+      result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$scoped_json" "$BRC_VALUES")"
     fi
-    exit_json="$rc"
-    failed=false; how=""
-    if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
-      failed=true
-      how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
-    elif [ "$rc" != "0" ]; then
-      failed=true
-      how="exited $rc"
-    fi
-    if [ "$failed" = "false" ]; then
-      verdict="met"
+    kind="$(printf '%s' "$result" | cut -f1)"
+    payload="$(printf '%s' "$result" | cut -f2-)"
+    if [ "$kind" = "UNRESOLVED" ]; then
+      verdict="unknown"
+      detail="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>."
+    elif [ "$kind" = "EMPTY" ]; then
+      verdict="unknown"
+      detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
+    else
+      rc="$payload"
       if [ -n "$signal" ]; then
-        detail="the $label command exited 0 with nothing on standard output, which is what signal empty-stdout asks for."
+        stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
+        case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
+        output="$(cat "$outfile" "$errfile" 2>/dev/null)"
       else
-        detail="the $label command exited 0 over this order's own files."
+        output="$(cat "$outfile" 2>/dev/null)"
       fi
-    else
-      baseline_verdict=""
-      if [ -f "$BRC_BASELINE_FILE" ]; then
-        baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
-        if [ -n "$baseline_doc" ]; then
-          baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
+      exit_json="$rc"
+      failed=false; how=""
+      if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
+        failed=true
+        how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
+      elif [ "$rc" = "126" ]; then
+        verdict="unknown"
+        detail="the $label command list came out empty, so nothing ran and nothing was decided."
+      elif [ "$rc" != "0" ]; then
+        failed=true
+        how="exited $rc"
+      fi
+      if [ -z "$verdict" ]; then
+        if [ "$failed" = "false" ]; then
+          verdict="met"
+          if [ -n "$signal" ]; then
+            detail="the $label command exited 0 with nothing on standard output, which is what signal empty-stdout asks for."
+          else
+            detail="the $label command exited 0 over this order's own files."
+          fi
+        else
+          baseline_verdict=""
+          if [ -f "$BRC_BASELINE_FILE" ]; then
+            baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
+            if [ -n "$baseline_doc" ]; then
+              baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
+            fi
+          fi
+          case "$baseline_verdict" in
+            met)
+              verdict="unmet"
+              detail="the $label command $how, and the baseline recorded this tool met at the commit the build started from; this order introduced the finding."
+              ;;
+            unmet|unknown|undeclared)
+              verdict="unknown"
+              detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so this cannot tell an old finding from an old one plus a new one."
+              ;;
+            *)
+              verdict="unknown"
+              detail="the $label command $how, and $BRC_BASELINE_FILE could not be read for this tool's own baseline verdict, so this cannot tell an old finding from a new one."
+              ;;
+          esac
         fi
       fi
-      case "$baseline_verdict" in
-        met)
-          verdict="unmet"
-          detail="the $label command $how, and the baseline recorded this tool met at the commit the build started from; this order introduced the finding."
-          ;;
-        unmet|unknown|undeclared)
-          verdict="unknown"
-          detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so this cannot tell an old finding from an old one plus a new one."
-          ;;
-        *)
-          verdict="unknown"
-          detail="the $label command $how, and $BRC_BASELINE_FILE could not be read for this tool's own baseline verdict, so this cannot tell an old finding from a new one."
-          ;;
-      esac
     fi
+    rm -f "$outfile"
+    [ -z "$errfile" ] || rm -f "$errfile"
   fi
   jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
         --argjson exitCode "$exit_json" --arg output "$output" \
-        --arg signal "$signal" --arg exts "$exts_json" '
+        --arg signal "$signal" --arg exts "${exts_json:-}" \
+        --arg framework "$(printf '%s' "$row" | jq -r '.framework // ""')" '
     {id: $id, verdict: $verdict, detail: $detail}
+    + (if $framework == "" then {} else {framework: $framework} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode, output: $output} end)
     + (if $signal == "" then {} else {signal: $signal} end)
     + (if $exts   == "" then {} else {extensions: ($exts | fromjson)} end)
   '
 }
 
-# One commanded test check: order-tests or suite-regression. $1 the check id, $2 the flag, $3 the
-# argv token list, $4 whether the flag was given, $5 a word for the message. Prints the check
-# object. suite-regression compares a failure against the baseline suite; order-tests does not,
-# because a test this order owns did not exist when the baseline was taken.
+# The verdict that wins when several frameworks answer one check. Undeclared ranks lowest, so a
+# framework that declared nothing never drags down one that ran and passed; unmet ranks highest,
+# because a definite failure outranks a question. $1 the JSON array of per-framework verdicts.
+#
+# This is deliberately not pc_rank's order, which puts met below undeclared. There the question is
+# what a whole run may report, and a recipe declaring nothing must not read as a pass. Here the
+# question is what one check answered across several frameworks, and a framework with no row to run
+# has said nothing about it. Collapsing the two would make one of the two questions answer wrongly.
+br_worst_verdict() {
+  printf '%s' "$1" | jq -r '
+    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "unknown" then 2 else 3 end;
+    (. + ["undeclared"]) | max_by(rank)'
+}
+
+# One commanded test check: order-tests or suite-regression. $1 the check id, $2 the field of each
+# framework entry holding the command (`orderTests` or `suite`), $3 a word for the message. The
+# command comes from the recipe, and it runs once per framework the task resolved one for, because
+# the build runs in one repository that is all of them at once. Prints the check object.
+#
+# suite-regression compares a failure against the baseline suite; order-tests does not, because a
+# test this order owns did not exist when the baseline was taken.
 br_test_check() {
-  local check_id="$1" flag="$2" raw="$3" have="$4" label="$5"
-  local verdict detail exit_json output outfile rc
-  local baseline_doc baseline_unmet_frameworks
-  verdict=""; detail=""; exit_json="null"; output=""
-  if [ "$have" != "true" ]; then
-    verdict="undeclared"
-    if [ "$check_id" = "order-tests" ]; then
-      detail="no $flag command was given, so whether this order's own tests pass was not checked."
-    else
-      detail="no $flag command was given, so whether this order broke anything outside itself was not checked."
-    fi
-  else
-    outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-    rc="$(br_run_argv "$raw" "$BRC_CODEPATH" "$outfile")"
-    exit_json="$rc"
-    output="$(cat "$outfile" 2>/dev/null)"
-    if [ "$BRC_HAVE_NOTHING_RAN" = "true" ] && pc_output_holds "$outfile" "$BRC_NOTHING_RAN"; then
+  local check_id="$1" field="$2" label="$3"
+  local fw_count fwi fw_obj fw cmd argv_json paths_json result kind payload
+  local runs='[]' verdicts='[]' verdict detail outfile rc marker_json markers_len mi marker
+  local nothing_ran_hit run_detail baseline_doc baseline_unmet_frameworks
+
+  fw_count="$(printf '%s' "$BRC_RECIPES" | jq '(.frameworks // []) | length')"
+  case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
+  paths_json='[]'
+  [ "$field" = "orderTests" ] && paths_json="$BRC_SELECTED_JSON"
+
+  fwi=0
+  while [ "$fwi" -lt "$fw_count" ]; do
+    fw_obj="$(printf '%s' "$BRC_RECIPES" | jq -c --argjson i "$fwi" '.frameworks[$i]')"
+    fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
+    cmd="$(printf '%s' "$fw_obj" | jq -c --arg f "$field" '.[$f] // {}')"
+    verdict=""; detail=""; rc=""
+    if [ "$(printf '%s' "$cmd" | jq -r 'has("absent")')" = "true" ]; then
+      verdict="undeclared"
+      detail="$(printf '%s' "$cmd" | jq -r '.absent')"
+    elif [ "$(printf '%s' "$cmd" | jq -r 'has("missing")')" = "true" ]; then
+      verdict="undeclared"
+      detail="$(printf '%s' "$cmd" | jq -r '.missing')"
+    elif [ "$field" = "orderTests" ] && [ "$(printf '%s' "$paths_json" | jq 'length')" -eq 0 ]; then
       verdict="unknown"
-      detail="the $label command's output holds the nothing-ran marker ('$BRC_NOTHING_RAN'); an exit status cannot decide a green run when nothing was selected."
-    elif [ "$rc" = "0" ]; then
-      verdict="met"
-      if [ "$check_id" = "order-tests" ]; then
-        detail="the order-tests command exited 0."
-      else
-        detail="the whole suite exited 0; nothing outside this order failed."
-      fi
-    elif [ "$rc" = "127" ]; then
-      # A runner that is not there answers nothing about the tests. Read as unmet it would say the
-      # tests failed, which is a different fact and sends a reader to the wrong repair. The tool
-      # checks and the baseline suite runner both already answer 127 this way, and this is the one
-      # place that did not.
-      verdict="unknown"
-      detail="the $label command could not be found (exit 127), so nothing here ran and nothing was decided."
-    elif [ "$check_id" = "order-tests" ]; then
-      verdict="unmet"
-      detail="the order-tests command exited $rc."
+      detail="this order froze no test file, so the selected-tests command would run over nothing."
     else
-      # The baseline records one verdict per framework, taken whole, not which test failed
-      # (baseline-schema.json, suite[].verdict); that is the finest grain step two's own record
-      # holds. A suite failing now, with the baseline already unmet, is not the same fact as a
-      # suite that is clean: this cannot tell an old failure from an old failure plus a new one
-      # this order introduced, so it says so rather than reading a red baseline as a pass. Only a
-      # baseline whose every framework was met, with the suite failing now, is decidable, because
-      # then every failure is new. A test-level comparison is a documented bound this stage does
-      # not close, the same kind of bound the ownedFiles overlap check already accepts elsewhere
-      # in this file; the bound is honest about what it cannot decide rather than defaulting to met.
-      baseline_doc=""
-      if [ -f "$BRC_BASELINE_FILE" ]; then
-        baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
-      fi
-      if [ -n "$baseline_doc" ]; then
-        baseline_unmet_frameworks="$(printf '%s' "$baseline_doc" | jq -r \
-          '[ (.suite // [])[] | select(.verdict == "unmet") | .framework ] | join(", ")')"
-        if [ -n "$baseline_unmet_frameworks" ]; then
-          verdict="unknown"
-          detail="the suite exited $rc, and the baseline recorded $baseline_unmet_frameworks unmet at the commit the build started from. The baseline records one verdict per framework rather than which tests failed, so this cannot tell an old failure from an old failure plus a new one."
-        else
-          verdict="unmet"
-          detail="the suite exited $rc, and the baseline recorded every framework met at the commit the build started from; this order introduced the failure."
-        fi
-      else
+      argv_json="$(printf '%s' "$cmd" | jq -c '.argv')"
+      outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+      result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$paths_json" "$BRC_VALUES")"
+      kind="$(printf '%s' "$result" | cut -f1)"
+      payload="$(printf '%s' "$result" | cut -f2-)"
+      if [ "$kind" = "UNRESOLVED" ]; then
         verdict="unknown"
-        detail="the suite exited $rc, and $BRC_BASELINE_FILE could not be read to tell whether this failure predates this order."
+        detail="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>."
+      elif [ "$kind" = "EMPTY" ]; then
+        verdict="unknown"
+        detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
+      else
+        rc="$payload"
+        run_detail="$(cat "$outfile" 2>/dev/null)"
+        # A green run that selected nothing is not a pass. The framework's own recipe names the
+        # marker, under failure_signal's silent_pass; the caller's --nothing-ran is read only where
+        # the recipe names none.
+        nothing_ran_hit=false
+        marker_json="$(printf '%s' "$fw_obj" | jq -c '.silentPass // []')"
+        markers_len="$(printf '%s' "$marker_json" | jq 'length')"
+        if [ "$markers_len" -gt 0 ]; then
+          mi=0
+          while [ "$mi" -lt "$markers_len" ]; do
+            marker="$(printf '%s' "$marker_json" | jq -r --argjson i "$mi" '.[$i]')"
+            if pc_output_holds "$outfile" "$marker"; then nothing_ran_hit=true; fi
+            [ "$nothing_ran_hit" = "true" ] && break
+            mi=$((mi + 1))
+          done
+        elif [ "$BRC_HAVE_NOTHING_RAN" = "true" ] && pc_output_holds "$outfile" "$BRC_NOTHING_RAN"; then
+          nothing_ran_hit=true
+          marker="$BRC_NOTHING_RAN"
+        fi
+        if [ "$nothing_ran_hit" = "true" ]; then
+          verdict="unknown"
+          detail="the $label command's output on $fw holds the nothing-ran marker ('$marker'); an exit status cannot decide a green run when nothing was selected."
+        elif [ "$rc" = "0" ]; then
+          verdict="met"
+          detail="the $label command exited 0 on $fw."
+        elif [ "$rc" = "127" ]; then
+          # A runner that is not there answers nothing about the tests. Read as unmet it would say
+          # the tests failed, which is a different fact and sends a reader to the wrong repair.
+          verdict="unknown"
+          detail="the $label command could not be found on $fw (exit 127), so nothing here ran and nothing was decided."
+        elif [ "$rc" = "126" ]; then
+          verdict="unknown"
+          detail="the $label command list came out empty on $fw, so nothing ran and nothing was decided."
+        elif [ "$check_id" = "order-tests" ]; then
+          verdict="unmet"
+          detail="the order-tests command exited $rc on $fw."
+        else
+          # The baseline records one verdict per framework, taken whole, not which test failed
+          # (baseline-schema.json, suite[].verdict); that is the finest grain step two's own record
+          # holds. A suite failing now, with the baseline already unmet, is not the same fact as a
+          # suite that is clean: this cannot tell an old failure from an old failure plus a new one
+          # this order introduced, so it says so rather than reading a red baseline as a pass.
+          baseline_doc=""
+          if [ -f "$BRC_BASELINE_FILE" ]; then
+            baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
+          fi
+          if [ -n "$baseline_doc" ]; then
+            baseline_unmet_frameworks="$(printf '%s' "$baseline_doc" | jq -r \
+              '[ (.suite // [])[] | select(.verdict == "unmet") | .framework ] | join(", ")')"
+            if [ -n "$baseline_unmet_frameworks" ]; then
+              verdict="unknown"
+              detail="the suite exited $rc on $fw, and the baseline recorded $baseline_unmet_frameworks unmet at the commit the build started from. The baseline records one verdict per framework rather than which tests failed, so this cannot tell an old failure from an old failure plus a new one."
+            else
+              verdict="unmet"
+              detail="the suite exited $rc on $fw, and the baseline recorded every framework met at the commit the build started from; this order introduced the failure."
+            fi
+          else
+            verdict="unknown"
+            detail="the suite exited $rc on $fw, and $BRC_BASELINE_FILE could not be read to tell whether this failure predates this order."
+          fi
+        fi
+        runs="$(jq -nc --argjson runs "$runs" --arg fw "$fw" --arg v "$verdict" \
+          --arg d "$detail" --argjson rc "$rc" --arg out "$run_detail" \
+          '$runs + [{framework: $fw, verdict: $v, detail: $d, exitCode: $rc, output: $out}]')"
       fi
+      rm -f "$outfile"
     fi
-    rm -f "$outfile"
+    if [ -z "$rc" ]; then
+      runs="$(jq -nc --argjson runs "$runs" --arg fw "$fw" --arg v "$verdict" --arg d "$detail" \
+        '$runs + [{framework: $fw, verdict: $v, detail: $d}]')"
+    fi
+    verdicts="$(jq -nc --argjson v "$verdicts" --arg x "$verdict" '$v + [$x]')"
+    fwi=$((fwi + 1))
+  done
+
+  if [ "$fw_count" -eq 0 ]; then
+    jq -n --arg id "$check_id" --arg detail "no framework recipe was resolved for this task, so $label was not checked." \
+      '{id: $id, verdict: "undeclared", detail: $detail}'
+    return 0
   fi
-  jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
-        --argjson exitCode "$exit_json" --arg output "$output" '
-    {id: $id, verdict: $verdict, detail: $detail}
-    + (if $exitCode == null then {} else {exitCode: $exitCode, output: $output} end)
+
+  verdict="$(br_worst_verdict "$verdicts")"
+  jq -n --arg id "$check_id" --arg verdict "$verdict" --argjson runs "$runs" '
+    {id: $id, verdict: $verdict,
+     detail: ([ $runs[] | (.framework + ": " + .detail) ] | join(" ")),
+     runs: [ $runs[] | {framework, verdict} ]}
+    + (if ([ $runs[] | select(has("exitCode")) ] | length) == 0 then {}
+       else {exitCode: ([ $runs[] | select(has("exitCode")) | (.exitCode | tonumber) ] | max),
+             output:   ([ $runs[] | select(has("output")) | .output ] | join("\n"))} end)
   '
 }
 
@@ -4301,19 +4838,11 @@ br_seven_checks() {
   local parts_file
   parts_file="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
 
-  br_test_check "order-tests" "--order-tests" "$BRC_ORDER_TESTS_RAW" "$BRC_HAVE_ORDER_TESTS" \
-    "order-tests" >>"$parts_file"
-  br_test_check "suite-regression" "--suite" "$BRC_SUITE_RAW" "$BRC_HAVE_SUITE" \
-    "suite" >>"$parts_file"
-  br_tool_check "coding-standards" "--standards" "$BRC_STANDARDS_RAW" "$BRC_HAVE_STANDARDS" \
-    "codingStandards" "coding-standards" "$BRC_STANDARDS_SIGNAL" "$BRC_STANDARDS_EXTS" \
-    "$BRC_STANDARDS_ABSENT" >>"$parts_file"
-  br_tool_check "static-analysis" "--static-analysis" "$BRC_STATIC_RAW" "$BRC_HAVE_STATIC" \
-    "staticAnalysis" "static-analysis" "$BRC_STATIC_SIGNAL" "$BRC_STATIC_EXTS" \
-    "$BRC_STATIC_ABSENT" >>"$parts_file"
-  br_tool_check "security" "--security" "$BRC_SECURITY_RAW" "$BRC_HAVE_SECURITY" \
-    "security" "security" "$BRC_SECURITY_SIGNAL" "$BRC_SECURITY_EXTS" \
-    "$BRC_SECURITY_ABSENT" >>"$parts_file"
+  br_test_check "order-tests"      "orderTests" "order-tests" >>"$parts_file"
+  br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
+  br_tool_check "coding-standards" "codingStandards" "coding-standards" >>"$parts_file"
+  br_tool_check "static-analysis"  "staticAnalysis"  "static-analysis"  >>"$parts_file"
+  br_tool_check "security"         "security"        "security"         >>"$parts_file"
 
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
@@ -4379,6 +4908,45 @@ BR_DIFF
   rm -f "$parts_file"
 }
 
+# How many of the checks in $1 actually executed. A check executed when it ran a command, which is
+# every check carrying an exitCode, or when it computed a diff or a hash, which is owned-files and
+# frozen-tests. interface-record compares two texts the caller handed over and runs nothing, so it
+# is never counted. Prints the number.
+#
+# The count exists because a record saying eight checks answered, without saying how many of them
+# ran, reads the same whether the code was tested or nothing was. That was the defect this count
+# closes, and it is recorded and printed for the same reason.
+br_executed_count() {
+  printf '%s' "$1" | jq -r '
+    [ .[] | select(has("exitCode") or .id == "owned-files" or .id == "frozen-tests") ] | length'
+}
+
+# Whether the checks in $1 let the order pass. $2 is the id whose unknown does not stop the attempt
+# (interface-record at build-record, nothing at fix-record). Prints true or false.
+#
+# Two rules, and the second is the floor. Every check must answer met or undeclared, with the one
+# exempt unknown allowed. And order-tests must have answered met: that check is the only one that
+# says this order's own code does what its tests ask, so undeclared or unknown there is an order
+# nothing executed. Undeclared on every other check still continues, which is the rule step two
+# already applies to a precondition a recipe declared nothing for.
+br_checks_pass() {
+  printf '%s' "$1" | jq -r --arg exempt "$2" '
+    (all(.[]; .verdict == "met" or .verdict == "undeclared"
+              or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
+    and (any(.[]; .id == "order-tests" and .verdict == "met"))'
+}
+
+# The first check that stopped the order in $1, in the recorded order, with $2 the exempt id as
+# above. Prints "<id>: <verdict>, <detail>", or "none: " when nothing stopped it.
+br_first_stopper() {
+  printf '%s' "$1" | jq -r --arg exempt "$2" '
+    [ .[] | select(.verdict == "unmet"
+                   or (.verdict == "unknown" and ($exempt == "" or .id != $exempt))
+                   or (.id == "order-tests" and .verdict != "met")) ]
+    | .[0] // {id:"none",verdict:"",detail:""}
+    | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
+}
+
 # Check eight, the interface record, and the countable half of it only. $1 the interface this order
 # declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
 #
@@ -4419,92 +4987,44 @@ br_interface_check() {
 
 do_build_record() {
   local task_arg="" unit_id="" interface_path="" report_path="" started_at=""
-  local suite_raw="" order_tests_raw="" nothing_ran=""
-  local standards_raw="" static_raw="" security_raw=""
-  local have_suite=false have_order_tests=false have_nothing_ran=false
-  local have_standards=false have_static=false have_security=false
-  local standards_signal="" static_signal="" security_signal=""
-  local standards_exts="" static_exts="" security_exts=""
-  local standards_absent="" static_absent="" security_absent=""
+  local nothing_ran="" have_nothing_ran=false
+  local test_recipes="" check_recipes="" values=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --interface)
         [ "$#" -ge 2 ] || die3 "build-record: --interface needs a path to the record the builder wrote"
+        [ -n "$2" ] || die3 "build-record: --interface was given an empty path."
         interface_path="$2"; shift 2 ;;
       --report)
         [ "$#" -ge 2 ] || die3 "build-record: --report needs a path to the builder's report"
+        [ -n "$2" ] || die3 "build-record: --report was given an empty path."
         report_path="$2"; shift 2 ;;
       --started-at)
         [ "$#" -ge 2 ] || die3 "build-record: --started-at needs a commit"
+        [ -n "$2" ] || die3 "build-record: --started-at was given an empty commit."
         started_at="$2"; shift 2 ;;
-      --suite)
-        [ "$#" -ge 2 ] || die3 "build-record: --suite needs an argv token"
-        have_suite=true
-        suite_raw="$suite_raw$2
+      --test-recipe)
+        [ "$#" -ge 2 ] || die3 "build-record: --test-recipe needs <framework>=<path>"
+        cr_recipe_pair "build-record" "--test-recipe" "$2"
+        test_recipes="$test_recipes$CR_PAIR
 "
         shift 2 ;;
-      --order-tests)
-        [ "$#" -ge 2 ] || die3 "build-record: --order-tests needs an argv token"
-        have_order_tests=true
-        order_tests_raw="$order_tests_raw$2
+      --check-recipe)
+        [ "$#" -ge 2 ] || die3 "build-record: --check-recipe needs <framework>=<path>"
+        cr_recipe_pair "build-record" "--check-recipe" "$2"
+        check_recipes="$check_recipes$CR_PAIR
 "
         shift 2 ;;
-      --standards)
-        [ "$#" -ge 2 ] || die3 "build-record: --standards needs an argv token"
-        have_standards=true
-        standards_raw="$standards_raw$2
+      --value)
+        [ "$#" -ge 2 ] || die3 "build-record: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die3 "build-record: --value takes <name>=<value>, got: $2" ;; esac
+        pc_refuse_forged_value "build-record" "$2"
+        values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
-      --static-analysis)
-        [ "$#" -ge 2 ] || die3 "build-record: --static-analysis needs an argv token"
-        have_static=true
-        static_raw="$static_raw$2
-"
-        shift 2 ;;
-      --security)
-        [ "$#" -ge 2 ] || die3 "build-record: --security needs an argv token"
-        have_security=true
-        security_raw="$security_raw$2
-"
-        shift 2 ;;
-      --standards-signal)
-        [ "$#" -ge 2 ] || die3 "build-record: --standards-signal needs a value"
-        br_check_signal "build-record" "--standards-signal" "$2"
-        standards_signal="$2"; shift 2 ;;
-      --static-analysis-signal)
-        [ "$#" -ge 2 ] || die3 "build-record: --static-analysis-signal needs a value"
-        br_check_signal "build-record" "--static-analysis-signal" "$2"
-        static_signal="$2"; shift 2 ;;
-      --security-signal)
-        [ "$#" -ge 2 ] || die3 "build-record: --security-signal needs a value"
-        br_check_signal "build-record" "--security-signal" "$2"
-        security_signal="$2"; shift 2 ;;
-      --standards-absent)
-        [ "$#" -ge 2 ] || die3 "build-record: --standards-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "build-record: --standards-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        standards_absent="$2"; shift 2 ;;
-      --static-analysis-absent)
-        [ "$#" -ge 2 ] || die3 "build-record: --static-analysis-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "build-record: --static-analysis-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        static_absent="$2"; shift 2 ;;
-      --security-absent)
-        [ "$#" -ge 2 ] || die3 "build-record: --security-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "build-record: --security-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        security_absent="$2"; shift 2 ;;
-      --standards-extensions)
-        [ "$#" -ge 2 ] || die3 "build-record: --standards-extensions needs a comma separated list"
-        br_set_exts "build-record" "--standards-extensions" "$2"
-        standards_exts="$BR_EXTS_JSON"; shift 2 ;;
-      --static-analysis-extensions)
-        [ "$#" -ge 2 ] || die3 "build-record: --static-analysis-extensions needs a comma separated list"
-        br_set_exts "build-record" "--static-analysis-extensions" "$2"
-        static_exts="$BR_EXTS_JSON"; shift 2 ;;
-      --security-extensions)
-        [ "$#" -ge 2 ] || die3 "build-record: --security-extensions needs a comma separated list"
-        br_set_exts "build-record" "--security-extensions" "$2"
-        security_exts="$BR_EXTS_JSON"; shift 2 ;;
       --nothing-ran)
         [ "$#" -ge 2 ] || die3 "build-record: --nothing-ran needs a literal substring"
+        [ -n "$2" ] || die3 "build-record: --nothing-ran was given an empty substring, which every output holds."
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
@@ -4520,27 +5040,12 @@ do_build_record() {
         shift ;;
     esac
   done
-  # A tool declared absent by its recipe and commanded on the same call is two answers to one
-  # question, and nothing here may choose between them.
-  [ -n "$standards_absent" ] && [ "$have_standards" = "true" ] \
-    && die3 "build-record: --standards-absent and --standards were both given. A row is declared absent or it carries a command, never both."
-  [ -n "$static_absent" ] && [ "$have_static" = "true" ] \
-    && die3 "build-record: --static-analysis-absent and --static-analysis were both given. A row is declared absent or it carries a command, never both."
-  [ -n "$security_absent" ] && [ "$have_security" = "true" ] \
-    && die3 "build-record: --security-absent and --security were both given. A row is declared absent or it carries a command, never both."
 
   [ -n "$task_arg" ]        || die3 "build-record: a task folder is required"
   [ -n "$unit_id" ]         || die3 "build-record: a unit id is required"
   [ -n "$interface_path" ]  || die3 "build-record: --interface is required"
   [ -n "$report_path" ]     || die3 "build-record: --report is required"
   [ -n "$started_at" ]      || die3 "build-record: --started-at is required"
-
-  br_require_tool_flag "build-record" "--standards-signal" "$standards_signal" "--standards" "$have_standards"
-  br_require_tool_flag "build-record" "--static-analysis-signal" "$static_signal" "--static-analysis" "$have_static"
-  br_require_tool_flag "build-record" "--security-signal" "$security_signal" "--security" "$have_security"
-  br_require_tool_flag "build-record" "--standards-extensions" "$standards_exts" "--standards" "$have_standards"
-  br_require_tool_flag "build-record" "--static-analysis-extensions" "$static_exts" "--static-analysis" "$have_static"
-  br_require_tool_flag "build-record" "--security-extensions" "$security_exts" "--security" "$have_security"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "build-record")"
@@ -4575,20 +5080,10 @@ do_build_record() {
   local attempts_allowed
   attempts_allowed="$(attempts_allowed_for "$order_entry")"
 
-  # --- the task's own project, resolved the same way every earlier step already resolves it --------
-  local project_folder codepath
-  project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die3 "build-record: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-  case "$(project_code_path_state "$project_folder")" in
-    unreadable) die14 "build-record: $project_folder/project.json exists but is not valid JSON, so its codePath cannot be read." ;;
-    missing)    die3  "build-record: $project_folder/project.json not found, though it was found moments ago." ;;
-  esac
-  codepath="$(project_code_path_value "$project_folder")"
-  [ -n "$codepath" ] || die3 "build-record: $project_folder/project.json is valid JSON but has no usable codePath field."
-  [ -d "$codepath" ] || die15 "build-record: the recorded codePath does not exist on disk: $codepath"
-  command -v git >/dev/null 2>&1 || die3 "build-record: git is required and was not found on PATH"
-  is_git_repo "$codepath" \
-    || die5 "build-record: this task's project code at $codepath is not a git repository."
+  # --- the task's own project, through the one reader every step-five action already uses ---------
+  local codepath
+  rv_load_codepath "build-record"
+  codepath="$RV_CODEPATH"
 
   # --- exit 43: --started-at must be a real commit in this repository ------------------------------
   local started_at_full current_commit
@@ -4598,6 +5093,7 @@ do_build_record() {
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+  br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
   local record_file="$IMPL_DIR/build-$unit_id.json"
@@ -4610,6 +5106,13 @@ do_build_record() {
     existing_attempt="$(printf '%s' "$existing_doc" | jq -r '.attempt // empty')"
     if [ "$existing_commit" = "$current_commit" ] && [ "$existing_attempt" = "$attempt_number" ]; then
       die45 "build-record: $record_file already holds attempt $attempt_number at commit $current_commit. Nothing has changed since that record was written."
+    fi
+    # The guard above keys on the commit and the attempt number together, so a repeat call after a
+    # failed attempt computed a new attempt number, passed it, re-ran every check against unchanged
+    # code and spent the last attempt on work nobody did. The previous attempt's own commit is the
+    # fact that decides it, which is the rule fix-record already applies to its previous round.
+    if [ -n "$existing_commit" ] && [ "$existing_commit" = "$current_commit" ]; then
+      die45 "build-record: $record_file already holds attempt $existing_attempt at commit $current_commit, so the code has not moved since that attempt. An attempt spent on unchanged code is an attempt nobody worked."
     fi
   fi
 
@@ -4637,25 +5140,20 @@ do_build_record() {
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
-  BRC_ORDER_TESTS_RAW="$order_tests_raw"
-  BRC_SUITE_RAW="$suite_raw"
-  BRC_STANDARDS_RAW="$standards_raw"
-  BRC_STATIC_RAW="$static_raw"
-  BRC_SECURITY_RAW="$security_raw"
-  BRC_HAVE_ORDER_TESTS="$have_order_tests"
-  BRC_HAVE_SUITE="$have_suite"
-  BRC_HAVE_STANDARDS="$have_standards"
-  BRC_HAVE_STATIC="$have_static"
-  BRC_HAVE_SECURITY="$have_security"
-  BRC_STANDARDS_SIGNAL="$standards_signal"
-  BRC_STATIC_SIGNAL="$static_signal"
-  BRC_SECURITY_SIGNAL="$security_signal"
-  BRC_STANDARDS_ABSENT="$standards_absent"
-  BRC_STATIC_ABSENT="$static_absent"
-  BRC_SECURITY_ABSENT="$security_absent"
-  BRC_STANDARDS_EXTS="$standards_exts"
-  BRC_STATIC_EXTS="$static_exts"
-  BRC_SECURITY_EXTS="$security_exts"
+  # Every commanded check runs a command the recipe declares, resolved here rather than retyped by
+  # the caller. The selected-tests row runs this order's own frozen test files.
+  local selected_tests_json
+  selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
+    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  CR_WHO="build-record"
+  CR_TEST_RECIPES="$test_recipes"
+  CR_CHECK_RECIPES="$check_recipes"
+  cr_resolve
+  cr_require_baseline_recipes "build-record" "$IMPL_DIR/baseline.json"
+
+  BRC_RECIPES="$CR_DOC"
+  BRC_SELECTED_JSON="$selected_tests_json"
+  BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
 
@@ -4673,13 +5171,15 @@ do_build_record() {
   checks_json="$(jq -n --argjson seven "$seven_json" --argjson eighth "$interface_check_json" \
     '$seven + [$eighth]')"
 
-  local today record_json
+  local today record_json executed_count
+  executed_count="$(br_executed_count "$checks_json")"
+  case "$executed_count" in ''|*[!0-9]*) executed_count=0 ;; esac
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n \
     --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
-    --argjson checks "$checks_json" \
+    --argjson checks "$checks_json" --argjson executed "$executed_count" \
     '{
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -4690,6 +5190,7 @@ do_build_record() {
       interfaceRecord: $interfaceRecord,
       reportPath: $reportPath,
       checks: $checks,
+      executed: $executed,
       decidingChecks: { total: 8, ranHere: [ $checks[] | .id ] }
     }')"
 
@@ -4706,14 +5207,13 @@ do_build_record() {
   # interface-record is the one exception, and only for its unknown. That check answers unknown when
   # the declaration names nothing in backticks, which is a question for the reviewer and not a fault
   # in the code (ideal/implementation.md). Its unmet still stops the attempt like any other.
+  #
+  # order-tests is the floor under all of it. That check is the only one that says this order's own
+  # code does what its tests ask, so it must have run and answered met. Undeclared there is an
+  # order nothing executed, and an order nothing executed never reaches checks-passed.
   local all_met first_stopper
-  all_met="$(printf '%s' "$checks_json" | jq -r '
-    all(.[]; .verdict == "met" or .verdict == "undeclared"
-             or (.verdict == "unknown" and .id == "interface-record"))')"
-  first_stopper="$(printf '%s' "$checks_json" | jq -r '
-    [ .[] | select(.verdict == "unmet" or (.verdict == "unknown" and .id != "interface-record")) ]
-    | .[0] // {id:"none",verdict:"",detail:""}
-    | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)')"
+  all_met="$(br_checks_pass "$checks_json" "interface-record")"
+  first_stopper="$(br_first_stopper "$checks_json" "interface-record")"
   # The counter and the step move in one update; the halt, when there is one, goes through the one
   # helper that writes every halt, so this reason never erases a reason the order already carried.
   local step_expr halt_why
@@ -4737,6 +5237,7 @@ do_build_record() {
   write_atomic "$ledger_file" "$new_ledger_doc"
 
   printf '%s\n' "$record_json"
+  echo "BUILD-RECORD: $unit_id: $executed_count of the eight deciding checks executed a command, a diff or a hash." >&2
   if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$attempts_allowed" ]; then
     echo "BUILD-RECORD: $unit_id is halted. Attempts spent: $attempt_number of $attempts_allowed. The last was stopped by $first_stopper" >&2
   fi
@@ -4762,22 +5263,9 @@ do_build_record() {
 RV_LEDGER_FILE=""; RV_LEDGER_DOC=""; RV_ORDER_ENTRY=""; RV_RUN_MODE=""; RV_UNIT_JSON=""
 rv_load_state() {
   local who="$1" unit_id="$2"
-  RV_LEDGER_FILE="$IMPL_DIR/ledger.json"
-  local snapshot_file="$IMPL_DIR/snapshot.json"
-  if [ ! -f "$RV_LEDGER_FILE" ]; then
-    [ -f "$snapshot_file" ] \
-      && die3 "$who: $RV_LEDGER_FILE not found, though $snapshot_file exists. A snapshot with no ledger beside it is not a supported state; run start again."
-    die20 "$who: this task's build has never started. There is no $RV_LEDGER_FILE and no $snapshot_file. Run start on this task first."
-  fi
-  RV_LEDGER_DOC="$(jq -c '.' "$RV_LEDGER_FILE" 2>/dev/null)"
-  [ -n "$RV_LEDGER_DOC" ] \
-    || die3 "$who: $RV_LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
-
-  [ -f "$snapshot_file" ] \
-    || die3 "$who: $snapshot_file not found, though $RV_LEDGER_FILE exists. A ledger with no snapshot beside it is not a supported state; run start again."
-  SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
-  [ -n "$SNAPSHOT_DOC" ] \
-    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+  require_started_build "$who"
+  RV_LEDGER_FILE="$STARTED_LEDGER_FILE"
+  RV_LEDGER_DOC="$STARTED_LEDGER_DOC"
 
   RV_UNIT_JSON="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$unit_id" \
     '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
@@ -4929,12 +5417,38 @@ rv_is_finding_id() {
 # refusal would exit that subshell alone and the caller would carry on with an empty list. That is
 # the same rule br_seven_checks states above, and this function was written the wrong way once.
 RV_FINDINGS_ARRAY=""
+# Refuses a hand-written JSON file that names one key twice. jq resolves a duplicate to the last
+# occurrence and says nothing, so a findings file carrying `findings` twice silently discards the
+# earlier array, and a review with findings records as clean.
+#
+# `jq --stream` reports every path as it reads it, duplicates included, while the parsed document
+# has already lost them. So the file is streamed twice, once from disk and once from the document
+# jq parsed out of it, and a difference in the paths read is a key written more than once. The
+# message names the paths that appeared too often.
+# $1 the file, $2 the action. Never returns on a duplicate.
+RV_STREAM_PATHS_JQ='[ inputs | .[0] | map(tostring) | join(".") ] | sort'
+rv_refuse_duplicate_keys() {
+  local file="$1" who="$2" from_file from_doc dup
+  from_file="$(jq -cn --stream "$RV_STREAM_PATHS_JQ" "$file" 2>/dev/null)"
+  [ -n "$from_file" ] || return 0
+  from_doc="$(jq -c '.' "$file" 2>/dev/null | jq -cn --stream "$RV_STREAM_PATHS_JQ" 2>/dev/null)"
+  [ -n "$from_doc" ] || return 0
+  [ "$from_file" = "$from_doc" ] && return 0
+  dup="$(jq -rn --argjson a "$from_file" --argjson b "$from_doc" '
+    [ ($a | group_by(.) | map({k: .[0], n: length})[]) as $x
+      | ($b | map(select(. == $x.k)) | length) as $m
+      | select($x.n > $m) | $x.k ] | unique | join(", ")')"
+  [ -n "$dup" ] || dup="a key this reader could not name"
+  die52 "$who: $file writes the same key more than once, at: $dup. A duplicate key resolves to the last one and throws the earlier value away in silence, so this is refused rather than half read."
+}
+
 rv_read_findings_array() {
   local file="$1" key="$2" who="$3" doc arr count i one id severity evidence seen_ids=""
   [ -f "$file" ] || die52 "$who: $file not found. The file named on the command line has to exist."
   [ -s "$file" ] || die52 "$who: $file is empty. An empty file is not an empty findings list; write { \"$key\": [] } instead."
   doc="$(jq -c '.' "$file" 2>/dev/null)"
   [ -n "$doc" ] || die52 "$who: $file is not valid JSON."
+  rv_refuse_duplicate_keys "$file" "$who"
   arr="$(printf '%s' "$doc" | jq -c --arg k "$key" 'if (.[$k] | type) == "array" then .[$k] else null end')"
   [ -n "$arr" ] && [ "$arr" != "null" ] \
     || die52 "$who: $file holds no $key array. The shape is { \"$key\": [ ... ] }."
@@ -5120,10 +5634,34 @@ do_review_record() {
 
   rv_load_state "review-record" "$unit_id"
 
-  # Exit 50 before the step check, for the reason review-brief above states.
+  # Exit 50 before the step check, for the reason review-brief above states. One case is not a
+  # second review: a crash between the record write and the ledger write leaves the record on disk
+  # with the ledger still at checks-passed, and the routing table has no row for that. The record
+  # is this order own, at this order own commit, so the repair is to finish the write that did not
+  # land rather than to refuse forever.
   local review_file="$IMPL_DIR/review-$unit_id.json"
-  [ -f "$review_file" ] \
-    && die50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
+  if [ -f "$review_file" ]; then
+    local rr_step rr_doc rr_commit rr_head
+    rr_step="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')"
+    rr_doc="$(jq -c '.' "$review_file" 2>/dev/null)"
+    rr_commit=""
+    [ -n "$rr_doc" ] && rr_commit="$(printf '%s' "$rr_doc" | jq -r '.reviewedAt // ""')"
+    rv_load_codepath "review-record"
+    rr_head="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+    if [ "$rr_step" = "checks-passed" ] && [ -n "$rr_commit" ] && [ "$rr_commit" = "$rr_head" ]; then
+      RV_REVIEW_FILE="$review_file"
+      RV_REVIEW_DOC="$rr_doc"
+      local rr_ledger
+      rr_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
+        '.orders = (.orders | map(if .id == $id then (.lastStep = "reviewed") else . end))')"
+      [ -n "$rr_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
+      write_atomic "$RV_LEDGER_FILE" "$rr_ledger"
+      printf '%s\n' "$rr_doc"
+      echo "REVIEW-RECORD: $review_file was already written at $rr_commit and the ledger had not moved. The ledger now reads reviewed; nothing was reviewed twice." >&2
+      exit 0
+    fi
+    die50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
+  fi
   rv_require_step "review-record" "$unit_id" "checks-passed"
 
   rv_load_build_record "review-record" "$unit_id"
@@ -5177,16 +5715,19 @@ do_review_record() {
   # like any other finding and the skill puts it to the person.
   local nongoal_hits step_expr
   nongoal_hits="$(rv_nongoal_hits "$findings_json" "$alignment")"
+  local new_ledger halt_why=""
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
-    step_expr='.lastStep = "reviewed" | .haltedBecause = $why'
-  else
-    step_expr='.lastStep = "reviewed"'
+    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
   fi
-  local new_ledger
+  step_expr='.lastStep = "reviewed"'
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
-    --arg why "a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
+  # One function writes every halt, so this reason never erases a reason the order already carried.
+  if [ -n "$halt_why" ]; then
+    new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
+    [ -n "$new_ledger" ] || die3 "review-record: the halt on $unit_id could not be written."
+  fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
   printf '%s\n' "$record_json"
@@ -5235,8 +5776,11 @@ do_fix_brief() {
   scope_json="$(printf '%s' "$open_json" | jq -c '[ .[] | (.fixScope // [])[] ] | unique')"
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
 
+  rv_load_codepath "fix-brief"
+  local fb_head
+  fb_head="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
-    --argjson frozenTests "$tests_json" \
+    --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
     --arg reportPath "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
     --argjson round "$((rounds_used + 1))" '
@@ -5248,6 +5792,7 @@ do_fix_brief() {
       findings: $findings,
       fixScope: $fixScope,
       frozenTests: $frozenTests,
+      headNow: $headNow,
       reportPath: $reportPath
     }'
   exit 0
@@ -5261,95 +5806,47 @@ do_fix_brief() {
 
 do_fix_record() {
   local task_arg="" unit_id="" report_path="" started_at=""
-  local suite_raw="" order_tests_raw="" nothing_ran=""
-  local standards_raw="" static_raw="" security_raw=""
-  local have_suite=false have_order_tests=false have_nothing_ran=false
-  local have_standards=false have_static=false have_security=false
-  local standards_signal="" static_signal="" security_signal=""
-  local standards_exts="" static_exts="" security_exts=""
-  local standards_absent="" static_absent="" security_absent=""
-  local scope_raw=""
+  local nothing_ran="" have_nothing_ran=false
+  local test_recipes="" check_recipes="" values="" scope_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --report)
         [ "$#" -ge 2 ] || die3 "fix-record: --report needs a path to the fixer's report"
+        [ -n "$2" ] || die3 "fix-record: --report was given an empty path."
         report_path="$2"; shift 2 ;;
       --scope-insufficient)
         [ "$#" -ge 2 ] || die3 "fix-record: --scope-insufficient needs <finding id>=<reason>"
+        [ -n "$2" ] || die3 "fix-record: --scope-insufficient was given an empty value."
+        halt_refuse_separator "fix-record" "--scope-insufficient" "${2#*=}"
         scope_raw="$scope_raw$2
 "
         shift 2 ;;
       --started-at)
         [ "$#" -ge 2 ] || die3 "fix-record: --started-at needs a commit"
+        [ -n "$2" ] || die3 "fix-record: --started-at was given an empty commit."
         started_at="$2"; shift 2 ;;
-      --suite)
-        [ "$#" -ge 2 ] || die3 "fix-record: --suite needs an argv token"
-        have_suite=true
-        suite_raw="$suite_raw$2
+      --test-recipe)
+        [ "$#" -ge 2 ] || die3 "fix-record: --test-recipe needs <framework>=<path>"
+        cr_recipe_pair "fix-record" "--test-recipe" "$2"
+        test_recipes="$test_recipes$CR_PAIR
 "
         shift 2 ;;
-      --order-tests)
-        [ "$#" -ge 2 ] || die3 "fix-record: --order-tests needs an argv token"
-        have_order_tests=true
-        order_tests_raw="$order_tests_raw$2
+      --check-recipe)
+        [ "$#" -ge 2 ] || die3 "fix-record: --check-recipe needs <framework>=<path>"
+        cr_recipe_pair "fix-record" "--check-recipe" "$2"
+        check_recipes="$check_recipes$CR_PAIR
 "
         shift 2 ;;
-      --standards)
-        [ "$#" -ge 2 ] || die3 "fix-record: --standards needs an argv token"
-        have_standards=true
-        standards_raw="$standards_raw$2
+      --value)
+        [ "$#" -ge 2 ] || die3 "fix-record: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die3 "fix-record: --value takes <name>=<value>, got: $2" ;; esac
+        pc_refuse_forged_value "fix-record" "$2"
+        values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
-      --static-analysis)
-        [ "$#" -ge 2 ] || die3 "fix-record: --static-analysis needs an argv token"
-        have_static=true
-        static_raw="$static_raw$2
-"
-        shift 2 ;;
-      --security)
-        [ "$#" -ge 2 ] || die3 "fix-record: --security needs an argv token"
-        have_security=true
-        security_raw="$security_raw$2
-"
-        shift 2 ;;
-      --standards-signal)
-        [ "$#" -ge 2 ] || die3 "fix-record: --standards-signal needs a value"
-        br_check_signal "fix-record" "--standards-signal" "$2"
-        standards_signal="$2"; shift 2 ;;
-      --static-analysis-signal)
-        [ "$#" -ge 2 ] || die3 "fix-record: --static-analysis-signal needs a value"
-        br_check_signal "fix-record" "--static-analysis-signal" "$2"
-        static_signal="$2"; shift 2 ;;
-      --security-signal)
-        [ "$#" -ge 2 ] || die3 "fix-record: --security-signal needs a value"
-        br_check_signal "fix-record" "--security-signal" "$2"
-        security_signal="$2"; shift 2 ;;
-      --standards-absent)
-        [ "$#" -ge 2 ] || die3 "fix-record: --standards-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "fix-record: --standards-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        standards_absent="$2"; shift 2 ;;
-      --static-analysis-absent)
-        [ "$#" -ge 2 ] || die3 "fix-record: --static-analysis-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "fix-record: --static-analysis-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        static_absent="$2"; shift 2 ;;
-      --security-absent)
-        [ "$#" -ge 2 ] || die3 "fix-record: --security-absent needs the reason the recipe row gives"
-        [ -n "$2" ] || die3 "fix-record: --security-absent needs a reason. A row declared absent with nothing to read is not an answer."
-        security_absent="$2"; shift 2 ;;
-      --standards-extensions)
-        [ "$#" -ge 2 ] || die3 "fix-record: --standards-extensions needs a comma separated list"
-        br_set_exts "fix-record" "--standards-extensions" "$2"
-        standards_exts="$BR_EXTS_JSON"; shift 2 ;;
-      --static-analysis-extensions)
-        [ "$#" -ge 2 ] || die3 "fix-record: --static-analysis-extensions needs a comma separated list"
-        br_set_exts "fix-record" "--static-analysis-extensions" "$2"
-        static_exts="$BR_EXTS_JSON"; shift 2 ;;
-      --security-extensions)
-        [ "$#" -ge 2 ] || die3 "fix-record: --security-extensions needs a comma separated list"
-        br_set_exts "fix-record" "--security-extensions" "$2"
-        security_exts="$BR_EXTS_JSON"; shift 2 ;;
       --nothing-ran)
         [ "$#" -ge 2 ] || die3 "fix-record: --nothing-ran needs a literal substring"
+        [ -n "$2" ] || die3 "fix-record: --nothing-ran was given an empty substring, which every output holds."
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
@@ -5361,26 +5858,11 @@ do_fix_record() {
         shift ;;
     esac
   done
-  # A tool declared absent by its recipe and commanded on the same call is two answers to one
-  # question, and nothing here may choose between them.
-  [ -n "$standards_absent" ] && [ "$have_standards" = "true" ] \
-    && die3 "fix-record: --standards-absent and --standards were both given. A row is declared absent or it carries a command, never both."
-  [ -n "$static_absent" ] && [ "$have_static" = "true" ] \
-    && die3 "fix-record: --static-analysis-absent and --static-analysis were both given. A row is declared absent or it carries a command, never both."
-  [ -n "$security_absent" ] && [ "$have_security" = "true" ] \
-    && die3 "fix-record: --security-absent and --security were both given. A row is declared absent or it carries a command, never both."
 
   [ -n "$task_arg" ]    || die3 "fix-record: a task folder is required"
   [ -n "$unit_id" ]     || die3 "fix-record: a unit id is required"
   [ -n "$report_path" ] || die3 "fix-record: --report is required"
   [ -n "$started_at" ]  || die3 "fix-record: --started-at is required"
-
-  br_require_tool_flag "fix-record" "--standards-signal" "$standards_signal" "--standards" "$have_standards"
-  br_require_tool_flag "fix-record" "--static-analysis-signal" "$static_signal" "--static-analysis" "$have_static"
-  br_require_tool_flag "fix-record" "--security-signal" "$security_signal" "--security" "$have_security"
-  br_require_tool_flag "fix-record" "--standards-extensions" "$standards_exts" "--standards" "$have_standards"
-  br_require_tool_flag "fix-record" "--static-analysis-extensions" "$static_exts" "--static-analysis" "$have_static"
-  br_require_tool_flag "fix-record" "--security-extensions" "$security_exts" "--security" "$have_security"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "fix-record")"
@@ -5439,6 +5921,7 @@ RV_SCOPE
   current_commit="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+  br_require_real_base "fix-record" "$RV_CODEPATH" "$started_at" "$started_at_full" "$current_commit"
 
   # Exit 45, twice over. One round per commit: a second call at the commit a record already names
   # would spend a round on code nobody changed. The round number moves with the ledger, so the
@@ -5452,8 +5935,23 @@ RV_SCOPE
     [ -n "$existing_doc" ] \
       || die3 "fix-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
-    [ "$existing_commit" = "$current_commit" ] \
-      && die45 "fix-record: $record_file already holds round $round_number at commit $current_commit. Nothing has changed since that record was written."
+    if [ "$existing_commit" = "$current_commit" ]; then
+      # A crash between this record and the ledger write leaves the round recorded and the counter
+      # where it was, and the routing table has no row for that state. The record is this round own
+      # at this commit, so the repair is to finish the write that did not land.
+      local fr_step fr_ledger
+      fr_step="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')"
+      if [ "$fr_step" != "fixed" ]; then
+        fr_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
+          '.orders = (.orders | map(if .id == $id then (.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed") else . end))')"
+        [ -n "$fr_ledger" ] || die3 "fix-record: the ledger update for $unit_id failed."
+        write_atomic "$RV_LEDGER_FILE" "$fr_ledger"
+        printf '%s\n' "$existing_doc"
+        echo "FIX-RECORD: $record_file was already written at $current_commit and the ledger had not moved. The ledger now counts round $round_number; no round was spent twice." >&2
+        exit 0
+      fi
+      die45 "fix-record: $record_file already holds round $round_number at commit $current_commit. Nothing has changed since that record was written."
+    fi
   fi
   if [ "$round_number" -gt 1 ]; then
     prev_file="$IMPL_DIR/fix-$unit_id-$((round_number - 1)).json"
@@ -5483,25 +5981,18 @@ RV_SCOPE
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
-  BRC_ORDER_TESTS_RAW="$order_tests_raw"
-  BRC_SUITE_RAW="$suite_raw"
-  BRC_STANDARDS_RAW="$standards_raw"
-  BRC_STATIC_RAW="$static_raw"
-  BRC_SECURITY_RAW="$security_raw"
-  BRC_HAVE_ORDER_TESTS="$have_order_tests"
-  BRC_HAVE_SUITE="$have_suite"
-  BRC_HAVE_STANDARDS="$have_standards"
-  BRC_HAVE_STATIC="$have_static"
-  BRC_HAVE_SECURITY="$have_security"
-  BRC_STANDARDS_SIGNAL="$standards_signal"
-  BRC_STATIC_SIGNAL="$static_signal"
-  BRC_SECURITY_SIGNAL="$security_signal"
-  BRC_STANDARDS_ABSENT="$standards_absent"
-  BRC_STATIC_ABSENT="$static_absent"
-  BRC_SECURITY_ABSENT="$security_absent"
-  BRC_STANDARDS_EXTS="$standards_exts"
-  BRC_STATIC_EXTS="$static_exts"
-  BRC_SECURITY_EXTS="$security_exts"
+  local selected_tests_json
+  selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
+    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  CR_WHO="fix-record"
+  CR_TEST_RECIPES="$test_recipes"
+  CR_CHECK_RECIPES="$check_recipes"
+  cr_resolve
+  cr_require_baseline_recipes "fix-record" "$IMPL_DIR/baseline.json"
+
+  BRC_RECIPES="$CR_DOC"
+  BRC_SELECTED_JSON="$selected_tests_json"
+  BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
 
@@ -5517,11 +6008,13 @@ RV_SCOPE
   git -C "$RV_CODEPATH" diff "$started_at_full" "$current_commit" > "$diff_path" 2>/dev/null \
     || die3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."
 
-  local today record_json
+  local today record_json executed_count
+  executed_count="$(br_executed_count "$checks_json")"
+  case "$executed_count" in ''|*[!0-9]*) executed_count=0 ;; esac
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson round "$round_number" --arg reportPath "$report_path" \
-    --arg diffPath "$diff_path" --argjson checks "$checks_json" '
+    --arg diffPath "$diff_path" --argjson checks "$checks_json" --argjson executed "$executed_count" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -5532,6 +6025,7 @@ RV_SCOPE
       reportPath: $reportPath,
       diffPath: $diffPath,
       checks: $checks,
+      executed: $executed,
       decidingChecks: { total: 8, ranHere: [ $checks[] | .id ] }
     }')"
   write_atomic "$record_file" "$record_json"
@@ -5564,12 +6058,11 @@ RV_SCOPE
   # interface-record here, so no unknown is exempt: that exemption belongs to a check this step
   # never runs. At the cap the order halts, naming the check that stopped it, at the moment the
   # fact becomes true rather than when the next brief refuses.
+  # order-tests carries the same floor it carries at build-record: it must have run and answered
+  # met. A fix round nothing executed proves nothing about the fix.
   local all_met first_stopper step_expr halt_why=""
-  all_met="$(printf '%s' "$checks_json" | jq -r 'all(.[]; .verdict == "met" or .verdict == "undeclared")')"
-  first_stopper="$(printf '%s' "$checks_json" | jq -r '
-    [ .[] | select(.verdict == "unmet" or .verdict == "unknown") ]
-    | .[0] // {id:"none",verdict:"",detail:""}
-    | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)')"
+  all_met="$(br_checks_pass "$checks_json" "")"
+  first_stopper="$(br_first_stopper "$checks_json" "")"
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$scope_list" ]; then
     halt_why="a fixer reported its scope too small and nobody is present to rule on it: ${scope_list%, }"
   fi
@@ -5580,18 +6073,19 @@ RV_SCOPE
       halt_why="fix rounds spent: $round_number of $FIX_ROUNDS_ALLOWED, and the last was stopped by $first_stopper"
     fi
   fi
-  if [ -n "$halt_why" ]; then
-    step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed" | .haltedBecause = $why'
-  else
-    step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed"'
-  fi
+  step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed"'
   local new_ledger
-  new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg why "$halt_why" \
+  new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die3 "fix-record: the ledger update for $unit_id failed."
+  if [ -n "$halt_why" ]; then
+    new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
+    [ -n "$new_ledger" ] || die3 "fix-record: the halt on $unit_id could not be written."
+  fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
   printf '%s\n' "$record_json"
+  echo "FIX-RECORD: $unit_id: $executed_count of the seven deciding checks executed a command, a diff or a hash." >&2
   if [ -n "$scope_list" ]; then
     echo "FIX-RECORD: the fixer reported its scope too small on ${scope_list%, }" >&2
   fi
@@ -5617,6 +6111,8 @@ do_verify_record() {
         verdicts_path="$2"; shift 2 ;;
       --ruling)
         [ "$#" -ge 2 ] || die3 "verify-record: --ruling needs <finding id>=<wrong|deferred|load-bearing>::<reason>"
+        [ -n "$2" ] || die3 "verify-record: --ruling was given an empty value."
+        halt_refuse_separator "verify-record" "--ruling" "$2"
         rulings_raw="$rulings_raw$2
 "
         shift 2 ;;
@@ -5653,8 +6149,14 @@ do_verify_record() {
   local already
   already="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson r "$rounds_used" \
     '[ (.rounds // [])[] | select(.round == $r) ] | length')"
-  [ "$already" = "0" ] \
-    || die45 "verify-record: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing has changed since that record was written."
+  if [ "$already" != "0" ]; then
+    # The verification is already on the record. rv_write_verification writes the review record and
+    # then the ledger, so a crash between the two leaves this state with the ledger unmoved. There
+    # is nothing left to verify and nothing to write twice, so this reports the record it found.
+    printf '%s\n' "$RV_REVIEW_DOC"
+    echo "VERIFY-RECORD: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing was verified twice." >&2
+    exit 0
+  fi
 
   local fix_file
   fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
@@ -5670,6 +6172,7 @@ do_verify_record() {
   local verdicts_doc verdict_rows breakage_rows outofscope_json
   [ -f "$verdicts_path" ] || die52 "verify-record: $verdicts_path not found. The file named on the command line has to exist."
   [ -s "$verdicts_path" ] || die52 "verify-record: $verdicts_path is empty."
+  rv_refuse_duplicate_keys "$verdicts_path" "verify-record"
   verdicts_doc="$(jq -c '.' "$verdicts_path" 2>/dev/null)"
   [ -n "$verdicts_doc" ] || die52 "verify-record: $verdicts_path is not valid JSON."
   verdict_rows="$(printf '%s' "$verdicts_doc" | jq -c 'if (.verdicts | type) == "array" then .verdicts else null end')"
@@ -5861,14 +6364,14 @@ rv_write_verification() {
   write_atomic "$RV_REVIEW_FILE" "$new_doc"
   RV_REVIEW_DOC="$new_doc"
 
-  if [ -n "$halt_why" ]; then
-    step_expr='.lastStep = "fixed" | .haltedBecause = $why'
-  else
-    step_expr='.lastStep = "fixed"'
-  fi
-  new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg why "$halt_why" \
+  step_expr='.lastStep = "fixed"'
+  new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die3 "verify-record: the ledger update for $unit_id failed."
+  if [ -n "$halt_why" ]; then
+    new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
+    [ -n "$new_ledger" ] || die3 "verify-record: the halt on $unit_id could not be written."
+  fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
   RV_LEDGER_DOC="$new_ledger"
 }
@@ -6009,22 +6512,10 @@ do_close() {
 # neither file is exit 20, one without the other is exit 3.
 FN_LEDGER_FILE=""; FN_LEDGER_DOC=""
 fn_load_task_state() {
-  local who="$1" snapshot_file
-  FN_LEDGER_FILE="$IMPL_DIR/ledger.json"
-  snapshot_file="$IMPL_DIR/snapshot.json"
-  if [ ! -f "$FN_LEDGER_FILE" ]; then
-    [ -f "$snapshot_file" ] \
-      && die3 "$who: $FN_LEDGER_FILE not found, though $snapshot_file exists. A snapshot with no ledger beside it is not a supported state; run start again."
-    die20 "$who: this task's build has never started. There is no $FN_LEDGER_FILE and no $snapshot_file. Run start on this task first."
-  fi
-  FN_LEDGER_DOC="$(jq -c '.' "$FN_LEDGER_FILE" 2>/dev/null)"
-  [ -n "$FN_LEDGER_DOC" ] \
-    || die3 "$who: $FN_LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
-  [ -f "$snapshot_file" ] \
-    || die3 "$who: $snapshot_file not found, though $FN_LEDGER_FILE exists. A ledger with no snapshot beside it is not a supported state; run start again."
-  SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
-  [ -n "$SNAPSHOT_DOC" ] \
-    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+  local who="$1"
+  require_started_build "$who"
+  FN_LEDGER_FILE="$STARTED_LEDGER_FILE"
+  FN_LEDGER_DOC="$STARTED_LEDGER_DOC"
 }
 
 # Exit 68. Both the grant and the restart are a person's judgement, so an autonomous run refuses.
@@ -6067,10 +6558,22 @@ do_finish() {
       | join("; ")')"
   [ -z "$halted_orders" ] \
     || die66 "finish: these orders are halted, closed or not: $halted_orders. Implementation does not finish while a reason to stop stands on an order."
+  # A criterion that is not confirmed stops the stage, and three different facts land here. The
+  # refusal names which, and which action answers it, because two of the three no action in this
+  # script clears: `restart` wants a drift halt and `grant-attempt` answers a spent counter, so a
+  # reader told only "not confirmed" has nothing to do next and no way to learn what.
   unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" '
       ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]) as $machine
+      | ([ ($snap.workOrders // [])[] | (.criteriaServed // [])[] , (.criteriaOwned // [])[] ]) as $served
       | [ ($ledger.criteria // [])[] | select((.id as $i | $machine | index($i)) != null)
-          | select(.rowState != "confirmed") | .id + " (" + .rowState + ")" ]
+          | select(.rowState != "confirmed")
+          | . as $c
+          | if ($c.rowState == "rejected")
+              then ($c.id + " (rejected: a row checker turned this down. The row goes back to the test author, who runs tests-freeze on that order again once the test is repaired)")
+            elif (($served | index($c.id)) == null)
+              then ($c.id + " (no work order serves or owns it, so nothing will ever judge it. Design left this criterion with no order behind it: close design again with one, then restart)")
+            else ($c.id + " (" + $c.rowState + ": the orders serving it have not all closed yet, so close them)")
+            end ]
       | join("; ")')"
   [ -z "$unconfirmed" ] \
     || die66 "finish: these machine-verified criteria are not confirmed: $unconfirmed. A criterion a machine verifies is confirmed by the checkpoint over its own rows, and implementation does not finish without it."
@@ -6157,6 +6660,8 @@ do_grant_attempt() {
     case "$1" in
       --reason)
         [ "$#" -ge 2 ] || die3 "grant-attempt: --reason needs the reason this order gets another attempt"
+        [ -n "$2" ] || die3 "grant-attempt: --reason was given an empty reason."
+        halt_refuse_separator "grant-attempt" "--reason" "$2"
         reason="$2"; shift 2 ;;
       -*) die3 "grant-attempt: unrecognized argument: $1" ;;
       *)
@@ -6248,6 +6753,8 @@ do_restart() {
     case "$1" in
       --reason)
         [ "$#" -ge 2 ] || die3 "restart: --reason needs the reason this build starts again"
+        [ -n "$2" ] || die3 "restart: --reason was given an empty reason."
+        halt_refuse_separator "restart" "--reason" "$2"
         reason="$2"; shift 2 ;;
       -*) die3 "restart: unrecognized argument: $1" ;;
       *)
@@ -6361,8 +6868,7 @@ do_dispatch_open() {
   local role_bare agents_dir known_list
   role_bare="${role##*:}"
   agents_dir="$PLUGIN_ROOT/agents"
-  known_list="$(find "$agents_dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null \
-    | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' ')"
+  known_list="$(md_basenames_in "$agents_dir")"
   [ -n "$known_list" ] \
     || die46 "dispatch-open: no agent definitions were found in $agents_dir, so no role name can be checked. This plugin's own files are incomplete; nothing about the task is wrong."
   case " $known_list" in
@@ -6370,8 +6876,16 @@ do_dispatch_open() {
     *) die46 "dispatch-open: $role names no agent this plugin ships, so a dispatch under it would run with no permission applied. The roles that exist are: $known_list" ;;
   esac
   [ -n "$unit_id" ]  || die3 "dispatch-open: a unit id is required"
+  # The schema pattern is ^wo[1-9][0-9]*$, and a looser glob here opened a record under an id no
+  # other record in this stage uses. A `case` glob cannot say "digits to the end", so the digits
+  # are checked on their own.
   case "$unit_id" in
-    wo[1-9]*) ;;
+    wo[1-9]) ;;
+    wo[1-9]*)
+      case "${unit_id#wo}" in
+        *[!0-9]*) die3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
+      esac
+      ;;
     *) die3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
   esac
 
@@ -6494,6 +7008,30 @@ do_dispatch_open() {
   exit 0
 }
 
+# `step <name>` prints one of this skill's own step files on standard output.
+#
+# The skill reads its step files through this action rather than with Read. The documentation
+# mirror scopes ${CLAUDE_PLUGIN_ROOT} substitution in `allowed-tools` to Bash rules, so a Read rule
+# naming that variable never matches, and every step-file read raises a permission prompt on the
+# one file that carries the step's own rules. An unattended run has nobody to answer it. The Bash
+# rule on this script already matches, so the read goes through that instead.
+#
+# A name is one name and never a path. A slash would turn this into a reader for any file the
+# script can open, and it exists to hand over the six step files and nothing else.
+do_step() {
+  local names
+  names="$(md_basenames_in "$STEPS_DIR")"
+  [ "$#" -ge 1 ] || die3 "step: a step name is required. The steps are: $names"
+  [ "$#" -le 1 ] || die3 "step: unrecognized extra argument: $2"
+  case "$1" in
+    */*|.|..|'') die3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
+  esac
+  [ -f "$STEPS_DIR/$1.md" ] \
+    || die3 "step: this skill ships no step file named $1. The steps are: $names"
+  cat "$STEPS_DIR/$1.md" || die3 "step: $STEPS_DIR/$1.md could not be read."
+  exit 0
+}
+
 do_dispatch_close() {
   [ "$#" -ge 1 ] || die3 "dispatch-close: a task folder is required"
   [ "$#" -le 1 ] || die3 "dispatch-close: unrecognized extra argument: $2"
@@ -6509,6 +7047,20 @@ do_dispatch_close() {
 
   local dispatch_file="$project_folder/dispatch.json"
   if [ -f "$dispatch_file" ]; then
+    # The record lives at the project root while `read` and `start` are per task, and two tasks in
+    # one project is a supported state. A second task closing the first task record would leave
+    # both hooks on the no-record branch, allowing every read and every write to a frozen test for
+    # the rest of that role run, and the message reporting it reaches the running role and nobody
+    # else. So the record says whose it is, and a close that does not match refuses.
+    local open_doc open_task this_task
+    open_doc="$(jq -c '.' "$dispatch_file" 2>/dev/null)"
+    if [ -n "$open_doc" ]; then
+      open_task="$(printf '%s' "$open_doc" | jq -r '.task // ""')"
+      this_task="$(basename -- "$TASK_PATH")"
+      if [ -n "$open_task" ] && [ "$open_task" != "$this_task" ]; then
+        die75 "dispatch-close: $dispatch_file was opened for task $open_task, and this call names task $this_task. A close belongs to the task that opened the record; clearing another task record would leave its role with every permission the record withheld."
+      fi
+    fi
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"
   else
@@ -6548,5 +7100,6 @@ case "$ACTION" in
   restart)        do_restart        "$@" ;;
   dispatch-open)  do_dispatch_open  "$@" ;;
   dispatch-close) do_dispatch_close "$@" ;;
+  step)           do_step           "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

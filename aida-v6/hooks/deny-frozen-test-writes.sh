@@ -19,11 +19,23 @@
 # plain forms rather than a boundary, and a path assembled from a variable, an interpreter, an
 # editor, or a symlink all pass it.
 #
+# A relative write target is resolved against the record's own codePath, the value the frozen paths
+# themselves are resolved from (scripts/dispatch-schema.json, codePath). When the payload's working
+# directory is a different directory, the target is resolved against that directory too, and a match
+# on either resolution denies the write. Both tests are needed. A dispatched agent's working
+# directory is not guaranteed to be codePath, so a relative target read only from the working
+# directory misses a frozen test. A shell command's own relative path really is relative to the
+# directory that command runs in, so dropping that second test misses one the other way.
+#
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name: allow, silent.
 # No project registered for this working directory, no dispatch.json, dispatch.json unreadable,
 # or no unit has frozen anything yet for this task: allow, through `systemMessage` naming why.
 # Nothing is frozen before the third step of implementation runs, and that is a real state, not a
-# fault, the same distinction dispatch-schema.json's own header draws.
+# fault, the same distinction dispatch-schema.json's own header draws. An agent that reports a test
+# author type while the record names another role, or names no role, still gets the exception
+# described above, and that allow reports itself through `systemMessage` as well: the exception
+# belongs to the role the record names, and an agent type the record does not name is the case a
+# mistyped or unnamed dispatch lands in.
 #
 # Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
 # the model), on exit 0, so the reason reaches whoever attempted the write.
@@ -77,6 +89,9 @@ jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"
 
 TASK_ID="$(jq -r '.task // empty' "$DISPATCH_FILE" 2>/dev/null)"
+# The role is read to report the exception below, never to gate this rule: a frozen test is
+# protected from every role, so a record naming no role still enforces the freeze.
+ROLE="$(jq -r '.role // empty' "$DISPATCH_FILE" 2>/dev/null)"
 UNIT="$(jq -r '.unit // empty' "$DISPATCH_FILE" 2>/dev/null)"
 CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
 [ -n "$TASK_ID" ] && [ -n "$UNIT" ] && [ -n "$CODE_PATH" ] \
@@ -128,6 +143,11 @@ read_words() {
   fi
 }
 
+# The payload's working directory in the same canonical form codePath is held in, so the two
+# compare as strings. A working directory that no longer exists still normalizes textually.
+CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
+[ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+
 # ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test ---------------
 FROZEN=""
 for f in "$IMPL_DIR"/tests-*.json; do
@@ -166,6 +186,28 @@ OWNER_EOF
   return 1
 }
 
+# Resolves one write target and reports whether a frozen test owns it. The record's codePath is
+# tried first, and the payload's working directory second when it is a different directory, for the
+# reason this file's own header gives. On a match this sets OWNER_UNIT to the owning unit and
+# OWNER_ABS to the resolution that matched, and returns 0. Sets them by assignment rather than
+# printing them, because a command substitution runs in a subshell and would lose the second value.
+OWNER_UNIT=""
+OWNER_ABS=""
+owner_of_arg() {
+  local arg="$1" cand u
+  cand="$(normalize_abs "$(resolve_against "$arg" "$CODE_CANON")")"
+  if u="$(owner_of "$cand")"; then
+    OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
+  fi
+  if [ "$CWD_CANON" != "$CODE_CANON" ]; then
+    cand="$(normalize_abs "$(resolve_against "$arg" "$CWD_CANON")")"
+    if u="$(owner_of "$cand")"; then
+      OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
+    fi
+  fi
+  return 1
+}
+
 deny() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
   exit 0
@@ -180,6 +222,15 @@ allow_person() {
   jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $1 is frozen for unit $2 by this task. The recorded hash will no longer match it. Reopen design if the test itself is wrong." '{systemMessage:$m}'
   exit 0
 }
+# The exception is the record's, so an agent type the record does not name is allowed and reported.
+# Denying it instead would be a new refusal this rule never made, and the write is this unit's own
+# frozen test either way. $1 the path, $2 the unit that froze it.
+allow_unnamed_role() {
+  local shown="$ROLE"
+  [ -n "$shown" ] || shown="no role at all"
+  jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: the test author exception let the agent type $AGENT write $1, frozen for unit $2. This dispatch record names $shown, which is not that type. An agent type the record does not name is the case a mistyped or unnamed dispatch lands in." '{systemMessage:$m}'
+  exit 0
+}
 frozen_reason() {
   printf 'this task froze this test for unit %s. Changing it needs the design reopened. If the test is wrong, stop and report it. Do not edit it.' "$1"
 }
@@ -188,10 +239,14 @@ case "$TOOL" in
   Write|Edit|MultiEdit|NotebookEdit)
     TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
     [ -n "$TARGET" ] || { echo '{}'; exit 0; }
-    TARGET_ABS="$(normalize_abs "$(resolve_against "$TARGET" "$CWD")")"
-    OWNER="$(owner_of "$TARGET_ABS")" || { echo '{}'; exit 0; }
+    owner_of_arg "$TARGET" || { echo '{}'; exit 0; }
+    TARGET_ABS="$OWNER_ABS"
+    OWNER="$OWNER_UNIT"
     if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ]; then
-      echo '{}'; exit 0
+      if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
+        echo '{}'; exit 0
+      fi
+      allow_unnamed_role "$TARGET_ABS" "$OWNER"
     fi
     [ -n "$AGENT" ] || allow_person "$TARGET_ABS" "$OWNER"
     deny "$TARGET_ABS: $(frozen_reason "$OWNER")"
@@ -212,15 +267,13 @@ case "$TOOL" in
         case "$t" in
           '>'|'>>'|'1>'|'1>>'|'&>'|'&>>'|'>|')
             if [ "$n" -lt "${#w[@]}" ]; then
-              cand="$(normalize_abs "$(resolve_against "${w[$n]}" "$CWD")")"
-              if HIT_OWNER="$(owner_of "$cand")"; then HIT="${w[$n]}"; break; fi
+              if owner_of_arg "${w[$n]}"; then HIT="${w[$n]}"; HIT_OWNER="$OWNER_UNIT"; break; fi
             fi ;;
           '2>'*) ;;
           '>'*|'1>'*|'&>'*)
             x="${t#&}"; x="${x#1}"; x="${x#>>}"; x="${x#>}"; x="${x#|}"
             if [ -n "$x" ]; then
-              cand="$(normalize_abs "$(resolve_against "$x" "$CWD")")"
-              if HIT_OWNER="$(owner_of "$cand")"; then HIT="$x"; break; fi
+              if owner_of_arg "$x"; then HIT="$x"; HIT_OWNER="$OWNER_UNIT"; break; fi
             fi ;;
         esac
         i=$n
@@ -230,32 +283,32 @@ case "$TOOL" in
         rm|touch|truncate|chmod|mkdir|rmdir|tee|unlink)
           for t in "${w[@]:1}"; do
             case "$t" in -*) continue ;; esac
-            cand="$(normalize_abs "$(resolve_against "$t" "$CWD")")"
-            if HIT_OWNER="$(owner_of "$cand")"; then HIT="$t"; break; fi
+            if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
           done ;;
         git) case "${w[1]:-}" in rm|mv|checkout|restore|stash|apply|clean|reset)
                for t in "${w[@]:2}"; do
                  case "$t" in -*) continue ;; esac
-                 cand="$(normalize_abs "$(resolve_against "$t" "$CWD")")"
-                 if HIT_OWNER="$(owner_of "$cand")"; then HIT="$t"; break; fi
+                 if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
                done ;; esac ;;
         sed) case "${w[1]:-}" in -i*)
                for t in "${w[@]:2}"; do
-                 cand="$(normalize_abs "$(resolve_against "$t" "$CWD")")"
-                 if HIT_OWNER="$(owner_of "$cand")"; then HIT="$t"; break; fi
+                 if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
                done ;; esac ;;
         cp|mv|ln|install|rsync)
           last="${w[$((${#w[@]} - 1))]}"
-          cand="$(normalize_abs "$(resolve_against "$last" "$CWD")")"
-          if HIT_OWNER="$(owner_of "$cand")"; then HIT="$last"; fi ;;
+          if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi ;;
         cd)
-          cand="$(normalize_abs "$(resolve_against "${w[1]:-}" "$CWD")")"
-          if HIT_OWNER="$(owner_of "$cand")" && printf '%s' "$CMD" | grep -q '>'; then HIT="${w[1]}"; fi ;;
+          if owner_of_arg "${w[1]:-}" && printf '%s' "$CMD" | grep -q '>'; then
+            HIT="${w[1]}"; HIT_OWNER="$OWNER_UNIT"
+          fi ;;
       esac
     done < <(printf '%s\n' "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
     if [ -n "$HIT" ]; then
       if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ]; then
-        echo '{}'; exit 0
+        if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
+          echo '{}'; exit 0
+        fi
+        allow_unnamed_role "$HIT" "$HIT_OWNER"
       fi
       [ -n "$AGENT" ] || allow_person "$HIT" "$HIT_OWNER"
       deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"

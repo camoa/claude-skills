@@ -5,9 +5,11 @@ once per build, not once per work order.
 
 ## Resolve one recipe per framework
 
-Read the project's own `frameworks`. For each one, dispatch `catalog-identifier` to ask the
-navigator's process-recipe lookup for the `test-execution` point and that framework. It answers
-whether one is available and, when it is, a path to the body on disk.
+Read the project's own `frameworks`. A `project.json` recording none refuses outright (exit 77):
+no recipe can be chosen for a project the run cannot name a framework for. For each framework,
+dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `test-execution`
+point and that framework. It answers whether one is available and, when it is, a path to the body
+on disk.
 
 **Name the role.** A dispatch that names none runs as the general agent, with every tool and this
 session's own model. The role exists so a catalog listing lands in the agent and not here: it
@@ -19,52 +21,45 @@ a folder of its own, is read the ordinary way and wins over the catalog.
 a failed network are three different things, and only the first says anything about the framework.
 Pass the one that happened, in its own word.
 
-Dispatch `catalog-identifier` once more, for the `review` point and each framework. When that
-recipe carries a `check_commands` data block, it names three tool commands, coding-standards,
-static-analysis and security. Each is an argv per tool, with `{paths}` as a placeholder. Each
-row also carries its own `signal` and `extensions` keys, where present.
-
-When the recipe carries no such block, pass no tool flag for it. The three checks then record
-undeclared, and the report says the recipe declares no tool for that check. Never read a tool's
-name out of the recipe's own prose.
+Dispatch `catalog-identifier` once more, for the `review` point and each framework. This is a
+second recipe, never the same file as the `test-execution` one above. Pass its path straight
+through; do not open it here. The script reads its `## Check commands` block itself, one entry per
+tool, coding-standards, static-analysis and security, each with its own argv, `{paths}` placeholder,
+and `signal` and `extensions` keys where present.
 
 ## Run the checks
 
-Run, with one flag per framework:
+Run, with one `--recipe` and one `--check-recipe` per framework:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh preconditions "<task_folder>" \
-  --recipe <framework>=<path to the recipe body> \
+  --recipe <framework>=<path to the test-execution recipe> \
+  --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
-  --standards <argv token>... \
-  --static-analysis <argv token>... \
-  --security <argv token>... \
-  [--standards-signal empty-stdout] [--standards-extensions <comma list>] \
-  [--static-analysis-signal empty-stdout] [--static-analysis-extensions <comma list>] \
-  [--security-signal empty-stdout] [--security-extensions <comma list>] \
-  [--standards-absent <reason>] [--static-analysis-absent <reason>] [--security-absent <reason>]
+  --value <name>=<value>...
 ```
-`--standards`, `--static-analysis` and `--security` are each tool's own argv, one token per
-repeated flag, from the `review` recipe resolved above. A token that is exactly `{paths}` is a
-placeholder. The script expands it itself, to the union of every work order's own owned files, one
-argv token per file, relative to codePath. The orders' tests do not exist yet at this step, so this
-is the baseline every later check compares against. Never expand `{paths}` here, and never hand any
-of the three to a shell. Absent, a tool stays undeclared, the same as `preconditions.json`'s own
-fields already do.
+`--recipe` names the `test-execution` recipe this step already resolved, for the `## Preconditions`
+and `## Test commands` blocks. `--check-recipe` names the `review` recipe, for `## Check commands`.
+Pass paths only. The script parses both files itself: the argv for each tool, its `signal` and
+`extensions` keys, and which rows a framework declares absent. Nothing here retypes a tool's
+command, so nothing here can drop a key a dropped `signal` would silently turn into a check that
+always passes.
 
-Each tool takes its `signal` and `extensions` keys the same way, straight from its `check_commands`
-row. Pass `--standards-signal empty-stdout` (and the same for the other two) only when the recipe
-names that signal. It marks a tool that exits 0 whether it found something or not. A clean run and
-a dirty one are then told apart by whether anything landed on standard output, not by the exit code.
+Every framework the project declares needs a `--recipe` or a `--lookup-failed` for it. The script
+refuses rather than guess, because a lookup nobody ran must never be recorded as a recipe that
+declared nothing. `--check-recipe` is optional per framework: absent, its three tool checks record
+undeclared, with a reason saying no check recipe was resolved.
 
-Pass `--standards-extensions <comma list>` (and the same for the other two) when the row names one.
-`{paths}` then expands to only the files in scope carrying one of those extensions. A scope with
-none of them records that tool's row as undeclared, with the reason, rather than met.
+**Two frameworks may not both command one tool.** A project declaring two frameworks whose review
+recipes each carry a coding-standards row, say, gives the script two answers to one question, and
+it refuses (exit 72) rather than choose. Resolve one check recipe for the task, or split the
+frameworks into two tasks.
 
-Pass `--standards-absent <reason>` (and the same for the other two) when the recipe's row is
-declared absent, with the recipe's own reason text.
-
-Every framework the project declares needs one flag or the other. The script refuses rather than
-guess, because a lookup nobody ran must never be recorded as a recipe that declared nothing.
+**A framework that could never test itself refuses here, not later.** The test-execution recipe's
+`## Test commands` block needs a `changed` or a `file` row, the two that can run a named set of
+tests. A framework declaring both absent stops the whole run (exit 19), naming the framework. No
+order on it could ever have its own tests run. `build-record`'s own floor requires that check to
+answer met before an order reaches `checks-passed`. This is the one place `undeclared` does not
+continue: continuing would mean no project on that framework ever builds.
 
 The script reads each recipe's declared conditions, runs each check inside the code repository,
 and writes what it found. It never hands a check to a shell.
@@ -105,12 +100,12 @@ Its result folds into the same verdict, and where it did not succeed the record 
 command printed.
 
 Last, it records what was already broken at the commit the build started from. The suite runs
-whole, because the orders' tests do not exist yet and no framework maps changed paths to the tests
-covering them. The three tools that take paths, `--standards`, `--static-analysis` and `--security`
-above, run over the union of every work order's own owned files. A run with none of the three
-supplied records each as undeclared instead. A suite that is already red is recorded, never
-refused. Knowing it is the point: a builder chasing a failure it did not cause spends every
-attempt it has.
+whole, from the `## Test commands` block's own `suite` row, because the orders' tests do not exist
+yet and no framework maps changed paths to the tests covering them. The three tools from the
+`## Check commands` block run over the union of every work order's own owned files. A framework
+with no `--check-recipe` records each tool undeclared instead. A suite that is already red is
+recorded, never refused. Knowing it is the point: a builder chasing a failure it did not cause
+spends every attempt it has.
 
 The baseline is taken once, at that commit. A second run at the same commit leaves it alone. One
 recorded at a different commit refuses rather than overwrites, and names both commits.

@@ -42,7 +42,9 @@ the order needs one more attempt, run:
 It raises the order's own allowed count by one, and records the reason and the date. It clears the
 halt only when the halt began with `attempts spent`; any other halt refuses, naming it. It never
 touches the attempts already used, so the counter still never goes down. It refuses outright on an
-autonomous run: the grant is a person's judgement, and nobody is present to make it.
+autonomous run: the grant is a person's judgement, and nobody is present to make it. The reason may
+not hold the text `; earlier: `, the text this stage joins one halt reason to another with; a
+reason carrying it would forge a segment nobody wrote.
 
 The grant is the person's to offer and the person's to take. Do not run it on their own behalf
 because an order is halted; put the halt and its recorded attempts to them first.
@@ -59,7 +61,9 @@ Put that to the person. If they want to rebuild against the new design, run:
   --reason <what changed and why the build starts over>
 ```
 It refuses when no order is halted for design drift, or when the code repository's tree is not
-clean. It refuses on an autonomous run too: a restart is a person's judgement. On success it moves
+clean. It refuses on an autonomous run too: a restart is a person's judgement. The reason may not
+hold `; earlier: `, the same refusal the grant's own reason takes, for the same cause. On success
+it moves
 `implementation/` to `implementation-<date>-<commit>/`, writes the reason and the drifted orders
 into that archive as `restarted.json`, and prints the archive path.
 

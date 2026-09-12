@@ -4,7 +4,19 @@
   "description": "What `fix-record` verified for one fix round on one order, at <task folder>/implementation/fix-<unit_id>-<round>.json (ideal/implementation.md, 'The fix rounds re-run the first two checks'). One file per round, so a second round never overwrites the first and a person reading a halted order can see both. The same shape as the build record with `round` in place of `attempt`, because the two steps verify the same code the same way and a reader who knows one must not have to learn another. Seven checks here, not eight: a fix round does not rewrite the interface record, so `interface-record` is never re-run. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "takenAt", "unit", "startedAt", "commit", "round", "reportPath", "diffPath", "checks", "decidingChecks"],
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "unit",
+    "startedAt",
+    "commit",
+    "round",
+    "reportPath",
+    "diffPath",
+    "checks",
+    "decidingChecks",
+    "executed"
+  ],
   "properties": {
     "schemaVersion": {
       "type": "integer",
@@ -51,13 +63,23 @@
       "type": "array",
       "minItems": 7,
       "maxItems": 7,
-      "items": { "$ref": "#/$defs/check" },
+      "items": {
+        "$ref": "#/$defs/check"
+      },
       "description": "The seven computable deciding checks this step re-runs, in the same fixed order the build record holds them: order-tests, suite-regression, coding-standards, static-analysis, security, owned-files, frozen-tests. The eighth, interface-record, is absent by design and not by omission."
+    },
+    "executed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many of the checks in `checks` actually executed: they ran a command, which is every check carrying an exitCode, or they computed a diff or a hash, which is owned-files and frozen-tests. interface-record compares two texts the caller handed over and runs nothing, so it is never counted. The field exists because a record saying every check answered, without saying how many of them ran, reads the same whether the code was tested or nothing was."
     },
     "decidingChecks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["total", "ranHere"],
+      "required": [
+        "total",
+        "ranHere"
+      ],
       "description": "States plainly which of the deciding checks ideal/implementation.md names this step ran. Seven of the eight, and the field exists so a reader never has to count `checks` to learn what a pass here covered.",
       "properties": {
         "total": {
@@ -69,7 +91,9 @@
           "type": "array",
           "minItems": 7,
           "maxItems": 7,
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "The `id` of each check in `checks`, in the same order, copied rather than re-derived."
         }
       }
@@ -77,38 +101,28 @@
   },
   "$defs": {
     "check": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "verdict", "detail"],
-      "properties": {
-        "id": {
-          "type": "string",
-          "enum": ["order-tests", "suite-regression", "coding-standards", "static-analysis", "security", "owned-files", "frozen-tests"],
-          "description": "Which of the seven checks this is. The same ids the build record uses for the same checks, because both steps call one function and neither may drift into checking something the other does not."
+      "description": "The same check object build-record writes, narrowed to the seven ids a fix round runs. One definition, in build-record-schema.json, because both steps run the same checks through the same function and a second copy is how the two drift into describing different things. The narrowing is the whole difference: interface-record is not re-run here, since a fix round does not rewrite that record.",
+      "allOf": [
+        {
+          "$ref": "build-record-schema.json#/$defs/check"
         },
-        "verdict": {
-          "type": "string",
-          "enum": ["met", "unmet", "unknown", "undeclared"],
-          "description": "The same four words every verdict in this stage uses. undeclared means the command this check needed was never supplied, and undeclared is never satisfied. unknown means the check ran and nothing here can decide from it. Both unmet and unknown spend the round and leave every finding open. There is no exception here: the one unknown that does not spend an attempt belongs to interface-record, which this step never runs."
-        },
-        "absent": {
-          "type": "boolean",
-          "description": "True when the recipe row for this tool was declared absent, and the reason in `detail` is the recipe's own. Absent from the entry otherwise. It exists because undeclared covers two facts that must not read alike: a framework that says it has no such tool answered the question, and a caller who passed no flag answered nothing. Both stay undeclared, because undeclared is never satisfied either way, and this field is what tells a reader which happened."
-        },
-        "detail": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Why this verdict, in plain words naming what was compared: an exit code, a set of file paths that did not match, or which marker or file could not be read."
-        },
-        "exitCode": {
-          "type": "integer",
-          "description": "What the check's own command exited with, present only for order-tests, suite-regression, coding-standards, static-analysis and security, and only when a command was actually supplied and run."
-        },
-        "output": {
-          "type": "string",
-          "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode."
+        {
+          "properties": {
+            "id": {
+              "enum": [
+                "order-tests",
+                "suite-regression",
+                "coding-standards",
+                "static-analysis",
+                "security",
+                "owned-files",
+                "frozen-tests"
+              ],
+              "description": "Which of the seven checks this is. The same ids the build record uses for the same checks, because both steps call one function and neither may drift into checking something the other does not."
+            }
+          }
         }
-      }
+      ]
     }
   }
 }

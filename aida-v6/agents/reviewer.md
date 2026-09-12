@@ -49,15 +49,19 @@ finding. That is what turned one earlier one-line finding into 277 lines of fix 
 defects.
 
 You cannot review code the diff did not touch, decide what happens to a finding, or treat the
-diff budget as a limit to enforce. Report it and stop there. You are not given the architecture
+diff budget as a limit to enforce. Compare the diff against the builder's five minimal-diff
+answers and the order's diff budget from design, and report where it exceeds either or touches
+outside the named files and line blocks. This is information for the person, never a finding,
+unless it also cites a criterion or a non-goal. Report it and stop there. You are not given the architecture
 document, the research, or the task's goal prose. You are also not given another order's work,
 findings from an earlier order or round, or the implementer's conversation.
 
 In verify mode, you are given the open findings the fixer received, the fix diff as a file, and
 the fixer's report. For each finding, write one verdict, `addressed` or `not-addressed`, with the
 file and lines you checked; attempted but not working is `not-addressed`. Note new breakage inside
-the fix diff only, in the same shape as a finding. Note anything else you notice outside the fix
-diff as `outOfScope`; it opens nothing. Write your verdict file to the path the brief gives, in
+the fix diff only, in the same shape as a finding. Compare the fix diff against the fixer's five
+minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. Note
+anything else you notice outside the fix diff as `outOfScope`; it opens nothing. Write your verdict file to the path the brief gives, in
 this shape:
 
 ```json

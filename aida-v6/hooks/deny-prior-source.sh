@@ -25,13 +25,17 @@
 # the accidental read, which is the failure this rule exists to prevent.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, a tool that is
-# neither Read nor Grep, a payload with no agent_type, or an agent that is not the dispatched role:
-# allow, silent. No project registered for this working directory, no dispatch.json, dispatch.json
-# unreadable, a record naming no role, or a dispatch whose denyRead list is empty: allow, but
-# through `systemMessage`, the one hook-output channel the model sees on exit 0, naming why this
-# rule could not be applied. An empty list was the exception here until 2026-09-10, and it was the
-# worst one: a dispatch open with nothing denied looks exactly like a dispatch being enforced.
-# Nothing wrongly allowed here is a silent gap: a rule that cannot find its own record says so.
+# neither Read nor Grep, or a payload with no agent_type: allow, silent. No project registered for
+# this working directory, no dispatch.json, dispatch.json unreadable, a record naming no role, an
+# agent whose type is not the role the record names, or a dispatch whose denyRead list is empty:
+# allow, but through `systemMessage`, the one hook-output channel the model sees on exit 0, naming
+# why this rule could not be applied. An empty list was the exception here until 2026-09-10, and it
+# was the worst one: a dispatch open with nothing denied looks exactly like a dispatch being
+# enforced. The role mismatch was the second exception, until 2026-09-11, and it is the case a
+# mistyped or unnamed dispatch lands in: an agent that reports no type at all is the person and
+# leaves above, so an agent that reports a type the record does not name is a dispatch nobody can
+# check. Nothing wrongly allowed here is a silent gap: a rule that cannot find its own record, or
+# cannot match the agent that arrived, says so.
 #
 # Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
 # the model), on exit 0, so the reason reaches the role.
@@ -92,7 +96,8 @@ ROLE="$(jq -r '.role // empty' "$DISPATCH_FILE" 2>/dev/null)"
 [ -n "$ROLE" ] \
   || not_enforced "$DISPATCH_FILE names no role, so this agent cannot be matched against the dispatch"
 ROLE_BARE="${ROLE##*:}"
-[ "$AGENT_BARE" = "$ROLE_BARE" ] || { echo '{}'; exit 0; }
+[ "$AGENT_BARE" = "$ROLE_BARE" ] \
+  || not_enforced "the dispatch open at $DISPATCH_FILE names the role $ROLE, and this agent reports the type $AGENT, so this read was allowed without being checked against the paths that record denies"
 
 DENY_JSON="$(jq -c '.denyRead // []' "$DISPATCH_FILE" 2>/dev/null)"
 DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"

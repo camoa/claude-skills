@@ -612,9 +612,14 @@ else
   # reads from these entries and compares them as paths, so a glob would deny nothing while the
   # dispatch still reads as enforced (stages/08-invariant-audit.md, section 9). The rule is here,
   # at the producer, rather than as glob matching in the hook that reads them.
+  # A leading dash is refused on the same reasoning. Implementation expands these entries into the
+  # argument list of whatever tool the framework recipe names, so a name beginning with a dash
+  # reaches that tool as an option rather than as a path, and a tool with a fixing mode rewrites
+  # what it is pointed at. Both shapes are reported in one list, because both are the same defect:
+  # an entry that is not a path.
   GLOBBED_OWNED_FILES_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | .id as $id | (.ownedFiles // [])[]
-      | select(test("[*?\\[]"))
+      | select(test("[*?\\[]") or startswith("-"))
       | {id: $id, path: .}
     ]
   ')"
