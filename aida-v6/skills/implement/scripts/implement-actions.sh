@@ -3867,8 +3867,17 @@ br_test_check() {
       verdict="undeclared"
       detail="$(printf '%s' "$cmd" | jq -r '.missing')"
     elif [ "$field" = "orderTests" ] && [ "$(printf '%s' "$paths_json" | jq 'length')" -eq 0 ]; then
-      verdict="unknown"
-      detail="this order froze no test file, so the selected-tests command would run over nothing."
+      # An order serving only criteria a person verifies legitimately froze no test: its rows are
+      # checklists, and completion confirms those, not the build (ideal/implementation.md, "A
+      # criterion a person inspects has no tests"). The floor stays for every other order: a
+      # machine row with no test path is a record nothing can run, and it reads unknown.
+      if [ "$(printf '%s' "$BRC_TESTS_DOC" | jq '(.rows // []) | length > 0 and all(.[]; .kind == "person")')" = "true" ]; then
+        verdict="met"
+        detail="this order serves only criteria a person verifies, so its frozen record carries checklist rows and no test. Nothing here runs; completion confirms the checklists."
+      else
+        verdict="unknown"
+        detail="this order froze no test file, so the selected-tests command would run over nothing."
+      fi
     else
       argv_json="$(printf '%s' "$cmd" | jq -c '.argv')"
       outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"

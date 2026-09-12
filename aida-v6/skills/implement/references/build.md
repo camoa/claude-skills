@@ -164,6 +164,11 @@ may not. It is the one check that says this order's own code does what its tests
 unknown there means nothing here ran, so the order stays at `code-written`, whatever the other
 seven answered.
 
+One order has nothing for this check to run: an order serving only criteria a person verifies.
+Its frozen record carries checklist rows and no test, which design allows. order-tests answers
+met there, with a detail saying so, and completion confirms the checklists. A machine-verified
+criterion frozen with no test path still reads unknown, and the order stays at `code-written`.
+
 The summary's `executed:` line says how many of the eight actually ran a command, a diff or a
 hash rather than reading undeclared. Say that count to the person: eight checks answering does not
 by itself say the code was tested.
