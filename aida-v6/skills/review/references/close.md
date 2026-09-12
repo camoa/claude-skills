@@ -4,9 +4,10 @@ This step asks the one question a script cannot answer, decides check 1, and wri
 
 ## Ask the checklist rows, once
 
-Read `checklists[]` from `finished.json` and show each row **verbatim**, with the criterion it
-belongs to. A summary asks a different question than the row a person signed up to answer. Show every
-row in one pass, and ask for each one only once.
+`read` emits `checklists[]` whole, each row with the criterion it belongs to. Show each row
+**verbatim** from that output, and open no file yourself: this skill grants no Read rule, and a
+summary asks a different question than the row a person signed up to answer. Show every row in one
+pass, and ask for each one only once.
 
 The person answers met or unmet per row. Their answer becomes one flag below. Autonomous, there is
 nobody to ask: each such criterion reads unanswered, no row flag is accepted, and the task gets no
