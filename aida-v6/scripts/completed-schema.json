@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA completion record",
+  "description": "On what grounds one task closed, at <task folder>/completion/completed.json (ideal/completion.md, 'The completion record'). One file per task, in its own folder beside review/, because implementation's own `restart` archives implementation/ whole and this record has nothing to do with a build restart. Written once, by `close`, after the pull request body and before the task skill's `complete` writes the state. A record beside a task still in progress is a close that failed at its last step, and running `close` again is the repair. Every field is required, because one action writes them all at once. The task state says closed; this record says on what grounds, by whom, and what was left behind. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "task",
+    "reviewVerdict",
+    "closedBy",
+    "reason",
+    "followUps"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date this record was written, YYYY-MM-DD. Set by the script, never typed by hand."
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The task's own id, read from task.json. Joined on, never re-minted."
+    },
+    "reviewVerdict": {
+      "type": "string",
+      "enum": ["passed", "failed", "unfinished", "none"],
+      "description": "What review/review.json said when the task closed, copied from its `verdict`. Four words, because a review that never ran (`none`), one that did not close (`unfinished`, a record with no verdict) and one that failed are three different facts. Only `passed` closes the task with nothing asked; every other word closes on a person's recorded reason."
+    },
+    "closedBy": {
+      "type": "string",
+      "enum": ["person", "nobody"],
+      "description": "Who was present when the task closed. `person` on an interactive run. `nobody` on an autonomous run, which closes only on a passed review, since a script inventing a reason would be a bypass."
+    },
+    "reason": {
+      "type": "string",
+      "description": "The person's own sentence saying why the task closes without a passed review, given through --reason. Empty when a passed review closed it. It is not a bypass flag: a later reader learns the grounds from it."
+    },
+    "followUps": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/followUp" },
+      "description": "One row per finding in the review record carrying `disposition: follow-up`. The task id comes from the folder check under tasks/, null when none exists, and the reason from --leave. A high severity finding with no task and no reason refuses the close, because leaving a queued security fault ships it. Empty when the review raised no such finding, or when no review ran."
+    }
+  },
+  "$defs": {
+    "followUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding", "task", "reason"],
+      "properties": {
+        "finding": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "The finding's own id, as the review record carries it. Joined on, never re-minted."
+        },
+        "task": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 }
+          ],
+          "description": "The id of the task created for this finding, `<source task>-<finding id>`, when that folder exists under tasks/. Null when none does. No task field records the link, and no goal text is parsed: the folder is how completion knows the task exists."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why this finding was left without a task, in the person's own words from --leave. Empty when a task exists, or when the finding is below high severity and nobody said why."
+        }
+      }
+    }
+  }
+}
