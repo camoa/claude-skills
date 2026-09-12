@@ -10,6 +10,7 @@
     "task",
     "reviewedRange",
     "reviewedAt",
+    "hasUpstream",
     "runMode",
     "recipes",
     "checks",
@@ -45,6 +46,10 @@
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "The commit the review read, which is the code repository's HEAD when `checks` ran and the right-hand end of the range above. `checks` refuses a dirty working tree (exit 61), so this value describes a tree nothing uncommitted changes. Every later action refuses when the code path has moved off it or gone dirty (exit 51), because a finding about code that is no longer there is not a finding."
+    },
+    "hasUpstream": {
+      "type": "boolean",
+      "description": "Whether the branch checked out at `reviewedAt` had an upstream when `checks` ran. False means the work is on one machine only, and completion's pull request body says to push before opening. Recorded here because `checks` printed the fact to stderr only, and the body reads records."
     },
     "runMode": {
       "type": "string",

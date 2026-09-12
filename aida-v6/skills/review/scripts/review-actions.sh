@@ -1138,11 +1138,12 @@ RW_FRAMEWORKS
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n --arg takenAt "$today" --arg task "$RW_TASK_ID" \
     --arg range "$range" --arg commit "$head_now" --arg runMode "$RW_RUN_MODE" \
+    --argjson hasUpstream "$([ -n "$upstream" ] && echo true || echo false)" \
     --argjson recipes "$recipes_json" --argjson checks "$checks_json" \
     --argjson resolved "$CR_DOC" \
     --argjson mutation "$RW_MUTATION" --argjson notes "$RW_CATALOG_NOTES" '
     {schemaVersion: 1, takenAt: $takenAt, task: $task,
-     reviewedRange: $range, reviewedAt: $commit, runMode: $runMode,
+     reviewedRange: $range, reviewedAt: $commit, hasUpstream: $hasUpstream, runMode: $runMode,
      # The sha of each recipe this run read sits beside its path, the way the baseline records its
      # own, so a reader can compare the two files rather than take a refusal'"'"'s word for it.
      recipes: [ $recipes[] | . as $row

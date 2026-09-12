@@ -405,7 +405,8 @@ cp_render_body() {
         if $alignment == null then ["no contract"]
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)
     + section("Commit range";
-        if $finished == null then ["no build record; no range"] else [$finished.commitRange // ""] end)
+        (if $finished == null then ["no build record; no range"] else [$finished.commitRange // ""] end)
+        + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end))
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]
