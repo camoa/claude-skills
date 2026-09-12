@@ -53,6 +53,7 @@
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>] \
 #                            [--scope-insufficient <finding id>=<reason>]...
+#   implement-actions.sh verify-brief  <task_folder> <unit_id>
 #   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
 #   implement-actions.sh close <task_folder> <unit_id>
@@ -80,6 +81,17 @@
 # in `allowed-tools` to Bash rules, so a Read rule naming that variable never matches and every
 # step-file read raises a prompt an unattended run cannot answer. A name carrying a slash, and a
 # name no file matches, both refuse with exit 3 and name the steps that exist.
+#
+# Every action prints a summary of `key: value` lines and nothing else: no record body, no diff, no
+# command output, no brief, no finding's evidence. Each line that a person may want in full names
+# the path that holds it. The five brief actions write their brief to a file under
+# <task_folder>/implementation/ and print its path, which the dispatch then names:
+# brief-<unit_id>-tests.json, brief-<unit_id>-build.json, brief-<unit_id>-review.json,
+# brief-<unit_id>-fix-<round>.json and brief-<unit_id>-verify-<round>.json. `read`, `start` and
+# every record action end with a `next:` line, derived from the ledger the way SKILL.md's routing
+# table reads it. The two exceptions to the summary rule are the bodies a person or a caller has to
+# read verbatim: `tests-freeze`'s checklist rows, and `step`'s own step file. `restart` prints the
+# archive path alone, and `dispatch-open` the denied paths and the record path.
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -268,9 +280,10 @@
 #  45  a record for this attempt or this round already exists, so the call would write it twice.
 #      `build-record` found build-<unit_id>.json already recorded at the same commit and the same
 #      attempt number; `fix-record` found fix-<unit_id>-<round>.json already recorded at the same
-#      commit; `verify-record` found the round already verified in review-<unit_id>.json. The
-#      message names both values, because a caller who calls this twice for one attempt or one
-#      round is not shown a stale success silently.
+#      commit; `verify-brief` found the round already verified in review-<unit_id>.json, so there is
+#      nothing left to hand a verifier. The message names both values, because a caller who calls
+#      this twice for one attempt or one round is not shown a stale success silently.
+#      `verify-record` on a round already verified reports the verification on record instead.
 #
 #  46  `dispatch-open` was given a role that names no agent under ${CLAUDE_PLUGIN_ROOT}/agents, or
 #      found that folder empty. A role nothing checks opens a record no agent's own `agent_type`
@@ -287,8 +300,8 @@
 # six rather than one number per action per fact.
 #  48  the ledger records this order at a step the action cannot follow. `review-brief` and
 #      `review-record` follow `checks-passed`; `fix-brief` and `fix-record` follow `reviewed` or
-#      `fixed`; `verify-record` follows `fixed`; `close` follows `reviewed` or `fixed`. The message
-#      names the step found and the steps allowed.
+#      `fixed`; `verify-brief` and `verify-record` follow `fixed`; `close` follows `reviewed` or
+#      `fixed`. The message names the step found and the steps allowed.
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the halt's own recorded reason.
 #  50  a review record already exists for this order, and an order gets one review, ever
@@ -302,7 +315,7 @@
 #      the shape the action reads. The message names the entry and what was wrong with it. A file
 #      this script half understands is worse than no file at all.
 #  53  `fix-brief` or `fix-record` found no open actionable finding for this order, so there is
-#      nothing for a fixer to do.
+#      nothing for a fixer to do. `verify-brief` shares it: nothing open means nothing to verify.
 #  54  `fix-brief` or `fix-record` found this order's fix rounds already spent (roundsUsed at
 #      FIX_ROUNDS_ALLOWED). Every open finding needs a ruling now, not another round. The mirror of
 #      exit 41 for the build attempts.
@@ -415,8 +428,9 @@
 #   5. Never put `local` inside a loop body. zsh prints a parameter when `local` names one that
 #      already exists in the same scope, with no option asking it to, so the second round of the
 #      loop writes `name=<the previous round's value>` to standard output. Every action here prints
-#      JSON on standard output, so that line corrupts what the caller parses, and it appears only
-#      when the loop runs more than once: a fixture with one criterion per order never sees it.
+#      `key: value` summary lines on standard output, so that line reads as one more of them, and it
+#      appears only when the loop runs more than once: a fixture with one criterion per order never
+#      sees it.
 #      Declare every name the loop uses above the loop, and assign inside it.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
@@ -519,6 +533,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
                             [--scope-insufficient <finding id>=<reason>]...
+       implement-actions.sh verify-brief  <task_folder> <unit_id>
        implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
                             [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
        implement-actions.sh close <task_folder> <unit_id>
@@ -762,6 +777,104 @@ ledger_required_string() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# What an action prints. A summary, never a body: one `key: value` line at a time, and nothing
+# that came out of a tool, a record, a diff, a brief or a finding's evidence. The orchestrator
+# reads standard output in its own conversation, and a record printed there costs the build the
+# context its own steps need, so every line a person may want in full names the path that holds
+# it. The one body any action prints is `tests-freeze`'s checklist rows, because the person
+# answering them has to read those words.
+#
+# $1 the action. $2 a JSON object whose entries print in order, one line each. A string is made
+# one line, and one holding a space is cut to 240 characters: prose is what runs long, and a path
+# or a hash holds no space and prints whole. An array of strings joins with ", ", and an empty one
+# prints "none". An array of objects prints one line per element, `key(first value): the other
+# values joined by " | "`, which is how a check, a finding, a framework or an order gets its own
+# line. Every action builds one object and calls this once, so there is one writer and not one per
+# action.
+im_print_summary() {
+  local who="$1" fields="$2"
+  printf '%s' "$fields" | jq -r --arg who "$who" '
+    def short: gsub("\n"; " ") | if contains(" ") then .[0:240] else . end;
+    def one:
+      if type == "string" then short
+      elif type == "array" then (if length == 0 then "none" else (map(tostring) | join(", ")) end)
+      elif . == null then "none"
+      else tostring end;
+    ([ "action: \($who)" ]
+     + [ to_entries[] | .key as $k | .value as $v
+         | if ($v | type) == "array" and ($v | length) > 0 and (($v[0] | type) == "object") then
+             ($v[] | [ .[] ] | "\($k)(\(.[0] | one)): \(.[1:] | map(one) | join(" | "))")
+           else "\($k): \($v | one)" end ])
+    | .[]'
+}
+
+# The next step, derived the way SKILL.md's routing table reads the ledger, so `read`, `start` and
+# every record action print the same answer from the same facts. $1 the ledger document, or empty
+# when none is readable; $2 the snapshot document, or empty; $3 the implementation folder, for the
+# review records that say which order has a finding open; $4 whether the preconditions record
+# exists; $5 whether the finished record exists. Prints one line and nothing else.
+#
+# An order in flight comes before a new one, because the build is serial and the in-flight order is
+# the one the ledger is waiting on. A halted order is named only when nothing else can move: the
+# orders that do not depend on it still build (SKILL.md, "One order halting does not stop the run").
+# The preconditions step is named only while some order could move once it has run; a ledger whose
+# every order is halted for drift is waiting on the restart, whether or not step two ever ran.
+im_next_step() {
+  local ledger="$1" snapshot="$2" impl="$3" precon="$4" finished="$5"
+  if [ -z "$ledger" ] || [ -z "$snapshot" ]; then
+    printf 'start'
+    return 0
+  fi
+  if [ "$finished" = "true" ]; then
+    printf 'none: implementation is finished, and the review stage is next'
+    return 0
+  fi
+  # How many actionable findings each reviewed order still has open, read once per order here so
+  # the jq below decides fix-or-close without opening a file itself.
+  local opens ids count i id file n
+  opens='{}'
+  ids="$(printf '%s' "$ledger" | jq -c '[ (.orders // [])[] | .id ]')"
+  count="$(printf '%s' "$ids" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    id="$(printf '%s' "$ids" | jq -r --argjson i "$i" '.[$i]')"
+    file="$impl/review-$id.json"
+    n=0
+    if [ -f "$file" ]; then
+      n="$(jq '[ (.findings // [])[] | select(.actionable == true and .status == "open") ] | length' "$file" 2>/dev/null)"
+      case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    fi
+    opens="$(printf '%s' "$opens" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    i=$((i + 1))
+  done
+  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson snap "$snapshot" \
+    --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
+    (.orders // []) as $orders
+    | ([ $orders[] | select(.lastStep == "closed") | .id ]) as $closed
+    | ([ $orders[] | select((.haltedBecause // "") == "") ]) as $live
+    | (($snap.workOrders // []) | map({(.id): (.dependsOn // [])}) | add // {}) as $deps
+    | ([ $live[] | select(.lastStep == "checks-passed" or .lastStep == "reviewed" or .lastStep == "fixed") ] | .[0]) as $rv
+    | ([ $live[] | select(.lastStep == "tests-frozen"
+                          or (.lastStep == "code-written" and ((.attemptsUsed // 0) < (.attemptsAllowed // $allowed)))) ] | .[0]) as $bd
+    | ([ $live[] | select(.lastStep == null) | select((($deps[.id] // []) - $closed) | length == 0) ] | .[0]) as $ts
+    | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
+    | ([ $orders[] | select((.haltedBecause // "") | contains("attempts spent")) ] | .[0]) as $spent
+    | ([ $orders[] | select((.haltedBecause // "") != "") ] | length) as $halted
+    | if ($precon | not) and ($rv != null or $bd != null or $ts != null) then "preconditions"
+      elif $rv != null then
+        (if $rv.lastStep == "checks-passed" then "review \($rv.id): review the order"
+         elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
+         else "review \($rv.id): close the order" end)
+      elif $bd != null then "build \($bd.id)"
+      elif $ts != null then "tests \($ts.id)"
+      elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
+      elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
+      elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts spent"
+      elif $halted > 0 then "none: every order that is not closed is halted for a reason neither a grant nor a restart answers"
+      else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
+}
+
+# ------------------------------------------------------------------------------------------------
 # read: the current state, never a failure just because nothing has run yet.
 # ------------------------------------------------------------------------------------------------
 
@@ -938,59 +1051,81 @@ do_read() {
     done
   fi
 
-  jq -n \
-    --arg taskPath "$TASK_PATH" \
-    --arg alignmentFile "$ALIGNMENT_FILE" \
-    --arg alignmentState "$astate" \
-    --arg designDir "$DESIGN_DIR" \
-    --argjson designStarted "$design_started" \
-    --argjson designFileCount "$design_file_count" \
-    --arg projectPath "$project_path" \
-    --arg projectNote "$project_note" \
-    --arg codePath "$code_path" \
-    --argjson gitChecked "$git_checked" \
-    --argjson gitIsRepo "$git_is_repo" \
-    --arg gitBranch "$git_branch" \
-    --argjson trunkDerived "$trunk_derived" \
-    --arg trunkBranch "$trunk_branch" \
-    --arg trunkNote "$trunk_note" \
-    --arg runMode "$run_mode" \
-    --arg implementationDir "$IMPL_DIR" \
-    --argjson snapshotExists "$snap_exists" \
-    --argjson snapshotReadable "$snap_readable" \
-    --arg snapshotNote "$snap_note" \
-    --argjson snapshot "$snap_summary" \
-    --argjson ledgerExists "$ledger_exists" \
-    --argjson ledgerReadable "$ledger_readable" \
-    --arg ledgerNote "$ledger_note" \
-    --argjson ledger "$ledger_summary" \
-    --argjson preconditionsExists "$precon_exists" \
-    --argjson preconditionsReadable "$precon_readable" \
-    --arg preconditionsNote "$precon_note" \
-    --argjson finishedExists "$finished_exists" \
-    --argjson finishedReadable "$finished_readable" \
-    --arg finishedNote "$finished_note" \
-    --argjson reviews "$reviews_json" \
-    '{
-      taskPath: $taskPath,
-      alignmentFile: $alignmentFile, alignmentState: $alignmentState,
-      designDir: $designDir, designStarted: $designStarted, designFileCount: $designFileCount,
-      project: { path: (if $projectPath == "" then null else $projectPath end),
-                 codePath: (if $codePath == "" then null else $codePath end),
-                 note: (if $projectNote == "" then null else $projectNote end) },
-      git: { checked: $gitChecked, isRepo: $gitIsRepo,
-             currentBranch: (if $gitBranch == "" then null else $gitBranch end),
-             trunk: { derived: $trunkDerived,
-                      branch: (if $trunkBranch == "" then null else $trunkBranch end),
-                      note: $trunkNote } },
-      runMode: $runMode,
-      implementationDir: $implementationDir,
-      snapshot: { exists: $snapshotExists, readable: $snapshotReadable, note: $snapshotNote, summary: $snapshot },
-      ledger: { exists: $ledgerExists, readable: $ledgerReadable, note: $ledgerNote, summary: $ledger },
-      preconditions: { exists: $preconditionsExists, readable: $preconditionsReadable, note: $preconditionsNote },
-      finished: { exists: $finishedExists, readable: $finishedReadable, note: $finishedNote },
-      reviews: $reviews
-    }'
+  # The state the router needs, as summary lines: SKILL.md's table reads `snapshot`, `ledger`,
+  # `preconditions`, `finished`, each `order(...)` line and `next`. The snapshot body, the ledger
+  # body and the review records stay in their files, each named here by path.
+  local snap_line snap_hash ledger_line started_from precon_line finished_line orders_json
+  local criteria_line judged_line next_line ledger_doc_for_next snapshot_doc_for_next
+  snap_line="none"
+  snap_hash="none"
+  [ "$snap_exists" = "true" ] && snap_line="present but could not be read as JSON, at $SNAPSHOT_FILE"
+  if [ "$snap_readable" = "true" ]; then
+    snap_line="$SNAPSHOT_FILE"
+    snap_hash="$(printf '%s' "$snap_summary" | jq -r '"\(.hash // "none") | workOrders=\(.workOrderCount) | takenAt=\(.takenAt)"')"
+  fi
+  ledger_line="none"
+  started_from="none"
+  [ "$ledger_exists" = "true" ] && ledger_line="present but could not be read as JSON, at $LEDGER_FILE"
+  if [ "$ledger_readable" = "true" ]; then
+    ledger_line="$LEDGER_FILE"
+    started_from="$(printf '%s' "$ledger_summary" | jq -r '"\(.startedFrom // "none") | runMode=\(.runMode) | snapshotHash=\(.snapshotHash)"')"
+  fi
+  precon_line="none"
+  [ "$precon_exists" = "true" ] && precon_line="$precon_note, at $IMPL_DIR/preconditions.json"
+  [ "$precon_readable" = "true" ] && precon_line="recorded at $IMPL_DIR/preconditions.json"
+  finished_line="none"
+  [ "$finished_exists" = "true" ] && finished_line="$finished_note, at $IMPL_DIR/finished.json"
+  [ "$finished_readable" = "true" ] && finished_line="recorded at $IMPL_DIR/finished.json"
+  orders_json='[]'
+  criteria_line="none"
+  judged_line="0"
+  if [ "$ledger_readable" = "true" ]; then
+    orders_json="$(jq -c --argjson reviews "$reviews_json" '
+      ($reviews | map({(.unit): .}) | add // {}) as $rv
+      | [ (.orders // [])[] | . as $o
+          | {id: .id,
+             step: (.lastStep // "not started"),
+             halt: ("halt: " + (.haltedBecause // "none")),
+             attempts: ("attempts=" + ((.attemptsUsed // 0) | tostring)),
+             rounds: ("rounds=" + ((.roundsUsed // 0) | tostring)),
+             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end)} ]' \
+      "$LEDGER_FILE")"
+    criteria_line="$(printf '%s' "$ledger_summary" | jq -r \
+      '(.criteriaByRowState // {}) | to_entries | map("\(.key)=\(.value)") | join(" ") | if . == "" then "none" else . end')"
+    judged_line="$(printf '%s' "$ledger_summary" | jq -r \
+      '"\(.rowsJudgedByModel // 0)" + (if ((.rowsJudgedByModelCriteria // []) | length) > 0 then " (" + (.rowsJudgedByModelCriteria | join(", ")) + ")" else "" end)')"
+  fi
+  ledger_doc_for_next=""
+  snapshot_doc_for_next=""
+  [ "$ledger_readable" = "true" ] && ledger_doc_for_next="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
+  [ "$snap_readable" = "true" ] && snapshot_doc_for_next="$(jq -c '.' "$SNAPSHOT_FILE" 2>/dev/null)"
+  if { [ "$snap_exists" = "true" ] && [ "$snap_readable" != "true" ]; } \
+     || { [ "$ledger_exists" = "true" ] && [ "$ledger_readable" != "true" ]; }; then
+    next_line="none: a record under $IMPL_DIR could not be read as JSON; repair or remove it by hand first"
+  elif [ "$snap_exists" != "true" ] && { [ "$astate" != "ok" ] || [ "$design_started" != "true" ]; }; then
+    next_line="none: no usable contract or design has not started; the stage before this one is missing"
+  else
+    next_line="$(im_next_step "$ledger_doc_for_next" "$snapshot_doc_for_next" "$IMPL_DIR" "$precon_readable" "$finished_readable")"
+  fi
+
+  im_print_summary "read" "$(jq -n \
+    --arg task "$TASK_PATH" --arg alignment "$astate" \
+    --arg design "$(if [ "$design_started" = "true" ]; then printf 'started, %s file(s) under %s' "$design_file_count" "$DESIGN_DIR"; else printf 'not started'; fi)" \
+    --arg project "$(if [ -n "$project_path" ]; then printf '%s' "$project_path"; else printf 'none'; fi)$(if [ -n "$project_note" ]; then printf ' | %s' "$project_note"; fi)" \
+    --arg codePath "$(if [ -n "$code_path" ]; then printf '%s' "$code_path"; else printf 'none'; fi)" \
+    --arg branch "$(if [ "$git_is_repo" = "true" ]; then printf '%s' "${git_branch:-detached}"; else printf 'not a git repository'; fi)" \
+    --arg trunk "$(if [ "$trunk_derived" = "true" ]; then printf '%s | ' "$trunk_branch"; fi)$trunk_note" \
+    --arg runMode "$run_mode, from task.json" \
+    --arg snapshot "$snap_line" --arg snapshotHash "$snap_hash" \
+    --arg ledger "$ledger_line" --arg startedFrom "$started_from" \
+    --arg preconditions "$precon_line" --arg finished "$finished_line" \
+    --argjson orders "$orders_json" --arg criteria "$criteria_line" --arg judged "$judged_line" \
+    --arg next "$next_line" '
+    {task: $task, alignment: $alignment, design: $design, project: $project, codePath: $codePath,
+     branch: $branch, trunk: $trunk, runMode: $runMode,
+     snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom,
+     preconditions: $preconditions, finished: $finished, order: $orders,
+     criteria: $criteria, rowsJudgedByModel: $judged, next: $next}')"
   exit 0
 }
 
@@ -1432,39 +1567,38 @@ do_start() {
     reported_run_mode="$ledger_run_mode"
     run_mode_source="the ledger, which is the authority every later step reads"
   fi
-  # One line before the report, not two: a caller strips the first line to parse the JSON, and a
-  # second line here would break every one of them.
-  echo "RUN: ${run_kind} (ledger ${opened_as}), run mode ${reported_run_mode}, from ${run_mode_source}. STATE: ${run_state}"
-  jq -n \
-    --arg taskPath "$TASK_PATH" --arg codePath "$code_path" \
-    --arg runMode "$reported_run_mode" --arg runModeSource "$run_mode_source" --arg runKind "$run_kind" \
-    --argjson trunkDerived "$trunk_derived" --arg trunkBranch "$trunk_branch" --arg trunkNote "$trunk_note" \
-    --arg currentBranch "$current_branch" \
-    --arg snapshotFile "$SNAPSHOT_FILE" --arg snapshotHash "$snapshot_hash_on_disk" \
-    --argjson workOrderCount "$(printf '%s' "$snapshot_workorders_json" | jq 'length')" \
-    --argjson criteriaCount "$(printf '%s' "$snapshot_criteria_json" | jq 'length')" \
-    --argjson driftChecked "$drift_checked" \
-    --argjson contractChanged "$contract_changed_json" \
-    --argjson driftedOrders "$drifted_orders_json" \
-    --argjson haltedDependents "$dependent_halts_json" \
-    --argjson newLiveOrderIds "$new_live_order_ids_json" \
-    --arg ledgerFile "$LEDGER_FILE" --arg ledgerOpenedAs "$opened_as" --arg startedFrom "$started_from" \
-    --argjson readyToBuild "$ready_ids_json" --argjson halted "$halted_json" --argjson inFlight "$in_flight_json" \
-    --arg runState "$run_state" \
-    '{
-      taskPath: $taskPath, codePath: $codePath,
-      runMode: $runMode, runModeSource: $runModeSource, runKind: $runKind,
-      trunkCheck: { derived: $trunkDerived,
-                    branch: (if $trunkBranch == "" then null else $trunkBranch end),
-                    currentBranch: $currentBranch,
-                    note: $trunkNote },
-      snapshot: { file: $snapshotFile, hash: $snapshotHash, workOrderCount: $workOrderCount, criteriaCount: $criteriaCount },
-      drift: { checked: $driftChecked, contractChanged: $contractChanged, driftedOrders: $driftedOrders,
-               haltedDependents: $haltedDependents, newLiveOrdersNotInSnapshot: $newLiveOrderIds },
-      ledger: { file: $ledgerFile, openedAs: $ledgerOpenedAs, startedFrom: $startedFrom, halted: $halted, inFlight: $inFlight },
-      runState: $runState,
-      readyToBuild: $readyToBuild
-    }'
+  # The report, as summary lines. The snapshot and the ledger stay in their files, named by path;
+  # the orders that drifted, halted and are ready are named by id, and `next` is the same answer
+  # `read` gives from the same ledger. The preconditions record cannot exist before the first
+  # start, and a resumed run reads whether it is there the way `read` does.
+  local st_precon st_finished st_ledger_now st_next
+  st_precon=false
+  st_finished=false
+  [ -f "$IMPL_DIR/preconditions.json" ] && jq empty "$IMPL_DIR/preconditions.json" 2>/dev/null && st_precon=true
+  [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
+  st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
+  st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
+  im_print_summary "start" "$(jq -n \
+    --arg task "$TASK_PATH" --arg codePath "$code_path" \
+    --arg run "${run_kind}, ledger ${opened_as}" \
+    --arg runMode "${reported_run_mode}, from ${run_mode_source}" \
+    --arg branch "$current_branch" \
+    --arg trunk "$(if [ "$trunk_derived" = "true" ]; then printf '%s | ' "$trunk_branch"; fi)$trunk_note" \
+    --arg snapshot "$SNAPSHOT_FILE" \
+    --arg snapshotHash "$snapshot_hash_on_disk | workOrders=$(printf '%s' "$snapshot_workorders_json" | jq 'length') | criteria=$(printf '%s' "$snapshot_criteria_json" | jq 'length')" \
+    --arg ledger "$LEDGER_FILE" --arg startedFrom "$started_from" \
+    --arg drift "$(if [ "$drift_checked" = "true" ]; then printf 'checked | contractChanged=%s' "$contract_changed_json"; else printf 'not checked: a first run has no earlier snapshot to compare against'; fi)" \
+    --argjson drifted "$(printf '%s' "$drifted_orders_json" | jq -c '[ .[] | .id ]')" \
+    --argjson haltedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
+    --argjson newLiveOrders "$new_live_order_ids_json" \
+    --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
+    --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
+    --argjson ready "$ready_ids_json" \
+    --arg state "$run_state" --arg next "$st_next" '
+    {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
+     snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom,
+     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, newLiveOrders: $newLiveOrders,
+     halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}')"
   exit 0
 }
 
@@ -2358,33 +2492,44 @@ EOF
       ;;
   esac
 
-  jq -n --arg verdict "$run_verdict" --arg record "$record_file" --argjson report "$record_json" \
+  # The report, as summary lines. One line per framework carries its verdict, its lookup, the ids
+  # of what answered unmet or unknown with the owner each recipe named, the state of its test
+  # commands and its smoke verdict. What a condition or a smoke run printed stays in the record.
+  local pc_next
+  pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
+  case "$run_verdict" in
+    met|undeclared) ;;
+    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record" ;;
+  esac
+  im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
+        --argjson report "$record_json" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
-        --argjson baselineSummary "$baseline_summary_json" '
-    {
-      verdict: $verdict,
-      record: $record,
-      frameworks: ($report.frameworks | map({
+        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" '
+    def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
+                   | if length == 0 then "none" else join(", ") end;
+    {verdict: $verdict,
+     record: $record,
+     framework: [ $report.frameworks[] | {
         framework: .framework,
-        lookup: .lookup,
         verdict: .verdict,
-        unmet:   [.entries[] | select(.verdict == "unmet")   | {id, what, owner}],
-        unknown: [.entries[] | select(.verdict == "unknown") | {id, what, owner, reason}],
-        testCommands: {
-          state: .testCommands.state,
-          unreadable: [ .testCommands.rows[] | select((.unreadable // []) | length > 0) | {id, unreadable} ]
-        },
-        smoke: .smoke
-      })),
-      baseline: {
-        file: $baselineFile,
-        status: $baselineStatus,
-        note: $baselineNote,
-        commit: (if $baselineCommit == "" then null else $baselineCommit end),
-        summary: $baselineSummary
-      }
-    }'
+        lookup: ("lookup=" + .lookup),
+        unmet: ("unmet: " + named("unmet")),
+        unknown: ("unknown: " + named("unknown")),
+        testCommands: ("testCommands=" + .testCommands.state
+                       + (([ .testCommands.rows[] | select((.unreadable // []) | length > 0) | .id ]) as $u
+                          | if ($u | length) == 0 then "" else " unreadable=" + ($u | join(",")) end)),
+        smoke: ("smoke=" + .smoke.verdict + (if (.smoke.reason // "") == "" then "" else " (" + .smoke.reason + ")" end)) } ],
+     baseline: ($baselineStatus + " | " + $baselineNote),
+     baselineFile: (if $baselineStatus == "not-attempted" then "none" else $baselineFile end),
+     baselineCommit: (if $baselineCommit == "" then "none" else $baselineCommit end),
+     baselineSuite: (if $baselineSummary == null then "none"
+                     else ([ $baselineSummary.suite[] | .framework + "=" + .verdict ] | if length == 0 then "none" else join(" ") end) end),
+     baselineTools: (if $baselineSummary == null then "none"
+                     else "codingStandards=" + $baselineSummary.codingStandards.verdict
+                          + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
+                          + " security=" + $baselineSummary.security.verdict end),
+     next: $next}')"
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a
   # test runs, or nothing before a smoke command proves one, has answered, and refusing on it
@@ -2565,9 +2710,24 @@ do_tests_brief() {
   unit_out="$(printf '%s' "$UNIT_JSON" | jq -c \
     '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
 
-  jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
+  # The brief is a file the dispatch names, never text printed through this conversation. It
+  # carries the criteria, the non-goals and every dependency's interface record, and printing it
+  # would spend the orchestrator's own context on words only the test author reads.
+  local brief_file brief_json
+  brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
+  brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
-    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces}'
+    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces}')"
+  [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
+  write_atomic "$brief_file" "$brief_json"
+  im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+    {order: .unit.id,
+     brief: $brief,
+     criteria: ([ .criteria[] | .id + " (" + .verifiedBy + ")" ]),
+     nonGoals: (.nonGoals | length),
+     declaredTests: (.unit.tests | length),
+     dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
+     next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}')"
   exit 0
 }
 
@@ -3438,14 +3598,31 @@ do_build_brief() {
     fi
   fi
   # The report has one named path per attempt, so a later attempt never writes over the answers a
-  # reviewer already compared a diff against.
-  jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
+  # reviewer already compared a diff against. The brief is one file per order, rewritten on each
+  # attempt: only its counters and its report path change between two attempts.
+  local brief_file brief_json
+  brief_file="$IMPL_DIR/brief-$unit_id-build.json"
+  brief_json="$(jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
     '{unit: $unit, tests: $tests, headNow: $headNow, dependencyInterfaces: $dependencyInterfaces,
       reportPath: $reportPath,
-      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}'
+      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}')"
+  [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
+  write_atomic "$brief_file" "$brief_json"
+  # headNow is printed because the caller passes it back as --started-at, and the report path
+  # because the dispatch names it. Everything else the implementer reads from the file.
+  im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+    {order: .unit.id,
+     brief: $brief,
+     reportPath: .reportPath,
+     headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
+     attempts: "\(.attemptsUsed) of \(.attemptsAllowed) used",
+     ownedFiles: (.unit.ownedFiles | length),
+     frozenTests: (.tests | length),
+     dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
+     next: "dispatch implementer with the brief path and the implement recipe path, then build-record"}')"
   exit 0
 }
 
@@ -4205,8 +4382,23 @@ do_build_record() {
   fi
   write_atomic "$ledger_file" "$new_ledger_doc"
 
-  printf '%s\n' "$record_json"
-  echo "BUILD-RECORD: $unit_id: $executed_count of the eight deciding checks executed a command, a diff or a hash." >&2
+  # The summary: one line per check with its verdict and this script's own one-line detail. What
+  # each tool printed stays in the record, named by path.
+  local br_state br_next
+  if [ "$all_met" = "true" ]; then br_state="checks-passed"; else br_state="code-written, stopped by $first_stopper"; fi
+  br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
+  im_print_summary "build-record" "$(printf '%s' "$record_json" | jq -c \
+    --arg attempts "$attempt_number of $attempts_allowed" --arg state "$br_state" \
+    --arg halt "${halt_why:-none}" --arg record "$record_file" --arg next "$br_next" '
+    {order: .unit,
+     attempt: $attempts,
+     range: "\(.startedAt)..\(.commit)",
+     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
+     executed: "\(.executed) of 8 ran a command, a diff or a hash",
+     state: $state,
+     halt: $halt,
+     record: $record,
+     next: $next}')"
   if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$attempts_allowed" ]; then
     echo "BUILD-RECORD: $unit_id is halted. Attempts spent: $attempt_number of $attempts_allowed. The last was stopped by $first_stopper" >&2
   fi
@@ -4432,7 +4624,12 @@ do_review_brief() {
   checks_json="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.checks // []')"
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
 
-  jq -n \
+  # The brief is a file the dispatch names, never text printed through this conversation. It
+  # carries the contract, the order, the eight check results with what each tool printed, and both
+  # interface texts; the reviewer reads it from the path.
+  local brief_file brief_json
+  brief_file="$IMPL_DIR/brief-$unit_id-review.json"
+  brief_json="$(jq -n \
     --arg unit "$unit_id" \
     --argjson criteria "$criteria_json" \
     --argjson nonGoals "$nongoals_json" \
@@ -4447,6 +4644,7 @@ do_review_brief() {
     --arg startedAt "$started_at" --arg commit "$commit" \
     '{
       unit: $unit,
+      mode: "review",
       criteria: $criteria,
       nonGoals: $nonGoals,
       order: $order,
@@ -4458,7 +4656,25 @@ do_review_brief() {
       checks: $checks,
       interface: { declared: $interfaceDeclared, record: $interfaceRecord },
       findingsPath: $findingsPath
-    }'
+    }')"
+  [ -n "$brief_json" ] || die 3 "review-brief: could not assemble the brief for $unit_id."
+  write_atomic "$brief_file" "$brief_json"
+  # The check verdicts are printed one per line because review.md routes on interface-record's;
+  # the detail and the tool output stay in the brief and the build record.
+  im_print_summary "review-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+    {order: .unit,
+     brief: $brief,
+     diff: .diffPath,
+     findingsPath: .findingsPath,
+     reportPath: .reportPath,
+     range: "\(.startedAt)..\(.commit)",
+     criteria: ([ .criteria[] | .id ]),
+     nonGoals: (.nonGoals | length),
+     frozenTests: (.frozenTests | length),
+     check: ([ .checks[] | {id, verdict} ]),
+     interface: ("declared=" + (if .interface.declared == "" then "empty" else "present" end)
+                 + " record=" + (if .interface.record == "" then "empty" else "present" end)),
+     next: "dispatch reviewer with the brief path, then review-record with the findings path"}')"
   exit 0
 }
 
@@ -4515,7 +4731,13 @@ do_review_record() {
         '.orders = (.orders | map(if .id == $id then (.lastStep = "reviewed") else . end))')"
       [ -n "$rr_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
       write_atomic "$RV_LEDGER_FILE" "$rr_ledger"
-      printf '%s\n' "$rr_doc"
+      im_print_summary "review-record" "$(printf '%s' "$rr_doc" | jq -c --arg record "$review_file" \
+        --arg next "$(im_next_step "$rr_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+        {order: .unit, commit: .reviewedAt,
+         findings: ([ .findings[] | .id ]),
+         openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
+         state: "reviewed: the record was already written and the ledger had not moved, so nothing was reviewed twice",
+         halt: "none", record: $record, next: $next}')"
       echo "REVIEW-RECORD: $review_file was already written at $rr_commit and the ledger had not moved. The ledger now reads reviewed; nothing was reviewed twice." >&2
       exit 0
     fi
@@ -4589,7 +4811,22 @@ do_review_record() {
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
-  printf '%s\n' "$record_json"
+  # One line per finding: its severity, whether it is actionable and what it cites. Its evidence
+  # stays in the record, named by path.
+  im_print_summary "review-record" "$(printf '%s' "$record_json" | jq -c --arg record "$review_file" \
+    --arg halt "${halt_why:-none}" --arg nongoals "${nongoal_hits:-none}" \
+    --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    {order: .unit,
+     commit: .reviewedAt,
+     finding: ([ .findings[] | {id, severity,
+                                actionable: (if .actionable then "actionable" else "not actionable" end),
+                                linkedTo: ("cites " + (.linkedTo // "nothing")), file} ]),
+     openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
+     nonGoalHits: $nongoals,
+     state: "reviewed",
+     halt: $halt,
+     record: $record,
+     next: $next}')"
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
     echo "REVIEW-RECORD: $unit_id is halted. A finding hits a non-goal and this run is unattended: $nongoal_hits" >&2
   fi
@@ -4636,9 +4873,12 @@ do_fix_brief() {
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
 
   rv_load_codepath "fix-brief"
-  local fb_head
+  local fb_head brief_file brief_json
   fb_head="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
-  jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
+  # One brief per round, because each round's open findings differ from the last round's and the
+  # record of what a fixer was given is worth keeping beside its report.
+  brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
+  brief_json="$(jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
     --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
@@ -4655,7 +4895,21 @@ do_fix_brief() {
       headNow: $headNow,
       diffBudget: $diffBudget,
       reportPath: $reportPath
-    }'
+    }')"
+  [ -n "$brief_json" ] || die 3 "fix-brief: could not assemble the brief for $unit_id."
+  write_atomic "$brief_file" "$brief_json"
+  # A finding is named by id, severity and the id it cites. Its evidence stays in the brief.
+  im_print_summary "fix-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+    {order: .unit,
+     round: "\(.round) of \(.roundsAllowed)",
+     brief: $brief,
+     reportPath: .reportPath,
+     headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
+     finding: ([ .findings[] | {id, severity, linkedTo: ("cites " + (.linkedTo // "nothing")), file} ]),
+     fixScope: .fixScope,
+     frozenTests: (.frozenTests | length),
+     diffBudget: (if .diffBudget == "" then "none" else .diffBudget end),
+     next: "dispatch fixer with the brief path, then fix-record"}')"
   exit 0
 }
 
@@ -4808,7 +5062,14 @@ RV_SCOPE
           '.orders = (.orders | map(if .id == $id then (.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed") else . end))')"
         [ -n "$fr_ledger" ] || die 3 "fix-record: the ledger update for $unit_id failed."
         write_atomic "$RV_LEDGER_FILE" "$fr_ledger"
-        printf '%s\n' "$existing_doc"
+        im_print_summary "fix-record" "$(printf '%s' "$existing_doc" | jq -c --arg record "$record_file" \
+          --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" \
+          --arg next "$(im_next_step "$fr_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+          {order: .unit, round: $rounds, range: "\(.startedAt)..\(.commit)",
+           check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
+           executed: "\(.executed) of 7 ran a command, a diff or a hash",
+           state: "fixed: the record was already written and the ledger had not moved, so no round was spent twice",
+           halt: "none", record: $record, diff: .diffPath, next: $next}')"
         echo "FIX-RECORD: $record_file was already written at $current_commit and the ledger had not moved. The ledger now counts round $round_number; no round was spent twice." >&2
         exit 0
       fi
@@ -4946,8 +5207,23 @@ RV_SCOPE
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
-  printf '%s\n' "$record_json"
-  echo "FIX-RECORD: $unit_id: $executed_count of the seven deciding checks executed a command, a diff or a hash." >&2
+  local fr_state
+  if [ "$all_met" = "true" ]; then fr_state="fixed"; else fr_state="fixed, every finding left open: stopped by $first_stopper"; fi
+  im_print_summary "fix-record" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" \
+    --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" --arg state "$fr_state" \
+    --arg scope "${scope_list:-none}" --arg halt "${halt_why:-none}" \
+    --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    {order: .unit,
+     round: $rounds,
+     range: "\(.startedAt)..\(.commit)",
+     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
+     executed: "\(.executed) of 7 ran a command, a diff or a hash",
+     scopeInsufficient: ($scope | if endswith(", ") then .[0:-2] else . end),
+     state: $state,
+     halt: $halt,
+     record: $record,
+     diff: .diffPath,
+     next: $next}')"
   if [ -n "$scope_list" ]; then
     echo "FIX-RECORD: the fixer reported its scope too small on ${scope_list%, }" >&2
   fi
@@ -4955,6 +5231,85 @@ RV_SCOPE
     echo "FIX-RECORD: round $round_number of $unit_id left every finding open. It was stopped by $first_stopper" >&2
   fi
   [ -z "$halt_why" ] || echo "FIX-RECORD: $unit_id is halted. $halt_why" >&2
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# verify-brief: what the reviewer is given in verify mode, as a file. The open findings the fixer
+# received, the fix diff as a path, the fixer's report as a path, and the path its verdicts go to.
+# Nothing else: not the original diff, not an earlier round's verdicts (reviewer.md, verify mode).
+# Before this action the skill body assembled that dispatch by hand from fix-brief's output and the
+# fix record, which put both through the conversation.
+# ------------------------------------------------------------------------------------------------
+
+do_verify_brief() {
+  [ "$#" -ge 2 ] || die 3 "verify-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "verify-brief: unrecognized extra argument: $3"
+  local unit_id="$2" resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "verify-brief")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  rv_load_state "verify-brief" "$unit_id"
+  rv_require_step "verify-brief" "$unit_id" "fixed"
+  rv_load_review_record "verify-brief" "$unit_id"
+
+  local rounds_used already
+  rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
+  case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
+  [ "$rounds_used" -gt 0 ] 2>/dev/null \
+    || die 3 "verify-brief: $unit_id records no fix round, though the ledger records it as fixed."
+  # Exit 45: a round is verified once, so a brief for a round already verified would hand the
+  # reviewer findings the first verification already closed.
+  already="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson r "$rounds_used" \
+    '[ (.rounds // [])[] | select(.round == $r) ] | length')"
+  [ "$already" = "0" ] \
+    || die 45 "verify-brief: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. There is nothing left to hand a verifier."
+
+  local fix_file fix_doc
+  fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
+  [ -f "$fix_file" ] \
+    || die 3 "verify-brief: $fix_file not found, though the ledger records round $rounds_used of $unit_id. Run fix-record on it again."
+  fix_doc="$(jq -c '.' "$fix_file" 2>/dev/null)"
+  [ -n "$fix_doc" ] \
+    || die 3 "verify-brief: $fix_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  # The open findings are the ones the fixer received: nothing has closed one since, because this
+  # round's verification is what closes findings and it has not run. A scope report the fixer made
+  # rides on the finding it names, so the verifier sees it beside the finding rather than in prose.
+  local open_json brief_file brief_json
+  open_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '
+    [ (.findings // [])[] | select(.actionable == true and .status == "open") ]
+    | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
+    | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin}
+          + (if has("scopeInsufficientInRound") then {scopeInsufficientInRound, scopeInsufficientBecause} else {} end))')"
+  [ "$(printf '%s' "$open_json" | jq 'length')" -gt 0 ] 2>/dev/null \
+    || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
+  brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
+  brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
+    --argjson fix "$fix_doc" --arg fixRecord "$fix_file" \
+    --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" '
+    {unit: $unit,
+     mode: "verify",
+     round: $round,
+     findings: $findings,
+     fixDiffPath: ($fix.diffPath // ""),
+     fixReportPath: ($fix.reportPath // ""),
+     fixRange: "\($fix.startedAt // "")..\($fix.commit // "")",
+     fixRecord: $fixRecord,
+     verdictsPath: $verdictsPath}')"
+  [ -n "$brief_json" ] || die 3 "verify-brief: could not assemble the brief for $unit_id."
+  write_atomic "$brief_file" "$brief_json"
+  im_print_summary "verify-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+    {order: .unit,
+     round: .round,
+     brief: $brief,
+     fixDiff: .fixDiffPath,
+     fixReport: .fixReportPath,
+     verdictsPath: .verdictsPath,
+     finding: ([ .findings[] | {id, severity, scope: (if has("scopeInsufficientInRound") then "scope reported insufficient" else "in scope" end)} ]),
+     next: "dispatch reviewer in verify mode with the brief path, then verify-record with the verdicts path"}')"
   exit 0
 }
 
@@ -5015,7 +5370,7 @@ do_verify_record() {
     # The verification is already on the record. rv_write_verification writes the review record and
     # then the ledger, so a crash between the two leaves this state with the ledger unmoved. There
     # is nothing left to verify and nothing to write twice, so this reports the record it found.
-    printf '%s\n' "$RV_REVIEW_DOC"
+    rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so nothing was verified twice" "none"
     echo "VERIFY-RECORD: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing was verified twice." >&2
     exit 0
   fi
@@ -5198,9 +5553,34 @@ RV_RULINGS
   fi
   rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
 
-  printf '%s\n' "$RV_REVIEW_DOC"
+  rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
   [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is halted. $halt_why" >&2
   exit 0
+}
+
+# The verify-record summary, from the review record as it now stands: one line per verdict this
+# round wrote, the new breakage it opened, what it noted outside the diff, the rulings, and what is
+# still open. Evidence stays in the record. $1 the round, $2 the state line, $3 the halt or "none".
+# Shared by the ordinary exit and the already-verified one, so the two print the same lines.
+rv_print_verification() {
+  local round="$1" state="$2" halt="$3"
+  im_print_summary "verify-record" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson round "$round" \
+    --arg state "$state" --arg halt "$halt" --arg record "$RV_REVIEW_FILE" \
+    --arg rounds "$round of $FIX_ROUNDS_ALLOWED" \
+    --arg next "$(im_next_step "$RV_LEDGER_DOC" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    ([ (.rounds // [])[] | select(.round == $round) ] | .[0] // {}) as $r
+    | {order: .unit,
+       round: $rounds,
+       addressed: ($r.addressed // []),
+       notAddressed: ($r.notAddressed // []),
+       newBreakage: ($r.newBreakage // []),
+       outOfScope: (($r.outOfScope // []) | length),
+       ruling: ([ .findings[] | select(.status == "ruled") | {id, ruling} ]),
+       openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
+       state: $state,
+       halt: $halt,
+       record: $record,
+       next: $next}')"
 }
 
 # Writes the verified review record and moves the ledger. Shared by verify-record's two exits, the
@@ -5351,13 +5731,21 @@ do_close() {
 
   # The model-judged count is over the whole ledger, not this order alone: it is what a person
   # returning to a finished run reads to list every row no person ever looked at.
-  printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --argjson served "$served_json" '{
-      order: ((.orders // []) | map(select(.id == $id)) | .[0]),
-      criteria: [ (.criteria // [])[] | select((.id as $i | $served | index($i)) != null)
-                  | {id: .id, rowState: .rowState,
-                     judgedBy: ([ (.judgements // [])[] | .judgedBy ] | unique)} ],
-      rowsJudgedByModel: ([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
-    }'
+  im_print_summary "close" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --argjson served "$served_json" \
+    --arg ledger "$RV_LEDGER_FILE" \
+    --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
+    | {order: $id,
+       state: ($o.lastStep // ""),
+       commitRange: ($o.commitRange // ""),
+       attempts: ("\($o.attemptsUsed // 0) used"),
+       rounds: ("\($o.roundsUsed // 0) used"),
+       criterion: [ (.criteria // [])[] | select((.id as $i | $served | index($i)) != null)
+                    | {id: .id, rowState: .rowState,
+                       judgedBy: ("judgedBy=" + (([ (.judgements // [])[] | .judgedBy ] | unique) | if length == 0 then "nobody" else join(",") end))} ],
+       rowsJudgedByModel: ([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length),
+       ledger: $ledger,
+       next: $next}')"
   exit 0
 }
 
@@ -5509,9 +5897,18 @@ do_finish() {
   [ -n "$record_json" ] || die 3 "finish: could not assemble the finished record for $task_id."
   write_atomic "$record_file" "$record_json"
 
-  # The record alone on standard output, the way `build-record` prints its own. The path is named on
-  # standard error instead of after it, so a caller can read this whole stream as one JSON document.
-  printf '%s\n' "$record_json"
+  # The summary. The checklists, the deferred findings and every criterion's row are in the record,
+  # which the review stage reads from the path named here.
+  im_print_summary "finish" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" '
+    {task: .task,
+     commitRange: .commitRange,
+     order: ([ .orders[] | {id, commitRange, rounds: ("rounds=" + (.roundsUsed | tostring))} ]),
+     criteria: ((.criteria | group_by(.rowState) | map("\(.[0].rowState)=\(length)") | join(" ")) | if . == "" then "none" else . end),
+     checklists: (.checklists | length),
+     deferred: ([ .deferred[] | .unit + "/" + .finding ]),
+     rowsJudgedByModel: .rowsJudgedByModel,
+     record: $record,
+     next: "none: implementation is finished, and the review stage reads the record"}')"
   echo "FINISH: implementation is finished for this task; the review stage reads $record_file" >&2
   exit 0
 }
@@ -5598,14 +5995,30 @@ do_grant_attempt() {
   [ -n "$new_ledger" ] || die 3 "grant-attempt: the ledger update for $unit_id failed."
   write_atomic "$FN_LEDGER_FILE" "$new_ledger"
 
-  echo "GRANT-ATTEMPT: $unit_id may now use $allowed_after attempts, one more than before."
+  local ga_cleared ga_halt
+  ga_cleared="none: the order was not halted"
+  ga_halt="none"
   if [ -n "$halt_spent" ] && [ -z "$halt_rest" ]; then
-    echo "GRANT-ATTEMPT: the halt is cleared. It read: $halt_spent"
+    ga_cleared="$halt_spent"
   elif [ -n "$halt_spent" ]; then
-    echo "GRANT-ATTEMPT: the spent-attempts reason is cleared. It read: $halt_spent" >&2
+    ga_cleared="$halt_spent"
+    ga_halt="$halt_rest"
     echo "GRANT-ATTEMPT: $unit_id stays halted, because this reason still holds: $halt_rest" >&2
   fi
-  printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" '(.orders // []) | map(select(.id == $id)) | .[0]'
+  im_print_summary "grant-attempt" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" \
+    --arg allowed "$allowed_after (was $allowed_before)" --arg cleared "$ga_cleared" --arg halt "$ga_halt" \
+    --arg ledger "$FN_LEDGER_FILE" \
+    --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
+    | {order: $id,
+       attemptsAllowed: $allowed,
+       attemptsUsed: ($o.attemptsUsed // 0),
+       state: ($o.lastStep // "not started"),
+       haltCleared: $cleared,
+       halt: $halt,
+       grants: (($o.grants // []) | length),
+       ledger: $ledger,
+       next: $next}')"
   exit 0
 }
 
@@ -5949,6 +6362,7 @@ case "$ACTION" in
   review-record)  do_review_record  "$@" ;;
   fix-brief)      do_fix_brief      "$@" ;;
   fix-record)     do_fix_record     "$@" ;;
+  verify-brief)   do_verify_brief   "$@" ;;
   verify-record)  do_verify_record  "$@" ;;
   close)          do_close          "$@" ;;
   finish)         do_finish         "$@" ;;
