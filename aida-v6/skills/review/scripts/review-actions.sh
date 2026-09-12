@@ -490,6 +490,11 @@ do_read() {
 # listing or a fetch that failed means nobody looked. Collapsing them writes a false finding
 # nothing can tell from a true one. Sets RW_LOOKUP_FLOOR and RW_LOOKUP_NOTE.
 RW_LOOKUP_FLOOR=""; RW_LOOKUP_NOTE=""
+# What a block the parser could not read contributes to every check that reads it. `unparseable` is
+# the heading being there while its key never opens under it, which is nobody having looked rather
+# than a framework that declared nothing, so the word is unknown and it fails the review. A block
+# that is simply absent stays undeclared, because a framework with no such block has answered.
+RW_CHECK_FLOOR=""; RW_TEST_FLOOR=""; RW_BLOCK_NOTE=""
 rw_lookup_floor() {
   local failures="$1" line fw reason
   RW_LOOKUP_FLOOR=""; RW_LOOKUP_NOTE=""
@@ -753,10 +758,9 @@ rw_run_mutation() {
     fwi=$((fwi + 1))
   done
   [ -n "$combined" ] || { combined="undeclared"; detail=" no framework recipe was resolved, so no mutation row was read."; }
-  if [ -n "$RW_LOOKUP_FLOOR" ]; then
-    combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
-    detail="$detail $RW_LOOKUP_NOTE"
-  fi
+  combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
+  combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
+  detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
   RW_MUTATION="$(jq -n --arg verdict "$combined" --arg detail "$(pc_trim "$detail")" \
     --arg score "$score" --argjson survivors "$survivors" --arg output "$output" '
     {verdict: $verdict, detail: $detail, score: $score, survivors: $survivors}
@@ -892,11 +896,10 @@ rw_tool_row_check() {
   fi
   rm -f "$outfile"
   [ -z "$errfile" ] || rm -f "$errfile"
-  if [ -n "$RW_LOOKUP_FLOOR" ]; then
-    verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
-    detail="$detail $RW_LOOKUP_NOTE"
-  fi
-  rw_check_row "$row_id" "$verdict" "$detail" "$rc" "$output" "$framework"
+  verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
+  verdict="$(rw_worse "$verdict" "$RW_CHECK_FLOOR")"
+  detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
+  rw_check_row "$row_id" "$verdict" "$(pc_trim "$detail")" "$rc" "$output" "$framework"
 }
 
 # Check 8: the whole suite, at the final commit, once per framework. It reads the recipe's own
@@ -972,10 +975,9 @@ rw_check_suite() {
     combined="undeclared"
     detail=" no framework recipe was resolved, so the suite was not run."
   fi
-  if [ -n "$RW_LOOKUP_FLOOR" ]; then
-    combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
-    detail="$detail $RW_LOOKUP_NOTE"
-  fi
+  combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
+  combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
+  detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
   rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" "$exit_max" "$outputs"
 }
 
@@ -983,7 +985,7 @@ do_checks() {
   local task_arg="" recipes="" check_recipes="" failures="" values=""
   local frameworks fw lookup recipes_json rows_file parts_file
   local range base head_end head_now coverage cov_verdict cov_detail
-  local mut_verdict tool_count ti one checks_json record_json today
+  local mut_verdict tool_count ti one checks_json record_json today floor_id
   local upstream empty_range
 
   while [ "$#" -gt 0 ]; do
@@ -1076,6 +1078,18 @@ RW_FRAMEWORKS
   # the same refusal implementation makes is what keeps review from calling a finding this task's
   # when a different tool produced it.
   cr_require_baseline_recipes "checks" "$BASELINE_FILE"
+  RW_CHECK_FLOOR=""; RW_TEST_FLOOR=""; RW_BLOCK_NOTE=""
+  if [ "$(printf '%s' "$CR_DOC" | jq '[ (.frameworks // [])[] | select(.checkCommandsState == "unparseable") ] | length')" -gt 0 ]; then
+    RW_CHECK_FLOOR="unknown"
+    RW_BLOCK_NOTE="The check commands block could not be read: its heading is there and its key never opens under it."
+    rw_catalog_note "the check commands block's heading is there and its key never opens under it" "$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | select(.checkCommandsState == "unparseable") | .checkRecipe ] | join(", ")')"
+  fi
+  if [ "$(printf '%s' "$CR_DOC" | jq '[ (.frameworks // [])[] | select(.testCommandsState == "unparseable") ] | length')" -gt 0 ]; then
+    RW_TEST_FLOOR="unknown"
+    RW_BLOCK_NOTE="$RW_BLOCK_NOTE The test commands block could not be read the same way."
+    rw_catalog_note "the test commands block's heading is there and its key never opens under it" "$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | select(.testCommandsState == "unparseable") | .testRecipe ] | join(", ")')"
+  fi
+  RW_BLOCK_NOTE="$(pc_trim "$RW_BLOCK_NOTE")"
   # The sha of each recipe this run read, recorded beside its path the way the baseline records its
   # own, so a reader can compare the two files rather than take the refusal's word for it.
   recipes_json="$(jq -nc --argjson rows "$recipes_json" --argjson resolved "$CR_DOC" '
@@ -1139,9 +1153,16 @@ RW_FRAMEWORKS
     rw_tool_row_check "$one" >>"$parts_file"
     ti=$((ti + 1))
   done
-  if [ "$tool_count" -eq 0 ]; then
-    rw_check_row "coding-standards" "${RW_LOOKUP_FLOOR:-undeclared}" "no resolved review recipe carries a check commands row, so no tool ran. ${RW_LOOKUP_NOTE}" >>"$parts_file"
-  fi
+  # The three ids below are a floor the recipe may add to and never a list it may shorten, so each one
+  # no row declared still gets a row of its own. A check with no row at all is a check a reader cannot
+  # see was never answered, and version 5 printed that four times.
+  for floor_id in coding-standards static-analysis security; do
+    if [ "$(printf '%s' "$CR_DOC" | jq --arg id "$floor_id" '[ (.tools // [])[] | select(.id == $id) ] | length')" -eq 0 ]; then
+      rw_check_row "$floor_id" \
+        "$(rw_worse "$(rw_worse "undeclared" "$RW_LOOKUP_FLOOR")" "$RW_CHECK_FLOOR")" \
+        "$(pc_trim "no resolved review recipe carries a check commands row with this id, so this tool did not run. The three tool ids are a floor, never a list a recipe may shorten. $RW_LOOKUP_NOTE $RW_BLOCK_NOTE")" >>"$parts_file"
+    fi
+  done
 
   rw_check_suite >>"$parts_file"
 
