@@ -34,6 +34,10 @@
 # AIDA_RUN_MODE=autonomous script.sh does not match a rule naming script.sh and asks for approval
 # every time. AIDA_RUN_MODE is still read as a fallback, for a caller that is not the skill.
 #
+# What reaches stdout is what reaches the orchestrator's context. A project is named by one
+# `project:` line carrying its name, state, code path and folder, never by its registry row or
+# its project file. The check's own report follows where the skill shows it to the person.
+#
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints
 # why to stderr and exits 3. A miss that is a real, expected outcome, such as switch finding
 # nothing, exits 1 and prints nothing to stdout, never confused with 3.
@@ -218,6 +222,14 @@ run_check() {
   return $?
 }
 
+# The one summary printer: one line per registry row. $1 the row, $2 an optional trailing note.
+project_line() {
+  printf '%s' "$1" | jq -r --arg extra "${2:-}" '
+    "project: " + (.name // "?") + " state=" + (.state // "?")
+      + " code-path=" + (.codePath // "?") + " path=" + (.path // "?")
+      + (if $extra == "" then "" else " " + $extra end)'
+}
+
 # ------------------------------------------------------------------------------------------------
 # create
 # ------------------------------------------------------------------------------------------------
@@ -385,7 +397,7 @@ do_report() {
 
   if match="$(registry_resolve_by_directory "$cwd")"; then
     echo "CASE: 1"
-    echo "$match"
+    project_line "$match"
     local project_path
     project_path="$(printf '%s' "$match" | jq -r '.path')"
     registry_touch_last_accessed "$project_path"
@@ -400,7 +412,7 @@ do_report() {
     match="$(jq -c --arg n "$choice_name" '[.projects[]? | select(.name == $n)] | first // empty' "$REGISTRY_FILE" 2>/dev/null)"
     if [ -n "$match" ] && [ "$match" != "null" ]; then
       echo "CASE: 2"
-      echo "$match"
+      project_line "$match"
       local project_path
       project_path="$(printf '%s' "$match" | jq -r '.path')"
       registry_touch_last_accessed "$project_path"
@@ -420,7 +432,11 @@ do_report() {
   echo "PROJECTS:"
   # Offered as work: complete stops being offered and archived is not in the list unless asked
   # for (ideal/project.md, "New"). registry_list_projects filters to this when a state is named.
-  registry_list_projects active
+  local row
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    project_line "$row"
+  done < <(registry_list_projects active)
   return 1
 }
 
@@ -448,7 +464,8 @@ do_switch() {
 
   registry_touch_last_accessed "$project_path"
   echo "PROJECT: ${project_path}"
-  cat "$project_path/project.json"
+  project_line "$match"
+  echo "project-file: ${project_path}/project.json"
   run_check "$project_path"
 }
 
@@ -460,13 +477,13 @@ do_list() {
   local rows
   rows="$(registry_list_projects "$@")" || return 1
   [ -n "$rows" ] || { echo "PROJECTS: (none registered)"; return 0; }
-  echo "$rows" | while IFS= read -r row; do
+  local row cp exists
+  while IFS= read -r row; do
     [ -n "$row" ] || continue
-    local cp exists
     cp="$(printf '%s' "$row" | jq -r '.codePath')"
     if [ -d "$cp" ]; then exists="true"; else exists="false"; fi
-    printf '%s\n' "$row" | jq -c --argjson e "$exists" '. + {codePathExists: $e}'
-  done
+    project_line "$row" "exists=$exists"
+  done < <(printf '%s\n' "$rows")
 }
 
 # ------------------------------------------------------------------------------------------------

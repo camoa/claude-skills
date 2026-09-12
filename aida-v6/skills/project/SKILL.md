@@ -39,14 +39,14 @@ Run:
 Read the first line, `CASE: 1`, `CASE: 2`, or `CASE: 4`. This is ideal/project.md's "Picking up
 work", in the order it names, case 3 being case 1 winning when both would otherwise apply.
 
-**`CASE: 1` or `CASE: 2`.** A project JSON object follows on the next line, then the check's own
-report. Show the report as described in "Reading the check's report" below. Stop here; this
+**`CASE: 1` or `CASE: 2`.** A `project:` line follows, naming the project, its state, its code
+path and its folder, then the check's own report. Show the report as described in "Reading the check's report" below. Stop here; this
 already touched `lastAccessed` and, for case 2, this is the remembered choice winning because
 nothing else answers.
 
 **`CASE: 4`.** Neither the directory nor a remembered choice resolves to a project. The output
-then carries `DECLINED: true` or `DECLINED: false`, then `PROJECTS:` followed by one JSON object
-per registered project, most recently used first (empty when none are registered yet).
+then carries `DECLINED: true` or `DECLINED: false`, then `PROJECTS:` followed by one `project:`
+line per registered project, most recently used first (empty when none are registered yet).
 
 - **`DECLINED: false`, interactive.** Offer to create a project here, in one line: setting one up
   gives findings and decisions somewhere to live past this session. Wait for a plain yes or no.
@@ -159,7 +159,8 @@ another project by its own code path. That note means this switch applies to thi
 only and is not remembered, because a code-path match always wins over a remembered choice
 (ideal/project.md, "Picking up work", case 3). No note: the choice is now remembered for this
 directory, and a later plain `report` from here finds this project again on its own. Either way
-it then prints the project file and the check's report; show both.
+it then prints a `project:` line, the project file's path, and the check's report. Show the
+report; read the project file only when a field is needed.
 
 ## `list [active|complete|archived]...`
 
@@ -167,10 +168,10 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh list [state...]
 ```
-Prints one JSON object per registered project, most recently used first. Each carries
-`codePathExists`. With no state named, every project prints, whatever its state. Naming one or
+Prints one `project:` line per registered project, most recently used first. Each carries
+`exists=`. With no state named, every project prints, whatever its state. Naming one or
 more states filters to those. Use it for "show me my projects" and for cleanup. A project whose
-`codePathExists` is `false` names a code path that moved or was deleted. Name that project to
+`exists=` is `false` names a code path that moved or was deleted. Name that project to
 the person rather than acting on it alone.
 
 ## `state <name-or-path> <active|complete|archived>`
