@@ -938,7 +938,9 @@ rw_check_suite() {
         output="$(cat "$outfile" 2>/dev/null)"
         outputs="$outputs$output
 "
-        exit_max="$rc"
+        # The worst exit status across the frameworks, never the last one. Two frameworks where the
+        # first fails and the second passes would otherwise record a zero beside a verdict of unmet.
+        if [ -z "$exit_max" ] || [ "$rc" -gt "$exit_max" ]; then exit_max="$rc"; fi
         hit=false
         markers="$(printf '%s' "$fw_obj" | jq -c '.silentPass // []')"
         mlen="$(printf '%s' "$markers" | jq 'length')"
