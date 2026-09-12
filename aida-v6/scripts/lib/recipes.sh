@@ -46,6 +46,9 @@
 #   rv_is_finding_id <id>                     true for `f` and then digits, no leading zero
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
 #   rv_read_findings_array <file> <key> <action>  sets RV_FINDINGS_ARRAY, or exits 52
+#   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
+#   json_file_state <file>                    missing | unreadable | ok, for any JSON file
+#   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
 #
 # What this library takes from its caller, and never defines itself:
 #
@@ -125,16 +128,20 @@ rv_load_codepath() {
     || die 5 "$who: this task's project code at $RV_CODEPATH is not a git repository."
 }
 
-# Prints one of: missing, unreadable, ok, for the project.json under $1. Never dies: a caller
-# decides the meaning. "unreadable" means not valid JSON; a well-formed file with no codePath
-# field is "ok" with an empty value from project_code_path_value, a different fact the caller
-# checks next. Missing and unreadable are never folded into the same word here.
-project_code_path_state() {
-  local f="$1/project.json"
-  [ -f "$f" ] || { printf 'missing'; return; }
-  [ -r "$f" ] || { printf 'unreadable'; return; }
-  jq empty "$f" 2>/dev/null || { printf 'unreadable'; return; }
+# Prints one of: missing, unreadable, ok, for the JSON file $1. Never dies: a caller decides what
+# each word means for it, and missing and unreadable are never folded into one word, because they
+# send a reader to two different repairs. Every stage asks this about a record before it reads one.
+json_file_state() {
+  [ -f "$1" ] || { printf 'missing'; return; }
+  [ -r "$1" ] || { printf 'unreadable'; return; }
+  jq empty "$1" 2>/dev/null || { printf 'unreadable'; return; }
   printf 'ok'
+}
+
+# The same question about the project.json under $1. A well-formed file with no codePath field is
+# "ok" with an empty value from project_code_path_value, a different fact the caller checks next.
+project_code_path_state() {
+  json_file_state "$1/project.json"
 }
 
 # The codePath recorded in a project.json already known to be valid JSON, or empty when the field
@@ -457,6 +464,27 @@ cr_recipe_pair() {
   [ -n "$rp" ] || die 3 "$who: $flag was given no path for framework $fw."
   [ -f "$rp" ] || die 3 "$who: the recipe handed over for $fw is not a file: $rp"
   CR_PAIR="$(printf '%s\t%s' "$fw" "$rp")"
+}
+
+# Parses one `<framework>=<reason>` flag value for a lookup that failed, and sets CR_PAIR to the
+# tab-separated line the caller appends to its own list, the way cr_recipe_pair does for a path. $1
+# the action, $2 the flag, $3 the value.
+#
+# The three reasons stay apart, and nothing here accepts a fourth word: no recipe says the framework
+# answered, while an unreachable listing and a failed fetch say nobody looked. A stage records the
+# first as undeclared and the other two as unknown, and collapsing them writes a false finding
+# nothing can tell from a true one.
+cr_lookup_failure_pair() {
+  local who="$1" flag="$2" value="$3" fw reason
+  case "$value" in *=*) ;; *) die 3 "$who: $flag takes <framework>=<reason>, got: $value" ;; esac
+  fw="${value%%=*}"
+  reason="${value#*=}"
+  [ -n "$fw" ] || die 3 "$who: $flag was given no framework name: $value"
+  case "$reason" in
+    no-recipe|listing-unreachable|fetch-failed) ;;
+    *) die 3 "$who: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $reason" ;;
+  esac
+  CR_PAIR="$(printf '%s\t%s' "$fw" "$reason")"
 }
 
 # Resolves the recipes into the commands the checks run. The caller sets these globals first,
@@ -907,6 +935,13 @@ br_worst_verdict() {
 }
 
 
+
+# The base names of every .md file directly in $1, sorted, space separated with a trailing space.
+# Two stages list a set of files this way, `dispatch-open` for the agents and `step` for the step
+# files, and one copy is what keeps their refusals listing their sets in the same shape.
+md_basenames_in() {
+  find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
 
 # ------------------------------------------------------------------------------------------------
 # The one --value flag, and the findings file a reviewer writes. Both stages take the same flag and

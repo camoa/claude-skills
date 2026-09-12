@@ -140,7 +140,6 @@ LENS_WORDS="non-goals solid dry architecture guides practices mutation"
 # beyond coding-standards, static-analysis and security carry their own row ids, because the check
 # commands block is a floor and never the list.
 CHECK_EVERY_CRITERION="every-criterion"
-CHECK_NON_GOALS="non-goals"
 CHECK_SERVES="serves-a-criterion"
 CHECK_TEST_MUTATION="test-and-mutation"
 CHECK_SUITE="suite"
@@ -191,22 +190,13 @@ rw_paths() {
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 }
 
-# Prints one of: missing, unreadable, ok, for the JSON file $1. Never dies: a caller decides the
-# meaning, and missing and unreadable are never folded into one word.
-rw_json_state() {
-  [ -f "$1" ] || { printf 'missing'; return; }
-  [ -r "$1" ] || { printf 'unreadable'; return; }
-  jq empty "$1" 2>/dev/null || { printf 'unreadable'; return; }
-  printf 'ok'
-}
-
 RW_FINISHED_DOC=""; RW_LEDGER_DOC=""; RW_SNAPSHOT_DOC=""; RW_RECORD_DOC=""
 RW_RUN_MODE="interactive"; RW_PROJECT_DOC=""; RW_TASK_ID=""
 
 # Exit 66. Implementation has not finished, so there is nothing to review.
 rw_require_finished() {
   local who="$1"
-  case "$(rw_json_state "$FINISHED_FILE")" in
+  case "$(json_file_state "$FINISHED_FILE")" in
     missing)
       die 66 "$who: $FINISHED_FILE not found, so implementation has not finished for this task. Run the implement skill's finish step first; review reads the record it writes." ;;
     unreadable)
@@ -220,13 +210,13 @@ rw_require_finished() {
 # than repairs.
 rw_require_frozen() {
   local who="$1"
-  case "$(rw_json_state "$LEDGER_FILE")" in
+  case "$(json_file_state "$LEDGER_FILE")" in
     missing)    die 3 "$who: $LEDGER_FILE not found, though $FINISHED_FILE exists. The run mode is read from the ledger and nothing else holds it." ;;
     unreadable) die 3 "$who: $LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again." ;;
   esac
   RW_LEDGER_DOC="$(jq -c '.' "$LEDGER_FILE")"
   RW_RUN_MODE="$(printf '%s' "$RW_LEDGER_DOC" | jq -r '.runMode // "interactive"')"
-  case "$(rw_json_state "$SNAPSHOT_FILE")" in
+  case "$(json_file_state "$SNAPSHOT_FILE")" in
     missing)    die 3 "$who: $SNAPSHOT_FILE not found, though $FINISHED_FILE exists. The frozen contract and the frozen orders are what review judges against." ;;
     unreadable) die 3 "$who: $SNAPSHOT_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again." ;;
   esac
@@ -246,7 +236,7 @@ rw_load_project() {
 rw_load_record() {
   local who="$1"
   RW_RECORD_DOC=""
-  case "$(rw_json_state "$RECORD_FILE")" in
+  case "$(json_file_state "$RECORD_FILE")" in
     ok)         RW_RECORD_DOC="$(jq -c '.' "$RECORD_FILE")" ;;
     unreadable) die 3 "$who: $RECORD_FILE exists but could not be read as JSON. Move it aside by hand; review refuses to write over a record it cannot read." ;;
   esac
@@ -408,13 +398,13 @@ do_read() {
   rw_paths "read" "$1"
 
   local finished_state ledger_state record_state report
-  local range final_commit machine_count person_count checklist_count checklists_json
+  local range final_commit machine_count person_count checklists_json
   local frameworks_json e2e_enabled vr_enabled registry_path code_state
-  finished_state="$(rw_json_state "$FINISHED_FILE")"
-  ledger_state="$(rw_json_state "$LEDGER_FILE")"
-  record_state="$(rw_json_state "$RECORD_FILE")"
+  finished_state="$(json_file_state "$FINISHED_FILE")"
+  ledger_state="$(json_file_state "$LEDGER_FILE")"
+  record_state="$(json_file_state "$RECORD_FILE")"
 
-  range=""; final_commit=""; machine_count=0; person_count=0; checklist_count=0
+  range=""; final_commit=""; machine_count=0; person_count=0
   checklists_json='[]'
   if [ "$finished_state" = "ok" ]; then
     RW_FINISHED_DOC="$(jq -c '.' "$FINISHED_FILE")"
@@ -422,7 +412,6 @@ do_read() {
     final_commit="${range##*..}"
     machine_count="$(printf '%s' "$RW_FINISHED_DOC" | jq '[ (.criteria // [])[] | select(.verifiedBy == "machine") ] | length')"
     person_count="$(printf '%s' "$RW_FINISHED_DOC" | jq '[ (.criteria // [])[] | select(.verifiedBy == "person") ] | length')"
-    checklist_count="$(printf '%s' "$RW_FINISHED_DOC" | jq '(.checklists // []) | length')"
     # Every checklist row, whole and verbatim. `close` shows each one to the person and takes met or
     # unmet per row, and a summary asks a different question than the row a person signed up to
     # answer. This skill holds one Bash rule and no Read rule, so nothing else could open the file.
@@ -435,7 +424,7 @@ do_read() {
   frameworks_json='[]'; e2e_enabled="unknown"; vr_enabled="unknown"; registry_path=""
   code_state="unresolved"
   RV_PROJECT_FOLDER="$(resolve_project_folder "$TASK_PATH")" || RV_PROJECT_FOLDER=""
-  if [ -n "$RV_PROJECT_FOLDER" ] && [ "$(rw_json_state "$RV_PROJECT_FOLDER/project.json")" = "ok" ]; then
+  if [ -n "$RV_PROJECT_FOLDER" ] && [ "$(json_file_state "$RV_PROJECT_FOLDER/project.json")" = "ok" ]; then
     RW_PROJECT_DOC="$(jq -c '.' "$RV_PROJECT_FOLDER/project.json")"
     frameworks_json="$(printf '%s' "$RW_PROJECT_DOC" | jq -c '.frameworks // []')"
     e2e_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.e2e // null) == null then "not-set-up" elif (.e2e.enabled // false) then "on" else "off" end')"
@@ -450,7 +439,7 @@ do_read() {
     --arg finished "$finished_state" --arg range "$range" --arg final "$final_commit" \
     --arg runMode "$RW_RUN_MODE" --arg ledger "$ledger_state" \
     --argjson machine "$machine_count" --argjson person "$person_count" \
-    --argjson checklists "$checklist_count" --argjson checklistRows "$checklists_json" \
+    --argjson checklistRows "$checklists_json" \
     --argjson frameworks "$frameworks_json" \
     --arg e2e "$e2e_enabled" --arg vr "$vr_enabled" --arg registry "$registry_path" \
     --arg codePath "$code_state" \
@@ -462,16 +451,14 @@ do_read() {
      finalCommit: $final,
      runMode: $runMode,
      runModeSource: (if $ledger == "ok" then "the ledger" else "nothing read it; interactive is what absence means" end),
-     criteria: {machineVerified: $machine, personVerified: $person, checklistRows: $checklists},
+     criteria: {machineVerified: $machine, personVerified: $person, checklistRows: ($checklistRows | length)},
      checklists: $checklistRows,
      frameworks: $frameworks,
      codePath: $codePath,
      surfaces: {e2e: $e2e, visualRegression: $vr, registryPath: $registry},
-     record: {state: $recordState,
-              checks: (if $record == null then 0 else (($record.checks // []) | length) end),
-              findings: (if $record == null then 0 else (($record.findings // []) | length) end),
-              surfaces: (if $record == null then 0 else (($record.surfaces // []) | length) end),
-              verdict: (if $record == null then "" else ($record.verdict // "") end)},
+     record: ({state: $recordState} + (($record // {}) | {checks: ((.checks // []) | length),
+              findings: ((.findings // []) | length), surfaces: ((.surfaces // []) | length),
+              verdict: (.verdict // "")})),
      nextStep: $step}')"
   [ -n "$report" ] || die 3 "read: could not assemble the report for $TASK_PATH."
   printf '%s\n' "$report"
@@ -688,8 +675,8 @@ rw_check_coverage_verdict() {
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
-  local fw_count fwi fw_obj fw row argv outfile result kind payload rc
-  local verdict detail output survivors score combined lines_file one
+  local fw_count fwi fw_obj fw row outfile rc
+  local detail output survivors score combined
   verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""
   fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
@@ -704,27 +691,18 @@ rw_run_mutation() {
       fwi=$((fwi + 1))
       continue
     fi
-    argv="$(printf '%s' "$row" | jq -c '.argv')"
-    outfile="$(mktemp)" || die 3 "checks: could not create a temporary file"
-    result="$(br_run_resolved "$argv" "$RV_CODEPATH" "$outfile" "$RW_CHANGED_JSON" "$RW_VALUES")"
-    kind="$(printf '%s' "$result" | cut -f1)"
-    payload="$(printf '%s' "$result" | cut -f2-)"
-    if [ "$kind" = "UNRESOLVED" ]; then
-      combined="$(rw_worse "$combined" "unknown")"
-      detail="$detail $fw: the token {$payload} in the mutation command has no supplied value; pass --value $payload=<value>."
-      rm -f "$outfile"
+    rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_CHANGED_JSON" "$RW_VALUES" ""
+    rw_run_fault "mutation" "the test-execution recipe for $fw"
+    if [ -n "$RW_RUN_VERDICT" ]; then
+      combined="$(rw_worse "$combined" "$RW_RUN_VERDICT")"
+      detail="$detail $fw: $RW_RUN_DETAIL"
+      rw_run_done
       fwi=$((fwi + 1))
       continue
     fi
-    if [ "$kind" = "EMPTY" ]; then
-      combined="$(rw_worse "$combined" "unknown")"
-      detail="$detail $fw: the mutation command came out with no token at all, so nothing ran."
-      rm -f "$outfile"
-      fwi=$((fwi + 1))
-      continue
-    fi
-    rc="$payload"
-    output="$(cat "$outfile" 2>/dev/null)"
+    rc="$RW_RUN_RC"
+    output="$RW_RUN_OUTPUT"
+    outfile="$RW_RUN_OUTFILE"
     score="$(printf '%s' "$output" | grep -i 'score' | head -1)"
     # The criterion a survivor belongs to, by exact path: the frozen test records say which test file
     # belongs to which criterion, and the frozen orders say which source file belongs to which order
@@ -755,7 +733,7 @@ rw_run_mutation() {
       detail="$detail $fw: the mutation command exited $rc and named no changed file, so nothing here can tell a failed run from a clean one."
       rw_catalog_note "the mutation command the recipe declares exited $rc" "the test-execution recipe for $fw"
     fi
-    rm -f "$outfile"
+    rw_run_done
     fwi=$((fwi + 1))
   done
   [ -n "$combined" ] || { combined="undeclared"; detail=" no framework recipe was resolved, so no mutation row was read."; }
@@ -791,7 +769,7 @@ rw_baseline_field_for() {
 # every task forever.
 rw_tool_row_check() {
   local row="$1" row_id framework argv signal exts scoped scoped_count has_paths
-  local outfile errfile result kind payload rc stdout_len output failed how
+  local rc output failed how
   local verdict detail field baseline_doc baseline_verdict
   row_id="$(printf '%s' "$row" | jq -r '.id')"
   framework="$(printf '%s' "$row" | jq -r '.framework // ""')"
@@ -824,79 +802,47 @@ rw_tool_row_check() {
     return 0
   fi
 
-  outfile="$(mktemp)" || die 3 "checks: could not create a temporary file"
-  errfile=""
-  stdout_len=0
-  if [ -n "$signal" ]; then
-    errfile="$(mktemp)" || die 3 "checks: could not create a temporary file"
-    result="$(br_run_resolved "$argv" "$RV_CODEPATH" "$outfile" "$scoped" "$RW_VALUES" "$errfile")"
-  else
-    result="$(br_run_resolved "$argv" "$RV_CODEPATH" "$outfile" "$scoped" "$RW_VALUES")"
-  fi
-  kind="$(printf '%s' "$result" | cut -f1)"
-  payload="$(printf '%s' "$result" | cut -f2-)"
-  if [ "$kind" = "UNRESOLVED" ]; then
-    verdict="unknown"
-    detail="the token {$payload} in the $row_id command has no supplied value; pass --value $payload=<value>."
-  elif [ "$kind" = "EMPTY" ]; then
-    verdict="unknown"
-    detail="the $row_id command came out with no token at all, so nothing ran and nothing was decided."
-  else
-    rc="$payload"
-    if [ -n "$signal" ]; then
-      stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
-      case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
-      output="$(cat "$outfile" "$errfile" 2>/dev/null)"
-    else
-      output="$(cat "$outfile" 2>/dev/null)"
-    fi
+  rw_run_row "$argv" "$scoped" "$RW_VALUES" "$signal"
+  rw_run_fault "$row_id" "the review recipe for ${framework:-this project}"
+  verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
+  if [ -z "$verdict" ]; then
+    rc="$RW_RUN_RC"
+    output="$RW_RUN_OUTPUT"
     failed=false; how=""
-    if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
+    if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$RW_RUN_STDOUT_LEN" -gt 0 ]; then
       failed=true
       how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
-    elif [ "$rc" = "127" ]; then
-      verdict="unknown"
-      detail="the $row_id command could not be found (exit 127), so nothing ran and nothing was decided."
-      rw_catalog_note "the $row_id command the recipe declares could not be found" "the review recipe for ${framework:-this project}"
-    elif [ "$rc" = "126" ]; then
-      verdict="unknown"
-      detail="the $row_id command list came out empty, so nothing ran and nothing was decided."
     elif [ "$rc" != "0" ]; then
       failed=true
       how="exited $rc"
     fi
-    if [ -z "$verdict" ]; then
-      if [ "$failed" = "false" ]; then
-        verdict="met"
-        detail="the $row_id command exited 0 over the files this change touched."
-      else
-        field="$(rw_baseline_field_for "$row_id")"
-        baseline_verdict=""
-        if [ -n "$field" ] && [ -f "$BASELINE_FILE" ]; then
-          baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
-          [ -z "$baseline_doc" ] || baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
-        fi
-        if [ -z "$field" ]; then
-          verdict="unknown"
-          detail="the $row_id command $how, and the baseline holds no field for this row, so this cannot tell a finding this task introduced from one that predates it."
-        else
-          case "$baseline_verdict" in
-            met)
-              verdict="unmet"
-              detail="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; this task introduced the finding." ;;
-            unmet|unknown|undeclared)
-              verdict="unknown"
-              detail="the $row_id command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so this cannot tell an old finding from an old one plus a new one." ;;
-            *)
-              verdict="unknown"
-              detail="the $row_id command $how, and $BASELINE_FILE could not be read for this tool's own baseline verdict, so this cannot tell an old finding from a new one." ;;
-          esac
-        fi
+    if [ "$failed" = "false" ]; then
+      verdict="met"
+      detail="the $row_id command exited 0 over the files this change touched."
+    else
+      field="$(rw_baseline_field_for "$row_id")"
+      baseline_verdict=""
+      if [ -n "$field" ] && [ -f "$BASELINE_FILE" ]; then
+        baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
+        [ -z "$baseline_doc" ] || baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
       fi
+      case "${field:+$baseline_verdict}" in
+        met)
+          verdict="unmet"
+          detail="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; this task introduced the finding." ;;
+        unmet|unknown|undeclared)
+          verdict="unknown"
+          detail="the $row_id command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so this cannot tell an old finding from an old one plus a new one." ;;
+        *)
+          # Two ways to get here, and the detail tells them apart: the baseline holds no field for
+          # this row at all, which is every row beyond the three the baseline knows, or it holds one
+          # and the file could not be read.
+          verdict="unknown"
+          detail="the $row_id command $how, and ${field:+$BASELINE_FILE could not be read for the baseline verdict of this tool}${field:-the baseline holds no field for this row}, so this cannot tell a finding this task introduced from one that predates it." ;;
+      esac
     fi
   fi
-  rm -f "$outfile"
-  [ -z "$errfile" ] || rm -f "$errfile"
+  rw_run_done
   verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
   verdict="$(rw_worse "$verdict" "$RW_CHECK_FLOOR")"
   detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
@@ -907,8 +853,8 @@ rw_tool_row_check() {
 # outcome words and not the exit status alone: three of the five frameworks print that nothing was
 # selected and exit zero, and a silent pass reads unknown, never met.
 rw_check_suite() {
-  local fw_count fwi fw_obj fw cmd argv outfile result kind payload rc output
-  local verdict detail markers mlen mi marker hit combined outputs exit_max
+  local fw_count fwi fw_obj fw cmd outfile rc output
+  local verdict detail marker combined outputs exit_max
   combined=""; detail=""; outputs=""; exit_max=""
   fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
@@ -917,59 +863,42 @@ rw_check_suite() {
     fw_obj="$(printf '%s' "$CR_DOC" | jq -c --argjson i "$fwi" '.frameworks[$i]')"
     fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
     cmd="$(printf '%s' "$fw_obj" | jq -c '.suite // {}')"
+
     verdict=""; rc=""
     if [ "$(printf '%s' "$cmd" | jq -r 'has("argv")')" != "true" ]; then
       verdict="undeclared"
       detail="$detail $fw: $(printf '%s' "$cmd" | jq -r '.absent // .missing')"
     else
-      argv="$(printf '%s' "$cmd" | jq -c '.argv')"
-      outfile="$(mktemp)" || die 3 "checks: could not create a temporary file"
-      result="$(br_run_resolved "$argv" "$RV_CODEPATH" "$outfile" '[]' "$RW_VALUES")"
-      kind="$(printf '%s' "$result" | cut -f1)"
-      payload="$(printf '%s' "$result" | cut -f2-)"
-      if [ "$kind" = "UNRESOLVED" ]; then
-        verdict="unknown"
-        detail="$detail $fw: the token {$payload} in the suite command has no supplied value; pass --value $payload=<value>."
-      elif [ "$kind" = "EMPTY" ]; then
-        verdict="unknown"
-        detail="$detail $fw: the suite command came out with no token at all, so nothing ran."
+      rw_run_row "$(printf '%s' "$cmd" | jq -c '.argv')" '[]' "$RW_VALUES" ""
+      rw_run_fault "suite" "the test-execution recipe for $fw"
+      outfile="$RW_RUN_OUTFILE"
+      if [ -n "$RW_RUN_VERDICT" ]; then
+        verdict="$RW_RUN_VERDICT"
+        detail="$detail $fw: $RW_RUN_DETAIL"
       else
-        rc="$payload"
-        output="$(cat "$outfile" 2>/dev/null)"
+        rc="$RW_RUN_RC"
+        output="$RW_RUN_OUTPUT"
         outputs="$outputs$output
 "
         # The worst exit status across the frameworks, never the last one. Two frameworks where the
         # first fails and the second passes would otherwise record a zero beside a verdict of unmet.
         if [ -z "$exit_max" ] || [ "$rc" -gt "$exit_max" ]; then exit_max="$rc"; fi
-        hit=false
-        markers="$(printf '%s' "$fw_obj" | jq -c '.silentPass // []')"
-        mlen="$(printf '%s' "$markers" | jq 'length')"
-        mi=0
-        while [ "$mi" -lt "$mlen" ]; do
-          marker="$(printf '%s' "$markers" | jq -r --argjson i "$mi" '.[$i]')"
-          pc_output_holds "$outfile" "$marker" && hit=true
-          [ "$hit" = "true" ] && break
-          mi=$((mi + 1))
-        done
-        if [ "$hit" = "true" ]; then
+        # The first marker the recipe declares that this output holds, asked once. The markers are
+        # the recipe's own words for a run that selected nothing, harvested by the library.
+        marker="$(jq -rn --argjson m "$(printf '%s' "$fw_obj" | jq -c '.silentPass // []')" \
+          --rawfile out "$outfile" '[ $m[] as $one | select($out | contains($one)) | $one ][0] // ""')"
+        if [ -n "$marker" ]; then
           verdict="unknown"
           detail="$detail $fw: the suite output holds the recipe's own silent-pass marker ('$marker'), so an exit status cannot decide a run that selected nothing."
         elif [ "$rc" = "0" ]; then
           verdict="met"
           detail="$detail $fw: the suite exited 0 at the final commit."
-        elif [ "$rc" = "127" ]; then
-          verdict="unknown"
-          detail="$detail $fw: the suite command could not be found (exit 127), so nothing ran and nothing was decided."
-          rw_catalog_note "the suite command the recipe declares could not be found" "the test-execution recipe for $fw"
-        elif [ "$rc" = "126" ]; then
-          verdict="unknown"
-          detail="$detail $fw: the suite command list came out empty, so nothing ran."
         else
           verdict="unmet"
           detail="$detail $fw: the suite exited $rc at the final commit, so the finished task fails its own tests."
         fi
       fi
-      rm -f "$outfile"
+      rw_run_done
     fi
     combined="$(rw_worse "$combined" "$verdict")"
     fwi=$((fwi + 1))
@@ -1007,13 +936,8 @@ do_checks() {
         shift 2 ;;
       --lookup-failed)
         [ "$#" -ge 2 ] || die 3 "checks: --lookup-failed needs <framework>=<reason>"
-        case "$2" in *=*) ;; *) die 3 "checks: --lookup-failed takes <framework>=<reason>, got: $2" ;; esac
-        [ -n "${2%%=*}" ] || die 3 "checks: --lookup-failed was given no framework name: $2"
-        case "${2#*=}" in
-          no-recipe|listing-unreachable|fetch-failed) ;;
-          *) die 3 "checks: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: ${2#*=}" ;;
-        esac
-        failures="$failures$(printf '%s' "$2" | sed 's/=/\t/')
+        cr_lookup_failure_pair "checks" "--lookup-failed" "$2"
+        failures="$failures$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -1093,14 +1017,6 @@ RW_FRAMEWORKS
     rw_catalog_note "the test commands block's heading is there and its key never opens under it" "$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | select(.testCommandsState == "unparseable") | .testRecipe ] | join(", ")')"
   fi
   RW_BLOCK_NOTE="$(pc_trim "$RW_BLOCK_NOTE")"
-  # The sha of each recipe this run read, recorded beside its path the way the baseline records its
-  # own, so a reader can compare the two files rather than take the refusal's word for it.
-  recipes_json="$(jq -nc --argjson rows "$recipes_json" --argjson resolved "$CR_DOC" '
-    [ $rows[] | . as $row
-      | ([ ($resolved.frameworks // [])[] | select(.framework == $row.framework) ][0]) as $fw
-      | $row + {checkRecipeSha256: (($fw.checkRecipeSha256) // ""),
-                testRecipeSha256: (($fw.testRecipeSha256) // "")} ]')"
-  [ -n "$recipes_json" ] || die 3 "checks: the recipe rows could not record the hash of each file they read."
 
   # --- the change set, read and never derived -----------------------------------------------------
   range="$(printf '%s' "$RW_FINISHED_DOC" | jq -r '.commitRange // ""')"
@@ -1131,7 +1047,7 @@ RW_FRAMEWORKS
   [ -n "$RW_CHANGED_JSON" ] || RW_CHANGED_JSON='[]'
   RW_CHANGED_COUNT="$(printf '%s' "$RW_CHANGED_JSON" | jq 'length')"
   empty_range="no"
-  [ "$base" = "$(git -C "$RV_CODEPATH" rev-parse "$head_end^{commit}" 2>/dev/null)" ] && empty_range="yes"
+  [ "$base" = "$RW_HEAD" ] && empty_range="yes"
   upstream="$(git -C "$RV_CODEPATH" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
 
   rw_load_test_rows "checks"
@@ -1180,10 +1096,17 @@ RW_FRAMEWORKS
   record_json="$(jq -n --arg takenAt "$today" --arg task "$RW_TASK_ID" \
     --arg range "$range" --arg commit "$head_now" --arg runMode "$RW_RUN_MODE" \
     --argjson recipes "$recipes_json" --argjson checks "$checks_json" \
+    --argjson resolved "$CR_DOC" \
     --argjson mutation "$RW_MUTATION" --argjson notes "$RW_CATALOG_NOTES" '
     {schemaVersion: 1, takenAt: $takenAt, task: $task,
      reviewedRange: $range, reviewedAt: $commit, runMode: $runMode,
-     recipes: $recipes, checks: $checks,
+     # The sha of each recipe this run read sits beside its path, the way the baseline records its
+     # own, so a reader can compare the two files rather than take a refusal'"'"'s word for it.
+     recipes: [ $recipes[] | . as $row
+                | ([ ($resolved.frameworks // [])[] | select(.framework == $row.framework) ][0]) as $fw
+                | $row + {checkRecipeSha256: ($fw.checkRecipeSha256 // ""),
+                          testRecipeSha256: ($fw.testRecipeSha256 // "")} ],
+     checks: $checks,
      criteria: [], findings: [], surfaces: [],
      mutation: $mutation, catalogNotes: $notes}')"
   [ -n "$record_json" ] || die 3 "checks: could not assemble the review record for $RW_TASK_ID."
@@ -1217,7 +1140,7 @@ do_brief() {
   rw_load_record "brief"
   rw_require_step "brief" "$CHECK_SERVES" "checks"
 
-  local research_json list one doc brief_json deferred_json
+  local research_json list one doc brief_json
   research_json='[]'
   list="$(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)"
   while IFS= read -r one; do
@@ -1233,35 +1156,26 @@ do_brief() {
 $list
 RW_RESEARCH
   # Whether each cited source is on disk, so the reviewer names a body it could not open as unread
-  # rather than answering as though it had read it.
-  research_json="$(printf '%s' "$research_json" | jq -c '.')"
-  local ri rcount fi fcount src exists
-  rcount="$(printf '%s' "$research_json" | jq 'length')"
-  ri=0; src=""; exists=""
-  while [ "$ri" -lt "$rcount" ]; do
-    fcount="$(printf '%s' "$research_json" | jq --argjson i "$ri" '.[$i].findings | length')"
-    fi=0
-    while [ "$fi" -lt "$fcount" ]; do
-      src="$(printf '%s' "$research_json" | jq -r --argjson i "$ri" --argjson j "$fi" '.[$i].findings[$j].source')"
-      exists=false
-      [ -e "$src" ] && exists=true
-      [ -e "$RV_CODEPATH/$src" ] 2>/dev/null && exists=true
-      research_json="$(printf '%s' "$research_json" | jq -c --argjson i "$ri" --argjson j "$fi" \
-        --argjson on "$exists" '.[$i].findings[$j].onDisk = $on')"
-      fi=$((fi + 1))
-    done
-    ri=$((ri + 1))
-  done
-
-  # The findings implementation ruled deferred are handed over as findings to classify again. A
-  # deferral is a person saying not now, never a person saying this is fine.
-  deferred_json="$(printf '%s' "$RW_FINISHED_DOC" | jq -c '.deferred // []')"
+  # rather than answering as though it had read it. The paths are tested once, in one pass, and one
+  # jq marks every finding from that list: a test per finding reran jq twice for each one.
+  local src on_disk
+  on_disk='[]'
+  while IFS= read -r src; do
+    [ -n "$src" ] || continue
+    if [ -e "$src" ] || [ -e "$RV_CODEPATH/$src" ]; then
+      on_disk="$(jq -nc --argjson have "$on_disk" --arg s "$src" '$have + [$s]')"
+    fi
+  done <<RW_SOURCES
+$(printf '%s' "$research_json" | jq -r '[ .[].findings[].source ] | unique | .[]')
+RW_SOURCES
+  research_json="$(printf '%s' "$research_json" | jq -c --argjson found "$on_disk" '
+    [ .[] | .findings = [ .findings[] | . as $f | .onDisk = (($found | index($f.source)) != null) ] ]')"
 
   brief_json="$(jq -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --argjson record "$RW_RECORD_DOC" --argjson research "$research_json" \
-    --argjson deferred "$deferred_json" --arg lenses "$LENS_WORDS" '
+    --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" '
     {task: $task,
      codePath: $codePath,
      reviewedRange: $record.reviewedRange,
@@ -1274,7 +1188,7 @@ RW_RESEARCH
      nonGoals: ($alignment.nonGoals // []),
      workOrders: ($snap.workOrders // []),
      research: $research,
-     deferredFindings: $deferred,
+     deferredFindings: ($finished.deferred // []),
      checks: [ ($record.checks // [])[]
                | select(.id != "serves-a-criterion")
                | {id, verdict, detail, framework: (.framework // ""), output: (.output // "")} ],
@@ -1364,9 +1278,12 @@ do_findings() {
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
     check_id="$(rw_check_for_lens "$lens_word")"
-    hits="$(printf '%s' "$findings_json" | jq -c --arg l "$lens_word" '[ .[] | select(.lens == $l) ]')"
-    if [ "$(printf '%s' "$hits" | jq 'length')" -gt 0 ]; then
-      rw_check_row "$check_id" "unmet" "the $lens_word lens raised $(printf '%s' "$hits" | jq 'length') finding(s): $(printf '%s' "$hits" | jq -r '[ .[] | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')" >>"$rows_file"
+    # Met when this lens returned nothing, unmet when it returned a finding. An absent verdict is
+    # never a clean one, which is why every one of the six is written whatever the file held.
+    hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
+      '[ .[] | select(.lens == $l) | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
+    if [ -n "$hits" ]; then
+      rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits" >>"$rows_file"
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
@@ -1517,8 +1434,8 @@ RW_REGISTRY
 rw_surface_kind() {
   local check_id="$1" row_id="$2" gate="$3" enabled="$4" walked="$5" accepted="$6"
   local checks_out="$7" surfaces_out="$8"
-  local row argv outfile result kind payload rc output mine count i sid verdict
-  local ran walk_ok row_verdict detail worst missing_walk accept_here accept_row
+  local row rc output mine count i sid verdict rows
+  local ran row_verdict detail worst missing_walk accept_here accept_row
 
   mine="$(printf '%s' "$RW_REGISTRY_SURFACES" | jq -c --arg g "$gate" \
     '[ .[] | select((.gates // []) | index($g)) ]')"
@@ -1574,79 +1491,78 @@ rw_surface_kind() {
       '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ][0] // null')"
     if [ "$accept_row" != "null" ]; then
       RW_ACCEPTED_ROWS="$RW_ACCEPTED_ROWS $row_id-accept"
-      rw_run_row "$(printf '%s' "$accept_row" | jq -c '.argv')" '[]' "" ""
-      rw_run_fault "$row_id-accept" "the review recipe for $(printf '%s' "$accept_row" | jq -r '.framework // "this project"')"
-      if [ -n "$RW_RUN_VERDICT" ]; then
-        rw_check_row "$row_id-accept" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" >>"$checks_out"
-      elif [ "$RW_RUN_RC" = "0" ]; then
-        rw_check_row "$row_id-accept" "met" "the $row_id-accept command exited 0 over the surfaces a person accepted:${accept_here}." "$RW_RUN_RC" "$RW_RUN_OUTPUT" >>"$checks_out"
+      rw_surface_row_check "$accept_row" "$row_id-accept" "ran over the surfaces a person accepted,${accept_here}," >>"$checks_out"
+      if [ -z "$RW_RUN_VERDICT" ] && [ "$RW_RUN_RC" = "0" ]; then
         RW_ACCEPTED_DONE="$RW_ACCEPTED_DONE$accept_here"
-      else
-        rw_check_row "$row_id-accept" "unmet" "the $row_id-accept command exited $RW_RUN_RC, so no new baseline was written for:${accept_here}." "$RW_RUN_RC" "$RW_RUN_OUTPUT" >>"$checks_out"
       fi
-      rw_run_done
     fi
   fi
 
-  argv="$(printf '%s' "$row" | jq -c '.argv')"
-  outfile="$(mktemp)" || die 3 "surfaces: could not create a temporary file"
   # {paths} expands to nothing here on purpose: version 6 runs every registered surface, which is
   # why the change-impact globs stay unparsed, so a row ending in {paths} runs the whole set.
-  result="$(br_run_resolved "$argv" "$RV_CODEPATH" "$outfile" '[]' "")"
-  kind="$(printf '%s' "$result" | cut -f1)"
-  payload="$(printf '%s' "$result" | cut -f2-)"
-  ran=false; rc=""; row_verdict=""; detail=""
-  output="$(cat "$outfile" 2>/dev/null)"
-  if [ "$kind" = "UNRESOLVED" ]; then
-    row_verdict="unknown"
-    detail="the token {$payload} in the $row_id command has no supplied value, and this action takes none, so nothing ran."
-  elif [ "$kind" = "EMPTY" ]; then
-    row_verdict="unknown"
-    detail="the $row_id command came out with no token at all, so nothing ran."
-  else
+  rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "" ""
+  rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$row" | jq -r '.framework // "this project"')"
+  output="$RW_RUN_OUTPUT"
+  ran=false; rc=""; row_verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
+  if [ -z "$row_verdict" ]; then
     ran=true
-    rc="$payload"
+    rc="$RW_RUN_RC"
     if [ "$rc" = "0" ]; then
       row_verdict="met"
       detail="the $row_id command exited 0."
-    elif [ "$rc" = "127" ]; then
-      row_verdict="unknown"
-      detail="the $row_id command could not be found (exit 127), so nothing ran."
-      rw_catalog_note "the $row_id surface command the recipe declares could not be found" "the review recipe for $(printf '%s' "$row" | jq -r '.framework // "this project"')"
     else
       row_verdict="unmet"
       detail="the $row_id command exited $rc."
     fi
   fi
 
-  worst=""; missing_walk=""
-  i=0; sid=""; verdict=""; walk_ok=""
-  while [ "$i" -lt "$count" ]; do
-    sid="$(printf '%s' "$mine" | jq -r --argjson i "$i" '.[$i].id')"
-    verdict="$row_verdict"
-    if [ "$ran" = "true" ] && ! pc_output_holds "$outfile" "$sid"; then
-      # A gate that cannot notice its subject going absent cannot inform, so a registered surface
-      # the run said nothing about reads unmet rather than borrowing the run's own verdict.
-      verdict="unmet"
-    fi
-    walk_ok=false
-    case " $walked " in *" $sid "*) walk_ok=true ;; esac
-    jq -nc --arg id "$sid" --arg verdict "$verdict" --argjson ran "$ran" \
-      --argjson walked "$walk_ok" --arg report "" \
-      --argjson accepted "$(case " $RW_ACCEPTED_DONE " in *" $sid "*) printf true ;; *) printf false ;; esac)" '
-      {id: $id, verdict: $verdict, ran: $ran, walked: $walked, reportPath: $report}
-      + (if $accepted then {baselineAccepted: true} else {} end)' >>"$surfaces_out"
+  # One row per registered surface of this kind, in one pass. A surface the run said nothing about
+  # reads unmet rather than borrowing the run's own verdict: a gate that cannot notice its subject
+  # going absent cannot inform.
+  rows="$(jq -nc --argjson mine "$mine" --arg out "$output" --arg v "$row_verdict" \
+    --argjson ran "$ran" --arg walked " $walked " --arg accepted " $RW_ACCEPTED_DONE " '
+    [ $mine[] | .id as $sid
+      | {id: $sid,
+         verdict: (if $ran and (($out | contains($sid)) | not) then "unmet" else $v end),
+         ran: $ran,
+         walked: ($walked | contains(" " + $sid + " ")),
+         reportPath: ""}
+        + (if ($accepted | contains(" " + $sid + " ")) then {baselineAccepted: true} else {} end) ]')"
+  printf '%s' "$rows" | jq -c '.[]' >>"$surfaces_out"
+  worst=""
+  while IFS= read -r verdict; do
+    [ -n "$verdict" ] || continue
     worst="$(rw_worse "$worst" "$verdict")"
-    [ "$walk_ok" = "true" ] || missing_walk="$missing_walk$sid, "
-    i=$((i + 1))
-  done
-  rm -f "$outfile"
+  done <<RW_SURFACE_KIND
+$(printf '%s' "$rows" | jq -r '.[].verdict')
+RW_SURFACE_KIND
+  missing_walk="$(printf '%s' "$rows" | jq -r '[ .[] | select(.walked | not) | .id ] | join(", ")')"
+  rw_run_done
 
   if [ -n "$missing_walk" ]; then
     worst="$(rw_worse "$worst" "unknown")"
-    detail="$detail Nobody walked these surfaces, and the walk is half the answer: ${missing_walk%, }"
+    detail="$detail Nobody walked these surfaces, and the walk is half the answer: $missing_walk"
   fi
   rw_check_row "$check_id" "$worst" "$detail" "$rc" "$output" "$(printf '%s' "$row" | jq -r '.framework // ""')" >>"$checks_out"
+}
+
+# Runs one surface row and prints its check row: the wording rw_run_fault gives a run that decided
+# nothing, met on exit 0, unmet on anything else. $1 the row, $2 the id to record it under, $3 what
+# the detail says the row did. The caller reads RW_RUN_VERDICT and RW_RUN_RC afterwards when it needs
+# to know whether the command really ran.
+rw_surface_row_check() {
+  local one="$1" id="$2" did="$3" fw
+  fw="$(printf '%s' "$one" | jq -r '.framework // ""')"
+  rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "" ""
+  rw_run_fault "$id" "the review recipe for ${fw:-this project}"
+  if [ -n "$RW_RUN_VERDICT" ]; then
+    rw_check_row "$id" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" "" "" "$fw"
+  elif [ "$RW_RUN_RC" = "0" ]; then
+    rw_check_row "$id" "met" "the $id command $did and exited 0." "$RW_RUN_RC" "$RW_RUN_OUTPUT" "$fw"
+  else
+    rw_check_row "$id" "unmet" "the $id command $did and exited $RW_RUN_RC." "$RW_RUN_RC" "$RW_RUN_OUTPUT" "$fw"
+  fi
+  rw_run_done
 }
 
 # Every surface row the recipe declares that no kind above answered. The check commands block gets
@@ -1674,16 +1590,7 @@ rw_surface_extra_rows() {
       rw_check_row "$row_id" "undeclared" "$(printf '%s' "$one" | jq -r '.absentReason // "the recipe declares this surface row absent"')" "" "" "$(printf '%s' "$one" | jq -r '.framework // ""')" "absent" >>"$checks_out"
       continue
     fi
-    rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "" ""
-    rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$one" | jq -r '.framework // "this project"')"
-    if [ -n "$RW_RUN_VERDICT" ]; then
-      rw_check_row "$row_id" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" "" "" "$(printf '%s' "$one" | jq -r '.framework // ""')" >>"$checks_out"
-    elif [ "$RW_RUN_RC" = "0" ]; then
-      rw_check_row "$row_id" "met" "the $row_id command the recipe declares exited 0." "$RW_RUN_RC" "$RW_RUN_OUTPUT" "$(printf '%s' "$one" | jq -r '.framework // ""')" >>"$checks_out"
-    else
-      rw_check_row "$row_id" "unmet" "the $row_id command the recipe declares exited $RW_RUN_RC." "$RW_RUN_RC" "$RW_RUN_OUTPUT" "$(printf '%s' "$one" | jq -r '.framework // ""')" >>"$checks_out"
-    fi
-    rw_run_done
+    rw_surface_row_check "$one" "$row_id" "ran as the recipe declares it" >>"$checks_out"
   done
 }
 
@@ -1725,7 +1632,7 @@ do_surfaces() {
   rw_load_surface_rows "surfaces"
 
   local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
-  local one_accept
+  local one_accept all_rows si one_surface merged one_verdict
   e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.e2e // null) == null then "not set up" elif (.e2e.enabled // false) then "on" else "off" end')"
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.visualRegression // null) == null then "not set up" elif (.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.visualRegression.registryPath // ""')"
@@ -1766,20 +1673,32 @@ $(printf '%s' "$accepted" | tr ' ' '\n')
 RW_ACCEPTED_IN
 
   checks_json="$(jq -s '.' "$checks_file")" || die 3 "surfaces: could not assemble the check rows"
-  # One row per surface, not one per gate. A surface carrying two gates is answered twice above, and
-  # the walk is per surface rather than per gate: a person looks at the page once, at every viewport.
-  # So the answers merge, keeping the worse verdict, through the same ranking every other verdict
-  # here uses.
-  surfaces_json="$(jq -s -c '
-    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "unknown" then 2 else 3 end;
-    [ group_by(.id)[]
-      | {id: .[0].id,
-         verdict: ([ .[].verdict ] | max_by(rank)),
-         ran: ([ .[].ran ] | any),
-         walked: ([ .[].walked ] | all),
-         reportPath: ([ .[].reportPath ] | map(select(. != "")) | (.[0] // ""))}
-        + (if ([ .[] | (.baselineAccepted // false) ] | any) then {baselineAccepted: true} else {} end) ]' \
-    "$surfaces_file")" || die 3 "surfaces: could not assemble the surface rows"
+  # One row per surface, not one per gate. A surface carrying two gates is answered once per gate
+  # above, and the walk is per surface rather than per gate: a person looks at the page once, at every
+  # viewport. So the answers merge, keeping the worse verdict, and the worse of two verdicts is
+  # br_worst_verdict's to decide rather than a second ranking of the four words written here.
+  all_rows="$(jq -s -c '[ group_by(.id)[] | {id: .[0].id, rows: .} ]' "$surfaces_file")" \
+    || die 3 "surfaces: could not assemble the surface rows"
+  surfaces_json='[]'
+  si=0; one_surface=""; merged=""
+  while [ "$si" -lt "$(printf '%s' "$all_rows" | jq 'length')" ]; do
+    one_surface="$(printf '%s' "$all_rows" | jq -c --argjson i "$si" '.[$i]')"
+    merged=""
+    while IFS= read -r one_verdict; do
+      [ -n "$one_verdict" ] || continue
+      merged="$(rw_worse "$merged" "$one_verdict")"
+    done <<RW_SURFACE_VERDICTS
+$(printf '%s' "$one_surface" | jq -r '.rows[].verdict')
+RW_SURFACE_VERDICTS
+    surfaces_json="$(jq -nc --argjson have "$surfaces_json" --argjson g "$one_surface" \
+      --arg verdict "$merged" '
+      $have + [ {id: $g.id, verdict: $verdict,
+                 ran: ([ $g.rows[].ran ] | any),
+                 walked: ([ $g.rows[].walked ] | all),
+                 reportPath: ([ $g.rows[].reportPath ] | map(select(. != "")) | (.[0] // ""))}
+                + (if ([ $g.rows[] | (.baselineAccepted // false) ] | any) then {baselineAccepted: true} else {} end) ]')"
+    si=$((si + 1))
+  done
   rm -f "$checks_file" "$surfaces_file"
 
   updated="$(jq -n --argjson record "$RW_RECORD_DOC" --argjson rows "$checks_json" \
@@ -1837,7 +1756,7 @@ do_close() {
   [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it"
 
   local alignment criteria count i one kind state verdict answered suite_verdict suite_output
-  local names nlen ni tname hit rows_out criteria_json unanswered=0 unmet_count=0
+  local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
   alignment="$(rw_alignment)"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
@@ -1846,7 +1765,7 @@ do_close() {
   rw_load_test_rows "close"
 
   rows_out="$(mktemp)" || die 3 "close: could not create a temporary file"
-  i=0; cid=""; kind=""; state=""; verdict=""; answered=""; names=""; nlen=0; ni=0; tname=""; hit=false
+  i=0; cid=""; kind=""; state=""; verdict=""; answered=""; hit="false"
   while [ "$i" -lt "$count" ]; do
     cid="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].id')"
     kind="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].verifiedBy')"
@@ -1863,20 +1782,11 @@ do_close() {
       state="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" \
         '[ (.criteria // [])[] | select(.id == $id) ][0].rowState // ""')"
       # Check 1 joins on the test name: implementation puts the criterion id at the end of each
-      # test's name, delimited, so this compares strings and never re-derives the join.
-      names="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" \
-        '[ $rows[] | select(.criterion == $id) | (.tests // [])[] | .name ] | unique | .[]')"
-      hit=false
-      nlen=0
-      while IFS= read -r tname; do
-        [ -n "$tname" ] || continue
-        nlen=$((nlen + 1))
-        case "$suite_output" in
-          *"$tname"*) [ "$suite_verdict" = "unmet" ] && hit=true ;;
-        esac
-      done <<RW_TEST_NAMES
-$names
-RW_TEST_NAMES
+      # test's name, delimited, so this compares strings and never re-derives the join. One question
+      # per criterion: does the suite output name any test this criterion froze.
+      hit="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" --arg out "$suite_output" '
+        [ $rows[] | select(.criterion == $id) | (.tests // [])[] | .name
+          | select($out | contains(.)) ] | length > 0')"
       case "$suite_verdict" in
         met)
           case "$state" in
@@ -1903,16 +1813,16 @@ RW_TEST_NAMES
   rm -f "$rows_out"
 
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
-  # answering a question nobody asked.
-  one=""
-  while IFS= read -r one; do
-    [ -n "$one" ] || continue
-    cid="${one%%	*}"
-    printf '%s' "$criteria" | jq -e --arg id "$cid" '[ .[] | select(.id == $id and .verifiedBy == "person") ] | length > 0' >/dev/null 2>&1 \
-      || die 3 "close: --row named $cid, and the frozen contract holds no person-verified criterion with that id. A machine-verified criterion is answered by the suite join, never by a flag."
-  done <<RW_ROWS
+  # answering a question nobody asked. Every id is checked in one question rather than one per row.
+  bad_rows="$(jq -Rrn --argjson c "$criteria" --rawfile given /dev/stdin '
+    [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
+      | . as $id | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
+    | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
+)"
+  [ -z "$bad_rows" ] \
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id. A machine-verified criterion is answered by the suite join, never by a flag."
 
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then
@@ -1956,7 +1866,7 @@ RW_ROWS
   # `start` reports the contract as changed; that drift is review's own, and the report says so.
   local live_state written missing_ids new_alignment
   written=0; missing_ids=""
-  live_state="$(rw_json_state "$ALIGNMENT_FILE")"
+  live_state="$(json_file_state "$ALIGNMENT_FILE")"
   if [ "$live_state" = "ok" ]; then
     new_alignment="$(jq -c --argjson rows "$criteria_json" '
       .criteria = [ (.criteria // [])[] | . as $c
@@ -1986,12 +1896,6 @@ RW_ROWS
 # ------------------------------------------------------------------------------------------------
 # `step`: print one step file.
 # ------------------------------------------------------------------------------------------------
-
-# The base names of every .md file directly in $1, sorted, space separated. The same shape
-# implement-actions.sh's own `step` lists its set in.
-md_basenames_in() {
-  find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
-}
 
 do_step() {
   local names

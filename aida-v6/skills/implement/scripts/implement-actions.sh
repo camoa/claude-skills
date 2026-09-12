@@ -548,13 +548,6 @@ resolve_task_folder() {
 
 # The temporary file is created beside the target, in the same directory, so mv is a rename
 # within one filesystem and a failure partway never leaves a half-written file at $target.
-# The base names of every .md file directly in $1, sorted, space separated with a trailing space.
-# `dispatch-open` names the agents this way and `step` names the step files, and one copy is what
-# keeps the two refusals listing their sets in the same shape.
-md_basenames_in() {
-  find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
-}
-
 write_atomic() {
   local target="$1" content="$2" dir tmp
   dir="$(dirname -- "$target")"
@@ -2063,14 +2056,8 @@ do_preconditions() {
         shift 2 ;;
       --lookup-failed)
         [ "$#" -ge 2 ] || die 3 "preconditions: --lookup-failed needs <framework>=<reason>"
-        case "$2" in *=*) ;; *) die 3 "preconditions: --lookup-failed takes <framework>=<reason>, got: $2" ;; esac
-        [ -n "${2%%=*}" ] || die 3 "preconditions: --lookup-failed was given no framework name: $2"
-        val="${2#*=}"
-        case "$val" in
-          no-recipe|listing-unreachable|fetch-failed) ;;
-          *) die 3 "preconditions: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $val" ;;
-        esac
-        failures="$failures$(printf '%s' "$2" | sed 's/=/\t/')
+        cr_lookup_failure_pair "preconditions" "--lookup-failed" "$2"
+        failures="$failures$CR_PAIR
 "
         shift 2 ;;
       --value)
