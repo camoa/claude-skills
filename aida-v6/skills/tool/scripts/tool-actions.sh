@@ -9,12 +9,17 @@
 # install  runs every command in the recipe's Install block, in order.
 # run      runs the recipe's Run command. A missing tool is that command failing.
 #
+# What reaches stdout is what reaches the orchestrator's context. A command's own output never
+# does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
+# folder derived files already live in. They print `status:`, `lines:` and `output:` with that
+# path. A status that is not zero adds `first:`, the first line the failing command printed.
+#
 # Exit codes:
 #   0  did what was asked
 #   1  no project owns this directory
 #   2  no recipe for this tool and this project's frameworks
 #   3  the script could not do its job (bad arguments, unreadable file, refused command)
-#   4  a command from the recipe ran and failed; its own output is the answer
+#   4  a command from the recipe ran and failed; its own output, in the file, is the answer
 #
 # A command from a recipe runs as arguments, never through a shell. A command carrying a
 # shell metacharacter is refused, because a recipe is data written elsewhere and a
@@ -180,14 +185,36 @@ refuse_if_unsafe() {
   return 0
 }
 
+# Runs one recipe line as arguments and appends its output to a file. $1 the line, $2 the file,
+# the rest extra arguments. zsh does not split an unquoted expansion. The split happens in a
+# subshell that sets SH_WORD_SPLIT for zsh, and the option never leaks to the caller.
 run_line() {
-  local line="$1"; shift
+  local line="$1" outfile="$2"
+  shift 2
   refuse_if_unsafe "$line" || exit 3
-  # shellcheck disable=SC2206
-  local argv=($line)
-  [ ${#argv[@]} -gt 0 ] || return 0
   printf '+ %s\n' "$line"
-  "${argv[@]}" "$@"
+  (
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      setopt SH_WORD_SPLIT 2>/dev/null
+    fi
+    set -f
+    # shellcheck disable=SC2086
+    set -- $line "$@"
+    set +f
+    [ "$#" -gt 0 ] || exit 0
+    exec "$@"
+  ) >>"$outfile" 2>&1
+}
+
+# The one summary printer. $1 the exit status, $2 the output file, $3 the line to quote on a
+# failure, counted from one.
+output_summary() {
+  printf 'status: %s\n' "$1"
+  printf 'lines: %s\n' "$(wc -l <"$2" | tr -d '[:space:]')"
+  printf 'output: %s\n' "$2"
+  if [ "$1" -ne 0 ]; then
+    printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
+  fi
 }
 
 # ------------------------------------------------------------------- actions
@@ -231,11 +258,21 @@ case "$ACTION" in
       printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"
       printf '%s\n' "$STEPS" | sed 's/^/  /'
     fi
+    mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
+    OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-install.txt"
+    : >"$OUTFILE"
+    BEFORE=0
     while IFS= read -r line; do
       [ -n "${line// /}" ] || continue
-      run_line "$line" || { printf 'tool-actions: step failed, see its output above\n' >&2; exit 4; }
+      BEFORE="$(wc -l <"$OUTFILE" | tr -d '[:space:]')"
+      if ! run_line "$line" "$OUTFILE"; then
+        printf 'tool-actions: step failed: %s\n' "$line" >&2
+        output_summary 4 "$OUTFILE" "$((BEFORE + 1))"
+        exit 4
+      fi
     done <<< "$STEPS"
     printf 'INSTALLED: %s per %s\n' "$TOOL" "$RECIPE"
+    output_summary 0 "$OUTFILE" 1
     exit 0
     ;;
 
@@ -264,8 +301,23 @@ case "$ACTION" in
       exit 3
     fi
     CMD="$(sh_blocks_under Run | grep '[^[:space:]]' | head -1)"
-    run_line "$CMD" "${EXTRA[@]+"${EXTRA[@]}"}" || exit 4
-    exit 0
+    mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
+    OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-run.txt"
+    : >"$OUTFILE"
+    # The branch on the count is deliberate. `"${EXTRA[@]+"${EXTRA[@]}"}"` hands zsh one empty
+    # word for an empty array, and that word reached the tool as an argument.
+    if [ "${#EXTRA[@]}" -gt 0 ]; then
+      run_line "$CMD" "$OUTFILE" "${EXTRA[@]}"
+    else
+      run_line "$CMD" "$OUTFILE"
+    fi
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+      output_summary 0 "$OUTFILE" 1
+      exit 0
+    fi
+    output_summary 4 "$OUTFILE" 1
+    exit 4
     ;;
 
   *)

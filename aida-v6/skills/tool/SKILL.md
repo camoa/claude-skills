@@ -32,11 +32,13 @@ This is the common case, and it is also how you find out whether the tool is the
 "${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> run <tool>
 ```
 
-Read the exit code first, never the text alone.
+Read the exit code first, never the text alone. The command's own output goes to the file named
+on the `output:` line, under the project's `records/` folder. The `status:` and `lines:` lines say
+how it ended and how much it printed.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
-| 0 | The tool ran. | Its output is above. You are done. |
+| 0 | The tool ran. | Its output is in the file at `output:`. You are done. |
 | 1 | No project owns this directory. | Say so in one line and name the project skill. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
 | 3 | The script could not do its job. | Show the error text and stop. |
@@ -44,8 +46,8 @@ Read the exit code first, never the text alone.
 
 ## The command failed
 
-Exit 4 means the tool's own command returned an error. Read its output. Two cases, and they look
-different.
+Exit 4 means the tool's own command returned an error. Read the `first:` line, and the file at
+`output:` when that line is not enough. Two cases, and they look different.
 
 The tool is missing, which reads as a command that was not found. Install it, below, then run it
 again.
@@ -69,7 +71,7 @@ change and check them against the active order's untouched list.
 | 0 | Every step ran. | Run the tool once to confirm it works. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
 | 3 | A command was refused, or the recipe has no install steps. | Show the error text and stop. It names the recipe, which is where the fix belongs. |
-| 4 | A step failed. | Show that step's own output. It says what is missing better than a guess would. |
+| 4 | A step failed. | The `first:` line quotes the step's first line of output, and the file at `output:` holds the rest. Show what it said; it says what is missing better than a guess would. |
 
 Do not install by hand when a step fails. A missing package manager or a wrong version is the
 recipe's problem or the machine's, and doing it by hand hides which.
