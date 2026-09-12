@@ -27,12 +27,8 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh surfaces "<task_folder>"
 ```
-It records checks 13 to 15 and one row per registered surface, with the verdict, whether it ran, and
-its report path.
-
-**The base URL is resolved at review time.** Version 5 resolved it at setup, wrote it into a config,
-and later captures failed against a stale address. Report the address the run used, and never invent
-one.
+It runs every row the surface block declares, and it records checks 13 to 15 and one row per
+registered surface, with the verdict and whether it ran.
 
 **Zero tests ran is never a pass.** A run that selected nothing reads unknown. A registry surface
 with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform.
@@ -64,5 +60,6 @@ write it:
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh surfaces "<task_folder>" \
   --accept-baseline <surface id>
 ```
-Never write one automatically, and never unattended. The call refuses on an autonomous run, and the
-refusal is recorded.
+This runs the accept row the surface block declares for that kind. It refuses when the block declares
+none, because there is then no command that writes a baseline. Never write one automatically, and
+never unattended. The call refuses on an autonomous run too, and the refusal is recorded.
