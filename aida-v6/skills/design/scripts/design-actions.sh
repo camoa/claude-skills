@@ -13,8 +13,8 @@
 # summary lines and the paths it wrote, and never a record body. A caller that needs a field reads
 # the file at the printed path. `check` writes check-design.sh's report to
 # <task_folder>/records/design-check.json and prints its status, its line count and that path.
-# records/ is where check-task.sh writes too, and the project's .gitignore keeps it out of history,
-# because a report that changes on every run is a derived value and never something to commit.
+# records/ is where check-task.sh writes too, and the project's .gitignore keeps it out of history.
+# A report that changes on every run is a derived value and never something to commit.
 #
 # Usage:
 #   design-actions.sh read       <task_folder>
