@@ -1093,6 +1093,9 @@ do_brief() {
   rw_paths "brief" "$1"
   rw_require_finished "brief"
   rw_require_frozen "brief"
+  # The reviewer reads the code at the final commit where a lens needs more than the diff, so the
+  # brief names the repository it may read.
+  rv_load_codepath "brief"
   rw_load_record "brief"
   rw_require_step "brief" "$CHECK_SERVES" "checks"
 
