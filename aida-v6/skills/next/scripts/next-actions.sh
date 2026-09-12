@@ -290,9 +290,17 @@ do_open() {
     if [ ! -r "$tj" ] || ! jq empty "$tj" >/dev/null 2>&1; then
       die3 "$tj exists but could not be read as JSON"
     fi
+    # Summary lines, never the record: what reaches stdout reaches the orchestrator's context.
     echo "FOUND: new"
     echo "PROJECT: ${project_path}"
-    cat "$tj"
+    echo "PATH: ${project_path}/tasks/${target}"
+    echo "task-file: ${tj}"
+    jq -r '
+      "id: " + (.id // "?"),
+      "state: " + (.state // "new"),
+      "parent: " + (.parent // "none"),
+      "children: " + ((.children // []) | join(" ")),
+      "runMode: " + (.runMode // "interactive")' "$tj"
     return 0
   fi
 

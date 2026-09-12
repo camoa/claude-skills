@@ -92,8 +92,9 @@ Run:
 
 Read the first line.
 
-- **`FOUND: new`.** The task's own `task.json` follows. Say which task it is, from its `id` and
-  `state`, and treat it as active. Nothing else is asked.
+- **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
+  `children:` and `runMode:`. Say which task it is, from its `id` and `state`, and treat it as
+  active. Nothing else is asked. Read the file at `task-file:` only when another field is needed.
 - **`FOUND: legacy_in_progress` or `FOUND: legacy_complete`.** A `PATH:` line follows, and an
   `EPIC:` line when it is nested inside one. Say plainly that this task predates the tasks folder
   and has not moved: its files live at that path, and no contract is offered on it here.
