@@ -254,7 +254,7 @@ Once every planned search has been dispatched and recorded, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh check "<task_folder>"
 ```
-This reads every research file's JSON and writes its report to `<task_folder>/research-check.json`.
+This reads every research file's JSON and writes its report to `<task_folder>/records/research-check.json`.
 It prints `status:`, the report's line count and `report:` with the path. When the status is not
 zero it adds one `open:` line with the uncovered ids and the counts. The report holds:
 

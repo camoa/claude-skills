@@ -11,8 +11,9 @@
 #
 # What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
 # summary lines and the paths it wrote, and never a record body or a finding's text. `check`
-# writes check-research.sh's report to <task_folder>/research-check.json and prints its status,
-# its line count and that path.
+# writes check-research.sh's report to <task_folder>/records/research-check.json and prints its
+# status, its line count and that path. records/ is where check-task.sh writes too, and the
+# project's .gitignore keeps it out of history: a report that changes on every run is derived.
 #
 # Usage:
 #   research-actions.sh read   <task_folder>
@@ -376,6 +377,7 @@ do_check() {
   # The report goes to a file and the summary to stdout, so the conversation holds the verdict and
   # a path rather than the whole report.
   local rc verdict lines
+  mkdir -p "$TASK_PATH/records" || die3 "check: could not create $TASK_PATH/records"
   bash "$CHECK_RESEARCH_SCRIPT" "$TASK_PATH" >"$CHECK_FILE"
   rc=$?
   case "$rc" in
@@ -425,7 +427,7 @@ RESOLVE_RC=$?
 [ "$RESOLVE_RC" -eq 0 ] || exit "$RESOLVE_RC"
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 RESEARCH_DIR="$TASK_PATH/research"
-CHECK_FILE="$TASK_PATH/research-check.json"
+CHECK_FILE="$TASK_PATH/records/research-check.json"
 
 case "$ACTION" in
   read)    do_read    "$@" ;;
