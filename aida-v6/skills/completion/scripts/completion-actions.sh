@@ -384,6 +384,210 @@ CP_WANTED
 }
 
 # ------------------------------------------------------------------------------------------------
+# `close`: the body, the record, then the task skill's complete.
+# ------------------------------------------------------------------------------------------------
+
+# Renders the pull request body from the records only. Completion computes nothing: each section
+# reads one field, and a missing record is written in words, never left blank. The body is never
+# printed; its path is. $1 the record this close is about to write.
+cp_render_body() {
+  jq -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
+    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" '
+    def section($title; $lines): ["## " + $title, ""] + $lines + [""];
+    def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
+    ["# " + $task, ""]
+    + section("Goal";
+        if $alignment == null then ["no contract; see task.md"] else [$alignment.goal // ""] end)
+    + section("Success criteria";
+        if $alignment == null then ["no contract"]
+        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + ")" ]; "none") end)
+    + section("Non-goals";
+        if $alignment == null then ["no contract"]
+        else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)
+    + section("Commit range";
+        if $finished == null then ["no build record; no range"] else [$finished.commitRange // ""] end)
+    + section("Review";
+        if $review == null then ["no review record; nothing was checked"]
+        elif ($review | has("verdict") | not) then ["review ran and did not close"]
+        else ["Verdict: " + $review.verdict, ""]
+          + none_when_empty(([ ($review.findings // []) | group_by(.disposition)[]
+              | ["### " + .[0].disposition, ""]
+                + [ .[] | "- " + .id + " (" + .severity + ", " + .lens
+                    + (if .file == "" then "" else ", " + .file + (if .lines == "" then "" else ":" + .lines end) end)
+                    + "): " + .evidence ] ]
+              | map(. + [""]) | add // [] | .[:-1]); "no findings")
+        end)
+    + section("Grounds for closing";
+        ["Closed by " + $record.closedBy + " with the review verdict " + $record.reviewVerdict + "."]
+        + (if $record.reason == "" then [] else ["Reason: " + $record.reason] end))
+    + section("Follow-up tasks";
+        none_when_empty([ $record.followUps[]
+          | "- " + .finding + ": " + (if .task == null then "no task" + (if .reason == "" then "" else ", left because " + .reason end) else .task end) ]; "none"))
+    + section("Catalog notes";
+        if $review == null then ["none"]
+        else none_when_empty([ ($review.catalogNotes // [])[] | "- " + .seen + " (" + .where + ")" ]; "none") end)
+    | .[]'
+}
+
+# Compares $2, the record as text, against scripts/completed-schema.json through the same library
+# every record check in this plugin uses, then writes it. A field the schema requires and the
+# record does not hold, or one whose type or constraint the schema refuses, stops the write: a
+# record this stage cannot read back is worse than no record. $1 the action.
+cp_write_record() {
+  local who="$1" doc="$2" tmp result missing_required unreadable_fields
+  tmp="$(mktemp "$COMPLETION_DIR/.completed-candidate.XXXXXX")" \
+    || die 3 "$who: could not create a temporary file in $COMPLETION_DIR"
+  printf '%s\n' "$doc" >"$tmp" || { rm -f "$tmp"; die 3 "$who: could not write $tmp"; }
+  result="$(schema_check_compare "$COMPLETED_SCHEMA" "$tmp")"
+  if [ -z "$result" ]; then
+    rm -f "$tmp"
+    die 3 "$who: the record could not be compared against $COMPLETED_SCHEMA."
+  fi
+  missing_required="$(jq -r --slurpfile schema "$COMPLETED_SCHEMA" '
+    ($schema[0].required // []) as $req
+    | [ (.missing // [])[] | select(.field as $f | $req | index($f)) | .field ] | join(", ")' <<CP_SCHEMA_RESULT
+$result
+CP_SCHEMA_RESULT
+)"
+  unreadable_fields="$(jq -r '[ (.unreadable // [])[] | (.field + " (" + .reason + ")") ] | join("; ")' <<CP_SCHEMA_RESULT2
+$result
+CP_SCHEMA_RESULT2
+)"
+  if [ -n "$missing_required" ] || [ -n "$unreadable_fields" ]; then
+    rm -f "$tmp"
+    die 3 "$who: the record does not match $COMPLETED_SCHEMA and was not written. Missing: ${missing_required:-none}. Wrong shape: ${unreadable_fields:-none}."
+  fi
+  rm -f "$tmp"
+  write_atomic "$RECORD_FILE" "$doc"
+}
+
+do_close() {
+  local task_arg="" reason="" leaves="" fid value
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --reason)
+        [ "$#" -ge 2 ] || die 3 "close: --reason needs a sentence saying why the task closes without a passed review"
+        looks_like_flag "$2" && die 3 "close: --reason needs a sentence, got another option: $2"
+        is_blank "$2" && die 3 "close: --reason was given no text. A reason is a sentence the record keeps, so a later reader knows the grounds."
+        reason="$2"; shift 2 ;;
+      --leave)
+        [ "$#" -ge 2 ] || die 3 "close: --leave needs <finding id>=<reason>"
+        case "$2" in *=*) ;; *) die 3 "close: --leave takes <finding id>=<reason>, got: $2" ;; esac
+        fid="${2%%=*}"; value="${2#*=}"
+        [ -n "$fid" ] || die 3 "close: --leave was given no finding id: $2"
+        is_blank "$value" && die 3 "close: --leave $fid was given no reason. Say why the finding is left without a task."
+        leaves="$leaves$(printf '%s\t%s' "$fid" "$value")
+"
+        shift 2 ;;
+      --) shift; break ;;
+      -*) die 3 "close: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_arg" ] || die 3 "close: more than one task folder given"
+        task_arg="$1"; shift ;;
+    esac
+  done
+  local summary="$*"
+
+  cp_paths "close" "$task_arg"
+  cp_load "close"
+  cp_refuse_complete "close"
+  [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review"
+  [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task"
+
+  # A parent refuses to close while a child is open, and the person closes the parent.
+  local open_children
+  open_children="$(printf '%s' "$CP_CHILDREN" | jq -r '[ .[] | select(.state != "complete") | .id ] | join(", ")')"
+  [ -z "$open_children" ] \
+    || die 1 "close: $CP_TASK_ID has an open child: $open_children. Close every child first; a parent closes only when each child is complete."
+
+  # A review verdict of passed closes with nothing asked. Anything else closes only on a person's
+  # explicit word, with the reason recorded. Unattended, that is the halt, naming the verdict read,
+  # because a script inventing a reason would be a bypass.
+  if [ "$CP_REVIEW_VERDICT" != "passed" ] && [ -z "$reason" ]; then
+    case "$CP_RUN_MODE" in
+      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason." ;;
+      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it." ;;
+    esac
+  fi
+
+  # Every --leave names a follow up finding that has no task. A high severity finding with no
+  # task and no reason refuses the close, because leaving a queued security fault ships it.
+  local bad_leaves rows blocking
+  bad_leaves="$(jq -Rrn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
+    [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
+      | . as $id | ([ $f[] | select(.finding == $id) ][0]) as $row
+      | if $row == null then $id + " (not a follow up finding)"
+        elif $row.task != null then $id + " (already has the task " + $row.task + ")"
+        else empty end ]
+    | unique | join(", ")' <<CP_LEAVES
+$leaves
+CP_LEAVES
+)"
+  [ -z "$bad_leaves" ] \
+    || die 3 "close: --leave named $bad_leaves. A finding is left only when the review record holds it as a follow up and no task exists for it."
+  rows="$(jq -cn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
+    ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))} ] | from_entries) as $why
+    | [ $f[] | {finding: .finding, severity: .severity, task: .task, reason: ($why[.finding] // "")} ]' <<CP_LEAVES2
+$leaves
+CP_LEAVES2
+)"
+  blocking="$(printf '%s' "$rows" | jq -r '[ .[] | select(.severity == "high" and .task == null and .reason == "") | .finding ] | join(", ")')"
+  [ -z "$blocking" ] \
+    || die 1 "close: the high severity follow up finding $blocking has no task. Create it with follow-ups --create, or say why not with --leave $(printf '%s' "$blocking" | cut -d, -f1)=<reason>. Leaving a queued fault unnamed ships it."
+  CP_FOLLOW_UPS="$rows"
+
+  local closed_by record
+  case "$CP_RUN_MODE" in
+    autonomous) closed_by="nobody" ;;
+    *)          closed_by="person" ;;
+  esac
+  record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \
+    --arg closedBy "$closed_by" --arg reason "$reason" --argjson rows "$rows" '
+    {schemaVersion: 1, takenAt: $today, task: $task, reviewVerdict: $verdict, closedBy: $closedBy, reason: $reason,
+     followUps: [ $rows[] | {finding: .finding, task: .task, reason: .reason} ]}')"
+  [ -n "$record" ] || die 3 "close: could not assemble the record for $CP_TASK_ID."
+
+  local body
+  mkdir -p "$COMPLETION_DIR" || die 3 "close: could not create $COMPLETION_DIR"
+  body="$(cp_render_body "$record")"
+  [ -n "$body" ] || die 3 "close: could not render the pull request body for $CP_TASK_ID."
+  write_atomic "$BODY_FILE" "$body"
+  cp_write_record "close" "$record"
+  CP_RECORD_STATE="ok"
+
+  # The task skill stays the one writer of `state: complete`. With no summary given, one line names
+  # the grounds, which the record holds anyway. Its commit carries the record and the body.
+  if [ -z "$summary" ]; then
+    case "$CP_REVIEW_VERDICT" in
+      passed) summary="Closed on a passed review." ;;
+      *)      summary="Closed with the review verdict $CP_REVIEW_VERDICT, on a recorded reason." ;;
+    esac
+  fi
+  local said
+  said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
+      complete --project "$PROJECT_DIR" "$CP_TASK_ID" -- "$summary" 2>&1)" \
+    || { printf '%s\n' "$said" >&2; die 3 "close: task complete refused $CP_TASK_ID after the body and the record were written. Run close again once the task script's own line above is answered."; }
+  CP_STATE="$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)"
+
+  cp_print_summary "close" "$(jq -nc --arg closedBy "$closed_by" --arg reason "$reason" --arg body "$BODY_FILE" --arg record "$RECORD_FILE" \
+    '{closedBy: $closedBy, reason: (if $reason == "" then "none" else $reason end), prBody: $body, record: $record}')"
+
+  local parent siblings_open
+  parent="$(printf '%s' "$CP_TASK_DOC" | jq -r '.parent // ""')"
+  echo "CLOSE: $CP_TASK_ID is complete. The pull request body is at $BODY_FILE; open the pull request from it by hand. Run /next." >&2
+  if [ -n "$parent" ] && [ -f "$TASKS_DIR/$parent/task.json" ]; then
+    siblings_open="$(jq -r '(.children // [])[]' "$TASKS_DIR/$parent/task.json" 2>/dev/null | while IFS= read -r fid; do
+      [ -n "$fid" ] || continue
+      [ "$(jq -r '.state // ""' "$TASKS_DIR/$fid/task.json" 2>/dev/null)" = "complete" ] || printf '%s ' "$fid"
+    done)"
+    if [ -z "$siblings_open" ]; then
+      echo "CLOSE: every child of $parent is complete, so close $parent next." >&2
+    fi
+  fi
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # `step`: print one step file.
 # ------------------------------------------------------------------------------------------------
 
@@ -416,6 +620,7 @@ shift
 case "$ACTION" in
   read)       do_read       "$@" ;;
   follow-ups) do_follow_ups "$@" ;;
+  close)      do_close      "$@" ;;
   step)       do_step       "$@" ;;
   *) usage; die 3 "unknown action: $ACTION" ;;
 esac
