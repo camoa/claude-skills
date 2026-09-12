@@ -9,6 +9,11 @@
 # file's markdown, and runs the coverage check. Deciding whether research is done belongs to
 # whoever calls this, never to this script.
 #
+# What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
+# summary lines and the paths it wrote, and never a record body or a finding's text. `check`
+# writes check-research.sh's report to <task_folder>/research-check.json and prints its status,
+# its line count and that path.
+#
 # Usage:
 #   research-actions.sh read   <task_folder>
 #   research-actions.sh start  <task_folder>
@@ -179,45 +184,40 @@ is_criterion_id() {
 do_read() {
   [ "$#" -eq 0 ] || die3 "read: unrecognized argument: $1"
 
-  local criteria_json contract_exists decided_json files_json research_exists f entry ftype
+  # Summary lines only. The skill routes on `contract:`, on `criteria-by-designer:` and on the
+  # `search:` lines, and reads a file from its printed path when it needs the findings.
+  local criteria_json contract_state research_state file_count decided f count
   criteria_json="$(contract_criteria_json)"
-  contract_exists="$(contract_ok)"
-  decided_json="$(jq -c '.decidedWithoutAPerson // []' "$ALIGNMENT_FILE" 2>/dev/null)"
-  [ -n "$decided_json" ] || decided_json="[]"
+  contract_state="absent"
+  [ "$(contract_ok)" = "true" ] && contract_state="present"
+  decided="$(jq -r '(.decidedWithoutAPerson // []) | length' "$ALIGNMENT_FILE" 2>/dev/null)"
+  [ -n "$decided" ] || decided=0
+  echo "action: read"
+  echo "task: $TASK_PATH"
+  echo "contract: $contract_state"
+  echo "contract-file: $ALIGNMENT_FILE"
+  echo "criteria: $(printf '%s' "$criteria_json" | jq -r '[.[].id] | join(" ")')"
+  echo "criteria-by-designer: $(printf '%s' "$criteria_json" | jq -r '[.[] | select(.author == "designer") | .id] | join(" ")')"
+  echo "decided-without-a-person: $decided"
 
-  files_json="[]"
-  research_exists=false
+  research_state="not started"
+  file_count=0
   if [ -d "$RESEARCH_DIR" ]; then
-    research_exists=true
+    research_state="started"
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      if ! jq empty "$f" 2>/dev/null; then
-        entry="$(jq -n --arg path "$f" '{path: $path, parsed: false, note: "not valid JSON"}')"
+      count="$(jq -r 'if type == "object" then ((.findings // []) | length) else empty end' "$f" 2>/dev/null)"
+      if [ -n "$count" ]; then
+        file_count=$((file_count + 1))
+        echo "search: $f findings=$count"
       else
-        ftype="$(jq -r 'type' "$f" 2>/dev/null)"
-        if [ "$ftype" != "object" ]; then
-          entry="$(jq -n --arg path "$f" --arg t "$ftype" '{path: $path, parsed: false, note: ("valid JSON but a " + $t + ", not an object")}')"
-        else
-          entry="$(jq --arg path "$f" '{path: $path, parsed: true, search: (.search // null), findingCount: ((.findings // []) | length)}' "$f" 2>/dev/null)"
-          [ -n "$entry" ] || entry="$(jq -n --arg path "$f" '{path: $path, parsed: false, note: "could not be read"}')"
-        fi
+        echo "unreadable: $f"
       fi
-      files_json="$(printf '%s' "$files_json" | jq --argjson e "$entry" '. + [$e]')"
     done < <(find "$RESEARCH_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
   fi
-
-  jq -n \
-    --arg taskPath "$TASK_PATH" \
-    --arg alignmentFile "$ALIGNMENT_FILE" \
-    --argjson contractExists "$contract_exists" \
-    --argjson criteria "$criteria_json" \
-    --arg researchDir "$RESEARCH_DIR" \
-    --argjson researchStarted "$research_exists" \
-    --argjson files "$files_json" \
-    --argjson decidedWithoutAPerson "$decided_json" \
-    '{taskPath: $taskPath, alignmentFile: $alignmentFile, contractExists: $contractExists,
-      criteria: $criteria, decidedWithoutAPerson: $decidedWithoutAPerson, researchDir: $researchDir,
-      researchStarted: $researchStarted, files: $files}'
+  echo "research: $research_state"
+  echo "research-dir: $RESEARCH_DIR"
+  echo "searches: $file_count"
   exit 0
 }
 
@@ -225,7 +225,7 @@ do_read() {
 # start: makes sure the contract exists before research begins, and makes sure the research
 # folder exists. Idempotent: running it again on a task already started changes nothing and is
 # not refused, unlike scope's `init`, because no aggregate file here could be overwritten by a
-# second call. Prints the criteria the conversation is answering for.
+# second call. Prints the ids of the criteria the conversation is answering for.
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
@@ -237,8 +237,8 @@ do_start() {
   mkdir -p "$RESEARCH_DIR" || die3 "start: could not create $RESEARCH_DIR"
 
   echo "STARTED: $RESEARCH_DIR"
-  contract_criteria_json
-  printf '\n'
+  echo "contract-file: $ALIGNMENT_FILE"
+  echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
   exit 0
 }
 
@@ -284,19 +284,17 @@ do_record() {
   is_blank "$text" && die3 "record: --text is required and must not be blank"
   is_blank "$source_val" && die3 "record: --source is required and must not be blank. Every finding names where it came from"
 
+  # The list is split with tr and read line by line. An unquoted `for id in $list` under a comma
+  # IFS splits in bash and not in zsh. zsh was handed the whole list as one id.
   local ids_json='[]'
+  local id
   if [ -n "$criteria_served" ]; then
-    local old_ifs="$IFS" id
-    IFS=','
-    for id in $criteria_served; do
-      IFS="$old_ifs"
+    while IFS= read -r id; do
       is_blank "$id" && die3 "record: --criteria-served has a blank id in '$criteria_served'"
       is_criterion_id "$id" \
         || die3 "record: --criteria-served id '$id' is not a valid criterion id shape (c<n>, no leading zero)"
       ids_json="$(printf '%s' "$ids_json" | jq --arg id "$id" '. + [$id]')"
-      IFS=','
-    done
-    IFS="$old_ifs"
+    done < <(printf '%s\n' "$criteria_served" | tr ',' '\n')
   fi
 
   mkdir -p "$RESEARCH_DIR" || die3 "record: could not create $RESEARCH_DIR"
@@ -349,14 +347,17 @@ do_record() {
   write_atomic "$file" "$doc"
 
   echo "RECORDED: $file"
-  printf '%s\n' "$finding_json"
+  echo "search: $search"
+  echo "criteriaServed: $(printf '%s' "$ids_json" | jq -r 'join(",")')"
+  echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
 
   [ -f "$RESEARCH_RENDER_SCRIPT" ] \
     || die3 "record: cannot find research-render.sh at $RESEARCH_RENDER_SCRIPT"
-  bash "$RESEARCH_RENDER_SCRIPT" "$TASK_PATH" "$search"
+  bash "$RESEARCH_RENDER_SCRIPT" "$TASK_PATH" "$search" >/dev/null
   local render_rc=$?
   [ "$render_rc" -eq 0 ] \
     || die3 "record: research-render.sh could not render $search.md (exit $render_rc)"
+  echo "rendered: $RESEARCH_DIR/$search.md"
 
   exit 0
 }
@@ -372,15 +373,35 @@ do_check() {
   [ -f "$CHECK_RESEARCH_SCRIPT" ] \
     || die3 "check: cannot find check-research.sh at $CHECK_RESEARCH_SCRIPT"
 
-  bash "$CHECK_RESEARCH_SCRIPT" "$TASK_PATH"
-  local rc=$?
+  # The report goes to a file and the summary to stdout, so the conversation holds the verdict and
+  # a path rather than the whole report.
+  local rc verdict lines
+  bash "$CHECK_RESEARCH_SCRIPT" "$TASK_PATH" >"$CHECK_FILE"
+  rc=$?
   case "$rc" in
-    0) exit 0 ;;
-    1) exit 4 ;;
-    3) exit 3 ;;
-    4) exit 5 ;;
+    0) verdict=0 ;;
+    1) verdict=4 ;;
+    3) verdict=3 ;;
+    4) verdict=5 ;;
     *) die3 "check: check-research.sh exited with an unexpected code $rc" ;;
   esac
+  lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
+  echo "action: check"
+  echo "status: $verdict"
+  echo "lines: $lines"
+  echo "report: $CHECK_FILE"
+  if [ "$verdict" -ne 0 ]; then
+    echo "open: $(jq -r '
+      [ ("criteria with no finding: " + ((.coverage.criteriaWithNoFinding // []) | map(.id) | join(" "))
+          | select(endswith(": ") | not)),
+        ("findings with no criterion: " + ((.coverage.findingsWithNoCriterion // []) | length | tostring)
+          | select(endswith(": 0") | not)),
+        ("unknown criterion ids: " + ((.coverage.unknownCriteriaIds // []) | map(.id) | unique | join(" "))
+          | select(endswith(": ") | not)),
+        ("files with issues: " + ((.fileIssueCount // 0) | tostring) | select(endswith(": 0") | not))
+      ] | join("; ")' "$CHECK_FILE" 2>/dev/null)"
+  fi
+  exit "$verdict"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -404,6 +425,7 @@ RESOLVE_RC=$?
 [ "$RESOLVE_RC" -eq 0 ] || exit "$RESOLVE_RC"
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 RESEARCH_DIR="$TASK_PATH/research"
+CHECK_FILE="$TASK_PATH/research-check.json"
 
 case "$ACTION" in
   read)    do_read    "$@" ;;

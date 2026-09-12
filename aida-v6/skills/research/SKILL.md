@@ -53,15 +53,15 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh read "<task_folder>"
 ```
-This reports whether the task has an approved contract, lists its criteria, and lists any
-research file already on disk for this task, with each file's search name and how many findings
-it holds. Each criterion carries its author, and `designer` there means no person ever approved
-that criterion.
+This prints summary lines. `contract:` says present or absent and `contract-file:` names the
+file. `criteria:` lists the ids, and `criteria-by-designer:` lists the ids no person ever
+approved. One `search:` line names each research file already on disk with its finding count.
+Read the criteria's text from the contract file.
 
-No contract: say so in one line and name the scope skill. Stop.
+`contract: absent`: say so in one line and name the scope skill. Stop.
 
-A contract with research files already present: this is a resumed or repeated run. Read each
-listed file before deciding what is still missing, rather than starting over.
+`search:` lines present: this is a resumed or repeated run. Read each named file before deciding
+what is still missing, rather than starting over.
 
 ## Start the stage
 
@@ -69,7 +69,7 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh start "<task_folder>"
 ```
-This creates the task's `research` folder and prints the criteria list again, for reference
+This creates the task's `research` folder and prints the criterion ids again, for reference
 while planning searches. It is safe to run more than once; it never overwrites anything.
 
 ## Decide which searches are needed
@@ -254,7 +254,9 @@ Once every planned search has been dispatched and recorded, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh check "<task_folder>"
 ```
-This reads every research file's JSON and reports, in one JSON object:
+This reads every research file's JSON and writes its report to `<task_folder>/research-check.json`.
+It prints `status:`, the report's line count and `report:` with the path. When the status is not
+zero it adds one `open:` line with the uncovered ids and the counts. The report holds:
 
 - a research file with a missing, empty or malformed required field;
 - a `criteriaServed` id that names no criterion in the contract;
@@ -272,9 +274,9 @@ malformed required field. Fix that file with another `record` call, or by hand, 
 Exit 3: the script could not run the check at all. Read its stderr and fix the named problem,
 then check again.
 
-Exit 5: the schema is fine but the coverage is not. For each id in `criteriaWithNoFinding`,
-dispatch another search for that criterion specifically. For each entry in
-`findingsWithNoCriterion`, decide by hand: a genuine "looked and found nothing" that never tied
+Exit 5: the schema is fine but the coverage is not. For each id the `open:` line names under
+criteria with no finding, dispatch another search for that criterion specifically. For each entry
+in the report's `findingsWithNoCriterion`, decide by hand: a genuine "looked and found nothing" that never tied
 to one criterion can stand as recorded; a positive finding attached to nothing is work nobody
 asked for, so either attach it to the criterion it actually serves or leave it out. Then check
 again.
