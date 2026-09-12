@@ -28,7 +28,9 @@ once, at the start.
 
 `task-actions.sh` never asks a question on its own. Every fact below that this skill would
 otherwise ask for must be decided before the script runs; the script only writes what it is given
-and reports what happened.
+and reports what happened. Every action prints summary lines: `task-file:` with the path, `id:`,
+`state:`, `parent:`, `children:` and `runMode:`. It never prints the record. Read the file at the
+printed path when another field is needed.
 
 ## `create <name>`
 

@@ -7,6 +7,10 @@
 # prints what it did. Deciding whether a stage may proceed belongs to whoever calls this, never
 # to this script.
 #
+# What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
+# summary lines naming the task file, its id, its state, its parent and its children, and never
+# the record itself. A caller that needs a field reads the file at the printed path.
+#
 # Every action takes the project's own folder (the one holding project.json, never the code
 # folder) as `--project <path>`, because a task always lives inside one project and this script
 # never resolves which project is active on its own (ideal/task.md, "What a task is").
@@ -136,6 +140,17 @@ require_project_folder() {
 
 task_dir_for() { printf '%s/tasks/%s' "$1" "$2"; }
 
+# The one summary printer. $1 is a task.json path.
+task_summary() {
+  echo "task-file: $1"
+  jq -r '
+    "id: " + (.id // "?"),
+    "state: " + (.state // "?"),
+    "parent: " + (.parent // "none"),
+    "children: " + ((.children // []) | join(" ")),
+    "runMode: " + (.runMode // "interactive")' "$1"
+}
+
 # Renders the same five-field commit shape templates/project-commit.md defines, checks its own
 # shape before use, then commits it in the project folder's own git repository. AIDA commits its
 # own files there and never in the code repository (foundations.md, History). This is a private
@@ -229,7 +244,7 @@ do_create() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_dir" >&2
 
   echo "CREATED: ${task_dir}"
-  cat "$task_dir/task.json"
+  task_summary "$task_dir/task.json"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -411,7 +426,7 @@ do_repair() {
     || printf 'task-actions: %s was moved, but the commit failed. Commit it by hand.\n' "$new_task_dir" >&2
 
   echo "REPAIRED: ${new_task_dir}"
-  cat "$new_task_dir/task.json"
+  task_summary "$new_task_dir/task.json"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -454,7 +469,7 @@ do_start() {
       ;;
     in_progress)
       echo "UNCHANGED: ${id} is already in_progress."
-      cat "$task_json"
+      task_summary "$task_json"
       return 0
       ;;
   esac
@@ -473,7 +488,7 @@ do_start() {
     || printf 'task-actions: %s state was written but not committed. Commit it by hand.\n' "$task_dir" >&2
 
   echo "STATE: ${old_state} -> in_progress"
-  cat "$task_json"
+  task_summary "$task_json"
 
   # A task is repaired one thing at a time, only when it is worked on and a deterministic check
   # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
@@ -514,7 +529,7 @@ do_complete() {
 
   if [ "$old_state" = "complete" ]; then
     echo "UNCHANGED: ${id} is already complete."
-    cat "$task_json"
+    task_summary "$task_json"
     return 0
   fi
 
@@ -539,7 +554,7 @@ do_complete() {
     || printf 'task-actions: %s was marked complete, but the commit failed. Commit it by hand.\n' "$task_dir" >&2
 
   echo "STATE: ${old_state} -> complete"
-  cat "$task_json"
+  task_summary "$task_json"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -718,7 +733,7 @@ do_split() {
     || printf 'task-actions: the split was written but not committed. Commit it by hand.\n' >&2
 
   echo "SPLIT: ${parent_id} -> ${child_ids[*]}"
-  cat "$parent_json_file"
+  task_summary "$parent_json_file"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -778,7 +793,7 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}"
-  cat "$task_json"
+  task_summary "$task_json"
 }
 
 # ------------------------------------------------------------------------------------------------
