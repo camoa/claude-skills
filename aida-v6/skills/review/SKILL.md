@@ -158,9 +158,10 @@ One number never means two things, and these keep the meanings implementation ga
 | 66 | implementation has not finished, so there is no `finished.json` |
 | 70 | a person's answer was passed on a run with nobody present |
 | 72 | two frameworks each command one tool |
+| 73 | the check recipe resolved now is not the one the baseline was taken with, so take the baseline again first |
 | 77 | the project records no framework |
 
-Eight of these are review's own. The other six arrive with the library both stages source, and each
+Eight of these are review's own. The other seven arrive with the library both stages source, and each
 keeps the meaning implementation gave it. Code 70 is the one an autonomous run meets in ordinary use,
 the first time a `--walked` or a `--row` is passed.
 
