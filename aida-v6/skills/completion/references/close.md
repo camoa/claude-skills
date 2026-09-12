@@ -53,8 +53,8 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh close "<task_folder>" \
   [--reason "<sentence>"] [--leave <finding id>=<reason>]... [-- <summary...>]
 ```
-It refuses at exit 1 in three cases: a child is open, a high severity follow up has no task and
-no `--leave`, or the review did not pass and no `--reason` was given. Otherwise it writes the
+It refuses at exit 1 in three cases. A child is open. A high severity follow up has no task and
+no `--leave`. The review did not pass and no `--reason` was given. Otherwise it writes the
 pull request body to `<task_folder>/completion/pr-body.md`. It writes the record to
 `<task_folder>/completion/completed.json`. Then it calls `task complete` last. That call commits
 the record and the body with the state.

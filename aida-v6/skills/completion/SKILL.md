@@ -1,6 +1,6 @@
 ---
 name: completion
-description: This skill should be used when a reviewed task is ready to close, for example "close this task", "finish the task", "mark the task done", "write the pull request body", or "complete the task". It reads the review verdict, offers one follow up task per finding the review left open, writes a pull request body from the records, records on what grounds the task closed, and calls the task skill's complete last.
+description: This skill should be used when a reviewed task is ready to close, for example "close this task", "finish the task", "mark the task done", "write the pull request body", or "complete the task". It reads the review verdict and offers one follow up task per open finding. It writes a pull request body from the records, records the grounds for closing, and calls the task skill last.
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
@@ -89,8 +89,8 @@ One number never means two things, and none is new to this plugin.
 
 | Code | What it says |
 |---|---|
-| 1 | refused, with the reason on the first line: the path holds no `task.json`, the task is already complete, a child is open, a high severity follow up has no task, or the review did not pass and no reason was given |
-| 3 | the script could not do its job: a missing argument, a record it could not read, a record that does not match its schema, a file it could not write, or a task name the task script refused |
+| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. |
+| 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
 
 Read a refusal and act on it. Do not repeat the same call unchanged.
