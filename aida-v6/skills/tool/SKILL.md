@@ -82,6 +82,10 @@ Exit 2 means this tool has no recipe for any framework this project records. The
 frameworks it tried. It also says which sources it did not search: it reads folder sources only, and
 another plugin fetches the hosted catalog.
 
+A project that declares no source of tooling recipes always lands here. Declare one with the
+project skill's `add-source <name-or-path> toolingRecipes <folder>`, where the folder holds
+`tooling-recipes/<framework>/<tool>.md`, then run `show <tool>` again.
+
 Say all three things in one line: the tool, the frameworks tried, and any source not searched. Then
 stop. Do not improvise an install from memory. Installing a tool the wrong way for a framework is
 worse than not installing it, and the recipe is where that knowledge belongs.

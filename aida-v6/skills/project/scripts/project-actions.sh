@@ -79,6 +79,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh state <name-or-codePath> <active|complete|archived> -- <why...>
        project-actions.sh set-code-path <name-or-codePath> <newCodePath>
        project-actions.sh set-worktree-default <name-or-codePath> <true|false>
+       project-actions.sh add-source <name-or-codePath> <kind> <folder>
        project-actions.sh unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
        project-actions.sh task-rule-remove <name-or-codePath>
@@ -659,6 +660,57 @@ do_set_worktree_default() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# add-source: declares one folder as a source of one kind of content
+# ------------------------------------------------------------------------------------------------
+
+# Appends one entry to project.json's `sources`, or adds the kind to the entry already naming
+# that folder, so calling it twice writes the same thing once. A folder is the only location type
+# this plugin's own scripts read (tool-actions.sh, "reads folder sources only"), so it is the
+# only one this declares. The entry answers for everything and ranks first for its kind: the
+# project's own source wins, and the hosted catalog is the fallback (project-schema.json,
+# precedence). Nothing here fetches anything; declaring is cheap and fetching stays lazy.
+do_add_source() {
+  local target="${1:?add-source: a name or a code path is required}"
+  local kind="${2:?add-source: a kind is required}"
+  local folder="${3:?add-source: a folder is required}"
+  case "$kind" in
+    guides|playbooks|processRecipes|agenticRecipes|toolingRecipes) : ;;
+    *) die3 "add-source: kind must be one of guides, playbooks, processRecipes, agenticRecipes or toolingRecipes, got: $kind" ;;
+  esac
+  [ -d "$folder" ] || die3 "add-source: not a folder: $folder"
+  folder="$(canon_path "$folder")"
+
+  local match project_path
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+
+  write_project_field "$project_path" "could not update sources in $project_path/project.json" \
+    --arg loc "$folder" --arg kind "$kind" '
+    .sources = ((.sources // []) as $s
+      | if any($s[]; .location == $loc) then
+          $s | map(if .location == $loc
+                   then .provides = ((.provides + [$kind]) | unique)
+                        | .precedence = ((.precedence // {}) + {($kind): (.precedence[$kind] // 1)})
+                   else . end)
+        else
+          $s + [{location: $loc, locationType: "folder", provides: [$kind],
+                 answersFor: {extent: "everything"}, precedence: {($kind): 1}}]
+        end)'
+
+  commit_project "$project_path" \
+    "Add ${folder} as a source of ${kind}" \
+    "requested" \
+    "" \
+    "" \
+    "project" "source" \
+    || printf 'project-actions: the source was written but not committed.\n' >&2
+
+  echo "SOURCE: ${folder} provides ${kind}"
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
 # unregister: drops the row, leaves both folders untouched
 # ------------------------------------------------------------------------------------------------
 
@@ -932,6 +984,7 @@ case "$action" in
   state) do_state "$@" ;;
   set-code-path) do_set_code_path "$@" ;;
   set-worktree-default) do_set_worktree_default "$@" ;;
+  add-source) do_add_source "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
   task-rule-remove) do_task_rule_remove "$@" ;;
