@@ -190,7 +190,7 @@ CP_IDS
 
 # Every finding in the review record carrying `disposition: follow-up`, each with the task that
 # exists for it under tasks/ or null. The task id is `<source task>-<finding id>`, and the folder
-# is how completion knows the task exists: no task field is added, and no goal text is parsed.
+# is how completion knows the task exists. No task field is added, and no goal text is parsed.
 # Sets CP_FOLLOW_UPS to [{finding, severity, lens, file, lines, evidence, task}].
 cp_load_follow_ups() {
   local rows_out one fid task_id task_here
@@ -228,7 +228,7 @@ cp_load() {
   CP_FINISHED_DOC="$(cp_record_doc "$who" "$FINISHED_FILE" "build record")"
   CP_REVIEW_DOC="$(cp_record_doc "$who" "$REVIEW_FILE" "review record")"
   # Four words, because a review that never ran, one that did not close, and one that failed are
-  # three different facts, and `passed` is the one that closes the task with nothing asked.
+  # three different facts. Only `passed` closes the task with nothing asked.
   case "$CP_REVIEW_STATE" in
     ok) CP_REVIEW_VERDICT="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '.verdict // "unfinished"')" ;;
     *)  CP_REVIEW_VERDICT="none" ;;
@@ -237,9 +237,9 @@ cp_load() {
   cp_load_follow_ups "$who"
 }
 
-# What an action prints. A summary, never a body: one `key: value` line at a time, and nothing
-# that came out of a record beyond a state word, a verdict, an id or a path. $1 the action, $2 a
-# JSON object of the action's own extra lines, printed after the shared ones in the order given.
+# What an action prints. A summary, never a body: one `key: value` line at a time. Nothing from
+# a record reaches it beyond a state word, a verdict, an id or a path. $1 the action, $2 a JSON
+# object of the action's own extra lines, printed after the shared ones in the order given.
 cp_print_summary() {
   local who="$1" extra="$2"
   jq -nr --arg who "$who" --arg task "$CP_TASK_ID" --arg state "$CP_STATE" --arg runMode "$CP_RUN_MODE" \
@@ -295,15 +295,15 @@ do_read() {
 # `follow-ups`: one task per follow up finding, through the task skill, and nothing else written.
 # ------------------------------------------------------------------------------------------------
 
-# Exit 1. A closed task has nothing left to close, and a follow up task made after the close would
+# Exit 1. A closed task has nothing left to close. A follow up task made after the close would
 # sit under a source task the record already lists as done. $1 the action.
 cp_refuse_complete() {
   [ "$CP_STATE" != "complete" ] || die 1 "$1: $CP_TASK_ID is already complete. Nothing is left to close, and the record at $RECORD_FILE says on what grounds."
 }
 
-# Exit 70. A person's answer is accepted only when a person is present, which is the rule review
-# and tests-freeze already apply and the number they already use. $1 the action, $2 the flag, $3
-# what the flag would have decided.
+# Exit 70. A person's answer is accepted only when a person is present. Review and tests-freeze
+# apply the same rule under the same number. $1 the action, $2 the flag, $3 what the flag would
+# have decided.
 cp_require_person() {
   local who="$1" flag="$2" what="$3"
   [ "$CP_RUN_MODE" = "autonomous" ] || return 0
@@ -317,9 +317,9 @@ cp_follow_up_row() {
 }
 
 # Creates the task for the follow up finding whose row is $2, through task-actions.sh create, the
-# one producer of a task. The id is `<source task>-<finding id>`, so nobody has to name it, and the
-# goal is the evidence and then one sentence naming the finding, the source task, the lens, the
-# file and the lines. The task script's own output is relayed only when it refuses. $1 the action.
+# one producer of a task. The id is `<source task>-<finding id>`, so nobody has to name it. The
+# goal is the evidence, then one sentence naming the finding, the source task, the lens, the file
+# and the lines. The task script's own output is relayed only when it refuses. $1 the action.
 cp_create_follow_up_task() {
   local who="$1" row="$2" fid task_id goal said
   fid="$(printf '%s' "$row" | jq -r '.finding')"
