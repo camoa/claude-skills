@@ -23,12 +23,12 @@
 #                        --title <text> [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>]
+#                        [--diff-budget <text>] [--surface <id>]...
 #   design-actions.sh update     <task_folder> \
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>]
+#                        [--diff-budget <text>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
 #   design-actions.sh add-done-when  <task_folder> \
@@ -176,13 +176,13 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>]
+                                         [--diff-budget <text>] [--surface <id>]...
        design-actions.sh update         <task_folder> --id <woId> [--title <text>] \
                                          [--criteria-served <id[,id...]>] \
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>]
+                                         [--diff-budget <text>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
@@ -428,7 +428,7 @@ next_wo_id() {
 
 do_create() {
   local title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" diff_budget=""
+  local interface="" reasoning="" diff_budget="" surfaces_json='[]'
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --title)
@@ -455,6 +455,9 @@ do_create() {
       --diff-budget)
         need_value "create" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; shift 2 ;;
+      --surface)
+        need_value "create" "--surface" "$#" "${2:-}"
+        surfaces_json="$(printf '%s' "$surfaces_json" | jq --arg id "$2" '. + [$id]')"; shift 2 ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
   done
@@ -479,9 +482,10 @@ do_create() {
     --argjson criteriaServed "$served_json" --argjson criteriaOwned "$owned_json" \
     --argjson nonGoals "$nongoals_json" --argjson dependsOn "$dependson_json" \
     --arg interface "$interface" --arg reasoning "$reasoning" --arg diffBudget "$diff_budget" \
+    --argjson surfaces "$surfaces_json" \
     '{schemaVersion: 1, id: $id, title: $title,
       criteriaServed: $criteriaServed, criteriaOwned: $criteriaOwned, nonGoals: $nonGoals,
-      dependsOn: $dependsOn, ownedFiles: [], interface: $interface, tests: [], doneWhen: [],
+      dependsOn: $dependsOn, ownedFiles: [], surfaces: $surfaces, interface: $interface, tests: [], doneWhen: [],
       reasoning: $reasoning, diffBudget: $diffBudget}')"
 
   write_atomic "$file" "$doc"
@@ -501,9 +505,9 @@ do_create() {
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" diff_budget=""
+  local interface="" reasoning="" diff_budget="" surfaces_json='[]'
   local set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
-  local set_interface=false set_reasoning=false set_diffbudget=false
+  local set_interface=false set_reasoning=false set_diffbudget=false set_surfaces=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
@@ -533,6 +537,9 @@ do_update() {
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
+      --surface)
+        need_value "update" "--surface" "$#" "${2:-}"
+        surfaces_json="$(printf '%s' "$surfaces_json" | jq --arg id "$2" '. + [$id]')"; set_surfaces=true; shift 2 ;;
       *) die3 "update: unrecognized argument: $1" ;;
     esac
   done
@@ -575,6 +582,9 @@ do_update() {
   fi
   if [ "$set_diffbudget" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$diff_budget" '.diffBudget = $v')"
+  fi
+  if [ "$set_surfaces" = "true" ]; then
+    doc="$(printf '%s' "$doc" | jq --argjson v "$surfaces_json" '.surfaces = $v')"
   fi
 
   write_atomic "$file" "$doc"

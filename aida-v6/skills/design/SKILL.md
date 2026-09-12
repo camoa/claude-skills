@@ -216,12 +216,16 @@ Create it:
   [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
-  --diff-budget "<a plain-words signal, e.g. small: one class and its test>"
+  --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
+  [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
 this conversation; the id space is shared and minted in order, so naming it ahead of its own
 `create` call is safe as long as it is created before design finishes.
+
+Name a `--surface` when the order changes a page or a screen a person sees, by its id in the
+surface registry. Most orders name none.
 
 Then, one call per item, add what the order still needs:
 ```
@@ -242,7 +246,7 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>]
+  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--surface <id>]...
 ```
 
 ## Serving a criterion is not completing it
