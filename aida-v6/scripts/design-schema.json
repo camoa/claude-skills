@@ -75,11 +75,12 @@
     "ownedFiles": {
       "type": "array",
       "default": [],
+      "minItems": 1,
       "items": {
         "type": "string",
         "minLength": 1
       },
-      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared."
+      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared. At least one entry is required: an order that names no file it may write hands the builder no boundary at all."
     },
     "interface": {
       "type": "string",
@@ -111,7 +112,8 @@
     "diffBudget": {
       "type": "string",
       "default": "",
-      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here."
+      "minLength": 1,
+      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against."
     }
   },
   "$defs": {

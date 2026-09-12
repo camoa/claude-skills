@@ -55,7 +55,8 @@ Run:
 ```
 This reports whether the task has an approved contract, lists its criteria, and lists any
 research file already on disk for this task, with each file's search name and how many findings
-it holds.
+it holds. Each criterion carries its author, and `designer` there means no person ever approved
+that criterion.
 
 No contract: say so in one line and name the scope skill. Stop.
 
@@ -109,7 +110,8 @@ Typical search subjects, named by what they read, not by a fixed roster:
   most useful things research produces.
 
 How many searches run is set by what these criteria actually need. A task with three criteria
-that all rest on the same library may need one search, not three.
+that all rest on the same library may need one search, not three. The search inside this project
+is the exception: run it on every task that changes code.
 
 ## Dispatch one agent per search
 

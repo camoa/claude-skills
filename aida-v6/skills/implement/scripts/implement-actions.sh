@@ -1,111 +1,22 @@
 #!/usr/bin/env bash
 # implement-actions.sh: the deterministic half of the implement skill (ideal/implementation.md).
 #
-# The skill body holds the conversation: whether to tell a person about a refusal, whether to act
-# on a drifted order, what to say once the report comes back. This script never asks a question
-# and never judges whether a criterion is really met. It performs the first step of the
-# implementation stage: freezing the contract and the work orders design left into a snapshot,
-# opening the ledger that will track every order's progress, and refusing before writing anything
-# when the task is not ready. It then performs the second step: establishing whether the code
-# repository can run a test at all, against the conditions each framework's recipe declares. It
-# then performs the two halves of the third step: `tests-brief` assembles exactly what a model
-# writing one unit's tests may see, from the frozen snapshot, and `tests-freeze` verifies what that
-# model wrote and freezes it. The script never writes a test and never judges one; the model that
-# writes a test chooses the level, writes the file, and runs it. It then performs the two halves of
-# the fourth step: `build-brief` assembles exactly what a model writing one unit's code may see, and
-# `build-record` verifies what came back and moves the attempt counter. `build-record` runs all
-# eight deciding checks named in docs/implementation.md ("The deciding checks run before anything
-# judges"): every test of this order passes, no test outside the baseline fails, the coding-standards
-# tool is clean, static analysis is clean, the security tool is clean, the realized diff touches only
-# files this order owns, every frozen test file is unchanged, and the interface record names every
-# element the order's own declared interface names in backticks. A review only ever sees code that
-# passed all eight, which is why the three tool checks and the interface check run here and not
-# later. The three tool commands arrive as argv, one token per repeated flag, and a token that is
-# exactly `{paths}` expands to this order's own ownedFiles, one argv token per file. Two optional
-# keys the catalog's own `check_commands` block carries are honored beside them (dev-guides,
-# process-recipes, "`## Check commands` is parsed"). A tool's own extensions list narrows what
-# `{paths}` expands to, and a row left with nothing to read did not apply to this order, which is
-# recorded undeclared and never met. The signal `empty-stdout` marks a tool that cannot fail by exit
-# status: a zero exit with anything on standard output is unmet. The script never
-# writes code and never judges whether a criterion is met; it only decides whether this attempt
-# stayed inside the bounds a script can check without reading anyone's prose.
-# It then performs the fifth step, the review and the repair after it. `review-brief` assembles
-# exactly what a reviewer may see: the criteria this order serves and owns, the non-goals, the
-# order, the diff as a file, the frozen tests, the builder's report path, the eight check results
-# and both interface texts. `review-record` reads the findings the reviewer wrote, decides which of
-# them cite a criterion or a non-goal and so may reach a fixer, and refuses when the code moved
-# while the review ran. `fix-brief` hands one fixer every open finding of one order, in severity
-# order, with the union of their scopes. `fix-record` re-runs the seven computable checks after the
-# round, because a fix that breaks a passing test is not a fix, and it consumes the one thing a
-# fixer may report rather than do: that its scope was too small. Interactive that report is
-# recorded on the finding and put to the person; unattended it halts the order. `verify-record` reads one verdict
-# per open finding against the fix diff only, and at the round cap it takes a person's ruling on
-# each finding still open. `close` writes the order's last step and the commits it produced.
-# One review per order, ever: `review-brief` and `review-record` both refuse a second.
+# The skill body holds the conversation. This script holds the deterministic half: it freezes the
+# contract and the work orders into a snapshot, opens the ledger, establishes whether the code
+# repository can run a test at all, briefs and freezes one order's tests, briefs and records one
+# order's build against eight deciding checks, briefs and records its review, its fix rounds and
+# their verification, closes the order, and finishes the task once every order is closed. It never
+# asks a question and never judges whether a criterion is met. What each step is for, and why, is
+# ideal/implementation.md; this header says only what a caller needs.
+#
 # `dispatch-open` and `dispatch-close` open and clear the one record, <project path>/dispatch.json,
 # that the two permission hooks (hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh) read
-# to tell a dispatched role apart from a person working their own repository. Neither hook is this
-# script's own concern past that one file; this script only opens and closes the record.
+# to tell a dispatched role apart from a person working their own repository.
 #
-# The checkpoint over the trace matrix writes its verdict here (ideal/implementation.md, "The trace
-# matrix and its checkpoint"). `tests-freeze` takes one `--row` per criterion the order serves or
-# owns whose frozen verifiedBy is machine, and each row carries a verdict, who judged it, and a
-# note. A machine criterion with no row refuses, and so does a row for a criterion this order does
-# not serve or own, or for one a person verifies: a person-verified criterion carries a checklist
-# and never a judgement, and completion is what confirms it. A rejected row stops the freeze and
-# writes no test record, because that row goes back to the test author. Unattended, a row the
-# checker rejected halts the order on the way out, the same way a dirty tree already halts one at
-# `build-record`. Every accepted row is appended to
-# the criterion's own `judgements` list in the ledger, one per order serving it, and `rowState`
-# stays where it is until `close`. `close` then decides the criterion: confirmed when every order
-# serving it is closed and every one of their judgements is confirmed, rejected when any judgement
-# is rejected, and not-judged otherwise. A criterion several orders split has no honest answer
-# before the last of them closes, which is why the decision waits. `read` and `close` both report
-# how many rows a model judged rather than a person, so a person returning can list exactly those.
-#
-# `finish <task_folder>` ends the implementation stage for one task, and ends nothing else. The task
-# itself stays open and goes to the review stage next. `finish` refuses unless every order is closed
-# and unhalted and every machine-verified criterion is confirmed, and it refuses a dirty tree,
-# because the range it records is a claim about the repository. A halt survives a close, and an
-# order halted for drift after it closed is the case the closed check alone would miss. It writes <task_folder>/implementation/finished.json
-# (finished-schema.json), which is what the review stage reads: the commit range this stage
-# produced, each order's own range and rounds, each criterion's row state and who judged it, the
-# checklists for the criteria a person verifies, the findings ruled deferred with their reasons, and
-# the number of rows a model judged. It never touches task.json. A task's own state belongs to the
-# stage that owns it, and a stage that writes another stage's field is how two producers for one
-# fact begin.
-#
-# `grant-attempt <task_folder> <unit_id> --reason <text>` is the person's grant of one more attempt
-# on one order. It raises that order's own `attemptsAllowed` by one and records the grant with its
-# reason, so the used counter never goes down. It clears the halt only when the halt text begins
-# with "attempts spent"; a closed order and any other halt both refuse, because a grant answers a
-# spent counter and answers nothing else. It refuses under an autonomous run: the grant is a person's judgement and an
-# unattended run has none to offer. `build-brief` and `build-record` read the order's own
-# `attemptsAllowed` when it carries one, and the constant below when it does not.
-#
-# `restart <task_folder> --reason <text>` is what follows a design change mid-build. `start` halts
-# every drifted order on a resumed run, and every order that depends on one, directly or through
-# another, because rebuilding against an interface that moved is the same unbounded work. `restart`
-# then moves <task_folder>/implementation/ aside to implementation-<UTC date>-<short commit>/ and
-# prints that path, so the next `start` takes a fresh snapshot from the live design. It reads every
-# segment of a halt reason, so a halt landing later and sitting in front of the drift one never
-# hides it. It refuses when no order is halted for drift, when the tree is dirty, and under an
-# autonomous run. Redoing one
-# order alone is not built: the whole implementation folder moves or nothing does.
-#
-# One function writes every halt: `start` on drift, `tests-freeze` on a rejected row, and
-# `build-record` on a dirty tree and on a spent attempt counter. A halt never writes over a reason
-# the order already carries. The new reason goes first and the older ones follow, joined by
-# "; earlier: ", and a reason already there is moved to the front rather than written twice. So
-# every reader that looks for one kind of halt splits on that separator and tests each segment:
-# `restart` looks for a drift reason anywhere in the text, and `grant-attempt` removes only the
-# spent-counter segment and leaves the order halted for whatever else stood.
-#
-# Two of these steps halt an order rather than refuse. A halt is the run continuing correctly, so
-# it exits 0, writes the reason into the ledger and says so on standard error, the same way
-# `build-record` already halts an order at its attempt cap. The one exception is an unattended run
-# reaching the fix cap with findings still open: a ruling is a person's judgement, so that one
-# refuses with its own exit code and halts the order in the same call (exit 56).
+# Two steps halt an order rather than refuse. A halt is the run continuing correctly, so it exits 0,
+# writes the reason into the ledger and says so on standard error. The one exception is an
+# unattended run reaching the fix cap with findings still open: a ruling is a person's judgement, so
+# that one refuses with its own code and halts the order in the same call (exit 56).
 #
 # Usage:
 #   implement-actions.sh read  <task_folder>
@@ -204,94 +115,16 @@
 # a stale or hand-edited file already on disk before this script's first call on it is a fact this
 # script reports (present-but-unreadable, or a hash mismatch), not one it repairs.
 #
-# Freezing, and what a freeze is for (ideal/implementation.md, "Freezing, and what a freeze is
-# for"). Design close records a hash over the contract and every work order at
-# <task_folder>/design-closed.json (design-closed-schema.json). A new run here re-derives that
-# same hash from the live files and refuses when the two disagree, because design changed after it
-# closed and was never closed again. That refusal replaces the "late state" version 5 could only
-# report: version 5 named a capture taken after work had already started as `status: "late"` and
-# left a person to notice it, above a comment that a late re-capture would launder exactly the
-# edit it exists to expose. Version 6 refuses outright, before a snapshot is ever written, and the
-# message says to close design again. Once a snapshot exists, this script never reads
-# design-closed.json again: a resumed run instead re-derives a hash from the LIVE files and
-# compares it against the SNAPSHOT's own recorded hash, which is the separate, ongoing drift check
-# described below. That is deliberate. The design-closed hash proves what design closed on; the
-# snapshot is what the build is frozen against, and only the snapshot governs a resumed run.
+# Freezing (ideal/implementation.md, "Freezing, and what a freeze is for"). A new run re-derives
+# the design-closed hash from the live files and refuses when the two disagree. Once a snapshot
+# exists this script never reads design-closed.json again: a resumed run re-derives from the live
+# files and compares against the SNAPSHOT's own recorded hash, and only the snapshot governs a
+# resumed run.
 #
-# Version 5's freeze mechanism has four properties. Version 6 takes three: the one-shot capture,
-# which refuses to overwrite; the check that re-derives from disk rather than believing a recorded
-# value, applied both to the live files (the drift check, on a resumed run) and to the snapshot's
-# own stored content (a resumed run also checks the snapshot agrees with itself); and the second
-# snapshot, which is review's own and belongs to that later part. The fourth, the named "late"
-# state, is the one version 6 does not need: the design-closed hash turns "late" into a refusal at
-# the moment it would happen, so there is nothing left to name after the fact.
-#
-# What `start` does, in order, and why:
-#
-#   1. Resolve the task folder, and confirm its contract exists and can be read.
-#   2. Refuse unless scripts/check-design.sh reports design closed cleanly, on the LIVE
-#      design/*.json files, never a stale copy.
-#   3. Read the live alignment.json and every live design/*.json, and re-derive one hash over
-#      them together (scripts/lib/records-hash.sh). Every later step that reads "the live hash"
-#      reads this one value; it is computed once per call, never twice.
-#   4. Resolve the task's own project (two folders up: <task_folder> is
-#      <projectPath>/tasks/<task-id>) and confirm its codePath is a git repository. AIDA commits
-#      its own records in the project folder's own repository; codePath is the code repository
-#      the build itself lands in, and that is the repository this step and the two steps below
-#      both read.
-#   5. Confirm codePath is currently on a named branch. A detached HEAD refuses, whether or not
-#      the trunk branch can be derived: a commit made there belongs to no branch, which this build
-#      must never risk.
-#   6. Derive codePath's trunk branch from `refs/remotes/origin/HEAD`, never store it, and refuse
-#      when the branch currently checked out there is the trunk. When it cannot be derived (no
-#      `origin` remote, or origin's HEAD is unset), that is reported as a check that could not
-#      look, never as a pass and never as a refusal.
-#   7. Read runMode from task.json. Absent means interactive (task-schema.json, `runMode`). The
-#      field's only other legal value is "autonomous"; a task.json that spells out "interactive"
-#      by hand is refused, because the schema never writes that word there.
-#   8. Look at <task_folder>/implementation/snapshot.json. Absent: a new run. Present and
-#      readable: a resumed run. Present and unreadable: a third fact, and a refusal.
-#   9. New run only: refuse unless <task_folder>/design-closed.json exists and its own recorded
-#      hash equals the live hash from step 3 (a missing record means design has never closed; a
-#      disagreeing hash means it closed once and something changed since, without closing again).
-#      Refuse separately when design left no work orders at all. Then copy alignment.json and
-#      every design/*.json (in id order) into a snapshot, using the live hash from step 3, and
-#      write it. Every refusal here runs before this write.
-#  10. Resumed run only: re-derive a hash from the snapshot's own copied alignment and work
-#      orders and refuse if it disagrees with the snapshot's own stored hash: the snapshot file
-#      was edited after it was written. Otherwise compare the live hash from step 3 against the
-#      same stored hash. A difference is worked out order by order: only a work order whose own
-#      design file actually changed is drifted. A drifted order's ledger entry is halted at the end
-#      of this run, and so is every order that depends on it, directly or through another order,
-#      because that order would build against an interface that moved. Every one of those halt
-#      reasons begins with "design drift: ", which is what `restart` reads later. A contract that
-#      changed with no work order affected halts nothing
-#      and is reported. A new run has nothing to compare against and reports that plainly, never
-#      as "nothing changed".
-#  11. From here on, every read of the criteria and the work orders is from the snapshot, never
-#      the live files.
-#  12. Derive a build order from dependsOn. Refuse on a dependency cycle (naming the orders in
-#      it) or on two orders sharing a declared owned-file path (naming both). This overlap check
-#      compares declared path strings for equality only, the same bound check-design.sh's own
-#      overlap check carries: two globs that would collide at build time without sharing one
-#      identical declared entry are not caught here, which is a documented bound, not a defect.
-#      It also duplicates a check the design check already owns; it is kept here as a second
-#      reading on the resumed path, where check-design.sh is not re-run.
-#  13. Capture codePath's current HEAD, the commit the build starts from.
-#  14. Open <task_folder>/implementation/ledger.json, or reopen it. Opening writes one entry per
-#      snapshot work order (lastStep null, both counters zero) and one per snapshot criterion
-#      (not-judged). Reopening compares its own stored snapshotHash against the snapshot file's
-#      own hash field and refuses on a mismatch; it never resets a counter and never rewrites a
-#      completed step, and its only change on a drifted resume is adding haltedBecause to the
-#      orders step 10 found drifted.
-#  15. Print one report: what was read, which orders are ready to build, which order is in
-#      flight and at what step, what drifted, and what the trunk check could establish.
-#
-# The refusals in steps 1 through 9 all run before step 9's own write, so a run refused there
-# leaves nothing on disk. A refusal from steps 12 or 14 can follow a write earlier in the same
-# `start` call (the snapshot from step 9, most often): that write is never half-formed, because
-# write_atomic below always produces a complete file or none, and it is never wrong to have on
-# disk, because it is exactly what the next `start` call on this task would compute again.
+# What `start` does, in order, is ideal/implementation.md, "Before the first order: start, then
+# preconditions". Every refusal it can make runs before its own first write, so a refused run
+# leaves nothing on disk; a later refusal can follow the snapshot write, and that file is never
+# half-formed and never wrong to have, because it is exactly what the next `start` would compute.
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that nothing has run yet.
@@ -599,86 +432,14 @@ RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 
 command -v jq >/dev/null 2>&1 || { printf 'implement-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
-die1() { printf 'implement-actions: %s\n' "$1" >&2; exit 1; }
-die2() { printf 'implement-actions: %s\n' "$1" >&2; exit 2; }
-die3() { printf 'implement-actions: %s\n' "$1" >&2; exit 3; }
-die4() { printf 'implement-actions: %s\n' "$1" >&2; exit 4; }
-die5() { printf 'implement-actions: %s\n' "$1" >&2; exit 5; }
-die6() { printf 'implement-actions: %s\n' "$1" >&2; exit 6; }
-die7() { printf 'implement-actions: %s\n' "$1" >&2; exit 7; }
-die8() { printf 'implement-actions: %s\n' "$1" >&2; exit 8; }
-die9() { printf 'implement-actions: %s\n' "$1" >&2; exit 9; }
-die10() { printf 'implement-actions: %s\n' "$1" >&2; exit 10; }
-die11() { printf 'implement-actions: %s\n' "$1" >&2; exit 11; }
-die12() { printf 'implement-actions: %s\n' "$1" >&2; exit 12; }
-die13() { printf 'implement-actions: %s\n' "$1" >&2; exit 13; }
-die14() { printf 'implement-actions: %s\n' "$1" >&2; exit 14; }
-die15() { printf 'implement-actions: %s\n' "$1" >&2; exit 15; }
-die16() { printf 'implement-actions: %s\n' "$1" >&2; exit 16; }
-die17() { printf 'implement-actions: %s\n' "$1" >&2; exit 17; }
-die18() { printf 'implement-actions: %s\n' "$1" >&2; exit 18; }
-die20() { printf 'implement-actions: %s\n' "$1" >&2; exit 20; }
-die21() { printf 'implement-actions: %s\n' "$1" >&2; exit 21; }
-die22() { printf 'implement-actions: %s\n' "$1" >&2; exit 22; }
-die23() { printf 'implement-actions: %s\n' "$1" >&2; exit 23; }
-die24() { printf 'implement-actions: %s\n' "$1" >&2; exit 24; }
-die25() { printf 'implement-actions: %s\n' "$1" >&2; exit 25; }
-die26() { printf 'implement-actions: %s\n' "$1" >&2; exit 26; }
-die27() { printf 'implement-actions: %s\n' "$1" >&2; exit 27; }
-die28() { printf 'implement-actions: %s\n' "$1" >&2; exit 28; }
-die29() { printf 'implement-actions: %s\n' "$1" >&2; exit 29; }
-die30() { printf 'implement-actions: %s\n' "$1" >&2; exit 30; }
-die31() { printf 'implement-actions: %s\n' "$1" >&2; exit 31; }
-die32() { printf 'implement-actions: %s\n' "$1" >&2; exit 32; }
-die33() { printf 'implement-actions: %s\n' "$1" >&2; exit 33; }
-die34() { printf 'implement-actions: %s\n' "$1" >&2; exit 34; }
-die35() { printf 'implement-actions: %s\n' "$1" >&2; exit 35; }
-die36() { printf 'implement-actions: %s\n' "$1" >&2; exit 36; }
-die37() { printf 'implement-actions: %s\n' "$1" >&2; exit 37; }
-die38() { printf 'implement-actions: %s\n' "$1" >&2; exit 38; }
-die39() { printf 'implement-actions: %s\n' "$1" >&2; exit 39; }
-die40() { printf 'implement-actions: %s\n' "$1" >&2; exit 40; }
-die41() { printf 'implement-actions: %s\n' "$1" >&2; exit 41; }
-die42() { printf 'implement-actions: %s\n' "$1" >&2; exit 42; }
-die43() { printf 'implement-actions: %s\n' "$1" >&2; exit 43; }
-die44() { printf 'implement-actions: %s\n' "$1" >&2; exit 44; }
-die45() { printf 'implement-actions: %s\n' "$1" >&2; exit 45; }
-die46() { printf 'implement-actions: %s\n' "$1" >&2; exit 46; }
-die47() { printf 'implement-actions: %s\n' "$1" >&2; exit 47; }
-die48() { printf 'implement-actions: %s\n' "$1" >&2; exit 48; }
-die49() { printf 'implement-actions: %s\n' "$1" >&2; exit 49; }
-die50() { printf 'implement-actions: %s\n' "$1" >&2; exit 50; }
-die51() { printf 'implement-actions: %s\n' "$1" >&2; exit 51; }
-die52() { printf 'implement-actions: %s\n' "$1" >&2; exit 52; }
-die53() { printf 'implement-actions: %s\n' "$1" >&2; exit 53; }
-die54() { printf 'implement-actions: %s\n' "$1" >&2; exit 54; }
-die55() { printf 'implement-actions: %s\n' "$1" >&2; exit 55; }
-die56() { printf 'implement-actions: %s\n' "$1" >&2; exit 56; }
-die57() { printf 'implement-actions: %s\n' "$1" >&2; exit 57; }
-die58() { printf 'implement-actions: %s\n' "$1" >&2; exit 58; }
-die59() { printf 'implement-actions: %s\n' "$1" >&2; exit 59; }
-die60() { printf 'implement-actions: %s\n' "$1" >&2; exit 60; }
-die61() { printf 'implement-actions: %s\n' "$1" >&2; exit 61; }
-die62() { printf 'implement-actions: %s\n' "$1" >&2; exit 62; }
-die63() { printf 'implement-actions: %s\n' "$1" >&2; exit 63; }
-die64() { printf 'implement-actions: %s\n' "$1" >&2; exit 64; }
-die65() { printf 'implement-actions: %s\n' "$1" >&2; exit 65; }
-die66() { printf 'implement-actions: %s\n' "$1" >&2; exit 66; }
-die67() { printf 'implement-actions: %s\n' "$1" >&2; exit 67; }
-die68() { printf 'implement-actions: %s\n' "$1" >&2; exit 68; }
-die69() { printf 'implement-actions: %s\n' "$1" >&2; exit 69; }
-die70() { printf 'implement-actions: %s\n' "$1" >&2; exit 70; }
-die71() { printf 'implement-actions: %s\n' "$1" >&2; exit 71; }
-die72() { printf 'implement-actions: %s\n' "$1" >&2; exit 72; }
-die73() { printf 'implement-actions: %s\n' "$1" >&2; exit 73; }
-die74() { printf 'implement-actions: %s\n' "$1" >&2; exit 74; }
-die75() { printf 'implement-actions: %s\n' "$1" >&2; exit 75; }
-die76() { printf 'implement-actions: %s\n' "$1" >&2; exit 76; }
-die77() { printf 'implement-actions: %s\n' "$1" >&2; exit 77; }
+die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
+# One refusal function, one exit code as its first argument. The exit-code table above is the
+# only place a number gets a meaning, and nothing here mints one that table does not carry.
 
-[ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
+
+[ -f "$RECORDS_HASH_LIB" ] || die 3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
-source "$RECORDS_HASH_LIB" || die3 "the records-hash library failed to load: $RECORDS_HASH_LIB"
+source "$RECORDS_HASH_LIB" || die 3 "the records-hash library failed to load: $RECORDS_HASH_LIB"
 
 # How many times `build-brief` will hand one order to a builder before refusing (exit 41). Two, not
 # version 5's three: nothing in version 5 justifies three beyond a clamp guarding a corrupted
@@ -761,9 +522,9 @@ EOF
 
 resolve_task_folder() {
   local arg="$1" who="$2" p
-  [ -n "$arg" ] || die3 "$who: a task folder is required"
-  p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
-  [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
+  [ -n "$arg" ] || die 3 "$who: a task folder is required"
+  p="$(cd "$arg" 2>/dev/null && pwd -P)" || die 1 "$who: task folder not found: $arg"
+  [ -f "$p/task.json" ] || die 1 "$who: $p has no task.json; this is not a task folder"
   printf '%s' "$p"
 }
 
@@ -780,9 +541,9 @@ write_atomic() {
   local target="$1" content="$2" dir tmp
   dir="$(dirname -- "$target")"
   tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
-    || die3 "could not create a temporary file in $dir"
-  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
-  mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
+    || die 3 "could not create a temporary file in $dir"
+  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die 3 "could not write $tmp"; }
+  mv -f "$tmp" "$target" || { rm -f "$tmp"; die 3 "could not write $target"; }
 }
 
 # The one definition of how a halt reason is written, as a jq function every caller prepends to its
@@ -819,7 +580,7 @@ HALT_SEPARATOR="; earlier: "
 halt_refuse_separator() {
   case "$3" in
     *"$HALT_SEPARATOR"*)
-      die3 "$1: $2 was given a reason holding the text '$HALT_SEPARATOR', which is how this stage joins one halt reason to another. A reason carrying it would forge a halt nobody wrote. The reason given: $3"
+      die 3 "$1: $2 was given a reason holding the text '$HALT_SEPARATOR', which is how this stage joins one halt reason to another. A reason carrying it would forge a halt nobody wrote. The reason given: $3"
       ;;
   esac
 }
@@ -861,6 +622,29 @@ resolve_project_folder() {
   p="$(cd "$task_path/../.." 2>/dev/null && pwd -P)" || return 1
   [ -f "$p/project.json" ] || return 1
   printf '%s' "$p"
+}
+
+# The task's own project, and the code repository it records. $1 the action's own name. Sets
+# RV_PROJECT_FOLDER and RV_CODEPATH. Every action that needs either asks here, so all of them name
+# the same facts in the same words: a project folder that cannot be resolved, a project.json that
+# will not parse, one with no codePath, a codePath that is not on disk, and one that is not a git
+# repository are five different refusals with five different exit codes.
+TASK_PATH=""
+RV_PROJECT_FOLDER=""; RV_CODEPATH=""
+rv_load_codepath() {
+  local who="$1"
+  RV_PROJECT_FOLDER="$(resolve_project_folder "$TASK_PATH")" \
+    || die 3 "$who: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+  case "$(project_code_path_state "$RV_PROJECT_FOLDER")" in
+    unreadable) die 14 "$who: $RV_PROJECT_FOLDER/project.json exists but is not valid JSON, so its codePath cannot be read." ;;
+    missing)    die 3 "$who: $RV_PROJECT_FOLDER/project.json not found, though it was found moments ago." ;;
+  esac
+  RV_CODEPATH="$(project_code_path_value "$RV_PROJECT_FOLDER")"
+  [ -n "$RV_CODEPATH" ] || die 3 "$who: $RV_PROJECT_FOLDER/project.json is valid JSON but has no usable codePath field."
+  [ -d "$RV_CODEPATH" ] || die 15 "$who: the recorded codePath does not exist on disk: $RV_CODEPATH"
+  command -v git >/dev/null 2>&1 || die 3 "$who: git is required and was not found on PATH"
+  is_git_repo "$RV_CODEPATH" \
+    || die 5 "$who: this task's project code at $RV_CODEPATH is not a git repository."
 }
 
 # Prints one of: missing, unreadable, ok, for the project.json under $1. Never dies: a caller
@@ -1028,8 +812,8 @@ ledger_required_string() {
 # ------------------------------------------------------------------------------------------------
 
 do_read() {
-  [ "$#" -ge 1 ] || die3 "read: a task folder is required"
-  [ "$#" -le 1 ] || die3 "read: unrecognized extra argument: $2"
+  [ "$#" -ge 1 ] || die 3 "read: a task folder is required"
+  [ "$#" -le 1 ] || die 3 "read: unrecognized extra argument: $2"
   local task_path="$1"
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_path" "read")"
@@ -1261,8 +1045,8 @@ do_read() {
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
-  [ "$#" -ge 1 ] || die3 "start: a task folder is required"
-  [ "$#" -le 1 ] || die3 "start: unrecognized extra argument: $2"
+  [ "$#" -ge 1 ] || die 3 "start: a task folder is required"
+  [ "$#" -le 1 ] || die 3 "start: unrecognized extra argument: $2"
   local task_path="$1"
 
   # --- step 1: resolve the task folder and its contract -----------------------------------------
@@ -1279,17 +1063,17 @@ do_start() {
 
   case "$(alignment_state)" in
     missing)
-      die2 "start: $ALIGNMENT_FILE not found. Run the scope skill on this task before implementation can freeze a contract to build from."
+      die 2 "start: $ALIGNMENT_FILE not found. Run the scope skill on this task before implementation can freeze a contract to build from."
       ;;
     unreadable)
-      die10 "start: $ALIGNMENT_FILE exists but cannot be read as a contract (not valid JSON, not an object, or missing a required field). Fix it, or re-run the scope skill on this task, before implementation can freeze a contract to build from."
+      die 10 "start: $ALIGNMENT_FILE exists but cannot be read as a contract (not valid JSON, not an object, or missing a required field). Fix it, or re-run the scope skill on this task, before implementation can freeze a contract to build from."
       ;;
   esac
 
   # --- step 2: design must have closed cleanly, on the live files -------------------------------
-  [ -f "$CHECK_DESIGN_SCRIPT" ] || die3 "start: cannot find check-design.sh at $CHECK_DESIGN_SCRIPT"
+  [ -f "$CHECK_DESIGN_SCRIPT" ] || die 3 "start: cannot find check-design.sh at $CHECK_DESIGN_SCRIPT"
   local design_stderr_file design_report_json design_rc design_stderr_text
-  design_stderr_file="$(mktemp)" || die3 "start: could not create a temporary file"
+  design_stderr_file="$(mktemp)" || die 3 "start: could not create a temporary file"
   design_report_json="$(bash "$CHECK_DESIGN_SCRIPT" "$TASK_PATH" 2>"$design_stderr_file")"
   design_rc=$?
   design_stderr_text="$(cat "$design_stderr_file" 2>/dev/null)"
@@ -1319,64 +1103,46 @@ do_start() {
           ] | join("; ")
         ' 2>/dev/null)"
       [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
-      die4 "start: design has not closed cleanly. Finish design first. Open: $open_summary"
+      die 4 "start: design has not closed cleanly. Finish design first. Open: $open_summary"
       ;;
     3)
-      die3 "start: check-design.sh could not run: $design_stderr_text"
+      die 3 "start: check-design.sh could not run: $design_stderr_text"
       ;;
     *)
-      die3 "start: check-design.sh exited with an unexpected code $design_rc"
+      die 3 "start: check-design.sh exited with an unexpected code $design_rc"
       ;;
   esac
 
   # --- step 3: read the live records once, and re-derive one hash over them together -------------
   local live_alignment_json live_workorders_json live_hash
   live_alignment_json="$(jq -c '.' "$ALIGNMENT_FILE" 2>/dev/null)"
-  [ -n "$live_alignment_json" ] || die3 "start: $ALIGNMENT_FILE could not be re-read as JSON immediately after passing its own check"
+  [ -n "$live_alignment_json" ] || die 3 "start: $ALIGNMENT_FILE could not be re-read as JSON immediately after passing its own check"
 
   live_workorders_json="$(gather_workorders_json "$DESIGN_DIR")"
   if [ -n "$READ_FAILED" ]; then
-    die3 "start: $READ_FAILED is under design/ but could not be read as JSON, even though check-design.sh just reported design closed cleanly"
+    die 3 "start: $READ_FAILED is under design/ but could not be read as JSON, even though check-design.sh just reported design closed cleanly"
   fi
 
   local live_hash_stderr_file live_hash_rc live_hash_stderr_text
-  live_hash_stderr_file="$(mktemp)" || die3 "start: could not create a temporary file"
+  live_hash_stderr_file="$(mktemp)" || die 3 "start: could not create a temporary file"
   live_hash="$(records_hash_for "$TASK_PATH" 2>"$live_hash_stderr_file")"
   live_hash_rc=$?
   live_hash_stderr_text="$(cat "$live_hash_stderr_file" 2>/dev/null)"
   rm -f "$live_hash_stderr_file"
   [ "$live_hash_rc" -eq 0 ] && [ -n "$live_hash" ] \
-    || die3 "start: could not compute a hash over the live alignment.json and design/*.json: $live_hash_stderr_text"
+    || die 3 "start: could not compute a hash over the live alignment.json and design/*.json: $live_hash_stderr_text"
 
   # --- step 4: the task's own project must point at a git repository ----------------------------
   local project_path code_path
-  project_path="$(resolve_project_folder "$TASK_PATH")" \
-    || die3 "start: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-
-  case "$(project_code_path_state "$project_path")" in
-    missing)
-      die3 "start: $project_path/project.json not found, though it was found moments ago. This is a bug, not an authoring mistake."
-      ;;
-    unreadable)
-      die14 "start: $project_path/project.json exists but is not valid JSON, so its codePath cannot be read."
-      ;;
-    ok)
-      code_path="$(project_code_path_value "$project_path")"
-      [ -n "$code_path" ] || die3 "start: $project_path/project.json is valid JSON but has no usable codePath field."
-      ;;
-  esac
-
-  command -v git >/dev/null 2>&1 || die3 "start: git is required and was not found on PATH"
-  [ -d "$code_path" ] \
-    || die15 "start: $project_path/project.json names codePath $code_path, which does not exist on disk."
-  is_git_repo "$code_path" \
-    || die5 "start: this task's project code at $code_path is not a git repository. Implementation builds in place there and needs a real repository to commit into."
+  rv_load_codepath "start"
+  project_path="$RV_PROJECT_FOLDER"
+  code_path="$RV_CODEPATH"
 
   # --- step 5: codePath must be on a named branch, never a detached HEAD ------------------------
   local current_branch
   current_branch="$(git -C "$code_path" symbolic-ref --short -q HEAD 2>/dev/null)"
   [ -n "$current_branch" ] \
-    || die16 "start: $code_path is not currently on a named branch (a detached HEAD, or the branch could not be read for another reason). A commit made there belongs to no branch, and this build must not risk that. Check out a real branch first."
+    || die 16 "start: $code_path is not currently on a named branch (a detached HEAD, or the branch could not be read for another reason). A commit made there belongs to no branch, and this build must not risk that. Check out a real branch first."
 
   # --- step 6: derive the trunk branch, and refuse only when the build would land on it ---------
   local trunk_derived trunk_branch trunk_note
@@ -1394,7 +1160,7 @@ do_start() {
     fi
   fi
   if [ "$trunk_derived" = "true" ] && [ "$current_branch" = "$trunk_branch" ]; then
-    die6 "start: $code_path is currently on $trunk_branch, which is derived as its trunk branch. The build must not land there. Check out a branch other than $trunk_branch first."
+    die 6 "start: $code_path is currently on $trunk_branch, which is derived as its trunk branch. The build must not land there. Check out a branch other than $trunk_branch first."
   fi
 
   # --- step 7: the run mode is the task's own, never a flag on this call -------------------------
@@ -1404,10 +1170,10 @@ do_start() {
     __aida_absent__) run_mode="interactive" ;;
     autonomous) run_mode="autonomous" ;;
     interactive)
-      die3 "start: $TASK_PATH/task.json declares runMode \"interactive\". The schema allows only \"autonomous\" there; absence already means interactive. Remove the field, or set it to \"autonomous\", by hand."
+      die 3 "start: $TASK_PATH/task.json declares runMode \"interactive\". The schema allows only \"autonomous\" there; absence already means interactive. Remove the field, or set it to \"autonomous\", by hand."
       ;;
     *)
-      die3 "start: $TASK_PATH/task.json has an unusable runMode ('$run_mode_raw'); expected it absent or 'autonomous'."
+      die 3 "start: $TASK_PATH/task.json has an unusable runMode ('$run_mode_raw'); expected it absent or 'autonomous'."
       ;;
   esac
 
@@ -1419,7 +1185,7 @@ do_start() {
     if [ -r "$SNAPSHOT_FILE" ] && snapshot_doc="$(jq -c '.' "$SNAPSHOT_FILE" 2>/dev/null)" && [ -n "$snapshot_doc" ]; then
       snapshot_present=true
     else
-      die3 "start: $SNAPSHOT_FILE exists but could not be read as JSON. This is a third fact, distinct from absent or readable, and is a refusal: repair or remove it by hand before running this again."
+      die 3 "start: $SNAPSHOT_FILE exists but could not be read as JSON. This is a third fact, distinct from absent or readable, and is a refusal: repair or remove it by hand before running this again."
     fi
   fi
 
@@ -1434,29 +1200,29 @@ do_start() {
 
     case "$(design_closed_state)" in
       missing)
-        die11 "start: $CLOSED_FILE not found. Design has never closed. Run the design skill's close action on this task before implementation can freeze anything."
+        die 11 "start: $CLOSED_FILE not found. Design has never closed. Run the design skill's close action on this task before implementation can freeze anything."
         ;;
       unreadable)
-        die12 "start: $CLOSED_FILE exists but cannot be read as a close record (not valid JSON, not an object, or its hash field is missing or malformed). Close design again."
+        die 12 "start: $CLOSED_FILE exists but cannot be read as a close record (not valid JSON, not an object, or its hash field is missing or malformed). Close design again."
         ;;
     esac
     local closed_hash
     closed_hash="$(design_closed_hash)"
     [ "$closed_hash" = "$live_hash" ] \
-      || die13 "start: $CLOSED_FILE recorded a hash over the contract and the work orders design closed on, and it disagrees with a hash just re-derived from the live alignment.json and design/*.json. Design changed after it closed. Close design again before implementation can freeze it."
+      || die 13 "start: $CLOSED_FILE recorded a hash over the contract and the work orders design closed on, and it disagrees with a hash just re-derived from the live alignment.json and design/*.json. Design changed after it closed. Close design again before implementation can freeze it."
 
     local wo_count
     wo_count="$(printf '%s' "$live_workorders_json" | jq 'length')"
     [ "$wo_count" -gt 0 ] \
-      || die7 "start: design/ under $TASK_PATH has no work orders. There is nothing for implementation to build. (A contract with no criteria closes design with none; add criteria and redesign, or this task has nothing to implement.)"
+      || die 7 "start: design/ under $TASK_PATH has no work orders. There is nothing for implementation to build. (A contract with no criteria closes design with none; add criteria and redesign, or this task has nothing to implement.)"
 
     [ ! -e "$LEDGER_FILE" ] \
-      || die3 "start: $LEDGER_FILE already exists but $SNAPSHOT_FILE does not. A ledger with no snapshot beside it is not a supported state; remove $LEDGER_FILE by hand if this task is meant to start fresh, or restore the snapshot it was opened against."
+      || die 3 "start: $LEDGER_FILE already exists but $SNAPSHOT_FILE does not. A ledger with no snapshot beside it is not a supported state; remove $LEDGER_FILE by hand if this task is meant to start fresh, or restore the snapshot it was opened against."
 
     [ ! -e "$SNAPSHOT_FILE" ] \
-      || die3 "start: $SNAPSHOT_FILE appeared between this script's own presence check and its own write. Another start call on this task finished first and won that race; this call lost it normally. Re-run read to see what the winner produced."
+      || die 3 "start: $SNAPSHOT_FILE appeared between this script's own presence check and its own write. Another start call on this task finished first and won that race; this call lost it normally. Re-run read to see what the winner produced."
 
-    mkdir -p "$IMPL_DIR" || die3 "start: could not create $IMPL_DIR"
+    mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
 
     local taken_at snapshot_json
     taken_at="$(date -u +%Y-%m-%d)"
@@ -1478,13 +1244,13 @@ do_start() {
     snapshot_hash_on_disk="$(printf '%s' "$snapshot_doc" | jq -r '.hash // empty')"
     snapshot_alignment_json="$(printf '%s' "$snapshot_doc" | jq -c '.alignment')"
     snapshot_workorders_json="$(printf '%s' "$snapshot_doc" | jq -c '.workOrders')"
-    [ -n "$snapshot_hash_on_disk" ] || die3 "start: $SNAPSHOT_FILE has no usable hash field"
+    [ -n "$snapshot_hash_on_disk" ] || die 3 "start: $SNAPSHOT_FILE has no usable hash field"
 
     local self_hash
     self_hash="$(snapshot_self_hash "$snapshot_alignment_json" "$snapshot_workorders_json")" \
-      || die3 "start: could not re-derive a hash from $SNAPSHOT_FILE's own alignment and workOrders fields (see stderr above)"
+      || die 3 "start: could not re-derive a hash from $SNAPSHOT_FILE's own alignment and workOrders fields (see stderr above)"
     [ "$self_hash" = "$snapshot_hash_on_disk" ] \
-      || die17 "start: $SNAPSHOT_FILE's own hash field ($snapshot_hash_on_disk) disagrees with a hash re-derived from its own alignment and workOrders fields ($self_hash). The snapshot file was edited after it was written; restore it from git history, or remove it and accept that the frozen state is lost. Never edit it by hand."
+      || die 17 "start: $SNAPSHOT_FILE's own hash field ($snapshot_hash_on_disk) disagrees with a hash re-derived from its own alignment and workOrders fields ($self_hash). The snapshot file was edited after it was written; restore it from git history, or remove it and accept that the frozen state is lost. Never edit it by hand."
 
     if [ "$live_hash" != "$snapshot_hash_on_disk" ]; then
       contract_changed="$(jq -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
@@ -1585,7 +1351,7 @@ do_start() {
       overlap_text="$(printf '%s' "$overlap_json" | jq -r '[.[] | (.ids | join(" and ")) + " both declare " + .path] | join("; ")')"
       if [ -n "$msg" ]; then msg="$msg; and $overlap_text"; else msg="$overlap_text"; fi
     fi
-    die8 "start: the build order could not be derived from the frozen work orders: $msg"
+    die 8 "start: the build order could not be derived from the frozen work orders: $msg"
   fi
 
   # --- step 11: capture the commit the build starts from -------------------------------------------
@@ -1593,7 +1359,7 @@ do_start() {
   started_from="$(git -C "$code_path" rev-parse HEAD 2>/dev/null)"
   started_from_rc=$?
   [ "$started_from_rc" -eq 0 ] && [ -n "$started_from" ] \
-    || die3 "start: could not capture the current commit (git rev-parse HEAD failed in $code_path). An empty repository with no commit yet has nothing to roll back to."
+    || die 3 "start: could not capture the current commit (git rev-parse HEAD failed in $code_path). An empty repository with no commit yet has nothing to roll back to."
 
   # --- step 12: open the ledger, or reopen it -------------------------------------------------------
   local ledger_present ledger_doc opened_as
@@ -1603,7 +1369,7 @@ do_start() {
     if [ -r "$LEDGER_FILE" ] && ledger_doc="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)" && [ -n "$ledger_doc" ]; then
       ledger_present=true
     else
-      die3 "start: $LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      die 3 "start: $LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
     fi
   fi
 
@@ -1613,12 +1379,12 @@ do_start() {
     local stored_snapshot_hash
     stored_snapshot_hash="$(printf '%s' "$ledger_doc" | jq -r '.snapshotHash // empty')"
     [ "$stored_snapshot_hash" = "$snapshot_hash_on_disk" ] \
-      || die9 "start: $LEDGER_FILE was opened against a different snapshot (its snapshotHash is $stored_snapshot_hash) than the one now on disk (hash $snapshot_hash_on_disk). A ledger and a snapshot that do not belong together are never read as a pair; investigate before proceeding."
+      || die 9 "start: $LEDGER_FILE was opened against a different snapshot (its snapshotHash is $stored_snapshot_hash) than the one now on disk (hash $snapshot_hash_on_disk). A ledger and a snapshot that do not belong together are never read as a pair; investigate before proceeding."
 
     ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
-      || die3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+      || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
     ledger_run_mode="$(ledger_required_string "$ledger_doc" "runMode")" \
-      || die3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+      || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
 
     # A drift halt never writes over a reason the order already carries. The old text is kept after
     # the new one, joined by "; earlier: ", so nothing loses a reason; and a start run repeated on
@@ -1650,7 +1416,7 @@ do_start() {
     final_criteria_json="$(printf '%s' "$snapshot_criteria_json" | jq -c '[ .[] | {id: .id, rowState: "not-judged"} ]')"
   fi
 
-  mkdir -p "$IMPL_DIR" || die3 "start: could not create $IMPL_DIR"
+  mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
   local ledger_json_out
   ledger_json_out="$(jq -n \
     --arg startedFrom "$ledger_started_from" --arg runMode "$ledger_run_mode" \
@@ -1883,14 +1649,14 @@ pc_refuse_forged_value() {
   local who="$1" pair="$2"
   case "$pair" in
     *"$(printf '\t')"*)
-      die3 "$who: --value was given text holding a tab, and the table this builds is tab delimited, so a tab inside a value forges a row: $pair"
+      die 3 "$who: --value was given text holding a tab, and the table this builds is tab delimited, so a tab inside a value forges a row: $pair"
       ;;
   esac
   # Counted, never matched as a pattern: command substitution strips trailing newlines, so
   # `*"$(printf '\n')"*` is `*""*`, which matches every value and refused all of them.
   [ "$(printf '%s' "$pair" | wc -l | tr -d '[:space:]')" = "0" ] \
-    || die3 "$who: --value was given text holding a newline, and the table this builds is newline delimited, so a newline inside a value forges a row: $pair"
-  [ -n "${pair%%=*}" ] || die3 "$who: --value was given no name: $pair"
+    || die 3 "$who: --value was given text holding a newline, and the table this builds is newline delimited, so a newline inside a value forges a row: $pair"
+  [ -n "${pair%%=*}" ] || die 3 "$who: --value was given no name: $pair"
 }
 
 pc_unquote() {
@@ -1959,7 +1725,7 @@ pc_flush_entry() {
     + (if $owner    == ""   then {} else {owner: $owner} end)
     + (if $reason   == ""   then {} else {reason: $reason} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode} end)
-  ' >>"$out" || die3 "preconditions: could not record the entry $PC_ID"
+  ' >>"$out" || die 3 "preconditions: could not record the entry $PC_ID"
   PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""
 }
 
@@ -2112,7 +1878,7 @@ tc_flush_entry() {
     + (if $absent     == false then {} else {absent: true} end)
     + (if $nearest    == null  then {} else {nearest: $nearest} end)
     + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
-  ' >>"$out" || die3 "preconditions: could not record the test-command row $TC_ID"
+  ' >>"$out" || die 3 "preconditions: could not record the test-command row $TC_ID"
   TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
 }
 
@@ -2262,7 +2028,7 @@ cc_flush_entry() {
     + (if $absent == false then {} else {absent: true, absentReason: $absentText} end)
     + (if $signal == ""    then {} else {signal: $signal} end)
     + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
-  ' >>"$out" || die3 "the check-command row $CC_ID could not be recorded"
+  ' >>"$out" || die 3 "the check-command row $CC_ID could not be recorded"
   CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
 }
 
@@ -2354,12 +2120,12 @@ cc_silent_pass_markers() {
 CR_PAIR=""
 cr_recipe_pair() {
   local who="$1" flag="$2" value="$3" fw rp
-  case "$value" in *=*) ;; *) die3 "$who: $flag takes <framework>=<path>, got: $value" ;; esac
+  case "$value" in *=*) ;; *) die 3 "$who: $flag takes <framework>=<path>, got: $value" ;; esac
   fw="${value%%=*}"
   rp="${value#*=}"
-  [ -n "$fw" ] || die3 "$who: $flag was given no framework name: $value"
-  [ -n "$rp" ] || die3 "$who: $flag was given no path for framework $fw."
-  [ -f "$rp" ] || die3 "$who: the recipe handed over for $fw is not a file: $rp"
+  [ -n "$fw" ] || die 3 "$who: $flag was given no framework name: $value"
+  [ -n "$rp" ] || die 3 "$who: $flag was given no path for framework $fw."
+  [ -f "$rp" ] || die 3 "$who: the recipe handed over for $fw is not a file: $rp"
   CR_PAIR="$(printf '%s\t%s' "$fw" "$rp")"
 }
 
@@ -2390,8 +2156,8 @@ cr_resolve() {
   local all_tools tools_out commanded count absent_rows
 
   records_hash__resolve_sha256_cmd \
-    || die3 "$CR_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
-  work="$(mktemp -d)" || die3 "$CR_WHO: could not create a temporary folder"
+    || die 3 "$CR_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  work="$(mktemp -d)" || die 3 "$CR_WHO: could not create a temporary folder"
   fw_file="$work/frameworks"
   tools_file="$work/tools"
   rows_file="$work/rows"
@@ -2452,7 +2218,7 @@ cr_resolve() {
        testCommandsRows: $testRows,
        checkRecipe: $checkRecipe, checkRecipeSha256: $checkSha, checkCommandsState: $ccState,
        suite: $suite, orderTests: $orderTests, silentPass: $silentPass}' >>"$fw_file" \
-      || die3 "$CR_WHO: the resolved recipe entry for $fw could not be recorded"
+      || die 3 "$CR_WHO: the resolved recipe entry for $fw could not be recorded"
   done <<CR_NAMES
 $names
 CR_NAMES
@@ -2466,7 +2232,7 @@ CR_NAMES
       '[ .[] | select(.id == $id and (has("argv")) and (((.unreadable // []) | index("argv")) == null)) ]')"
     count="$(printf '%s' "$commanded" | jq 'length')"
     if [ "$count" -gt 1 ]; then
-      die72 "$CR_WHO: $(printf '%s' "$commanded" | jq -r '[ .[].framework ] | join(" and ")') each declare a $tool_id command, and nothing here may choose between two answers to one question. Resolve one check recipe for this task, or split the frameworks into two tasks."
+      die 72 "$CR_WHO: $(printf '%s' "$commanded" | jq -r '[ .[].framework ] | join(" and ")') each declare a $tool_id command, and nothing here may choose between two answers to one question. Resolve one check recipe for this task, or split the frameworks into two tasks."
     fi
     if [ "$count" -eq 1 ]; then
       tools_out="$(jq -nc --argjson out "$tools_out" --argjson row "$(printf '%s' "$commanded" | jq -c '.[0]')" '$out + [$row]')"
@@ -2485,7 +2251,7 @@ CR_NAMES
   done
 
   CR_DOC="$(jq -s --argjson tools "$tools_out" '{frameworks: ., tools: $tools}' "$fw_file")" \
-    || die3 "$CR_WHO: the resolved recipe document could not be assembled"
+    || die 3 "$CR_WHO: the resolved recipe document could not be assembled"
   rm -rf "$work"
 }
 
@@ -2554,17 +2320,17 @@ require_started_build() {
   snapshot_file="$IMPL_DIR/snapshot.json"
   if [ ! -f "$STARTED_LEDGER_FILE" ]; then
     [ -f "$snapshot_file" ] \
-      && die3 "$who: $STARTED_LEDGER_FILE not found, though $snapshot_file exists. A snapshot with no ledger beside it is not a supported state; run start again."
-    die20 "$who: this task's build has never started. There is no $STARTED_LEDGER_FILE and no $snapshot_file. Run start on this task first."
+      && die 3 "$who: $STARTED_LEDGER_FILE not found, though $snapshot_file exists. A snapshot with no ledger beside it is not a supported state; run start again."
+    die 20 "$who: this task's build has never started. There is no $STARTED_LEDGER_FILE and no $snapshot_file. Run start on this task first."
   fi
   STARTED_LEDGER_DOC="$(jq -c '.' "$STARTED_LEDGER_FILE" 2>/dev/null)"
   [ -n "$STARTED_LEDGER_DOC" ] \
-    || die3 "$who: $STARTED_LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "$who: $STARTED_LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
   [ -f "$snapshot_file" ] \
-    || die3 "$who: $snapshot_file not found, though $STARTED_LEDGER_FILE exists. A ledger with no snapshot beside it is not a supported state; run start again."
+    || die 3 "$who: $snapshot_file not found, though $STARTED_LEDGER_FILE exists. A ledger with no snapshot beside it is not a supported state; run start again."
   SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
   [ -n "$SNAPSHOT_DOC" ] \
-    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+    || die 3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
 }
 
 # Prints one of: missing, unreadable, ok, for <task_folder>/implementation/baseline.json
@@ -2663,7 +2429,7 @@ bl_run_suite() {
       + (if $exitCode == null then {} else {exitCode: $exitCode} end)
       + (if $output   == ""   then {} else {output: $output} end)
       + (if $truncated == true then {truncated: true} else {} end)
-    ' >>"$out" || die3 "preconditions: could not record the baseline suite result for framework $fw"
+    ' >>"$out" || die 3 "preconditions: could not record the baseline suite result for framework $fw"
     i=$((i + 1))
   done
 }
@@ -2789,7 +2555,7 @@ bl_tool_result() {
 # The step. Every framework the project declares must be answered for, because the build runs in
 # one repository that is all of them at once.
 do_preconditions() {
-  local task_folder="" project_folder codepath project_state
+  local task_folder="" project_folder codepath
   local recipes="" failures="" values="" check_recipes="" arg fw val
   local tool_out_file cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
@@ -2806,46 +2572,48 @@ do_preconditions() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --recipe)
-        [ "$#" -ge 2 ] || die3 "preconditions: --recipe needs <framework>=<path>"
-        case "$2" in *=*) ;; *) die3 "preconditions: --recipe takes <framework>=<path>, got: $2" ;; esac
-        [ -n "${2%%=*}" ] || die3 "preconditions: --recipe was given no framework name: $2"
-        [ -n "${2#*=}" ] || die3 "preconditions: --recipe was given no path: $2"
+        [ "$#" -ge 2 ] || die 3 "preconditions: --recipe needs <framework>=<path>"
+        case "$2" in *=*) ;; *) die 3 "preconditions: --recipe takes <framework>=<path>, got: $2" ;; esac
+        [ -n "${2%%=*}" ] || die 3 "preconditions: --recipe was given no framework name: $2"
+        [ -n "${2#*=}" ] || die 3 "preconditions: --recipe was given no path: $2"
         recipes="$recipes$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
       --check-recipe)
-        [ "$#" -ge 2 ] || die3 "preconditions: --check-recipe needs <framework>=<path>"
+        [ "$#" -ge 2 ] || die 3 "preconditions: --check-recipe needs <framework>=<path>"
         cr_recipe_pair "preconditions" "--check-recipe" "$2"
         check_recipes="$check_recipes$CR_PAIR
 "
         shift 2 ;;
       --lookup-failed)
-        [ "$#" -ge 2 ] || die3 "preconditions: --lookup-failed needs <framework>=<reason>"
-        case "$2" in *=*) ;; *) die3 "preconditions: --lookup-failed takes <framework>=<reason>, got: $2" ;; esac
-        [ -n "${2%%=*}" ] || die3 "preconditions: --lookup-failed was given no framework name: $2"
+        [ "$#" -ge 2 ] || die 3 "preconditions: --lookup-failed needs <framework>=<reason>"
+        case "$2" in *=*) ;; *) die 3 "preconditions: --lookup-failed takes <framework>=<reason>, got: $2" ;; esac
+        [ -n "${2%%=*}" ] || die 3 "preconditions: --lookup-failed was given no framework name: $2"
         val="${2#*=}"
         case "$val" in
           no-recipe|listing-unreachable|fetch-failed) ;;
-          *) die3 "preconditions: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $val" ;;
+          *) die 3 "preconditions: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $val" ;;
         esac
         failures="$failures$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
       --value)
-        [ "$#" -ge 2 ] || die3 "preconditions: --value needs <name>=<value>"
-        case "$2" in *=*) ;; *) die3 "preconditions: --value takes <name>=<value>, got: $2" ;; esac
+        [ "$#" -ge 2 ] || die 3 "preconditions: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die 3 "preconditions: --value takes <name>=<value>, got: $2" ;; esac
         pc_refuse_forged_value "preconditions" "$2"
         values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
-      -*) die3 "preconditions: unrecognized argument: $1" ;;
+      -*) die 3 "preconditions: unrecognized argument: $1" ;;
       *)
-        [ -z "$task_folder" ] || die3 "preconditions: more than one task folder given"
+        [ -z "$task_folder" ] || die 3 "preconditions: more than one task folder given"
         task_folder="$1"; shift ;;
     esac
   done
 
   task_folder="$(resolve_task_folder "$task_folder" "preconditions")"
+  # Every other action calls the folder TASK_PATH, and the shared loaders read that name.
+  TASK_PATH="$task_folder"
 
   # This step belongs to a run, so a run must have opened. Writing a record for a build that never
   # started would leave a file nothing can be read against. The same reader every step-five action
@@ -2853,20 +2621,13 @@ do_preconditions() {
   IMPL_DIR="$task_folder/implementation"
   require_started_build "preconditions"
 
-  project_folder="$(resolve_project_folder "$task_folder")" \
-    || die3 "preconditions: the task folder is not inside a project, so no framework is known"
-  project_state="$(project_code_path_state "$project_folder")"
-  case "$project_state" in
-    unreadable) die14 "preconditions: $project_folder/project.json is not valid JSON" ;;
-    missing)    die3  "preconditions: $project_folder has no project.json" ;;
-  esac
-  codepath="$(project_code_path_value "$project_folder")"
-  [ -n "$codepath" ] || die3 "preconditions: project.json records no codePath, so no check has anywhere to run"
-  [ -d "$codepath" ] || die15 "preconditions: the recorded codePath does not exist on disk: $codepath"
+  rv_load_codepath "preconditions"
+  project_folder="$RV_PROJECT_FOLDER"
+  codepath="$RV_CODEPATH"
 
   frameworks="$(jq -r '.frameworks // [] | .[]' "$project_folder/project.json" 2>/dev/null)"
   [ -n "$frameworks" ] \
-    || die77 "preconditions: $project_folder/project.json is valid and records no frameworks, so no recipe can be chosen for this project. Exit 14 is the separate fact that the file is not valid JSON."
+    || die 77 "preconditions: $project_folder/project.json is valid and records no frameworks, so no recipe can be chosen for this project. Exit 14 is the separate fact that the file is not valid JSON."
 
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
   # framework that can never answer is named now rather than at the first build-record. An order
@@ -2904,13 +2665,13 @@ do_preconditions() {
       lookup="resolved"
     else
       lookup="$(cr_lookup "$failures" "$fw")"
-      [ -n "$lookup" ] || die18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
+      [ -n "$lookup" ] || die 18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
     fi
 
     : >"$entries_file"
     : >"$tc_rows_file"
     if [ "$lookup" = "resolved" ]; then
-      [ -f "$recipe_path" ] || die3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
+      [ -f "$recipe_path" ] || die 3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
       section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
       case "$section_state" in
         undeclared)     fw_verdict="undeclared" ;;
@@ -3030,7 +2791,7 @@ EOF
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
-    ' >>"$fw_json_file" || die3 "preconditions: could not record the result for framework $fw"
+    ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
   rm -f "$entries_file" "$tc_rows_file"
@@ -3046,7 +2807,7 @@ EOF
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -s --arg takenAt "$today" --arg verdict "$run_verdict" '
     {schemaVersion: 1, takenAt: $takenAt, verdict: $verdict, frameworks: .}
-  ' "$fw_json_file")" || die3 "preconditions: could not assemble the record"
+  ' "$fw_json_file")" || die 3 "preconditions: could not assemble the record"
   rm -f "$fw_json_file"
 
   record_file="$task_folder/implementation/preconditions.json"
@@ -3068,7 +2829,7 @@ EOF
       LEDGER_FILE="$STARTED_LEDGER_FILE"
       ledger_doc="$STARTED_LEDGER_DOC"
       ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
-        || die3 "preconditions: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+        || die 3 "preconditions: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
       baseline_commit_report="$ledger_started_from"
 
       case "$(bl_state)" in
@@ -3104,7 +2865,7 @@ EOF
               staticAnalysis:  $staticAnalysis,
               security:        $security,
               checkRecipes:    $checkRecipes
-            }')" || die3 "preconditions: could not assemble the baseline record"
+            }')" || die 3 "preconditions: could not assemble the baseline record"
           write_atomic "$BASELINE_FILE" "$baseline_json"
 
           baseline_status="written"
@@ -3116,11 +2877,11 @@ EOF
             baseline_status="already-recorded"
             baseline_note="a baseline already exists for commit $ledger_started_from; a baseline retaken after code is written measures nothing, so it was left alone"
           else
-            die21 "preconditions: $BASELINE_FILE already holds a baseline taken at commit $existing_commit, but this run's own ledger started from a different commit, $ledger_started_from. A baseline is taken once, at the commit the build started from, and never retaken after that: retaking it here would measure the wrong repository state. Investigate before proceeding; remove $BASELINE_FILE by hand only if this task's baseline is meant to start over."
+            die 21 "preconditions: $BASELINE_FILE already holds a baseline taken at commit $existing_commit, but this run's own ledger started from a different commit, $ledger_started_from. A baseline is taken once, at the commit the build started from, and never retaken after that: retaking it here would measure the wrong repository state. Investigate before proceeding; remove $BASELINE_FILE by hand only if this task's baseline is meant to start over."
           fi
           ;;
         unreadable)
-          die3 "preconditions: $BASELINE_FILE exists but could not be read as a baseline record (not valid JSON, not an object, or its commit field is missing or malformed). Repair or remove it by hand before running this again."
+          die 3 "preconditions: $BASELINE_FILE exists but could not be read as a baseline record (not valid JSON, not an object, or its commit field is missing or malformed). Repair or remove it by hand before running this again."
           ;;
       esac
 
@@ -3202,15 +2963,15 @@ tt_ordered_union() {
 # Loads the frozen work order $2 from the frozen snapshot document $1, and the frozen record of
 # every criterion it serves or owns, in that first-seen order. Sets three globals a caller reads
 # afterward: UNIT_JSON (the whole frozen work order object), CRITERIA_IDS_JSON (the ordered id
-# list), and CRITERIA_JSON (the full frozen criterion record for each). Exits directly (die22 or
-# die3) rather than returning a code, because every caller of this helper treats both problems as
+# list), and CRITERIA_JSON (the full frozen criterion record for each). Exits directly (exit 22 or
+# exit 3) rather than returning a code, because every caller of this helper treats both problems as
 # fatal and would only turn around and exit itself.
 UNIT_JSON=""; CRITERIA_IDS_JSON="[]"; CRITERIA_JSON="[]"
 tt_load_unit_and_criteria() {
   local snapshot_doc="$1" unit_id="$2" who="$3"
   UNIT_JSON="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$unit_id" \
     '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
-  [ "$UNIT_JSON" != "null" ] || die22 "$who: $unit_id is not in the frozen copy."
+  [ "$UNIT_JSON" != "null" ] || die 22 "$who: $unit_id is not in the frozen copy."
 
   local served_json owned_json count j id one
   served_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaServed // []')"
@@ -3225,13 +2986,13 @@ tt_load_unit_and_criteria() {
     one="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$id" \
       '(.alignment.criteria // []) | map(select(.id == $id)) | .[0] // null')"
     [ "$one" != "null" ] \
-      || die3 "$who: $unit_id names criterion $id, which is not in the frozen contract."
+      || die 3 "$who: $unit_id names criterion $id, which is not in the frozen contract."
     CRITERIA_JSON="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson c "$one" '. + [$c]')"
     j=$((j + 1))
   done
 }
 
-# Reads the frozen snapshot beside <task_folder>/implementation, dying (die25 missing, die3
+# Reads the frozen snapshot beside <task_folder>/implementation, dying (exit 25 missing, exit 3
 # unreadable) when it is not ready. Sets SNAPSHOT_DOC. Shared by tests-brief and tests-freeze,
 # which both refuse for the same reason on the same missing file.
 SNAPSHOT_DOC=""
@@ -3241,10 +3002,10 @@ SNAPSHOT_DOC=""
 # and the resume logic both read a lastStep that never moved.
 tt_ledger_update() {
   local ledger_file="$1" unit_id="$2" expr="$3" doc
-  [ -f "$ledger_file" ] || die3 "the ledger at $ledger_file is missing, though start writes it. Run start again."
+  [ -f "$ledger_file" ] || die 3 "the ledger at $ledger_file is missing, though start writes it. Run start again."
   doc="$(jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($expr) else . end))" "$ledger_file" 2>/dev/null)"
-  [ -n "$doc" ] || die3 "the ledger at $ledger_file could not be read as JSON, or the update to $unit_id failed."
+  [ -n "$doc" ] || die 3 "the ledger at $ledger_file could not be read as JSON, or the update to $unit_id failed."
   write_atomic "$ledger_file" "$doc"
 }
 
@@ -3252,15 +3013,15 @@ tt_load_snapshot() {
   local who="$1"
   local snapshot_file="$IMPL_DIR/snapshot.json"
   [ -f "$snapshot_file" ] \
-    || die25 "$who: $snapshot_file not found. This step ran before start, so there is no frozen copy. Run start on this task first."
+    || die 25 "$who: $snapshot_file not found. This step ran before start, so there is no frozen copy. Run start on this task first."
   SNAPSHOT_DOC="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
   [ -n "$SNAPSHOT_DOC" ] \
-    || die3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+    || die 3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
 }
 
 do_tests_brief() {
-  [ "$#" -ge 2 ] || die3 "tests-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die3 "tests-brief: unrecognized extra argument: $3"
+  [ "$#" -ge 2 ] || die 3 "tests-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "tests-brief: unrecognized extra argument: $3"
   local resolve_rc unit_id="$2"
   TASK_PATH="$(resolve_task_folder "$1" "tests-brief")"
   resolve_rc=$?
@@ -3270,11 +3031,11 @@ do_tests_brief() {
   tt_load_snapshot "tests-brief"
   local ledger_file="$IMPL_DIR/ledger.json"
   [ -f "$ledger_file" ] \
-    || die3 "tests-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+    || die 3 "tests-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
   local ledger_doc
   ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
   [ -n "$ledger_doc" ] \
-    || die3 "tests-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "tests-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-brief"
 
@@ -3293,7 +3054,7 @@ do_tests_brief() {
     dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
       '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
     [ "$dep_entry" != "null" ] \
-      || die3 "tests-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
+      || die 3 "tests-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
     dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
     if [ "$dep_step" = "closed" ]; then
       dep_interface="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$dep_id" \
@@ -3312,7 +3073,7 @@ do_tests_brief() {
         . + [ {id: $id, declaredInterface: $iface, interface: $iface}
               + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
     else
-      die23 "tests-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+      die 23 "tests-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
     fi
     i=$((i + 1))
   done
@@ -3327,7 +3088,7 @@ do_tests_brief() {
         | join(", ")
       ')"
     [ -z "$owned_machine_unmet" ] \
-      || die24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
+      || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
   # --- assemble the brief: exactly these four keys, and nothing else ------------------------------
@@ -3410,23 +3171,23 @@ tf_parse_tests() {
     [ -n "$line" ] || continue
     case "$line" in
       *"::"*) : ;;
-      *) die3 "tests-freeze: --test value has no '::' separating the path from the test name: $line" ;;
+      *) die 3 "tests-freeze: --test value has no '::' separating the path from the test name: $line" ;;
     esac
     p="${line%%::*}"
     rest="${line#*::}"
     case "$rest" in
       *"="*) : ;;
-      *) die3 "tests-freeze: --test value has no '=' separating the test name from its criteria: $line" ;;
+      *) die 3 "tests-freeze: --test value has no '=' separating the test name from its criteria: $line" ;;
     esac
     name="${rest%%=*}"
     csv="${rest#*=}"
-    [ -n "$p" ]    || die3 "tests-freeze: --test value has an empty path: $line"
-    [ -n "$name" ] || die3 "tests-freeze: --test value has an empty test name: $line"
-    [ -n "$csv" ]  || die3 "tests-freeze: --test value names no criterion: $line"
+    [ -n "$p" ]    || die 3 "tests-freeze: --test value has an empty path: $line"
+    [ -n "$name" ] || die 3 "tests-freeze: --test value has an empty test name: $line"
+    [ -n "$csv" ]  || die 3 "tests-freeze: --test value names no criterion: $line"
     ids_json="$(printf '%s' "$csv" | tr ',' '\n' | jq -R -s 'split("\n") | map(select(length>0))')"
     jq -n --arg path "$p" --arg name "$name" --argjson criteria "$ids_json" \
       '{path: $path, name: $name, criteria: $criteria}' >>"$out" \
-      || die3 "tests-freeze: could not record the --test row for $name"
+      || die 3 "tests-freeze: could not record the --test row for $name"
   done <<TF_EOF
 $raw
 TF_EOF
@@ -3440,14 +3201,14 @@ tf_parse_reds() {
     [ -n "$line" ] || continue
     case "$line" in
       *"="*) : ;;
-      *) die3 "tests-freeze: --red value has no '=' separating the test name from the file path: $line" ;;
+      *) die 3 "tests-freeze: --red value has no '=' separating the test name from the file path: $line" ;;
     esac
     name="${line%%=*}"
     p="${line#*=}"
-    [ -n "$name" ] || die3 "tests-freeze: --red value has an empty test name: $line"
-    [ -n "$p" ]    || die3 "tests-freeze: --red value has an empty file path: $line"
+    [ -n "$name" ] || die 3 "tests-freeze: --red value has an empty test name: $line"
+    [ -n "$p" ]    || die 3 "tests-freeze: --red value has an empty file path: $line"
     jq -n --arg name "$name" --arg path "$p" '{name: $name, path: $path}' >>"$out" \
-      || die3 "tests-freeze: could not record the --red row for $name"
+      || die 3 "tests-freeze: could not record the --red row for $name"
   done <<TF_EOF
 $raw
 TF_EOF
@@ -3461,14 +3222,14 @@ tf_parse_checklists() {
     [ -n "$line" ] || continue
     case "$line" in
       *"="*) : ;;
-      *) die3 "tests-freeze: --checklist value has no '=' separating the criterion id from the verification text: $line" ;;
+      *) die 3 "tests-freeze: --checklist value has no '=' separating the criterion id from the verification text: $line" ;;
     esac
     id="${line%%=*}"
     text="${line#*=}"
-    [ -n "$id" ]   || die3 "tests-freeze: --checklist value has an empty criterion id: $line"
-    [ -n "$text" ] || die3 "tests-freeze: --checklist value has empty verification text: $line"
+    [ -n "$id" ]   || die 3 "tests-freeze: --checklist value has an empty criterion id: $line"
+    [ -n "$text" ] || die 3 "tests-freeze: --checklist value has empty verification text: $line"
     jq -n --arg id "$id" --arg text "$text" '{id: $id, text: $text}' >>"$out" \
-      || die3 "tests-freeze: could not record the --checklist row for $id"
+      || die 3 "tests-freeze: could not record the --checklist row for $id"
   done <<TF_EOF
 $raw
 TF_EOF
@@ -3485,35 +3246,35 @@ tf_parse_rows() {
     [ -n "$line" ] || continue
     case "$line" in
       *"="*) : ;;
-      *) die3 "tests-freeze: --row value has no '=' separating the criterion id from the verdict: $line" ;;
+      *) die 3 "tests-freeze: --row value has no '=' separating the criterion id from the verdict: $line" ;;
     esac
     id="${line%%=*}"
     rest="${line#*=}"
     case "$rest" in
       *"::"*) : ;;
-      *) die3 "tests-freeze: --row value has no '::' separating the verdict from who judged it: $line" ;;
+      *) die 3 "tests-freeze: --row value has no '::' separating the verdict from who judged it: $line" ;;
     esac
     verdict="${rest%%::*}"
     rest="${rest#*::}"
     case "$rest" in
       *"::"*) : ;;
-      *) die3 "tests-freeze: --row value has no '::' separating who judged it from the note: $line" ;;
+      *) die 3 "tests-freeze: --row value has no '::' separating who judged it from the note: $line" ;;
     esac
     judged="${rest%%::*}"
     note="${rest#*::}"
-    [ -n "$id" ] || die3 "tests-freeze: --row value has an empty criterion id: $line"
+    [ -n "$id" ] || die 3 "tests-freeze: --row value has an empty criterion id: $line"
     case "$verdict" in
       confirmed|rejected) ;;
-      *) die3 "tests-freeze: --row value answers '$verdict'. The two answers are confirmed and rejected: $line" ;;
+      *) die 3 "tests-freeze: --row value answers '$verdict'. The two answers are confirmed and rejected: $line" ;;
     esac
     case "$judged" in
       person|model) ;;
-      *) die3 "tests-freeze: --row value says '$judged' judged it. The two words are person and model: $line" ;;
+      *) die 3 "tests-freeze: --row value says '$judged' judged it. The two words are person and model: $line" ;;
     esac
-    [ -n "$note" ] || die3 "tests-freeze: --row value for $id carries no note. A verdict with nothing to read beside it is not a verdict."
+    [ -n "$note" ] || die 3 "tests-freeze: --row value for $id carries no note. A verdict with nothing to read beside it is not a verdict."
     jq -n --arg id "$id" --arg v "$verdict" --arg j "$judged" --arg n "$note" \
       '{criterion: $id, verdict: $v, judgedBy: $j, note: $n}' >>"$out" \
-      || die3 "tests-freeze: could not record the --row for $id"
+      || die 3 "tests-freeze: could not record the --row for $id"
   done <<TF_EOF
 $raw
 TF_EOF
@@ -3527,14 +3288,14 @@ tf_parse_goa() {
     [ -n "$line" ] || continue
     case "$line" in
       *"="*) : ;;
-      *) die3 "tests-freeze: --green-on-arrival value has no '=' separating the test name from the reason: $line" ;;
+      *) die 3 "tests-freeze: --green-on-arrival value has no '=' separating the test name from the reason: $line" ;;
     esac
     name="${line%%=*}"
     reason="${line#*=}"
-    [ -n "$name" ]   || die3 "tests-freeze: --green-on-arrival value has an empty test name: $line"
-    [ -n "$reason" ] || die3 "tests-freeze: --green-on-arrival value has an empty reason: $line"
+    [ -n "$name" ]   || die 3 "tests-freeze: --green-on-arrival value has an empty test name: $line"
+    [ -n "$reason" ] || die 3 "tests-freeze: --green-on-arrival value has an empty reason: $line"
     jq -n --arg name "$name" --arg reason "$reason" '{name: $name, reason: $reason}' >>"$out" \
-      || die3 "tests-freeze: could not record the --green-on-arrival row for $name"
+      || die 3 "tests-freeze: could not record the --green-on-arrival row for $name"
   done <<TF_EOF
 $raw
 TF_EOF
@@ -3684,51 +3445,51 @@ do_tests_freeze() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --test)
-        [ "$#" -ge 2 ] || die3 "tests-freeze: --test needs <path>::<test name>=<criterion id>[,<criterion id>...]"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --test needs <path>::<test name>=<criterion id>[,<criterion id>...]"
         test_raw="$test_raw$2
 "
         shift 2 ;;
       --red)
-        [ "$#" -ge 2 ] || die3 "tests-freeze: --red needs <test name>=<path to a file holding what the run printed>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --red needs <test name>=<path to a file holding what the run printed>"
         red_raw="$red_raw$2
 "
         shift 2 ;;
       --test-glob)
-        [ "$#" -ge 2 ] || die3 "tests-freeze: --test-glob needs <glob>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --test-glob needs <glob>"
         glob_raw="$glob_raw$2
 "
         shift 2 ;;
       --checklist)
-        [ "$#" -ge 2 ] || die3 "tests-freeze: --checklist needs <criterion id>=<verification text>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --checklist needs <criterion id>=<verification text>"
         checklist_raw="$checklist_raw$2
 "
         shift 2 ;;
       --row)
-        [ "$#" -ge 2 ] || die3 "tests-freeze: --row needs <criterion id>=<confirmed|rejected>::<person|model>::<note>"
-        [ -n "$2" ] || die3 "tests-freeze: --row was given an empty value."
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --row needs <criterion id>=<confirmed|rejected>::<person|model>::<note>"
+        [ -n "$2" ] || die 3 "tests-freeze: --row was given an empty value."
         halt_refuse_separator "tests-freeze" "--row" "$2"
         row_raw="$row_raw$2
 "
         shift 2 ;;
       --green-on-arrival)
-        [ "$#" -ge 2 ] || die3 "tests-freeze: --green-on-arrival needs <test name>=<reason>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --green-on-arrival needs <test name>=<reason>"
         goa_raw="$goa_raw$2
 "
         shift 2 ;;
-      -*) die3 "tests-freeze: unrecognized argument: $1" ;;
+      -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
           task_arg="$1"
         elif [ -z "$unit_id" ]; then
           unit_id="$1"
         else
-          die3 "tests-freeze: unrecognized extra argument: $1"
+          die 3 "tests-freeze: unrecognized extra argument: $1"
         fi
         shift ;;
     esac
   done
-  [ -n "$task_arg" ] || die3 "tests-freeze: a task folder is required"
-  [ -n "$unit_id" ]  || die3 "tests-freeze: a unit id is required"
+  [ -n "$task_arg" ] || die 3 "tests-freeze: a task folder is required"
+  [ -n "$unit_id" ]  || die 3 "tests-freeze: a unit id is required"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "tests-freeze")"
@@ -3744,7 +3505,7 @@ do_tests_freeze() {
   # freezes a record with no test and no glob in it. The reference then proves nothing, and the
   # frozen-tests check later hashes nothing and answers met.
   [ "$(printf '%s' "$CRITERIA_IDS_JSON" | jq 'length')" -gt 0 ] \
-    || die74 "tests-freeze: $unit_id serves and owns no criterion, so there is nothing for a test to prove and nothing for this step to freeze. Design left this order with no criteriaServed and no criteriaOwned; repair the work order and close design again."
+    || die 74 "tests-freeze: $unit_id serves and owns no criterion, so there is nothing for a test to prove and nothing for this step to freeze. Design left this order with no criteriaServed and no criteriaOwned; repair the work order and close design again."
 
   # --- 76: a re-freeze after the order has already left the frozen state ---------------------------
   # A re-freeze rewinds lastStep and leaves attemptsUsed and the build record where they are, so the
@@ -3757,7 +3518,7 @@ do_tests_freeze() {
         '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')"
       case "$tf_prior_step" in
         ""|null|tests-frozen) ;;
-        *) die76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved; otherwise this order goes forward, not back." ;;
+        *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved; otherwise this order goes forward, not back." ;;
       esac
     fi
   fi
@@ -3787,28 +3548,19 @@ do_tests_freeze() {
 
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
   local project_folder codepath
-  project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die3 "tests-freeze: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-  case "$(project_code_path_state "$project_folder")" in
-    unreadable) die14 "tests-freeze: $project_folder/project.json exists but is not valid JSON, so its codePath cannot be read." ;;
-    missing)    die3  "tests-freeze: $project_folder/project.json not found, though it was found moments ago." ;;
-  esac
-  codepath="$(project_code_path_value "$project_folder")"
-  [ -n "$codepath" ] || die3 "tests-freeze: $project_folder/project.json is valid JSON but has no usable codePath field."
-  [ -d "$codepath" ] || die15 "tests-freeze: the recorded codePath does not exist on disk: $codepath"
-  command -v git >/dev/null 2>&1 || die3 "tests-freeze: git is required and was not found on PATH"
-  is_git_repo "$codepath" \
-    || die5 "tests-freeze: this task's project code at $codepath is not a git repository."
+  rv_load_codepath "tests-freeze"
+  project_folder="$RV_PROJECT_FOLDER"
+  codepath="$RV_CODEPATH"
   local current_commit
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
-    || die3 "tests-freeze: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+    || die 3 "tests-freeze: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
 
   # --- 36: every --test path must resolve inside codePath, and is stored relative to it -----------
   local codepath_canon
   codepath_canon="$(cd "$codepath" 2>/dev/null && pwd -P)"
   [ -n "$codepath_canon" ] \
-    || die3 "tests-freeze: could not resolve $codepath to a canonical path, though it was already checked to be a directory."
+    || die 3 "tests-freeze: could not resolve $codepath to a canonical path, though it was already checked to be a directory."
 
   local norm_tmp norm_count nk raw_path row_json rel_result rel_kind rel_value abs_path outside_paths=""
   norm_tmp="$IMPL_DIR/.tests-freeze-norm.$$"
@@ -3830,11 +3582,11 @@ do_tests_freeze() {
     fi
     jq -c -n --argjson row "$row_json" --arg abs "$abs_path" --arg rel "$rel_value" \
       '$row + {absPath: $abs, relPath: $rel}' >>"$norm_tmp" \
-      || die3 "tests-freeze: could not record the resolved path for $raw_path"
+      || die 3 "tests-freeze: could not record the resolved path for $raw_path"
     nk=$((nk + 1))
   done
   [ -z "$outside_paths" ] \
-    || die36 "tests-freeze: these --test paths are outside the code root $codepath_canon: ${outside_paths%, }"
+    || die 36 "tests-freeze: these --test paths are outside the code root $codepath_canon: ${outside_paths%, }"
   tests_json="$(jq -s '.' "$norm_tmp")"
   rm -f "$norm_tmp"
 
@@ -3848,7 +3600,7 @@ do_tests_freeze() {
 $unique_paths
 TF_EOF
   [ -z "$missing_paths" ] \
-    || die26 "tests-freeze: these --test paths do not exist on disk: ${missing_paths%, }"
+    || die 26 "tests-freeze: these --test paths do not exist on disk: ${missing_paths%, }"
 
   # --- 27: every --test path (relative to codePath) must match at least one --test-glob, under the
   # catalog's own `**` semantics -----------------------------------------------------------------
@@ -3870,7 +3622,7 @@ TF_EOF
 $unique_rel_paths
 TF_EOF
   [ -z "$unmatched_paths" ] \
-    || die27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
+    || die 27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
 
   # --- 28: a test name must carry, at its own end, the criterion id(s) it claims -------------------
   local test_rows_count ti name id_list bad_carry=""
@@ -3883,7 +3635,7 @@ TF_EOF
     ti=$((ti + 1))
   done
   [ -z "$bad_carry" ] \
-    || die28 "tests-freeze: these test names do not carry, at the end, the criterion id they claim: ${bad_carry%, }"
+    || die 28 "tests-freeze: these test names do not carry, at the end, the criterion id they claim: ${bad_carry%, }"
 
   # --- 29: every machine-verified criterion the unit serves or owns needs a --test row -------------
   local missing_machine
@@ -3894,7 +3646,7 @@ TF_EOF
       | join(", ")
     ')"
   [ -z "$missing_machine" ] \
-    || die29 "tests-freeze: these machine-verified criteria have no --test row naming them: $missing_machine"
+    || die 29 "tests-freeze: these machine-verified criteria have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
   local missing_person
@@ -3905,7 +3657,7 @@ TF_EOF
       | join(", ")
     ')"
   [ -z "$missing_person" ] \
-    || die30 "tests-freeze: these person-verified criteria have no --checklist row: $missing_person"
+    || die 30 "tests-freeze: these person-verified criteria have no --checklist row: $missing_person"
 
   # --- 31: a --test must never name a criterion the unit does not serve or own ---------------------
   local bad_criteria
@@ -3914,7 +3666,7 @@ TF_EOF
       | [ $named[] as $cid | select(($allowed | index($cid)) == null) | $cid ] | unique | join(", ")
     ')"
   [ -z "$bad_criteria" ] \
-    || die31 "tests-freeze: a --test names criteria $unit_id does not serve or own: $bad_criteria"
+    || die 31 "tests-freeze: a --test names criteria $unit_id does not serve or own: $bad_criteria"
 
   # --- the run's own mode, read once: the row checks below and the rejected-row halt both use it ---
   # A ledger that is present and unreadable refuses here rather than further down. The mode decides
@@ -3927,7 +3679,7 @@ TF_EOF
   if [ -f "$tf_ledger_file" ]; then
     tf_ledger_doc="$(jq -c '.' "$tf_ledger_file" 2>/dev/null)"
     [ -n "$tf_ledger_doc" ] \
-      || die3 "tests-freeze: $tf_ledger_file exists but could not be read as JSON. This step reads the run's own mode from it, and every row below is judged against that mode. Repair or remove it by hand before running this again."
+      || die 3 "tests-freeze: $tf_ledger_file exists but could not be read as JSON. This step reads the run's own mode from it, and every row below is judged against that mode. Repair or remove it by hand before running this again."
   fi
   tf_run_mode="interactive"
   [ -n "$tf_ledger_doc" ] && tf_run_mode="$(printf '%s' "$tf_ledger_doc" | jq -r '.runMode // "interactive"')"
@@ -3943,7 +3695,7 @@ TF_EOF
       [ .[] | select((.verifiedBy // "") != "machine") | select((.verifiedBy // "") != "person")
         | .id + " (verifiedBy " + ((.verifiedBy // null) | tostring) + ")" ] | join(", ")')"
   [ -z "$bad_kinds" ] \
-    || die64 "tests-freeze: $unit_id serves or owns criteria whose verifiedBy is neither machine nor person: $bad_kinds. Such a criterion takes no test, no checklist and no row, so freezing it would record nothing at all. Fix the contract and close design again."
+    || die 64 "tests-freeze: $unit_id serves or owns criteria whose verifiedBy is neither machine nor person: $bad_kinds. Such a criterion takes no test, no checklist and no row, so freezing it would record nothing at all. Fix the contract and close design again."
 
   # --- 70: the judge of a row must match the run this task is on -----------------------------------
   local wrong_judge
@@ -3951,12 +3703,12 @@ TF_EOF
     wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.judgedBy == "person") | .criterion ] | join(", ")')"
     [ -z "$wrong_judge" ] \
-      || die70 "tests-freeze: these rows say a person judged them, and this run is autonomous: $wrong_judge. No person is here to read a row, and a row recorded as a person's is one nobody can list again later. Nothing is written."
+      || die 70 "tests-freeze: these rows say a person judged them, and this run is autonomous: $wrong_judge. No person is here to read a row, and a row recorded as a person's is one nobody can list again later. Nothing is written."
   else
     wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.judgedBy == "model") | .criterion ] | join(", ")')"
     [ -z "$wrong_judge" ] \
-      || die70 "tests-freeze: these rows say a model judged them, and this run is interactive: $wrong_judge. A person is here, and their reading is the stronger evidence, so the record must not say a checker stood in for them. Nothing is written."
+      || die 70 "tests-freeze: these rows say a model judged them, and this run is interactive: $wrong_judge. A person is here, and their reading is the stronger evidence, so the record must not say a checker stood in for them. Nothing is written."
   fi
 
   # --- 64: the --row set and this order's criteria must correspond, in all four ways ---------------
@@ -3973,25 +3725,25 @@ TF_EOF
       | join(", ")
     ')"
   [ -z "$rows_missing" ] \
-    || die64 "tests-freeze: these machine-verified criteria have no --row: $rows_missing. Every row of the trace matrix is judged before the tests are frozen."
+    || die 64 "tests-freeze: these machine-verified criteria have no --row: $rows_missing. Every row of the trace matrix is judged before the tests are frozen."
   rows_unknown="$(jq -nr --argjson allowed "$CRITERIA_IDS_JSON" --argjson rows "$rows_meta_json" '
       [ $rows[] | .criterion as $cid | select(($allowed | index($cid)) == null) | $cid ]
       | unique | join(", ")
     ')"
   [ -z "$rows_unknown" ] \
-    || die64 "tests-freeze: a --row names criteria $unit_id does not serve or own: $rows_unknown"
+    || die 64 "tests-freeze: a --row names criteria $unit_id does not serve or own: $rows_unknown"
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
       | [ $rows[] | .criterion as $cid | select(($people | index($cid)) != null) | $cid ]
       | unique | join(", ")
     ')"
   [ -z "$rows_person" ] \
-    || die64 "tests-freeze: a --row names $rows_person, which a person verifies. Such a criterion carries a checklist and never a judgement; completion confirms it."
+    || die 64 "tests-freeze: a --row names $rows_person, which a person verifies. Such a criterion carries a checklist and never a judgement; completion confirms it."
   rows_twice="$(jq -nr --argjson rows "$rows_meta_json" '
       [ $rows | group_by(.criterion)[] | select(length > 1) | .[0].criterion ] | join(", ")
     ')"
   [ -z "$rows_twice" ] \
-    || die64 "tests-freeze: these criteria have more than one --row: $rows_twice. One order judges one criterion once."
+    || die 64 "tests-freeze: these criteria have more than one --row: $rows_twice. One order judges one criterion once."
 
   # --- 65: a rejected row stops the freeze, and no test record is written ---------------------------
   # Unattended, a row the checker rejected also halts the order before the refusal, the same way a
@@ -4011,12 +3763,12 @@ TF_EOF
       if [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
         tf_why="row rejected by the checker: $rejected_by_model"
         tf_halted_doc="$(halt_order_in "$tf_ledger_doc" "$unit_id" "$tf_why")"
-        [ -n "$tf_halted_doc" ] || die3 "tests-freeze: the ledger update for $unit_id failed."
+        [ -n "$tf_halted_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
         write_atomic "$tf_ledger_file" "$tf_halted_doc"
         echo "TESTS-FREEZE: $unit_id is halted. $tf_why" >&2
       fi
     fi
-    die65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
   fi
 
   # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
@@ -4026,7 +3778,7 @@ TF_EOF
       | [ $reds[] | .name as $n | select(($known | index($n)) == null) | $n ] | unique | join(", ")
     ')"
   [ -z "$bad_red_names" ] \
-    || die32 "tests-freeze: these --red rows name a test with no --test row: $bad_red_names"
+    || die 32 "tests-freeze: these --red rows name a test with no --test row: $bad_red_names"
 
   local red_count ri red_name red_path bad_red_files=""
   red_count="$(printf '%s' "$reds_json" | jq 'length')"
@@ -4038,7 +3790,7 @@ TF_EOF
     ri=$((ri + 1))
   done
   [ -z "$bad_red_files" ] \
-    || die32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
+    || die 32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
 
   # --- 33: every declared test needs a --red -------------------------------------------------------
   local missing_red
@@ -4047,13 +3799,13 @@ TF_EOF
       | [ $tests[] | .name as $n | select(($named | index($n)) == null) | $n ] | unique | join(", ")
     ')"
   [ -z "$missing_red" ] \
-    || die33 "tests-freeze: these tests have no --red at all: $missing_red"
+    || die 33 "tests-freeze: these tests have no --red at all: $missing_red"
 
   # --- 34: a green-on-arrival stops the step outright -----------------------------------------------
   if [ "$(printf '%s' "$goa_json" | jq 'length')" -gt 0 ]; then
     local goa_text
     goa_text="$(printf '%s' "$goa_json" | jq -r 'map(.name + ": " + .reason) | join("; ")')"
-    die34 "tests-freeze: reported green on arrival, which proves nothing: $goa_text. Fix the test or the code until it fails for the right reason, then run tests-freeze again."
+    die 34 "tests-freeze: reported green on arrival, which proves nothing: $goa_text. Fix the test or the code until it fails for the right reason, then run tests-freeze again."
   fi
 
   # --- 35: a record already exists for this unit at a different commit -----------------------------
@@ -4062,12 +3814,12 @@ TF_EOF
   if [ -f "$record_file" ]; then
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
     [ -n "$existing_doc" ] \
-      || die3 "tests-freeze: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      || die 3 "tests-freeze: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
     [ -n "$existing_commit" ] \
-      || die3 "tests-freeze: $record_file exists but has no usable commit field."
+      || die 3 "tests-freeze: $record_file exists but has no usable commit field."
     [ "$existing_commit" = "$current_commit" ] \
-      || die35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit. A record is taken once per commit; investigate before proceeding."
+      || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit. A record is taken once per commit; investigate before proceeding."
   fi
 
   # --- every check passed: build the rows, one per criterion the unit serves or owns ---------------
@@ -4075,7 +3827,7 @@ TF_EOF
   need_sha="$(printf '%s' "$CRITERIA_JSON" | jq -r 'map(select(.verifiedBy == "machine")) | length > 0')"
   if [ "$need_sha" = "true" ]; then
     records_hash__resolve_sha256_cmd \
-      || die3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
+      || die 3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
   fi
 
   # Every name the loop below uses is declared here, never inside it. zsh prints a parameter when
@@ -4104,27 +3856,27 @@ TF_EOF
         tname="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].name')"
         trelpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].relPath')"
         tsha="$(tf_sha256_of "$tpath")"
-        [ -n "$tsha" ] || die3 "tests-freeze: could not compute a sha256 for $tpath"
+        [ -n "$tsha" ] || die 3 "tests-freeze: could not compute a sha256 for $tpath"
         tredpath="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].path // empty')"
         tredtext="$(cat "$tredpath" 2>/dev/null)"
         # The record stores the path relative to codePath, never the absolute form: a frozen path
         # must still mean the same file once the checkout moves (see exit 36's own reasoning).
         jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" \
           '{path: $path, name: $name, sha256: $sha, red: $red}' >>"$tests_out_tmp" \
-          || die3 "tests-freeze: could not record the test row for $tname"
+          || die 3 "tests-freeze: could not record the test row for $tname"
         tj=$((tj + 1))
       done
       tests_out_json="$(jq -s '.' "$tests_out_tmp")"
       rm -f "$tests_out_tmp"
       jq -n --arg cid "$cid" --argjson tests "$tests_out_json" \
         '{criterion: $cid, kind: "machine", tests: $tests}' >>"$rows_tmp" \
-        || die3 "tests-freeze: could not record the row for $cid"
+        || die 3 "tests-freeze: could not record the row for $cid"
     else
       checklist_text="$(printf '%s' "$checklists_json" | jq -r --arg id "$cid" \
         '[ .[] | select(.id == $id) ][0].text // empty')"
       jq -n --arg cid "$cid" --arg text "$checklist_text" \
         '{criterion: $cid, kind: "person", checklist: $text}' >>"$rows_tmp" \
-        || die3 "tests-freeze: could not record the row for $cid"
+        || die 3 "tests-freeze: could not record the row for $cid"
     fi
     ci=$((ci + 1))
   done
@@ -4142,10 +3894,10 @@ TF_EOF
   if [ "$judgement_count" -gt 0 ]; then
     ledger_file_now="$IMPL_DIR/ledger.json"
     [ -f "$ledger_file_now" ] \
-      || die3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
+      || die 3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
     ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
     [ -n "$ledger_doc_now" ] \
-      || die3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      || die 3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
     ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
       --arg unit "$unit_id" --argjson rows "$rows_meta_json" '
       .criteria = ((.criteria // []) | map(
@@ -4157,7 +3909,7 @@ TF_EOF
                   + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
           end))')"
     [ -n "$ledger_with_judgements" ] \
-      || die3 "tests-freeze: the ledger update for $unit_id's judgements failed."
+      || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
     write_atomic "$ledger_file_now" "$ledger_with_judgements"
   fi
 
@@ -4205,22 +3957,22 @@ TF_EOF
 # hash function would be a second producer for one fact.
 # ------------------------------------------------------------------------------------------------
 
-# The frozen work order $2 from frozen snapshot $1. Sets BB_UNIT_JSON. Dies (die38) when the unit is
+# The frozen work order $2 from frozen snapshot $1. Sets BB_UNIT_JSON. Dies (exit 38) when the unit is
 # not in the frozen copy, rather than returning a code: every caller of this helper treats that as
 # fatal and would only turn around and exit itself. Kept apart from tt_load_unit_and_criteria, which
-# dies on the same fact with die22, because build-brief's own refusal list names this fact as exit
+# dies on the same fact with exit 22, because build-brief's own refusal list names this fact as exit
 # 38 rather than sharing tests-brief and tests-freeze's number (see exit 38's own comment above).
 BB_UNIT_JSON=""
 bb_load_unit() {
   local snapshot_doc="$1" unit_id="$2"
   BB_UNIT_JSON="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$unit_id" \
     '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
-  [ "$BB_UNIT_JSON" != "null" ] || die38 "build-brief: $unit_id is not in the frozen copy."
+  [ "$BB_UNIT_JSON" != "null" ] || die 38 "build-brief: $unit_id is not in the frozen copy."
 }
 
 do_build_brief() {
-  [ "$#" -ge 2 ] || die3 "build-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die3 "build-brief: unrecognized extra argument: $3"
+  [ "$#" -ge 2 ] || die 3 "build-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "build-brief: unrecognized extra argument: $3"
   local unit_id="$2"
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$1" "build-brief")"
@@ -4231,11 +3983,11 @@ do_build_brief() {
   # --- exit 42: this step ran before start, so there is no frozen copy to read from ---------------
   local snapshot_file="$IMPL_DIR/snapshot.json"
   [ -f "$snapshot_file" ] \
-    || die42 "build-brief: $snapshot_file not found. This step ran before start, so there is no frozen copy. Run start on this task first."
+    || die 42 "build-brief: $snapshot_file not found. This step ran before start, so there is no frozen copy. Run start on this task first."
   local snapshot_doc
   snapshot_doc="$(jq -c '.' "$snapshot_file" 2>/dev/null)"
   [ -n "$snapshot_doc" ] \
-    || die3 "build-brief: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
+    || die 3 "build-brief: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
 
   # --- exit 38: the unit itself must be in the frozen copy -----------------------------------------
   bb_load_unit "$snapshot_doc" "$unit_id"
@@ -4243,20 +3995,20 @@ do_build_brief() {
   # --- exit 39: step three (tests-brief, tests-freeze) must already have run for this unit ---------
   local tests_file="$IMPL_DIR/tests-$unit_id.json"
   [ -f "$tests_file" ] \
-    || die39 "build-brief: $tests_file not found. Step three has not run for $unit_id yet; run tests-brief and tests-freeze on it first."
+    || die 39 "build-brief: $tests_file not found. Step three has not run for $unit_id yet; run tests-brief and tests-freeze on it first."
   local tests_doc
   tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
   [ -n "$tests_doc" ] \
-    || die3 "build-brief: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "build-brief: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   # --- the ledger: needed for the dependency check and the attempt count ---------------------------
   local ledger_file="$IMPL_DIR/ledger.json"
   [ -f "$ledger_file" ] \
-    || die3 "build-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+    || die 3 "build-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
   local ledger_doc
   ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
   [ -n "$ledger_doc" ] \
-    || die3 "build-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "build-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   # --- exit 40: every dependency needs a completion record before its interface is handed over ------
   # dep_interface is declared here, never inside the loop, for the reason tests-brief states above
@@ -4271,7 +4023,7 @@ do_build_brief() {
     dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
       '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
     [ "$dep_entry" != "null" ] \
-      || die3 "build-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
+      || die 3 "build-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
     dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
     if [ "$dep_step" = "closed" ]; then
       dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
@@ -4290,7 +4042,7 @@ do_build_brief() {
         . + [ {id: $id, declaredInterface: $iface, interface: $iface}
               + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
     else
-      die40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+      die 40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
     fi
     i=$((i + 1))
   done
@@ -4300,13 +4052,13 @@ do_build_brief() {
   order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$order_entry" != "null" ] \
-    || die3 "build-brief: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+    || die 3 "build-brief: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
   attempts_used="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
   case "$attempts_used" in ''|*[!0-9]*) attempts_used=0 ;; esac
   local attempts_allowed
   attempts_allowed="$(attempts_allowed_for "$order_entry")"
   [ "$attempts_used" -lt "$attempts_allowed" ] \
-    || die41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
+    || die 41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
   # --- assemble the brief: exactly these five keys, and nothing else -------------------------------
   local unit_out tests_out
@@ -4330,10 +4082,14 @@ do_build_brief() {
       bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
     fi
   fi
+  # The report has one named path per attempt, so a later attempt never writes over the answers a
+  # reviewer already compared a diff against.
   jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
+        --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
     '{unit: $unit, tests: $tests, headNow: $headNow, dependencyInterfaces: $dependencyInterfaces,
+      reportPath: $reportPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}'
   exit 0
 }
@@ -4413,9 +4169,9 @@ br_filter_extensions() {
 br_require_real_base() {
   local who="$1" repo="$2" given="$3" full="$4" head_now="$5"
   [ "$full" != "$head_now" ] \
-    || die71 "$who: --started-at ($given) is the commit $repo is at now. The range between them is empty, so every check would answer about no change at all. Pass the commit the work began from."
+    || die 71 "$who: --started-at ($given) is the commit $repo is at now. The range between them is empty, so every check would answer about no change at all. Pass the commit the work began from."
   git -C "$repo" merge-base --is-ancestor "$full" "$head_now" >/dev/null 2>&1 \
-    || die71 "$who: --started-at ($given, $full) is not an ancestor of HEAD ($head_now) in $repo, so the range between the two is not this order own work."
+    || die 71 "$who: --started-at ($given, $full) is not an ancestor of HEAD ($head_now) in $repo, so the range between the two is not this order own work."
 }
 
 # Exit 73. Every tool check compares its own result against the baseline that step two took, and
@@ -4437,7 +4193,7 @@ cr_require_baseline_recipes() {
     was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
     was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
     if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
-      die73 "$who: the check recipe resolved for $fw is not the one the baseline was taken with. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline, so take the baseline again before recording this."
+      die 73 "$who: the check recipe resolved for $fw is not the one the baseline was taken with. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline, so take the baseline again before recording this."
     fi
     idx=$((idx + 1))
   done
@@ -4476,11 +4232,11 @@ br_require_clean_tree() {
   printf '%s: the uncommitted paths in %s are:\n%s\n' "$who" "$repo" "$dirty" >&2
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
     halted_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$why")"
-    [ -n "$halted_doc" ] || die3 "$who: the ledger update for $unit_id failed."
+    [ -n "$halted_doc" ] || die 3 "$who: the ledger update for $unit_id failed."
     write_atomic "$ledger_file" "$halted_doc"
     echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is halted. $why" >&2
   fi
-  die61 "$who: the working tree at $repo is not clean, and the checks below would read a tree the record cannot describe. The owned-files check compares two commits, so an uncommitted change passes it while staying in the tree. Commit this role's work, then write the record. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
+  die 61 "$who: the working tree at $repo is not clean, and the checks below would read a tree the record cannot describe. The owned-files check compares two commits, so an uncommitted change passes it while staying in the tree. Commit this role's work, then write the record. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -4593,11 +4349,11 @@ br_tool_check() {
     verdict="undeclared"
     detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions, so the row does not apply to it."
   else
-    outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+    outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
     errfile=""
     stdout_len=0
     if [ -n "$signal" ]; then
-      errfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+      errfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
       result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$scoped_json" "$BRC_VALUES" "$errfile")"
     else
       result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$scoped_json" "$BRC_VALUES")"
@@ -4728,7 +4484,7 @@ br_test_check() {
       detail="this order froze no test file, so the selected-tests command would run over nothing."
     else
       argv_json="$(printf '%s' "$cmd" | jq -c '.argv')"
-      outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+      outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
       result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$paths_json" "$BRC_VALUES")"
       kind="$(printf '%s' "$result" | cut -f1)"
       payload="$(printf '%s' "$result" | cut -f2-)"
@@ -4836,7 +4592,7 @@ br_test_check() {
 # coding-standards, static-analysis, security, owned-files, frozen-tests. Prints the JSON array.
 br_seven_checks() {
   local parts_file
-  parts_file="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+  parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
   br_test_check "order-tests"      "orderTests" "order-tests" >>"$parts_file"
   br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
@@ -4847,7 +4603,9 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g
-  diff_output="$(git -C "$BRC_CODEPATH" diff --name-only "$BRC_STARTED_AT" "$BRC_CURRENT" 2>/dev/null)"
+  # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
+  # the new path, so a deleted file this order does not own would never appear here.
+  diff_output="$(git -C "$BRC_CODEPATH" diff --no-renames --name-only "$BRC_STARTED_AT" "$BRC_CURRENT" 2>/dev/null)"
   owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
@@ -4876,7 +4634,7 @@ BR_DIFF
 
   # --- every frozen test file is unchanged ---------------------------------------------------------
   records_hash__resolve_sha256_cmd \
-    || die3 "$BRC_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
+    || die 3 "$BRC_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
   local ftc_verdict ftc_detail
   local frozen_paths frozen_count fidx frozen_file fsha current_sha changed_tests=""
   frozen_paths="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
@@ -4904,7 +4662,7 @@ BR_DIFF
   jq -n --arg verdict "$ftc_verdict" --arg detail "$ftc_detail" \
     '{id: "frozen-tests", verdict: $verdict, detail: $detail}' >>"$parts_file"
 
-  jq -s '.' "$parts_file" || die3 "$BRC_WHO: could not assemble the checks"
+  jq -s '.' "$parts_file" || die 3 "$BRC_WHO: could not assemble the checks"
   rm -f "$parts_file"
 }
 
@@ -4992,60 +4750,61 @@ do_build_record() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --interface)
-        [ "$#" -ge 2 ] || die3 "build-record: --interface needs a path to the record the builder wrote"
-        [ -n "$2" ] || die3 "build-record: --interface was given an empty path."
+        [ "$#" -ge 2 ] || die 3 "build-record: --interface needs a path to the record the builder wrote"
+        [ -n "$2" ] || die 3 "build-record: --interface was given an empty path."
         interface_path="$2"; shift 2 ;;
       --report)
-        [ "$#" -ge 2 ] || die3 "build-record: --report needs a path to the builder's report"
-        [ -n "$2" ] || die3 "build-record: --report was given an empty path."
+        [ "$#" -ge 2 ] || die 3 "build-record: --report needs a path to the builder's report"
+        [ -n "$2" ] || die 3 "build-record: --report was given an empty path."
         report_path="$2"; shift 2 ;;
       --started-at)
-        [ "$#" -ge 2 ] || die3 "build-record: --started-at needs a commit"
-        [ -n "$2" ] || die3 "build-record: --started-at was given an empty commit."
+        [ "$#" -ge 2 ] || die 3 "build-record: --started-at needs a commit"
+        [ -n "$2" ] || die 3 "build-record: --started-at was given an empty commit."
         started_at="$2"; shift 2 ;;
       --test-recipe)
-        [ "$#" -ge 2 ] || die3 "build-record: --test-recipe needs <framework>=<path>"
+        [ "$#" -ge 2 ] || die 3 "build-record: --test-recipe needs <framework>=<path>"
         cr_recipe_pair "build-record" "--test-recipe" "$2"
         test_recipes="$test_recipes$CR_PAIR
 "
         shift 2 ;;
       --check-recipe)
-        [ "$#" -ge 2 ] || die3 "build-record: --check-recipe needs <framework>=<path>"
+        [ "$#" -ge 2 ] || die 3 "build-record: --check-recipe needs <framework>=<path>"
         cr_recipe_pair "build-record" "--check-recipe" "$2"
         check_recipes="$check_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
-        [ "$#" -ge 2 ] || die3 "build-record: --value needs <name>=<value>"
-        case "$2" in *=*) ;; *) die3 "build-record: --value takes <name>=<value>, got: $2" ;; esac
+        [ "$#" -ge 2 ] || die 3 "build-record: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die 3 "build-record: --value takes <name>=<value>, got: $2" ;; esac
         pc_refuse_forged_value "build-record" "$2"
         values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
       --nothing-ran)
-        [ "$#" -ge 2 ] || die3 "build-record: --nothing-ran needs a literal substring"
-        [ -n "$2" ] || die3 "build-record: --nothing-ran was given an empty substring, which every output holds."
+        [ "$#" -ge 2 ] || die 3 "build-record: --nothing-ran needs a literal substring"
+        [ -n "$2" ] || die 3 "build-record: --nothing-ran was given an empty substring, which every output holds."
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
-      -*) die3 "build-record: unrecognized argument: $1" ;;
+      -*) die 3 "build-record: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
           task_arg="$1"
         elif [ -z "$unit_id" ]; then
           unit_id="$1"
         else
-          die3 "build-record: unrecognized extra argument: $1"
+          die 3 "build-record: unrecognized extra argument: $1"
         fi
         shift ;;
     esac
   done
 
-  [ -n "$task_arg" ]        || die3 "build-record: a task folder is required"
-  [ -n "$unit_id" ]         || die3 "build-record: a unit id is required"
-  [ -n "$interface_path" ]  || die3 "build-record: --interface is required"
-  [ -n "$report_path" ]     || die3 "build-record: --report is required"
-  [ -n "$started_at" ]      || die3 "build-record: --started-at is required"
+  [ -n "$task_arg" ]        || die 3 "build-record: a task folder is required"
+  [ -n "$unit_id" ]         || die 3 "build-record: a unit id is required"
+  [ -n "$interface_path" ]  || die 3 "build-record: --interface is required"
+  [ -n "$report_path" ]     || die 3 "build-record: --report is required"
+  [ -s "$report_path" ]     || die 3 "build-record: --report names no file, or an empty one: $report_path"
+  [ -n "$started_at" ]      || die 3 "build-record: --started-at is required"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "build-record")"
@@ -5058,22 +4817,22 @@ do_build_record() {
 
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
-    || die3 "build-record: $tests_file not found, though a build attempt implies tests-brief and tests-freeze already ran for $unit_id. Run tests-freeze on it first."
+    || die 3 "build-record: $tests_file not found, though a build attempt implies tests-brief and tests-freeze already ran for $unit_id. Run tests-freeze on it first."
   tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
   [ -n "$tests_doc" ] \
-    || die3 "build-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "build-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   local ledger_file="$IMPL_DIR/ledger.json" ledger_doc
   [ -f "$ledger_file" ] \
-    || die3 "build-record: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+    || die 3 "build-record: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
   ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
   [ -n "$ledger_doc" ] \
-    || die3 "build-record: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "build-record: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
   local order_entry attempts_used_before attempt_number
   order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$order_entry" != "null" ] \
-    || die3 "build-record: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+    || die 3 "build-record: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
   attempts_used_before="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
   case "$attempts_used_before" in ''|*[!0-9]*) attempts_used_before=0 ;; esac
   attempt_number=$((attempts_used_before + 1))
@@ -5089,10 +4848,10 @@ do_build_record() {
   local started_at_full current_commit
   started_at_full="$(git -C "$codepath" rev-parse --verify --quiet "${started_at}^{commit}" 2>/dev/null)"
   [ -n "$started_at_full" ] \
-    || die43 "build-record: --started-at ($started_at) is not a commit in the code repository at $codepath."
+    || die 43 "build-record: --started-at ($started_at) is not a commit in the code repository at $codepath."
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
-    || die3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+    || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
@@ -5101,18 +4860,18 @@ do_build_record() {
     local existing_doc existing_commit existing_attempt
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
     [ -n "$existing_doc" ] \
-      || die3 "build-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      || die 3 "build-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
     existing_attempt="$(printf '%s' "$existing_doc" | jq -r '.attempt // empty')"
     if [ "$existing_commit" = "$current_commit" ] && [ "$existing_attempt" = "$attempt_number" ]; then
-      die45 "build-record: $record_file already holds attempt $attempt_number at commit $current_commit. Nothing has changed since that record was written."
+      die 45 "build-record: $record_file already holds attempt $attempt_number at commit $current_commit. Nothing has changed since that record was written."
     fi
     # The guard above keys on the commit and the attempt number together, so a repeat call after a
     # failed attempt computed a new attempt number, passed it, re-ran every check against unchanged
     # code and spent the last attempt on work nobody did. The previous attempt's own commit is the
     # fact that decides it, which is the rule fix-record already applies to its previous round.
     if [ -n "$existing_commit" ] && [ "$existing_commit" = "$current_commit" ]; then
-      die45 "build-record: $record_file already holds attempt $existing_attempt at commit $current_commit, so the code has not moved since that attempt. An attempt spent on unchanged code is an attempt nobody worked."
+      die 45 "build-record: $record_file already holds attempt $existing_attempt at commit $current_commit, so the code has not moved since that attempt. An attempt spent on unchanged code is an attempt nobody worked."
     fi
   fi
 
@@ -5121,7 +4880,7 @@ do_build_record() {
   unit_interface_declared="$(printf '%s' "$UNIT_JSON" | jq -r '.interface // ""')"
   if [ -n "$unit_interface_declared" ]; then
     [ -s "$interface_path" ] \
-      || die44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path is missing or empty."
+      || die 44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path is missing or empty."
   fi
   [ -f "$interface_path" ] && interface_text="$(cat "$interface_path" 2>/dev/null)"
 
@@ -5158,15 +4917,15 @@ do_build_record() {
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
 
   local seven_file seven_json interface_check_json checks_json
-  seven_file="$(mktemp)" || die3 "build-record: could not create a temporary file"
+  seven_file="$(mktemp)" || die 3 "build-record: could not create a temporary file"
   br_seven_checks >"$seven_file"
   seven_json="$(cat "$seven_file" 2>/dev/null)"
   rm -f "$seven_file"
-  [ -n "$seven_json" ] || die3 "build-record: the seven computable checks produced nothing for $unit_id."
+  [ -n "$seven_json" ] || die 3 "build-record: the seven computable checks produced nothing for $unit_id."
 
   interface_check_json="$(br_interface_check "$unit_interface_declared" "$interface_text")"
   [ -n "$interface_check_json" ] \
-    || die3 "build-record: the interface-record check produced nothing for $unit_id."
+    || die 3 "build-record: the interface-record check produced nothing for $unit_id."
 
   checks_json="$(jq -n --argjson seven "$seven_json" --argjson eighth "$interface_check_json" \
     '$seven + [$eighth]')"
@@ -5229,10 +4988,10 @@ do_build_record() {
   local new_ledger_doc
   new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
-  [ -n "$new_ledger_doc" ] || die3 "build-record: the ledger update for $unit_id failed."
+  [ -n "$new_ledger_doc" ] || die 3 "build-record: the ledger update for $unit_id failed."
   if [ -n "$halt_why" ]; then
     new_ledger_doc="$(halt_order_in "$new_ledger_doc" "$unit_id" "$halt_why")"
-    [ -n "$new_ledger_doc" ] || die3 "build-record: the halt on $unit_id could not be written."
+    [ -n "$new_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
   fi
   write_atomic "$ledger_file" "$new_ledger_doc"
 
@@ -5269,12 +5028,12 @@ rv_load_state() {
 
   RV_UNIT_JSON="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$unit_id" \
     '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
-  [ "$RV_UNIT_JSON" != "null" ] || die22 "$who: $unit_id is not in the frozen copy."
+  [ "$RV_UNIT_JSON" != "null" ] || die 22 "$who: $unit_id is not in the frozen copy."
 
   RV_ORDER_ENTRY="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$RV_ORDER_ENTRY" != "null" ] \
-    || die3 "$who: $unit_id has no entry in $RV_LEDGER_FILE, though start opens one entry per snapshot work order."
+    || die 3 "$who: $unit_id has no entry in $RV_LEDGER_FILE, though start opens one entry per snapshot work order."
 
   RV_RUN_MODE="$(printf '%s' "$RV_LEDGER_DOC" | jq -r '.runMode // "interactive"')"
   [ -n "$RV_RUN_MODE" ] || RV_RUN_MODE="interactive"
@@ -5284,7 +5043,7 @@ rv_load_state() {
   local halted
   halted="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.haltedBecause // ""')"
   [ -z "$halted" ] \
-    || die49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $halted"
+    || die 49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $halted"
 }
 
 # Exit 48: the order must be at one of the steps this action can follow. $1 the action's own name,
@@ -5295,26 +5054,7 @@ rv_require_step() {
   case " $allowed " in
     *" $found "*) return 0 ;;
   esac
-  die48 "$who: $unit_id is at step $found, and this step follows one of: $allowed."
-}
-
-# The task's own project code repository, resolved the way every earlier step resolves it. $1 the
-# action's own name. Sets RV_CODEPATH.
-RV_CODEPATH=""
-rv_load_codepath() {
-  local who="$1" project_folder
-  project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die3 "$who: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-  case "$(project_code_path_state "$project_folder")" in
-    unreadable) die14 "$who: $project_folder/project.json exists but is not valid JSON, so its codePath cannot be read." ;;
-    missing)    die3  "$who: $project_folder/project.json not found, though it was found moments ago." ;;
-  esac
-  RV_CODEPATH="$(project_code_path_value "$project_folder")"
-  [ -n "$RV_CODEPATH" ] || die3 "$who: $project_folder/project.json is valid JSON but has no usable codePath field."
-  [ -d "$RV_CODEPATH" ] || die15 "$who: the recorded codePath does not exist on disk: $RV_CODEPATH"
-  command -v git >/dev/null 2>&1 || die3 "$who: git is required and was not found on PATH"
-  is_git_repo "$RV_CODEPATH" \
-    || die5 "$who: this task's project code at $RV_CODEPATH is not a git repository."
+  die 48 "$who: $unit_id is at step $found, and this step follows one of: $allowed."
 }
 
 # The build record for this order. $1 the action's own name, $2 the unit id. Sets RV_BUILD_DOC.
@@ -5323,10 +5063,10 @@ rv_load_build_record() {
   local who="$1" unit_id="$2" build_file
   build_file="$IMPL_DIR/build-$unit_id.json"
   [ -f "$build_file" ] \
-    || die3 "$who: $build_file not found, though the ledger records $unit_id past the build. Run build-record on it again."
+    || die 3 "$who: $build_file not found, though the ledger records $unit_id past the build. Run build-record on it again."
   RV_BUILD_DOC="$(jq -c '.' "$build_file" 2>/dev/null)"
   [ -n "$RV_BUILD_DOC" ] \
-    || die3 "$who: $build_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "$who: $build_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 }
 
 # The review record for this order. $1 the action's own name, $2 the unit id. Sets RV_REVIEW_FILE
@@ -5336,10 +5076,10 @@ rv_load_review_record() {
   local who="$1" unit_id="$2"
   RV_REVIEW_FILE="$IMPL_DIR/review-$unit_id.json"
   [ -f "$RV_REVIEW_FILE" ] \
-    || die3 "$who: $RV_REVIEW_FILE not found, though the ledger records $unit_id as reviewed. Run review-record on it again."
+    || die 3 "$who: $RV_REVIEW_FILE not found, though the ledger records $unit_id as reviewed. Run review-record on it again."
   RV_REVIEW_DOC="$(jq -c '.' "$RV_REVIEW_FILE" 2>/dev/null)"
   [ -n "$RV_REVIEW_DOC" ] \
-    || die3 "$who: $RV_REVIEW_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "$who: $RV_REVIEW_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
 }
 
 # The frozen test paths for this order, one per line, from the frozen test record. $1 the unit id.
@@ -5409,7 +5149,7 @@ rv_is_finding_id() {
 }
 
 # Reads $1, a file the reviewer wrote, and sets RV_FINDINGS_ARRAY to the array under key $2 after
-# checking every entry's own shape. $3 the action's own name. Dies (die52) on anything it cannot
+# checking every entry's own shape. $3 the action's own name. Dies (exit 52) on anything it cannot
 # read as that shape, because a findings file this script half understands is worse than none.
 #
 # It sets a global rather than printing, and every caller calls it as a plain statement. A function
@@ -5439,40 +5179,40 @@ rv_refuse_duplicate_keys() {
       | ($b | map(select(. == $x.k)) | length) as $m
       | select($x.n > $m) | $x.k ] | unique | join(", ")')"
   [ -n "$dup" ] || dup="a key this reader could not name"
-  die52 "$who: $file writes the same key more than once, at: $dup. A duplicate key resolves to the last one and throws the earlier value away in silence, so this is refused rather than half read."
+  die 52 "$who: $file writes the same key more than once, at: $dup. A duplicate key resolves to the last one and throws the earlier value away in silence, so this is refused rather than half read."
 }
 
 rv_read_findings_array() {
   local file="$1" key="$2" who="$3" doc arr count i one id severity evidence seen_ids=""
-  [ -f "$file" ] || die52 "$who: $file not found. The file named on the command line has to exist."
-  [ -s "$file" ] || die52 "$who: $file is empty. An empty file is not an empty findings list; write { \"$key\": [] } instead."
+  [ -f "$file" ] || die 52 "$who: $file not found. The file named on the command line has to exist."
+  [ -s "$file" ] || die 52 "$who: $file is empty. An empty file is not an empty findings list; write { \"$key\": [] } instead."
   doc="$(jq -c '.' "$file" 2>/dev/null)"
-  [ -n "$doc" ] || die52 "$who: $file is not valid JSON."
+  [ -n "$doc" ] || die 52 "$who: $file is not valid JSON."
   rv_refuse_duplicate_keys "$file" "$who"
   arr="$(printf '%s' "$doc" | jq -c --arg k "$key" 'if (.[$k] | type) == "array" then .[$k] else null end')"
   [ -n "$arr" ] && [ "$arr" != "null" ] \
-    || die52 "$who: $file holds no $key array. The shape is { \"$key\": [ ... ] }."
+    || die 52 "$who: $file holds no $key array. The shape is { \"$key\": [ ... ] }."
   count="$(printf '%s' "$arr" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$arr" | jq -c --argjson i "$i" '.[$i]')"
     [ "$(printf '%s' "$one" | jq -r 'type')" = "object" ] \
-      || die52 "$who: entry $i of $key in $file is not an object."
+      || die 52 "$who: entry $i of $key in $file is not an object."
     id="$(printf '%s' "$one" | jq -r '.id // ""')"
     rv_is_finding_id "$id" \
-      || die52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
+      || die 52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
     severity="$(printf '%s' "$one" | jq -r '.severity // ""')"
     case "$severity" in
       high|medium|low) ;;
-      *) die52 "$who: finding $id in $file has the severity '$severity'. The three words are high, medium and low." ;;
+      *) die 52 "$who: finding $id in $file has the severity '$severity'. The three words are high, medium and low." ;;
     esac
     evidence="$(printf '%s' "$one" | jq -r '.evidence // ""')"
     [ -n "$evidence" ] \
-      || die52 "$who: finding $id in $file carries no evidence. A finding with nothing to read is not a finding."
+      || die 52 "$who: finding $id in $file carries no evidence. A finding with nothing to read is not a finding."
     # Two findings under one id are two findings nothing can tell apart. One verdict would answer
     # both, and one ruling would close both, so the list is refused rather than half read.
     case " $seen_ids " in
-      *" $id "*) die52 "$who: $file names the finding $id more than once. Each finding carries its own id." ;;
+      *" $id "*) die 52 "$who: $file names the finding $id more than once. Each finding carries its own id." ;;
     esac
     seen_ids="$seen_ids $id"
     i=$((i + 1))
@@ -5522,7 +5262,7 @@ rv_require_round_verified() {
   [ "$rounds_used" -gt 0 ] 2>/dev/null || return 0
   verified="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.rounds // [])[] | .round ] | max // 0')"
   [ "$verified" = "$rounds_used" ] && return 0
-  die62 "$who: $unit_id has used $rounds_used fix round(s) and the last one verified is $verified. Run verify-record on round $rounds_used before another one starts."
+  die 62 "$who: $unit_id has used $rounds_used fix round(s) and the last one verified is $verified. Run verify-record on round $rounds_used before another one starts."
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -5530,8 +5270,8 @@ rv_require_round_verified() {
 # ------------------------------------------------------------------------------------------------
 
 do_review_brief() {
-  [ "$#" -ge 2 ] || die3 "review-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die3 "review-brief: unrecognized extra argument: $3"
+  [ "$#" -ge 2 ] || die 3 "review-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "review-brief: unrecognized extra argument: $3"
   local unit_id="$2" resolve_rc
   TASK_PATH="$(resolve_task_folder "$1" "review-brief")"
   resolve_rc=$?
@@ -5546,7 +5286,7 @@ do_review_brief() {
   # message is true and sends a reader to the wrong repair.
   local review_file="$IMPL_DIR/review-$unit_id.json"
   [ -f "$review_file" ] \
-    && die50 "review-brief: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
+    && die 50 "review-brief: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
   rv_require_step "review-brief" "$unit_id" "checks-passed"
 
   rv_load_build_record "review-brief" "$unit_id"
@@ -5558,10 +5298,10 @@ do_review_brief() {
   started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
   commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   [ -n "$started_at" ] && [ -n "$commit" ] \
-    || die3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no startedAt or no commit, though build-record writes both."
+    || die 3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no startedAt or no commit, though build-record writes both."
   diff_path="$IMPL_DIR/diff-$unit_id.patch"
   git -C "$RV_CODEPATH" diff "$started_at" "$commit" > "$diff_path" 2>/dev/null \
-    || die3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+    || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
 
   local criteria_json nongoals_json checks_json tests_json
   criteria_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson unit "$RV_UNIT_JSON" '
@@ -5612,19 +5352,19 @@ do_review_record() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --findings)
-        [ "$#" -ge 2 ] || die3 "review-record: --findings needs a path to the file the reviewer wrote"
+        [ "$#" -ge 2 ] || die 3 "review-record: --findings needs a path to the file the reviewer wrote"
         findings_path="$2"; shift 2 ;;
-      -*) die3 "review-record: unrecognized argument: $1" ;;
+      -*) die 3 "review-record: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then task_arg="$1"
         elif [ -z "$unit_id" ]; then unit_id="$1"
-        else die3 "review-record: unrecognized extra argument: $1"; fi
+        else die 3 "review-record: unrecognized extra argument: $1"; fi
         shift ;;
     esac
   done
-  [ -n "$task_arg" ]      || die3 "review-record: a task folder is required"
-  [ -n "$unit_id" ]       || die3 "review-record: a unit id is required"
-  [ -n "$findings_path" ] || die3 "review-record: --findings is required"
+  [ -n "$task_arg" ]      || die 3 "review-record: a task folder is required"
+  [ -n "$unit_id" ]       || die 3 "review-record: a unit id is required"
+  [ -n "$findings_path" ] || die 3 "review-record: --findings is required"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "review-record")"
@@ -5654,13 +5394,13 @@ do_review_record() {
       local rr_ledger
       rr_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
         '.orders = (.orders | map(if .id == $id then (.lastStep = "reviewed") else . end))')"
-      [ -n "$rr_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
+      [ -n "$rr_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
       write_atomic "$RV_LEDGER_FILE" "$rr_ledger"
       printf '%s\n' "$rr_doc"
       echo "REVIEW-RECORD: $review_file was already written at $rr_commit and the ledger had not moved. The ledger now reads reviewed; nothing was reviewed twice." >&2
       exit 0
     fi
-    die50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
+    die 50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
   fi
   rv_require_step "review-record" "$unit_id" "checks-passed"
 
@@ -5674,12 +5414,12 @@ do_review_record() {
   recorded_commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   current_commit="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
-    || die3 "review-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "review-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   [ "$recorded_commit" = "$current_commit" ] \
-    || die51 "review-record: $RV_CODEPATH is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
+    || die 51 "review-record: $RV_CODEPATH is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
   dirty="$(git -C "$RV_CODEPATH" status --porcelain 2>/dev/null)"
   [ -z "$dirty" ] \
-    || die51 "review-record: the working tree at $RV_CODEPATH is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
+    || die 51 "review-record: the working tree at $RV_CODEPATH is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
   local raw_findings alignment count i one built findings_json
   rv_read_findings_array "$findings_path" "findings" "review-record"
@@ -5722,11 +5462,11 @@ do_review_record() {
   step_expr='.lastStep = "reviewed"'
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
-  [ -n "$new_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
+  [ -n "$new_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
   # One function writes every halt, so this reason never erases a reason the order already carried.
   if [ -n "$halt_why" ]; then
     new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
-    [ -n "$new_ledger" ] || die3 "review-record: the halt on $unit_id could not be written."
+    [ -n "$new_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
@@ -5744,8 +5484,8 @@ do_review_record() {
 # ------------------------------------------------------------------------------------------------
 
 do_fix_brief() {
-  [ "$#" -ge 2 ] || die3 "fix-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die3 "fix-brief: unrecognized extra argument: $3"
+  [ "$#" -ge 2 ] || die 3 "fix-brief: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "fix-brief: unrecognized extra argument: $3"
   local unit_id="$2" resolve_rc
   TASK_PATH="$(resolve_task_folder "$1" "fix-brief")"
   resolve_rc=$?
@@ -5759,11 +5499,11 @@ do_fix_brief() {
   local open_count rounds_used
   open_count="$(rv_open_actionable_count "$RV_REVIEW_DOC")"
   [ "$open_count" -gt 0 ] 2>/dev/null \
-    || die53 "fix-brief: $unit_id has no open actionable finding, so there is nothing to hand a fixer."
+    || die 53 "fix-brief: $unit_id has no open actionable finding, so there is nothing to hand a fixer."
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] \
-    || die54 "fix-brief: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
+    || die 54 "fix-brief: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
   rv_require_round_verified "fix-brief" "$unit_id" "$rounds_used"
 
   rv_load_build_record "fix-brief" "$unit_id"
@@ -5781,7 +5521,8 @@ do_fix_brief() {
   fb_head="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
-    --arg reportPath "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')" \
+    --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
+    --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
     --argjson round "$((rounds_used + 1))" '
     {
@@ -5793,6 +5534,7 @@ do_fix_brief() {
       fixScope: $fixScope,
       frozenTests: $frozenTests,
       headNow: $headNow,
+      diffBudget: $diffBudget,
       reportPath: $reportPath
     }'
   exit 0
@@ -5811,58 +5553,59 @@ do_fix_record() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --report)
-        [ "$#" -ge 2 ] || die3 "fix-record: --report needs a path to the fixer's report"
-        [ -n "$2" ] || die3 "fix-record: --report was given an empty path."
+        [ "$#" -ge 2 ] || die 3 "fix-record: --report needs a path to the fixer's report"
+        [ -n "$2" ] || die 3 "fix-record: --report was given an empty path."
         report_path="$2"; shift 2 ;;
       --scope-insufficient)
-        [ "$#" -ge 2 ] || die3 "fix-record: --scope-insufficient needs <finding id>=<reason>"
-        [ -n "$2" ] || die3 "fix-record: --scope-insufficient was given an empty value."
+        [ "$#" -ge 2 ] || die 3 "fix-record: --scope-insufficient needs <finding id>=<reason>"
+        [ -n "$2" ] || die 3 "fix-record: --scope-insufficient was given an empty value."
         halt_refuse_separator "fix-record" "--scope-insufficient" "${2#*=}"
         scope_raw="$scope_raw$2
 "
         shift 2 ;;
       --started-at)
-        [ "$#" -ge 2 ] || die3 "fix-record: --started-at needs a commit"
-        [ -n "$2" ] || die3 "fix-record: --started-at was given an empty commit."
+        [ "$#" -ge 2 ] || die 3 "fix-record: --started-at needs a commit"
+        [ -n "$2" ] || die 3 "fix-record: --started-at was given an empty commit."
         started_at="$2"; shift 2 ;;
       --test-recipe)
-        [ "$#" -ge 2 ] || die3 "fix-record: --test-recipe needs <framework>=<path>"
+        [ "$#" -ge 2 ] || die 3 "fix-record: --test-recipe needs <framework>=<path>"
         cr_recipe_pair "fix-record" "--test-recipe" "$2"
         test_recipes="$test_recipes$CR_PAIR
 "
         shift 2 ;;
       --check-recipe)
-        [ "$#" -ge 2 ] || die3 "fix-record: --check-recipe needs <framework>=<path>"
+        [ "$#" -ge 2 ] || die 3 "fix-record: --check-recipe needs <framework>=<path>"
         cr_recipe_pair "fix-record" "--check-recipe" "$2"
         check_recipes="$check_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
-        [ "$#" -ge 2 ] || die3 "fix-record: --value needs <name>=<value>"
-        case "$2" in *=*) ;; *) die3 "fix-record: --value takes <name>=<value>, got: $2" ;; esac
+        [ "$#" -ge 2 ] || die 3 "fix-record: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die 3 "fix-record: --value takes <name>=<value>, got: $2" ;; esac
         pc_refuse_forged_value "fix-record" "$2"
         values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
       --nothing-ran)
-        [ "$#" -ge 2 ] || die3 "fix-record: --nothing-ran needs a literal substring"
-        [ -n "$2" ] || die3 "fix-record: --nothing-ran was given an empty substring, which every output holds."
+        [ "$#" -ge 2 ] || die 3 "fix-record: --nothing-ran needs a literal substring"
+        [ -n "$2" ] || die 3 "fix-record: --nothing-ran was given an empty substring, which every output holds."
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
-      -*) die3 "fix-record: unrecognized argument: $1" ;;
+      -*) die 3 "fix-record: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then task_arg="$1"
         elif [ -z "$unit_id" ]; then unit_id="$1"
-        else die3 "fix-record: unrecognized extra argument: $1"; fi
+        else die 3 "fix-record: unrecognized extra argument: $1"; fi
         shift ;;
     esac
   done
 
-  [ -n "$task_arg" ]    || die3 "fix-record: a task folder is required"
-  [ -n "$unit_id" ]     || die3 "fix-record: a unit id is required"
-  [ -n "$report_path" ] || die3 "fix-record: --report is required"
-  [ -n "$started_at" ]  || die3 "fix-record: --started-at is required"
+  [ -n "$task_arg" ]    || die 3 "fix-record: a task folder is required"
+  [ -n "$unit_id" ]     || die 3 "fix-record: a unit id is required"
+  [ -n "$report_path" ] || die 3 "fix-record: --report is required"
+  [ -s "$report_path" ] || die 3 "fix-record: --report names no file, or an empty one: $report_path"
+  [ -n "$started_at" ]  || die 3 "fix-record: --started-at is required"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "fix-record")"
@@ -5877,11 +5620,11 @@ do_fix_record() {
   local open_count rounds_used round_number
   open_count="$(rv_open_actionable_count "$RV_REVIEW_DOC")"
   [ "$open_count" -gt 0 ] 2>/dev/null \
-    || die53 "fix-record: $unit_id has no open actionable finding, so there was nothing for a fixer to do."
+    || die 53 "fix-record: $unit_id has no open actionable finding, so there was nothing for a fixer to do."
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] \
-    || die54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
+    || die 54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
   rv_require_round_verified "fix-record" "$unit_id" "$rounds_used"
   round_number=$((rounds_used + 1))
 
@@ -5894,18 +5637,18 @@ do_fix_record() {
     [ -n "$scope_line" ] || continue
     case "$scope_line" in
       *=*) ;;
-      *) die3 "fix-record: --scope-insufficient takes <finding id>=<reason>; got: $scope_line" ;;
+      *) die 3 "fix-record: --scope-insufficient takes <finding id>=<reason>; got: $scope_line" ;;
     esac
     scope_id="${scope_line%%=*}"
     scope_reason="${scope_line#*=}"
     rv_is_finding_id "$scope_id" \
-      || die3 "fix-record: --scope-insufficient names '$scope_id'. A finding id is f and then digits, with no leading zero."
+      || die 3 "fix-record: --scope-insufficient names '$scope_id'. A finding id is f and then digits, with no leading zero."
     [ -n "$scope_reason" ] \
-      || die3 "fix-record: --scope-insufficient for $scope_id carries no reason. A report with no reason is not a report."
+      || die 3 "fix-record: --scope-insufficient for $scope_id carries no reason. A report with no reason is not a report."
     scope_open="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$scope_id" \
       '[ (.findings // [])[] | select(.id == $id and .actionable == true and .status == "open") ] | length')"
     [ "$scope_open" = "1" ] \
-      || die3 "fix-record: --scope-insufficient names $scope_id, which is not an open actionable finding on $unit_id."
+      || die 3 "fix-record: --scope-insufficient names $scope_id, which is not an open actionable finding on $unit_id."
     scope_json="$(printf '%s' "$scope_json" | jq -c --arg id "$scope_id" --arg reason "$scope_reason" \
       '. + [{id: $id, reason: $reason}]')"
   done <<RV_SCOPE
@@ -5917,10 +5660,10 @@ RV_SCOPE
   local started_at_full current_commit
   started_at_full="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "${started_at}^{commit}" 2>/dev/null)"
   [ -n "$started_at_full" ] \
-    || die43 "fix-record: --started-at ($started_at) is not a commit in the code repository at $RV_CODEPATH."
+    || die 43 "fix-record: --started-at ($started_at) is not a commit in the code repository at $RV_CODEPATH."
   current_commit="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
-    || die3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   br_require_real_base "fix-record" "$RV_CODEPATH" "$started_at" "$started_at_full" "$current_commit"
 
   # Exit 45, twice over. One round per commit: a second call at the commit a record already names
@@ -5933,7 +5676,7 @@ RV_SCOPE
   if [ -f "$record_file" ]; then
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
     [ -n "$existing_doc" ] \
-      || die3 "fix-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      || die 3 "fix-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
     if [ "$existing_commit" = "$current_commit" ]; then
       # A crash between this record and the ledger write leaves the round recorded and the counter
@@ -5944,13 +5687,13 @@ RV_SCOPE
       if [ "$fr_step" != "fixed" ]; then
         fr_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
           '.orders = (.orders | map(if .id == $id then (.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed") else . end))')"
-        [ -n "$fr_ledger" ] || die3 "fix-record: the ledger update for $unit_id failed."
+        [ -n "$fr_ledger" ] || die 3 "fix-record: the ledger update for $unit_id failed."
         write_atomic "$RV_LEDGER_FILE" "$fr_ledger"
         printf '%s\n' "$existing_doc"
         echo "FIX-RECORD: $record_file was already written at $current_commit and the ledger had not moved. The ledger now counts round $round_number; no round was spent twice." >&2
         exit 0
       fi
-      die45 "fix-record: $record_file already holds round $round_number at commit $current_commit. Nothing has changed since that record was written."
+      die 45 "fix-record: $record_file already holds round $round_number at commit $current_commit. Nothing has changed since that record was written."
     fi
   fi
   if [ "$round_number" -gt 1 ]; then
@@ -5960,17 +5703,17 @@ RV_SCOPE
       if [ -n "$existing_doc" ]; then
         existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
         [ "$existing_commit" = "$current_commit" ] \
-          && die45 "fix-record: $prev_file already holds round $((round_number - 1)) at commit $current_commit, so the code has not moved since that round. A round spent on unchanged code is a round nobody worked."
+          && die 45 "fix-record: $prev_file already holds round $((round_number - 1)) at commit $current_commit, so the code has not moved since that round. A round spent on unchanged code is a round nobody worked."
       fi
     fi
   fi
 
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
-    || die3 "fix-record: $tests_file not found, though a fix round implies tests-freeze already ran for $unit_id."
+    || die 3 "fix-record: $tests_file not found, though a fix round implies tests-freeze already ran for $unit_id."
   tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
   [ -n "$tests_doc" ] \
-    || die3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    || die 3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   br_require_clean_tree "fix-record" "$RV_CODEPATH" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC"
 
@@ -5997,16 +5740,16 @@ RV_SCOPE
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
 
   local seven_file checks_json
-  seven_file="$(mktemp)" || die3 "fix-record: could not create a temporary file"
+  seven_file="$(mktemp)" || die 3 "fix-record: could not create a temporary file"
   br_seven_checks >"$seven_file"
   checks_json="$(cat "$seven_file" 2>/dev/null)"
   rm -f "$seven_file"
-  [ -n "$checks_json" ] || die3 "fix-record: the seven computable checks produced nothing for $unit_id."
+  [ -n "$checks_json" ] || die 3 "fix-record: the seven computable checks produced nothing for $unit_id."
 
   local diff_path
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
   git -C "$RV_CODEPATH" diff "$started_at_full" "$current_commit" > "$diff_path" 2>/dev/null \
-    || die3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."
+    || die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."
 
   local today record_json executed_count
   executed_count="$(br_executed_count "$checks_json")"
@@ -6046,7 +5789,7 @@ RV_SCOPE
       --arg reason "$sc_reason" --argjson round "$round_number" '
       .findings = (.findings | map(if .id == $id then
         . + {scopeInsufficientInRound: $round, scopeInsufficientBecause: $reason} else . end))')"
-    [ -n "$RV_REVIEW_DOC" ] || die3 "fix-record: the scope report for $sc_id could not be recorded."
+    [ -n "$RV_REVIEW_DOC" ] || die 3 "fix-record: the scope report for $sc_id could not be recorded."
     scope_list="$scope_list$sc_id ($sc_reason), "
     si=$((si + 1))
   done
@@ -6077,10 +5820,10 @@ RV_SCOPE
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
-  [ -n "$new_ledger" ] || die3 "fix-record: the ledger update for $unit_id failed."
+  [ -n "$new_ledger" ] || die 3 "fix-record: the ledger update for $unit_id failed."
   if [ -n "$halt_why" ]; then
     new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
-    [ -n "$new_ledger" ] || die3 "fix-record: the halt on $unit_id could not be written."
+    [ -n "$new_ledger" ] || die 3 "fix-record: the halt on $unit_id could not be written."
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
@@ -6107,26 +5850,26 @@ do_verify_record() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --verdicts)
-        [ "$#" -ge 2 ] || die3 "verify-record: --verdicts needs a path to the file the verifier wrote"
+        [ "$#" -ge 2 ] || die 3 "verify-record: --verdicts needs a path to the file the verifier wrote"
         verdicts_path="$2"; shift 2 ;;
       --ruling)
-        [ "$#" -ge 2 ] || die3 "verify-record: --ruling needs <finding id>=<wrong|deferred|load-bearing>::<reason>"
-        [ -n "$2" ] || die3 "verify-record: --ruling was given an empty value."
+        [ "$#" -ge 2 ] || die 3 "verify-record: --ruling needs <finding id>=<wrong|deferred|load-bearing>::<reason>"
+        [ -n "$2" ] || die 3 "verify-record: --ruling was given an empty value."
         halt_refuse_separator "verify-record" "--ruling" "$2"
         rulings_raw="$rulings_raw$2
 "
         shift 2 ;;
-      -*) die3 "verify-record: unrecognized argument: $1" ;;
+      -*) die 3 "verify-record: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then task_arg="$1"
         elif [ -z "$unit_id" ]; then unit_id="$1"
-        else die3 "verify-record: unrecognized extra argument: $1"; fi
+        else die 3 "verify-record: unrecognized extra argument: $1"; fi
         shift ;;
     esac
   done
-  [ -n "$task_arg" ]      || die3 "verify-record: a task folder is required"
-  [ -n "$unit_id" ]       || die3 "verify-record: a unit id is required"
-  [ -n "$verdicts_path" ] || die3 "verify-record: --verdicts is required"
+  [ -n "$task_arg" ]      || die 3 "verify-record: a task folder is required"
+  [ -n "$unit_id" ]       || die 3 "verify-record: a unit id is required"
+  [ -n "$verdicts_path" ] || die 3 "verify-record: --verdicts is required"
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "verify-record")"
@@ -6142,7 +5885,7 @@ do_verify_record() {
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   [ "$rounds_used" -gt 0 ] 2>/dev/null \
-    || die3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
+    || die 3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
 
   # Exit 45: a round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
@@ -6161,23 +5904,23 @@ do_verify_record() {
   local fix_file
   fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
   [ -f "$fix_file" ] \
-    || die3 "verify-record: $fix_file not found, though the ledger records round $rounds_used of $unit_id. Run fix-record on it again."
+    || die 3 "verify-record: $fix_file not found, though the ledger records round $rounds_used of $unit_id. Run fix-record on it again."
 
   # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
   # the flag outright rather than recording a model's own word as a person's (decision 12).
   if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    die55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
+    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
   fi
 
   local verdicts_doc verdict_rows breakage_rows outofscope_json
-  [ -f "$verdicts_path" ] || die52 "verify-record: $verdicts_path not found. The file named on the command line has to exist."
-  [ -s "$verdicts_path" ] || die52 "verify-record: $verdicts_path is empty."
+  [ -f "$verdicts_path" ] || die 52 "verify-record: $verdicts_path not found. The file named on the command line has to exist."
+  [ -s "$verdicts_path" ] || die 52 "verify-record: $verdicts_path is empty."
   rv_refuse_duplicate_keys "$verdicts_path" "verify-record"
   verdicts_doc="$(jq -c '.' "$verdicts_path" 2>/dev/null)"
-  [ -n "$verdicts_doc" ] || die52 "verify-record: $verdicts_path is not valid JSON."
+  [ -n "$verdicts_doc" ] || die 52 "verify-record: $verdicts_path is not valid JSON."
   verdict_rows="$(printf '%s' "$verdicts_doc" | jq -c 'if (.verdicts | type) == "array" then .verdicts else null end')"
   [ -n "$verdict_rows" ] && [ "$verdict_rows" != "null" ] \
-    || die52 "verify-record: $verdicts_path holds no verdicts array. The shape is { \"verdicts\": [ ... ] }."
+    || die 52 "verify-record: $verdicts_path holds no verdicts array. The shape is { \"verdicts\": [ ... ] }."
   outofscope_json="$(printf '%s' "$verdicts_doc" | jq -c 'if (.outOfScope | type) == "array" then .outOfScope else [] end')"
   breakage_rows='[]'
   if [ "$(printf '%s' "$verdicts_doc" | jq -r 'if (.newBreakage | type) == "array" then "yes" else "no" end')" = "yes" ]; then
@@ -6197,12 +5940,12 @@ do_verify_record() {
     vrow="$(printf '%s' "$verdict_rows" | jq -c --argjson i "$vi" '.[$i]')"
     vid="$(printf '%s' "$vrow" | jq -r '.id // ""')"
     vverdict="$(printf '%s' "$vrow" | jq -r '.verdict // ""')"
-    [ -n "$vid" ] || die52 "verify-record: a verdict in $verdicts_path names no finding id."
+    [ -n "$vid" ] || die 52 "verify-record: a verdict in $verdicts_path names no finding id."
     rv_is_finding_id "$vid" \
-      || die52 "verify-record: a verdict in $verdicts_path names '$vid'. A finding id is f and then digits, with no leading zero."
+      || die 52 "verify-record: a verdict in $verdicts_path names '$vid'. A finding id is f and then digits, with no leading zero."
     case "$vverdict" in
       addressed|not-addressed) ;;
-      *) die52 "verify-record: the verdict for $vid is '$vverdict'. The two words are addressed and not-addressed." ;;
+      *) die 52 "verify-record: the verdict for $vid is '$vverdict'. The two words are addressed and not-addressed." ;;
     esac
     vi=$((vi + 1))
   done
@@ -6210,13 +5953,13 @@ do_verify_record() {
   local dup_verdicts
   dup_verdicts="$(printf '%s' "$verdict_ids" | jq -r 'group_by(.) | map(select(length > 1) | .[0]) | join(", ")')"
   [ -z "$dup_verdicts" ] \
-    || die58 "verify-record: $verdicts_path carries more than one verdict for: $dup_verdicts. Each open finding gets one verdict."
+    || die 58 "verify-record: $verdicts_path carries more than one verdict for: $dup_verdicts. Each open finding gets one verdict."
   missing="$(jq -rn --argjson o "$open_ids" --argjson v "$verdict_ids" '[ $o[] | select(. as $x | $v | index($x) | not) ] | join(", ")')"
   extra="$(jq -rn --argjson o "$open_ids" --argjson v "$verdict_ids" '[ $v[] | select(. as $x | $o | index($x) | not) ] | join(", ")')"
   [ -z "$missing" ] \
-    || die58 "verify-record: these open findings have no verdict in $verdicts_path: $missing. Every open finding needs one."
+    || die 58 "verify-record: these open findings have no verdict in $verdicts_path: $missing. Every open finding needs one."
   [ -z "$extra" ] \
-    || die58 "verify-record: these verdicts in $verdicts_path name nothing open on $unit_id: $extra."
+    || die 58 "verify-record: these verdicts in $verdicts_path name nothing open on $unit_id: $extra."
 
   # Addressed closes the finding. Not addressed keeps it open, and attempted is not addressed.
   local updated_findings
@@ -6268,19 +6011,19 @@ do_verify_record() {
     [ -n "$rline" ] || continue
     case "$rline" in
       *=*::*) ;;
-      *) die3 "verify-record: --ruling takes <finding id>=<wrong|deferred|load-bearing>::<reason>; got: $rline" ;;
+      *) die 3 "verify-record: --ruling takes <finding id>=<wrong|deferred|load-bearing>::<reason>; got: $rline" ;;
     esac
     rid="${rline%%=*}"
     rrest="${rline#*=}"
     rverdict="${rrest%%::*}"
     rreason="${rrest#*::}"
     rv_is_finding_id "$rid" \
-      || die3 "verify-record: --ruling names '$rid'. A finding id is f and then digits, with no leading zero."
+      || die 3 "verify-record: --ruling names '$rid'. A finding id is f and then digits, with no leading zero."
     case "$rverdict" in
       wrong|deferred|load-bearing) ;;
-      *) die3 "verify-record: the ruling for $rid is '$rverdict'. The three words are wrong, deferred and load-bearing." ;;
+      *) die 3 "verify-record: the ruling for $rid is '$rverdict'. The three words are wrong, deferred and load-bearing." ;;
     esac
-    [ -n "$rreason" ] || die3 "verify-record: the ruling for $rid carries no reason. A ruling with no reason is not a ruling."
+    [ -n "$rreason" ] || die 3 "verify-record: the ruling for $rid carries no reason. A ruling with no reason is not a ruling."
     rulings_json="$(printf '%s' "$rulings_json" | jq -c --arg id "$rid" --arg ruling "$rverdict" \
       --arg reason "$rreason" '. + [{id: $id, ruling: $ruling, reason: $reason}]')"
   done <<RV_RULINGS
@@ -6288,12 +6031,12 @@ $rulings_raw
 RV_RULINGS
 
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
-    die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available."
+    die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available."
   fi
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one
   # believes a finding is still open, and silence would let that belief stand.
   if [ -n "$rulings_raw" ] && [ "$open_now" = "0" ]; then
-    die3 "verify-record: a --ruling was given and $unit_id has no open actionable finding left to rule on."
+    die 3 "verify-record: a --ruling was given and $unit_id has no open actionable finding left to rule on."
   fi
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null; then
     if [ "$RV_RUN_MODE" = "autonomous" ]; then
@@ -6302,7 +6045,7 @@ RV_RULINGS
       rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
         "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
       echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
-      die56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
+      die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
     fi
     local rcount ri unruled is_open
     rcount="$(printf '%s' "$rulings_json" | jq 'length')"
@@ -6314,7 +6057,7 @@ RV_RULINGS
       is_open="$(printf '%s' "$updated_findings" | jq -r --arg id "$rid" \
         '[ .[] | select(.id == $id and .actionable == true and .status == "open") ] | length')"
       [ "$is_open" = "1" ] \
-        || die3 "verify-record: --ruling names $rid, which is not an open actionable finding on $unit_id."
+        || die 3 "verify-record: --ruling names $rid, which is not an open actionable finding on $unit_id."
       updated_findings="$(printf '%s' "$updated_findings" | jq -c --arg id "$rid" \
         --arg ruling "$rverdict" --arg reason "$rreason" '
         map(if .id == $id then . + {status: "ruled", ruling: $ruling, rulingReason: $reason} else . end)')"
@@ -6325,7 +6068,7 @@ RV_RULINGS
     unruled="$(printf '%s' "$updated_findings" | jq -r \
       '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
     [ -z "$unruled" ] \
-      || die57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing>::<reason>."
+      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing>::<reason>."
   fi
 
   local halt_why=""
@@ -6360,17 +6103,17 @@ rv_write_verification() {
     }')"
   new_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson f "$findings" --argjson r "$round_entry" \
     '.findings = $f | .rounds = ((.rounds // []) + [$r])')"
-  [ -n "$new_doc" ] || die3 "verify-record: the review record update for $unit_id failed."
+  [ -n "$new_doc" ] || die 3 "verify-record: the review record update for $unit_id failed."
   write_atomic "$RV_REVIEW_FILE" "$new_doc"
   RV_REVIEW_DOC="$new_doc"
 
   step_expr='.lastStep = "fixed"'
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
-  [ -n "$new_ledger" ] || die3 "verify-record: the ledger update for $unit_id failed."
+  [ -n "$new_ledger" ] || die 3 "verify-record: the ledger update for $unit_id failed."
   if [ -n "$halt_why" ]; then
     new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
-    [ -n "$new_ledger" ] || die3 "verify-record: the halt on $unit_id could not be written."
+    [ -n "$new_ledger" ] || die 3 "verify-record: the halt on $unit_id could not be written."
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
   RV_LEDGER_DOC="$new_ledger"
@@ -6382,8 +6125,8 @@ rv_write_verification() {
 # ------------------------------------------------------------------------------------------------
 
 do_close() {
-  [ "$#" -ge 2 ] || die3 "close: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die3 "close: unrecognized extra argument: $3"
+  [ "$#" -ge 2 ] || die 3 "close: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "close: unrecognized extra argument: $3"
   local unit_id="$2" resolve_rc
   TASK_PATH="$(resolve_task_folder "$1" "close")"
   resolve_rc=$?
@@ -6397,7 +6140,7 @@ do_close() {
   local open_count
   open_count="$(rv_open_actionable_count "$RV_REVIEW_DOC")"
   [ "$open_count" = "0" ] \
-    || die59 "close: $unit_id has $open_count open actionable finding(s). An order closes with nothing open."
+    || die 59 "close: $unit_id has $open_count open actionable finding(s). An order closes with nothing open."
 
   # Exit 60: a fix round that nobody verified is a round whose findings were marked addressed by
   # the fixer's own account, which this stage never takes as authority.
@@ -6408,7 +6151,7 @@ do_close() {
   if [ "$last_step" = "fixed" ]; then
     verified_round="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.rounds // [])[] | .round ] | max // 0')"
     [ "$verified_round" = "$rounds_used" ] \
-      || die60 "close: $unit_id has used $rounds_used fix round(s) and the last one verified is $verified_round. A round closes only after verify-record reads it."
+      || die 60 "close: $unit_id has used $rounds_used fix round(s) and the last one verified is $verified_round. A round closes only after verify-record reads it."
   fi
 
   rv_load_build_record "close" "$unit_id"
@@ -6417,10 +6160,10 @@ do_close() {
   local started_at head_now
   started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
   [ -n "$started_at" ] \
-    || die3 "close: $IMPL_DIR/build-$unit_id.json holds no startedAt, though build-record writes it."
+    || die 3 "close: $IMPL_DIR/build-$unit_id.json holds no startedAt, though build-record writes it."
   head_now="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$head_now" ] \
-    || die3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
 
   # Exit 61 and exit 63. Close writes the commit range this order produced, and a range is a claim
   # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
@@ -6435,18 +6178,18 @@ do_close() {
     last_record="$IMPL_DIR/build-$unit_id.json"
   fi
   [ -f "$last_record" ] \
-    || die3 "close: $last_record not found, though the ledger records $unit_id past that step."
+    || die 3 "close: $last_record not found, though the ledger records $unit_id past that step."
   last_commit="$(jq -r '.commit // ""' "$last_record" 2>/dev/null)"
   [ -n "$last_commit" ] \
-    || die3 "close: $last_record holds no commit, though the step that wrote it records one."
+    || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
   [ "$last_commit" = "$head_now" ] \
-    || die63 "close: $RV_CODEPATH is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
+    || die 63 "close: $RV_CODEPATH is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     --arg range "$started_at..$head_now" '
     .orders = (.orders | map(if .id == $id then (.lastStep = "closed" | .commitRange = $range) else . end))')"
-  [ -n "$new_ledger" ] || die3 "close: the ledger update for $unit_id failed."
+  [ -n "$new_ledger" ] || die 3 "close: the ledger update for $unit_id failed."
 
   # Every criterion this order serves or owns is decided now, and only now. A criterion design split
   # across several orders has no honest answer before the last of them closes, so confirmed needs
@@ -6484,7 +6227,7 @@ do_close() {
                 then ($c + {rowState: "confirmed"})
               else ($c + {rowState: "not-judged"}) end
           end))')"
-  [ -n "$new_ledger" ] || die3 "close: deriving the row states for $unit_id failed."
+  [ -n "$new_ledger" ] || die 3 "close: deriving the row states for $unit_id failed."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
   # The model-judged count is over the whole ledger, not this order alone: it is what a person
@@ -6523,14 +6266,14 @@ fn_load_task_state() {
 fn_require_interactive() {
   local who="$1" what="$2"
   [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.runMode // "interactive"')" = "autonomous" ] || return 0
-  die68 "$who: this run is autonomous, and $what is a person's judgement. Nothing is written. Run this action again with a person present, or let the halt stand."
+  die 68 "$who: this run is autonomous, and $what is a person's judgement. Nothing is written. Run this action again with a person present, or let the halt stand."
 }
 
 # finish: the implementation stage is done for this task. The task is not. It goes to the review
 # stage next, and finished.json is what that stage receives.
 do_finish() {
-  [ "$#" -ge 1 ] || die3 "finish: a task folder is required"
-  [ "$#" -le 1 ] || die3 "finish: unrecognized extra argument: $2"
+  [ "$#" -ge 1 ] || die 3 "finish: a task folder is required"
+  [ "$#" -le 1 ] || die 3 "finish: unrecognized extra argument: $2"
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$1" "finish")"
   resolve_rc=$?
@@ -6546,7 +6289,7 @@ do_finish() {
         | .id + " (" + (.lastStep // "not started") + (if (.haltedBecause // "") == "" then "" else ", halted: " + .haltedBecause end) + ")" ]
       | join("; ")')"
   [ -z "$open_orders" ] \
-    || die66 "finish: these orders are not closed: $open_orders. Every order closes before implementation finishes."
+    || die 66 "finish: these orders are not closed: $open_orders. Every order closes before implementation finishes."
 
   # A halt survives a close. `start` writes a drift halt onto every order the change touches,
   # whatever step each had reached, so an order closed before the design moved carries one
@@ -6557,7 +6300,7 @@ do_finish() {
       [ (.orders // [])[] | select((.haltedBecause // "") != "") | .id + ": " + .haltedBecause ]
       | join("; ")')"
   [ -z "$halted_orders" ] \
-    || die66 "finish: these orders are halted, closed or not: $halted_orders. Implementation does not finish while a reason to stop stands on an order."
+    || die 66 "finish: these orders are halted, closed or not: $halted_orders. Implementation does not finish while a reason to stop stands on an order."
   # A criterion that is not confirmed stops the stage, and three different facts land here. The
   # refusal names which, and which action answers it, because two of the three no action in this
   # script clears: `restart` wants a drift halt and `grant-attempt` answers a spent counter, so a
@@ -6576,7 +6319,7 @@ do_finish() {
             end ]
       | join("; ")')"
   [ -z "$unconfirmed" ] \
-    || die66 "finish: these machine-verified criteria are not confirmed: $unconfirmed. A criterion a machine verifies is confirmed by the checkpoint over its own rows, and implementation does not finish without it."
+    || die 66 "finish: these machine-verified criteria are not confirmed: $unconfirmed. A criterion a machine verifies is confirmed by the checkpoint over its own rows, and implementation does not finish without it."
 
   # --- exit 61: the range below is a claim about the repository, so the tree has to be clean ------
   rv_load_codepath "finish"
@@ -6584,10 +6327,10 @@ do_finish() {
   local head_now started_from
   head_now="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$head_now" ] \
-    || die3 "finish: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "finish: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   started_from="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // ""')"
   [ -n "$started_from" ] \
-    || die3 "finish: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
+    || die 3 "finish: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
 
   # --- the checklists a person still has to work through, copied from the frozen records ----------
   # They are copied rather than pointed at, because the review stage reads this one file and the
@@ -6602,7 +6345,7 @@ do_finish() {
     if [ -f "$IMPL_DIR/tests-$one_id.json" ]; then
       one_tests="$(jq -c '.' "$IMPL_DIR/tests-$one_id.json" 2>/dev/null)"
       [ -n "$one_tests" ] \
-        || die3 "finish: $IMPL_DIR/tests-$one_id.json exists but could not be read as JSON. Repair or remove it by hand before running this again."
+        || die 3 "finish: $IMPL_DIR/tests-$one_id.json exists but could not be read as JSON. Repair or remove it by hand before running this again."
       checklists_json="$(jq -cn --argjson have "$checklists_json" --argjson doc "$one_tests" --arg unit "$one_id" '
           $have + [ ($doc.rows // [])[] | select(.kind == "person")
                     | {criterion: .criterion, unit: $unit, checklist: (.checklist // "")} ]')"
@@ -6610,7 +6353,7 @@ do_finish() {
     if [ -f "$IMPL_DIR/review-$one_id.json" ]; then
       one_review="$(jq -c '.' "$IMPL_DIR/review-$one_id.json" 2>/dev/null)"
       [ -n "$one_review" ] \
-        || die3 "finish: $IMPL_DIR/review-$one_id.json exists but could not be read as JSON. Repair or remove it by hand before running this again."
+        || die 3 "finish: $IMPL_DIR/review-$one_id.json exists but could not be read as JSON. Repair or remove it by hand before running this again."
       deferred_json="$(jq -cn --argjson have "$deferred_json" --argjson doc "$one_review" --arg unit "$one_id" '
           $have + [ ($doc.findings // [])[] | select(.ruling == "deferred")
                     | {unit: $unit, finding: .id, severity: .severity, linkedTo: (.linkedTo // ""),
@@ -6621,7 +6364,7 @@ do_finish() {
 
   local task_id today record_json record_file
   task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
-  [ -n "$task_id" ] || die3 "finish: $TASK_PATH/task.json has no usable id field"
+  [ -n "$task_id" ] || die 3 "finish: $TASK_PATH/task.json has no usable id field"
   today="$(date -u +%Y-%m-%d)"
   record_file="$IMPL_DIR/finished.json"
   record_json="$(jq -n --arg takenAt "$today" --arg task "$task_id" \
@@ -6644,7 +6387,7 @@ do_finish() {
       deferred: $deferred,
       rowsJudgedByModel: ([ ($ledger.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
     }')"
-  [ -n "$record_json" ] || die3 "finish: could not assemble the finished record for $task_id."
+  [ -n "$record_json" ] || die 3 "finish: could not assemble the finished record for $task_id."
   write_atomic "$record_file" "$record_json"
 
   # The record alone on standard output, the way `build-record` prints its own. The path is named on
@@ -6659,25 +6402,25 @@ do_grant_attempt() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --reason)
-        [ "$#" -ge 2 ] || die3 "grant-attempt: --reason needs the reason this order gets another attempt"
-        [ -n "$2" ] || die3 "grant-attempt: --reason was given an empty reason."
+        [ "$#" -ge 2 ] || die 3 "grant-attempt: --reason needs the reason this order gets another attempt"
+        [ -n "$2" ] || die 3 "grant-attempt: --reason was given an empty reason."
         halt_refuse_separator "grant-attempt" "--reason" "$2"
         reason="$2"; shift 2 ;;
-      -*) die3 "grant-attempt: unrecognized argument: $1" ;;
+      -*) die 3 "grant-attempt: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
           task_arg="$1"
         elif [ -z "$unit_id" ]; then
           unit_id="$1"
         else
-          die3 "grant-attempt: unrecognized extra argument: $1"
+          die 3 "grant-attempt: unrecognized extra argument: $1"
         fi
         shift ;;
     esac
   done
-  [ -n "$task_arg" ] || die3 "grant-attempt: a task folder is required"
-  [ -n "$unit_id" ]  || die3 "grant-attempt: a unit id is required"
-  [ -n "$reason" ]   || die3 "grant-attempt: --reason is required. A grant with no reason is a cap nobody can audit."
+  [ -n "$task_arg" ] || die 3 "grant-attempt: a task folder is required"
+  [ -n "$unit_id" ]  || die 3 "grant-attempt: a unit id is required"
+  [ -n "$reason" ]   || die 3 "grant-attempt: --reason is required. A grant with no reason is a cap nobody can audit."
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "grant-attempt")"
@@ -6690,18 +6433,18 @@ do_grant_attempt() {
 
   local unit_present order_entry
   unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
-  [ "$unit_present" = "0" ] && die22 "grant-attempt: $unit_id is not in the frozen copy."
+  [ "$unit_present" = "0" ] && die 22 "grant-attempt: $unit_id is not in the frozen copy."
   order_entry="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$order_entry" != "null" ] \
-    || die3 "grant-attempt: $unit_id has no entry in $FN_LEDGER_FILE, though start opens one entry per snapshot work order."
+    || die 3 "grant-attempt: $unit_id has no entry in $FN_LEDGER_FILE, though start opens one entry per snapshot work order."
 
   # Exit 67, twice over. A closed order has nothing left to attempt, so raising its allowance would
   # record a grant against work that is already judged and closed.
   local last_step
   last_step="$(printf '%s' "$order_entry" | jq -r '.lastStep // ""')"
   [ "$last_step" != "closed" ] \
-    || die67 "grant-attempt: $unit_id is closed, so there is no attempt left to grant. Nothing is written."
+    || die 67 "grant-attempt: $unit_id is closed, so there is no attempt left to grant. Nothing is written."
 
   # A grant answers one reason and only one: the attempt counter is spent. A halt can hold several
   # reasons, newest first, so this looks at every segment rather than the front of the text. The
@@ -6714,7 +6457,7 @@ do_grant_attempt() {
   halt_rest="$(printf '%s' "$halt" | jq -Rr '
       if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent") | not)) | join("; earlier: ")) end')"
   if [ -n "$halt" ] && [ -z "$halt_spent" ]; then
-    die67 "grant-attempt: $unit_id is halted for something a grant does not answer: $halt. Nothing is written."
+    die 67 "grant-attempt: $unit_id is halted for something a grant does not answer: $halt. Nothing is written."
   fi
 
   local allowed_before allowed_after today expr new_ledger
@@ -6733,7 +6476,7 @@ do_grant_attempt() {
   new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$reason" \
     --arg today "$today" --argjson allowedAfter "$allowed_after" --arg rest "$halt_rest" \
     ".orders = (.orders | map(if .id == \$id then ($expr) else . end))")"
-  [ -n "$new_ledger" ] || die3 "grant-attempt: the ledger update for $unit_id failed."
+  [ -n "$new_ledger" ] || die 3 "grant-attempt: the ledger update for $unit_id failed."
   write_atomic "$FN_LEDGER_FILE" "$new_ledger"
 
   echo "GRANT-ATTEMPT: $unit_id may now use $allowed_after attempts, one more than before."
@@ -6752,22 +6495,22 @@ do_restart() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --reason)
-        [ "$#" -ge 2 ] || die3 "restart: --reason needs the reason this build starts again"
-        [ -n "$2" ] || die3 "restart: --reason was given an empty reason."
+        [ "$#" -ge 2 ] || die 3 "restart: --reason needs the reason this build starts again"
+        [ -n "$2" ] || die 3 "restart: --reason was given an empty reason."
         halt_refuse_separator "restart" "--reason" "$2"
         reason="$2"; shift 2 ;;
-      -*) die3 "restart: unrecognized argument: $1" ;;
+      -*) die 3 "restart: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
           task_arg="$1"
         else
-          die3 "restart: unrecognized extra argument: $1"
+          die 3 "restart: unrecognized extra argument: $1"
         fi
         shift ;;
     esac
   done
-  [ -n "$task_arg" ] || die3 "restart: a task folder is required"
-  [ -n "$reason" ]   || die3 "restart: --reason is required. A restart with no reason leaves the next reader guessing what design changed."
+  [ -n "$task_arg" ] || die 3 "restart: a task folder is required"
+  [ -n "$reason" ]   || die 3 "restart: --reason is required. A restart with no reason leaves the next reader guessing what design changed."
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "restart")"
@@ -6788,7 +6531,7 @@ do_restart() {
         | select(((.haltedBecause // "") | split("; earlier: ")) | map(startswith("design drift: ")) | any)
         | .id ] | join(", ")')"
   [ -n "$drifted" ] \
-    || die69 "restart: no order in $FN_LEDGER_FILE is halted for design drift, so there is nothing to restart from. Run start again to check the live design against the frozen copy."
+    || die 69 "restart: no order in $FN_LEDGER_FILE is halted for design drift, so there is nothing to restart from. Run start again to check the live design against the frozen copy."
 
   rv_load_codepath "restart"
   br_require_clean_tree "restart" "$RV_CODEPATH"
@@ -6796,11 +6539,11 @@ do_restart() {
   local head_short today target
   head_short="$(git -C "$RV_CODEPATH" rev-parse --short HEAD 2>/dev/null)"
   [ -n "$head_short" ] \
-    || die3 "restart: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "restart: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   today="$(date -u +%Y-%m-%d)"
   target="$TASK_PATH/implementation-$today-$head_short"
   [ ! -e "$target" ] \
-    || die3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
+    || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
 
   # The reason is written inside the folder being moved aside, because that folder is what it
   # explains. Nothing reads this file yet; a person does.
@@ -6811,7 +6554,7 @@ do_restart() {
       ordersHaltedForDrift: ($drifted | split(", "))}')"
   write_atomic "$IMPL_DIR/restarted.json" "$restart_json"
 
-  mv "$IMPL_DIR" "$target" || die3 "restart: could not move $IMPL_DIR to $target"
+  mv "$IMPL_DIR" "$target" || die 3 "restart: could not move $IMPL_DIR to $target"
 
   echo "RESTART: $IMPL_DIR moved aside. Orders halted for drift: $drifted"
   echo "RESTART: run start on this task to take a fresh snapshot from the live design."
@@ -6824,7 +6567,7 @@ do_restart() {
 # (scripts/dispatch-schema.json), the one record hooks/deny-prior-source.sh and
 # hooks/deny-frozen-test-writes.sh read to tell a dispatched role apart from a person working
 # their own repository. The build is serial, so a project has at most one active dispatch;
-# dispatch-open refuses to overwrite one already there (die37), and dispatch-close removes it,
+# dispatch-open refuses to overwrite one already there (exit 37), and dispatch-close removes it,
 # safe to call when none is open.
 # ------------------------------------------------------------------------------------------------
 
@@ -6833,16 +6576,16 @@ do_dispatch_open() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --deny-read)
-        [ "$#" -ge 2 ] || die3 "dispatch-open: --deny-read needs a path relative to codePath"
+        [ "$#" -ge 2 ] || die 3 "dispatch-open: --deny-read needs a path relative to codePath"
         deny_raw="$deny_raw$2
 "
         shift 2 ;;
       --allow-write)
-        [ "$#" -ge 2 ] || die3 "dispatch-open: --allow-write needs a path relative to codePath"
+        [ "$#" -ge 2 ] || die 3 "dispatch-open: --allow-write needs a path relative to codePath"
         allow_raw="$allow_raw$2
 "
         shift 2 ;;
-      -*) die3 "dispatch-open: unrecognized argument: $1" ;;
+      -*) die 3 "dispatch-open: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
           task_arg="$1"
@@ -6851,13 +6594,13 @@ do_dispatch_open() {
         elif [ -z "$unit_id" ]; then
           unit_id="$1"
         else
-          die3 "dispatch-open: unrecognized extra argument: $1"
+          die 3 "dispatch-open: unrecognized extra argument: $1"
         fi
         shift ;;
     esac
   done
-  [ -n "$task_arg" ] || die3 "dispatch-open: a task folder is required"
-  [ -n "$role" ]     || die3 "dispatch-open: a role is required"
+  [ -n "$task_arg" ] || die 3 "dispatch-open: a task folder is required"
+  [ -n "$role" ]     || die 3 "dispatch-open: a role is required"
 
   # A role must name an agent this plugin ships. The agents/ folder is that list, read here rather
   # than copied into this file, because a copy goes stale the first time a role is added. Nothing
@@ -6870,12 +6613,12 @@ do_dispatch_open() {
   agents_dir="$PLUGIN_ROOT/agents"
   known_list="$(md_basenames_in "$agents_dir")"
   [ -n "$known_list" ] \
-    || die46 "dispatch-open: no agent definitions were found in $agents_dir, so no role name can be checked. This plugin's own files are incomplete; nothing about the task is wrong."
+    || die 46 "dispatch-open: no agent definitions were found in $agents_dir, so no role name can be checked. This plugin's own files are incomplete; nothing about the task is wrong."
   case " $known_list" in
     *" $role_bare "*) ;;
-    *) die46 "dispatch-open: $role names no agent this plugin ships, so a dispatch under it would run with no permission applied. The roles that exist are: $known_list" ;;
+    *) die 46 "dispatch-open: $role names no agent this plugin ships, so a dispatch under it would run with no permission applied. The roles that exist are: $known_list" ;;
   esac
-  [ -n "$unit_id" ]  || die3 "dispatch-open: a unit id is required"
+  [ -n "$unit_id" ]  || die 3 "dispatch-open: a unit id is required"
   # The schema pattern is ^wo[1-9][0-9]*$, and a looser glob here opened a record under an id no
   # other record in this stage uses. A `case` glob cannot say "digits to the end", so the digits
   # are checked on their own.
@@ -6883,10 +6626,10 @@ do_dispatch_open() {
     wo[1-9]) ;;
     wo[1-9]*)
       case "${unit_id#wo}" in
-        *[!0-9]*) die3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
+        *[!0-9]*) die 3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
       esac
       ;;
-    *) die3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
+    *) die 3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
   esac
 
   local resolve_rc
@@ -6896,18 +6639,12 @@ do_dispatch_open() {
 
   local task_id
   task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
-  [ -n "$task_id" ] || die3 "dispatch-open: $TASK_PATH/task.json has no usable id field"
+  [ -n "$task_id" ] || die 3 "dispatch-open: $TASK_PATH/task.json has no usable id field"
 
   local project_folder codepath
-  project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die3 "dispatch-open: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-  case "$(project_code_path_state "$project_folder")" in
-    unreadable) die14 "dispatch-open: $project_folder/project.json exists but is not valid JSON" ;;
-    missing)    die3  "dispatch-open: $project_folder/project.json not found, though it was found moments ago" ;;
-  esac
-  codepath="$(project_code_path_value "$project_folder")"
-  [ -n "$codepath" ] || die3 "dispatch-open: $project_folder/project.json is valid JSON but has no usable codePath field"
-  [ -d "$codepath" ] || die15 "dispatch-open: the recorded codePath does not exist on disk: $codepath"
+  rv_load_codepath "dispatch-open"
+  project_folder="$RV_PROJECT_FOLDER"
+  codepath="$RV_CODEPATH"
 
   # The test author's one denial is that it cannot read production source, and production source is
   # what every work order declares it owns. The list is derived here, from the frozen snapshot,
@@ -6927,7 +6664,7 @@ do_dispatch_open() {
     unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" \
       '[ .workOrders[]? | select(.id == $u) ] | length')"
     [ "$unit_present" = "0" ] \
-      && die22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
+      && die 22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
   fi
 
   # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause
@@ -6941,7 +6678,7 @@ do_dispatch_open() {
     owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \
-      || die47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+      || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi
@@ -6963,7 +6700,7 @@ do_dispatch_open() {
     mine_count="$(printf '%s' "$mine_json" | jq 'length' 2>/dev/null)"
     [ -n "$mine_count" ] || mine_count=0
     [ "$mine_count" -gt 0 ] 2>/dev/null \
-      || die47 "dispatch-open: $unit_id declares no owned file in $IMPL_DIR/snapshot.json, so a $role_bare would be dispatched with nowhere it is meant to write. Design has to name what this order owns before its code is written."
+      || die 47 "dispatch-open: $unit_id declares no owned file in $IMPL_DIR/snapshot.json, so a $role_bare would be dispatched with nowhere it is meant to write. Design has to name what this order owns before its code is written."
     others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
       '[ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] | unique')"
     deny_raw="$deny_raw$(printf '%s' "$others_json" | jq -r '.[]')
@@ -6975,12 +6712,12 @@ do_dispatch_open() {
   local dispatch_file="$project_folder/dispatch.json"
   if [ -f "$dispatch_file" ]; then
     jq empty "$dispatch_file" 2>/dev/null \
-      || die3 "dispatch-open: $dispatch_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+      || die 3 "dispatch-open: $dispatch_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     local held_role held_task held_unit
     held_role="$(jq -r '.role // "?"' "$dispatch_file" 2>/dev/null)"
     held_task="$(jq -r '.task // "?"' "$dispatch_file" 2>/dev/null)"
     held_unit="$(jq -r '.unit // "?"' "$dispatch_file" 2>/dev/null)"
-    die37 "dispatch-open: $dispatch_file is already open, for role $held_role on task $held_task, unit $held_unit. Run dispatch-close first."
+    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on task $held_task, unit $held_unit. Run dispatch-close first."
   fi
 
   local deny_json allow_json
@@ -7021,20 +6758,20 @@ do_dispatch_open() {
 do_step() {
   local names
   names="$(md_basenames_in "$STEPS_DIR")"
-  [ "$#" -ge 1 ] || die3 "step: a step name is required. The steps are: $names"
-  [ "$#" -le 1 ] || die3 "step: unrecognized extra argument: $2"
+  [ "$#" -ge 1 ] || die 3 "step: a step name is required. The steps are: $names"
+  [ "$#" -le 1 ] || die 3 "step: unrecognized extra argument: $2"
   case "$1" in
-    */*|.|..|'') die3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
+    */*|.|..|'') die 3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
   esac
   [ -f "$STEPS_DIR/$1.md" ] \
-    || die3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md" || die3 "step: $STEPS_DIR/$1.md could not be read."
+    || die 3 "step: this skill ships no step file named $1. The steps are: $names"
+  cat "$STEPS_DIR/$1.md" || die 3 "step: $STEPS_DIR/$1.md could not be read."
   exit 0
 }
 
 do_dispatch_close() {
-  [ "$#" -ge 1 ] || die3 "dispatch-close: a task folder is required"
-  [ "$#" -le 1 ] || die3 "dispatch-close: unrecognized extra argument: $2"
+  [ "$#" -ge 1 ] || die 3 "dispatch-close: a task folder is required"
+  [ "$#" -le 1 ] || die 3 "dispatch-close: unrecognized extra argument: $2"
   local task_path="$1"
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_path" "dispatch-close")"
@@ -7043,7 +6780,7 @@ do_dispatch_close() {
 
   local project_folder
   project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die3 "dispatch-close: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+    || die 3 "dispatch-close: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
 
   local dispatch_file="$project_folder/dispatch.json"
   if [ -f "$dispatch_file" ]; then
@@ -7058,10 +6795,10 @@ do_dispatch_close() {
       open_task="$(printf '%s' "$open_doc" | jq -r '.task // ""')"
       this_task="$(basename -- "$TASK_PATH")"
       if [ -n "$open_task" ] && [ "$open_task" != "$this_task" ]; then
-        die75 "dispatch-close: $dispatch_file was opened for task $open_task, and this call names task $this_task. A close belongs to the task that opened the record; clearing another task record would leave its role with every permission the record withheld."
+        die 75 "dispatch-close: $dispatch_file was opened for task $open_task, and this call names task $this_task. A close belongs to the task that opened the record; clearing another task record would leave its role with every permission the record withheld."
       fi
     fi
-    rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
+    rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"
   else
     echo "DISPATCH-CLOSE: nothing was open"
@@ -7078,7 +6815,7 @@ if [ "$ACTION" = "-h" ] || [ "$ACTION" = "--help" ]; then
   usage
   exit 0
 fi
-[ -n "$ACTION" ] || { usage; die3 "no action given"; }
+[ -n "$ACTION" ] || { usage; die 3 "no action given"; }
 shift
 
 case "$ACTION" in
@@ -7101,5 +6838,5 @@ case "$ACTION" in
   dispatch-open)  do_dispatch_open  "$@" ;;
   dispatch-close) do_dispatch_close "$@" ;;
   step)           do_step           "$@" ;;
-  *) usage; die3 "unknown action: $ACTION" ;;
+  *) usage; die 3 "unknown action: $ACTION" ;;
 esac

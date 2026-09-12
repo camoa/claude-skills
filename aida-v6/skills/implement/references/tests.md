@@ -9,13 +9,11 @@ that reference outside the thing it judges.
 ## Resolve the recipes for this step
 
 Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup twice, for each
-framework the project declares. Name the role: a dispatch that names none runs as the general
-agent with every tool, and the role exists so a catalog listing lands in the agent and not here.
+framework the project declares. Name the role, and pass the lookup's answer in its own word:
+SKILL.md holds both rules.
 
 **The `test-authoring` point.** This answers where a test file goes, which levels exist and when
 each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
-Three answers, not one: no recipe for this framework, a listing that could not be reached, and a
-failed network are different things, and only the first says anything about the framework.
 
 **The `implement` point, for one thing only.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
@@ -69,16 +67,10 @@ the production source to the denied reads itself, taken from the owned files eve
 the frozen snapshot declares. Never type those paths here. It prints what it denied; read that
 list, because it is the whole of what separates the tests from the code they judge.
 
-Close it as soon as the role returns, whether it succeeded or not:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
-```
-A record left open makes the next dispatch refuse, and it names the role and order still holding it.
-It also refuses (exit 75) when the open record names a different task than this one: closing
-another task's record would leave that task's own role holding every permission the record
-withheld.
+Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
+next dispatch refuse, and it names the role and order still holding it.
 
-**Then dispatch `test-author`.** Name the role. It is not the context that writes the code, and it
+**Then dispatch `test-author`.** Name the role, per SKILL.md. It is not the context that writes the code, and it
 is not this conversation either: a dispatch that names no role runs as the general agent, with
 every tool and this session's own model, and the record just opened matches nothing. Both hooks
 recognise a role by the agent's own type, so writing the tests here instead of dispatching leaves
@@ -143,10 +135,7 @@ then just words, with nothing enforcing them.
 **Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's rows
 and the path its verdict file goes to, under the task folder, and nothing else. It reads the verify
 clause and each named test, never the implementation, and answers confirmed or rejected with a note
-for each row. Close the dispatch record as soon as it returns, whether it succeeded or not:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
-```
+for each row. Close the dispatch record as soon as it returns, per SKILL.md.
 
 Turn its answers into `--row <criterion id>=<verdict>::model::<its note>` for the freeze. A row it
 rejects is not sent back to the test author the way a person's rejection is. Nobody is present to

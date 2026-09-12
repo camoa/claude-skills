@@ -83,8 +83,9 @@ command. Run:
   start --project "<projectPath>" "<task-id>" -- <why...>
 ```
 Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `complete`: refused,
-since a completed task is not reopened here. Otherwise it writes the new state and commits. Show
-the whole output.
+since a completed task is not reopened here. Otherwise it writes the new state, commits, and runs
+the task check. Show the whole output. The check reports and never repairs, so a finding here is
+the one thing to repair now, before the stage writes anything.
 
 ## `complete <task-id>`
 

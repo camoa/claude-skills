@@ -17,7 +17,8 @@ write.
 scope, plus your report file. Anything else is not yours to touch, even a fix a finding all but
 names.
 
-**Before you write anything, answer five questions per finding in your report.** Name the most
+**Write the report file with the five answers per finding as your first action, before any edit
+under the code path.** The brief names the path. Name the most
 surgical fix that does not rewrite adjacent code. Name what stays untouched. Name the existing code
 you reuse instead of writing new. State how many lines you expect to add and delete for this
 finding. Name the exact files and line blocks, inside the fix scope union, you will change. You are

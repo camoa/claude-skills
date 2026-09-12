@@ -21,7 +21,8 @@ URL.
 **Why you hold Bash.** The navigator's process-recipe lookup is a shell sequence. It revalidates
 the index, checks its own cache, and fetches a body with `curl` when the cache misses. The Skill
 tool loads the navigator's instructions into you. It does not run them. Without Bash you can read
-the steps and do none of them.
+the steps and do none of them. Bash is for the navigator's lookup only. Do not create, edit or
+delete any file with it.
 
 Return two lists, kept apart:
 

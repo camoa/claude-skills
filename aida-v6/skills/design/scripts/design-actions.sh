@@ -10,35 +10,31 @@
 # script.
 #
 # Usage:
-#   design-actions.sh [--run-mode <interactive|autonomous>] read       <task_folder>
-#   design-actions.sh [--run-mode <interactive|autonomous>] start      <task_folder>
-#   design-actions.sh [--run-mode <interactive|autonomous>] create     <task_folder> \
+#   design-actions.sh read       <task_folder>
+#   design-actions.sh start      <task_folder>
+#   design-actions.sh create     <task_folder> \
 #                        --title <text> [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
 #                        [--diff-budget <text>]
-#   design-actions.sh [--run-mode <interactive|autonomous>] update     <task_folder> \
+#   design-actions.sh update     <task_folder> \
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
 #                        [--diff-budget <text>]
-#   design-actions.sh [--run-mode <interactive|autonomous>] add-owned-file <task_folder> \
+#   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
-#   design-actions.sh [--run-mode <interactive|autonomous>] add-done-when  <task_folder> \
+#   design-actions.sh add-done-when  <task_folder> \
 #                        --id <woId> --text <text>
-#   design-actions.sh [--run-mode <interactive|autonomous>] add-test       <task_folder> \
+#   design-actions.sh add-test       <task_folder> \
 #                        --id <woId> --level <text> --description <text>
-#   design-actions.sh [--run-mode <interactive|autonomous>] render     <task_folder> --id <woId>
-#   design-actions.sh [--run-mode <interactive|autonomous>] check      <task_folder>
-#   design-actions.sh [--run-mode <interactive|autonomous>] close      <task_folder>
+#   design-actions.sh render     <task_folder> --id <woId>
+#   design-actions.sh check      <task_folder>
+#   design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
 #
-# --run-mode is accepted on every action and changes nothing this script does today, the same
-# stance research-actions.sh takes for the same reason: a caller passes one run mode for a whole
-# invocation, and a flag some actions ignore is a smaller surface than two ways of invoking the
-# same script. Design's own approval step, where an interactive run asks whether a claimed
-# ownership is true and an autonomous run instead records that completeness was not judged
-# (ideal/design.md, "Serving a criterion is not completing it"), is a conversation the skill body
-# holds; nothing here needs the run mode to hold it.
+# --run-mode is accepted on every action and `close` requires it. A close record says who was
+# present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
+# record a person nobody saw. Every other action ignores it.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/design-render.sh      called by `create`, `update` and `render`
@@ -73,7 +69,7 @@
 # `close` records what design closed on (ideal/implementation.md, "Freezing, and what a freeze is
 # for"). It runs check-design.sh against the live files first, and writes
 # <task_folder>/design-closed.json only when that run exits 0. The record holds schemaVersion, the
-# UTC date, and one hash, computed by scripts/lib/records-hash.sh over alignment.json and every
+# UTC date, the run mode, who closed it, and one hash, computed by scripts/lib/records-hash.sh over alignment.json and every
 # design/*.json together, in work order id order (scripts/design-closed-schema.json). It sits at
 # the task's own root, beside task.json and alignment.json, never inside design/, because a record
 # inside the folder it hashes would hash itself. Implementation reads this file and refuses to
@@ -141,16 +137,16 @@ DESIGN_RENDER_SCRIPT="${PLUGIN_ROOT}/scripts/design-render.sh"
 CHECK_DESIGN_SCRIPT="${PLUGIN_ROOT}/scripts/check-design.sh"
 RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 
-RUN_MODE="interactive"
+RUN_MODE=""
 if [ "${1:-}" = "--run-mode" ]; then
   [ $# -ge 2 ] || { printf 'design-actions: --run-mode needs a value\n' >&2; exit 3; }
   RUN_MODE="$2"
   shift 2
+  case "$RUN_MODE" in
+    interactive|autonomous) ;;
+    *) printf 'design-actions: run mode must be interactive or autonomous, got %s\n' "$RUN_MODE" >&2; exit 3 ;;
+  esac
 fi
-case "$RUN_MODE" in
-  interactive|autonomous) ;;
-  *) printf 'design-actions: run mode must be interactive or autonomous, got %s\n' "$RUN_MODE" >&2; exit 3 ;;
-esac
 
 command -v jq >/dev/null 2>&1 || { printf 'design-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
@@ -186,44 +182,23 @@ usage: design-actions.sh read           <task_folder>
                                          --description <text>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
-       design-actions.sh close          <task_folder>
+       design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
 EOF
 }
 
-# ------------------------------------------------------------------------------------------------
-# Small helpers shared by more than one action below. Ported from research-actions.sh and
-# scope-actions.sh, which state the reasoning for each in their own headers.
-# ------------------------------------------------------------------------------------------------
+# The four helpers every stage script needs before it touches a task folder live in one place
+# (scripts/lib/task-helpers.sh): resolve_task_folder, looks_like_flag, is_blank, write_atomic.
+TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+[ -f "$TASK_HELPERS_LIB" ] || die3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
-resolve_task_folder() {
-  local arg="$1" who="$2" p
-  [ -n "$arg" ] || die3 "$who: a task folder is required"
-  p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
-  [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
-  printf '%s' "$p"
-}
-
-looks_like_flag() {
-  case "$1" in
-    --*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_blank() {
-  case "$1" in
-    *[![:space:]]*) return 1 ;;
-  esac
+# Every flag that takes a value refuses the same two ways: no value at all, and a value that is
+# itself the next option. $1 the action, $2 the flag, $3 what is left of "$#", $4 the value.
+need_value() {
+  [ "$3" -ge 2 ] || die3 "$1: $2 needs a value"
+  looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead"
   return 0
-}
-
-write_atomic() {
-  local target="$1" content="$2" dir tmp
-  dir="$(dirname -- "$target")"
-  tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
-    || die3 "could not create a temporary file in $dir"
-  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
-  mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
 }
 
 # Prints "true" when the contract at $ALIGNMENT_FILE exists, is readable, parses as JSON, and is
@@ -431,36 +406,28 @@ do_create() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --title)
-        [ $# -ge 2 ] || die3 "create: --title needs a value"
-        looks_like_flag "$2" && die3 "create: --title needs a value, got the option $2 instead"
+        need_value "create" "--title" "$#" "${2:-}"
         title="$2"; shift 2 ;;
       --criteria-served)
-        [ $# -ge 2 ] || die3 "create: --criteria-served needs a value"
-        looks_like_flag "$2" && die3 "create: --criteria-served needs a value, got the option $2 instead"
+        need_value "create" "--criteria-served" "$#" "${2:-}"
         criteria_served="$2"; shift 2 ;;
       --criteria-owned)
-        [ $# -ge 2 ] || die3 "create: --criteria-owned needs a value"
-        looks_like_flag "$2" && die3 "create: --criteria-owned needs a value, got the option $2 instead"
+        need_value "create" "--criteria-owned" "$#" "${2:-}"
         criteria_owned="$2"; shift 2 ;;
       --non-goals)
-        [ $# -ge 2 ] || die3 "create: --non-goals needs a value"
-        looks_like_flag "$2" && die3 "create: --non-goals needs a value, got the option $2 instead"
+        need_value "create" "--non-goals" "$#" "${2:-}"
         non_goals="$2"; shift 2 ;;
       --depends-on)
-        [ $# -ge 2 ] || die3 "create: --depends-on needs a value"
-        looks_like_flag "$2" && die3 "create: --depends-on needs a value, got the option $2 instead"
+        need_value "create" "--depends-on" "$#" "${2:-}"
         depends_on="$2"; shift 2 ;;
       --interface)
-        [ $# -ge 2 ] || die3 "create: --interface needs a value"
-        looks_like_flag "$2" && die3 "create: --interface needs a value, got the option $2 instead"
+        need_value "create" "--interface" "$#" "${2:-}"
         interface="$2"; shift 2 ;;
       --reasoning)
-        [ $# -ge 2 ] || die3 "create: --reasoning needs a value"
-        looks_like_flag "$2" && die3 "create: --reasoning needs a value, got the option $2 instead"
+        need_value "create" "--reasoning" "$#" "${2:-}"
         reasoning="$2"; shift 2 ;;
       --diff-budget)
-        [ $# -ge 2 ] || die3 "create: --diff-budget needs a value"
-        looks_like_flag "$2" && die3 "create: --diff-budget needs a value, got the option $2 instead"
+        need_value "create" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; shift 2 ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
@@ -514,40 +481,31 @@ do_update() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
-        [ $# -ge 2 ] || die3 "update: --id needs a value"
-        looks_like_flag "$2" && die3 "update: --id needs a value, got the option $2 instead"
+        need_value "update" "--id" "$#" "${2:-}"
         id="$2"; shift 2 ;;
       --title)
-        [ $# -ge 2 ] || die3 "update: --title needs a value"
-        looks_like_flag "$2" && die3 "update: --title needs a value, got the option $2 instead"
+        need_value "update" "--title" "$#" "${2:-}"
         title="$2"; set_title=true; shift 2 ;;
       --criteria-served)
-        [ $# -ge 2 ] || die3 "update: --criteria-served needs a value"
-        looks_like_flag "$2" && die3 "update: --criteria-served needs a value, got the option $2 instead"
+        need_value "update" "--criteria-served" "$#" "${2:-}"
         criteria_served="$2"; set_served=true; shift 2 ;;
       --criteria-owned)
-        [ $# -ge 2 ] || die3 "update: --criteria-owned needs a value"
-        looks_like_flag "$2" && die3 "update: --criteria-owned needs a value, got the option $2 instead"
+        need_value "update" "--criteria-owned" "$#" "${2:-}"
         criteria_owned="$2"; set_owned=true; shift 2 ;;
       --non-goals)
-        [ $# -ge 2 ] || die3 "update: --non-goals needs a value"
-        looks_like_flag "$2" && die3 "update: --non-goals needs a value, got the option $2 instead"
+        need_value "update" "--non-goals" "$#" "${2:-}"
         non_goals="$2"; set_nongoals=true; shift 2 ;;
       --depends-on)
-        [ $# -ge 2 ] || die3 "update: --depends-on needs a value"
-        looks_like_flag "$2" && die3 "update: --depends-on needs a value, got the option $2 instead"
+        need_value "update" "--depends-on" "$#" "${2:-}"
         depends_on="$2"; set_dependson=true; shift 2 ;;
       --interface)
-        [ $# -ge 2 ] || die3 "update: --interface needs a value"
-        looks_like_flag "$2" && die3 "update: --interface needs a value, got the option $2 instead"
+        need_value "update" "--interface" "$#" "${2:-}"
         interface="$2"; set_interface=true; shift 2 ;;
       --reasoning)
-        [ $# -ge 2 ] || die3 "update: --reasoning needs a value"
-        looks_like_flag "$2" && die3 "update: --reasoning needs a value, got the option $2 instead"
+        need_value "update" "--reasoning" "$#" "${2:-}"
         reasoning="$2"; set_reasoning=true; shift 2 ;;
       --diff-budget)
-        [ $# -ge 2 ] || die3 "update: --diff-budget needs a value"
-        looks_like_flag "$2" && die3 "update: --diff-budget needs a value, got the option $2 instead"
+        need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
       *) die3 "update: unrecognized argument: $1" ;;
     esac
@@ -620,12 +578,10 @@ do_add_owned_file() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
-        [ $# -ge 2 ] || die3 "add-owned-file: --id needs a value"
-        looks_like_flag "$2" && die3 "add-owned-file: --id needs a value, got the option $2 instead"
+        need_value "add-owned-file" "--id" "$#" "${2:-}"
         id="$2"; shift 2 ;;
       --path)
-        [ $# -ge 2 ] || die3 "add-owned-file: --path needs a value"
-        looks_like_flag "$2" && die3 "add-owned-file: --path needs a value, got the option $2 instead"
+        need_value "add-owned-file" "--path" "$#" "${2:-}"
         path_val="$2"; shift 2 ;;
       *) die3 "add-owned-file: unrecognized argument: $1" ;;
     esac
@@ -664,12 +620,10 @@ do_add_done_when() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
-        [ $# -ge 2 ] || die3 "add-done-when: --id needs a value"
-        looks_like_flag "$2" && die3 "add-done-when: --id needs a value, got the option $2 instead"
+        need_value "add-done-when" "--id" "$#" "${2:-}"
         id="$2"; shift 2 ;;
       --text)
-        [ $# -ge 2 ] || die3 "add-done-when: --text needs a value"
-        looks_like_flag "$2" && die3 "add-done-when: --text needs a value, got the option $2 instead"
+        need_value "add-done-when" "--text" "$#" "${2:-}"
         text="$2"; shift 2 ;;
       *) die3 "add-done-when: unrecognized argument: $1" ;;
     esac
@@ -693,16 +647,13 @@ do_add_test() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
-        [ $# -ge 2 ] || die3 "add-test: --id needs a value"
-        looks_like_flag "$2" && die3 "add-test: --id needs a value, got the option $2 instead"
+        need_value "add-test" "--id" "$#" "${2:-}"
         id="$2"; shift 2 ;;
       --level)
-        [ $# -ge 2 ] || die3 "add-test: --level needs a value"
-        looks_like_flag "$2" && die3 "add-test: --level needs a value, got the option $2 instead"
+        need_value "add-test" "--level" "$#" "${2:-}"
         level="$2"; shift 2 ;;
       --description)
-        [ $# -ge 2 ] || die3 "add-test: --description needs a value"
-        looks_like_flag "$2" && die3 "add-test: --description needs a value, got the option $2 instead"
+        need_value "add-test" "--description" "$#" "${2:-}"
         description="$2"; shift 2 ;;
       *) die3 "add-test: unrecognized argument: $1" ;;
     esac
@@ -740,8 +691,7 @@ do_render() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
-        [ $# -ge 2 ] || die3 "render: --id needs a value"
-        looks_like_flag "$2" && die3 "render: --id needs a value, got the option $2 instead"
+        need_value "render" "--id" "$#" "${2:-}"
         id="$2"; shift 2 ;;
       *) die3 "render: unrecognized argument: $1" ;;
     esac
@@ -784,6 +734,8 @@ do_check() {
 
 do_close() {
   [ "$#" -eq 0 ] || die3 "close: unrecognized argument: $1"
+  [ -n "$RUN_MODE" ] \
+    || die3 "close: --run-mode is required. The close record says who was present, and that is never assumed"
 
   [ -f "$CHECK_DESIGN_SCRIPT" ] \
     || die3 "close: cannot find check-design.sh at $CHECK_DESIGN_SCRIPT"
@@ -852,10 +804,15 @@ do_close() {
   hash="$(records_hash_for "$TASK_PATH")" \
     || die3 "close: could not compute the records hash for $TASK_PATH"
 
-  local closed_at doc
+  # An interactive close happens in front of the person who has just read the rendered design, so
+  # the person is the one closing. An autonomous close has nobody to be that person, and saying so
+  # is the whole value of the field.
+  local closed_at closed_by doc
   closed_at="$(date -u +%Y-%m-%d)"
+  if [ "$RUN_MODE" = "autonomous" ]; then closed_by="nobody"; else closed_by="person"; fi
   doc="$(jq -n --arg closedAt "$closed_at" --arg hash "$hash" \
-    '{schemaVersion: 1, closedAt: $closedAt, hash: $hash}')"
+    --arg runMode "$RUN_MODE" --arg closedBy "$closed_by" \
+    '{schemaVersion: 1, closedAt: $closedAt, runMode: $runMode, closedBy: $closedBy, hash: $hash}')"
 
   write_atomic "$CLOSED_FILE" "$doc"
   echo "CLOSED: $CLOSED_FILE"

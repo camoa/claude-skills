@@ -62,6 +62,7 @@ fi
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 COMMIT_SHAPE_SCRIPT="${PLUGIN_ROOT}/scripts/check-commit-shape.sh"
+CHECK_TASK_SCRIPT="${PLUGIN_ROOT}/scripts/check-task.sh"
 
 RUN_MODE="${AIDA_RUN_MODE:-interactive}"
 if [ "${1:-}" = "--run-mode" ]; then
@@ -160,7 +161,7 @@ commit_task_change() {
     fi
   fi
 
-  git -C "$project_path" add -A
+  git -C "$project_path" add -A -- tasks
   if git -C "$project_path" diff --cached --quiet 2>/dev/null; then
     rm -f "$msg_file"
     return 0
@@ -398,6 +399,9 @@ do_repair() {
     die3 "repair: task.json at $new_task_dir does not read back what was just written. Look at it by hand"
   fi
 
+  # The move leaves a deletion behind at the old path, and staging tasks/ alone cannot see it.
+  git -C "$project_path" add -A -- "$old_folder" >/dev/null 2>&1
+
   commit_task_change "$project_path" \
     "Repair ${id} into tasks/" \
     "this task predates the tasks/ folder; the first open moves it, one task at a time" \
@@ -470,6 +474,12 @@ do_start() {
 
   echo "STATE: ${old_state} -> in_progress"
   cat "$task_json"
+
+  # A task is repaired one thing at a time, only when it is worked on and a deterministic check
+  # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
+  # repairs, and its own exit code becomes this action's, the same way every project action ends
+  # with its check.
+  bash "$CHECK_TASK_SCRIPT" "$task_dir"
 }
 
 do_complete() {

@@ -9,23 +9,14 @@ Read the project's own `frameworks`. A `project.json` recording none refuses out
 no recipe can be chosen for a project the run cannot name a framework for. For each framework,
 dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `test-execution`
 point and that framework. It answers whether one is available and, when it is, a path to the body
-on disk.
-
-**Name the role.** A dispatch that names none runs as the general agent, with every tool and this
-session's own model. The role exists so a catalog listing lands in the agent and not here: it
-identifies and returns a path, and it never opens the body. Never fetch a catalog address yourself
-and never read a cached copy behind the navigator's back. A source this project configured itself,
-a folder of its own, is read the ordinary way and wins over the catalog.
-
-**Three answers, not one.** No recipe for this framework, a listing that could not be reached, and
-a failed network are three different things, and only the first says anything about the framework.
-Pass the one that happened, in its own word.
+on disk. Name the role, and pass the lookup's answer in its own word: SKILL.md holds both rules.
+The role identifies and returns a path, and it never opens the body. Never fetch a catalog address
+yourself and never read a cached copy behind the navigator's back. A source this project configured
+itself, a folder of its own, is read the ordinary way and wins over the catalog.
 
 Dispatch `catalog-identifier` once more, for the `review` point and each framework. This is a
 second recipe, never the same file as the `test-execution` one above. Pass its path straight
-through; do not open it here. The script reads its `## Check commands` block itself, one entry per
-tool, coding-standards, static-analysis and security, each with its own argv, `{paths}` placeholder,
-and `signal` and `extensions` keys where present.
+through; the script reads its `## Check commands` block itself, per SKILL.md.
 
 ## Run the checks
 

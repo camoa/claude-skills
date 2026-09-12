@@ -88,6 +88,32 @@ expand `${CLAUDE_PLUGIN_ROOT}`, which is why this skill grants only the one Bash
 `step` every time this table sends you to a file, even a file already read this turn. A step run
 from memory of an earlier invocation is a step run against rules that may have changed.
 
+## Four rules every step repeats
+
+These hold for every step below, and each step file names them rather than restating them. This
+file is always loaded; a step file is loaded only while its own step runs.
+
+**Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
+every tool and this session's own model, and the dispatch record just opened then matches nothing:
+the hook compares the agent's own type against the role in the record, so an unnamed dispatch is an
+unenforced one.
+
+**A recipe lookup has three answers, not one.** No recipe for this framework, a listing that could
+not be reached, and a failed network are three different things, and only the first says anything
+about the framework. Pass the one that happened, in its own word.
+
+**The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
+the action that takes it. `## Test commands` and `## Check commands` are parsed by the script, one
+entry per tool, each with its own argv, its `{paths}` placeholder, and its `signal` and `extensions`
+keys where present. It refuses (exit 72) when two frameworks each command one tool.
+
+**Close the dispatch record as soon as the role returns**, whether it succeeded or not:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
+```
+It refuses (exit 75) when the open record names a different task than this one: closing another
+task's record would leave that task's own role holding every permission the record withheld.
+
 ## What this skill does
 
 The permissions this step describes are applied by the runtime, not by the words above. Two hooks
@@ -105,6 +131,10 @@ when the person asks what the dispatch enforces, rather than describing the deni
 door above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
 whether a path is frozen, never by this flag. Say the same about it that you say about the other
 two: recorded, not enforced.
+
+The five answers a builder or a fixer writes into its report are a fourth. The record steps refuse
+an empty report file, and nothing checks the file holds five answers, that they preceded the write,
+or that the diff stayed inside them. Recorded, not enforced.
 
 The tool grants in this file's own frontmatter hold for one turn. The runtime clears them at your
 next message to the person, so a multi-turn build asks again for the Bash rule after that message.

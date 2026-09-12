@@ -14,23 +14,8 @@
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-commit-shape.sh   (the commit-message shape check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
-# Usage:
-#   project-actions.sh create   --name <name> --path <codePath> [--projects-home <dir>]
-#                                [--framework <fw>]...
-#   project-actions.sh report
-#   project-actions.sh switch   <name-or-codePath>
-#   project-actions.sh list     [active|complete|archived]...
-#   project-actions.sh state    <name-or-codePath> <active|complete|archived> -- <why...>
-#   project-actions.sh set-code-path <name-or-codePath> <newCodePath>
-#   project-actions.sh set-worktree-default <name-or-codePath> <true|false>
-#   project-actions.sh unregister <name-or-codePath>
-#   project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
-#   project-actions.sh task-rule-remove <name-or-codePath>
-#   project-actions.sh uninstall <name-or-codePath>
-#   project-actions.sh record-declined <directory>
-#   project-actions.sh read-declined <directory>
-#   project-actions.sh rebuild-registry [projectsHome]
-#   project-actions.sh read-projects-base
+# Usage: any action this script does not recognize, including none, prints the usage function
+# below and exits 3. That function is the only copy.
 #
 # read-projects-base prints the projects-folder base chosen the first time a project was ever
 # created ($AIDA_SETTINGS_PATH, default ~/.claude/aida/settings.json, key "projectsBase"), or
@@ -50,8 +35,8 @@
 # every time. AIDA_RUN_MODE is still read as a fallback, for a caller that is not the skill.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints
-# why to stderr and exits 3. A miss that is a real, expected outcome (switch found nothing,
-# read-declined found nothing) exits 1 and prints nothing to stdout, never confused with 3.
+# why to stderr and exits 3. A miss that is a real, expected outcome, such as switch finding
+# nothing, exits 1 and prints nothing to stdout, never confused with 3.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
 
@@ -95,7 +80,6 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh task-rule-remove <name-or-codePath>
        project-actions.sh uninstall <name-or-codePath>
        project-actions.sh record-declined <directory>
-       project-actions.sh read-declined <directory>
        project-actions.sh rebuild-registry [projectsHome]
        project-actions.sh read-projects-base
 EOF
@@ -215,6 +199,17 @@ commit_project() {
   local rc=$?
   rm -f "$msg_file"
   return $rc
+}
+
+# Writes one top-level field into a project's own project.json, through a temporary file, so a
+# failure partway never leaves a half-written file. $1 the project folder, $2 what to say when the
+# write fails, $3 onward the jq arguments and the expression.
+write_project_field() {
+  local project_path="$1" what="$2" file tmp
+  shift 2
+  file="$project_path/project.json"
+  tmp="$(mktemp)" || die3 "cannot create a temp file"
+  jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; die3 "$what"; }
 }
 
 run_check() {
@@ -501,10 +496,8 @@ do_state() {
     echo "UNCHANGED: ${project_path} is already ${new_state}."
   else
     local tmp
-    tmp="$(mktemp)" || die3 "cannot create a temp file"
-    jq --arg s "$new_state" '.state = $s' "$project_path/project.json" > "$tmp" \
-      && mv "$tmp" "$project_path/project.json" \
-      || { rm -f "$tmp"; die3 "could not update state in $project_path/project.json"; }
+    write_project_field "$project_path" "could not update state in $project_path/project.json" \
+      --arg s "$new_state" '.state = $s'
 
     registry_set_state "$project_path" "$new_state" \
       || printf 'project-actions: project.json now says %s, but the registry row could not be updated. The check below will report the mismatch.\n' "$new_state" >&2
@@ -567,10 +560,8 @@ do_set_code_path() {
   fi
 
   local tmp
-  tmp="$(mktemp)" || die3 "cannot create a temp file"
-  jq --arg c "$new_path" '.codePath = $c' "$project_path/project.json" > "$tmp" \
-    && mv "$tmp" "$project_path/project.json" \
-    || { rm -f "$tmp"; die3 "could not update codePath in $project_path/project.json"; }
+  write_project_field "$project_path" "could not update codePath in $project_path/project.json" \
+    --arg c "$new_path" '.codePath = $c'
 
   local new_registry
   new_registry="$(printf '%s' "$registry_snapshot" | jq --arg p "$(strip_slash "$project_path")" --arg c "$new_path" '
@@ -594,10 +585,8 @@ do_set_code_path() {
   # never kept here either: both copies are restored to what they were before this call.
   if [ "$check_rc" -eq 5 ]; then
     local tmp2 restore_registry
-    tmp2="$(mktemp)" || die3 "cannot create a temp file"
-    jq --arg c "$old_path" '.codePath = $c' "$project_path/project.json" > "$tmp2" \
-      && mv "$tmp2" "$project_path/project.json" \
-      || { rm -f "$tmp2"; die3 "could not restore the previous codePath in $project_path/project.json"; }
+    write_project_field "$project_path" "could not restore the previous codePath in $project_path/project.json" \
+      --arg c "$old_path" '.codePath = $c'
 
     restore_registry="$(registry__current)" && restore_registry="$(printf '%s' "$restore_registry" | jq --arg p "$(strip_slash "$project_path")" --arg c "$old_path" '
       (.projects[] | select((.path // "" | sub("/+$"; "")) == $p) | .codePath) = $c
@@ -638,10 +627,8 @@ do_set_worktree_default() {
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   local tmp
-  tmp="$(mktemp)" || die3 "cannot create a temp file"
-  jq --argjson w "$value" '.worktreeByDefault = $w' "$project_path/project.json" > "$tmp" \
-    && mv "$tmp" "$project_path/project.json" \
-    || { rm -f "$tmp"; die3 "could not update worktreeByDefault in $project_path/project.json"; }
+  write_project_field "$project_path" "could not update worktreeByDefault in $project_path/project.json" \
+    --argjson w "$value" '.worktreeByDefault = $w'
 
   commit_project "$project_path" \
     "Set worktreeByDefault to ${value}" \
@@ -690,7 +677,7 @@ decisions someone will need later belongs in a task, so what is learned survives
 that learned it.
 
 Before starting work, say in one line where it goes. Either open a task, or say plainly that
-this one is too small to track, and just do it.
+this one is too small to track, and wait for a yes before doing it.
 
 Judge the work, not the diff. A two-line edit that forces a version choice, a rebuild, or a
 restart of something everything else depends on is a task. A typo or a question is not.
@@ -733,10 +720,8 @@ do_task_rule() {
       echo "REFUSED: the task rule is already installed in ${claude_md}. Use --remove to take it out." >&2
       return 1
     fi
-    tmp="$(mktemp)" || die3 "cannot create a temp file"
-    jq '.taskRule = {offered: true, accepted: false}' "$project_path/project.json" > "$tmp" \
-      && mv "$tmp" "$project_path/project.json" \
-      || { rm -f "$tmp"; die3 "could not record the declined task rule in $project_path/project.json"; }
+    write_project_field "$project_path" "could not record the declined task rule in $project_path/project.json" \
+      '.taskRule = {offered: true, accepted: false}'
     commit_project "$project_path" \
       "Record the task rule as offered and declined" \
       "$why" \
@@ -804,10 +789,8 @@ do_task_rule() {
     echo "WRITTEN: ${claude_md}"
   fi
 
-  tmp="$(mktemp)" || die3 "cannot create a temp file"
-  jq '.taskRule = {offered: true, accepted: true}' "$project_path/project.json" > "$tmp" \
-    && mv "$tmp" "$project_path/project.json" \
-    || { rm -f "$tmp"; die3 "could not update taskRule in $project_path/project.json"; }
+  write_project_field "$project_path" "could not update taskRule in $project_path/project.json" \
+    '.taskRule = {offered: true, accepted: true}'
 
   commit_project "$project_path" \
     "Record the task rule as installed" \
@@ -856,14 +839,13 @@ do_task_rule_remove() {
   fi
 
   local tmp2
-  tmp2="$(mktemp)" || die3 "cannot create a temp file"
-  jq '.taskRule = (if .taskRule == null then null else (.taskRule + {accepted: false}) end)' \
-    "$project_path/project.json" > "$tmp2" \
-    && mv "$tmp2" "$project_path/project.json" \
-    || { rm -f "$tmp2"; die3 "could not update taskRule in $project_path/project.json"; }
+  write_project_field "$project_path" "could not update taskRule in $project_path/project.json" \
+    '.taskRule = (if .taskRule == null then null else (.taskRule + {accepted: false}) end)'
 
   commit_project "$project_path" "Remove the task rule" "requested" "" "" "project" "task-rule" \
     || printf 'project-actions: the task-rule removal was written but not committed.\n' >&2
+
+  run_check "$project_path"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -898,17 +880,12 @@ do_uninstall() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# record-declined / read-declined
+# record-declined
 # ------------------------------------------------------------------------------------------------
 
 do_record_declined() {
   local directory="${1:?record-declined: a directory is required}"
   registry_record_declined_offer "$directory"
-}
-
-do_read_declined() {
-  local directory="${1:?read-declined: a directory is required}"
-  registry_read_declined_offer "$directory"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -943,7 +920,6 @@ case "$action" in
   task-rule-remove) do_task_rule_remove "$@" ;;
   uninstall) do_uninstall "$@" ;;
   record-declined) do_record_declined "$@" ;;
-  read-declined) do_read_declined "$@" ;;
   rebuild-registry) do_rebuild_registry "$@" ;;
   read-projects-base) do_read_projects_base ;;
   *) usage; exit 3 ;;

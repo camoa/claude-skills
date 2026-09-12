@@ -208,8 +208,7 @@ Show the whole rendered file. Ask for a plain yes or no on that text, not on a r
 
 No: say what still needs to change, go back to the relevant step above, then render and ask again.
 
-Yes: for every criterion still `designer` because scope proposed it under "Tests and checks"
-above, promote it now:
+Yes: every criterion is written as `designer` until a person says yes, so promote each one now:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   update "<task_folder>" --id <id> --author owner

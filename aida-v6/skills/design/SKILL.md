@@ -214,7 +214,7 @@ Create it:
   [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
-  [--diff-budget "<a plain-words signal, e.g. small: one class and its test>"]
+  --diff-budget "<a plain-words signal, e.g. small: one class and its test>"
 ```
 This mints the next id and writes the file. `dependsOn` may name a work order not yet created in
 this conversation; the id space is shared and minted in order, so naming it ahead of its own
@@ -312,11 +312,14 @@ expensive place.
 
 Once design is done, close it. Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh close "<task_folder>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
+  close "<task_folder>"
 ```
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
-Closing records what design closed on: a hash over the contract and every work order.
+Closing records what design closed on: a hash over the contract and every work order, the run mode,
+and who was present. Pass the run mode you settled at the start. An interactive close records
+`person`, an autonomous one records `nobody`, and implementation reads which.
 
 A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
 Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and

@@ -10,19 +10,12 @@
 # whoever calls this, never to this script.
 #
 # Usage:
-#   research-actions.sh [--run-mode <interactive|autonomous>] read   <task_folder>
-#   research-actions.sh [--run-mode <interactive|autonomous>] start  <task_folder>
-#   research-actions.sh [--run-mode <interactive|autonomous>] record <task_folder> \
+#   research-actions.sh read   <task_folder>
+#   research-actions.sh start  <task_folder>
+#   research-actions.sh record <task_folder> \
 #                          --search <slug> --searched-for <text> --text <text> \
 #                          --source <text> [--criteria-served <id[,id...]>]
-#   research-actions.sh [--run-mode <interactive|autonomous>] check  <task_folder>
-#
-# --run-mode changes nothing this script does today. It is accepted, and rejected when it is
-# neither interactive nor autonomous, for the same reason tool-actions.sh accepts it on every
-# action: a caller passes one run mode for a whole invocation, and a flag some actions ignore is
-# a smaller surface than two ways of invoking the same script. Research never blocks and never
-# asks (ideal/research.md, 'Research never blocks'), so no action here branches on it; a later
-# action may, and the flag is already in place for that day.
+#   research-actions.sh check  <task_folder>
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, unmodified
@@ -108,17 +101,6 @@ fi
 RESEARCH_RENDER_SCRIPT="${PLUGIN_ROOT}/scripts/research-render.sh"
 CHECK_RESEARCH_SCRIPT="${PLUGIN_ROOT}/scripts/check-research.sh"
 
-RUN_MODE="interactive"
-if [ "${1:-}" = "--run-mode" ]; then
-  [ $# -ge 2 ] || { printf 'research-actions: --run-mode needs a value\n' >&2; exit 3; }
-  RUN_MODE="$2"
-  shift 2
-fi
-case "$RUN_MODE" in
-  interactive|autonomous) ;;
-  *) printf 'research-actions: run mode must be interactive or autonomous, got %s\n' "$RUN_MODE" >&2; exit 3 ;;
-esac
-
 command -v jq >/dev/null 2>&1 || { printf 'research-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
 die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
@@ -136,46 +118,12 @@ usage: research-actions.sh read   <task_folder>
 EOF
 }
 
-# ------------------------------------------------------------------------------------------------
-# Small helpers shared by more than one action below. Ported from scope-actions.sh, which states
-# the reasoning for each in its own header.
-# ------------------------------------------------------------------------------------------------
-
-resolve_task_folder() {
-  local arg="$1" who="$2" p
-  [ -n "$arg" ] || die3 "$who: a task folder is required"
-  p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
-  [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
-  printf '%s' "$p"
-}
-
-looks_like_flag() {
-  case "$1" in
-    --*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_blank() {
-  case "$1" in
-    *[![:space:]]*) return 1 ;;
-  esac
-  return 0
-}
-
-# The temporary file is created beside the target, in the same directory, so mv is a rename
-# within one filesystem rather than a copy across two, and a failure partway never leaves a
-# half-written file at $target (this is scope-actions.sh's own write_atomic, generalised to take
-# the target's own directory instead of assuming TASK_PATH, since a research file lives one level
-# down in $RESEARCH_DIR).
-write_atomic() {
-  local target="$1" content="$2" dir tmp
-  dir="$(dirname -- "$target")"
-  tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
-    || die3 "could not create a temporary file in $dir"
-  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
-  mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
-}
+# The four helpers every stage script needs before it touches a task folder live in one place
+# (scripts/lib/task-helpers.sh): resolve_task_folder, looks_like_flag, is_blank, write_atomic.
+TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+[ -f "$TASK_HELPERS_LIB" ] || die3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
 # Prints "true" when the contract at $ALIGNMENT_FILE exists, is readable, parses as JSON, and is
 # shaped like a contract (an object carrying schemaVersion, goal, expectedResult, and
@@ -205,7 +153,7 @@ contract_criteria_json() {
     printf '[]'
     return
   fi
-  jq -c '[ (.criteria // [])[]? | {id: .id, text: .text} ]' "$ALIGNMENT_FILE" 2>/dev/null || printf '[]'
+  jq -c '[ (.criteria // [])[]? | {id: .id, text: .text, author: .author} ]' "$ALIGNMENT_FILE" 2>/dev/null || printf '[]'
 }
 
 # True (exit 0) when $1 is a valid criterion id shape, c<n> with no leading zero. The same case
@@ -231,9 +179,11 @@ is_criterion_id() {
 do_read() {
   [ "$#" -eq 0 ] || die3 "read: unrecognized argument: $1"
 
-  local criteria_json contract_exists files_json research_exists f entry ftype
+  local criteria_json contract_exists decided_json files_json research_exists f entry ftype
   criteria_json="$(contract_criteria_json)"
   contract_exists="$(contract_ok)"
+  decided_json="$(jq -c '.decidedWithoutAPerson // []' "$ALIGNMENT_FILE" 2>/dev/null)"
+  [ -n "$decided_json" ] || decided_json="[]"
 
   files_json="[]"
   research_exists=false
@@ -264,9 +214,10 @@ do_read() {
     --arg researchDir "$RESEARCH_DIR" \
     --argjson researchStarted "$research_exists" \
     --argjson files "$files_json" \
+    --argjson decidedWithoutAPerson "$decided_json" \
     '{taskPath: $taskPath, alignmentFile: $alignmentFile, contractExists: $contractExists,
-      criteria: $criteria, researchDir: $researchDir, researchStarted: $researchStarted,
-      files: $files}'
+      criteria: $criteria, decidedWithoutAPerson: $decidedWithoutAPerson, researchDir: $researchDir,
+      researchStarted: $researchStarted, files: $files}'
   exit 0
 }
 

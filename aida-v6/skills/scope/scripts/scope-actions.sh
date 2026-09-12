@@ -28,14 +28,11 @@
 #   scope-actions.sh [--run-mode <interactive|autonomous>] record-decision <task_folder> \
 #                      --text <text>
 #
-# --run-mode is the DEFAULT for `add`'s author, used only when `add` is not given its own
-# --author (ideal/scope.md, "Approval" and "The autonomous branch"): interactive means nobody has
-# said otherwise, so the caller is expected to pass --author owner once a person actually
-# confirmed the criterion; autonomous means nobody was there to confirm it, so `author` defaults
-# to `designer`. There is no third value, and a missing answer is never read as the owner's.
-# Absent, or any other value, means interactive, the safe default (foundations.md, Run mode). A
-# non-goal carries no author (alignment-schema.json's own nonGoal has only id and text), so run
-# mode never affects add-non-goal.
+# `add` records `author` as `designer` in both run modes. Only an explicit `--author owner`, or
+# the promotion a person's yes triggers at approval, records `owner` (ideal/scope.md, "Approval").
+# A criterion nobody confirmed must never read as one the owner wrote. --run-mode is accepted on
+# every action and changes nothing here now. A non-goal carries no author (alignment-schema.json's
+# own nonGoal has only id and text), so no action here ever writes one for it.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/alignment-render.sh   called by `render`, unmodified
@@ -152,39 +149,18 @@ usage: scope-actions.sh read            <task_folder>
 EOF
 }
 
-# ------------------------------------------------------------------------------------------------
-# Small helpers shared by more than one action below.
-# ------------------------------------------------------------------------------------------------
+# The four helpers every stage script needs before it touches a task folder live in one place
+# (scripts/lib/task-helpers.sh): resolve_task_folder, looks_like_flag, is_blank, write_atomic.
+TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+[ -f "$TASK_HELPERS_LIB" ] || die3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
-# The task folder must already exist and already hold a task.json (ideal/scope.md, "Scope runs
-# against a task that already exists": scope finds a task or says it cannot, it never scaffolds
-# one). Prints the canonical path on success.
-resolve_task_folder() {
-  local arg="$1" who="$2" p
-  [ -n "$arg" ] || die3 "$who: a task folder is required"
-  p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
-  [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
-  printf '%s' "$p"
-}
-
-# True (exit 0) when $1 looks like another option rather than real data for the option that
-# wanted it (defect: an argument whose value is another flag was accepted for every text field
-# except --id). id_kind, below, is this same house style applied to an id's own shape: refuse on
-# the value's shape rather than trust the caller got the argument order right.
-looks_like_flag() {
-  case "$1" in
-    --*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-# True (exit 0) when $1 is empty, or holds only whitespace. Not the rubber-stamp judgement
-# (ideal/scope.md, "Open"), which belongs to the conversation; this is a value with no characters
-# in it at all.
-is_blank() {
-  case "$1" in
-    *[![:space:]]*) return 1 ;;
-  esac
+# Every flag that takes a value refuses the same two ways: no value at all, and a value that is
+# itself the next option. $1 the action, $2 the flag, $3 what is left of "$#", $4 the value.
+need_value() {
+  [ "$3" -ge 2 ] || die3 "$1: $2 needs a value"
+  looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead"
   return 0
 }
 
@@ -212,17 +188,6 @@ require_alignment_exists() {
     ' "$ALIGNMENT_FILE" 2>/dev/null)"
   [ "$shape" = "ok" ] \
     || die3 "$who: $ALIGNMENT_FILE is not a contract ($shape). A contract is never inferred"
-}
-
-# Writes $2 (assumed already-valid JSON text) to $1 through a temporary file in the same
-# directory, then renames over the target, so a failure partway through never leaves a
-# half-written file behind (this script's own header comment).
-write_atomic() {
-  local target="$1" content="$2" tmp
-  tmp="$(mktemp "${TASK_PATH}/.$(basename -- "$target").XXXXXX")" \
-    || die3 "could not create a temporary file in $TASK_PATH"
-  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
-  mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
 }
 
 # Prints "criterion" for a c<n> id, "nongoal" for an n<n> id, and nothing for anything else.
@@ -302,12 +267,10 @@ do_set_goal() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --goal)
-        [ $# -ge 2 ] || die3 "set-goal: --goal needs a value"
-        looks_like_flag "$2" && die3 "set-goal: --goal needs a value, got the option $2 instead"
+        need_value "set-goal" "--goal" "$#" "${2:-}"
         goal="$2"; shift 2 ;;
       --expected-result)
-        [ $# -ge 2 ] || die3 "set-goal: --expected-result needs a value"
-        looks_like_flag "$2" && die3 "set-goal: --expected-result needs a value, got the option $2 instead"
+        need_value "set-goal" "--expected-result" "$#" "${2:-}"
         expected="$2"; expected_given=1; shift 2 ;;
       *) die3 "set-goal: unrecognized argument: $1" ;;
     esac
@@ -342,20 +305,16 @@ do_add() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --text)
-        [ $# -ge 2 ] || die3 "add: --text needs a value"
-        looks_like_flag "$2" && die3 "add: --text needs a value, got the option $2 instead"
+        need_value "add" "--text" "$#" "${2:-}"
         text="$2"; shift 2 ;;
       --verification)
-        [ $# -ge 2 ] || die3 "add: --verification needs a value"
-        looks_like_flag "$2" && die3 "add: --verification needs a value, got the option $2 instead"
+        need_value "add" "--verification" "$#" "${2:-}"
         verification="$2"; shift 2 ;;
       --verified-by)
-        [ $# -ge 2 ] || die3 "add: --verified-by needs a value"
-        looks_like_flag "$2" && die3 "add: --verified-by needs a value, got the option $2 instead"
+        need_value "add" "--verified-by" "$#" "${2:-}"
         verified_by="$2"; shift 2 ;;
       --author)
-        [ $# -ge 2 ] || die3 "add: --author needs a value"
-        looks_like_flag "$2" && die3 "add: --author needs a value, got the option $2 instead"
+        need_value "add" "--author" "$#" "${2:-}"
         author="$2"; author_given=1; shift 2 ;;
       *) die3 "add: unrecognized argument: $1" ;;
     esac
@@ -372,7 +331,7 @@ do_add() {
       *) die3 "add: --author must be owner or designer, got '$author'" ;;
     esac
   else
-    if [ "$RUN_MODE" = "autonomous" ]; then author="designer"; else author="owner"; fi
+    author="designer"
   fi
 
   require_alignment_exists "add"
@@ -412,8 +371,7 @@ do_add_non_goal() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --text)
-        [ $# -ge 2 ] || die3 "add-non-goal: --text needs a value"
-        looks_like_flag "$2" && die3 "add-non-goal: --text needs a value, got the option $2 instead"
+        need_value "add-non-goal" "--text" "$#" "${2:-}"
         text="$2"; shift 2 ;;
       *) die3 "add-non-goal: unrecognized argument: $1" ;;
     esac
@@ -459,20 +417,16 @@ do_update() {
         [ $# -ge 2 ] || die3 "update: --id needs a value"
         id="$2"; shift 2 ;;
       --text)
-        [ $# -ge 2 ] || die3 "update: --text needs a value"
-        looks_like_flag "$2" && die3 "update: --text needs a value, got the option $2 instead"
+        need_value "update" "--text" "$#" "${2:-}"
         text="$2"; set_text=1; shift 2 ;;
       --verification)
-        [ $# -ge 2 ] || die3 "update: --verification needs a value"
-        looks_like_flag "$2" && die3 "update: --verification needs a value, got the option $2 instead"
+        need_value "update" "--verification" "$#" "${2:-}"
         verification="$2"; set_verification=1; shift 2 ;;
       --verified-by)
-        [ $# -ge 2 ] || die3 "update: --verified-by needs a value"
-        looks_like_flag "$2" && die3 "update: --verified-by needs a value, got the option $2 instead"
+        need_value "update" "--verified-by" "$#" "${2:-}"
         verified_by="$2"; set_verified_by=1; shift 2 ;;
       --author)
-        [ $# -ge 2 ] || die3 "update: --author needs a value"
-        looks_like_flag "$2" && die3 "update: --author needs a value, got the option $2 instead"
+        need_value "update" "--author" "$#" "${2:-}"
         author="$2"; set_author=1; shift 2 ;;
       *) die3 "update: unrecognized argument: $1" ;;
     esac
@@ -611,12 +565,10 @@ do_set_mechanism() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --approach)
-        [ $# -ge 2 ] || die3 "set-mechanism: --approach needs a value"
-        looks_like_flag "$2" && die3 "set-mechanism: --approach needs a value, got the option $2 instead"
+        need_value "set-mechanism" "--approach" "$#" "${2:-}"
         approach="$2"; shift 2 ;;
       --status)
-        [ $# -ge 2 ] || die3 "set-mechanism: --status needs a value"
-        looks_like_flag "$2" && die3 "set-mechanism: --status needs a value, got the option $2 instead"
+        need_value "set-mechanism" "--status" "$#" "${2:-}"
         status="$2"; shift 2 ;;
       *) die3 "set-mechanism: unrecognized argument: $1" ;;
     esac
@@ -653,8 +605,7 @@ do_record_decision() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --text)
-        [ $# -ge 2 ] || die3 "record-decision: --text needs a value"
-        looks_like_flag "$2" && die3 "record-decision: --text needs a value, got the option $2 instead"
+        need_value "record-decision" "--text" "$#" "${2:-}"
         text="$2"; shift 2 ;;
       *) die3 "record-decision: unrecognized argument: $1" ;;
     esac

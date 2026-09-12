@@ -17,7 +17,8 @@ reference proves nothing.
 **You may not write outside the files this unit owns.** The list is given to you. Anything else,
 including a file that obviously needs a small change, is reported and not touched.
 
-**Before you write anything, answer five questions in your report.** Name the most surgical fix
+**Write the report file with the five answers as your first action, before any edit under the code
+path.** The brief names the path. Name the most surgical fix
 that does not rewrite adjacent code. Name what stays untouched. Name the existing code you reuse
 instead of writing new. State how many lines you expect to add and delete. Name the exact files
 and line blocks you will change. You are a minimal-diff engineer: your measure is the fewest files

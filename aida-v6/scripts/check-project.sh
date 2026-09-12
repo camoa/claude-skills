@@ -688,7 +688,7 @@ echo "Code path safety: $SAFETY_VERDICT"
 echo "  $SAFETY_DETAIL"
 echo
 
-echo "Project file against its schema, fields present and well-formed: $((FIELD_COUNT - MISSING_COUNT - UNREADABLE_COUNT))/$FIELD_COUNT"
+echo "Project file against its schema, top-level fields present and well-formed: $((FIELD_COUNT - MISSING_COUNT - UNREADABLE_COUNT))/$FIELD_COUNT"
 echo
 
 if [ "$MISSING_COUNT" -gt 0 ]; then

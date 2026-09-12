@@ -6,10 +6,8 @@ reference now. Nothing below may change one.
 ## Resolve the recipe for this step
 
 Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `implement`
-point and each framework the project declares. Name the role: a dispatch that names none runs as
-the general agent with every tool, and the role exists so a catalog listing lands in the agent and
-not here. Three answers, not one: no recipe for this framework, a listing that could not be
-reached, and a failed network are different things.
+point and each framework the project declares. Name the role, and pass the lookup's answer in its
+own word: SKILL.md holds both rules.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.
@@ -19,9 +17,9 @@ this reader may do neither. Pass its path to `dispatch-open` as `--deny-read`.
 
 Dispatch `catalog-identifier` twice more, for the `test-execution` point and the `review` point,
 each for this order's framework. These are two more recipes, neither the `implement` one above.
-Pass both paths straight through to `build-record` below; do not open either here. The script
-reads the `## Test commands` block of the first and the `## Check commands` block of the second
-itself, the same two files preconditions already resolved for the baseline.
+Pass both paths straight through to `build-record` below. The script reads their command blocks
+itself, per SKILL.md, and these are the same two files preconditions already resolved for the
+baseline.
 
 ## Assemble what the implementer may see
 
@@ -59,12 +57,11 @@ order's owned files, and allowed its own. Never type those paths here. It prints
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
 write.
 
-**Then dispatch `implementer`.** Name the role. A dispatch that names none runs as the general
-agent with this session's own model, and the record just opened matches nothing: the hook compares
-the agent's own type against the role in the record, so an unnamed dispatch is an unenforced one.
+**Then dispatch `implementer`.** Name the role, per SKILL.md.
 
 Give it the path to the `implement` recipe for its framework, what `build-brief` emitted, and
-nothing else.
+nothing else. `reportPath` in that output is where it writes its five answers, and it writes that
+file before it edits anything under the code path.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
 there.
@@ -83,12 +80,7 @@ Ask it to return what it changed, one line on the tests, the path to the interfa
 and any concern. Under fifteen lines. The interface record is prose about what this unit exposes,
 and it is what the next order's tests are written against.
 
-Close the record as soon as the role returns, whether it succeeded or not:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
-```
-It refuses (exit 75) when the open record names a different task than this one: closing another
-task's record would leave that task's own role holding every permission the record withheld.
+Close the dispatch record as soon as the role returns, per SKILL.md.
 
 ## Record the attempt
 

@@ -6,12 +6,10 @@ finds, and closes the order once nothing actionable is left open.
 ## Resolve the recipe for this step
 
 Dispatch `catalog-identifier` for the `test-execution` point and the `review` point, both for this
-order's framework. Name the role: a dispatch that names none runs as the general agent with every
-tool, and the role exists so a catalog listing lands in the agent and not here. These are the same
-two files `references/build.md` already resolved for this order, and `references/preconditions.md`
-resolved for the baseline. Pass both paths straight through to `fix-record` below, in the fix
-section; do not open either here. The script reads `## Test commands` and `## Check commands`
-itself, and refuses (exit 72) when two frameworks each command one tool.
+order's framework. Name the role, per SKILL.md. These are the same two files
+`references/build.md` already resolved for this order, and `references/preconditions.md` resolved
+for the baseline. Pass both paths straight through to `fix-record` below, in the fix section; the
+script reads their command blocks itself, per SKILL.md.
 
 ## Review
 
@@ -48,16 +46,11 @@ not enforced for the whole review, and a write into a frozen test is caught only
 dirty tree. The empty lists still let the hook see this dispatch and protect every frozen test
 against it, the same way the freeze protects it against everyone else.
 
-**Dispatch `reviewer`.** Name the role: an unnamed dispatch runs as the general agent and matches
-no record. Set the model to opus. Give it the brief and nothing else, and tell it plainly that this
-is review mode. Its read is wide by design, one named file outside the diff for one named risk.
-Close the dispatch record as soon as it returns, whether it succeeded or not:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
-```
-It refuses (exit 75) when the open record names a different task: closing another task's record
-would leave that task's own role holding every permission the record withheld. Its write is also
-refused by the script, not by a hook, when the code moved or the tree is dirty.
+**Dispatch `reviewer`.** Name the role, per SKILL.md. Set the model to opus. Give it the brief and
+nothing else, and tell it plainly that this is review mode. Its read is wide by design, one named
+file outside the diff for one named risk. Close the dispatch record as soon as it returns, per
+SKILL.md. Its write is refused by the script, not by a hook, when the code moved or the tree is
+dirty.
 Leaving a probe file behind is a refusal, not a finding.
 
 Run:
@@ -89,8 +82,8 @@ It refuses when nothing is open, when the rounds are spent, when the order is ha
 last fix round has not been verified yet. A resumed run hits that last refusal most. A round
 recorded but never carried through `verify-record` still counts as open, so the next round may not
 start over it. It emits the open findings in severity order, the union of their fix scope, the
-frozen tests, the report path, the round number, and `headNow`, the code repository's own commit
-at the moment of this call.
+frozen tests, this round's own report path, the order's diff budget, the round number, and
+`headNow`, the code repository's own commit at the moment of this call.
 
 Open the dispatch record before dispatching:
 ```
@@ -102,18 +95,16 @@ files allowed, every other order's denied. Deny the test-authoring recipe by han
 build.md does for the implementer: a fixer chooses no level and names no test, so that recipe is
 not its to read.
 
-**Dispatch `fixer`.** Name the role. Round one runs on sonnet. Round two runs on opus, set on the
-Agent call. Give it the open findings, the fix scope union, the frozen tests, and its report path.
+**Dispatch `fixer`.** Name the role, per SKILL.md. Round one runs on sonnet. Round two runs on opus, set on the
+Agent call. Give it the open findings, the fix scope union, the frozen tests, the diff budget, and
+its report path, which it writes before it edits anything under the code path.
 **It may not change a test**: a hook refuses the write. **It may not write outside the fix
 scope.** No hook enforces that bound. The owned-files check after the round only bounds it to the
 order's own files, which is wider than the scope. A write inside those files but outside the scope
 is not caught there. It surfaces when the reviewer's verify mode reads the fix diff and reports it
 under `outOfScope`.
 
-Close the dispatch record as soon as it returns, whether it succeeded or not:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
-```
+Close the dispatch record as soon as it returns, per SKILL.md.
 
 Run:
 ```
@@ -170,10 +161,7 @@ write into a frozen test is caught afterward as a dirty tree, not stopped as it 
 fix diff as a file, and the fixer's report. Choose the path its verdicts go to yourself, the same
 way review-brief names its findings path, for example `<impl>/verify-<order id>-<round>.json`.
 Nothing else: not the original diff, not an earlier round's verdicts. Close the dispatch record as
-soon as it returns, whether it succeeded or not:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
-```
+soon as it returns, per SKILL.md.
 
 Run:
 ```

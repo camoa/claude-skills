@@ -59,8 +59,10 @@ answer, not a fault. Report what it said. Do not install anything and do not run
 "${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> install <tool>
 ```
 
-In interactive mode the script prints the commands before it runs them, because installing changes
-the project.
+Interactive: run `show <tool>` first, print its commands, and wait for a plain yes before you run
+`install`. Autonomous: halt here and say the install needs a person, because an install changes the
+project and nobody is there to approve it. Before you ask, name the files the recipe's commands
+change and check them against the active order's untouched list.
 
 | Exit code | Meaning | What to do |
 |---|---|---|

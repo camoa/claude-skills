@@ -73,6 +73,10 @@ REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
 # shellcheck source=/dev/null
 source "$REGISTRY_LIB" 2>/dev/null \
   || not_enforced "the project registry library at $REGISTRY_LIB could not be read. Nothing was checked."
+PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
+# shellcheck source=/dev/null
+source "$PATHS_LIB" 2>/dev/null \
+  || not_enforced "the path library at $PATHS_LIB could not be read. Nothing was checked."
 
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
@@ -102,36 +106,6 @@ CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
   || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
 
 IMPL_DIR="$PROJECT_PATH/tasks/$TASK_ID/implementation"
-
-# Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
-# drops a trailing slash. Never touches the filesystem, so it works on a path about to be
-# created. $1 must already be absolute. Walks the string one "/"-segment at a time rather than
-# word-splitting it, so this needs neither SH_WORD_SPLIT nor GLOB_SUBST scoped for zsh.
-normalize_abs() {
-  local input="$1" remainder comp out=""
-  case "$input" in /*) ;; *) input="/$input" ;; esac
-  remainder="${input#/}"
-  while [ -n "$remainder" ]; do
-    case "$remainder" in
-      */*) comp="${remainder%%/*}"; remainder="${remainder#*/}" ;;
-      *)   comp="$remainder"; remainder="" ;;
-    esac
-    case "$comp" in
-      ''|'.') : ;;
-      '..') out="${out%/*}" ;;
-      *) out="$out/$comp" ;;
-    esac
-  done
-  [ -n "$out" ] || out="/"
-  printf '%s' "$out"
-}
-
-resolve_against() {
-  case "$1" in
-    /*) printf '%s' "$1" ;;
-    *)  printf '%s' "$2/$1" ;;
-  esac
-}
 
 # Reads whitespace-separated words from $1 into array w. bash's read takes -a for an array
 # target; zsh's own read refuses -a ("bad option") and takes -A instead.
