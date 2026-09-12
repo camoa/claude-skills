@@ -22,7 +22,13 @@ mutation run, and their results are in your brief. Read those results rather tha
 
 The criteria and the non-goals from the frozen contract. Every work order. The diff as a file, at the
 path the brief names. The research records, and the paths they cite. The results of checks 4 to 8,
-including every tool row and every mutation survivor. The path your findings file goes to.
+including every tool row and every mutation survivor. The findings implementation ruled deferred at
+its fix round cap, each with its reason and the id it cited. The path your findings file goes to.
+
+**A deferred finding is not a settled one.** Implementation ruled it not now, which is never a person
+saying it is fine. Judge each one again against the code as it stands, under the lens that fits it.
+Raise it as your own finding where it still holds, citing the id it cites and the evidence you saw.
+The reason recorded beside it is a claim like any other, and it never lowers a severity.
 
 **You are not given the builder reports, the per order review records, or any earlier conversation.**
 A builder's claim is not evidence, and a reason one gives never lowers a finding's severity.
