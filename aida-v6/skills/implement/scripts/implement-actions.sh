@@ -1601,23 +1601,6 @@ pc_run_check() {
 # Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the
 # value can carry quotes of its own, and the outer pair belongs to the document rather than to the
 # string being looked for.
-# Refuses a --value whose name or value carries a newline or a tab. The value table this script
-# builds is newline and tab delimited, so either character inside a value forges a row and answers
-# a placeholder the caller never supplied. $1 the action, $2 the flag value as given.
-pc_refuse_forged_value() {
-  local who="$1" pair="$2"
-  case "$pair" in
-    *"$(printf '\t')"*)
-      die 3 "$who: --value was given text holding a tab, and the table this builds is tab delimited, so a tab inside a value forges a row: $pair"
-      ;;
-  esac
-  # Counted, never matched as a pattern: command substitution strips trailing newlines, so
-  # `*"$(printf '\n')"*` is `*""*`, which matches every value and refused all of them.
-  [ "$(printf '%s' "$pair" | wc -l | tr -d '[:space:]')" = "0" ] \
-    || die 3 "$who: --value was given text holding a newline, and the table this builds is newline delimited, so a newline inside a value forges a row: $pair"
-  [ -n "${pair%%=*}" ] || die 3 "$who: --value was given no name: $pair"
-}
-
 pc_unquote() {
   case "$1" in
     "'"*"'") printf '%s' "$1" | sed "s/^'//; s/'$//" ;;
@@ -4367,97 +4350,6 @@ rv_actionable_for() {
       RV_ACTIONABLE="false"
       RV_ACTIONABLE_BECAUSE="the finding cites $linked, which is neither a criterion nor a non-goal in the frozen contract" ;;
   esac
-}
-
-# The one place a finding id's shape is decided: `f` and then digits, with no leading zero, which
-# is what scripts/review-record-schema.json requires of the field this id lands in. Returns 0 when
-# the id is that shape. A glob of `f[1-9]*` would pass `f1a` and `f9 foo`, and such an id then
-# reads as zero where verify-record mints the next one, so a record already holding `f3a` would
-# mint `f1` again and two findings would answer to one verdict.
-rv_is_finding_id() {
-  local id="$1" rest
-  case "$id" in
-    f*) rest="${id#f}" ;;
-    *) return 1 ;;
-  esac
-  [ -n "$rest" ] || return 1
-  case "$rest" in
-    *[!0-9]*) return 1 ;;
-    0*) return 1 ;;
-  esac
-  return 0
-}
-
-# Reads $1, a file the reviewer wrote, and sets RV_FINDINGS_ARRAY to the array under key $2 after
-# checking every entry's own shape. $3 the action's own name. Dies (exit 52) on anything it cannot
-# read as that shape, because a findings file this script half understands is worse than none.
-#
-# It sets a global rather than printing, and every caller calls it as a plain statement. A function
-# that refuses must never be called with `$(...)`: a command substitution runs in a subshell, so the
-# refusal would exit that subshell alone and the caller would carry on with an empty list. That is
-# the same rule br_seven_checks states above, and this function was written the wrong way once.
-RV_FINDINGS_ARRAY=""
-# Refuses a hand-written JSON file that names one key twice. jq resolves a duplicate to the last
-# occurrence and says nothing, so a findings file carrying `findings` twice silently discards the
-# earlier array, and a review with findings records as clean.
-#
-# `jq --stream` reports every path as it reads it, duplicates included, while the parsed document
-# has already lost them. So the file is streamed twice, once from disk and once from the document
-# jq parsed out of it, and a difference in the paths read is a key written more than once. The
-# message names the paths that appeared too often.
-# $1 the file, $2 the action. Never returns on a duplicate.
-RV_STREAM_PATHS_JQ='[ inputs | .[0] | map(tostring) | join(".") ] | sort'
-rv_refuse_duplicate_keys() {
-  local file="$1" who="$2" from_file from_doc dup
-  from_file="$(jq -cn --stream "$RV_STREAM_PATHS_JQ" "$file" 2>/dev/null)"
-  [ -n "$from_file" ] || return 0
-  from_doc="$(jq -c '.' "$file" 2>/dev/null | jq -cn --stream "$RV_STREAM_PATHS_JQ" 2>/dev/null)"
-  [ -n "$from_doc" ] || return 0
-  [ "$from_file" = "$from_doc" ] && return 0
-  dup="$(jq -rn --argjson a "$from_file" --argjson b "$from_doc" '
-    [ ($a | group_by(.) | map({k: .[0], n: length})[]) as $x
-      | ($b | map(select(. == $x.k)) | length) as $m
-      | select($x.n > $m) | $x.k ] | unique | join(", ")')"
-  [ -n "$dup" ] || dup="a key this reader could not name"
-  die 52 "$who: $file writes the same key more than once, at: $dup. A duplicate key resolves to the last one and throws the earlier value away in silence, so this is refused rather than half read."
-}
-
-rv_read_findings_array() {
-  local file="$1" key="$2" who="$3" doc arr count i one id severity evidence seen_ids=""
-  [ -f "$file" ] || die 52 "$who: $file not found. The file named on the command line has to exist."
-  [ -s "$file" ] || die 52 "$who: $file is empty. An empty file is not an empty findings list; write { \"$key\": [] } instead."
-  doc="$(jq -c '.' "$file" 2>/dev/null)"
-  [ -n "$doc" ] || die 52 "$who: $file is not valid JSON."
-  rv_refuse_duplicate_keys "$file" "$who"
-  arr="$(printf '%s' "$doc" | jq -c --arg k "$key" 'if (.[$k] | type) == "array" then .[$k] else null end')"
-  [ -n "$arr" ] && [ "$arr" != "null" ] \
-    || die 52 "$who: $file holds no $key array. The shape is { \"$key\": [ ... ] }."
-  count="$(printf '%s' "$arr" | jq 'length')"
-  i=0
-  while [ "$i" -lt "$count" ]; do
-    one="$(printf '%s' "$arr" | jq -c --argjson i "$i" '.[$i]')"
-    [ "$(printf '%s' "$one" | jq -r 'type')" = "object" ] \
-      || die 52 "$who: entry $i of $key in $file is not an object."
-    id="$(printf '%s' "$one" | jq -r '.id // ""')"
-    rv_is_finding_id "$id" \
-      || die 52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
-    severity="$(printf '%s' "$one" | jq -r '.severity // ""')"
-    case "$severity" in
-      high|medium|low) ;;
-      *) die 52 "$who: finding $id in $file has the severity '$severity'. The three words are high, medium and low." ;;
-    esac
-    evidence="$(printf '%s' "$one" | jq -r '.evidence // ""')"
-    [ -n "$evidence" ] \
-      || die 52 "$who: finding $id in $file carries no evidence. A finding with nothing to read is not a finding."
-    # Two findings under one id are two findings nothing can tell apart. One verdict would answer
-    # both, and one ruling would close both, so the list is refused rather than half read.
-    case " $seen_ids " in
-      *" $id "*) die 52 "$who: $file names the finding $id more than once. Each finding carries its own id." ;;
-    esac
-    seen_ids="$seen_ids $id"
-    i=$((i + 1))
-  done
-  RV_FINDINGS_ARRAY="$arr"
 }
 
 # Turns one raw entry from a findings file into the record shape, deciding its own actionability

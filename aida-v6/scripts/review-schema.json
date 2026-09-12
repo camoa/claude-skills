@@ -1,0 +1,344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA review record",
+  "description": "What one pass of the review stage found, at <task folder>/review/review.json (ideal/review.md, 'The review record'). One file per task, in its own folder beside research/, design/ and implementation/, because implementation's own `restart` archives that folder whole and a review inside it would go with a build restart it has nothing to do with. Four actions write it in turn: `checks` creates it with the change set and checks 3 to 8, `findings` adds checks 2, 9 to 12 and 16 and every finding, `surfaces` adds checks 13 to 15 and the surface rows, and `close` adds check 1, the criterion verdicts and the verdict. A re-run archives the previous record to review/review-<date>-<commit>.json before it writes, and refuses when that move fails (exit 63). Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "task",
+    "reviewedRange",
+    "reviewedAt",
+    "runMode",
+    "recipes",
+    "checks",
+    "criteria",
+    "findings",
+    "surfaces",
+    "mutation",
+    "catalogNotes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date this record was first written, YYYY-MM-DD. Set by the script, never typed by hand."
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The task's own id, read from task.json. Joined on, never re-minted."
+    },
+    "reviewedRange": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$",
+      "description": "The change set, copied from `commitRange` in implementation/finished.json. Review computes none of its own, because a second producer for one fact is what foundations.md forbids. An empty range is a real state: the two commits are then equal, and the report says so rather than the record hiding it."
+    },
+    "reviewedAt": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit the review read, which is the code repository's HEAD when `checks` ran and the right-hand end of the range above. `checks` refuses a dirty working tree (exit 61), so this value describes a tree nothing uncommitted changes. Every later action refuses when the code path has moved off it or gone dirty (exit 51), because a finding about code that is no longer there is not a finding."
+    },
+    "runMode": {
+      "type": "string",
+      "enum": ["interactive", "autonomous"],
+      "description": "Copied from the ledger, which copied it from the task when the build started. It decides who may answer: a person's answer is accepted only when a person is present, so `surfaces` refuses --accept-baseline and `close` refuses --row on an autonomous run (exit 70, the number tests-freeze already gives that refusal)."
+    },
+    "recipes": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/recipeRow" },
+      "description": "One row per framework the project declares, written by `checks`. It holds the two recipe paths that run resolved to, or the word for the lookup that failed. `surfaces` reads the check recipe path from here rather than taking a flag, so the surface block is read from the same file the tool rows came from and review keeps its two lookups."
+    },
+    "checks": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/check" },
+      "description": "One row per check, in the order the actions record them. The sixteen checks carry the ids every-criterion, non-goals, serves-a-criterion, test-and-mutation, coding-standards, static-analysis, security, suite, solid, dry, architecture-fit, guides, e2e, visual-regression, visual-parity and framework-practices. The list is longer than sixteen whenever a check recipe declares a tool row beyond the three named above: the block is a floor, not the list, and every row it declares is run and recorded here (ideal/review.md, 'The check commands block is not fixed at three rows')."
+    },
+    "criteria": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/criterionRow" },
+      "description": "One row per criterion in the frozen contract, written by `close`. The same verdicts are written back into alignment.json, which is the only field review writes into the contract."
+    },
+    "findings": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/finding" },
+      "description": "Every finding the architecture reviewer raised, written by `findings`. An empty list is a real state and it is what a clean review looks like. Review acts on none of them: it records each one with its disposition and hands the record to a person."
+    },
+    "surfaces": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/surfaceRow" },
+      "description": "One row per surface the registry holds, written by `surfaces`. Empty when no registry is recorded or no kind is enabled, which is a project with no surfaces rather than a project whose surfaces passed."
+    },
+    "surfaceSetup": {
+      "type": "string",
+      "enum": ["not-applicable", "available", "not-offered-autonomous", "registered"],
+      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a framework whose recipe carries surface rows that are not absent while the project has no registry, which is when the skill offers setup once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. A refusal a person gives is not kept here, because no field outside this task holds one; the offer is therefore made again on the next task, and that is recorded in deferred-changes.md rather than worked around here."
+    },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "detail", "survivors"],
+      "description": "What the `mutation` row of the test-execution recipe found over the changed files, written by `checks`. A recipe with no such row leaves this undeclared, never met: decision 5 separates the order a test was written in from its power to fail, and a score nobody measured proves nothing about the second.",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "The four words every check in this stage uses, for the mutation row's own run."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why that verdict, naming the framework and what the run printed or why it did not run."
+        },
+        "score": {
+          "type": "string",
+          "description": "The score as the tool printed it, copied verbatim and never parsed into a number: each of the four tools prints its own shape, and a number this script derived would be a fifth. Empty when no row ran."
+        },
+        "survivors": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/survivor" },
+          "description": "Every surviving mutant the run reported. The reviewer reads these as one more lens, and a survivor inside code a criterion covers becomes a finding citing that criterion."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the mutation command printed, standard output and standard error together. Present only when a command ran."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the mutation command exited with. Present only when a command ran."
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["passed", "failed"],
+      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: a check reading unmet fails, a check reading unknown fails, met and undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the checks said. The rows say which check or criterion caused a fail. An absent verdict is a review that has not closed, never a review that passed."
+    },
+    "catalogNotes": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/catalogNote" },
+      "description": "What this review saw about the catalog, one line each: a guide the code contradicts, a recipe whose command no longer runs, a pattern the framework wants and no guide names. Review writes nothing to the catalog. A person decides whether a note becomes a proposal, and `close` names the count so the evidence is not lost in silence."
+    }
+  },
+  "$defs": {
+    "recipeRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["framework", "testRecipe", "checkRecipe", "lookup"],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The framework name as project.json records it."
+        },
+        "testRecipe": {
+          "type": "string",
+          "description": "The test-execution recipe path this run read for that framework, as the caller handed it over. Empty when the lookup failed."
+        },
+        "checkRecipe": {
+          "type": "string",
+          "description": "The review recipe path this run read for that framework. Empty when the lookup failed. `surfaces` reopens this file for its `## Surface commands` block."
+        },
+        "lookup": {
+          "type": "string",
+          "enum": ["resolved", "no-recipe", "listing-unreachable", "fetch-failed"],
+          "description": "How the lookup answered. The three failures stay apart because only the first says anything about the framework: no recipe records that framework's checks undeclared, while an unreachable listing and a failed fetch record them unknown, since nobody looked. Collapsing the two writes a false finding nothing can tell from a true one."
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verdict", "detail"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which check this is. The sixteen ids are listed in this schema's own `checks` description; a tool row the recipe declares beyond the three named tools carries the row's own id, because the ids are open."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "The same four words the build record uses, and build-record-schema.json is the authority for them. `undeclared` means nothing declared a command for this check, or the recipe declared that row absent, or the row did not apply to the changed files; it is never satisfied and never a pass, and it does not fail the review. `unknown` means nothing this check reads could be read, and it does fail the review. A check with two inputs that got one answers from that one and names what it did not get."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this verdict, in plain words naming what was compared: an exit code, a file that matched no order, a marker that was found, or the lens that returned nothing."
+        },
+        "absent": {
+          "type": "boolean",
+          "description": "True when the recipe row for this check was declared absent, and `detail` carries the recipe's own reason. It exists because undeclared covers two facts that must not read alike: a framework saying it has no such tool answered the question, and a caller that passed no recipe answered nothing."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the command exited with. Present only on a check that ran one."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed. Present only on a check that ran one. Check 1 reads the suite check's own output here, comparing test names as text."
+        },
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The framework whose recipe carried this row. Present only on a check that ran a command. One tool row may carry a command from one framework only: two frameworks each declaring one refuses before any check runs (exit 72)."
+        }
+      }
+    },
+    "criterionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verifiedBy", "verdict", "answeredBy"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion id scope minted. Joined on, never the criterion's text."
+        },
+        "verifiedBy": {
+          "type": "string",
+          "enum": ["machine", "person"],
+          "description": "Copied from the frozen contract, so a reader never has to look the criterion back up to know why a verdict is unanswered."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["unanswered", "met", "unmet"],
+          "description": "The contract's own three words, from alignment-schema.json, which reserves this field for the review. Three and not four: a criterion nobody could reach is not the same as one that failed, and `unanswered` is never a pass. This same value is written back into alignment.json."
+        },
+        "answeredBy": {
+          "type": "string",
+          "enum": ["script", "person", "nobody"],
+          "description": "Who answered. `script` for a machine-verified criterion joined against the suite result, `person` for a checklist row a person read, `nobody` for a row an unattended run could not put to anyone. A run with nobody present cannot sign off a task carrying one person-verified criterion, and this field is what makes that visible."
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "lens", "severity", "file", "lines", "linkedTo", "evidence", "disposition"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "The finding's own id, `f` followed by a number with no leading zero, minted by the reviewer in its own findings file and joined on here."
+        },
+        "lens": {
+          "type": "string",
+          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation"],
+          "description": "Which of the seven lenses raised it. One dispatch carries all seven, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "How bad the reviewer judged it. The three words are already in agents/reviewer.md and finished-schema.json, and this is that same vocabulary rather than a fourth. A high-severity security fault citing neither a criterion nor a non-goal is raised at once rather than queued, because leaving it queued ships it."
+        },
+        "file": {
+          "type": "string",
+          "description": "Where the finding is, as the reviewer wrote it, relative to codePath. May be empty: a finding about something absent has no file to name."
+        },
+        "lines": {
+          "type": "string",
+          "description": "Which lines, as the reviewer wrote it. A string rather than two numbers, because a reviewer writes a range, a list or a single number and none of the three is worth normalizing for a reader."
+        },
+        "linkedTo": {
+          "type": "string",
+          "description": "The one criterion id or non-goal id this finding cites, or empty when it cites neither. Empty is the third case of the classifier and is what `disposition` then records."
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the reviewer saw. Required, because a finding with nothing to read is not a finding. A reason in a builder's report never lowers it: those reports are refused as authority."
+        },
+        "disposition": {
+          "type": "string",
+          "enum": ["criterion", "non-goal", "follow-up"],
+          "description": "What this finding is. `criterion` means this task's work, and that criterion reads unmet. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
+        }
+      }
+    },
+    "surfaceRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verdict", "ran", "walked"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The surface's own id, from the registry. Joined on, never re-minted."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "What this surface came to. A registry surface with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform. A run that selected nothing reads unknown, which is version 5's own comment on its end-to-end gate: zero tests ran is never a pass."
+        },
+        "ran": {
+          "type": "boolean",
+          "description": "Whether a command ran for this surface at all."
+        },
+        "walked": {
+          "type": "boolean",
+          "description": "Whether a person looked at this surface, at every viewport, including when it passed. Version 5 measured why: an aggregate moved from 37 percent to 28 percent while six visible defects sat inside the passing surfaces. False on an unattended run, and checks 13 to 15 then read unknown."
+        },
+        "reportPath": {
+          "type": "string",
+          "description": "Where the harness wrote its own report, when it names one. Empty otherwise."
+        },
+        "baselineAccepted": {
+          "type": "boolean",
+          "description": "True when a person accepted a new baseline for this surface in this review. Accepted in two stages, plan then write, and never on an unattended run."
+        }
+      }
+    },
+    "survivor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One surviving mutant, the line the tool printed, copied verbatim. The four tools print four shapes, so this is the tool's own words and never a shape this script imposed."
+        },
+        "file": {
+          "type": "string",
+          "description": "The file the line named, when the line named one. Empty otherwise."
+        },
+        "criterion": {
+          "type": "string",
+          "description": "The criterion whose frozen tests cover that file, when one does. Empty otherwise, and a survivor with no criterion is still recorded: the reviewer reads the list, and a survivor nobody can attach is a fact rather than a finding."
+        }
+      }
+    },
+    "catalogNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seen", "where"],
+      "properties": {
+        "seen": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What was seen, in one line."
+        },
+        "where": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where it was seen: a recipe path and its row, a guide path, or the check that noticed."
+        }
+      }
+    }
+  }
+}
