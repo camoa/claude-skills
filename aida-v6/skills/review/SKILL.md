@@ -144,13 +144,23 @@ One number never means two things, and these keep the meanings implementation ga
 
 | Code | What it says |
 |---|---|
-| 3 | the project or task folder could not be resolved |
+| 1 | the given path holds no `task.json`, so it is not a task folder |
+| 3 | the script could not do its job: a missing argument, a tool not on PATH, a folder or a record it could not resolve or read, or a head that is not where the range ends |
+| 5 | the recorded code path exists and is not a git repository |
+| 14 | the project's own `project.json` exists and is not valid JSON |
+| 15 | the recorded code path does not exist on disk |
 | 51 | the code path moved, or went dirty, since `checks` ran |
+| 52 | the findings file could not be read as a findings file |
 | 61 | the code repository's tree is dirty |
 | 62 | a step ran out of order, and what it depends on recorded nothing |
 | 63 | the previous record could not be archived, so the write was refused |
 | 66 | implementation has not finished, so there is no `finished.json` |
+| 70 | a person's answer was passed on a run with nobody present |
 | 72 | two frameworks each command one tool |
 | 77 | the project records no framework |
+
+Eight of these are review's own. The other six arrive with the library both stages source, and each
+keeps the meaning implementation gave it. Code 70 is the one an autonomous run meets in ordinary use,
+the first time a `--walked` or a `--row` is passed.
 
 Read a refusal and act on it. Do not repeat the same call unchanged.
