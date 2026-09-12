@@ -268,8 +268,8 @@ Once every criterion has a drafted owner, run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh check "<task_folder>"
 ```
 This reads every work order's JSON and writes its report to `<task_folder>/design-check.json`.
-It prints `status:`, the report's line count, `report:` with the path, and, when the status is not
-zero, one `open:` line naming what is open. The report holds:
+It prints `status:`, the report's line count and `report:` with the path. When the status is not
+zero it adds one `open:` line naming what is open. The report holds:
 
 - a work order file with a missing, empty or malformed required field;
 - every criterion with no work order serving it, and every criterion owned by zero or by more
