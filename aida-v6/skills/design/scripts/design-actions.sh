@@ -382,6 +382,7 @@ do_start() {
   [ "$(contract_ok)" = "true" ] \
     || die2 "start: $ALIGNMENT_FILE not found, unreadable, or not a contract. Run the scope skill on this task first"
 
+  mark_task_in_progress "$TASK_PATH" "design started"
   mkdir -p "$DESIGN_DIR" || die3 "start: could not create $DESIGN_DIR"
 
   echo "STARTED: $DESIGN_DIR"

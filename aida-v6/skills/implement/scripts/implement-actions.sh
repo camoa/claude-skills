@@ -115,6 +115,9 @@
 #                                                        the two stages read one parser and one
 #                                                        resolver. Nothing in this file carries a
 #                                                        second copy.
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh   sourced, for resolve_task_folder,
+#                                                        write_atomic and mark_task_in_progress,
+#                                                        the same ones every other stage reads.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/records-hash.sh   sourced. Its records_hash_for is the only
 #                                                        place this script computes a hash over a
 #                                                        contract and its work orders, the same
@@ -453,6 +456,7 @@ CHECK_DESIGN_SCRIPT="${PLUGIN_ROOT}/scripts/check-design.sh"
 STEPS_DIR="${PLUGIN_ROOT}/skills/implement/references"
 RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
+TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 
 command -v jq >/dev/null 2>&1 || { printf 'implement-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
@@ -460,6 +464,14 @@ die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
 # One refusal function, one exit code as its first argument. The exit-code table above is the
 # only place a number gets a meaning, and nothing here mints one that table does not carry.
 
+# task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
+die1() { die 1 "$1"; }
+die3() { die 3 "$1"; }
+
+# The task-folder resolver, the atomic write and the task start, shared with every other stage.
+[ -f "$TASK_HELPERS_LIB" ] || die 3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die 3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
 [ -f "$RECORDS_HASH_LIB" ] || die 3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -546,30 +558,6 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh dispatch-close <task_folder>
        implement-actions.sh step <name>
 EOF
-}
-
-# ------------------------------------------------------------------------------------------------
-# Small helpers, ported from research-actions.sh and design-actions.sh, which state the reasoning
-# for each in their own headers.
-# ------------------------------------------------------------------------------------------------
-
-resolve_task_folder() {
-  local arg="$1" who="$2" p
-  [ -n "$arg" ] || die 3 "$who: a task folder is required"
-  p="$(cd "$arg" 2>/dev/null && pwd -P)" || die 1 "$who: task folder not found: $arg"
-  [ -f "$p/task.json" ] || die 1 "$who: $p has no task.json; this is not a task folder"
-  printf '%s' "$p"
-}
-
-# The temporary file is created beside the target, in the same directory, so mv is a rename
-# within one filesystem and a failure partway never leaves a half-written file at $target.
-write_atomic() {
-  local target="$1" content="$2" dir tmp
-  dir="$(dirname -- "$target")"
-  tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
-    || die 3 "could not create a temporary file in $dir"
-  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die 3 "could not write $tmp"; }
-  mv -f "$tmp" "$target" || { rm -f "$tmp"; die 3 "could not write $target"; }
 }
 
 # The one definition of how a halt reason is written, as a jq function every caller prepends to its
@@ -1311,6 +1299,7 @@ do_start() {
     [ ! -e "$SNAPSHOT_FILE" ] \
       || die 3 "start: $SNAPSHOT_FILE appeared between this script's own presence check and its own write. Another start call on this task finished first and won that race; this call lost it normally. Re-run read to see what the winner produced."
 
+    mark_task_in_progress "$TASK_PATH" "implementation started"
     mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
 
     local taken_at snapshot_json

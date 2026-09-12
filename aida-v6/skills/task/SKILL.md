@@ -77,9 +77,10 @@ some remain, is `/next`'s job, not built yet.
 
 ## `start <task-id>`
 
-A task becomes in progress the moment a stage first writes an artifact into it. A stage's own
-skill calls this for the task it is about to write to; it is not usually a person typing a
-command. Run:
+A task becomes in progress the moment a stage first writes an artifact into it. Each stage's own
+script calls this once, before its first write: scope `init`, research `start`, design `start`,
+implement `start` and review `checks`. It skips the call when the task is already in progress. So
+it is not usually a person typing a command. By hand, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   start --project "<projectPath>" "<task-id>" -- <why...>

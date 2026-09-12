@@ -1079,6 +1079,7 @@ RW_FRAMEWORKS
     || die 3 "checks: $RV_CODEPATH is at $head_now, and the range in $FINISHED_FILE ends at $head_end. Checks 5 to 8 run over the files on disk, so a tree that is not the final commit would answer about different code than the diff describes. Check that commit out, or run the implement skill's finish step again."
   RW_RANGE="$range"; RW_BASE="$base"; RW_HEAD="$head_now"
 
+  mark_task_in_progress "$TASK_PATH" "review started"
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
   git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null \
     || die 3 "checks: could not write the diff for $range to $DIFF_FILE"

@@ -61,13 +61,14 @@
 # target, so a write that fails partway never leaves a half-written alignment.json or task.json
 # behind.
 #
-# This script commits nothing to git. task-actions.sh commits on create, start, complete and
-# split because each is a discrete stage-boundary event. Scope's own set-goal, add, add-non-goal,
-# update, remove, set-mechanism and record-decision are mid-conversation edits inside one still-
-# open contract, closer to a document being drafted than to a stage finishing. Where the whole
-# contract is frozen, ready to be committed as a stage boundary (foundations.md, History: "AIDA
-# commits at stage boundaries"), is not decided here; that decision, and which caller makes the
-# commit, is left to the skill body, not built by this script.
+# This script commits nothing to git of its own. task-actions.sh commits on create, start,
+# complete and split because each is a discrete stage-boundary event. `init` here is the task's
+# first write, so it calls that start through mark_task_in_progress. Scope's own set-goal, add,
+# add-non-goal, update, remove, set-mechanism and record-decision are mid-conversation edits
+# inside one still-open contract, closer to a document being drafted than to a stage finishing.
+# Where the whole contract is frozen, ready to be committed as a stage boundary (foundations.md,
+# History: "AIDA commits at stage boundaries"), is not decided here; that decision, and which
+# caller makes the commit, is left to the skill body, not built by this script.
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet.
@@ -265,6 +266,9 @@ do_init() {
 
   [ ! -e "$ALIGNMENT_FILE" ] \
     || die3 "init: $ALIGNMENT_FILE already exists. This task already has a scope contract; use the other actions to change it"
+
+  # The first write into this task, so the task itself moves to in_progress here.
+  mark_task_in_progress "$TASK_PATH" "scope wrote its contract"
 
   local empty
   empty="$(jq -n '{schemaVersion: 1, goal: "", expectedResult: "", criteria: [], nonGoals: [],
