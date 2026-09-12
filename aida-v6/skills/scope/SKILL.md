@@ -48,9 +48,13 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh read "<task_folder>"
 ```
-This says whether `alignment.json` already exists. It does, on an update: read it, so the
-conversation below reflects what is already recorded instead of re-asking for it. It does not, on
-a first run: nothing is drafted yet.
+This prints `contract:` present or absent, and, when present, `contract-file:` with the path,
+the criterion and non-goal ids, and whether the goal is set. Present means an update: read the
+file at that path, so the conversation below reflects what is already recorded instead of
+re-asking for it. Absent means a first run: nothing is drafted yet.
+
+Every write below prints the same summary lines and never the contract's text. Read the file when
+a criterion's own words are needed.
 
 On a first run only, also read `task.md` directly. A task split by the task skill carries its
 handed-down criteria there, as plain prose with no id, no verify clause and no author. That prose
@@ -204,7 +208,8 @@ summary:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   render "<task_folder>"
 ```
-Show the whole rendered file. Ask for a plain yes or no on that text, not on a recap of it.
+This prints `rendered:` with the file's path. Show the whole rendered file. Ask for a plain yes
+or no on that text, not on a recap of it.
 
 No: say what still needs to change, go back to the relevant step above, then render and ask again.
 

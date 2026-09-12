@@ -7,6 +7,10 @@
 # alignment.json, mints ids, and renders alignment.md by calling alignment-render.sh. Deciding
 # whether a criterion is approved belongs to whoever calls this, never to this script.
 #
+# What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
+# summary lines and the path it wrote, and never the contract or a criterion's text. The caller
+# reads alignment.json from the printed path when it needs the text.
+#
 # Usage:
 #   scope-actions.sh [--run-mode <interactive|autonomous>] read           <task_folder>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] init           <task_folder>
@@ -213,17 +217,31 @@ id_kind() {
   if [ "$prefix" = "c" ]; then printf 'criterion'; else printf 'nongoal'; fi
 }
 
+# The one summary printer: the contract's path, whether the goal is set, the ids in each space,
+# and how many decisions an unattended run recorded. Never a text field.
+contract_summary() {
+  echo "contract-file: $ALIGNMENT_FILE"
+  jq -r '
+    "goal-set: " + (if (.goal // "") == "" then "no" else "yes" end),
+    "expected-result-set: " + (if (.expectedResult // "") == "" then "no" else "yes" end),
+    "criteria: " + ([(.criteria // [])[] | .id] | join(" ")),
+    "non-goals: " + ([(.nonGoals // [])[] | .id] | join(" ")),
+    "decided-without-a-person: " + ((.decidedWithoutAPerson // []) | length | tostring)' \
+    "$ALIGNMENT_FILE"
+}
+
 # ------------------------------------------------------------------------------------------------
-# read: the contract as JSON, or an honest empty state. Never a script failure just because a
-# task has not run scope yet.
+# read: summary lines, or an honest empty state. Never a script failure just because a task has
+# not run scope yet. The skill routes on `contract:` and reads the file when it is present.
 # ------------------------------------------------------------------------------------------------
 
 do_read() {
   [ "$#" -eq 0 ] || die3 "read: unrecognized argument: $1"
 
+  echo "action: read"
+  echo "task: $TASK_PATH"
   if [ ! -f "$ALIGNMENT_FILE" ]; then
-    jq -n --arg taskPath "$TASK_PATH" \
-      '{exists: false, taskPath: $taskPath, message: "no scope contract yet"}'
+    echo "contract: absent"
     exit 0
   fi
   [ -r "$ALIGNMENT_FILE" ] \
@@ -231,7 +249,8 @@ do_read() {
   jq empty "$ALIGNMENT_FILE" 2>/dev/null \
     || die3 "read: $ALIGNMENT_FILE exists but is not valid JSON (malformed, not the same fact as missing or unreadable)"
 
-  cat "$ALIGNMENT_FILE"
+  echo "contract: present"
+  contract_summary
   exit 0
 }
 
@@ -253,7 +272,7 @@ do_init() {
   write_atomic "$ALIGNMENT_FILE" "$empty"
 
   echo "INITIALIZED: $ALIGNMENT_FILE"
-  cat "$ALIGNMENT_FILE"
+  contract_summary
   exit 0
 }
 
@@ -291,7 +310,7 @@ do_set_goal() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "GOAL SET"
-  cat "$ALIGNMENT_FILE"
+  contract_summary
   exit 0
 }
 
@@ -358,7 +377,9 @@ do_add() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "ADDED: $id"
-  jq --arg id "$id" '(.criteria[] | select(.id == $id))' "$ALIGNMENT_FILE"
+  echo "verifiedBy: $verified_by"
+  echo "author: $author"
+  contract_summary
   exit 0
 }
 
@@ -396,7 +417,7 @@ do_add_non_goal() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "ADDED: $id"
-  jq --arg id "$id" '(.nonGoals[] | select(.id == $id))' "$ALIGNMENT_FILE"
+  contract_summary
   exit 0
 }
 
@@ -491,7 +512,13 @@ do_update() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "UPDATED: $id"
-  jq --arg arr "$arrfield" --arg id "$id" '(.[$arr][] | select(.id == $id))' "$ALIGNMENT_FILE"
+  local fields_set=""
+  [ "$set_text" -eq 0 ] || fields_set="$fields_set text"
+  [ "$set_verification" -eq 0 ] || fields_set="$fields_set verification"
+  [ "$set_verified_by" -eq 0 ] || fields_set="$fields_set verifiedBy"
+  [ "$set_author" -eq 0 ] || fields_set="$fields_set author"
+  echo "fields-set:${fields_set}"
+  contract_summary
   exit 0
 }
 
@@ -534,12 +561,13 @@ do_remove() {
 
   echo "REMOVED: $id"
   echo "This id is retired. It is never minted again for this task."
+  contract_summary
   exit 0
 }
 
 # ------------------------------------------------------------------------------------------------
-# render: calls alignment-render.sh. Its own stdout and stderr pass straight through, so its
-# message is never duplicated here.
+# render: calls alignment-render.sh. Its stderr passes straight through. Its stdout is one line
+# naming the file it wrote, and this prints that path as a `rendered:` line instead.
 # ------------------------------------------------------------------------------------------------
 
 do_render() {
@@ -548,9 +576,10 @@ do_render() {
   [ -f "$ALIGNMENT_RENDER_SCRIPT" ] \
     || die3 "render: cannot find alignment-render.sh at $ALIGNMENT_RENDER_SCRIPT"
 
-  bash "$ALIGNMENT_RENDER_SCRIPT" "$TASK_PATH"
+  bash "$ALIGNMENT_RENDER_SCRIPT" "$TASK_PATH" >/dev/null
   local rc=$?
   [ "$rc" -eq 0 ] || exit 4
+  echo "rendered: $TASK_PATH/alignment.md"
   exit 0
 }
 
@@ -561,7 +590,8 @@ do_render() {
 # ------------------------------------------------------------------------------------------------
 
 do_set_mechanism() {
-  local approach="" status=""
+  # The status is held in hint_status: `status` is a read-only variable in zsh.
+  local approach="" hint_status=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --approach)
@@ -569,14 +599,14 @@ do_set_mechanism() {
         approach="$2"; shift 2 ;;
       --status)
         need_value "set-mechanism" "--status" "$#" "${2:-}"
-        status="$2"; shift 2 ;;
+        hint_status="$2"; shift 2 ;;
       *) die3 "set-mechanism: unrecognized argument: $1" ;;
     esac
   done
   is_blank "$approach" && die3 "set-mechanism: --approach is required and must not be blank"
-  case "$status" in
+  case "$hint_status" in
     suggested|required) : ;;
-    *) die3 "set-mechanism: --status must be suggested or required, got '${status:-<nothing>}'" ;;
+    *) die3 "set-mechanism: --status must be suggested or required, got '${hint_status:-<nothing>}'" ;;
   esac
 
   [ -r "$TASK_FILE" ] \
@@ -585,13 +615,15 @@ do_set_mechanism() {
     || die3 "set-mechanism: $TASK_FILE exists but is not valid JSON (malformed, not the same fact as missing or unreadable)"
 
   local updated
-  updated="$(jq --arg approach "$approach" --arg status "$status" \
+  updated="$(jq --arg approach "$approach" --arg status "$hint_status" \
       '.mechanismHints = ((.mechanismHints // []) + [{approach: $approach, status: $status}])' \
       "$TASK_FILE")" || die3 "set-mechanism: could not update $TASK_FILE"
   write_atomic "$TASK_FILE" "$updated"
 
   echo "MECHANISM RECORDED"
-  jq '.mechanismHints' "$TASK_FILE"
+  echo "task-file: $TASK_FILE"
+  echo "status: $hint_status"
+  echo "mechanismHints: $(jq -r '.mechanismHints | length' "$TASK_FILE")"
   exit 0
 }
 
@@ -621,7 +653,7 @@ do_record_decision() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "DECISION RECORDED"
-  jq '.decidedWithoutAPerson' "$ALIGNMENT_FILE"
+  contract_summary
   exit 0
 }
 
