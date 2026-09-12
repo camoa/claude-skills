@@ -22,8 +22,10 @@ On success it writes `implementation/finished.json`: the commit range this stage
 order's own range and rounds used. It also records each criterion's row state and who judged it.
 The checklists for the criteria a person verifies are copied in too, from the frozen test records.
 The review stage reads this one file rather than one per order. It records the findings ruled
-deferred with their reasons, and how many rows a model judged rather than a person. It prints the
-record on standard output and the file path on standard error.
+deferred with their reasons, and how many rows a model judged rather than a person. It prints
+summary lines and the record's path, never the record. The lines carry the commit range and one line
+per order. They carry the criteria by row state, the checklist count, the deferred findings by id,
+and the model-judged count.
 
 **Finish ends implementation only.** It never touches `task.json`. The task goes to the review
 stage next, which reads `finished.json`; completion, not this step, is what confirms the criteria a

@@ -32,35 +32,44 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh read "<task_folder>"
 ```
-This reports the contract's state, whether design has started and how many work order files it
-left, the task's project and its code repository, the repository's current branch and its trunk
-branch when derivable, the task's own run mode, whether a snapshot, a ledger and a preconditions
-record already exist, and each order's last step and halt reason from the ledger.
+This prints summary lines, one `key: value` each:
+
+- the contract's state, and whether design has started and how many work order files it left;
+- the task's project, its code repository, the current branch, and the trunk branch when derivable;
+- the task's own run mode;
+- the snapshot's path and hash, the ledger's path, and whether a preconditions record and a
+  finished record exist;
+- one `order(...)` line per work order: its last step, its halt reason, its counters and its review
+  state;
+- the criteria counted by row state;
+- a `next:` line naming the step the table below would choose.
 
 No contract, or design has not started: say so in one line and name the missing stage. Stop.
 
 ## Which step, and where its instructions are
 
-The report from `read` says where this task is. Match it to one step, open that step's own file,
-and follow it. Each file holds everything for its step and nothing for another, so only the step
-being run is in this conversation.
+The `next:` line from `read` names the step. It is derived from the ledger the way this table
+reads it. Match it to one step, open that step's own file, and follow it. Each file holds everything for its
+step and nothing for another, so only the step being run is in this conversation. The table is the
+derivation, kept here so a person can check the line against the state the other lines report.
 
-| The report says | The step | Step name |
+| The summary says | The step | Step name |
 |---|---|---|
-| No snapshot, or a snapshot with no ledger | Start the build | `start` |
-| A ledger, and `preconditions.exists` is false | Check the preconditions | `preconditions` |
-| Preconditions recorded, and a ready order whose last step is null | Write the tests for one work order | `tests` |
-| An order whose last step is `tests-frozen`, or `code-written` with attempts remaining and no halt reason | Write the code for one work order | `build` |
-| An order at `checks-passed` | Review the order | `review` |
-| An order `reviewed` or `fixed`, with an open actionable finding and a fix round left | Fix, then verify | `review` |
-| An order `reviewed` or `fixed`, with nothing open | Close the order | `review` |
-| An order `closed` | Nothing left to do on it. Take the next ready order | |
-| Every order closed, no `finished` record | Finish the task | `finish` |
-| An order whose `haltedBecause` holds a `design drift...` segment, anywhere in it | Offer the restart | `finish` |
-| An order whose `haltedBecause` holds an `attempts spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
+| `snapshot: none`, or a snapshot with `ledger: none` | Start the build | `start` |
+| A ledger, `preconditions: none`, and an order that could move | Check the preconditions | `preconditions` |
+| Preconditions recorded, and an `order(...)` line reading `not started` whose dependencies are all `closed` | Write the tests for one work order | `tests` |
+| An `order(...)` line at `tests-frozen`, or `code-written` with attempts remaining and `halt: none` | Write the code for one work order | `build` |
+| An `order(...)` line at `checks-passed` | Review the order | `review` |
+| An `order(...)` line at `reviewed` or `fixed`, with `review: open=` above zero and a fix round left | Fix, then verify | `review` |
+| An `order(...)` line at `reviewed` or `fixed`, with `review: open=0` | Close the order | `review` |
+| An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
+| Every order `closed`, `finished: none` | Finish the task | `finish` |
+| An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart | `finish` |
+| An `order(...)` line whose halt holds an `attempts spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 
-A resumed run starts at `start` regardless, because that is where drift since the snapshot is
-checked, and it says which orders halted. Then the table applies.
+An order in flight comes before a new one, and a halted order is named only when nothing else can
+move. A resumed run starts at `start` regardless, because that is where drift since the snapshot is
+checked, and it says which orders halted. Its own `next:` line then applies.
 
 ## One order halting does not stop the run
 
@@ -88,10 +97,20 @@ expand `${CLAUDE_PLUGIN_ROOT}`, which is why this skill grants only the one Bash
 `step` every time this table sends you to a file, even a file already read this turn. A step run
 from memory of an earlier invocation is a step run against rules that may have changed.
 
-## Four rules every step repeats
+## Five rules every step repeats
 
 These hold for every step below, and each step file names them rather than restating them. This
 file is always loaded; a step file is loaded only while its own step runs.
+
+**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
+`key: value` lines and a path, and each record action ends with `next:`. Never read a record, a
+brief, a diff, a tool output or a finding's evidence into this conversation, and never paste one
+back. Name the path the script printed, and say the person can open it in an editor. Each brief
+action writes its brief to a file and prints the path; the dispatch prompt names that path and
+carries no brief content. **Only the dispatched role reads bodies**, and it opens them itself, from
+the paths its brief names. The one exception is text a person must read to answer: a checklist row
+at `tests-freeze`, or a question a step asks. A body pasted here costs the build the context its own
+steps need.
 
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
 every tool and this session's own model, and the dispatch record just opened then matches nothing:

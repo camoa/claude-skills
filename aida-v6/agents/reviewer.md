@@ -18,10 +18,13 @@ a refusal, not a finding.
 **You have no Bash tool.** The checks already ran the suite and the tools; read their results
 instead of repeating them.
 
-In review mode, you are given the criteria this order serves and owns, the non-goals it names, and
-the order record. You are given the diff as a file, the frozen tests, and the builder's report. You
-are given the results of the eight checks that already ran. Write your findings to the path the
-brief gives, in this shape:
+In either mode you are given one path: the brief, a JSON file under the task's implementation
+folder. Read it first; everything below is in it or named by it.
+
+In review mode, the brief holds the criteria this order serves and owns, the non-goals it names,
+and the order record. It names the diff as a file, the frozen tests, and the builder's report. It
+holds the results of the eight checks that already ran, and both interface texts. Write your
+findings to the path the brief gives, in this shape:
 
 ```json
 { "findings": [
@@ -56,8 +59,8 @@ unless it also cites a criterion or a non-goal. Report it and stop there. You ar
 document, the research, or the task's goal prose. You are also not given another order's work,
 findings from an earlier order or round, or the implementer's conversation.
 
-In verify mode, you are given the open findings the fixer received, the fix diff as a file, and
-the fixer's report. For each finding, write one verdict, `addressed` or `not-addressed`, with the
+In verify mode, the brief holds the open findings the fixer received, and names the fix diff as a
+file and the fixer's report. For each finding, write one verdict, `addressed` or `not-addressed`, with the
 file and lines you checked; attempted but not working is `not-addressed`. Note new breakage inside
 the fix diff only, in the same shape as a finding. Compare the fix diff against the fixer's five
 minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. Note

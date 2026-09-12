@@ -39,12 +39,18 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and never the live files, and it emits exactly four things: this order's
-own record, the criteria it serves and owns with their verification and who verifies each, the
-boundaries it names, and the declared interface of every order it depends on.
+It reads the frozen copy and never the live files. It writes exactly four things to
+`implementation/brief-<order id>-tests.json`:
 
-That list is the withheld list, decided once rather than at each dispatch. Pass what it emits and
-nothing else. Adding an input here is a change to the role, not a judgement made in the moment.
+- this order's own record;
+- the criteria it serves and owns, with their verification and who verifies each;
+- the boundaries it names;
+- the declared interface of every order it depends on.
+
+It prints the brief's path and counts, never the brief.
+
+That list is the withheld list, decided once rather than at each dispatch. Pass the brief's path
+and nothing else. Adding an input here is a change to the role, not a judgement made in the moment.
 
 An interface record is prose a builder wrote about its own code. It is not the code, and that is
 the line.
@@ -86,10 +92,11 @@ step earlier. A hook refuses the read while the dispatch record is open.
 frozen. The top tier where the run is unattended, because then nobody reads them and the whole
 build is measured against work nothing checked first.
 
-Give it the **path** to the test-authoring recipe for its framework, what `tests-brief` emitted,
-and nothing else. It opens the recipe itself. Do not read the body here and paste it in: the recipe
-runs to well over a hundred lines per framework, and reading it into this conversation is the cost
-the dispatch exists to avoid. Resolving which recipe is this step's job; reading it is the role's.
+Give it the **path** to the test-authoring recipe for its framework, the **path** of the brief
+`tests-brief` wrote, and nothing else. It opens both itself. Do not read either body here and paste
+it in. The recipe runs to well over a hundred lines per framework, and reading it into this
+conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
+reading it is the role's.
 
 Ask it to return, for each test, the path, the name, and the criterion the name carries. For each
 test, it writes what the run printed when the test failed to its own file, under the task folder's

@@ -28,12 +28,19 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests, and it emits six things: this order's own record
-with the files it owns, the frozen tests for it with the criterion each carries, every order it
-depends on with its declared interface, how many attempts this order has used of the count it is
-allowed, and `headNow`, the code repository's own commit at the moment of this call. That count is
-two unless a person has granted this order one more; see `references/finish.md`. It is the order's
-own recorded allowance, never the constant alone.
+It reads the frozen copy and the frozen tests. It writes six things to
+`implementation/brief-<order id>-build.json`:
+
+- this order's own record, with the files it owns;
+- the frozen tests for it, with the criterion each carries;
+- every order it depends on, with its declared interface;
+- this attempt's report path;
+- how many attempts this order has used of the count it is allowed;
+- `headNow`, the code repository's own commit at the moment of this call.
+
+It prints the brief's path, the report path, `headNow`, the attempt count and counts, never the
+brief. The allowed count is two unless a person has granted this order one more; see
+`references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
 **A dependency that has closed carries a second text beside the declared one, `interfaceRecord`:**
 what its own builder actually wrote about what it exposes. When it exists, it is what this unit's
@@ -43,7 +50,7 @@ forward and none of them did; `build-brief` is what actually forwards it now.
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
 
-That list is the withheld list. Pass what it emits and nothing else.
+That list is the withheld list. Pass the brief's path and nothing else.
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -59,9 +66,9 @@ write.
 
 **Then dispatch `implementer`.** Name the role, per SKILL.md.
 
-Give it the path to the `implement` recipe for its framework, what `build-brief` emitted, and
-nothing else. `reportPath` in that output is where it writes its five answers, and it writes that
-file before it edits anything under the code path.
+Give it the path to the `implement` recipe for its framework, the path of the brief `build-brief`
+wrote, and nothing else. `reportPath` in the brief is where it writes its five answers, and it
+writes that file before it edits anything under the code path.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
 there.
@@ -142,8 +149,10 @@ This step runs all eight deciding checks. The record holds every one.
   interface names in backticks.
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
-attempts as its own allowed count says, two unless a person has granted more. Say which check
-failed and what it printed, and let the person decide whether to spend the next one.
+attempts as its own allowed count says, two unless a person has granted more. The summary prints
+one line per check with its verdict and a one-line reason. Say which check failed, name the record
+path that holds what the tool printed, and let the person decide whether to spend the next one. Do
+not read the record here.
 
 An unknown on interface-record does not spend the attempt. The declaration named no backticked
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
@@ -155,9 +164,9 @@ may not. It is the one check that says this order's own code does what its tests
 unknown there means nothing here ran, so the order stays at `code-written`, whatever the other
 seven answered.
 
-The record carries `executed`, how many of the eight actually ran a command, a diff or a hash
-rather than reading undeclared. Say that count to the person: eight checks answering does not by
-itself say the code was tested.
+The summary's `executed:` line says how many of the eight actually ran a command, a diff or a
+hash rather than reading undeclared. Say that count to the person: eight checks answering does not
+by itself say the code was tested.
 
 The attempt counter lives in the ledger and is incremented here, and the order's state moves with
 it: `checks-passed` when every check but order-tests answered met or undeclared (interface-record's

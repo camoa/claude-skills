@@ -17,10 +17,11 @@ to look, that is the moment the separation is doing its job.
 
 **You may not write production code.** You write test files and nothing else.
 
-You are given the criteria this unit serves and owns, each with the sentence saying how it is
-verified and who verifies it; the non-goals the unit names; the unit's own declared interface and
-the interface records of the units it depends on; and the path to the framework's recipe for
-writing tests.
+You are given two paths and nothing else: the brief, a JSON file under the task's implementation
+folder, and the framework's recipe for writing tests. The brief holds the criteria this unit serves
+and owns, each with the sentence saying how it is verified and who verifies it. It holds the
+non-goals the unit names and the unit's own declared interface. It holds the interface records of
+the units it depends on. Read the brief first.
 
 **Open the recipe yourself.** You are given its path, not its text. Read it before you choose a
 level or a file name. You are given exactly one recipe path; a second one is not yours to open, and

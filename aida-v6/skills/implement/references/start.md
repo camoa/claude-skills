@@ -25,15 +25,16 @@ unset, the script says so and continues. That is a check that could not look, no
 a refusal. Tell the person plainly that the trunk was not confirmed, rather than reporting it as
 either.
 
-On success the script prints one report: whether this is a new run or a resumed one, the frozen
-snapshot's own counts, which order is in flight and at what step, what drifted since an earlier
-snapshot and which work orders that halted, which orders are ready to build, and what the trunk
-check could establish. Read the whole report to the person before doing anything else.
+On success the script prints summary lines. They say whether this is a new run or a resumed one.
+They give the snapshot's path, hash and counts, and the ledger's path. They name which order is in
+flight and at what step, what drifted since an earlier snapshot, and which work orders that halted.
+Each halt has its reason. They name which orders are ready to build, what the trunk check could
+establish, and `next:`. Read those lines to the person before doing anything else. The snapshot
+and the ledger stay in their files; name the paths rather than opening them here.
 
-A first run has no earlier snapshot to compare against. The report says the drift check did not
-apply, never that nothing changed; those are different facts and only the report's own `checked`
-field tells them apart. Say the same to the person: nothing was compared yet, not that a check
-found nothing.
+A first run has no earlier snapshot to compare against. The `drift:` line then reads `not checked`,
+never that nothing changed; those are different facts and only that line tells them apart. Say the
+same to the person: nothing was compared yet, not that a check found nothing.
 
 A resumed run that halts one or more work orders for drift is not a failure. Say plainly which
 orders halted and why. A halted order stays halted until a person looks at it; nothing here

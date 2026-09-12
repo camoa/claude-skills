@@ -53,7 +53,10 @@ answer met before an order reaches `checks-passed`. This is the one place `undec
 continue: continuing would mean no project on that framework ever builds.
 
 The script reads each recipe's declared conditions, runs each check inside the code repository,
-and writes what it found. It never hands a check to a shell.
+and writes what it found. It never hands a check to a shell. It prints the verdict and one line per
+framework, naming what answered unmet or unknown and who owns it. It prints the baseline's state,
+and the paths of the record and the baseline. What a check or the smoke command printed is in the
+record; name the path rather than reading it here.
 
 ## Supply a value where a command needs one
 
