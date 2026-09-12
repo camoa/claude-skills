@@ -92,17 +92,21 @@ the one thing to repair now, before the stage writes anything.
 
 ## `complete <task-id>`
 
-Finishes the work. Completing writes a summary and commits; nothing moves on disk.
+Writes `state: complete`. This action is the one writer of that state, and the completion skill
+calls it last. A person runs the completion skill, not this action: completion reads the review
+verdict, records on what grounds the task closed, and writes the pull request body. This action
+records none of that, so a task closed here has a state and no grounds.
 
-Ask for a short summary of what was done, in one or two lines, unless it is already obvious from
-the conversation. Autonomous: use what was already said, or record it as
-`(autonomous run, no summary given)`, and continue; the script refuses an empty one outright. Run:
+The completion skill passes the summary the person gave, after `--`. The script refuses an empty
+one outright. By hand, the call is:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   complete --project "<projectPath>" "<task-id>" -- <summary...>
 ```
 It sets the state to `complete`, appends a dated `## Completed` section holding the summary to
-`task.md`, and commits both together. Already complete: prints `UNCHANGED`. Show the whole output.
+`task.md`, and commits everything under `tasks/` together. That commit carries the completion
+record and the body when completion called it. Already complete: prints `UNCHANGED`. Show the
+whole output.
 
 ## `split <parent-task-id>`
 
