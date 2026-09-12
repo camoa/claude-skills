@@ -28,7 +28,8 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh surfaces "<task_folder>"
 ```
 It runs every row the surface block declares, and it records checks 13 to 15 and one row per
-registered surface, with the verdict and whether it ran.
+registered surface, with the verdict and whether it ran. It prints one summary line per surface. A
+harness's own output stays in the record, per SKILL.md.
 
 **Zero tests ran is never a pass.** A run that selected nothing reads unknown. A registry surface
 with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform.

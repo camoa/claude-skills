@@ -46,7 +46,9 @@ that each command one tool refuse at exit 72, rather than give the script two an
 script never guesses one and never reads a default out of a recipe's prose.
 
 On success it writes `review/diff.patch`, one row per tool the recipes declared, the mutation row,
-and checks 3 to 8 into `review/review.json`.
+and checks 3 to 8 into `review/review.json`. It prints one summary line per check, with the verdict
+and the framework, and the two paths. A tool's own output stays in the record. Name a path when the
+person wants more, and say they can open it in an editor.
 
 ## How to read what it recorded
 

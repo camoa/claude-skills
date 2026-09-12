@@ -40,8 +40,8 @@ Run:
 This reports whether `implementation/finished.json` exists, and the commit range and the final commit
 it records. It reports how many criteria a machine verifies and how many a person does, the task's
 run mode from the ledger, and the project's frameworks. It reports whether end to end and visual
-regression are on, and whether a registry is recorded. Last, it says how far an existing review
-record got.
+regression are on, and whether a registry is recorded. It says how far an existing review record got.
+Last, it prints the checklist rows whole, because a person has to read those words to answer them.
 
 No `finished.json`: say so in one line, name the implementation skill's finish step, and stop. Exit
 66 says the same thing when a later action is run first.
@@ -74,10 +74,16 @@ This prints `references/<step name>.md`. A `Read` rule naming that folder does n
 time this table sends you to a file, even one already read this turn. A step run from memory of an
 earlier invocation is a step run against rules that may have changed.
 
-## Three rules every step repeats
+## Four rules every step repeats
 
 These hold for every step, and each step file names them rather than restating them. This file stays
 loaded; a step file is loaded only while its own step runs.
+
+**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
+`key: value` lines and a path. Never read a record, a diff, a tool output or a research finding into
+this conversation, and never paste one back. Name the path the script printed, and say the person can
+open it in an editor. **Only the dispatched reviewer reads bodies**, and it opens them itself, from
+the paths its brief names. A body pasted here costs the review the context its own steps need.
 
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
 every tool and this session's own model. Review opens no dispatch record, so the role's own

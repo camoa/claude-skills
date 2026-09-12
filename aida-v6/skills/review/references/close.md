@@ -32,7 +32,8 @@ refuses at exit 63 when that move fails. Version 5 ran four review passes on one
 overwriting the last, and pass three found a defect pass four's record does not mention.
 
 It writes check 1, one verdict per criterion, and the review's own verdict into
-`review/review.json`.
+`review/review.json`. It prints the verdict, the rows that decided it, and that path. Give the person
+the path, and say the record holds the evidence for every row, per SKILL.md.
 
 ## The verdict rules
 

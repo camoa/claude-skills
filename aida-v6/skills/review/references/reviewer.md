@@ -12,19 +12,21 @@ Run:
 It refuses at exit 62 when `checks` recorded nothing, because five of the seven lenses read its
 results.
 
-It emits the criteria and the non-goals from the frozen contract, every work order, and the path to
-`review/diff.patch`. It emits the research records and the paths they cite. It emits the results of
-checks 4 to 8, with every tool row and every mutation survivor. Last, it emits the path the findings
-go to, `review/findings.json`.
+It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
+frozen contract, every work order, the path to `review/diff.patch`, the research records and the
+paths they cite, the results of checks 4 to 8 with every tool row and every mutation survivor, and
+the findings implementation ruled deferred.
 
-Pass what it emits and nothing else. Adding an input here is a change to the role, not a judgement
-made in the moment.
+The call prints three things: the brief's own path, the path the findings go to at
+`review/findings.json`, and the counts. Read neither file into this conversation, per SKILL.md.
 
 ## Dispatch the architecture reviewer
 
 **Dispatch `architecture-reviewer`.** Name the role, per SKILL.md. Set the model to opus on the
-Agent call: a critic runs at the top model whatever it judges. Give it the brief, and tell it the
-path its findings file goes to.
+Agent call: a critic runs at the top model whatever it judges. Give it the brief's **path**, and tell
+it to read that file first. Give it the findings path as well. **The prompt carries no brief
+content.** The role opens every body itself, and pasting one here spends this conversation's context
+on what the file already holds.
 
 **One dispatch carries all seven lenses.** Seven dispatches would read the same diff at seven times
 the cost, and a finding does not change because a different context raised it. The lens words are
@@ -62,10 +64,10 @@ Run:
 It refuses at exit 51 when the code path moved, or its tree went dirty, since `checks` ran. A file
 the role left behind is caught there, rather than read as a finding.
 
-It records checks 2, 9 to 12 and 16, and every finding. Each of those checks reads met when its lens
-returned nothing, unmet when that lens returned a finding, and unknown when the findings file is
-absent or unreadable. **An absent verdict is never a clean one**, and version 5 paid for that four
-times.
+It records checks 2, 9 to 12 and 16, and every finding, and it prints one summary line per check with
+the counts. Each of those checks reads met when its lens returned nothing, unmet when that lens
+returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
+never a clean one**, and version 5 paid for that four times.
 
 ## Classify every finding
 
@@ -88,5 +90,6 @@ round cap is not closed. `finished.json` carries each with its reason and the id
 first two cases above apply to it, and this step classifies it again. A deferral is a person saying
 not now, never a person saying this is fine.
 
-Read the findings to the person by lens, with the id each one cites. Name every finding carrying
-`disposition: follow-up` as work nobody has a task for yet.
+Report the findings by lens, with a count and the id each one cites, and name the findings file's own
+path for the person to open. Name every finding carrying `disposition: follow-up` as work nobody has a
+task for yet. Do not read the evidence bodies into this conversation, per SKILL.md.
