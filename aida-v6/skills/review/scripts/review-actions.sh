@@ -19,7 +19,7 @@
 #                                            [--check-recipe <framework>=<path>]...
 #                                            [--lookup-failed <framework>=<reason>]...
 #                                            [--value <name>=<value>]...
-#   review-actions.sh brief    <task_folder>
+#   review-actions.sh brief    <task_folder>          writes <task>/review/brief.json
 #   review-actions.sh findings <task_folder> --findings <path the reviewer wrote>
 #   review-actions.sh surfaces <task_folder> [--walked <surface id>]...
 #                                            [--accept-baseline <surface id>]...
@@ -32,6 +32,12 @@
 # declares needs one of the two, or a `--lookup-failed` saying which way its lookup failed. The
 # three reasons stay apart: no-recipe, listing-unreachable, fetch-failed. Only the first says
 # anything about the framework; the other two mean nobody looked.
+#
+# Every action prints a summary of `key: value` lines and nothing else: no record body, no diff, no
+# command output, no research text. Each line that a person may want in full names the path that holds
+# it, which is <task>/review/review.json for the record, review/diff.patch for the diff and
+# review/brief.json for the reviewer's brief. The one body any action prints is `read`'s checklist
+# rows, because the person answering them has to read them verbatim.
 #
 # `surfaces` takes no recipe flag. It reads the review recipe path `checks` recorded, so the surface
 # block is read from the same file the tool rows came from and review keeps its two lookups.
@@ -170,7 +176,7 @@ EOF
 
 IMPL_DIR=""; REVIEW_DIR=""; RECORD_FILE=""; DIFF_FILE=""
 FINISHED_FILE=""; LEDGER_FILE=""; SNAPSHOT_FILE=""; BASELINE_FILE=""; ALIGNMENT_FILE=""
-FINDINGS_TARGET=""
+FINDINGS_TARGET=""; BRIEF_FILE=""
 
 # $1 the action's own name, $2 the task folder as given. Sets TASK_PATH and every path above.
 rw_paths() {
@@ -183,6 +189,7 @@ rw_paths() {
   RECORD_FILE="$REVIEW_DIR/review.json"
   DIFF_FILE="$REVIEW_DIR/diff.patch"
   FINDINGS_TARGET="$REVIEW_DIR/findings.json"
+  BRIEF_FILE="$REVIEW_DIR/brief.json"
   FINISHED_FILE="$IMPL_DIR/finished.json"
   LEDGER_FILE="$IMPL_DIR/ledger.json"
   SNAPSHOT_FILE="$IMPL_DIR/snapshot.json"
@@ -391,6 +398,41 @@ RW_TEST_FILES
 # ------------------------------------------------------------------------------------------------
 # `read`: what is already there, and nothing written.
 # ------------------------------------------------------------------------------------------------
+
+# What an action prints. A summary, never a body: one `key: value` line at a time, and nothing that
+# came out of a tool, a record, a diff or a research finding. The orchestrator reads this in its own
+# conversation, and a record printed there costs the review the context its own steps need, so every
+# line that a person may want to read in full is named by a path instead.
+#
+# $1 the record, $2 the action. The detail each check carries is this script's own wording, cut to one
+# line, and the record holds the whole of it beside the command's own output.
+rw_print_summary() {
+  local doc="$1" who="$2"
+  printf '%s' "$doc" | jq -r --arg who "$who" --arg record "$RECORD_FILE" '
+    def line($k; $v): "\($k): \($v)";
+    def short: (. // "") | gsub("\n"; " ") | .[0:160];
+    [ line("action"; $who),
+      line("task"; .task),
+      line("range"; .reviewedRange),
+      line("commit"; .reviewedAt),
+      line("runMode"; .runMode) ]
+    + [ (.recipes // [])[] | line("recipe(\(.framework))"; "lookup=\(.lookup) test=\(.testRecipe) check=\(.checkRecipe)") ]
+    + [ (.checks // [])[] | line("check(\(.id))"; "\(.verdict) | \(.detail | short)") ]
+    + [ (.criteria // [])[] | line("criterion(\(.id))"; "\(.verdict) answeredBy=\(.answeredBy)") ]
+    + [ (.surfaces // [])[] | line("surface(\(.id))"; "\(.verdict) walked=\(.walked) ran=\(.ran)") ]
+    + (if has("surfaceSetup") then [ line("surfaceSetup"; .surfaceSetup) ] else [] end)
+    + [ line("mutation"; "\(.mutation.verdict) survivors=\((.mutation.survivors // []) | length) score=\(if (.mutation.score // "") == "" then "none printed" else "in the record" end)") ]
+    + [ (.findings // []) | group_by(.lens)[] | line("lens(\(.[0].lens))"; "\(length) finding(s): \([ .[].id ] | join(", "))") ]
+    + [ (.findings // []) | group_by(.disposition)[] | line("disposition(\(.[0].disposition))"; "\(length): \([ .[].id ] | join(", "))") ]
+    + [ line("catalogNotes"; ((.catalogNotes // []) | length)) ]
+    + (if has("verdict") then
+         [ line("failing"; ([ ((.checks // [])[] | select(.verdict == "unmet" or .verdict == "unknown") | .id),
+                              ((.criteria // [])[] | select(.verdict == "unmet" or .verdict == "unanswered") | .id) ] | join(", "))),
+           line("verdict"; .verdict) ]
+       else [] end)
+    + [ line("record"; $record) ]
+    | .[]'
+}
 
 do_read() {
   [ "$#" -ge 1 ] || die 3 "read: a task folder is required"
@@ -1112,7 +1154,9 @@ RW_FRAMEWORKS
   [ -n "$record_json" ] || die 3 "checks: could not assemble the review record for $RW_TASK_ID."
   rw_write_record "checks" "$record_json"
 
-  printf '%s\n' "$record_json"
+  rw_print_summary "$record_json" "checks"
+  printf 'changedFiles: %s\n' "$RW_CHANGED_COUNT"
+  printf 'diff: %s\n' "$DIFF_FILE"
   echo "CHECKS: the diff for $range is at $DIFF_FILE ($RW_CHANGED_COUNT changed files)." >&2
   if [ "$empty_range" = "yes" ]; then
     echo "CHECKS: the range $range holds no commit. It resolved, and the two ends are the same commit, so this task committed nothing." >&2
@@ -1195,8 +1239,27 @@ RW_SOURCES
      mutation: $record.mutation}')"
   [ -n "$brief_json" ] || die 3 "brief: could not assemble the brief for $RW_TASK_ID."
   mkdir -p "$REVIEW_DIR" || die 3 "brief: could not create $REVIEW_DIR"
-  printf '%s\n' "$brief_json"
-  echo "BRIEF: the reviewer writes its findings to $FINDINGS_TARGET, and nothing else." >&2
+  # The brief is a file the dispatch names, never text printed through this conversation: it carries
+  # the contract, every order and every research finding, and printing it would spend the reviewer's
+  # own context twice over.
+  write_atomic "$BRIEF_FILE" "$brief_json"
+  printf '%s' "$brief_json" | jq -r --arg brief "$BRIEF_FILE" --arg findings "$FINDINGS_TARGET" \
+    --arg diff "$DIFF_FILE" --arg code "$RV_CODEPATH" '
+    def line($k; $v): "\($k): \($v)";
+    [ line("action"; "brief"),
+      line("brief"; $brief),
+      line("findingsPath"; $findings),
+      line("diff"; $diff),
+      line("codePath"; $code),
+      line("criteria"; (.criteria | length)),
+      line("nonGoals"; (.nonGoals | length)),
+      line("workOrders"; (.workOrders | length)),
+      line("lenses"; (.lenses | join(" "))),
+      line("researchFiles"; (.research | length)),
+      line("researchPaths(onDisk)"; ([ .research[].findings[] | select(.onDisk) ] | length)),
+      line("researchPaths(notOnDisk)"; ([ .research[].findings[] | select(.onDisk | not) ] | length)),
+      line("deferredFindings"; (.deferredFindings | length)) ] | .[]'
+  echo "BRIEF: give the reviewer $BRIEF_FILE, and tell it to write its findings to $FINDINGS_TARGET and nowhere else." >&2
   exit 0
 }
 
@@ -1324,7 +1387,8 @@ do_findings() {
   fi
 
   rw_write_record "findings" "$updated"
-  printf '%s\n' "$updated"
+  rw_print_summary "$updated" "findings"
+  printf 'findingsRead: %s\n' "$findings_path"
   local follow_up high_security
   follow_up="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up") | .id ] | join(", ")')"
   high_security="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up" and .severity == "high") | .id ] | join(", ")')"
@@ -1710,7 +1774,8 @@ RW_SURFACE_VERDICTS
     | .catalogNotes = $notes')"
   [ -n "$updated" ] || die 3 "surfaces: could not update the record with the surface rows."
   rw_write_record "surfaces" "$updated"
-  printf '%s\n' "$updated"
+  rw_print_summary "$updated" "surfaces"
+  printf 'registry: %s\n' "${registry_path:-none} ($RW_REGISTRY_STATE)"
   echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the registry is $RW_REGISTRY_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   case "$setup" in
     available)              echo "SURFACES: this framework's recipe carries surface rows and this project has no registry. The setup offer belongs here, once." >&2 ;;
@@ -1880,7 +1945,8 @@ RW_ROWS
       [ $rows[] | . as $r | select(((($live[0].criteria // []) | map(.id)) | index($r.id)) == null) | .id ] | join(", ")')"
   fi
 
-  printf '%s\n' "$updated"
+  rw_print_summary "$updated" "close"
+  printf 'contract: %s\n' "$ALIGNMENT_FILE"
   local undeclared_list unknown_list note_count
   undeclared_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "undeclared") | .id ] | join(", ")')"
   unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown") | .id ] | join(", ")')"
