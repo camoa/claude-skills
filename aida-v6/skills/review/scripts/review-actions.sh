@@ -407,13 +407,14 @@ do_read() {
   rw_paths "read" "$1"
 
   local finished_state ledger_state record_state report
-  local range final_commit machine_count person_count checklist_count
+  local range final_commit machine_count person_count checklist_count checklists_json
   local frameworks_json e2e_enabled vr_enabled registry_path code_state
   finished_state="$(rw_json_state "$FINISHED_FILE")"
   ledger_state="$(rw_json_state "$LEDGER_FILE")"
   record_state="$(rw_json_state "$RECORD_FILE")"
 
   range=""; final_commit=""; machine_count=0; person_count=0; checklist_count=0
+  checklists_json='[]'
   if [ "$finished_state" = "ok" ]; then
     RW_FINISHED_DOC="$(jq -c '.' "$FINISHED_FILE")"
     range="$(printf '%s' "$RW_FINISHED_DOC" | jq -r '.commitRange // ""')"
@@ -421,6 +422,10 @@ do_read() {
     machine_count="$(printf '%s' "$RW_FINISHED_DOC" | jq '[ (.criteria // [])[] | select(.verifiedBy == "machine") ] | length')"
     person_count="$(printf '%s' "$RW_FINISHED_DOC" | jq '[ (.criteria // [])[] | select(.verifiedBy == "person") ] | length')"
     checklist_count="$(printf '%s' "$RW_FINISHED_DOC" | jq '(.checklists // []) | length')"
+    # Every checklist row, whole and verbatim. `close` shows each one to the person and takes met or
+    # unmet per row, and a summary asks a different question than the row a person signed up to
+    # answer. This skill holds one Bash rule and no Read rule, so nothing else could open the file.
+    checklists_json="$(printf '%s' "$RW_FINISHED_DOC" | jq -c '.checklists // []')"
   fi
 
   RW_RUN_MODE="interactive"
@@ -444,7 +449,7 @@ do_read() {
     --arg finished "$finished_state" --arg range "$range" --arg final "$final_commit" \
     --arg runMode "$RW_RUN_MODE" --arg ledger "$ledger_state" \
     --argjson machine "$machine_count" --argjson person "$person_count" \
-    --argjson checklists "$checklist_count" \
+    --argjson checklists "$checklist_count" --argjson checklistRows "$checklists_json" \
     --argjson frameworks "$frameworks_json" \
     --arg e2e "$e2e_enabled" --arg vr "$vr_enabled" --arg registry "$registry_path" \
     --arg codePath "$code_state" \
@@ -457,6 +462,7 @@ do_read() {
      runMode: $runMode,
      runModeSource: (if $ledger == "ok" then "the ledger" else "nothing read it; interactive is what absence means" end),
      criteria: {machineVerified: $machine, personVerified: $person, checklistRows: $checklists},
+     checklists: $checklistRows,
      frameworks: $frameworks,
      codePath: $codePath,
      surfaces: {e2e: $e2e, visualRegression: $vr, registryPath: $registry},
