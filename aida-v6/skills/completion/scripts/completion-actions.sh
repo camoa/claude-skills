@@ -292,6 +292,98 @@ do_read() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# `follow-ups`: one task per follow up finding, through the task skill, and nothing else written.
+# ------------------------------------------------------------------------------------------------
+
+# Exit 1. A closed task has nothing left to close, and a follow up task made after the close would
+# sit under a source task the record already lists as done. $1 the action.
+cp_refuse_complete() {
+  [ "$CP_STATE" != "complete" ] || die 1 "$1: $CP_TASK_ID is already complete. Nothing is left to close, and the record at $RECORD_FILE says on what grounds."
+}
+
+# Exit 70. A person's answer is accepted only when a person is present, which is the rule review
+# and tests-freeze already apply and the number they already use. $1 the action, $2 the flag, $3
+# what the flag would have decided.
+cp_require_person() {
+  local who="$1" flag="$2" what="$3"
+  [ "$CP_RUN_MODE" = "autonomous" ] || return 0
+  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written."
+}
+
+# The one follow up row for finding $1, or nothing when the review holds no follow up finding of
+# that id.
+cp_follow_up_row() {
+  printf '%s' "$CP_FOLLOW_UPS" | jq -c --arg id "$1" '[ .[] | select(.finding == $id) ][0] // empty'
+}
+
+# Creates the task for the follow up finding whose row is $2, through task-actions.sh create, the
+# one producer of a task. The id is `<source task>-<finding id>`, so nobody has to name it, and the
+# goal is the evidence and then one sentence naming the finding, the source task, the lens, the
+# file and the lines. The task script's own output is relayed only when it refuses. $1 the action.
+cp_create_follow_up_task() {
+  local who="$1" row="$2" fid task_id goal said
+  fid="$(printf '%s' "$row" | jq -r '.finding')"
+  task_id="$CP_TASK_ID-$fid"
+  goal="$(printf '%s' "$row" | jq -r --arg task "$CP_TASK_ID" '
+    .evidence + " Finding " + .finding + " of task " + $task + ", lens " + .lens
+    + (if .file == "" then ", with no file named." else ", in " + .file + (if .lines == "" then "" else " lines " + .lines end) + "." end)')"
+  said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
+      create --project "$PROJECT_DIR" --name "$task_id" -- "$goal" 2>&1)" \
+    || { printf '%s\n' "$said" >&2; die 3 "$who: task create refused $task_id, so nothing was written for $fid. Its own line is above."; }
+  printf '%s' "$task_id"
+}
+
+do_follow_ups() {
+  local task_arg="" wanted="" arg
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --create)
+        [ "$#" -ge 2 ] || die 3 "follow-ups: --create needs a finding id"
+        looks_like_flag "$2" && die 3 "follow-ups: --create needs a finding id, got another option: $2"
+        wanted="$wanted$2
+"
+        shift 2 ;;
+      -*) die 3 "follow-ups: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_arg" ] || die 3 "follow-ups: more than one task folder given"
+        task_arg="$1"; shift ;;
+    esac
+  done
+  cp_paths "follow-ups" "$task_arg"
+  cp_load "follow-ups"
+  cp_refuse_complete "follow-ups"
+
+  # Unattended, every finding still without a task is created: a task changes the contract least,
+  # and the fixed id means nobody has to name it. A person names each one through --create.
+  if [ "$CP_RUN_MODE" = "autonomous" ]; then
+    wanted="$(printf '%s' "$CP_FOLLOW_UPS" | jq -r '.[] | select(.task == null) | .finding')"
+  fi
+
+  # One finding id per line, read back line by line: zsh does not split an unquoted expansion.
+  local created="" existing="" row fid task_id
+  row=""; fid=""; task_id=""
+  while IFS= read -r fid; do
+    [ -n "$fid" ] || continue
+    row="$(cp_follow_up_row "$fid")"
+    [ -n "$row" ] || die 3 "follow-ups: the review record holds no follow up finding named $fid. The follow up findings are: $(printf '%s' "$CP_FOLLOW_UPS" | jq -r '[ .[].finding ] | join(", ")')"
+    task_id="$(printf '%s' "$row" | jq -r '.task // ""')"
+    if [ -n "$task_id" ]; then
+      existing="$existing $task_id"
+      continue
+    fi
+    task_id="$(cp_create_follow_up_task "follow-ups" "$row")" || exit $?
+    created="$created $task_id"
+  done <<CP_WANTED
+$wanted
+CP_WANTED
+
+  cp_load_follow_ups "follow-ups"
+  cp_print_summary "follow-ups" "$(jq -nc --arg created "${created# }" --arg existing "${existing# }" \
+    '{created: (if $created == "" then "none" else $created end), existing: (if $existing == "" then "none" else $existing end)}')"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # `step`: print one step file.
 # ------------------------------------------------------------------------------------------------
 
@@ -323,6 +415,7 @@ shift
 
 case "$ACTION" in
   read)       do_read       "$@" ;;
+  follow-ups) do_follow_ups "$@" ;;
   step)       do_step       "$@" ;;
   *) usage; die 3 "unknown action: $ACTION" ;;
 esac
