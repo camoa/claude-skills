@@ -104,7 +104,7 @@
         },
         "score": {
           "type": "string",
-          "description": "The score as the tool printed it, copied verbatim and never parsed into a number: each of the four tools prints its own shape, and a number this script derived would be a fifth. Empty when no row ran."
+          "description": "The score as the tool printed it: the first output line naming a score, copied verbatim and never parsed into a number, because each of the four tools prints its own shape and a number this script derived would be a fifth. Empty when no row ran, and empty when the run named no score."
         },
         "survivors": {
           "type": "array",

@@ -681,10 +681,10 @@ rw_check_coverage_verdict() {
   fi
 }
 
-# The mutation row, run over the changed files. The score stays the tool's own output: no key in a
-# recipe row declares the shape a score is printed in, so a number parsed out of free text here
-# would be this script inventing a fifth shape on top of the four tools' own. A survivor is a line
-# of that output naming one of the changed files, which is a string comparison and not a guess.
+# The mutation row, run over the changed files. The score is the tool's own line, verbatim: the first
+# output line naming a score, never a number parsed out of it, because no key in a recipe row declares
+# the shape a score is printed in and the four tools print four shapes. A survivor is a line of that
+# output naming one of the changed files, which is a string comparison and not a guess.
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
@@ -725,6 +725,7 @@ rw_run_mutation() {
     fi
     rc="$payload"
     output="$(cat "$outfile" 2>/dev/null)"
+    score="$(printf '%s' "$output" | grep -i 'score' | head -1)"
     # The criterion a survivor belongs to, by exact path: the frozen test records say which test file
     # belongs to which criterion, and the frozen orders say which source file belongs to which order
     # and what that order serves. A survivor no path attaches is still recorded, because the
