@@ -62,7 +62,7 @@ check 3 already reports that file as work no order asked for.
 **Check 8 reads the recipe's outcome words, not the exit status.** Three of the five frameworks print
 that nothing was selected and exit zero. A silent pass reads unknown, never met.
 
-**Check 4 records the mutation score and every survivor.** No mutation row in the recipe reads
+**Check 4 records the score and every survivor, as the record holds them.** No mutation row reads
 undeclared, never met. The survivors go to the reviewer at the next step, as one more lens.
 
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A hunk inside an
