@@ -138,7 +138,7 @@
     "recipeRow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["framework", "testRecipe", "checkRecipe", "lookup"],
+      "required": ["framework", "testRecipe", "checkRecipe", "lookup", "testRecipeSha256", "checkRecipeSha256"],
       "properties": {
         "framework": {
           "type": "string",
@@ -152,6 +152,14 @@
         "checkRecipe": {
           "type": "string",
           "description": "The review recipe path this run read for that framework. Empty when the lookup failed. `surfaces` reopens this file for its `## Surface commands` block."
+        },
+        "testRecipeSha256": {
+          "type": "string",
+          "description": "A sha256 over the test-execution recipe this run read, or empty when the lookup failed. Recorded the way baseline.json records its own, so a reader can tell a recipe that changed between the build and the review from one that did not."
+        },
+        "checkRecipeSha256": {
+          "type": "string",
+          "description": "A sha256 over the review recipe this run read, or empty when the lookup failed. `checks` refuses (exit 73) when this is not the hash the baseline recorded for the same framework, because checks 5 to 7 subtract that baseline and the subtraction is only honest while both runs read the same file."
         },
         "lookup": {
           "type": "string",

@@ -61,9 +61,10 @@
 #  66  implementation has not finished, so there is no finished.json.
 #  70  a person's answer was passed on a run with nobody present.
 #  72  two frameworks each command one tool.
+#  73  the check recipe resolved now is not the one the baseline was taken with.
 #  77  the project records no framework.
 #
-# Codes 5, 14, 15, 52, 70 and 72 arrive from scripts/lib/recipes.sh, which both stages source, and
+# Codes 5, 14, 15, 52, 70, 72 and 73 arrive from scripts/lib/recipes.sh, which both stages source, and
 # they carry exactly the meanings implement-actions.sh's own table gives them. ideal/review.md lists
 # eight of these; the rest come with the shared helpers, and giving them new numbers here would make
 # one number mean two things.
@@ -996,6 +997,19 @@ RW_FRAMEWORKS
   # implementation reads.
   CR_TOOL_IDS_ALL=true
   cr_resolve
+  # Exit 73. Checks 5 to 7 subtract the baseline, and that subtraction is only honest while both runs
+  # read the same check recipe. A catalog refresh between the build and the review is ordinary, and
+  # the same refusal implementation makes is what keeps review from calling a finding this task's
+  # when a different tool produced it.
+  cr_require_baseline_recipes "checks" "$BASELINE_FILE"
+  # The sha of each recipe this run read, recorded beside its path the way the baseline records its
+  # own, so a reader can compare the two files rather than take the refusal's word for it.
+  recipes_json="$(jq -nc --argjson rows "$recipes_json" --argjson resolved "$CR_DOC" '
+    [ $rows[] | . as $row
+      | ([ ($resolved.frameworks // [])[] | select(.framework == $row.framework) ][0]) as $fw
+      | $row + {checkRecipeSha256: (($fw.checkRecipeSha256) // ""),
+                testRecipeSha256: (($fw.testRecipeSha256) // "")} ]')"
+  [ -n "$recipes_json" ] || die 3 "checks: the recipe rows could not record the hash of each file they read."
 
   # --- the change set, read and never derived -----------------------------------------------------
   range="$(printf '%s' "$RW_FINISHED_DOC" | jq -r '.commitRange // ""')"
