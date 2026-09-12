@@ -60,9 +60,10 @@ step being run is in this conversation.
 | The surface rows recorded, and no verdict | Ask the person's rows, and close | `close` |
 | A verdict recorded | Nothing is left. Read the verdict and the rows that caused it to the person | |
 
-A re-run starts at `checks` again, because the range and the tools answer against the code as it
-stands now. The old record is archived before anything is written, and exit 63 refuses the write
-when that move fails.
+A recorded verdict is the end of the pass, and `read` says so in that word. Start a second review
+only when a person asks for one, and start it at `checks`, because the range and the tools answer
+against the code as it stands now. The old record is archived before anything is written, and exit 63
+refuses the write when that move fails.
 
 Open a step file through the script, never through the Read tool:
 ```
