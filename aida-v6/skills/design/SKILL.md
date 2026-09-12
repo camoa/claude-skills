@@ -46,13 +46,15 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh read "<task_folder>"
 ```
-This reports whether the task has an approved contract, lists its criteria and non-goals, and
-lists any work order already on disk for this task.
+This prints summary lines. `contract:` says present or absent and `contract-file:` names the
+file. `criteria:` and `non-goals:` list ids only. `work-orders:` is a count, and one `work-order:`
+line names each file already on disk. Read the criteria's text from the contract file when
+drafting.
 
-No contract: say so in one line and name the scope skill. Stop; a work order with nothing to
-serve is nothing this stage can check.
+`contract: absent`: say so in one line and name the scope skill. Stop; a work order with nothing
+to serve is nothing this stage can check.
 
-Work orders already present: this is a resumed or repeated run. Read each one's own file before
+`work-orders:` above zero: this is a resumed or repeated run. Read each named file before
 drafting anything new, rather than starting over.
 
 Then read every file under `<task_folder>/research/`, one search at a time. Each holds findings
@@ -216,7 +218,8 @@ Create it:
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>"
 ```
-This mints the next id and writes the file. `dependsOn` may name a work order not yet created in
+This mints the next id and writes the file, and prints the id and the fields set. It never prints
+the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
 this conversation; the id space is shared and minted in order, so naming it ahead of its own
 `create` call is safe as long as it is created before design finishes.
 
@@ -264,7 +267,9 @@ Once every criterion has a drafted owner, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh check "<task_folder>"
 ```
-This reads every work order's JSON and reports, in one JSON object:
+This reads every work order's JSON and writes its report to `<task_folder>/design-check.json`.
+It prints `status:`, the report's line count, `report:` with the path, and, when the status is not
+zero, one `open:` line naming what is open. The report holds:
 
 - a work order file with a missing, empty or malformed required field;
 - every criterion with no work order serving it, and every criterion owned by zero or by more
@@ -281,8 +286,8 @@ Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 Exit 4: a work order file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix it with another `update` call, or by hand, and check again.
 
-Exit 5: the schema is fine but a content or cross-order check is not. Read the named list and fix
-the specific order it names:
+Exit 5: the schema is fine but a content or cross-order check is not. The `open:` line names each
+problem. Read the report file when the line is not enough, and fix the specific order it names:
   - a criterion with no serving order needs a work order that names it in `--criteria-served`;
   - a criterion with no owner, or with more than one, needs its `--criteria-owned` reconciled so
     exactly one order claims it;

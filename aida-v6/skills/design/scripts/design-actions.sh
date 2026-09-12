@@ -9,6 +9,11 @@
 # the design check. Deciding whether design is done belongs to whoever calls this, never to this
 # script.
 #
+# What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
+# summary lines and the paths it wrote, and never a record body. A caller that needs a field reads
+# the file at the printed path. `check` writes check-design.sh's report to
+# <task_folder>/design-check.json and prints its status, its line count and that path.
+#
 # Usage:
 #   design-actions.sh read       <task_folder>
 #   design-actions.sh start      <task_folder>
@@ -259,21 +264,18 @@ id_shape_ok() {
 # Splits $1 on commas into $ID_LIST_JSON, a JSON array of strings, checking each entry is
 # non-blank and has the shape of an id in space $2 ("wo", "c" or "n"). Prints nothing; the caller
 # reads $ID_LIST_JSON. An empty $1 yields "[]".
+# The list is split with tr and read line by line. An unquoted `for id in $raw` under a comma IFS
+# splits in bash and not in zsh. zsh was handed the whole list as one id.
 parse_id_list() {
-  local raw="$1" space="$2" who="$3" old_ifs id
+  local raw="$1" space="$2" who="$3" id
   ID_LIST_JSON='[]'
   [ -n "$raw" ] || return 0
-  old_ifs="$IFS"
-  IFS=','
-  for id in $raw; do
-    IFS="$old_ifs"
+  while IFS= read -r id; do
     is_blank "$id" && die3 "$who: has a blank id in '$raw'"
     id_shape_ok "$id" "$space" \
       || die3 "$who: id '$id' is not a valid ${space}<n> id shape (no leading zero)"
     ID_LIST_JSON="$(printf '%s' "$ID_LIST_JSON" | jq --arg id "$id" '. + [$id]')"
-    IFS=','
-  done
-  IFS="$old_ifs"
+  done < <(printf '%s\n' "$raw" | tr ',' '\n')
 }
 
 # The work order file for a given id, or empty when it does not exist. Never dies.
@@ -291,9 +293,39 @@ render_wo() {
   local id="$1"
   [ -f "$DESIGN_RENDER_SCRIPT" ] \
     || die3 "cannot find design-render.sh at $DESIGN_RENDER_SCRIPT"
-  bash "$DESIGN_RENDER_SCRIPT" "$TASK_PATH" "$id"
+  bash "$DESIGN_RENDER_SCRIPT" "$TASK_PATH" "$id" >/dev/null
   local rc=$?
   [ "$rc" -eq 0 ] || die3 "design-render.sh could not render $id.md (exit $rc)"
+  echo "rendered: $DESIGN_DIR/$id.md"
+}
+
+# The one summary printer. It names the id and the list fields, and counts the free-text ones.
+wo_summary() {
+  printf '%s' "$1" | jq -r '
+    "id: " + .id,
+    "criteriaServed: " + ((.criteriaServed // []) | join(",")),
+    "criteriaOwned: " + ((.criteriaOwned // []) | join(",")),
+    "dependsOn: " + ((.dependsOn // []) | join(",")),
+    "ownedFiles: " + ((.ownedFiles // []) | length | tostring),
+    "tests: " + ((.tests // []) | length | tostring),
+    "doneWhen: " + ((.doneWhen // []) | length | tostring)'
+}
+
+# One line naming everything a check report left open, for `check` and `close` alike.
+open_summary_of() {
+  printf '%s' "$1" | jq -r '
+      [
+        ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
+        ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
+        ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
+        ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
+        ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
+        ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
+        ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and reaches no owner"),
+        ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
+        ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape")
+      ] | join("; ")
+    ' 2>/dev/null
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -303,45 +335,36 @@ render_wo() {
 do_read() {
   [ "$#" -eq 0 ] || die3 "read: unrecognized argument: $1"
 
-  local criteria_json non_goals_json contract_exists files_json design_exists f entry ftype
+  # Summary lines only. The skill routes on `contract:` and `work-orders:`, and reads the contract
+  # and each work order from the paths printed here when it needs their text.
+  local contract_state design_state wo_count f ftype
+  contract_state="absent"
+  [ "$(contract_ok)" = "true" ] && contract_state="present"
+  echo "action: read"
+  echo "task: $TASK_PATH"
+  echo "contract: $contract_state"
+  echo "contract-file: $ALIGNMENT_FILE"
+  echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
+  echo "non-goals: $(contract_non_goals_json | jq -r '[.[].id] | join(" ")')"
 
-  criteria_json="$(contract_criteria_json)"
-  non_goals_json="$(contract_non_goals_json)"
-  contract_exists="$(contract_ok)"
-
-  files_json="[]"
-  design_exists=false
+  design_state="not started"
+  wo_count=0
   if [ -d "$DESIGN_DIR" ]; then
-    design_exists=true
+    design_state="started"
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      if ! jq empty "$f" 2>/dev/null; then
-        entry="$(jq -n --arg path "$f" '{path: $path, parsed: false, note: "not valid JSON"}')"
+      ftype="$(jq -r 'type' "$f" 2>/dev/null)"
+      if [ "$ftype" = "object" ]; then
+        wo_count=$((wo_count + 1))
+        echo "work-order: $f"
       else
-        ftype="$(jq -r 'type' "$f" 2>/dev/null)"
-        if [ "$ftype" != "object" ]; then
-          entry="$(jq -n --arg path "$f" --arg t "$ftype" '{path: $path, parsed: false, note: ("valid JSON but a " + $t + ", not an object")}')"
-        else
-          entry="$(jq --arg path "$f" '{path: $path, parsed: true, id: (.id // null), title: (.title // null), criteriaServed: (.criteriaServed // []), criteriaOwned: (.criteriaOwned // [])}' "$f" 2>/dev/null)"
-          [ -n "$entry" ] || entry="$(jq -n --arg path "$f" '{path: $path, parsed: false, note: "could not be read"}')"
-        fi
+        echo "unreadable: $f"
       fi
-      files_json="$(printf '%s' "$files_json" | jq --argjson e "$entry" '. + [$e]')"
     done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
   fi
-
-  jq -n \
-    --arg taskPath "$TASK_PATH" \
-    --arg alignmentFile "$ALIGNMENT_FILE" \
-    --argjson contractExists "$contract_exists" \
-    --argjson criteria "$criteria_json" \
-    --argjson nonGoals "$non_goals_json" \
-    --arg designDir "$DESIGN_DIR" \
-    --argjson designStarted "$design_exists" \
-    --argjson files "$files_json" \
-    '{taskPath: $taskPath, alignmentFile: $alignmentFile, contractExists: $contractExists,
-      criteria: $criteria, nonGoals: $nonGoals, designDir: $designDir,
-      designStarted: $designStarted, files: $files}'
+  echo "design: $design_state"
+  echo "design-dir: $DESIGN_DIR"
+  echo "work-orders: $wo_count"
   exit 0
 }
 
@@ -360,8 +383,8 @@ do_start() {
   mkdir -p "$DESIGN_DIR" || die3 "start: could not create $DESIGN_DIR"
 
   echo "STARTED: $DESIGN_DIR"
-  contract_criteria_json
-  printf '\n'
+  echo "contract-file: $ALIGNMENT_FILE"
+  echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
   exit 0
 }
 
@@ -461,7 +484,7 @@ do_create() {
   write_atomic "$file" "$doc"
 
   echo "CREATED: $file"
-  printf '%s\n' "$doc"
+  wo_summary "$doc"
 
   render_wo "$id"
   exit 0
@@ -553,7 +576,7 @@ do_update() {
 
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
-  printf '%s\n' "$doc"
+  wo_summary "$doc"
 
   render_wo "$id"
   exit 0
@@ -610,7 +633,7 @@ do_add_owned_file() {
   doc="$(jq --arg p "$path_val" '.ownedFiles = (((.ownedFiles // []) + [$p]) | unique)' "$file")"
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
-  printf '%s\n' "$doc"
+  wo_summary "$doc"
   render_wo "$id"
   exit 0
 }
@@ -637,7 +660,7 @@ do_add_done_when() {
   doc="$(jq --arg t "$text" '.doneWhen = ((.doneWhen // []) + [$t])' "$file")"
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
-  printf '%s\n' "$doc"
+  wo_summary "$doc"
   render_wo "$id"
   exit 0
 }
@@ -676,7 +699,7 @@ do_add_test() {
   fi
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
-  printf '%s\n' "$doc"
+  wo_summary "$doc"
   render_wo "$id"
   exit 0
 }
@@ -712,15 +735,27 @@ do_check() {
   [ -f "$CHECK_DESIGN_SCRIPT" ] \
     || die3 "check: cannot find check-design.sh at $CHECK_DESIGN_SCRIPT"
 
-  bash "$CHECK_DESIGN_SCRIPT" "$TASK_PATH"
-  local rc=$?
+  # The report goes to a file and the summary to stdout, so the conversation holds the verdict and
+  # a path rather than the whole report.
+  local rc verdict lines
+  bash "$CHECK_DESIGN_SCRIPT" "$TASK_PATH" >"$CHECK_FILE"
+  rc=$?
   case "$rc" in
-    0) exit 0 ;;
-    1) exit 4 ;;
-    3) exit 3 ;;
-    4) exit 5 ;;
+    0) verdict=0 ;;
+    1) verdict=4 ;;
+    3) verdict=3 ;;
+    4) verdict=5 ;;
     *) die3 "check: check-design.sh exited with an unexpected code $rc" ;;
   esac
+  lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
+  echo "action: check"
+  echo "status: $verdict"
+  echo "lines: $lines"
+  echo "report: $CHECK_FILE"
+  if [ "$verdict" -ne 0 ]; then
+    echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
+  fi
+  exit "$verdict"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -772,19 +807,7 @@ do_close() {
       ;;
     1|4)
       local open_summary
-      open_summary="$(printf '%s' "$check_report_json" | jq -r '
-          [
-            ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
-            ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
-            ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
-            ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
-            ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
-            ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
-            ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and reaches no owner"),
-            ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-            ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape")
-          ] | join("; ")
-        ' 2>/dev/null)"
+      open_summary="$(open_summary_of "$check_report_json")"
       [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
       if [ "$check_rc" -eq 1 ]; then
         die4 "close: a work order file does not match the design shape. Fix it and close again. Open: $open_summary"
@@ -816,7 +839,9 @@ do_close() {
 
   write_atomic "$CLOSED_FILE" "$doc"
   echo "CLOSED: $CLOSED_FILE"
-  printf '%s\n' "$doc"
+  echo "closedBy: $closed_by"
+  echo "runMode: $RUN_MODE"
+  echo "hash: $hash"
   exit 0
 }
 
@@ -842,6 +867,7 @@ RESOLVE_RC=$?
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
 CLOSED_FILE="$TASK_PATH/design-closed.json"
+CHECK_FILE="$TASK_PATH/design-check.json"
 
 case "$ACTION" in
   read)           do_read           "$@" ;;
