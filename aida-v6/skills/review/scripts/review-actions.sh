@@ -543,6 +543,80 @@ rw_catalog_note() {
     '$have + [{seen: $seen, where: $where}]')"
 }
 
+# One commanded row's own run, in one place. Four callers repeat the same ladder otherwise: the
+# temporary file, br_run_resolved, the two fields it prints, and the faults that decide nothing.
+# $1 the argv array, $2 the JSON array a {paths} or {file} token expands to, $3 the tab-separated
+# --value list, $4 the row's own `signal` or the empty string.
+#
+# Sets RW_RUN_KIND (UNRESOLVED, EMPTY or RAN), RW_RUN_PAYLOAD, RW_RUN_RC, RW_RUN_OUTPUT,
+# RW_RUN_STDOUT_LEN and RW_RUN_OUTFILE. A caller reads its own verdict off those, calls rw_run_fault
+# for the faults every caller words alike, and calls rw_run_done when it has finished with the file.
+RW_RUN_KIND=""; RW_RUN_PAYLOAD=""; RW_RUN_RC=""; RW_RUN_OUTPUT=""
+RW_RUN_STDOUT_LEN=0; RW_RUN_OUTFILE=""; RW_RUN_ERRFILE=""
+RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
+# The surfaces a person accepted a baseline for and the accept rows that ran for them. Both are read
+# back after every kind has answered: a surface nothing accepted refuses, and a row that already
+# answered is not reported twice.
+RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
+rw_run_row() {
+  local argv_json="$1" paths_json="$2" values="$3" signal="$4" result
+  RW_RUN_KIND=""; RW_RUN_PAYLOAD=""; RW_RUN_RC=""; RW_RUN_OUTPUT=""; RW_RUN_STDOUT_LEN=0
+  RW_RUN_OUTFILE="$(mktemp)" || die 3 "a temporary file for the command's output could not be created"
+  RW_RUN_ERRFILE=""
+  if [ -n "$signal" ]; then
+    RW_RUN_ERRFILE="$(mktemp)" || die 3 "a temporary file for the command's standard error could not be created"
+    result="$(br_run_resolved "$argv_json" "$RV_CODEPATH" "$RW_RUN_OUTFILE" "$paths_json" "$values" "$RW_RUN_ERRFILE")"
+  else
+    result="$(br_run_resolved "$argv_json" "$RV_CODEPATH" "$RW_RUN_OUTFILE" "$paths_json" "$values")"
+  fi
+  RW_RUN_KIND="$(printf '%s' "$result" | cut -f1)"
+  RW_RUN_PAYLOAD="$(printf '%s' "$result" | cut -f2-)"
+  [ "$RW_RUN_KIND" = "RAN" ] || return 0
+  RW_RUN_RC="$RW_RUN_PAYLOAD"
+  if [ -n "$signal" ]; then
+    RW_RUN_STDOUT_LEN="$(wc -c <"$RW_RUN_OUTFILE" 2>/dev/null | tr -d '[:space:]')"
+    case "$RW_RUN_STDOUT_LEN" in ''|*[!0-9]*) RW_RUN_STDOUT_LEN=0 ;; esac
+    RW_RUN_OUTPUT="$(cat "$RW_RUN_OUTFILE" "$RW_RUN_ERRFILE" 2>/dev/null)"
+  else
+    RW_RUN_OUTPUT="$(cat "$RW_RUN_OUTFILE" 2>/dev/null)"
+  fi
+}
+
+rw_run_done() {
+  [ -z "$RW_RUN_OUTFILE" ] || rm -f "$RW_RUN_OUTFILE"
+  [ -z "$RW_RUN_ERRFILE" ] || rm -f "$RW_RUN_ERRFILE"
+  RW_RUN_OUTFILE=""; RW_RUN_ERRFILE=""
+}
+
+# The verdict and the detail for a run that decided nothing, worded once for every caller: a
+# placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
+# an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
+# exit status is the caller's own to read. $1 the row's own label, $2 where a catalog note points, or
+# empty for a caller that raises none.
+rw_run_fault() {
+  local label="$1" where="$2"
+  RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
+  case "$RW_RUN_KIND" in
+    UNRESOLVED)
+      RW_RUN_VERDICT="unknown"
+      RW_RUN_DETAIL="the token {$RW_RUN_PAYLOAD} in the $label command has no supplied value; pass --value $RW_RUN_PAYLOAD=<value>."
+      return 0 ;;
+    EMPTY)
+      RW_RUN_VERDICT="unknown"
+      RW_RUN_DETAIL="the $label command came out with no token at all, so nothing ran and nothing was decided."
+      return 0 ;;
+  esac
+  case "$RW_RUN_RC" in
+    127)
+      RW_RUN_VERDICT="unknown"
+      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided."
+      [ -z "$where" ] || rw_catalog_note "the $label command the recipe declares could not be found" "$where" ;;
+    126)
+      RW_RUN_VERDICT="unknown"
+      RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;
+  esac
+}
+
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
@@ -1420,15 +1494,28 @@ rw_surface_kind() {
   local check_id="$1" row_id="$2" gate="$3" enabled="$4" walked="$5" accepted="$6"
   local checks_out="$7" surfaces_out="$8"
   local row argv outfile result kind payload rc output mine count i sid verdict
-  local ran walk_ok row_verdict detail worst missing_walk
+  local ran walk_ok row_verdict detail worst missing_walk accept_here accept_row
 
   mine="$(printf '%s' "$RW_REGISTRY_SURFACES" | jq -c --arg g "$gate" \
     '[ .[] | select((.gates // []) | index($g)) ]')"
   count="$(printf '%s' "$mine" | jq 'length')"
   row="$(printf '%s' "$RW_SURFACE_ROWS" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
 
+  if [ "$enabled" = "unavailable" ]; then
+    # Visual parity has no recipe row, no project field to switch it on and no harness, so version 6
+    # records it as unavailable rather than reporting a check that passed. A recipe that does command
+    # the row reaches the ordinary path below instead.
+    rw_check_row "$check_id" "undeclared" "visual parity has no recipe row, no project field and no harness in version 6, so nothing ran and nothing is claimed. It is recorded as unavailable." >>"$checks_out"
+    return 0
+  fi
   if [ "$enabled" != "on" ]; then
     rw_check_row "$check_id" "undeclared" "the project record says $gate is $enabled, so review ran nothing for it. Review runs nothing that is off." >>"$checks_out"
+    return 0
+  fi
+  if [ "$RW_SURFACE_BLOCK_STATE" = "unparseable" ]; then
+    # The heading is there and the key never opens under it. Nobody looked, rather than a framework
+    # that declared nothing, so the word is unknown and it fails the review.
+    rw_check_row "$check_id" "unknown" "the surface commands block in the review recipe could not be read: the heading is there and its key never opens under it. Nothing ran, and nothing here can tell what the recipe meant to declare." >>"$checks_out"
     return 0
   fi
   if [ "$RW_SURFACE_BLOCK_STATE" != "ok" ] || [ "$row" = "null" ]; then
@@ -1446,6 +1533,35 @@ rw_surface_kind() {
   if [ "$count" -eq 0 ]; then
     rw_check_row "$check_id" "undeclared" "the registry holds no surface carrying the $gate gate, so this project has nothing for this check to run." >>"$checks_out"
     return 0
+  fi
+
+  # A person accepted a new baseline for one of this kind's own surfaces, so the row that writes one
+  # runs. The accept row is a second id, never a new key, which is what the recipe ask declares. A
+  # kind with no accept row declared does nothing here, and the caller refuses for the surface.
+  accept_here=""
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    sid="$(printf '%s' "$mine" | jq -r --argjson i "$i" '.[$i].id')"
+    case " $accepted " in *" $sid "*) accept_here="$accept_here $sid" ;; esac
+    i=$((i + 1))
+  done
+  if [ -n "$accept_here" ]; then
+    accept_row="$(printf '%s' "$RW_SURFACE_ROWS" | jq -c --arg id "$row_id-accept" \
+      '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ][0] // null')"
+    if [ "$accept_row" != "null" ]; then
+      RW_ACCEPTED_ROWS="$RW_ACCEPTED_ROWS $row_id-accept"
+      rw_run_row "$(printf '%s' "$accept_row" | jq -c '.argv')" '[]' "" ""
+      rw_run_fault "$row_id-accept" "the review recipe for $(printf '%s' "$accept_row" | jq -r '.framework // "this project"')"
+      if [ -n "$RW_RUN_VERDICT" ]; then
+        rw_check_row "$row_id-accept" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" >>"$checks_out"
+      elif [ "$RW_RUN_RC" = "0" ]; then
+        rw_check_row "$row_id-accept" "met" "the $row_id-accept command exited 0 over the surfaces a person accepted:${accept_here}." "$RW_RUN_RC" "$RW_RUN_OUTPUT" >>"$checks_out"
+        RW_ACCEPTED_DONE="$RW_ACCEPTED_DONE$accept_here"
+      else
+        rw_check_row "$row_id-accept" "unmet" "the $row_id-accept command exited $RW_RUN_RC, so no new baseline was written for:${accept_here}." "$RW_RUN_RC" "$RW_RUN_OUTPUT" >>"$checks_out"
+      fi
+      rw_run_done
+    fi
   fi
 
   argv="$(printf '%s' "$row" | jq -c '.argv')"
@@ -1493,7 +1609,7 @@ rw_surface_kind() {
     case " $walked " in *" $sid "*) walk_ok=true ;; esac
     jq -nc --arg id "$sid" --arg verdict "$verdict" --argjson ran "$ran" \
       --argjson walked "$walk_ok" --arg report "" \
-      --argjson accepted "$(case " $accepted " in *" $sid "*) printf true ;; *) printf false ;; esac)" '
+      --argjson accepted "$(case " $RW_ACCEPTED_DONE " in *" $sid "*) printf true ;; *) printf false ;; esac)" '
       {id: $id, verdict: $verdict, ran: $ran, walked: $walked, reportPath: $report}
       + (if $accepted then {baselineAccepted: true} else {} end)' >>"$surfaces_out"
     worst="$(rw_worse "$worst" "$verdict")"
@@ -1507,6 +1623,44 @@ rw_surface_kind() {
     detail="$detail Nobody walked these surfaces, and the walk is half the answer: ${missing_walk%, }"
   fi
   rw_check_row "$check_id" "$worst" "$detail" "$rc" "$output" "$(printf '%s' "$row" | jq -r '.framework // ""')" >>"$checks_out"
+}
+
+# Every surface row the recipe declares that no kind above answered. The check commands block gets
+# this treatment already: the ids are a floor and never the list, so a row a framework invents is run
+# and recorded rather than dropped in silence. $1 the check rows file, $2 the ids already answered.
+#
+# An accept row is the one exception. It writes a new baseline, so it runs only when a person accepts
+# one, and a row nobody asked for is recorded as not run rather than run unasked.
+rw_surface_extra_rows() {
+  local checks_out="$1" answered="$2" count i one row_id
+  count="$(printf '%s' "$RW_SURFACE_ROWS" | jq 'length')"
+  case "$count" in ''|*[!0-9]*) count=0 ;; esac
+  i=0; one=""; row_id=""
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$RW_SURFACE_ROWS" | jq -c --argjson i "$i" '.[$i]')"
+    row_id="$(printf '%s' "$one" | jq -r '.id')"
+    i=$((i + 1))
+    case " $answered " in *" $row_id "*) continue ;; esac
+    case "$row_id" in
+      *-accept)
+        rw_check_row "$row_id" "undeclared" "this row writes a new baseline, so it runs only when a person accepts one. Nobody accepted one in this review, and it was not run." >>"$checks_out"
+        continue ;;
+    esac
+    if [ "$(printf '%s' "$one" | jq -r '.absent // false')" = "true" ]; then
+      rw_check_row "$row_id" "undeclared" "$(printf '%s' "$one" | jq -r '.absentReason // "the recipe declares this surface row absent"')" "" "" "$(printf '%s' "$one" | jq -r '.framework // ""')" "absent" >>"$checks_out"
+      continue
+    fi
+    rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "" ""
+    rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$one" | jq -r '.framework // "this project"')"
+    if [ -n "$RW_RUN_VERDICT" ]; then
+      rw_check_row "$row_id" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" "" "" "$(printf '%s' "$one" | jq -r '.framework // ""')" >>"$checks_out"
+    elif [ "$RW_RUN_RC" = "0" ]; then
+      rw_check_row "$row_id" "met" "the $row_id command the recipe declares exited 0." "$RW_RUN_RC" "$RW_RUN_OUTPUT" "$(printf '%s' "$one" | jq -r '.framework // ""')" >>"$checks_out"
+    else
+      rw_check_row "$row_id" "unmet" "the $row_id command the recipe declares exited $RW_RUN_RC." "$RW_RUN_RC" "$RW_RUN_OUTPUT" "$(printf '%s' "$one" | jq -r '.framework // ""')" >>"$checks_out"
+    fi
+    rw_run_done
+  done
 }
 
 do_surfaces() {
@@ -1543,9 +1697,11 @@ do_surfaces() {
     || rw_require_person "surfaces" "--walked" "a person looked at a surface at every viewport"
 
   RW_CATALOG_NOTES="$(printf '%s' "$RW_RECORD_DOC" | jq -c '.catalogNotes // []')"
+  RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
   rw_load_surface_rows "surfaces"
 
-  local e2e_on vr_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
+  local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
+  local one_accept
   e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.e2e // null) == null then "not set up" elif (.e2e.enabled // false) then "on" else "off" end')"
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.visualRegression // null) == null then "not set up" elif (.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.visualRegression.registryPath // ""')"
@@ -1563,11 +1719,27 @@ do_surfaces() {
 
   checks_file="$(mktemp)" || die 3 "surfaces: could not create a temporary file"
   surfaces_file="$(mktemp)" || die 3 "surfaces: could not create a temporary file"
+  # Visual parity has no project field, so the recipe is the only thing that can say whether it runs:
+  # a commanded row reaches the ordinary path, and anything else reads unavailable.
+  parity_on="unavailable"
+  [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
+    && parity_on="on"
   rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
   rw_surface_kind "$CHECK_VR" "visual-regression" "visual_regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
-  # Visual parity has no recipe row anywhere, no project field to enable it and no harness, so
-  # version 6 records it as unavailable rather than reporting a check that passed.
-  rw_check_row "$CHECK_PARITY" "undeclared" "visual parity has no recipe row, no project field and no harness in version 6, so nothing ran and nothing is claimed. It is recorded as unavailable." >>"$checks_file"
+  rw_surface_kind "$CHECK_PARITY" "visual-parity" "visual_parity" "$parity_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  rw_surface_extra_rows "$checks_file" "e2e visual-regression visual-parity$RW_ACCEPTED_ROWS"
+
+  # A person accepted a baseline for a surface whose kinds declare no accept row. Recording a boolean
+  # and writing nothing would say a baseline was replaced when none was.
+  while IFS= read -r one_accept; do
+    [ -n "$one_accept" ] || continue
+    case " $RW_ACCEPTED_DONE " in
+      *" $one_accept "*) ;;
+      *) die 3 "surfaces: --accept-baseline named $one_accept, and no surface row the review recipe declares writes a baseline for the gates that surface carries. The recipe needs a row whose id is the kind's own id with -accept after it. Nothing was written." ;;
+    esac
+  done <<RW_ACCEPTED_IN
+$(printf '%s' "$accepted" | tr ' ' '\n')
+RW_ACCEPTED_IN
 
   checks_json="$(jq -s '.' "$checks_file")" || die 3 "surfaces: could not assemble the check rows"
   # One row per surface, not one per gate. A surface carrying two gates is answered twice above, and
