@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] - 2026-09-06
+
+### Fixed
+
+- **Both debate commands were written against tools Claude Code deleted.** `security-debate` and `architecture-debate` each said "Verify agent teams are available by attempting to create a team" and "Create a team and these tasks". `TeamCreate` and `TeamDelete` were removed in v2.1.178, and `team_name` on the Agent tool is now accepted and ignored. Agent teams are also experimental and off unless `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set, and the Task tools that once enforced the `Depends on` column are excluded by default on current models from v2.1.233. Three separate reasons the documented mechanism could not run. Both commands now dispatch ordinary subagents with the Agent tool, which needs no team, no experimental flag and no Task tools — every analyst already delivered by writing a file rather than by replying, so nothing was lost in the change. Where ordering matters the commands now say plainly that the orchestrator sequences the rounds and that nothing in the harness enforces it.
+- **The cross-challenge round was promised and never happened.** Both task tables listed "Cross-challenge — debate severity / trade-offs" as a step, and both frontmatter descriptions said the agents "debate" and "cross-challenge". Steps 5 and 6 went straight from spawning to synthesis. Three agents wrote independent reports and the lead merged them, which is a panel rather than a debate, and a "consensus" drawn from it was three opinions that happened to agree. There is now a real round 2: each analyst reads its own round-1 file and both others, and writes a challenge naming what it disputes, where it changed position, and whether unanimity is consensus or a shared blind spot. The synthesis reads all six files and reports a missing challenge rather than skipping it.
+- **The spawn prompts told the analysts to message each other.** All six ended with "Message the other teammates". Plain subagents have no channel between them, so the instruction was unfollowable and the coordination it stood in for never occurred. Round 2 replaces it, and the prompts now say the file is the delivery and there is no channel.
+- **The skill's hook scoping was justified by a mechanism that no longer exists.** `SKILL.md` said "both hooks auto-disable when the skill isn't active" and `CONVENTIONS.md` said the hooks are "active only while the skill is loaded". Skill-frontmatter hooks are registered on invocation and keep running for the rest of the session. The conclusion still holds for a better reason, now stated: skill scope gates whether a hook ever arms, it does not disarm it afterwards, and a plugin-scoped `FileChanged` would be live from session start for people who never asked for an audit. `once: true` is documented alongside, including why it does not suit watch-mode linting.
+
 ## [3.10.5] - 2026-09-06
 
 ### Fixed

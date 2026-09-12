@@ -36,7 +36,7 @@ Two scopes in use:
 **Plugin-scoped** (`hooks/hooks.json` — session-global, always on when plugin enabled):
 - **PreCompact** — `hooks/pre-compact.sh` — Preserves audit context before conversation compaction
 
-**Skill-scoped** (declared in `skills/code-quality-audit/SKILL.md` frontmatter — active only while the skill is loaded):
+**Skill-scoped** (declared in `skills/code-quality-audit/SKILL.md` frontmatter — registered when the skill is invoked, then running for the rest of the session; skill scope gates whether they ever arm, it does not disarm them afterwards):
 - **FileChanged** — `hooks/lint-changed.sh` — Watch-mode linting on linter-config edits. Matcher enumerates literal filenames (per Hooks Reference, FileChanged matcher values are literal filenames, NOT globs): `composer.json`, `package.json`, `phpstan.neon`, `phpstan.neon.dist`, `psalm.xml`, `eslint.config.js`, `eslint.config.mjs`, `.eslintrc.json`, `tsconfig.json`. Source-file watching requires populating `watchPaths` dynamically. Force-disable: `CLAUDE_CODE_QUALITY_WATCH=0`.
 - **PermissionDenied** — returns `{retry: true}` scoped to `Read|Grep|Glob` only. Prevents audit flows from stalling on auto-mode classifier denials for read-only tools.
 
