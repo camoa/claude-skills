@@ -102,6 +102,11 @@ as permission to guess.
 Prints the recipe's path, the framework it matched, and the commands it holds. Runs nothing. Use it
 when someone asks what would happen, or when an install failed and you want to show the steps.
 
+## Reading a process recipe
+
+The stage skills read a process recipe; this one does not. The rules the catalog publishes for
+its blocks, and what a missing heading means, are in `references/reading-a-recipe.md`.
+
 ## What this skill never does
 
 It never writes down that a tool is installed. Running the tool answers that every time. A stored
