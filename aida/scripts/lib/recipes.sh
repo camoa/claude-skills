@@ -29,7 +29,8 @@
 #   recipe_block_into <recipe> <heading> <key> <file>   cuts one YAML block out; prints the state
 #   tc_parse_recipe <recipe> <out>            one JSON object per `## Test commands` row
 #   cc_parse_recipe <recipe> <heading> <key> <out>      the same for a check or surface block
-#   cc_silent_pass_markers <recipe>           the literal markers of a run that selected nothing
+#   cc_markers_in_text <text>                 the literal markers in one silent-pass text
+#   cc_silent_pass_markers <recipe>           the same, from the file-level key of a test recipe
 #   cr_recipe_pair <action> <flag> <value>    parses <framework>=<path> into CR_PAIR
 #   cr_resolve                                resolves the recipes into CR_DOC
 #   cr_lookup <tab list> <name>               the value that name was given, as whole text
@@ -323,17 +324,24 @@ tc_parse_recipe() {
 # ------------------------------------------------------------------------------------------------
 
 # The entry being read, held between lines, the same way PC_* and TC_* are held above.
-CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
+CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""; CC_SILENT_TEXT=""
 
 # Appends one JSON object to $1 for the held row and clears it. `argv` and `extensions` are read as
 # JSON through jq, never split by hand, and a value that does not parse as an array of strings is
 # named in `unreadable` rather than dropped: a malformed row is a defect worth reporting, not a
 # reason to report fewer rows than the recipe wrote. `absent` carries its own folded reason text,
-# because that text is what a person reads when they ask why this check never ran.
+# because that text is what a person reads when they ask why this check never ran. `silent_pass`
+# is a row key on a surface row that runs a suite, and it lands as `silentPass`, the markers
+# harvested from that row's own text. Two surface rows carry two texts, and a file-level read
+# would hand the e2e text to the visual-regression run.
 cc_flush_entry() {
   local out="$1"
   [ -n "$CC_ID" ] || return 0
-  local argv_json='null' exts_json='null' unreadable='[]' parsed
+  local argv_json='null' exts_json='null' unreadable='[]' parsed silent_json='[]'
+  if [ -n "$CC_SILENT_TEXT" ]; then
+    silent_json="$(cc_markers_in_text "$CC_SILENT_TEXT" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+    [ -n "$silent_json" ] || silent_json='[]'
+  fi
   if [ -n "$CC_ARGV_RAW" ]; then
     parsed="$(printf '%s' "$CC_ARGV_RAW" | jq -e -c 'if (type == "array") and (all(.[]; type == "string")) then . else empty end' 2>/dev/null)"
     if [ -n "$parsed" ]; then
@@ -353,15 +361,16 @@ cc_flush_entry() {
   jq -n --arg id "$CC_ID" --argjson argv "$argv_json" --argjson exts "$exts_json" \
         --argjson absent "$([ "$CC_ABSENT" = "1" ] && printf true || printf false)" \
         --arg absentText "$CC_ABSENT_TEXT" --arg signal "$CC_SIGNAL" \
-        --argjson unreadable "$unreadable" '
+        --argjson unreadable "$unreadable" --argjson silent "$silent_json" '
     {id: $id}
     + (if $argv   == null  then {} else {argv: $argv} end)
     + (if $exts   == null  then {} else {extensions: $exts} end)
     + (if $absent == false then {} else {absent: true, absentReason: $absentText} end)
     + (if $signal == ""    then {} else {signal: $signal} end)
+    + (if ($silent | length) == 0 then {} else {silentPass: $silent} end)
     + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
   ' >>"$out" || die 3 "the check-command row $CC_ID could not be recorded"
-  CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
+  CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""; CC_SILENT_TEXT=""
 }
 
 # Reads the section of the recipe at $1 that heading $2 opens and key $3 holds, appending one JSON
@@ -376,32 +385,30 @@ cc_flush_entry() {
 # second parser for the second block is the duplication this move removes.
 cc_parse_recipe() {
   local recipe_file="$1" heading="$2" key="$3" out="$4"
-  local block_file line trimmed indent skip_indent
+  local block_file line trimmed indent skip_indent skip_key
 
   block_file="$out.ccblock"
   RECIPE_STATE="$(recipe_block_into "$recipe_file" "$heading" "$key" "$block_file")"
   [ "$RECIPE_STATE" = "ok" ] || return 0
 
-  CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""
-  skip_indent=-1
+  CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""; CC_SILENT_TEXT=""
+  skip_indent=-1; skip_key=""
   while IFS= read -r line; do
     trimmed="$(pc_trim "$line")"
     # A folded scalar continues on every line indented further than the key that opened it. For
-    # `absent:` those lines are the reason itself, so they are kept rather than skipped.
+    # `absent:` those lines are the reason itself, and for `silent_pass:` the marker text, so they
+    # are kept under the key that opened the fold rather than skipped.
     if [ "$skip_indent" -ge 0 ]; then
       if [ -z "$trimmed" ]; then continue; fi
       indent="$(tc_indent "$line")"
       if [ "$indent" -gt "$skip_indent" ]; then
-        if [ "$CC_ABSENT" = "1" ]; then
-          if [ -z "$CC_ABSENT_TEXT" ]; then
-            CC_ABSENT_TEXT="$trimmed"
-          else
-            CC_ABSENT_TEXT="$CC_ABSENT_TEXT $trimmed"
-          fi
-        fi
+        case "$skip_key" in
+          absent)      CC_ABSENT_TEXT="${CC_ABSENT_TEXT:+$CC_ABSENT_TEXT }$trimmed" ;;
+          silent_pass) CC_SILENT_TEXT="${CC_SILENT_TEXT:+$CC_SILENT_TEXT }$trimmed" ;;
+        esac
         continue
       fi
-      skip_indent=-1
+      skip_indent=-1; skip_key=""
     fi
     [ -n "$trimmed" ] || continue
     case "$trimmed" in
@@ -416,7 +423,12 @@ cc_parse_recipe() {
         CC_ABSENT=1
         CC_ABSENT_TEXT="$(pc_trim "${trimmed#absent:}")"
         case "$CC_ABSENT_TEXT" in '>-'|'>'|'|-'|'|') CC_ABSENT_TEXT="" ;; esac
-        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")" ;; esac
+        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")"; skip_key="absent" ;; esac
+        ;;
+      'silent_pass:'*)
+        CC_SILENT_TEXT="$(pc_trim "${trimmed#silent_pass:}")"
+        case "$CC_SILENT_TEXT" in '>-'|'>'|'|-'|'|') CC_SILENT_TEXT="" ;; esac
+        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")"; skip_key="silent_pass" ;; esac
         ;;
     esac
   done <"$block_file"
@@ -424,11 +436,26 @@ cc_parse_recipe() {
   rm -f "$block_file"
 }
 
+# Prints, one per line, the literal markers in the silent-pass text $1. A marker is a backtick-quoted
+# token in that folded text. A token holding a `<placeholder>` is not printed: it is a shape for a
+# person to read, never a literal substring anything can search for. A text that opens with `None`
+# declares no marker at all. The catalog writes it on a harness that cannot pass in silence, and the
+# failure texts it goes on to quote exit non-zero, so the exit status reads them.
+cc_markers_in_text() {
+  case "$(pc_trim "$1")" in None*) return 0 ;; esac
+  printf '%s' "$1" | tr '\n' ' ' \
+    | grep -o '`[^`]*`' 2>/dev/null \
+    | sed 's/^`//; s/`$//' \
+    | grep -v '<' \
+    | grep -v '^$'
+  return 0
+}
+
 # Prints, one per line, the literal markers the recipe at $1 declares for a run that passed while
-# nothing was selected (`failure_signal:`, `silent_pass:`). A marker is a backtick-quoted token in
-# that folded text. A token holding a `<placeholder>` is not printed: it is a shape for a person to
-# read, never a literal substring anything can search for. Prints nothing when the recipe declares
-# no silent-pass text, which is when the caller's own `--nothing-ran` flag still applies.
+# nothing was selected (`failure_signal:`, `silent_pass:`), through cc_markers_in_text. Prints
+# nothing when the recipe declares no silent-pass text, which is when the caller's own
+# `--nothing-ran` flag still applies. This reads the file-level key under `failure_signal:` in a
+# test-execution recipe; a surface row's own key is read per row by cc_parse_recipe.
 cc_silent_pass_markers() {
   local recipe_file="$1" block
   # Bounded twice, because one bound is not enough. The range ends at the closing fence, and
@@ -439,12 +466,7 @@ cc_silent_pass_markers() {
   block="$(sed -n '/^[[:space:]]*silent_pass:/,/^```/p' "$recipe_file" 2>/dev/null \
     | sed -n '1p; 1!{ /^```/q; /^[[:space:]]*[a-z_][a-z_]*:/q; p; }')"
   [ -n "$block" ] || return 0
-  printf '%s' "$block" | tr '\n' ' ' \
-    | grep -o '`[^`]*`' 2>/dev/null \
-    | sed 's/^`//; s/`$//' \
-    | grep -v '<' \
-    | grep -v '^$'
-  return 0
+  cc_markers_in_text "$(printf '%s' "$block" | sed '1s/^[[:space:]]*silent_pass://; 1s/^[[:space:]]*[>|][+-]*//')"
 }
 
 # Parses one `<framework>=<path>` flag value and sets CR_PAIR to the tab-separated line the caller
@@ -790,7 +812,8 @@ tf_path_matches_catalog_glob() {
 
 
 # Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
-# array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry. $5 is
+# array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry, and
+# that `{dirs}` expands to one token per directory holding one. $5 is
 # the tab-separated `--value` list every other single-placeholder token is read from. $6, when
 # given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
 #
@@ -801,20 +824,32 @@ tf_path_matches_catalog_glob() {
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
 br_run_resolved() {
   local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}"
-  local count i tok name pcount pi rc
+  local count i tok name list_json pcount pi rc
   set --
   count="$(printf '%s' "$argv_json" | jq 'length' 2>/dev/null)"
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
-  pcount="$(printf '%s' "$paths_json" | jq 'length' 2>/dev/null)"
-  case "$pcount" in ''|*[!0-9]*) pcount=0 ;; esac
   i=0
   while [ "$i" -lt "$count" ]; do
     tok="$(printf '%s' "$argv_json" | jq -r --argjson i "$i" '.[$i]' 2>/dev/null)"
     case "$tok" in
-      '{paths}'|'{file}')
+      '{paths}'|'{file}'|'{dirs}')
+        list_json="$paths_json"
+        # `{dirs}` is the same list read as directories: the one that directly holds each file,
+        # relative to the project root, unique. A directory inside another listed one is dropped,
+        # so no file is scanned twice (skills/tool/references/reading-a-recipe.md). A file at the
+        # root gives `.`, and `.` holds every other directory.
+        if [ "$tok" = '{dirs}' ]; then
+          list_json="$(printf '%s' "$paths_json" | jq -c '
+            [ .[] | if contains("/") then sub("/[^/]*$"; "") else "." end ] | unique
+            | . as $all
+            | [ .[] | . as $d
+                | select([ $all[] as $e | select($e != $d and ($e == "." or ($d | startswith($e + "/")))) ] | length == 0) ]')"
+        fi
+        pcount="$(printf '%s' "$list_json" | jq 'length' 2>/dev/null)"
+        case "$pcount" in ''|*[!0-9]*) pcount=0 ;; esac
         pi=0
         while [ "$pi" -lt "$pcount" ]; do
-          set -- "$@" "$(printf '%s' "$paths_json" | jq -r --argjson pi "$pi" '.[$pi]')"
+          set -- "$@" "$(printf '%s' "$list_json" | jq -r --argjson pi "$pi" '.[$pi]')"
           pi=$((pi + 1))
         done
         ;;

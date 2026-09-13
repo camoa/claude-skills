@@ -66,7 +66,7 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/check" },
-      "description": "One row per check, in the order the actions record them. The sixteen checks carry the ids every-criterion, non-goals, serves-a-criterion, test-and-mutation, coding-standards, static-analysis, security, suite, solid, dry, architecture-fit, guides, e2e, visual-regression, visual-parity and framework-practices. The list is longer than sixteen whenever a check recipe declares a tool row beyond the three named above: the block is a floor, not the list, and every row it declares is run and recorded here (ideal/review.md, 'The check commands block is not fixed at three rows')."
+      "description": "One row per check, in the order the actions record them. The sixteen checks carry the ids every-criterion, non-goals, serves-a-criterion, test-and-mutation, coding-standards, static-analysis, security, suite, solid, dry, architecture-fit, guides, e2e, visual-regression, visual-parity and framework-practices. The catalog's check block declares five rows: coding-standards, static-analysis, security, duplication and design-metrics. The last two are recorded here under their own ids whenever a recipe commands them, so the list runs past sixteen on such a framework. The block is a floor, not the list, and every row it declares is run and recorded here (ideal/review.md, 'The check commands block is not fixed at three rows')."
     },
     "criteria": {
       "type": "array",
@@ -109,7 +109,7 @@
         },
         "score": {
           "type": "string",
-          "description": "The score as the tool printed it: the first output line naming a score, copied verbatim and never parsed into a number, because each of the four tools prints its own shape and a number this script derived would be a fifth. Empty when no row ran, and empty when the run named no score."
+          "description": "The score as the tool printed it, copied verbatim and never parsed into a number, because each tool prints its own shape and a number this script derived would be another. The line is chosen by the tool the row names: Infection's Metrics lines, gremlins' Test efficacy line, mutmut's count per outcome on its last line. Empty when no row ran, and empty when the run named no score."
         },
         "survivors": {
           "type": "array",
@@ -181,7 +181,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Which check this is. The sixteen ids are listed in this schema's own `checks` description; a tool row the recipe declares beyond the three named tools carries the row's own id, because the ids are open."
+          "description": "Which check this is. The sixteen ids are listed in this schema's own `checks` description; a duplication or design-metrics row the recipe declares carries the row's own id, because the ids are open."
         },
         "verdict": {
           "type": "string",

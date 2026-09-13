@@ -711,16 +711,20 @@ rw_check_coverage_verdict() {
   fi
 }
 
-# The mutation row, run over the changed files. The score is the tool's own line, verbatim: the first
-# output line naming a score, never a number parsed out of it, because no key in a recipe row declares
-# the shape a score is printed in and the four tools print four shapes. A survivor is a line of that
-# output naming one of the changed files, which is a string comparison and not a guess.
+# The mutation row, run over the changed files. The score is the tool's own line, verbatim, never a
+# number parsed out of it. No key in a recipe row declares the shape a score is printed in, and the
+# tools print different shapes. No tool prints the word "score", so the line is chosen by the tool
+# the row names, from the shapes the catalog observed in each recipe's own `trap:`. Infection
+# prints `Metrics:` lines, gremlins a `Test efficacy:` line, and mutmut a count per outcome on its
+# last line. A survivor is a line of that output naming one of the changed files, which is a
+# string comparison and not a guess. mutmut prints none, and its survivors are recorded as not
+# readable rather than as none.
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
-  local fw_count fwi fw_obj fw row outfile rc
+  local fw_count fwi fw_obj fw row outfile rc tool
   local detail output survivors score combined
-  verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""
+  verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""; tool=""
   fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
   fwi=0
@@ -746,7 +750,13 @@ rw_run_mutation() {
     rc="$RW_RUN_RC"
     output="$RW_RUN_OUTPUT"
     outfile="$RW_RUN_OUTFILE"
-    score="$(printf '%s' "$output" | grep -i 'score' | head -1)"
+    tool=""
+    case "$(printf '%s' "$row" | jq -r '.argv | join(" ")')" in
+      *infection*) tool="infection"; score="$(printf '%s' "$output" | grep -E 'MSI|Mutation Code Coverage')" ;;
+      *gremlins*)  tool="gremlins";  score="$(printf '%s' "$output" | grep 'Test efficacy:' | head -1)" ;;
+      *mutmut*)    tool="mutmut";    score="$(printf '%s' "$output" | grep -v '^[[:space:]]*$' | tail -1)" ;;
+      *)           score="$(printf '%s' "$output" | grep -i 'score' | head -1)" ;;
+    esac
     # The criterion a survivor belongs to, by exact path: the frozen test records say which test file
     # belongs to which criterion, and the frozen orders say which source file belongs to which order
     # and what that order serves. A survivor no path attaches is still recorded, because the
@@ -765,9 +775,18 @@ rw_run_mutation() {
                        // "")} ]
       | unique_by(.text)')"
     [ -n "$survivors" ] || survivors='[]'
+    # `mutmut run` names no file, so a progress line naming a source file is not a survivor. The
+    # survivors come from a second command, `mutmut results`, as dotted mutant names nothing here
+    # maps to a path. So they are recorded as not readable. The row still reads met on exit 0: the
+    # coverage half and the score with its survived count were read, and only the list was not
+    # (references/checks.md, "A check answers unknown only when nothing it reads could be read").
+    [ "$tool" != "mutmut" ] || survivors='[]'
     if [ "$(printf '%s' "$survivors" | jq 'length')" -gt 0 ]; then
       combined="$(rw_worse "$combined" "unmet")"
       detail="$detail $fw: the mutation command reported $(printf '%s' "$survivors" | jq 'length') line(s) naming a changed file, and a surviving mutant is a test nothing can fail."
+    elif [ "$rc" = "0" ] && [ "$tool" = "mutmut" ]; then
+      combined="$(rw_worse "$combined" "met")"
+      detail="$detail $fw: mutmut run exited 0 and prints no survivor by file. The survivors come from mutmut results as dotted mutant names, which nothing here maps to a path, so they are recorded as not readable. The outcome counts are in the score."
     elif [ "$rc" = "0" ]; then
       combined="$(rw_worse "$combined" "met")"
       detail="$detail $fw: the mutation command exited 0 and named no changed file, so it reported no survivor in this change."
@@ -831,7 +850,7 @@ rw_tool_row_check() {
   signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
   exts="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
   has_paths=false
-  printf '%s' "$argv" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
+  printf '%s' "$argv" | jq -e 'any(.[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1 && has_paths=true
   scoped="$RW_CHANGED_JSON"
   [ -z "$exts" ] || scoped="$(br_filter_extensions "$RW_CHANGED_JSON" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
@@ -1519,7 +1538,7 @@ RW_REGISTRY
 rw_surface_kind() {
   local check_id="$1" row_id="$2" gate="$3" enabled="$4" walked="$5" accepted="$6"
   local checks_out="$7" surfaces_out="$8"
-  local row rc output mine count i sid verdict rows
+  local row rc output mine count i sid verdict rows marker
   local ran row_verdict detail worst missing_walk accept_here accept_row
 
   mine="$(printf '%s' "$RW_REGISTRY_SURFACES" | jq -c --arg g "$gate" \
@@ -1592,7 +1611,14 @@ rw_surface_kind() {
   if [ -z "$row_verdict" ]; then
     ran=true
     rc="$RW_RUN_RC"
-    if [ "$rc" = "0" ]; then
+    # The row's own silent-pass markers, read before the exit status the way rw_check_suite reads
+    # the file-level ones: a suite that selected nothing and exited 0 decided nothing.
+    marker="$(jq -rn --argjson m "$(printf '%s' "$row" | jq -c '.silentPass // []')" \
+      --arg out "$output" '[ $m[] as $one | select($out | contains($one)) | $one ][0] // ""')"
+    if [ -n "$marker" ]; then
+      row_verdict="unknown"
+      detail="the $row_id output holds the row's own silent-pass marker ('$marker'), so an exit status cannot decide a run that selected nothing."
+    elif [ "$rc" = "0" ]; then
       row_verdict="met"
       detail="the $row_id command exited 0."
     else
