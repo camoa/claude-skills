@@ -34,6 +34,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                      --approach <text> --status <suggested|required>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] record-decision <task_folder> \
 #                      --text <text>
+#   scope-actions.sh [--run-mode <interactive|autonomous>] distill        <task_folder>
 #
 # `add` records `author` as `designer` in both run modes. Only an explicit `--author owner`, or
 # the promotion a person's yes triggers at approval, records `owner` (ideal/scope.md, "Approval").
@@ -78,9 +79,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   1  the given path does not exist, is not a folder, or holds no task.json: not a task folder
 #      (ideal/scope.md, "Scope runs against a task that already exists").
 #   2  the target of this action is not present: alignment.json does not exist yet, for an action
-#      that needs one already (every action but `read`, `init` and `set-mechanism`); or, for
-#      `update` and `remove`, the given --id names no criterion and no non-goal in an
-#      alignment.json that does exist.
+#      that needs one already (every action but `read`, `init`, `set-mechanism` and `distill`);
+#      or, for `update` and `remove`, the given --id names no criterion and no non-goal in an
+#      alignment.json that does exist; or, for `distill`, records/scope-distill.json does not
+#      exist yet, so the distiller has not been dispatched.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; alignment.json exists but will not parse as JSON, or parses
 #      but is not a contract (missing schemaVersion, goal, expectedResult, or criteria/nonGoals
@@ -92,7 +94,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      nextCriterionId or nextNonGoalId; the plugin root could not be resolved; or a write that
 #      failed.
 #   4  a script this action calls ran and failed. `render` calls alignment-render.sh; that
-#      script's own stderr is the answer, printed here rather than duplicated.
+#      script's own stderr is the answer, printed here rather than duplicated. For `distill`, the
+#      sidecar exists but fails scripts/distill-schema.json, or says standsAlone false with no gap.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule task-actions.sh and check-alignment.sh
@@ -138,6 +141,7 @@ command -v jq >/dev/null 2>&1 || { printf 'scope-actions: jq is required and was
 die1() { printf 'scope-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'scope-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'scope-actions: %s\n' "$1" >&2; exit 3; }
+die4() { printf 'scope-actions: %s\n' "$1" >&2; exit 4; }
 
 usage() {
   cat <<'EOF' >&2
@@ -154,6 +158,7 @@ usage: scope-actions.sh read            <task_folder>
        scope-actions.sh render          <task_folder>
        scope-actions.sh set-mechanism   <task_folder> --approach <text> --status <suggested|required>
        scope-actions.sh record-decision <task_folder> --text <text>
+       scope-actions.sh distill         <task_folder>
 EOF
 }
 
@@ -664,6 +669,13 @@ do_record_decision() {
   exit 0
 }
 
+# Reads the sidecar the distiller wrote after the approval; the read is distill_read in task-helpers.sh.
+do_distill() {
+  [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
+  distill_read "$TASK_PATH" scope
+  exit 0
+}
+
 # ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
@@ -700,5 +712,6 @@ case "$ACTION" in
   render)           do_render           "$@" ;;
   set-mechanism)    do_set_mechanism    "$@" ;;
   record-decision)  do_record_decision  "$@" ;;
+  distill)          do_distill          "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

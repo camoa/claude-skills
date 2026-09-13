@@ -41,6 +41,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
+#   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
 #                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed]
@@ -102,7 +103,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  the target of this action is not present: `start` was asked to begin a task with no
 #      alignment.json, or with one that will not parse or is not a contract; or `update`,
 #      `add-owned-file`, `add-done-when`, `add-test` or `render` were given an --id naming no
-#      work order file in this task's design/ folder.
+#      work order file in this task's design/ folder; or `distill` found no
+#      records/design-distill.json, so the distiller has not been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
@@ -118,6 +120,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      JSON, not an object, or a missing, malformed or unknown top-level field (check-design.sh's
 #      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
 #      folder"). `close` refuses for the same reason, on the live files, before writing anything.
+#      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says standsAlone
+#      false with no gap.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
 #      problem: a criterion with no serving order, a criterion owned by zero or by more than one
 #      work order, an order serving no criterion, an order missing a required test, a dependency
@@ -201,6 +205,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
+       design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
                                          --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed]
@@ -989,6 +994,13 @@ do_dispose() {
   exit 0
 }
 
+# Reads the sidecar the distiller wrote after `close`; the read is distill_read in task-helpers.sh.
+do_distill() {
+  [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
+  distill_read "$TASK_PATH" design
+  exit 0
+}
+
 # ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
@@ -1026,5 +1038,6 @@ case "$ACTION" in
   check)          do_check          "$@" ;;
   close)          do_close          "$@" ;;
   dispose)        do_dispose        "$@" ;;
+  distill)        do_distill        "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

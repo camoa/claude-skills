@@ -364,6 +364,16 @@ Did a work order change after closing? Close again. A second close is allowed an
 replaces the old hash with the new one. Closing again is the supported way to change a design that
 already closed.
 
+Once `design-closed.json` is written, dispatch the `distiller` role once, with the task folder,
+the stage `design`, and the paths of `design/*.json` and `design-closed.json`. Never a summary of
+this conversation. It writes `records/design-distill.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
+```
+It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
+`gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
+written; dispatch again. Exit 4 means the sidecar is malformed; say so.
+
 ## What this skill never does
 
 It never writes a single overview file or a file per component. The work orders are the whole

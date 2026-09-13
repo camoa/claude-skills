@@ -53,7 +53,8 @@ Each `OPEN:` line is one of two shapes:
 - `"kind":"new"`: a task with its own `task.json`. Carries `id`, `state` (`new` or
   `in_progress`), `parent`, `children`, `runMode`, and `review`: what `review/review.json` says,
   `passed` or `failed` from its verdict, `unfinished` for a record with no verdict, `none` with no
-  record. An open task reading `passed` or `failed` is reviewed, and completion closes it.
+  record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
+  `notes`: the date of the newest file under the task's `notes/`, or `none`.
 - `"kind":"legacy"`: a task from before the tasks folder existed. Carries `id`, `epic` (the
   folder it is nested inside, or `null`), `legacyState` (`in_progress` here; `complete` only
   appears under `LEGACY_COMPLETE:`), and `path`.

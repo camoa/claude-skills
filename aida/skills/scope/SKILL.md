@@ -4,7 +4,7 @@ description: This skill should be used when a task needs its scope contract writ
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Agent
 ---
 
 # Scope
@@ -218,7 +218,7 @@ Yes: every criterion is written as `designer` until a person says yes, so promot
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   update "<task_folder>" --id <id> --author owner
 ```
-Then the conversation is done.
+Then run the distill check below, and the conversation is done.
 
 **Autonomous:** still render the whole document, for the record, but do not wait for an answer and
 do not promote anything: a criterion `designer` because scope proposed it stays `designer`, since
@@ -227,7 +227,19 @@ nobody approved it. Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
   record-decision "<task_folder>" --text "approved the rendered contract on the person's behalf"
 ```
-to report it as approved on the person's behalf, and finish.
+to report it as approved on the person's behalf, then run the distill check below and finish.
+
+## The distill check
+
+The contract is now written. Dispatch the `distiller` role once, with the task folder, the stage
+`scope`, and the path of `alignment.json`. Never a summary of this conversation: it exists to be
+denied that account. It writes `records/scope-distill.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh distill "<task_folder>"
+```
+It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
+`gap:` line. Acting on one is the relevant step above run again; the check never blocks. Exit 2
+means the sidecar was not written; dispatch again. Exit 4 means the sidecar is malformed; say so.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove` or `set-mechanism` again. Only call one of those after the
