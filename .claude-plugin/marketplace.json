@@ -5,8 +5,8 @@
     "email": ""
   },
   "metadata": {
-    "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.82"
+    "description": "Claude Code plugins for AI-assisted development: aida, the stack-agnostic development process with a Drupal-flavored reference; the dev-guides navigator; HTMX and AJAX migration; AI-assisted Drupal contribution quality; brand content creation; code quality auditing; paper testing; and plugin checks.",
+    "version": "2.1.0"
   },
   "renames": {
     "ai-dev-assistant": "aida",
@@ -61,7 +61,7 @@
     {
       "name": "aida",
       "source": "./aida",
-      "description": "Keeps AI coding work inside a process that produces better code. Every task runs through five stages: scope, research, design, implementation, review. Scope writes a contract of goals, non-goals, and the criteria that prove them, and every later stage is checked against it. Research finds prior art in your own code first, then outside, from current documentation rather than the model's memory. Design writes a spec you can build from. Implementation writes tests first. Review runs the blocking checks. The checks are scripts, not the model judging its own work. Stack knowledge lives in fetched recipes, so one process fits PHP, Python, Go, Drupal, or a Claude plugin.",
+      "description": "Keeps AI coding work inside a process that produces better code. Every task runs through six stages: scope, research, design, implementation, review, completion. Scope writes a contract of goals, non-goals, and the criteria that prove them, and every later stage is checked against it. Research finds prior art in your own code first, then outside, from current documentation rather than the model's memory. Design writes work orders you can build from, each with its owned files and a diff budget. Implementation writes the tests first and freezes them before the code. Review answers every criterion, runs the stack's tools from its recipe, and judges the whole change once. Completion closes the task on the verdict and writes the pull request body from the records. The checks are scripts reading records, not the model judging its own work. Stack knowledge lives in fetched recipes, so one process fits PHP, Python, Go, Drupal, or a Claude plugin.",
       "version": "6.0.0-beta",
       "author": {
         "name": "camoa"
