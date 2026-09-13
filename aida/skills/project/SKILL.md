@@ -49,8 +49,15 @@ line naming its path. A person writes it by hand, so a standing note for this pr
 every window.
 
 **`CASE: 4`.** Neither the directory nor a remembered choice resolves to a project. The output
-then carries `DECLINED: true` or `DECLINED: false`, then `PROJECTS:` followed by one `project:`
-line per registered project, most recently used first (empty when none are registered yet).
+then carries `DECLINED: true` or `DECLINED: false`, then zero or more `V5:` lines. Then comes
+`PROJECTS:`, followed by one `project:` line per registered project, most recently used first
+(empty when none are registered yet).
+
+A `V5:` line names a version 5 folder under the projects base whose code path is this directory.
+When one or more are present, offer the switch first, in one line: "This directory is the code
+path of the version 5 project <folder>. Pick it up? (runs switch)". Yes runs "switch" below with
+that folder. No falls through to the create offer below. Autonomously, do not ask: say the folder
+exists and that `switch <folder>` picks it up, and continue.
 
 - **`DECLINED: false`, interactive.** Offer to create a project here, in one line: setting one up
   gives findings and decisions somewhere to live past this session. Wait for a plain yes or no.
@@ -300,8 +307,10 @@ corrupted or lost registry file, or after unregistering something by mistake:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh rebuild-registry ["<base>"]
 ```
-Walks every immediate subdirectory of the projects-folder base (the recorded default when none is
-given) and reads each one's project file. Replaces the whole registry with what it found.
+Walks every immediate subdirectory of the projects-folder base and reads each one's project file.
+With no base given, it walks the base recorded when the first project was created, or the
+built-in `~/.claude/aida/projects` when no project was ever created. Replaces the whole registry
+with what it found.
 `declinedOffers` and `directoryChoices` cannot be recovered this way and start empty again; say so
 plainly rather than letting it pass unremarked.
 
