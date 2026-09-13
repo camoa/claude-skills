@@ -2,7 +2,7 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -192,9 +192,12 @@ runs `set-frameworks` below with the answer. Autonomous **halts**, reporting tha
 are missing, the same rule as create's step 3.
 
 A version 5 folder is usually not a git repository, and the check names `git init` there as the
-repair. Interactive: offer it once, in one line, and on yes run `git -C "<folder>" init`. The
-script has no action that runs the check alone, so the next action that touches this project
-shows the repair gone. Autonomous: name the repair and continue.
+repair. Interactive: offer it once, in one line, and on yes run
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh git-init "<name>"
+```
+It makes the folder a repository, commits the files already there, and runs the check again.
+Autonomous: name the repair and continue.
 
 ## `list [active|complete|archived]...`
 

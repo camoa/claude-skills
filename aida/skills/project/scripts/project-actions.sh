@@ -82,6 +82,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh state <name-or-codePath> <active|complete|archived> -- <why...>
        project-actions.sh set-code-path <name-or-codePath> <newCodePath>
        project-actions.sh set-frameworks <name-or-codePath> <framework>...
+       project-actions.sh git-init <name-or-codePath>
        project-actions.sh add-source <name-or-codePath> <kind> <folder>
        project-actions.sh unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
@@ -171,6 +172,49 @@ resolve_target() {
   ' "$REGISTRY_FILE" 2>/dev/null
 }
 
+# The project folder's ignore file, written by create and by git-init on a version 5 pickup. A
+# whitelist, not a blacklist: everything is ignored until named back in. records/ is named back
+# in for .json only by the line above it, so it is re-ignored on its own line below. The check
+# overwrites records/check-project.json on every run. A file that changes on every check is a
+# derived value, never something to commit (foundations.md, State). The unanchored pattern
+# covers a task's own records folder too: a task check writes one per task.
+write_project_gitignore() {
+  cat > "$1/.gitignore" <<'EOF'
+*
+!*/
+!.gitignore
+!*.md
+!*.json
+!*.txt
+/records/
+records/
+EOF
+}
+
+# The one writer of a new project file. create and the version 5 pickup both call it, so the
+# initial shape lives here once. frameworks is written when $4 is a JSON array. When $4 is null
+# the field is absent, and the check names it as missing for its producer to fill. Sources,
+# process recipes, playbook subscriptions, surfaces and the task rule start empty or null.
+# ideal/project.md declares each of them lazily, the first time a later stage needs it.
+write_project_file() {
+  local project_path="$1" code_path="$2" name="$3" fw_json="$4"
+  jq -n --arg codePath "$code_path" --arg name "$name" --argjson frameworks "$fw_json" '
+    {schemaVersion: 1, codePath: $codePath, name: $name}
+    + (if $frameworks == null then {} else {frameworks: $frameworks} end)
+    + {state: "active", processRecipes: [], sources: [], playbookSubscriptions: {}, surfaces: null, taskRule: null}
+  ' > "$project_path/project.json"
+}
+
+# Makes a project folder a repository with its first commit. It writes the ignore file when the
+# folder has none, runs git init, then commit_project with the subject, why and stage given.
+# Returns the commit's status. create and git-init both call it.
+init_project_repo() {
+  local project_path="$1" subject="$2" why="$3" stage="$4"
+  [ -e "$project_path/.gitignore" ] || write_project_gitignore "$project_path"
+  git -C "$project_path" init -q || die3 "git init failed in $project_path"
+  commit_project "$project_path" "$subject" "$why" "" "" "project" "$stage"
+}
+
 # Renders the five-field commit shape from templates/project-commit.md, checks its own shape
 # before use (never trust an unrendered corner case to slip past silently), then commits it as
 # the project folder's own git identity. AIDA commits its own files in the project folder and
@@ -196,6 +240,9 @@ commit_project() {
     fi
   fi
 
+  # A folder that is not a repository yet returns 1 before any git call, so git prints no
+  # error. The caller says the write was not committed. A version 5 pickup is such a folder.
+  git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || { rm -f "$msg_file"; return 1; }
   git -C "$project_path" add -A
   if git -C "$project_path" diff --cached --quiet 2>/dev/null; then
     rm -f "$msg_file"
@@ -299,30 +346,8 @@ do_create() {
 
   mkdir -p "$project_path/records" || die3 "cannot create $project_path"
 
-  local fw_json code_path_json
-  fw_json="$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)"
-  code_path_json="$(printf '%s' "$code_path" | jq -R .)"
-
-  # Sources, process recipes, playbook subscriptions, both optional harnesses and the task rule
-  # all start empty or null: ideal/project.md, "Sources" and "Starting a new project", declares
-  # every one of them lazily, the first time a later stage needs it. None of them is asked here,
-  # and none is pre-populated with a default entry.
-  jq -n \
-    --argjson codePath "$code_path_json" \
-    --arg name "$name" \
-    --argjson frameworks "$fw_json" \
-    '{
-      schemaVersion: 1,
-      codePath: $codePath,
-      name: $name,
-      frameworks: $frameworks,
-      state: "active",
-      processRecipes: [],
-      sources: [],
-      playbookSubscriptions: {},
-      surfaces: null,
-      taskRule: null
-    }' > "$project_path/project.json" || die3 "could not write $project_path/project.json"
+  write_project_file "$project_path" "$code_path" "$name" "$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)" \
+    || die3 "could not write $project_path/project.json"
 
   cat > "$project_path/project_state.md" <<EOF
 # ${name}
@@ -333,32 +358,9 @@ do_create() {
 Notes for a person go here. Nothing on this page is read by a script.
 EOF
 
-  # A whitelist, not a blacklist: everything is ignored until named back in. records/ is named
-  # back in for .json only by the line above it, so it is re-ignored on its own line below.
-  # the check overwrites records/check-project.json on every run, and a file that changes on
-  # every check is a derived value, never something to commit (foundations.md, State). The
-  # unanchored pattern covers a task's own records folder too: a task check writes one per task,
-  # and without it every check put a derived file into permanent history.
-  cat > "$project_path/.gitignore" <<'EOF'
-*
-!*/
-!.gitignore
-!*.md
-!*.json
-!*.txt
-/records/
-records/
-EOF
-
-  git -C "$project_path" init -q || die3 "git init failed in $project_path"
-  if ! commit_project "$project_path" \
-      "Create project for ${code_path}" \
-      "A new project needs its own git history from the first write, so later stage boundaries have somewhere to land." \
-      "" \
-      "" \
-      "project" "creation"; then
-    die3 "the first commit in $project_path failed"
-  fi
+  init_project_repo "$project_path" "Create project for ${code_path}" \
+    "A new project needs its own git history from the first write, so later stage boundaries have somewhere to land." \
+    "creation" || die3 "the first commit in $project_path failed"
 
   if ! registry_add_project "$code_path" "$project_path" "$name"; then
     printf 'project-actions: the project folder was created at %s, but the registry entry was not\n' "$project_path" >&2
@@ -475,21 +477,18 @@ register_v5_folder() {
   name="$(basename -- "$folder")"
   code_path="$(canon_path "$code_path")"
   registry_add_project "$code_path" "$folder" "$name" || die3 "the registry row for $folder was not written; see the message above."
-  # The folder's parent is the projects base when none is recorded yet, so a first version 6 run
-  # on a machine with version 5 projects finds the rest of them. The helper keeps an existing base.
+  # The folder's parent is the projects base when none is recorded yet. A first version 6 run on
+  # a machine with version 5 projects then finds the rest of them. The helper keeps an existing base.
   settings_set_projects_base_if_unset "$(dirname -- "$folder")" \
     || printf 'project-actions: the projects base could not be recorded; the next creation may ask for it.\n' >&2
-  # state is written here too: a project being picked up is active, the same fact the registry
-  # row just recorded, and the check compares the two.
-  jq -n --arg c "$code_path" --arg n "$name" '{schemaVersion: 1, codePath: $c, name: $n, state: "active"}' \
-    > "$folder/project.json" || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
-  # frameworks has one producer, the detector. Exit 0 names at least one; any other exit leaves
-  # the field missing for set-frameworks to fill.
-  local detected
+  # The same initial file create writes. frameworks comes from the detector, the field's one
+  # producer: exit 0 names at least one, and any other exit leaves it absent for set-frameworks.
+  local detected fw_json="null"
   if detected="$("${PLUGIN_ROOT}/scripts/detect-framework.sh" "$code_path" 2>/dev/null)"; then
-    write_project_field "$folder" "could not write frameworks into $folder/project.json" \
-      --argjson f "$(printf '%s\n' "$detected" | sed 's/:.*$//' | jq -R . | jq -s .)" '.frameworks = $f'
+    fw_json="$(printf '%s\n' "$detected" | sed 's/:.*$//' | jq -R . | jq -s .)"
   fi
+  write_project_file "$folder" "$code_path" "$name" "$fw_json" \
+    || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
   echo "PICKED UP: ${folder}"
 }
 
@@ -509,7 +508,7 @@ do_switch() {
   # code path already answers for. Standing inside some other project's own code and switching
   # by hand is a fact about this conversation only. Persisting it would make the switch outlive
   # the session and later read as the "surprising failure" case 3 exists to prevent.
-  # The owner being the target itself is every version 5 pickup run from the code folder: the code
+  # The owner is the target itself on every version 5 pickup run from the code folder. The code
   # path already answers, so there is no note and no choice to record.
   local owner
   if owner="$(registry_resolve_by_directory "$cwd" 2>/dev/null)"; then
@@ -702,6 +701,27 @@ do_set_frameworks() {
     || printf 'project-actions: the frameworks were written but not committed.\n' >&2
 
   echo "FRAMEWORKS: $*"
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
+# git-init: the repair the check names on a project folder that is not a repository yet
+# ------------------------------------------------------------------------------------------------
+
+# Only a version 5 folder reaches this: create makes its folder a repository. The files already
+# there are committed at once, so the check does not next report them as uncommitted work.
+do_git_init() {
+  local target="${1:?git-init: a name or a code path is required}" match project_path
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  if git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "GIT: already a repository $project_path"
+  else
+    init_project_repo "$project_path" "Pick up the version 5 project folder" "picked up by version 6" "git-init" \
+      || printf 'project-actions: the repository was made but its first commit failed.\n' >&2
+    echo "GIT: initialised $project_path"
+  fi
   run_check "$project_path"
 }
 
@@ -1021,6 +1041,7 @@ case "$action" in
   state) do_state "$@" ;;
   set-code-path) do_set_code_path "$@" ;;
   set-frameworks) do_set_frameworks "$@" ;;
+  git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
