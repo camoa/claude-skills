@@ -14,34 +14,35 @@
 #
 # It needs sort_key from next-actions.sh, so it is sourced by that file and never on its own.
 
-# Legacy tasks: version 5's implementation_process/in_progress and completed. A top-level folder
-# with its own subfolders is a split task (an epic); each subfolder is a listed leaf, one level
-# deep, matching the two-level nesting version 5 already enforced. A top-level folder with no
-# subfolders is itself the leaf.
+# Legacy tasks: version 5's implementation_process/in_progress and completed. A folder counts as
+# a task only when it holds task.md; a version 5 task folder holds its stage folders (research,
+# review, validations, ...) beside that file, and none of those is a task. Every top-level folder
+# is looked into one level, with or without a task.md of its own: a split task (an epic) nests
+# its children there, and each child holding task.md lists with the epic named, matching the
+# two-level nesting version 5 already enforced. An epic remnant with no task.md still yields its
+# children and is never listed itself.
 # ------------------------------------------------------------------------------------------------
 
 emit_legacy_leaves() {
   local project_path="$1" base_dir="$2" legacy_state="$3"
   [ -d "$base_dir" ] || return 0
-  local top top_name has_children child key line
+  local top top_name child key line
   while IFS= read -r top; do
     [ -n "$top" ] || continue
     top_name="$(basename -- "$top")"
-    has_children=0
-    while IFS= read -r child; do
-      [ -n "$child" ] || continue
-      has_children=1
-      key="$(sort_key "$project_path" "$child")"
-      line="$(jq -nc --arg k "$(basename -- "$child")" --arg e "$top_name" --arg s "$legacy_state" --arg p "$child" \
-        '{kind:"legacy", id:$k, epic:$e, legacyState:$s, path:$p}')"
-      printf '%s\t%s\n' "$key" "$line"
-    done < <(find "$top" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
-    if [ "$has_children" -eq 0 ]; then
+    if [ -f "$top/task.md" ]; then
       key="$(sort_key "$project_path" "$top")"
       line="$(jq -nc --arg k "$top_name" --arg s "$legacy_state" --arg p "$top" \
         '{kind:"legacy", id:$k, epic:null, legacyState:$s, path:$p}')"
       printf '%s\t%s\n' "$key" "$line"
     fi
+    while IFS= read -r child; do
+      [ -n "$child" ] && [ -f "$child/task.md" ] || continue
+      key="$(sort_key "$project_path" "$child")"
+      line="$(jq -nc --arg k "$(basename -- "$child")" --arg e "$top_name" --arg s "$legacy_state" --arg p "$child" \
+        '{kind:"legacy", id:$k, epic:$e, legacyState:$s, path:$p}')"
+      printf '%s\t%s\n' "$key" "$line"
+    done < <(find "$top" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
   done < <(find "$base_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
 }
 

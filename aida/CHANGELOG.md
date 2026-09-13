@@ -16,6 +16,17 @@ Rows of the first live run from the first task on a picked-up project.
 - Row 21: after a version 5 pickup, `switch` prints one `LEGACY:` line per task still under
   `implementation_process/in_progress/`, and the skill names `/aida:next` as the step that moves
   the one the person picks.
+- Row 16: a legacy task never reaches "Enter the tree"; the move comes first.
+- Row 17: `LEGACY_COMPLETE:` listed every stage sub-folder of a completed version 5 task as a
+  task. A folder is a task only when it holds `task.md`, one level down as a child of its epic.
+  `open <name>` follows the same rule and never finds a stage sub-folder by name.
+- Row 18: the report's `CASE:` and `RUN_MODE:` lines are named in the skill.
+- Row 20: every open task line carries `stage`, the first stage whose close record is absent.
+  The rule lives once, in `task_stage` in `scripts/lib/task-helpers.sh`; the session-start hook
+  reads the field instead of deriving it, and `task save` points at the same field.
+- Row 22: a task holding a version 5 `alignment.md` and no `alignment.json` reads
+  `legacyRecords: true`, and the skill says the old contract and research are there to read while
+  the stage writes its own record.
 - Row 19: `next` said that moving a version 5 task into `tasks/` "is not built yet". The live run
   concluded it had to delete and recreate the task. `next` now runs the task skill's `repair`
   itself on the legacy task it loads, so a person never types it. `task` no longer calls `next`

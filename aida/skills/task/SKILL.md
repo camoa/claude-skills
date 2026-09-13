@@ -163,7 +163,8 @@ write, since the field's absence already means that. Show the whole output.
 A person stops mid-stage, and a decision this conversation made is in no record yet. This writes
 it down for the next window. Only a person invokes it; nothing dispatches it.
 
-Derive the current stage as the session-start hook does, the first whose close record is absent.
+The current stage is the `stage` the next skill's report prints for this task, the first whose
+close record is absent.
 That is scope without `alignment.json`, research without `records/research-check.json` at
 `exitCode` 0, design without `design-closed.json`. Read that stage's sidecar,
 `records/<stage>-distill.json`. When none exists, dispatch the `distiller` role with the task
