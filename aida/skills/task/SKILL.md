@@ -1,7 +1,6 @@
 ---
 name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", or "save what we decided". It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, or saves a mid-stage decision as a note.
-disable-model-invocation: true
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
@@ -35,6 +34,8 @@ printed path when another field is needed.
 ## `create <name>`
 
 Makes the task and nothing else: no contract, no interview, no stage. It takes a name and a goal.
+Run it only when the person asked for this task in this conversation, by name or by a yes to an
+offer. Another skill's hand-off carries that yes. Nothing here invents one.
 
 **1. Name.** Ask what to call it, unless already said. Validate against
 `^[A-Za-z0-9_][A-Za-z0-9._-]*$`: it must start with a letter, digit or underscore, and hold only

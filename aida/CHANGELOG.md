@@ -27,6 +27,9 @@ Rows of the first live run from the first task on a picked-up project.
 - Row 22: a task holding a version 5 `alignment.md` and no `alignment.json` reads
   `legacyRecords: true`, and the skill says the old contract and research are there to read while
   the stage writes its own record.
+- Row 23: `task` is model-invocable. The flag made the person type `/aida:task create` after
+  saying yes to `next`'s offer, and refused `repair`. The guards stay as prose: `create` runs only
+  on the person's ask or yes, and `set-run-mode` only when a person explicitly asks.
 - Row 19: `next` said that moving a version 5 task into `tasks/` "is not built yet". The live run
   concluded it had to delete and recreate the task. `next` now runs the task skill's `repair`
   itself on the legacy task it loads, so a person never types it. `task` no longer calls `next`
