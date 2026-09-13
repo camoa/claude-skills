@@ -4,6 +4,36 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.4] - 2026-09-13
+
+Rows 5 to 13 of the first live run, all from picking up a version 5 project. The pickup now ends
+usable, or with the one step left named.
+
+### Added
+
+- A version 5 pickup runs the framework detector on the code path and writes what it names.
+- `set-frameworks <name-or-path> <framework>...` writes the stack by hand when the detector
+  named none. The skill asks "What is the stack?" once after a pickup that still lacks it.
+- `git-init <name-or-path>` makes a picked-up folder a repository, commits what is there, and
+  runs the check. The skill offers it once, interactively, when the check names the repair.
+
+### Changed
+
+- On exit 1 the skill names each missing field, its producer, and any repair printed beside them.
+- One writer for a new project file, and one helper that makes a project folder a repository.
+  `create`, the version 5 pickup and `git-init` call them, so the initial shape lives once.
+
+### Fixed
+
+- A version 5 pickup records the folder's parent as the projects base when none is recorded.
+- `report` exits 0 at case 4. Exit 1 collided with the check's "field missing" code.
+- `switch` no longer prints "belongs to another project" when the owner is the target itself.
+- A version 5 pickup writes the same initial file as `create`, `state: active` included, so the
+  check names only what is missing in fact.
+- The skill names the two files a version 5 pickup writes, `project.json` and
+  `records/check-project.json`, and the undo: `unregister` plus removing those two.
+- A write on a folder that is not a repository yet says "not committed" and prints no git error.
+
 ## [6.0.0-beta.3] - 2026-09-13
 
 Two gaps from the first pickup of a version 5 project with beta.2 installed.
