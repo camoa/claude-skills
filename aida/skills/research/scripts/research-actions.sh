@@ -280,7 +280,8 @@ do_read() {
 # start: makes sure the contract exists before research begins, and makes sure the research
 # folder exists. Idempotent: running it again on a task already started changes nothing and is
 # not refused, unlike scope's `init`, because no aggregate file here could be overwritten by a
-# second call. Prints the ids of the criteria the conversation is answering for.
+# second call. Prints the ids of the criteria the conversation is answering for, and the
+# project's playbook subscriptions.
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
@@ -295,6 +296,12 @@ do_start() {
   echo "STARTED: $RESEARCH_DIR"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
+  # The catalog playbook sets this project subscribes to, for the skill to hand the loader agent.
+  # `none` covers an empty field and a task folder outside any project.
+  local project_folder subs=""
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    && subs="$(jq -r '[(.playbookSubscriptions // {})[][]] | join(" ")' "$project_folder/project.json" 2>/dev/null)"
+  echo "subscriptions: ${subs:-none}"
   exit 0
 }
 

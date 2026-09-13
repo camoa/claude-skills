@@ -69,6 +69,10 @@ for one subject: prior art inside the project, prior art outside it, guides and 
 reputable sources recommend, or an assumption checked. A finding that says nothing was found is
 not a reason to stop. Design decides from nothing found, same as when research covered it.
 
+Then read `<task_folder>/records/playbooks.md` the same way: it holds the plays research loaded,
+the rules this project and this person want followed. Name a play that decides an order's shape
+by its id in that order's `reasoning`.
+
 ## Read the guides and recipes research found
 
 Research named these without opening them, so design is the first read. Research recorded an
