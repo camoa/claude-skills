@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # check-design.sh: the design check (ideal/design.md, "What a work order holds" and "Serving a
 # criterion is not completing it").

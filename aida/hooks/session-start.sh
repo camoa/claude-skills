@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # session-start.sh: says which project owns this directory, at the start of every session.
 #
 # ideal/project.md, "Session start": say which project owns this directory, or that it is

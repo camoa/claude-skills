@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # review-actions.sh: the deterministic half of the review skill (ideal/review.md).
 #
 # The skill body holds the conversation. This script holds the deterministic half: it reads what

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Install or run one tool, following that tool's recipe.
 #
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # deny-frozen-test-writes.sh. A PreToolUse hook on Write, Edit, MultiEdit, NotebookEdit and Bash:
 # refuses a write to a test file this task has already frozen (scripts/tests-frozen-schema.json,
 # <task folder>/implementation/tests-<unit_id>.json).

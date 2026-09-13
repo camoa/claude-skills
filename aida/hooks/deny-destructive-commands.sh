@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # deny-destructive-commands.sh. A PreToolUse hook on Bash: refuses commands that throw work away
 # or publish it, before they run. The list is version 5's, from block-dangerous-commands.sh. Any
 # `git push`, a force push, a hard reset, `git clean`, `git branch -D`, `git checkout .` and

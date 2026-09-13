@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # recipe-lint.sh: tell a recipe author what the recipe's shape is missing, before a stage resolves
 # it (ideal/tooling.md, "Templates, schema and linter"). Usage: recipe-lint.sh <recipe.md>
 #
