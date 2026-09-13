@@ -9,6 +9,13 @@ All notable changes to this plugin are recorded here. The format follows
 Rows of the first live run from the first task on a picked-up project.
 
 ### Fixed
+- Row 14: the `V5:` offer never fired on a fresh install, because no version 6 base was recorded
+  yet. With none recorded, the report now scans the base that version 5 recorded in
+  `~/.claude/ai-dev-assistant/active_projects.json`. Nothing is written.
+- Row 15: `read-projects-base` ends its line with a newline.
+- Row 21: after a version 5 pickup, `switch` prints one `LEGACY:` line per task still under
+  `implementation_process/in_progress/`, and the skill names `/aida:next` as the step that moves
+  the one the person picks.
 - Row 19: `next` said that moving a version 5 task into `tasks/` "is not built yet". The live run
   concluded it had to delete and recreate the task. `next` now runs the task skill's `repair`
   itself on the legacy task it loads, so a person never types it. `task` no longer calls `next`
