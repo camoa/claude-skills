@@ -9,7 +9,6 @@
     "codePath",
     "name",
     "frameworks",
-    "worktreeByDefault",
     "state"
   ],
   "properties": {
@@ -38,7 +37,7 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "The stack this project is written in, e.g. [\"drupal\"] or [\"python\", \"django\"]. Drives every recipe and source lookup a later stage makes. Detected from the code at creation (a composer file, a package file, a go module, a Python project file, a Drupal info file) and asked only when detection finds nothing. Repaired by re-running that same detection on its own, never the whole interview."
+      "description": "The stack this project is written in, e.g. [\"drupal\"] or [\"python-cli\", \"django\"]. Drives every recipe and source lookup a later stage makes. Detected from the code at creation (a composer file, a package file, a go module, a Python project file, a Drupal info file) and asked only when detection finds nothing. Repaired by re-running that same detection on its own, never the whole interview."
     },
     "state": {
       "type": "string",
@@ -83,11 +82,6 @@
       },
       "description": "Which playbooks apply, recorded per framework, and never inferred from a source declaration. A source says where playbooks can be found; matching a guide happens per task, but subscribing to a playbook is a standing choice, and this is the field that fixes version 5's defect of treating a framework and its playbook as two unrelated facts. Keyed by a name from `frameworks`; each value is the list of playbook locations this project subscribes to for that framework. A key here naming a framework this project never declared is a mistake this schema does not catch; the check runs a separate test for it. Starts empty; declared whenever a person decides, which can be any time."
     },
-    "worktreeByDefault": {
-      "type": "boolean",
-      "default": false,
-      "description": "Whether a task builds in a worktree without being asked first. Set at creation; a project that never says otherwise defaults to false. Settable again at any later time, the same as every other opt-in."
-    },
     "visualRegression": {
       "default": null,
       "oneOf": [
@@ -113,15 +107,6 @@
         }
       ],
       "description": "Whether end-to-end testing is set up. Null means not set up. Version 5 has a setup step and no field for it, so nothing could ask whether it had run; this field exists so that question is answerable. The shape past `enabled` is left open for the e2e setup skill that will write it, a later part; not produced by this part."
-    },
-    "memoryHook": {
-      "default": {
-        "installed": false,
-        "version": null
-      },
-      "type": "object",
-      "$ref": "#/$defs/memoryHook",
-      "description": "Whether the memory hook is installed, and which version it installed. The hook is a copy living in the code repository's own settings, never a reference to the plugin's path, because that path changes at release. Recording the version is what lets the check compare it against the current one and notice drift without guessing; the repair is re-running the installer, which is idempotent and preserves a person's own edits. Written by a memory-hook install skill, a later part; not produced by this part."
     },
     "taskRule": {
       "default": null,
@@ -322,27 +307,6 @@
         }
       },
       "description": "The shape past `enabled` is left open (\"{enabled, ...}\") for the e2e setup skill that will extend it, a later part. Only `enabled` is fixed here."
-    },
-    "memoryHook": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "installed",
-        "version"
-      ],
-      "properties": {
-        "installed": {
-          "type": "boolean",
-          "description": "Whether the memory hook is installed for this project."
-        },
-        "version": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "The installed hook's version, so staleness against the current one is a comparison rather than a guess. Null when not installed."
-        }
-      }
     },
     "taskRule": {
       "type": "object",

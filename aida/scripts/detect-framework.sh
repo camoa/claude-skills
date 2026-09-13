@@ -3,9 +3,10 @@
 #
 # Usage: detect-framework.sh <codePath>
 #
-# Prints one recognised framework per line, on stdout, and exits 0 when it recognises at least
-# one. Prints nothing and exits 1 when the directory is real and readable but recognises none: this
-# is not an error, and the caller asks a person for the stack instead of guessing one.
+# Prints one recognised framework per line, on stdout, as `<name>: <file>`. The file is the one
+# under <codePath> that proved the name, so a person can see why. Exits 0 when it recognises at
+# least one. Prints nothing and exits 1 when the directory is real and readable but recognises
+# none. That is not an error: the caller asks a person for the stack instead of guessing one.
 #
 # Exit 2 is a different fact from exit 1, on purpose: <codePath> was missing, was not a directory,
 # or could not be read. A path that does not exist and a path this script could not look inside are
@@ -17,12 +18,14 @@
 # "drupal/core" (bounded to the first 4000 bytes, so a large lock-adjacent file never becomes a
 # large read).
 #
-# Recognises, each independent of the others, so more than one line can print for one codePath:
-#   drupal   a *.info.yml file (a Drupal info file), or composer.json requiring drupal/core
-#   php      composer.json, when no Drupal signal was found
-#   node     package.json
-#   go       go.mod
-#   python   pyproject.toml, setup.py, setup.cfg, or requirements.txt
+# Recognises, each independent of the others, so more than one line can print for one codePath.
+# Where the catalog has a recipe, the name is its `framework:` key, so a detected name matches
+# the recipe with no rename step in between:
+#   drupal      a *.info.yml file (a Drupal info file), or composer.json requiring drupal/core
+#   php-cli     composer.json, when no Drupal signal was found
+#   node        package.json
+#   go          go.mod
+#   python-cli  pyproject.toml, setup.py, setup.cfg, or requirements.txt
 #
 # Portability: bash 3.2+, tested under bash and zsh. No GNU-only find flags beyond -maxdepth, which
 # both GNU findutils and BSD find accept. No awk regex intervals, since this script uses no awk.
@@ -72,7 +75,7 @@ SEEN=""
 FOUND_ANY=0
 
 add_found() {
-  local name="$1"
+  local name="$1" proof="$2"
   case "$SEEN" in
     *"
 $name
@@ -82,7 +85,7 @@ $name
 $name
 "
   FOUND_ANY=1
-  printf '%s\n' "$name"
+  printf '%s: %s\n' "$name" "$proof"
 }
 
 already_found() {
@@ -108,7 +111,7 @@ if command -v find >/dev/null 2>&1; then
   DRUPAL_INFO="$(cd "$CODE_PATH" 2>/dev/null && find . -maxdepth 6 \( "${PRUNE_EXPR[@]}" \) -prune -o -type f -name '*.info.yml' -print 2>/dev/null | head -n 1)"
 fi
 if [ -n "$DRUPAL_INFO" ]; then
-  add_found "drupal"
+  add_found "drupal" "${DRUPAL_INFO#./}"
 fi
 
 # --- composer.json: drupal/core inside it means the drupal signal already covers it,
@@ -116,27 +119,27 @@ fi
 if [ -f "$CODE_PATH/composer.json" ]; then
   if [ -z "$DRUPAL_INFO" ] && [ -r "$CODE_PATH/composer.json" ] \
      && head -c 4000 "$CODE_PATH/composer.json" 2>/dev/null | grep -q 'drupal/core'; then
-    add_found "drupal"
+    add_found "drupal" "composer.json"
   fi
   if ! already_found "drupal"; then
-    add_found "php"
+    add_found "php-cli" "composer.json"
   fi
 fi
 
 # --- package.json: node ------------------------------------------------------------------------
 if [ -f "$CODE_PATH/package.json" ]; then
-  add_found "node"
+  add_found "node" "package.json"
 fi
 
 # --- go.mod: go ----------------------------------------------------------------------------------
 if [ -f "$CODE_PATH/go.mod" ]; then
-  add_found "go"
+  add_found "go" "go.mod"
 fi
 
 # --- python project file: pyproject.toml, setup.py, setup.cfg, requirements.txt -----------------
 for f in pyproject.toml setup.py setup.cfg requirements.txt; do
   if [ -f "$CODE_PATH/$f" ]; then
-    add_found "python"
+    add_found "python-cli" "$f"
     break
   fi
 done
