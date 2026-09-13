@@ -198,7 +198,7 @@ RECIPE_STATE=""
 recipe_block_into() {
   local recipe_file="$1" heading="$2" key="$3" block_file="$4" section_file
   section_file="$block_file.section"
-  sed -n "/^##[[:space:]]*$heading[[:space:]]*\$/,/^##[[:space:]]/p" "$recipe_file" >"$section_file" 2>/dev/null
+  sed -n "/^##[[:space:]]*${heading}[[:space:]]*\$/,/^##[[:space:]]/p" "$recipe_file" >"$section_file" 2>/dev/null
   if [ ! -s "$section_file" ]; then
     rm -f "$section_file"
     printf 'undeclared'
@@ -484,6 +484,7 @@ cr_lookup_failure_pair() {
     no-recipe|listing-unreachable|fetch-failed) ;;
     *) die 3 "$who: a lookup failure is no-recipe, listing-unreachable or fetch-failed, not: $reason" ;;
   esac
+  # shellcheck disable=SC2034 # read by the sourcing script
   CR_PAIR="$(printf '%s\t%s' "$fw" "$reason")"
 }
 
@@ -501,18 +502,19 @@ cr_lookup_failure_pair() {
 # recipes both name a coding-standards tool has two answers to one question, and nothing here may
 # choose between them (exit 72). A row every framework declares absent is absent, and its reasons
 # are joined.
-CR_WHO=""; CR_TEST_RECIPES=""; CR_CHECK_RECIPES=""; CR_SELECTED_JSON="[]"; CR_DOC=""
+CR_WHO=""; CR_TEST_RECIPES=""; CR_CHECK_RECIPES=""; CR_DOC=""
 # False resolves implementation's three tool rows. True resolves every row id the check recipes
 # declare, which is review's own reading of the same block.
 CR_TOOL_IDS_ALL=false
 # The tab-separated --value list bl_tool_result reads. A global, because that function already
 # takes five arguments and a sixth read only by one caller is a list read wrong sooner than right.
+# shellcheck disable=SC2034 # read by the sourcing script
 PC_VALUES=""
 cr_resolve() {
   local work fw_file tools_file fw names
   local test_path check_path tc_rows cc_rows rows_file
   local tc_state cc_state markers marker_json
-  local suite_json order_json tool_id tool_row
+  local suite_json order_json tool_id
   local test_sha check_sha
   local all_tools tools_out commanded count absent_rows tool_ids
 
@@ -685,20 +687,20 @@ tf_sha256_of() {
   "${RECORDS_HASH_SHA256_CMD[@]}" <"$1" 2>/dev/null | cut -d' ' -f1
 }
 
-# True when path $1 matches the case glob $2. bash always treats an unquoted variable used as a
-# case pattern as a glob; zsh, by default, does not, and matches it as the literal text instead
-# (Honesty: this script runs under both). GLOB_SUBST restores the glob reading, scoped to the
-# subshell this runs in only, the same discipline pc_run_check already applies to SH_WORD_SPLIT, so
-# it never changes how the rest of the script's own case statements behave.
+# True when path $1 matches the glob $2 (a real catalog example is `*Test.php`, so the star must
+# stay a wildcard, not become literal text). A variable used as a `case` pattern is one of this
+# project's zsh traps, so this uses `[[ ... == ... ]]` instead. bash always treats an unquoted
+# right-hand side there as a glob; zsh, by default, does not, and matches it as the literal text
+# instead (Honesty: this script runs under both). GLOB_SUBST restores the glob reading, scoped to
+# the subshell this runs in only, the same discipline pc_run_check already applies to
+# SH_WORD_SPLIT, so it never changes how the rest of the script's own matching behaves.
 tf_path_matches_glob() {
   (
     if [ -n "${ZSH_VERSION:-}" ]; then
       setopt GLOB_SUBST 2>/dev/null
     fi
-    case "$1" in
-      $2) exit 0 ;;
-      *)  exit 1 ;;
-    esac
+    # shellcheck disable=SC2053 # the glob must stay unquoted here
+    [[ "$1" == $2 ]]
   )
 }
 
@@ -1053,5 +1055,6 @@ rv_read_findings_array() {
     seen_ids="$seen_ids $id"
     i=$((i + 1))
   done
+  # shellcheck disable=SC2034 # read by the sourcing script
   RV_FINDINGS_ARRAY="$arr"
 }

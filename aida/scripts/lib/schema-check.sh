@@ -105,7 +105,7 @@ SCHEMA_CHECK__COMPARE_JQ='
   | ($data[0]) as $p
   | {
       missing: [
-        ($props | keys_unsorted[]) as $name
+        (($schema[0].required // ($props | keys_unsorted))[]) as $name
         | select(($p | has($name)) | not)
         | {field: $name, detail: ($props[$name].description // "no description in the field list")}
       ],

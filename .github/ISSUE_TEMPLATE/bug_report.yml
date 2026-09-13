@@ -16,7 +16,7 @@ body:
       options:
         - dev-guides-navigator
         - plugin-creation-tools
-        - ai-dev-assistant
+        - aida
         - code-quality-tools
         - brand-content-design
         - drupal-htmx

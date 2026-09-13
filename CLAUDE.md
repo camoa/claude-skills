@@ -60,20 +60,14 @@ make `plugin.json` disagree with the catalog entry. `make manifests` and
 
 The short run does not do three things. Read them before you use it.
 
-**`make test-<plugin>` saves little time on an ai-dev-assistant branch.** The
-repo has 142 spec files. 134 of them are ai-dev-assistant. 6 are
-code-quality-tools. 1 is plugin-creation-tools. 1 is
-`scripts/tests/claim-check-spec.sh` at the repo root. So
-`make test-ai-dev-assistant` is almost the same as `make test`. You save real
-time only on a code-quality-tools or a plugin-creation-tools branch. The 366
-seconds is a serial-execution problem. It is not a scope problem.
+**`make test-<plugin>` scope.** The old `ai-dev-assistant` carried 134 of the 142 spec files
+and is gone. `aida` ships its fixtures outside the repository for now, so `make test-aida` runs
+nothing until they move in. The rest of the spec files belong to code-quality-tools,
+plugin-creation-tools, and the root `scripts/tests/claim-check-spec.sh`.
 
-**The specs cross plugin borders.** ai-dev-assistant specs make assertions
-about `code-quality-tools` and `plugin-creation-tools`. code-quality-tools
-specs make assertions about `ai-dev-assistant` and `drupal-ai-contrib`. The
-root `claim-check-spec.sh` is outside every plugin and tests
+**The specs cross plugin borders.** code-quality-tools specs make assertions about
+`drupal-ai-contrib`. The root `claim-check-spec.sh` is outside every plugin and tests
 code-quality-tools. So `make test-<plugin>` can miss a spec in a different
-plugin that your change broke.
 
 **CI is not a required check on `main`.** The branch has no protection. A red
 CI does not stop a merge. Nothing later finds what you skip here. A person must
@@ -203,9 +197,8 @@ picks it up.
 
 - **bash 4 or newer.** macOS ships bash 3.2 and some tests fail on it for
   that reason alone. `brew install bash`.
-- **PyYAML.** `ai-dev-assistant/scripts/fm-helpers.sh` reads task
-  frontmatter with it. Without it the reader returns nulls and the tests
-  that depend on it fail. `pip install pyyaml`.
+- **jq.** Every `aida` script reads and writes its records with it, and
+  refuses to start without it.
 - **gitleaks.** `code-quality-tools`' secret-scanning spec gates whole
   sections on `command -v gitleaks`. Without the binary those sections do
   not run, and the spec still exits 0 and still prints a passing total, so

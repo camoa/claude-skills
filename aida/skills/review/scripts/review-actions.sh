@@ -567,7 +567,7 @@ rw_worse() {
   br_worst_verdict "$(jq -nc --arg a "$1" --arg b "$2" '[$a, $b]')"
 }
 
-RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""; RW_BASE=""; RW_HEAD=""
+RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""; RW_HEAD=""
 RW_VALUES=""; RW_CATALOG_NOTES="[]"
 
 # One catalog note. Review writes nothing to the catalog: it records what it saw and names the count
@@ -1033,13 +1033,15 @@ RW_FRAMEWORKS
 
   rw_lookup_floor "$failures"
   RW_VALUES="$values"
-  PC_VALUES="$values"
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_WHO="checks"
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_TEST_RECIPES="$recipes"
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_CHECK_RECIPES="$check_recipes"
-  CR_SELECTED_JSON='[]'
   # Every row the check commands block declares is run and recorded, not only the three tool ids
   # implementation reads.
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_TOOL_IDS_ALL=true
   cr_resolve
   # Exit 73. Checks 5 to 7 subtract the baseline, and that subtraction is only honest while both runs
@@ -1077,7 +1079,7 @@ RW_FRAMEWORKS
     || die 3 "checks: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   [ "$head_now" = "$(git -C "$RV_CODEPATH" rev-parse "$head_end^{commit}" 2>/dev/null)" ] \
     || die 3 "checks: $RV_CODEPATH is at $head_now, and the range in $FINISHED_FILE ends at $head_end. Checks 5 to 8 run over the files on disk, so a tree that is not the final commit would answer about different code than the diff describes. Check that commit out, or run the implement skill's finish step again."
-  RW_RANGE="$range"; RW_BASE="$base"; RW_HEAD="$head_now"
+  RW_RANGE="$range"; RW_HEAD="$head_now"
 
   mark_task_in_progress "$TASK_PATH" "review started"
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"

@@ -221,6 +221,7 @@ gather_new_tasks() {
 # Version 5 tasks, listed from their old folders. Transitional, and kept in its own file so that
 # removing it later is deleting that file and this line. See legacy-tasks.sh.
 LEGACY_LIB="${PLUGIN_ROOT}/skills/next/scripts/legacy-tasks.sh"
+# shellcheck source=/dev/null
 [ -r "$LEGACY_LIB" ] && . "$LEGACY_LIB"
 
 # ------------------------------------------------------------------------------------------------

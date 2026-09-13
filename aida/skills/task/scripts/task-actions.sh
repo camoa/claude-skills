@@ -42,7 +42,7 @@
 # project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
-# AIDA_RUN_MODE is still read as a fallback, for a caller that is not the skill.
+# The value itself is read nowhere below, so nothing here stores it.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints why
 # to stderr and exits 3. A miss that is a real, expected outcome (start or complete or split
@@ -68,10 +68,8 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 COMMIT_SHAPE_SCRIPT="${PLUGIN_ROOT}/scripts/check-commit-shape.sh"
 CHECK_TASK_SCRIPT="${PLUGIN_ROOT}/scripts/check-task.sh"
 
-RUN_MODE="${AIDA_RUN_MODE:-interactive}"
 if [ "${1:-}" = "--run-mode" ]; then
   [ $# -ge 2 ] || { printf 'task-actions: --run-mode needs a value\n' >&2; exit 3; }
-  RUN_MODE="$2"
   shift 2
 fi
 

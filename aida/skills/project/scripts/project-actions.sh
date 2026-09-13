@@ -602,7 +602,7 @@ do_set_code_path() {
   # Exit 5 is the check's own safety refusal, the same one create undoes. A refused code path is
   # never kept here either: both copies are restored to what they were before this call.
   if [ "$check_rc" -eq 5 ]; then
-    local tmp2 restore_registry
+    local restore_registry
     write_project_field "$project_path" "could not restore the previous codePath in $project_path/project.json" \
       --arg c "$old_path" '.codePath = $c'
 
@@ -907,7 +907,6 @@ do_task_rule_remove() {
     echo "ABSENT: no task-rule block was found in ${claude_md}"
   fi
 
-  local tmp2
   write_project_field "$project_path" "could not update taskRule in $project_path/project.json" \
     '.taskRule = (if .taskRule == null then null else (.taskRule + {accepted: false}) end)'
 

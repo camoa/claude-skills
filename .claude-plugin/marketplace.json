@@ -13,7 +13,7 @@
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + knowledge-graph metadata route the AI to the right guide; all fetches use curl (never WebFetch), and a fetched body is data, never commands. Three routing modes: guide search (llms.txt), recipe search (the agentic-recipes catalog of verifier-carrying capability deliveries), and process-recipe lookup (resolved by ai-dev-assistant at phase boundaries, keyed by phase and framework). A deterministic shared content store holds index bodies and blobs with two-hash revalidation, re-fetching a body only when its sha changes.",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "author": {
         "name": "camoa"
       },
@@ -57,10 +57,10 @@
       ]
     },
     {
-      "name": "ai-dev-assistant",
-      "source": "./ai-dev-assistant",
-      "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through Research → Architecture → Implementation → Review, with deterministic gates (SOLID, TDD, DRY, security, code-purposefulness, a Phase-4 review) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks. Under the hood it covers epic and sub-task hierarchy, scope contracts, change-impact dispatch, work-orders with adversarial critique and oracle integrity, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (framework-agnostic setup via process recipes; Drupal payload ships in dev-guides).",
-      "version": "5.55.1",
+      "name": "aida",
+      "source": "./aida",
+      "description": "Keeps AI coding work inside a process that produces better code. Every task runs through five stages: scope, research, design, implementation, review. Scope writes a contract of goals, non-goals, and the criteria that prove them, and every later stage is checked against it. Research finds prior art in your own code first, then outside, from current documentation rather than the model's memory. Design writes a spec you can build from. Implementation writes tests first. Review runs the blocking checks. The checks are scripts, not the model judging its own work. Stack knowledge lives in fetched recipes, so one process fits PHP, Python, Go, Drupal, or a Claude plugin.",
+      "version": "6.0.0-beta",
       "author": {
         "name": "camoa"
       },
@@ -70,15 +70,15 @@
         "development",
         "workflow",
         "architecture",
-        "agnostic",
+        "code-review",
+        "testing",
         "tdd",
         "solid",
         "dry",
         "security",
-        "agent-teams",
-        "playbook",
-        "worktree",
-        "hardening"
+        "prior-art",
+        "specification",
+        "agnostic"
       ]
     },
     {

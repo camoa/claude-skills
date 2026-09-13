@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-PLUGINS := ai-dev-assistant brand-content-design code-paper-test \
+PLUGINS := aida brand-content-design code-paper-test \
            code-quality-tools dev-guides-navigator drupal-ai-contrib \
            drupal-htmx plugin-creation-tools
 

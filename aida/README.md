@@ -35,19 +35,16 @@ make a decision once.
 
 ## Status
 
-This is version 6, and it is a rewrite. The folder is nearly empty on purpose: version 6 starts
-from nothing and each part is written as it is settled. Version 5 ships today as
-`ai-dev-assistant`, and it stays the working plugin until this one is done.
-
-Nothing here is released. There is no catalog entry and no version bump until the rewrite
-finishes.
+Version 6.0.0-beta. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every
+stage is built and proved against fixtures under bash and zsh. The beta exists to run the first
+live tasks: one started under version 5, one from scratch. Defects come from those runs.
 
 ## Running it while it is built
 
 Load it for one session, from wherever you cloned it:
 
 ```bash
-claude --plugin-dir /path/to/aida-v6-code/aida-v6
+claude --plugin-dir /path/to/aida-v6-code/aida
 ```
 
 The flag loads the plugin for that session only. A session started without it does not see
@@ -57,8 +54,8 @@ To see what actually registered, rather than what the files claim, put the flag 
 subcommand:
 
 ```bash
-claude --plugin-dir /path/to/aida-v6-code/aida-v6 plugin list
-claude --plugin-dir /path/to/aida-v6-code/aida-v6 plugin details aida-v6
+claude --plugin-dir /path/to/aida-v6-code/aida plugin list
+claude --plugin-dir /path/to/aida-v6-code/aida plugin details aida
 ```
 
 `plugin list` shows whether the plugin loaded. `plugin details` lists the components it

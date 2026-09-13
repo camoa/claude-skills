@@ -912,15 +912,13 @@ do_read() {
     project_note="could not resolve a project folder two levels up from the task folder, or it has no project.json"
   fi
 
-  local git_checked git_is_repo git_branch trunk_derived trunk_branch trunk_note
-  git_checked=false
+  local git_is_repo git_branch trunk_derived trunk_branch trunk_note
   git_is_repo=false
   git_branch=""
   trunk_derived=false
   trunk_branch=""
   trunk_note="not checked"
   if [ -n "$code_path" ]; then
-    git_checked=true
     if is_git_repo "$code_path"; then
       git_is_repo=true
       git_branch="$(git -C "$code_path" symbolic-ref --short -q HEAD 2>/dev/null)"
@@ -944,27 +942,23 @@ do_read() {
   run_mode="$(jq -r '.runMode // "interactive"' "$TASK_PATH/task.json" 2>/dev/null)"
   [ -n "$run_mode" ] || run_mode="interactive"
 
-  local snap_exists snap_readable snap_note snap_summary
-  snap_exists=false; snap_readable=false; snap_note="not started"; snap_summary='null'
+  local snap_exists snap_readable snap_summary
+  snap_exists=false; snap_readable=false; snap_summary='null'
   if [ -f "$SNAPSHOT_FILE" ]; then
     snap_exists=true
     if [ -r "$SNAPSHOT_FILE" ] && jq empty "$SNAPSHOT_FILE" 2>/dev/null; then
       snap_readable=true
-      snap_note="ok"
       snap_summary="$(jq -c '{schemaVersion, takenAt, hash, workOrderCount: ((.workOrders // []) | length)}' "$SNAPSHOT_FILE" 2>/dev/null)"
       [ -n "$snap_summary" ] || snap_summary='null'
-    else
-      snap_note="present but could not be read as JSON"
     fi
   fi
 
-  local ledger_exists ledger_readable ledger_note ledger_summary
-  ledger_exists=false; ledger_readable=false; ledger_note="not started"; ledger_summary='null'
+  local ledger_exists ledger_readable ledger_summary
+  ledger_exists=false; ledger_readable=false; ledger_summary='null'
   if [ -f "$LEDGER_FILE" ]; then
     ledger_exists=true
     if [ -r "$LEDGER_FILE" ] && jq empty "$LEDGER_FILE" 2>/dev/null; then
       ledger_readable=true
-      ledger_note="ok"
       ledger_summary="$(jq -c '{
           schemaVersion, startedFrom, runMode, snapshotHash,
           orderCount: ((.orders // []) | length),
@@ -976,8 +970,6 @@ do_read() {
           rowsJudgedByModelCriteria: ([ (.criteria // [])[] | select((.judgements // []) | map(.judgedBy == "model") | any) | .id ])
         }' "$LEDGER_FILE" 2>/dev/null)"
       [ -n "$ledger_summary" ] || ledger_summary='null'
-    else
-      ledger_note="present but could not be read as JSON"
     fi
   fi
 
@@ -2148,7 +2140,7 @@ bl_tool_result() {
 # one repository that is all of them at once.
 do_preconditions() {
   local task_folder="" project_folder codepath
-  local recipes="" failures="" values="" check_recipes="" arg fw val
+  local recipes="" failures="" values="" check_recipes="" fw
   local tool_out_file cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
@@ -3685,7 +3677,7 @@ BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 br_tool_check() {
   local check_id="$1" field="$2" label="$3"
   local row argv_json signal exts_json absent_declared missing_why
-  local verdict detail exit_json output expanded outfile errfile rc has_paths
+  local verdict detail exit_json output outfile errfile rc has_paths
   local owned_json owned_count scoped_json scoped_count stdout_len failed how
   local baseline_doc baseline_verdict result kind payload
   verdict=""; detail=""; exit_json="null"; output=""
@@ -5105,8 +5097,11 @@ RV_SCOPE
   local selected_tests_json
   selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_WHO="fix-record"
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_TEST_RECIPES="$test_recipes"
+  # shellcheck disable=SC2034 # read by the sourced library
   CR_CHECK_RECIPES="$check_recipes"
   cr_resolve
   cr_require_baseline_recipes "fix-record" "$IMPL_DIR/baseline.json"
