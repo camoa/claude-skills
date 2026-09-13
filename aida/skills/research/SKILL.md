@@ -1,7 +1,6 @@
 ---
 name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
@@ -322,6 +321,11 @@ again.
 
 Research is done when this check reaches exit 0, or when every remaining gap has been looked at
 and deliberately left, with the reason recorded in the finding's own text.
+
+Interactive: stop here. Name the next command for the person, `/aida:design <task-id>`, and never
+invoke it yourself. Autonomous: invoke `aida:design` through the Skill tool, once, with the task
+id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
+stage cannot run out of order. That is why this chain is safe.
 
 ## Research never blocks
 

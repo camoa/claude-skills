@@ -1,7 +1,6 @@
 ---
 name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
@@ -381,6 +380,11 @@ this conversation. It writes `records/design-distill.json`. Then run:
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
 written; dispatch again. Exit 4 means the sidecar is malformed; say so.
+
+Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
+never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with
+the task id, and stop if it refuses. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## What this skill never does
 

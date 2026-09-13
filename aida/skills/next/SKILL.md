@@ -1,7 +1,6 @@
 ---
 name: next
 description: This skill should be used when the user asks "what's next", "what should I work on", "continue", "resume", "pick up where I left off", or names a task directly to jump to it. It lists which tasks are open in the current project and where each stands, or loads the one named, and offers to start a task when none are open.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh *), EnterWorktree

@@ -1,7 +1,6 @@
 ---
 name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Agent
@@ -245,6 +244,11 @@ Cancelled at any point, first run or later: stop without running `init`, `set-go
 `add-non-goal`, `update`, `remove` or `set-mechanism` again. Only call one of those after the
 person (or, in the autonomous branch, the recommended answer) has actually confirmed that one
 change. Nothing is half-written, because nothing is written speculatively in the first place.
+
+Interactive: stop here. Name the next command for the person, `/aida:research <task-id>`, and never
+invoke it yourself. Autonomous: invoke `aida:research` through the Skill tool, once, with the task
+id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
+stage cannot run out of order. That is why this chain is safe.
 
 ## Changing the contract
 

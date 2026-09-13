@@ -32,6 +32,11 @@ and the model-judged count.
 stage next, which reads `finished.json`; completion, not this step, is what confirms the criteria a
 person verifies by checklist.
 
+Interactive: stop here. Name the next command for the person, `/aida:review <task-id>`, and never
+invoke it yourself. Autonomous: invoke `aida:review` through the Skill tool, once, with the task
+id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
+stage cannot run out of order. That is why this chain is safe.
+
 ## Offer the grant, when a halt reads "attempts spent"
 
 An order halted with a reason beginning `attempts spent` has used every attempt it was allowed and
