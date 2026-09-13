@@ -11,7 +11,7 @@
 # directory this project was last switched to by hand, and only then "not set up." This is
 # the same order project-actions.sh's own `report` action applies, kept here as its own,
 # lighter read: `report` also runs the full project check and prints the raw project JSON,
-# which belongs to a deliberate `/project` call, not to a line printed before every turn.
+# which belongs to a deliberate `/aida:project` call, not to a line printed before every turn.
 #
 # AIDA_UNATTENDED marks a session with nobody present to answer the offer below. It is not
 # AIDA_RUN_MODE: run mode belongs to a task (foundations.md, Run mode), and no task is chosen
@@ -21,6 +21,7 @@
 #
 # Depends on, shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh (sourced, never executed)
+#   ${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh (executed, for the task lines)
 #
 # What this script does not do: it does not clear a per-workspace session file the way
 # version 5's hook did. That file was a second, independent directory-to-project mapping
@@ -34,6 +35,7 @@ set -uo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
 REGISTRY_FILE="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
+NEXT_SCRIPT="${PLUGIN_ROOT}/skills/next/scripts/next-actions.sh"
 
 echo "## AIDA"
 echo ""
@@ -78,7 +80,52 @@ if [ -n "$MATCH" ]; then
 
   echo "This directory belongs to the **${PROJECT_NAME}** project."
   echo ""
-  echo "Run \`/project\` to pick up where you left off."
+
+  # The task in progress, and where it stands. The stage is derived from the records in the task
+  # folder every time, never stored. Each stage writes one record when it closes, and the stage
+  # is the first whose record is absent. Task discovery and the review verdict come from the next
+  # skill's own script, read off its OPEN: lines. So there is no second walk of the tasks folder.
+  # Version 5 kept this in a per-prompt hook and a session file. Version 6 keeps one copy of the
+  # state, in the records, so this block reads and never writes.
+  OPEN_TASKS="$("$NEXT_SCRIPT" report 2>/dev/null | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' \
+    | grep '^{' | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
+  IN_PROGRESS="$(printf '%s\n' "$OPEN_TASKS" | grep -c '^{')"
+  if [ "$IN_PROGRESS" -eq 1 ]; then
+    TASK_ID="$(printf '%s' "$OPEN_TASKS" | jq -r '.id')"
+    TASK_PATH="$(printf '%s' "$OPEN_TASKS" | jq -r '.path')"
+    TASK_REVIEW="$(printf '%s' "$OPEN_TASKS" | jq -r '.review')"
+    TASK_RUN_MODE="$(printf '%s' "$OPEN_TASKS" | jq -r '.runMode // empty')"
+    if [ ! -f "$TASK_PATH/alignment.json" ]; then
+      STAGE="scope"
+    elif [ "$(jq -r '.exitCode // 1' "$TASK_PATH/records/research-check.json" 2>/dev/null)" != "0" ]; then
+      STAGE="research"
+    elif [ ! -f "$TASK_PATH/design-closed.json" ]; then
+      STAGE="design"
+    elif [ ! -f "$TASK_PATH/implementation/finished.json" ]; then
+      STAGE="implementation"
+    elif [ "$TASK_REVIEW" != "passed" ] && [ "$TASK_REVIEW" != "failed" ]; then
+      STAGE="review"
+    else
+      STAGE="completion"
+    fi
+    echo "Task in progress: ${TASK_ID}"
+    echo "Stage: ${STAGE}"
+    [ "$TASK_RUN_MODE" != "autonomous" ] || echo "Run mode: autonomous"
+    echo ""
+  elif [ "$IN_PROGRESS" -gt 1 ]; then
+    echo "${IN_PROGRESS} tasks are in progress; \`/aida:next\` lists them."
+    echo ""
+  fi
+
+  # Per-project reminders, written by hand. Version 5 held these in an installed primer.
+  REMINDERS="$PROJECT_PATH/reminders.md"
+  if [ -s "$REMINDERS" ]; then
+    echo "Reminders, from ${REMINDERS}:"
+    cat "$REMINDERS"
+    echo ""
+  fi
+
+  echo "Run \`/aida:project\` to pick up where you left off."
   echo ""
   echo "**When new work arrives, say where it goes before you start.** Work that produces"
   echo "findings or decisions someone needs later belongs in a task. A typo or a question"
@@ -90,7 +137,7 @@ if [ -n "$MATCH" ]; then
 else
   echo "This directory is not set up as a project, so nothing here is being tracked."
   echo ""
-  echo "Run \`/project create\` to set it up, or carry on without it."
+  echo "Run \`/aida:project create\` to set it up, or carry on without it."
 
   DECLINED="false"
   if registry_read_declined_offer "$CWD" >/dev/null; then
@@ -106,7 +153,7 @@ else
     echo "when it closes, and the next session starts over. Looking first and setting up"
     echo "afterwards is the common mistake."
     echo ""
-    echo "\`/project\` puts that choice to you once and records your answer for this"
+    echo "\`/aida:project\` puts that choice to you once and records your answer for this"
     echo "directory. Say no there and this paragraph stops appearing here."
   fi
 
@@ -115,7 +162,7 @@ else
   OTHERS="$(registry_list_projects active | grep -c .)"
   if [ "${OTHERS:-0}" -gt 0 ] 2>/dev/null; then
     echo ""
-    echo "_(You have ${OTHERS} project(s) set up elsewhere; \`/project\` lists them.)_"
+    echo "_(You have ${OTHERS} project(s) set up elsewhere; \`/aida:project\` lists them.)_"
   fi
 fi
 

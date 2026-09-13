@@ -28,6 +28,15 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/deny-frozen-test-writes.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/deny-destructive-commands.sh"
+          }
+        ]
       }
     ]
   }

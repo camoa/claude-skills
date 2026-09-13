@@ -44,6 +44,10 @@ path and its folder, then the check's own report. Show the report as described i
 already touched `lastAccessed` and, for case 2, this is the remembered choice winning because
 nothing else answers.
 
+A file named `reminders.md` beside `project.json` is printed at every session start, under a
+line naming its path. A person writes it by hand, so a standing note for this project reaches
+every window.
+
 **`CASE: 4`.** Neither the directory nor a remembered choice resolves to a project. The output
 then carries `DECLINED: true` or `DECLINED: false`, then `PROJECTS:` followed by one `project:`
 line per registered project, most recently used first (empty when none are registered yet).
