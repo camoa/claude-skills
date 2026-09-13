@@ -224,10 +224,11 @@ content. Mixing is the point: your playbooks can come from your own folder, your
 recipes from the hosted catalog, and your guides from a site your team trusts, all at once.
 
 A new project declares no sources at all: the list starts empty, for every kind of content.
-Declaring is cheap and fetching is lazy, so nothing is fetched from the hosted catalog, or
-from anywhere else, until a later stage first needs a guide, a playbook, or a recipe and
-finds no source declared for that kind. Pointing a kind at your own source instead, a local
-folder or a site you trust, makes that source win over the catalog for that kind.
+Declaring is cheap and fetching is lazy. No stage fetches anything from the hosted catalog, or
+from anywhere else, until it first needs a guide or a recipe and finds no source declared for
+that kind. Research loads the playbooks once, at its start, and every later
+stage reads that record. Pointing a kind at your own source instead, a local folder or a site
+you trust, makes that source win over the catalog for that kind.
 You can set this per kind, per stage, and per framework: a team's own method for one stage
 can stand alongside the catalog's answer for every other stage.
 
@@ -240,9 +241,10 @@ A source's own precedence applies per kind it provides, not as one number coveri
 everything it offers, because a source's playbooks winning says nothing about whether its
 process recipes should win too.
 
-Declaring a source is cheap: it writes one entry. Fetching what it provides is lazy: a stage
-resolves the actual guide, playbook, or recipe body the first time it needs one, following
-whichever source is declared to answer. A cell no stage ever reaches is never paid for.
+Declaring a source is cheap: it writes one entry. Fetching what it provides is lazy. A stage
+resolves the actual guide or recipe body the first time it needs one. It follows whichever
+source the project declared to answer. Research loads the playbooks once, at its start. A cell no
+stage ever reaches is never paid for.
 
 A source that is a folder is read as a directory listing. The hosted catalog is read through
 the guides navigator. A site or a live search can fail, or return nothing, and what either

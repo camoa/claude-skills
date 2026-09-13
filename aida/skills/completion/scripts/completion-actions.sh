@@ -19,7 +19,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   completion-actions.sh read       <task_folder>
 #   completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
 #   completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
-#                                                  [-- <summary...>]
+#                                                  [--captures-offered <n>] [-- <summary...>]
 #   completion-actions.sh step       <name>
 #
 # Every action prints a summary of `key: value` lines and paths, and nothing else: no record body,
@@ -116,7 +116,7 @@ usage() {
 usage: completion-actions.sh read       <task_folder>
        completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
        completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
-                                                      [-- <summary...>]
+                                                      [--captures-offered <n>] [-- <summary...>]
        completion-actions.sh step       <name>
 EOF
 }
@@ -471,9 +471,14 @@ CP_SCHEMA_RESULT2
 }
 
 do_close() {
-  local task_arg="" reason="" leaves="" fid value
+  local task_arg="" reason="" leaves="" captures_offered="" captures_skipped="" fid value
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --captures-offered)
+        # How many notes the skill offered as plays; the play itself is written by playbook-actions.sh.
+        [ "$#" -ge 2 ] || die 3 "close: --captures-offered needs a count"
+        case "$2" in ''|*[!0-9]*) die 3 "close: --captures-offered takes a whole number, got: $2" ;; esac
+        captures_offered="$2"; shift 2 ;;
       --reason)
         [ "$#" -ge 2 ] || die 3 "close: --reason needs a sentence saying why the task closes without a passed review"
         looks_like_flag "$2" && die 3 "close: --reason needs a sentence, got another option: $2"
@@ -502,6 +507,9 @@ do_close() {
   cp_refuse_complete "close"
   [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review"
   [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task"
+  [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays"
+  # Unattended, nothing is offered and the record says why; a person names a play, a script never does.
+  [ "$CP_RUN_MODE" != "autonomous" ] || captures_skipped="autonomous"
 
   # A parent refuses to close while a child is open, and the person closes the parent.
   local open_children
@@ -551,9 +559,11 @@ CP_LEAVES2
     *)          closed_by="person" ;;
   esac
   record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \
-    --arg closedBy "$closed_by" --arg reason "$reason" --argjson rows "$rows" '
+    --arg closedBy "$closed_by" --arg reason "$reason" --argjson rows "$rows" \
+    --argjson offered "${captures_offered:-0}" --arg skipped "$captures_skipped" '
     {schemaVersion: 1, takenAt: $today, task: $task, reviewVerdict: $verdict, closedBy: $closedBy, reason: $reason,
-     followUps: [ $rows[] | {finding: .finding, task: .task, reason: .reason} ]}')"
+     followUps: [ $rows[] | {finding: .finding, task: .task, reason: .reason} ],
+     capturesOffered: $offered, capturesSkipped: $skipped}')"
   [ -n "$record" ] || die 3 "close: could not assemble the record for $CP_TASK_ID."
 
   local body

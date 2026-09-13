@@ -112,6 +112,14 @@ if [ -n "$MATCH" ]; then
     echo ""
   fi
 
+  # The playbook sets this project subscribes to, and whether it has a playbook file of its own,
+  # read off project.json. Research loads the plays once per task; this line only says what exists.
+  SUBS="$(jq -r '(.playbookSubscriptions // {}) | to_entries | map(.key + ": " + (.value | join(", "))) | join("; ")' \
+    "$PROJECT_PATH/project.json" 2>/dev/null)"
+  if [ -f "$PROJECT_PATH/playbook.md" ]; then HAS_PLAYBOOK="yes"; else HAS_PLAYBOOK="no"; fi
+  echo "Playbooks: ${SUBS:-none}; project file: ${HAS_PLAYBOOK}"
+  echo ""
+
   # Per-project reminders, written by hand. Version 5 held these in an installed primer.
   REMINDERS="$PROJECT_PATH/reminders.md"
   if [ -s "$REMINDERS" ]; then

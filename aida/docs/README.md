@@ -18,6 +18,7 @@ not the internals of any one command: read a command's own description for that.
 | [Finishing a task](finishing.md) | What happens once review passes. |
 | [Run modes](run-modes.md) | Interactive and autonomous, and what changes in each stage. |
 | [Where content comes from](sources.md) | Guides, playbooks, and recipes, and using your own instead of the catalog. |
+| [Playbooks](playbooks.md) | The rules you want followed: three sources, one file format, capture at completion, and where the plays reach the roles. |
 | [Visual and end-to-end tests](testing.md) | The two optional test harnesses, and what review does with each. |
 | [Carrying work across sessions](continuity.md) | Picking up work in a new window, or after context is compacted. |
 | [Glossary](glossary.md) | Every word AIDA uses in exactly one sense. |

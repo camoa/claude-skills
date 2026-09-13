@@ -4,6 +4,34 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.6] - 2026-09-13
+
+Playbooks: the rules a person wants followed, put in front of every role that writes or judges
+code. Version 5 never put a play in front of the model, and its adherence gate checked citations
+of plays the model had never seen. The acceptance test row: subscribe the demo project to
+`drupal/best-practices/camoa`, and add one project play that contradicts the obvious
+implementation. Then show the reviewer's finding naming it.
+
+### Added
+- The `playbooks` skill: `list` prints one line per play from the three sources; `capture`
+  appends one play to the project's file and commits.
+- The `playbook-loader` agent reads each subscribed catalog set and writes
+  `records/playbooks-catalog.json`, its only write.
+- Research runs `playbooks load` once at its start. The record marks each source `loaded`,
+  `absent`, `empty` or `unreachable`.
+- Design reads `records/playbooks.md` before the work orders, and an order's `reasoning` names
+  the play that decided its shape.
+- The four implementation briefs carry `playbooksPath`; the reviewer's `practices` lens reports
+  one finding per play the diff contradicts.
+- Review's check 16 reads `unknown` when the record is absent, or nothing loaded while a
+  subscription or a playbook file exists.
+- Completion offers each task note as a play, one yes or no per note; the record holds
+  `capturesOffered` and `capturesSkipped`. Autonomous offers nothing and says so.
+- The project skill's `subscribe-playbook` and `unsubscribe-playbook` write a set id under a
+  declared framework, fetching nothing.
+- The session-start hook prints one `Playbooks:` line per session. Nothing runs per prompt.
+- `docs/playbooks.md`.
+
 ## [6.0.0-beta.5] - 2026-09-13
 
 Rows of the first live run from the first task on a picked-up project.

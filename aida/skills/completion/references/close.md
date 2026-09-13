@@ -46,12 +46,31 @@ conversation already says it. The summary goes to the task skill's `complete` af
 Autonomous, or when nobody gives one: pass nothing, and the script passes one line naming the
 grounds.
 
+## Offer the notes as plays
+
+A note under `<task_folder>/notes/` is a decision the task skill's `save` wrote mid-stage, one
+file per date with a `## <UTC time>` heading per entry. Each is a candidate play for the
+project's playbook. A decision saved mid-stage is the candidate; a person names the play.
+
+No notes: offer nothing. Autonomous: offer nothing, and `close` records the offer as skipped.
+
+Interactive: list the notes, one line each with the date and the first line of text. Ask one yes
+or no per note. For each yes, draft the domain, the title, the what, the rationale and when it
+applies from the note. Show the five. Take the person's corrections. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/playbooks/scripts/playbook-actions.sh capture "<projectPath>" \
+  --domain "<H2>" --title "<title>" --what "<text>" --rationale "<text>" --when "<text>"
+```
+It appends the play to `<projectPath>/playbook.md` and commits. Exit 1 means that title is
+already a play; ask for another title. Show its `play:` line. Count every note offered, yes or
+no, and pass the count to `close` as `--captures-offered <n>`.
+
 ## Close
 
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh close "<task_folder>" \
-  [--reason "<sentence>"] [--leave <finding id>=<reason>]... [-- <summary...>]
+  [--reason "<sentence>"] [--leave <finding id>=<reason>]... [--captures-offered <n>] [-- <summary...>]
 ```
 It refuses at exit 1 in three cases. A child is open. A high severity follow up has no task and
 no `--leave`. The review did not pass and no `--reason` was given. Otherwise it writes the
@@ -66,6 +85,7 @@ run `close` again with the same arguments; that is the repair.
 
 Give the person the body path and the record path from the summary. Say the verdict the record
 holds and who closed it. Name each follow up task created and each finding left, with its reason.
+Name each play captured by its id, or say "no play captured".
 Say the person opens the pull request from the body file by hand, changing nothing in it first.
 End by naming `/aida:next`. When the script says every child of the parent is complete, say the
 parent closes next.

@@ -3,7 +3,7 @@ name: completion
 description: This skill should be used when a reviewed task is ready to close, for example "close this task", "finish the task", "mark the task done", "write the pull request body", or "complete the task". It reads the review verdict and offers one follow up task per open finding. It writes a pull request body from the records, records the grounds for closing, and calls the task skill last.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh capture *)
 ---
 
 # Completion
@@ -78,9 +78,10 @@ accepted only when a person is present.
 | A review that did not pass | the person gives the reason | the close halts, naming the verdict |
 | A high severity follow up with no task | the person creates it, or says why not | the close refuses, since the tasks were created first |
 | The summary for `task complete` | the person gives one or two lines | one line naming the grounds |
+| A saved note offered as a play | the person says yes or no per note, and names the play | offers nothing; the record says `autonomous` |
 
-`close` refuses `--reason` and `--leave` on an autonomous run at exit 70. A run with nobody
-present closes a task on a passed review and on nothing else.
+`close` refuses `--reason`, `--leave` and `--captures-offered` on an autonomous run at exit 70.
+A run with nobody present closes a task on a passed review and on nothing else.
 
 ## The exit codes
 
