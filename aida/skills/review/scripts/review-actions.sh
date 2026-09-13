@@ -136,11 +136,12 @@ for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RE
 done
 [ -f "$REVIEW_SCHEMA" ] || die 3 "cannot find the record shape at $REVIEW_SCHEMA"
 
-# The seven lenses one dispatch carries. The words are fixed here, in agents/architecture-reviewer.md
+# The eight lenses one dispatch carries. The words are fixed here, in agents/architecture-reviewer.md
 # and in the step file, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own
-# lens. A word this list does not hold would leave its check reading met on a findings file that is
-# not empty, so a finding naming one is refused rather than recorded.
-LENS_WORDS="non-goals solid dry architecture guides practices mutation"
+# lens. The purpose lens is check 3's reviewer half, and it merges into the script half's row. A
+# word this list does not hold would leave its check reading met on a findings file that is not
+# empty, so a finding naming one is refused rather than recorded.
+LENS_WORDS="non-goals solid dry architecture guides practices mutation purpose"
 
 # The sixteen checks, by the id each one carries in the record. The tool rows a recipe declares
 # beyond coding-standards, static-analysis and security carry their own row ids, because the check
@@ -1281,6 +1282,7 @@ rw_check_for_lens() {
     guides)       printf 'guides' ;;
     practices)    printf 'framework-practices' ;;
     mutation)     printf 'test-and-mutation' ;;
+    purpose)      printf 'serves-a-criterion' ;;
     *)            printf '' ;;
   esac
 }
@@ -1323,7 +1325,7 @@ do_findings() {
     lens="$(printf '%s' "$one" | jq -r '.lens // ""')"
     case " $LENS_WORDS " in
       *" $lens "*) ;;
-      *) die 52 "findings: finding $cid in $findings_path names the lens '$lens'. The seven lens words are $LENS_WORDS, and each of six checks reads its verdict off its own lens, so a word outside that list would leave a check reading met on a findings file that is not empty." ;;
+      *) die 52 "findings: finding $cid in $findings_path names the lens '$lens'. The eight lens words are $LENS_WORDS, and each of six checks reads its verdict off its own lens, so a word outside that list would leave a check reading met on a findings file that is not empty." ;;
     esac
     linked="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
     disposition="$(jq -nr --argjson a "$alignment" --arg l "$linked" '
@@ -1387,6 +1389,21 @@ do_findings() {
               | .detail = (.detail + " The mutation lens raised "
                            + ($hits | length | tostring) + " finding(s) on surviving mutants: "
                            + ([ $hits[] | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
+        else . end))')"
+  fi
+
+  # A hunk the purpose lens faulted is check 3's other half, so check 3 reads unmet however its own
+  # script half answered. The detail keeps the file and lines, because
+  # the hunk half cites those and the script half cites files alone.
+  local purpose_hits
+  purpose_hits="$(printf '%s' "$findings_json" | jq -c '[ .[] | select(.lens == "purpose") ]')"
+  if [ "$(printf '%s' "$purpose_hits" | jq 'length')" -gt 0 ]; then
+    updated="$(printf '%s' "$updated" | jq -c --argjson hits "$purpose_hits" --arg id "$CHECK_SERVES" '
+      .checks = (.checks | map(if .id == $id
+        then (.verdict = "unmet"
+              | .detail = (.detail + " The purpose lens raised "
+                           + ($hits | length | tostring) + " finding(s) on hunks the purpose lens faulted: "
+                           + ([ $hits[] | (.id + " at " + .file + ":" + .lines + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
         else . end))')"
   fi
 

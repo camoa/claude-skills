@@ -251,8 +251,8 @@
         },
         "lens": {
           "type": "string",
-          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation"],
-          "description": "Which of the seven lenses raised it. One dispatch carries all seven, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4."
+          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation", "purpose"],
+          "description": "Which of the eight lenses raised it. One dispatch carries all eight, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4. The `purpose` lens is the hunk read, and it lands on check 3."
         },
         "severity": {
           "type": "string",

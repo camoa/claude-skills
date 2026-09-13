@@ -1,6 +1,6 @@
 ---
 name: review
-description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over seven lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
+description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
 disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
