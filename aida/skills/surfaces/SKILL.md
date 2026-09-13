@@ -1,7 +1,6 @@
 ---
 name: surfaces
-description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "take the first baselines", "add a page to the visual review", or when review offered the setup and the person said yes. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
-disable-model-invocation: true
+description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "take the first baselines", "add a page to the visual review", or when a stage's offer, at scope, design or review, gets a yes. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
 argument-hint: "<read | show | install | register | baseline | decline> [<kind or id>]"
 arguments: [action, subject]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh *), Agent
@@ -10,8 +9,11 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actio
 # Surfaces
 
 Set up the surfaces review runs: end to end and visual regression. The framework decides how, and
-that answer lives in a recipe outside this plugin. Setup runs at project level, with no task, the
-way the tool skill does. The review skill runs the surfaces; this skill only sets them up.
+that answer lives in a recipe outside this plugin. Setup takes no task folder, the way the tool
+skill does. With no task active, it runs at the code path. Run from inside a task's worktree, it
+runs there instead, so the setup ships with the task's branch. The review skill runs the surfaces;
+this skill only sets them up. The guards live in the script: `--enable` and `decline` refuse
+unattended. This skill waits for a plain yes before `install`. So a stage's offer may invoke it.
 
 Every call below runs `surfaces-actions.sh`, named in this skill's own grant, so it runs without
 asking. Read the exit code first, never the text alone. Exit 1 means no project owns this
@@ -55,12 +57,15 @@ install changes the project and nobody is there to approve it.
 
 `install` runs every command in order and writes each file only when absent. It writes the
 surface file when absent, and turns the kind on in the project record. It runs again safely.
+It refuses a dirty tree at 61 before writing anything. It commits what it wrote, with the
+reason in the message, the way `baseline` does.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran, or `not-applicable`: no framework has a recipe. | Nothing more for this kind. |
 | 3 | A refused command, a file present with different content, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
 | 4 | A step failed. | The `first:` line quotes its first line of output. Show it; do not install by hand. |
+| 61 | The tree is dirty. | Say which paths. Commit or move them aside, then run install again. |
 | 72 | Two frameworks each carry a recipe. | Say which two, and stop. |
 
 `--viewport <name>=<w>x<h>` replaces the recipe's viewport list. It is a person's answer, so pass
@@ -98,8 +103,8 @@ it. Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirt
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline
 ```
-Records that the person declined the setup. Review reads it and does not offer again. It is a
-person's answer, so it refuses unattended at 70.
+Records that the person declined the setup. Every stage's offer, at scope, design and review,
+reads it and does not ask again. It is a person's answer, so it refuses unattended at 70.
 
 ## What this skill never does
 

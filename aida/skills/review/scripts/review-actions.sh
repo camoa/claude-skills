@@ -96,6 +96,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                      against review-schema.json before it lands.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/surfaces.sh      sourced. The surface file reader the
 #                                                      surfaces skill's writer is proved by.
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/paths.sh         sourced, for resolve_against, which
+#                                                      sf_surface_path joins a relative registryPath
+#                                                      through.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/review-schema.json   the shape of the record this script writes.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
@@ -126,6 +129,7 @@ RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
 SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
+PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
 REVIEW_SCHEMA="${PLUGIN_ROOT}/scripts/review-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'review-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
@@ -140,7 +144,7 @@ die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
 die79() { die 79 "$1"; }
 
-for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB" "$SURFACES_LIB"; do
+for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB" "$SURFACES_LIB" "$PATHS_LIB"; do
   [ -f "$lib_name" ] || die 3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die 3 "the library failed to load: $lib_name"
@@ -476,16 +480,20 @@ do_read() {
   [ "$ledger_state" = "ok" ] && RW_RUN_MODE="$(jq -r '.runMode // "interactive"' "$LEDGER_FILE")"
 
   frameworks_json='[]'; e2e_enabled="unknown"; vr_enabled="unknown"; registry_path=""
-  code_state="unresolved"
+  code_state="$(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
+  [ -n "$code_state" ] || code_state="none"
   RV_PROJECT_FOLDER="$(resolve_project_folder "$TASK_PATH")" || RV_PROJECT_FOLDER=""
   if [ -n "$RV_PROJECT_FOLDER" ] && [ "$(json_file_state "$RV_PROJECT_FOLDER/project.json")" = "ok" ]; then
     RW_PROJECT_DOC="$(jq -c '.' "$RV_PROJECT_FOLDER/project.json")"
     frameworks_json="$(printf '%s' "$RW_PROJECT_DOC" | jq -c '.frameworks // []')"
     e2e_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not-set-up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
     vr_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not-set-up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
-    registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')"
+    # The recorded worktree when this task has one, the project's own code path otherwise, the
+    # same tree the surfaces action joins a relative registryPath to (row 32 of
+    # audit/14-live-run-gaps.md); read never makes a worktree, so it never calls rv_load_codepath.
+    registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" \
+      "$([ "$code_state" != "none" ] && printf '%s' "$code_state" || printf '%s' "$RW_PROJECT_DOC" | jq -r '.codePath // ""')")"
   fi
-  code_state="$(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
 
   rw_load_record "read"
   report="$(jq -n \
@@ -1778,7 +1786,7 @@ do_surfaces() {
   local one_accept all_rows si one_surface merged one_verdict
   e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
-  registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')"
+  registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
 
   # The offer, which the skill makes and this action only records what it can decide. Rows that are

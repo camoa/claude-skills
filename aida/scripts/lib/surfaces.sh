@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# surfaces.sh: the one reader of the surface file, <codePath>/.visual-review/surfaces.json
-# (scripts/surfaces-schema.json). The surfaces skill writes the file and review runs it, and both
-# source this, so the writer is proved by the reader review uses (ideal/surfaces.md).
+# surfaces.sh: the one reader of the surface file, `.visual-review/surfaces.json` in the tree
+# setup ran in (scripts/surfaces-schema.json). The surfaces skill writes the file and review runs
+# it, and both source this, so the writer is proved by the reader review uses (ideal/surfaces.md).
 #
-#   sf_load_surfaces <file>   sets SF_STATE (absent, missing, unreadable, ok) and SF_SURFACES, a
-#                             JSON array of {id, url, kinds, enabled, masks}, empty unless ok
+#   sf_load_surfaces <file>          sets SF_STATE (absent, missing, unreadable, ok) and
+#                                    SF_SURFACES, a JSON array of {id, url, kinds, enabled, masks},
+#                                    empty unless ok
+#   sf_surface_path <registryPath> <tree>   prints the surface file's absolute path: <registryPath>
+#                                    joined to <tree> when it is relative, or <registryPath> as it
+#                                    is when a record written before row 32 of
+#                                    audit/14-live-run-gaps.md holds an absolute one
 #
 # Missing and unreadable stay two words, because they send a reader to two different repairs. A
 # file whose rows lack a string id, a kinds array or a boolean enabled reads unreadable, and the
@@ -42,4 +47,12 @@ sf_load_surfaces() {
   SF_STATE="ok"
   # shellcheck disable=SC2034 # read by the sourcing script
   SF_SURFACES="$rows"
+}
+
+# $1 the project record's `surfaces.registryPath`, may be empty. $2 the tree the caller runs in.
+# Calls no die function; an empty $1 prints empty, and sf_load_surfaces then reads it as absent.
+# The join itself is resolve_against, from scripts/lib/paths.sh, which the caller sources.
+sf_surface_path() {
+  [ -n "$1" ] && resolve_against "$1" "$2"
+  return 0
 }

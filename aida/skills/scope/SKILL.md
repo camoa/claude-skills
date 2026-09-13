@@ -3,7 +3,7 @@ name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
 ---
 
 # Scope
@@ -15,8 +15,9 @@ form.
 
 The record is `alignment.json`, in the task's own folder, beside `task.json` and `task.md`.
 `alignment.md`, beside it, is rendered from it for a person to read. Nothing ever parses
-`alignment.md` back. Every write below goes through `scope-actions.sh`, named in this skill's own
-grant, so it runs without asking. Any other Bash command still asks for approval.
+`alignment.md` back. Every write below goes through `scope-actions.sh`. A no to the surfaces offer
+below runs `surfaces-actions.sh decline`. Both are named in this skill's own grant, so they
+run without asking. Any other Bash command still asks for approval.
 
 ## Determine the run mode
 
@@ -187,9 +188,8 @@ to record that this run decided it. A non-goal carries no author field; only cri
 
 ## Tests and checks
 
-Scope does not set a check up and does not decide whether a task deserves one. It only asks
-whether an already-available capability applies here, and only when the project has already
-turned it on. Read `<projectPath>/project.json` once, at the point criteria are being drafted:
+Scope sets nothing up. It uses a kind that is already on, and offers the setup once when none is.
+Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
 - **`surfaces.e2e.enabled` is true.** An end to end test is an acceptance criterion automated: a
   criterion already phrased as an outcome is already the script. So do not ask a separate
@@ -198,16 +198,29 @@ turned it on. Read `<projectPath>/project.json` once, at the point criteria are 
   `machine` and the verify clause names the automated test; no falls back to the ordinary
   question of how it is observed.
 - **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
-  has a baseline in the surface file at `surfaces.registryPath`. One that does becomes a criterion
-  whose verify clause names the visual regression check that must pass. One that does not becomes
-  a criterion too, that creating its baseline is this task's own work. Either way this is a
-  criterion scope is proposing, not one the person asked for outright: draft it, show it with a
-  recommended answer, and write it with `add --author designer`, whatever the person says to the
-  draft. It stays `designer` until it is promoted at "Approval" below, once the whole rendered
-  document is approved; a yes on the draft alone does not promote it.
-- **Either is `false` or the field is `null`.** Not set up, or set up and turned off. Ask nothing
-  about it. Turning a capability on is a person's decision elsewhere, never scope's to infer from
-  the goal.
+  has a baseline in the surface file, `.visual-review/surfaces.json` in the tree scope runs from.
+  One that does becomes a criterion whose verify clause names the visual regression check that
+  must pass. One that does not becomes a criterion too, that creating its baseline is this task's
+  own work. Either way this is a criterion scope is proposing, not one the person asked for
+  outright: draft it, show it with a recommended answer, and write it with `add --author
+  designer`, whatever the person says to the draft. It stays `designer` until it is promoted at
+  "Approval" below, once the whole rendered document is approved; a yes on the draft alone does
+  not promote it.
+- **`surfaces` is null, or both kinds are off, and the project has not declined.** Interactive
+  only. Look at the goal once, at this same point. When it names something a person opens in a
+  browser, a page, a form, a screen, a journey, say so in one line. Ask once whether to set the
+  surfaces up now, with a recommended answer. Give three answers: yes, not this task, or no. Say
+  the difference between "not this task" and "no" in the ask itself, so the person knows what a
+  "no" silences. Yes invokes the `surfaces` skill through the Skill tool, then reads `project.json`
+  again, so the two bullets above apply to this task. "Not this task" records nothing; the next
+  stage that names a page may ask again. No runs
+  `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline`, project-wide, and
+  the question is never asked again; name `/aida:surfaces` as the way to turn it on later. A goal
+  that names nothing a person sees gets no question. Autonomous: nothing is offered, and say so.
+  The offer at review comes after the page has already changed, when no baseline can be taken of
+  what it was. Otherwise, a declined project or a single enabled kind, ask nothing. Turning a
+  capability on is a person's decision, made through this offer or `/aida:surfaces`, never scope's
+  to infer beyond it.
 
 ## Approval
 

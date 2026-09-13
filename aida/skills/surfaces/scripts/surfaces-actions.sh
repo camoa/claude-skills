@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # surfaces-actions.sh: the deterministic half of the surfaces skill (ideal/surfaces.md). Sets up
 # end to end and visual regression for the project that owns the current directory, so review has
-# something to run. Setup is not a stage: it runs at project level, with no task, as the tool skill does.
+# something to run. Setup is not a stage: it takes no task folder, the way the tool skill does. It
+# writes into the tree the current directory runs in, a task's worktree or, with none active, the
+# code path (active_tree_for in scripts/lib/task-helpers.sh).
 #
 #   surfaces-actions.sh [--run-mode <interactive|autonomous>] read
 #   surfaces-actions.sh [--run-mode ...] show     <kind> <recipe flags>
@@ -15,10 +17,11 @@
 # The recipe flags are `--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one
 # per framework the project records, the flags review's `checks` takes. A kind is `e2e` or
 # `visual-regression`, the review recipe's own surface row ids. The surface file is
-# <codePath>/.visual-review/surfaces.json (scripts/surfaces-schema.json), read by
-# scripts/lib/surfaces.sh, the reader review uses. The project record's `surfaces` field has this
-# script as its one producer. Every action prints `key: value` lines and paths; a recipe command's
-# own output goes to <project>/records/, never to stdout.
+# `.visual-review/surfaces.json` in the resolved tree (scripts/surfaces-schema.json), read by
+# scripts/lib/surfaces.sh, the reader review uses. The project record's `surfaces.registryPath`
+# holds that same relative path, and this script is its one producer. Every action prints
+# `key: value` lines and paths; a recipe command's own output goes to <project>/records/, never to
+# stdout.
 #
 # Exit codes, each with the meaning the tool and review scripts give it:
 #   0  did what was asked, including `install` printing not-applicable when no framework has a recipe
@@ -26,7 +29,7 @@
 #   3  could not do its job: a bad argument, a refused command, a differing file, a recipe with no
 #      block, a lookup nobody completed, an id registered with different fields, an absent accept row
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
-#  61  the code tree is dirty, so a baseline commit would sweep other work in
+#  61  the tree is dirty, so an install or baseline commit would sweep other work in
 #  62  `register` or `baseline` before `install` wrote the surface file
 #  70  a person's answer was passed with nobody present
 #  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
@@ -40,7 +43,7 @@ STEPS_DIR="${PLUGIN_ROOT}/skills/surfaces/references"
 command -v jq >/dev/null 2>&1 || { printf 'surfaces-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 die() { printf 'surfaces-actions: %s\n' "$2" >&2; exit "$1"; }
 die3() { die 3 "$1"; }  # write_atomic in task-helpers.sh refuses through this name
-for lib_name in registry task-helpers records-hash recipes surfaces; do
+for lib_name in registry task-helpers records-hash recipes paths surfaces; do
   # shellcheck source=/dev/null
   . "${PLUGIN_ROOT}/scripts/lib/${lib_name}.sh" || die 3 "the library failed to load: ${lib_name}.sh"
 done
@@ -74,14 +77,16 @@ PROJECT_FILE="$PROJECT_DIR/project.json"
 [ "$(json_file_state "$PROJECT_FILE")" = "ok" ] || die 3 "$PROJECT_FILE is missing or unreadable"
 CODE_PATH="$(project_code_path_value "$PROJECT_DIR")"
 [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die 3 "$PROJECT_FILE records no codePath on disk"
+TREE="$(active_tree_for "$CODE_PATH" "$(pwd -P)")"
 FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$PROJECT_FILE")"
-SURFACE_FILE="$CODE_PATH/.visual-review/surfaces.json"
+SURFACE_REL=".visual-review/surfaces.json"
+SURFACE_FILE="$TREE/$SURFACE_REL"
 RECORDS_DIR="$PROJECT_DIR/records"
 
 # The project record's `surfaces` field, initialised on the first write. $1 a jq filter over it.
 write_project_field() {
   local doc
-  doc="$(jq -c --arg sf "$SURFACE_FILE" '.surfaces = ((.surfaces // {registryPath: null, declined: false, e2e: {enabled: false}, visualRegression: {enabled: false}}) | '"$1"')' "$PROJECT_FILE")" \
+  doc="$(jq -c --arg sf "$SURFACE_REL" '.surfaces = ((.surfaces // {registryPath: null, declined: false, e2e: {enabled: false}, visualRegression: {enabled: false}}) | '"$1"')' "$PROJECT_FILE")" \
     || die 3 "$ACTION: could not update the surfaces field"
   write_atomic "$PROJECT_FILE" "$doc"
 }
@@ -94,6 +99,19 @@ require_surface_file() {
     missing) die 62 "$ACTION: there is no surface file at $SURFACE_FILE. Run install first." ;;
     *) die 3 "$ACTION: $SURFACE_FILE is $SF_STATE" ;;
   esac
+}
+
+# Commits everything install or baseline wrote in $TREE, printing `committed: <sha>`; prints
+# `committed: none, $1` when the tree was already clean, so nothing of this call's own is in it.
+# $1 what to say wrote nothing, $2 the commit message. Dies through $ACTION's own name.
+sa_commit_if_changed() {
+  if [ -z "$(git -C "$TREE" status --porcelain)" ]; then
+    printf 'committed: none, %s\n' "$1"
+  else
+    git -C "$TREE" add -A && git -C "$TREE" commit -q -m "$2" \
+      || die 3 "$ACTION: the commit failed"
+    printf 'committed: %s\n' "$(git -C "$TREE" rev-parse --short HEAD)"
+  fi
 }
 
 # ----------------------------------------------------------------- the recipe
@@ -181,18 +199,19 @@ do_show_or_install() {
   # Every file is checked before any command runs, so a differing file stops the install whole.
   while IFS="$TAB" read -r n rel; do
     [ -n "$n" ] || continue
-    case "$rel" in /*|*../*|*/..) die 3 "install: $RECIPE names a file outside the code path: $rel" ;; esac
-    target="$CODE_PATH/$rel"
+    case "$rel" in /*|*../*|*/..) die 3 "install: $RECIPE names a file outside the tree: $rel" ;; esac
+    target="$TREE/$rel"
     [ ! -f "$target" ] || cmp -s "$files_dir/$n" "$target" \
       || die 3 "install: $target exists with different content from the $rel block in $RECIPE. Nothing is overwritten; move the file aside or change the recipe."
   done <<SA_FILES
 $list
 SA_FILES
+  br_require_clean_tree install "$TREE"
   load_viewports
   [ "$RUN_MODE" = "interactive" ] && { printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"; printf '%s\n' "$steps" | sed 's/^/  /'; }
-  mkdir -p "$RECORDS_DIR" "$CODE_PATH/.visual-review" || die 3 "install: could not create the records folder"
+  mkdir -p "$RECORDS_DIR" "$TREE/.visual-review" || die 3 "install: could not create the records folder"
   OUTFILE="$RECORDS_DIR/surfaces-$KIND-install.txt"; : >"$OUTFILE"
-  cd "$CODE_PATH" || die 3 "install: could not enter $CODE_PATH"
+  cd "$TREE" || die 3 "install: could not enter $TREE"
   while IFS= read -r line; do
     [ -n "${line// /}" ] || continue
     before="$(wc -l <"$OUTFILE" | tr -d '[:space:]')"
@@ -204,7 +223,7 @@ $steps
 SA_STEPS
   while IFS="$TAB" read -r n rel; do
     [ -n "$n" ] || continue
-    target="$CODE_PATH/$rel"
+    target="$TREE/$rel"
     if [ -f "$target" ]; then kept=$((kept + 1)); continue; fi
     mkdir -p "$(dirname -- "$target")" && cp "$files_dir/$n" "$target" || die 3 "install: could not write $target"
     written=$((written + 1)); printf 'file: %s\n' "$target"
@@ -223,6 +242,7 @@ SA_FILES
   write_project_field '.registryPath = $sf | .'"$KEY"'.enabled = true'
   printf 'INSTALLED: %s per %s\nfiles: %s written, %s kept\nsurface-file: %s\nproject-file: %s\n' \
     "$KIND" "$RECIPE" "$written" "$kept" "$SURFACE_FILE" "$PROJECT_FILE"
+  sa_commit_if_changed "install wrote nothing new" "New $KIND surfaces setup, installed through the surfaces skill"
   recipe_output_summary 0 "$OUTFILE" 1
 }
 
@@ -299,13 +319,13 @@ $(printf '%s' "$ids" | tr ' ' '\n')
 SA_IDS
   if [ "$confirmed" = false ]; then printf 'confirm: run again with --confirmed to write these baselines\n'; exit 0; fi
   [ "$RUN_MODE" = "interactive" ] || { printf 'baselines: none\n'; require_person "--confirmed" "a person confirmed the baselines"; }
-  br_require_clean_tree baseline "$CODE_PATH"
+  br_require_clean_tree baseline "$TREE"
   VALUES="surfaces$TAB$(printf '%s' "$ids" | tr ' ' '|')
 $VALUES"
   [ -z "$(cr_lookup "$VALUES" base-url)" ] || { PLAYWRIGHT_BASE_URL="$(cr_lookup "$VALUES" base-url)"; export PLAYWRIGHT_BASE_URL; }
   mkdir -p "$RECORDS_DIR" || die 3 "baseline: could not create $RECORDS_DIR"
   OUTFILE="$RECORDS_DIR/surfaces-baseline.txt"
-  result="$(br_run_resolved "$(printf '%s' "$accept" | jq -c '.[0].argv')" "$CODE_PATH" "$OUTFILE" '[]' "$VALUES")"
+  result="$(br_run_resolved "$(printf '%s' "$accept" | jq -c '.[0].argv')" "$TREE" "$OUTFILE" '[]' "$VALUES")"
   case "$result" in
     RAN*) rc="${result#*"$TAB"}" ;;
     UNRESOLVED*) die 3 "baseline: the token {${result#*"$TAB"}} in the accept row has no value; pass --value ${result#*"$TAB"}=<value>" ;;
@@ -313,27 +333,21 @@ $VALUES"
   esac
   [ "$rc" = "0" ] || { recipe_output_summary 4 "$OUTFILE" 1; exit 4; }
   # Review refuses a dirty tree, and the message is the record of why these baselines changed.
-  if [ -z "$(git -C "$CODE_PATH" status --porcelain)" ]; then
-    printf 'committed: none, the accept row wrote nothing\n'
-  else
-    git -C "$CODE_PATH" add -A && git -C "$CODE_PATH" commit -q -m "New visual regression baselines for $ids, confirmed by a person through the surfaces skill" \
-      || die 3 "baseline: the commit failed"
-    printf 'committed: %s\n' "$(git -C "$CODE_PATH" rev-parse --short HEAD)"
-  fi
+  sa_commit_if_changed "the accept row wrote nothing" "New visual regression baselines for $ids, confirmed by a person through the surfaces skill"
   printf 'baselines: %s\n' "$ids"
   recipe_output_summary 0 "$OUTFILE" 1
 }
 
 # ------------------------------------------------------------------------ read
 do_read() {
-  printf 'project: %s\ncode-path: %s\n' "$PROJECT_DIR" "$CODE_PATH"
+  printf 'project: %s\ncode-path: %s\n' "$PROJECT_DIR" "$TREE"
   printf 'surfaces-field: %s\n' "$(jq -r 'if .surfaces == null then "none" else "e2e=\(if .surfaces.e2e.enabled then "on" else "off" end) visual-regression=\(if .surfaces.visualRegression.enabled then "on" else "off" end) declined=\(.surfaces.declined)" end' "$PROJECT_FILE")"
   sf_load_surfaces "$SURFACE_FILE"
   printf 'surface-file: %s (%s)\n' "$SURFACE_FILE" "$SF_STATE"
   [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) url=\(.url) masks=\(.masks | length)"'
   # A version 5 project holds a YAML registry beside the file. It is named, left in place, and its
   # ids and URLs are candidates for discovery.
-  [ ! -f "$CODE_PATH/.visual-review/registry.yml" ] || printf 'registry-v5: %s\n' "$CODE_PATH/.visual-review/registry.yml"
+  [ ! -f "$TREE/.visual-review/registry.yml" ] || printf 'registry-v5: %s\n' "$TREE/.visual-review/registry.yml"
 }
 
 case "$ACTION" in
