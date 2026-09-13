@@ -209,6 +209,13 @@ this project's framework at the research stage. It answers with whether one is a
 it is, a path to the body on disk. Read the body from that path. The body is never streamed into
 the conversation, which is what keeps a recipe affordable.
 
+**Judge the fit once, after the body is read and before the first dispatch.** Does this method,
+by its `description`, Goal and Preconditions, describe the work the criteria and non-goals name?
+Record the verdict on the search inside this project, on any one `record` call, with `--recipe-fit
+<true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"`. On `false`, interactive:
+say so with the reason, then ask whether to continue with the recipe, without it (the fallback
+below), or stop. Autonomous: continue with the recipe and record `false`.
+
 **Three answers, not one.** A recipe that does not exist for this framework, a listing that could
 not be reached, and a network that failed are three different things and only the first is a fact
 about the framework. Record which one happened, in those words. Treating the second or the third

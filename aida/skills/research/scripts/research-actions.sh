@@ -23,7 +23,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   research-actions.sh start  <task_folder>
 #   research-actions.sh record <task_folder> \
 #                          --search <slug> --searched-for <text> --text <text> \
-#                          --source <text> [--criteria-served <id[,id...]>]
+#                          --source <text> [--criteria-served <id[,id...]>] \
+#                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
 #   research-actions.sh check  <task_folder>
 #   research-actions.sh distill <task_folder>
 #
@@ -38,7 +39,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # A research file is plain JSON at <task_folder>/research/<search>.json: no fences, no markdown
 # (scripts/research-schema.json). Its fields are schemaVersion, search, searchedFor and
-# findings; a finding
+# findings, plus recipeFit when the three --recipe-* flags were given (ideal/tooling.md, 'whether
+# a resolved method fits the task'); a finding
 # holds text, source, lookedAt and criteriaServed. `record` writes that JSON, then renders
 # <search>.md from it by calling research-render.sh, the same way scope-actions.sh writes
 # alignment.json and then calls alignment-render.sh. Nothing reads <search>.md back: it is for
@@ -77,7 +79,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      research file already on disk that is not valid JSON or is not a JSON object; a research
 #      file already on disk whose searchedFor is absent, empty, not a string, or a different set
 #      of words from the one this call gives (one search records one set of words, and this
-#      script never rewrites the field on a file that already exists); the plugin
+#      script never rewrites the field on a file that already exists); a --recipe-fit outside its
+#      three words, without its two companions, or differing from the recipeFit on disk; the plugin
 #      root could not be resolved; a write that failed; `record`'s own call to research-render.sh
 #      failing to produce <search>.md; or `check`'s own call to check-research.sh failing to run
 #      at all (check-research.sh's own exit 3, meaning it could not do its job either).
@@ -136,7 +139,8 @@ usage: research-actions.sh read   <task_folder>
        research-actions.sh start  <task_folder>
        research-actions.sh record <task_folder> --search <slug> --searched-for <text> \
                                    --text <text> --source <text> \
-                                   [--criteria-served <id[,id...]>]
+                                   [--criteria-served <id[,id...]>] \
+                                   [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
        research-actions.sh check  <task_folder>
        research-actions.sh distill <task_folder>
 EOF
@@ -290,7 +294,7 @@ do_start() {
 # ------------------------------------------------------------------------------------------------
 
 do_record() {
-  local search="" searched_for="" text="" source_val="" criteria_served=""
+  local search="" searched_for="" text="" source_val="" criteria_served="" fit="" fit_path="" fit_reason=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --search)
@@ -313,6 +317,11 @@ do_record() {
         [ $# -ge 2 ] || die3 "record: --criteria-served needs a value"
         looks_like_flag "$2" && die3 "record: --criteria-served needs a value, got the option $2 instead"
         criteria_served="$2"; shift 2 ;;
+      --recipe-fit|--recipe-path|--recipe-reason)
+        [ $# -ge 2 ] || die3 "record: $1 needs a value"
+        looks_like_flag "$2" && die3 "record: $1 needs a value, got the option $2 instead"
+        case "$1" in --recipe-fit) fit="$2" ;; --recipe-path) fit_path="$2" ;; *) fit_reason="$2" ;; esac
+        shift 2 ;;
       *) die3 "record: unrecognized argument: $1" ;;
     esac
   done
@@ -337,6 +346,13 @@ do_record() {
         || die3 "record: --criteria-served id '$id' is not a valid criterion id shape (c<n>, no leading zero)"
       ids_json="$(printf '%s' "$ids_json" | jq --arg id "$id" '. + [$id]')"
     done < <(printf '%s\n' "$criteria_served" | tr ',' '\n')
+  fi
+
+  local fit_json=""
+  if [ -n "$fit$fit_path$fit_reason" ]; then
+    case "$fit" in true|false|unsure) ;; *) die3 "record: --recipe-fit must be true, false or unsure, got '$fit'" ;; esac
+    { is_blank "$fit_path" || is_blank "$fit_reason"; } && die3 "record: --recipe-path and --recipe-reason are required with --recipe-fit. The path traces the body judged, and a verdict with no reason cannot be read later"
+    fit_json="$(jq -nSc --arg path "$fit_path" --arg fits "$fit" --arg reason "$fit_reason" '{path: $path, fits: $fits, reason: $reason}')"
   fi
 
   mkdir -p "$RESEARCH_DIR" || die3 "record: could not create $RESEARCH_DIR"
@@ -379,12 +395,17 @@ do_record() {
         die3 "record: $file has a searchedFor that is a $stored_type, not a string. A field that cannot be read is not the same fact as one that is absent, and neither is repaired here; fix the file, or record this search again under a new --search name"
         ;;
     esac
+    local stored_fit; stored_fit="$(jq -Sc '.recipeFit // empty' "$file")"
+    if [ -n "$fit_json" ] && [ -n "$stored_fit" ] && [ "$stored_fit" != "$fit_json" ]; then
+      die3 "record: $file already records a recipeFit, and this call gives a different one. One judgment gets one record; give the same three values, or leave the flags off"
+    fi
     doc="$(jq --argjson f "$finding_json" '.findings = ((.findings // []) + [$f])' "$file")" \
       || die3 "record: could not add the new finding to $file"
   else
     doc="$(jq -n --arg search "$search" --arg searchedFor "$searched_for" --argjson f "$finding_json" \
         '{schemaVersion: 1, search: $search, searchedFor: $searchedFor, findings: [$f]}')"
   fi
+  [ -z "$fit_json" ] || doc="$(printf '%s' "$doc" | jq --argjson rf "$fit_json" '.recipeFit = $rf')"
 
   write_atomic "$file" "$doc"
 

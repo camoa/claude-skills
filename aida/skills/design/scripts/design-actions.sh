@@ -40,7 +40,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> --level <text> --description <text>
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
-#   design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
+#   design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
+#                        --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
@@ -84,7 +85,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # for"). It runs check-design.sh against the live files first, and writes
 # <task_folder>/design-closed.json only when that run exits 0. The record holds schemaVersion, the
 # UTC date, the run mode, who closed it, and one hash, computed by scripts/lib/records-hash.sh over alignment.json and every
-# design/*.json together, in work order id order (scripts/design-closed-schema.json). It sits at
+# design/*.json together, in work order id order (scripts/design-closed-schema.json), plus recipeFit,
+# design's verdict on the recipe it read, from the three --recipe-* flags (ideal/tooling.md). It sits at
 # the task's own root, beside task.json and alignment.json, never inside design/, because a record
 # inside the folder it hashes would hash itself. Implementation reads this file and refuses to
 # freeze anything when the hash it re-derives from the live files disagrees with the hash recorded
@@ -115,7 +117,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
 #      (check-design.sh's own exit 3, meaning it could not do its job either); the records-hash
 #      library could not be sourced; or `close`'s own call to records_hash_for failing, once
-#      design has already closed clean, to produce a hash.
+#      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe.
 #   4  `check` ran and found a work order file that cannot be read as this format: not valid
 #      JSON, not an object, or a missing, malformed or unknown top-level field (check-design.sh's
 #      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
@@ -204,7 +206,8 @@ usage: design-actions.sh read           <task_folder>
                                          --description <text>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
-       design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
+       design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
+                                         --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
@@ -830,9 +833,27 @@ do_check() {
 # ------------------------------------------------------------------------------------------------
 
 do_close() {
-  [ "$#" -eq 0 ] || die3 "close: unrecognized argument: $1"
   [ -n "$RUN_MODE" ] \
     || die3 "close: --run-mode is required. The close record says who was present, and that is never assumed"
+  local fit="" fit_path="" fit_reason="" no_recipe=false fit_json=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --recipe-fit)    need_value "close" "--recipe-fit" "$#" "${2:-}";    fit="$2"; shift 2 ;;
+      --recipe-path)   need_value "close" "--recipe-path" "$#" "${2:-}";   fit_path="$2"; shift 2 ;;
+      --recipe-reason) need_value "close" "--recipe-reason" "$#" "${2:-}"; fit_reason="$2"; shift 2 ;;
+      --no-recipe)     no_recipe=true; shift ;;
+      *) die3 "close: unrecognized argument: $1" ;;
+    esac
+  done
+  if [ "$no_recipe" = true ]; then
+    [ -z "$fit$fit_path$fit_reason" ] || die3 "close: --no-recipe means no recipe body was read, so it cannot come with a --recipe-fit"
+  else
+    case "$fit" in true|false|unsure) ;; '') die3 "close: pass --recipe-fit with --recipe-path and --recipe-reason, or --no-recipe when no recipe body was read" ;;
+      *) die3 "close: --recipe-fit must be true, false or unsure, got '$fit'" ;; esac
+    is_blank "$fit_path" && die3 "close: --recipe-path is required with --recipe-fit. It names the recipe body that was judged"
+    is_blank "$fit_reason" && die3 "close: --recipe-reason is required with --recipe-fit. A verdict with no reason cannot be read later"
+    fit_json="$(jq -nc --arg path "$fit_path" --arg fits "$fit" --arg reason "$fit_reason" '{path: $path, fits: $fits, reason: $reason}')"
+  fi
 
   [ -f "$CHECK_DESIGN_SCRIPT" ] \
     || die3 "close: cannot find check-design.sh at $CHECK_DESIGN_SCRIPT"
@@ -898,6 +919,7 @@ do_close() {
   doc="$(jq -n --arg closedAt "$closed_at" --arg hash "$hash" \
     --arg runMode "$RUN_MODE" --arg closedBy "$closed_by" \
     '{schemaVersion: 1, closedAt: $closedAt, runMode: $runMode, closedBy: $closedBy, hash: $hash}')"
+  [ -z "$fit_json" ] || doc="$(printf '%s' "$doc" | jq --argjson rf "$fit_json" '.recipeFit = $rf')"
 
   write_atomic "$CLOSED_FILE" "$doc"
   echo "CLOSED: $CLOSED_FILE"
