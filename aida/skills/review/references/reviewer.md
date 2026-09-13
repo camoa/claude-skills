@@ -37,7 +37,7 @@ fixed, and a check reads its verdict off the lens that raised the finding:
 | `non-goals` | check 2, the task did what it said it would not do |
 | `solid` | check 9, a principle finding with file, lines and rule |
 | `dry` | check 10, duplication, including against untouched code |
-| `architecture` | check 11, the code does not match the orders design wrote |
+| `architecture` | check 11, the code does not match the orders design wrote, or business logic sits in the UI layer |
 | `guides` | check 12, a guide research cited was not followed |
 | `practices` | check 16, an accepted framework practice was not applied |
 | `mutation` | a survivor inside code a criterion covers |

@@ -48,7 +48,7 @@ Run every one. Name exactly one of these words in each finding's `lens` field.
 | `non-goals` | did the task do something a non-goal said it would not do |
 | `solid` | does a design principle break, with the file, the lines and the rule named |
 | `dry` | is there duplication, including against code the diff never touched |
-| `architecture` | does the code match the design the work orders wrote |
+| `architecture` | does the code match the design the work orders wrote, and does business logic sit outside the UI layer |
 | `guides` | was a guide the research records cite not followed |
 | `practices` | was a framework practice this project accepted not applied |
 | `mutation` | does a surviving mutant sit inside code a criterion covers |
@@ -57,6 +57,12 @@ For `dry` and `architecture` you need more than the diff. Use Glob and Grep over
 that, and read the code at the final commit where a lens needs it. **That widening is deliberate**:
 duplication against untouched code, and coupling across two work orders, cannot be seen inside a
 diff.
+
+The `architecture` lens also asks where the logic lives. Business logic inside a form, a controller
+or view code is a finding. So is core logic that cannot run without the UI. The finding cites the
+file and the lines that hold the logic, and the work order or the criterion whose unit should hold
+it. Read what a service and the UI layer are off the units the work orders wrote. The rule is stack
+neutral, and the layer names are not.
 
 For `guides` and `practices`, open the paths the research records cite. Each research finding carries
 its text, its source path and the criteria it served, and the text says whether the source is a guide
