@@ -2694,7 +2694,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: exactly these four keys, and nothing else ------------------------------
+  # --- assemble the brief: exactly these five keys, and nothing else ------------------------------
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -2712,7 +2712,9 @@ do_tests_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
-    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces}')"
+        --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
+      playbooksPath: $playbooksPath}')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -3608,8 +3610,9 @@ do_build_brief() {
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
+        --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, tests: $tests, headNow: $headNow, dependencyInterfaces: $dependencyInterfaces,
-      reportPath: $reportPath,
+      reportPath: $reportPath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -4660,6 +4663,7 @@ do_review_brief() {
     --arg interfaceRecord "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" \
     --arg findingsPath "$IMPL_DIR/review-$unit_id-findings.json" \
     --arg startedAt "$started_at" --arg commit "$commit" \
+    --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{
       unit: $unit,
       mode: "review",
@@ -4674,7 +4678,8 @@ do_review_brief() {
       reportPath: $reportPath,
       checks: $checks,
       interface: { declared: $interfaceDeclared, record: $interfaceRecord },
-      findingsPath: $findingsPath
+      findingsPath: $findingsPath,
+      playbooksPath: $playbooksPath
     }')"
   [ -n "$brief_json" ] || die 3 "review-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -4902,7 +4907,7 @@ do_fix_brief() {
     --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
-    --argjson round "$((rounds_used + 1))" '
+    --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
     {
       unit: $unit,
       round: $round,
@@ -4913,7 +4918,8 @@ do_fix_brief() {
       frozenTests: $frozenTests,
       headNow: $headNow,
       diffBudget: $diffBudget,
-      reportPath: $reportPath
+      reportPath: $reportPath,
+      playbooksPath: $playbooksPath
     }')"
   [ -n "$brief_json" ] || die 3 "fix-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"

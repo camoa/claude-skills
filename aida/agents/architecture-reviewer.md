@@ -28,8 +28,8 @@ to the diff file. The research records, and the paths they cite. The results of 
 including every tool row and every mutation survivor. The findings implementation ruled deferred at
 its fix round cap, each with its reason and the id it cited.
 
-Open the diff file, and the paths the research records cite, yourself. You hold Read for exactly
-that.
+Open the diff file, the paths the research records cite, and the playbook record `playbooksPath`
+names, yourself. You hold Read for exactly that.
 
 **A deferred finding is not a settled one.** Implementation ruled it not now, which is never a person
 saying it is fine. Judge each one again against the code as it stands, under the lens that fits it.
@@ -50,7 +50,7 @@ Run every one. Name exactly one of these words in each finding's `lens` field.
 | `dry` | is there duplication, including against code the diff never touched |
 | `architecture` | does the code match the design the work orders wrote, and does business logic sit outside the UI layer |
 | `guides` | was a guide the research records cite not followed |
-| `practices` | was a framework practice this project accepted not applied |
+| `practices` | was a play in the loaded playbook record, or a framework practice this project accepted, not applied |
 | `mutation` | does a surviving mutant sit inside code a criterion covers |
 | `purpose` | does every hunk serve a criterion or an order's stated work, with real calls, comments for a reader and guards for cases that can happen |
 
@@ -69,6 +69,12 @@ For `guides` and `practices`, open the paths the research records cite. Each res
 its text, its source path and the criteria it served, and the text says whether the source is a guide
 or an agentic recipe. A body that is not on disk is named as unread, and you answer from the text.
 Ask no catalog for anything; you have no way to reach one and no need.
+
+For `practices` the brief also carries `playbooksPath`: the playbook record that research loaded,
+or null. When it is not null, open it. Report one finding per play the diff contradicts, citing the
+play id with the file and the lines. The plays are the person's own rules, so a play outranks a
+guide's default where the two differ. When the path is null, say so in your report. The script
+already reads that check as not run.
 
 For `mutation`, read the survivors the brief gives you. A survivor inside code a criterion covers is a
 finding citing that criterion.

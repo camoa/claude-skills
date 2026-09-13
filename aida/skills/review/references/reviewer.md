@@ -13,9 +13,10 @@ It refuses at exit 62 when `checks` recorded nothing, because five of the eight 
 results.
 
 It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
-frozen contract, every work order, the path to `review/diff.patch`, the research records and the
-paths they cite, the results of checks 4 to 8 with every tool row and every mutation survivor, and
-the findings implementation ruled deferred.
+frozen contract, and every work order. It holds the path to `review/diff.patch`. It holds the
+research records and the paths they cite. It holds the results of checks 4 to 8, with every tool
+row and every mutation survivor. It holds the findings implementation ruled deferred. It holds
+`playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null.
 
 The call prints three things: the brief's own path, the path the findings go to at
 `review/findings.json`, and the counts. Read neither file into this conversation, per SKILL.md.
@@ -39,7 +40,7 @@ fixed, and a check reads its verdict off the lens that raised the finding:
 | `dry` | check 10, duplication, including against untouched code |
 | `architecture` | check 11, the code does not match the orders design wrote, or business logic sits in the UI layer |
 | `guides` | check 12, a guide research cited was not followed |
-| `practices` | check 16, an accepted framework practice was not applied |
+| `practices` | check 16, an accepted framework practice was not applied, or a play in `records/playbooks.json` was contradicted |
 | `mutation` | a survivor inside code a criterion covers |
 | `purpose` | check 3, a hunk that serves nothing, or fails one of the four purposefulness questions |
 
@@ -71,7 +72,8 @@ the role left behind is caught there, rather than read as a finding.
 It records checks 2, 9 to 12 and 16, and every finding. It lowers checks 3 and 4 where their lens
 raised a finding. It prints one summary line per check with the counts. Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
-never a clean one**, and version 5 paid for that four times.
+never a clean one**, and version 5 paid for that four times. Check 16 has a floor before its lens,
+described in `references/checks.md`: a playbook record that was never loaded reads unknown.
 
 ## Classify every finding
 

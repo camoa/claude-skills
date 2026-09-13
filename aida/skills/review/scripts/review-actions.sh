@@ -1269,9 +1269,11 @@ RW_SOURCES
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --argjson record "$RW_RECORD_DOC" --argjson research "$research_json" \
-    --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" '
+    --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
+    --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
     {task: $task,
      codePath: $codePath,
+     playbooksPath: $playbooksPath,
      reviewedRange: $record.reviewedRange,
      reviewedAt: $record.reviewedAt,
      runMode: $record.runMode,
@@ -1305,6 +1307,7 @@ RW_SOURCES
       line("nonGoals"; (.nonGoals | length)),
       line("workOrders"; (.workOrders | length)),
       line("lenses"; (.lenses | join(" "))),
+      line("playbooksPath"; (.playbooksPath // "none: records/playbooks.json is absent")),
       line("researchFiles"; (.research | length)),
       line("researchPaths(onDisk)"; ([ .research[].findings[] | select(.onDisk) ] | length)),
       line("researchPaths(notOnDisk)"; ([ .research[].findings[] | select(.onDisk | not) ] | length)),
@@ -1353,6 +1356,7 @@ do_findings() {
   rw_require_finished "findings"
   rw_require_frozen "findings"
   rv_load_codepath "findings"
+  rw_load_project "findings"
   rw_load_record "findings"
   rw_require_step "findings" "$CHECK_SERVES" "checks"
   rw_refuse_moved_code "findings" "clean"
@@ -1388,6 +1392,24 @@ do_findings() {
   # Each check reads its verdict off its own lens: met when that lens returned nothing, unmet when
   # it returned a finding. An absent verdict is never a clean one, and version 5 paid for that four
   # times, which is why every one of the six is written here rather than left out.
+  # Check 16's floor, before its lens verdict. The practices lens reads the plays research loaded
+  # into records/playbooks.json, so a missing load is a lens that did not run, never a lens that
+  # found nothing to follow. Unknown when the record is absent; unknown when no source in it is
+  # loaded while the project subscribes to a set or holds a playbook.md, since then something was
+  # there to load. A record whose sources are all absent with nothing to load is the ordinary case
+  # for a project with no plays, and the lens verdict stands.
+  local playbooks_record playbooks_floor
+  playbooks_record="$(playbooks_record_path "$TASK_PATH")"
+  playbooks_floor=""
+  if [ ! -f "$playbooks_record" ]; then
+    playbooks_floor="playbooks not loaded: $playbooks_record is absent, so the practices lens read no play. Run playbooks load on this task."
+  elif [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ]; then
+    if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.playbookSubscriptions // {})[] | .[] ] | length')" != "0" ] \
+      || [ -f "$RV_PROJECT_FOLDER/playbook.md" ]; then
+      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set or holds playbook.md. Run playbooks load on this task."
+    fi
+  fi
+
   local rows_file lens_word check_id hits updated
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
@@ -1396,7 +1418,9 @@ do_findings() {
     # never a clean one, which is why every one of the six is written whatever the file held.
     hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
       '[ .[] | select(.lens == $l) | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
-    if [ -n "$hits" ]; then
+    if [ "$lens_word" = "practices" ] && [ -n "$playbooks_floor" ]; then
+      rw_check_row "$check_id" "unknown" "$playbooks_floor" >>"$rows_file"
+    elif [ -n "$hits" ]; then
       rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits" >>"$rows_file"
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
