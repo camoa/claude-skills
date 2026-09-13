@@ -29,6 +29,8 @@ Eight gaps from the first pickup of a version 5 project with beta.2 installed.
 - `report` exits 0 at case 4. Exit 1 collided with the check's "field missing" code.
 - `switch` no longer prints "belongs to another project" when the owner is the target itself.
 - A version 5 pickup writes `state: active` into the project file, matching its registry row.
+- The skill names the two files a version 5 pickup writes, `project.json` and
+  `records/check-project.json`, and the undo: `unregister` plus removing those two.
 
 ## [6.0.0-beta.2] - 2026-09-13
 

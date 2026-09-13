@@ -182,6 +182,11 @@ parent becomes the projects base when none is recorded yet. The project file get
 when the detector recognises the code path, `frameworks`. The check reports every other field
 missing, and each field's own producer fills it in later, which is the design.
 
+The pickup writes two files into the folder: `project.json`, and the check's own record at
+`records/check-project.json`. To undo a pickup, run `unregister` below and remove those two
+files by hand; nothing else was written. A folder left with its `project.json` is picked up again
+by `rebuild-registry`, since the base was recorded at the pickup.
+
 When the check still reports `frameworks` missing, interactive asks "What is the stack?" once and
 runs `set-frameworks` below with the answer. Autonomous **halts**, reporting that the frameworks
 are missing, the same rule as create's step 3.
@@ -339,6 +344,7 @@ plainly rather than letting it pass unremarked.
 ## Reading the check's report
 
 Every path above that touches a project ends by running the check and showing what it printed.
+The check also writes its report to `records/check-project.json` in the project folder.
 Read its exit code to decide what happens next, never its text alone:
 
 | Exit code | What it means | What this skill does |
