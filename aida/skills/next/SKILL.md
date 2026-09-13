@@ -62,15 +62,18 @@ Each `OPEN:` line is one of two shapes:
   `worktree`: the path of the task's own git worktree, or `none` for a task made before every
   task had one. And `stage`: where the task stands, the first stage whose close record is absent,
   one of `scope`, `research`, `design`, `implementation`, `review`, `completion`.
-  `legacyRecords: true` appears only when the folder holds a version 5 `alignment.md` and no
-  `alignment.json`; otherwise the key is absent. When it is true, say that the version 5 contract
-  and research are in the folder to read. Version 6 writes its own record when that stage runs.
+  `legacyStages` appears only on a moved version 5 task. It lists the stages whose version 5
+  file the move kept under a `.v5` name and whose version 6 record is absent. The order is the
+  stage order, from `scope`, `research`, `design`. Otherwise the key is absent. See "Carrying
+  version 5 work forward," below.
 - `"kind":"legacy"`: a task from before the tasks folder existed. Carries `id`, `epic` (the
   folder it is nested inside, or `null`), `legacyState` (`in_progress` here; `complete` only
   appears under `LEGACY_COMPLETE:`), and `path`.
 
 **Exactly one line under `OPEN:`.** That is the answer. Say which task it is and its `stage`.
-Name `/aida:<stage>` as the skill to run next. Treat it as active. This step asks nothing and writes nothing, except the move of a legacy task; there is no session file. Then
+Name `/aida:<stage>` as the skill to run next. Treat it as active. This step writes nothing, except the move of a legacy task; there is no session file. It asks one
+question only when the line carries `legacyStages`: the offer in "Carrying version 5 work
+forward," below. Go there. Otherwise
 enter the tree, below. A
 `kind: legacy` task still lives outside the project's own tasks folder. Move it, below. Then run
 the report again. Read the task as `kind: new`. Never delete it: the move keeps it.
@@ -119,6 +122,18 @@ move does and when it refuses. Ask nothing first. With the `PROJECT:` line and t
 ```
 Show the whole output. On success, say what moved and where.
 
+## Carrying version 5 work forward
+
+A moved task can carry `legacyStages`. Say which stages version 5 finished for this task, from
+that list, and that version 6 holds no record of them. Then offer one thing: run the first listed
+stage now. That stage reads the version 5 file as its input and writes the version 6 record. The
+producer runs again, and there is no converter, so the stage that reads the old file is the
+repair. Wait for a plain yes or no.
+
+- **Yes.** Invoke `aida:<first stage>` through the Skill tool, once, with the task id, and stop.
+- **No.** Enter the tree, above.
+- **Autonomous.** Do not ask. Invoke it the same way, and stop.
+
 ## A task named directly
 
 Run:
@@ -129,10 +144,12 @@ Run:
 Read the first line.
 
 - **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
-  `children:`, `runMode:`, `worktree:`, `review:` and `stage:`, with `legacyRecords: true` when
+  `children:`, `runMode:`, `worktree:`, `review:` and `stage:`, with `legacyStages:` when
   it applies. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
-  `/aida:<stage>` as the skill to run next. Treat it as active. Nothing else is asked. Read
-  the file at `task-file:` only when another field is needed. Then enter the tree, above.
+  `/aida:<stage>` as the skill to run next. Treat it as active. Read
+  the file at `task-file:` only when another field is needed. With `legacyStages:`, go to
+  "Carrying version 5 work forward," above; its offer is the one question asked here. Otherwise
+  enter the tree, above.
 - **`FOUND: legacy_in_progress`.** A `PATH:` line follows, and an `EPIC:` line when it is nested
   inside one. Move it, above. Then run the same action again. Read it as `FOUND: new`.
 - **`FOUND: legacy_complete`.** The same lines follow. Say plainly that this task finished before

@@ -70,6 +70,15 @@ what is still missing, rather than starting over.
 `input:` path before any search runs. This material is input, never a finding. It names things to
 search for. Record a claim from it only once a search confirms it with a source.
 
+No `search:` line, and `research.v5.md` or a `research.v5/` folder exists in the task folder.
+This is a first run on a version 5 task, and those files are its research. Read them. Record each
+finding that still holds through `record` below, one search per version 5 file. `--search` is
+`version-5-<file-slug>`, the file's name slugged. `--searched-for` is the file's own title or
+subject line. `--source` names the version 5 file. `--criteria-served` names the criterion the
+finding serves now. Dispatch a search only for a criterion those files do not cover. The coverage
+check then says what is left. Version 6 parses nothing back. So the stage that reads the old
+research is the conversion, and there is no converter.
+
 ## Start the stage
 
 Run:

@@ -210,14 +210,14 @@ EOF
 # The one writer of a new project file. create and the version 5 pickup both call it, so the
 # initial shape lives here once. frameworks is written when $4 is a JSON array. When $4 is null
 # the field is absent, and the check names it as missing for its producer to fill. Sources,
-# process recipes, playbook subscriptions, surfaces and the task rule start empty or null.
+# playbook subscriptions, surfaces and the task rule start empty or null.
 # ideal/project.md declares each of them lazily, the first time a later stage needs it.
 write_project_file() {
   local project_path="$1" code_path="$2" name="$3" fw_json="$4"
   jq -n --arg codePath "$code_path" --arg name "$name" --argjson frameworks "$fw_json" '
     {schemaVersion: 1, codePath: $codePath, name: $name}
     + (if $frameworks == null then {} else {frameworks: $frameworks} end)
-    + {state: "active", processRecipes: [], sources: [], playbookSubscriptions: {}, surfaces: null, taskRule: null}
+    + {state: "active", sources: [], playbookSubscriptions: {}, surfaces: null, taskRule: null}
   ' > "$project_path/project.json"
 }
 
@@ -466,6 +466,10 @@ register_v5_folder() {
   write_project_file "$folder" "$code_path" "$name" "$fw_json" \
     || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
   echo "PICKED UP: ${folder}"
+  # Version 5 wrote a task rule naming its own commands. Printed so the skill offers the rewrite
+  # once; task-rule replaces a block between the version 5 markers.
+  [ -f "$code_path/CLAUDE.md" ] && grep -qF "$TASK_RULE_V5_BEGIN" "$code_path/CLAUDE.md" 2>/dev/null \
+    && echo "TASK_RULE: version 5"
   # The tasks the folder already holds, in version 5's own place, one line each, so the skill
   # can name them and the step that moves one. Folder names only; nothing inside them is read.
   local legacy
@@ -818,6 +822,10 @@ do_unregister() {
 
 TASK_RULE_BEGIN="<!-- task-rule:begin -->"
 TASK_RULE_END="<!-- task-rule:end -->"
+# Version 5's own markers. The write path replaces a block between them and the remove path takes
+# one out, so a picked-up repository never holds two blocks. --decline looks only for this version's.
+TASK_RULE_V5_BEGIN="<!-- ai-dev-assistant:task-rule:begin -->"
+TASK_RULE_V5_END="<!-- ai-dev-assistant:task-rule:end -->"
 
 task_rule_block() {
   local project_name="$1"
@@ -900,7 +908,7 @@ do_task_rule() {
 
   claude_md="${code_path%/}/CLAUDE.md"
   present="false"
-  [ -f "$claude_md" ] && grep -qF "$TASK_RULE_BEGIN" "$claude_md" 2>/dev/null && present="true"
+  [ -f "$claude_md" ] && grep -qF -e "$TASK_RULE_BEGIN" -e "$TASK_RULE_V5_BEGIN" "$claude_md" 2>/dev/null && present="true"
 
   # Ported from version 5's task-rule-install.sh: check writability before writing, and report a
   # distinct failure rather than printing WRITTEN or REFRESHED regardless of what happened.
@@ -920,9 +928,9 @@ do_task_rule() {
     tmp="$(mktemp)"
     block_file="$(mktemp)"
     task_rule_block "$project_name" > "$block_file"
-    awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v bf="$block_file" '
-      index($0,b){ while ((getline line < bf) > 0) print line; close(bf); skip=1; next }
-      index($0,e){ skip=0; next }
+    awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v vb="$TASK_RULE_V5_BEGIN" -v ve="$TASK_RULE_V5_END" -v bf="$block_file" '
+      index($0,b) || index($0,vb){ while ((getline line < bf) > 0) print line; close(bf); skip=1; next }
+      index($0,e) || index($0,ve){ skip=0; next }
       !skip{print}
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
       rm -f "$tmp" "$block_file"
@@ -964,15 +972,15 @@ do_task_rule_remove() {
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   local claude_md="${code_path%/}/CLAUDE.md"
-  if [ -f "$claude_md" ] && grep -qF "$TASK_RULE_BEGIN" "$claude_md" 2>/dev/null; then
+  if [ -f "$claude_md" ] && grep -qF -e "$TASK_RULE_BEGIN" -e "$TASK_RULE_V5_BEGIN" "$claude_md" 2>/dev/null; then
     local tmp
     tmp="$(mktemp)"
-    awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" '
+    awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v vb="$TASK_RULE_V5_BEGIN" -v ve="$TASK_RULE_V5_END" '
       { lines[NR] = $0 }
       END {
         for (i = 1; i <= NR; i++) {
-          if (index(lines[i], b)) bi = i
-          if (index(lines[i], e)) ei = i
+          if (index(lines[i], b) || index(lines[i], vb)) bi = i
+          if (index(lines[i], e) || index(lines[i], ve)) ei = i
         }
         if (bi == 0) { for (i = 1; i <= NR; i++) print lines[i]; exit }
         if (ei == 0) ei = bi

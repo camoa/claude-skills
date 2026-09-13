@@ -203,6 +203,13 @@ repair. Interactive: offer it once, in one line, and on yes run
 It makes the folder a repository, commits the files already there, and runs the check again.
 Autonomous: name the repair and continue.
 
+`TASK_RULE: version 5` after `PICKED UP:` means the code repository's `CLAUDE.md` holds the
+task rule version 5 wrote, which names `/ai-dev-assistant:` commands that no longer exist.
+Interactive: after the `git-init` offer, offer once to rewrite it, in one line. Yes runs the
+`task-rule` section below, which replaces that block in place. No records the refusal with
+`task-rule "<name>" --decline`, the same as create's step 6. The block stays as it is.
+Autonomous: say the offer is waiting and continue, as at create.
+
 ## `list [active|complete|archived]...`
 
 Run:

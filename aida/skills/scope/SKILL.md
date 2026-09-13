@@ -60,6 +60,16 @@ handed-down criteria there, as plain prose with no id, no verify clause and no a
 is input for this conversation, exactly like anything else a person typed at the task. It is never
 a contract: this task has no contract until scope has run once.
 
+On a first run only, when `alignment.v5.md` exists in the task folder, read it too. It holds the
+person's earlier words: the goal, the expected result, each criterion in its order, and each
+non-goal. Propose the contract from it, through the same `init`, `set-goal`, `add` and
+`add-non-goal` calls below. Keep the criteria in the version 5 order, so the ids line up with the
+old numbering. Each criterion still needs its verify clause and its machine or person judgment.
+The version 5 text seldom states those. Draft them. Confirm each one. Before each write, show what
+changed from the version 5 text. The writes come first and the approval after, at "Approval"
+below, as that section says. Version 6 parses nothing back. So the stage that reads the old
+contract is the conversion, and there is no converter.
+
 The single freshest source of what the person wants is whatever they typed on the invocation line
 that started this conversation. Read it before asking anything. Setting it aside and opening a
 blank interview anyway is a fault, and it is exactly what version 5 shipped once: a run that threw
@@ -68,8 +78,8 @@ away what the user had just said and asked them to restate it.
 ## Choose a posture, then hold the conversation
 
 Three postures, and the choice is how much is already on the table between the invocation line,
-an existing `alignment.json`, and, on a first run for a split child, the handed-down prose in
-`task.md`:
+an existing `alignment.json`, and, on a first run, the handed-down prose in `task.md` of a split
+child or the version 5 contract in `alignment.v5.md`:
 
 - **Reflect and refine.** A goal and most of a contract are already there. State back what is
   recorded and ask only about gaps or points that need sharpening.
@@ -181,12 +191,12 @@ Scope does not set a check up and does not decide whether a task deserves one. I
 whether an already-available capability applies here, and only when the project has already
 turned it on. Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
-- **`e2e.enabled` is true.** An end to end test is an acceptance criterion automated: a criterion
-  already phrased as an outcome is already the script. So do not ask a separate question about
-  coverage. When agreeing a criterion's verify clause (step 2 above), ask instead "shall I
-  automate this criterion", with a recommended answer. Yes sets `verifiedBy` to `machine` and the
-  verify clause names the automated test; no falls back to the ordinary question of how it is
-  observed.
+- **`surfaces.e2e.enabled` is true.** An end to end test is an acceptance criterion automated: a
+  criterion already phrased as an outcome is already the script. So do not ask a separate
+  question about coverage. When agreeing a criterion's verify clause (step 2 above), ask instead
+  "shall I automate this criterion", with a recommended answer. Yes sets `verifiedBy` to
+  `machine` and the verify clause names the automated test; no falls back to the ordinary
+  question of how it is observed.
 - **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
   has a baseline in the surface file at `surfaces.registryPath`. One that does becomes a criterion
   whose verify clause names the visual regression check that must pass. One that does not becomes
