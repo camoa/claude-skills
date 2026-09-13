@@ -124,6 +124,7 @@
 #   6  `start` was asked to begin design on a task research has not closed: no
 #      records/research-check.json, or one whose exitCode is not 0. Research is required (the
 #      owner's rule: no skip), and the way through is the research skill.
+#   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule research-actions.sh and
@@ -170,6 +171,7 @@ die3() { printf 'design-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
 die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
+die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null

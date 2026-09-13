@@ -69,6 +69,7 @@
 #  72  two frameworks each command one tool.
 #  73  the check recipe resolved now is not the one the baseline was taken with.
 #  77  the project records no framework.
+#  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Codes 5, 14, 15, 52, 70, 72 and 73 arrive from scripts/lib/recipes.sh, which both stages source, and
 # they carry exactly the meanings implement-actions.sh's own table gives them. ideal/review.md lists
@@ -128,6 +129,7 @@ die() { printf 'review-actions: %s\n' "$2" >&2; exit "$1"; }
 # task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
 die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
+die79() { die 79 "$1"; }
 
 for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do
   [ -f "$lib_name" ] || die 3 "cannot find the library at $lib_name"
@@ -473,8 +475,8 @@ do_read() {
     e2e_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.e2e // null) == null then "not-set-up" elif (.e2e.enabled // false) then "on" else "off" end')"
     vr_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.visualRegression // null) == null then "not-set-up" elif (.visualRegression.enabled // false) then "on" else "off" end')"
     registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.visualRegression.registryPath // ""')"
-    code_state="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.codePath // ""')"
   fi
+  code_state="$(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
 
   rw_load_record "read"
   report="$(jq -n \

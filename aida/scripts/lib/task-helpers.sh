@@ -16,6 +16,11 @@
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   mark_task_in_progress <folder> <why>  moves the task to in_progress once, before a first write
+#   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
+#                                         when task.json does not record one
+#
+# task_worktree also takes resolve_project_folder, project_code_path_value and is_git_repo from
+# scripts/lib/recipes.sh, and the refusal in resolve_task_folder takes die79 from the caller.
 
 # The task folder must already exist and already hold a task.json (ideal/scope.md, "Scope runs
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
@@ -25,6 +30,15 @@ resolve_task_folder() {
   [ -n "$arg" ] || die3 "$who: a task folder is required"
   p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
   [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
+  # Every stage action but read runs inside the task's own worktree, or a folder under it
+  # (ideal/task.md, "Two windows"). A task with no field yet, or a recorded tree gone from disk,
+  # is not refused here: the action that makes the tree names it, and the next action refuses.
+  local wt here
+  wt="$(jq -r '.worktree.path // empty' "$p/task.json" 2>/dev/null)"
+  here="$(pwd -P)/"
+  if [ -n "$wt" ] && [ -d "$wt" ] && [ "$who" != "read" ] && [ "${here#"$wt"/}" = "$here" ]; then
+    die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree first."
+  fi
   printf '%s' "$p"
 }
 
@@ -78,4 +92,52 @@ mark_task_in_progress() {
       "$(basename -- "$task_folder")" -- "$why" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die3 "task start refused for $task_folder, so nothing was written. Repair the task first"; }
   echo "task-state: $state -> in_progress"
+}
+
+# The task's own git worktree (ideal/task.md, "A worktree per task, always"). Prints the path
+# task.json records. When the field is absent it makes the tree and writes the field first; that
+# is the one producer, and running it again is the repair for a task made before the field
+# existed. A recorded tree gone from disk is made again from its branch, after a prune, because
+# git refuses a path it still registers; a branch gone too starts from HEAD again. The base is
+# HEAD of the directory this action was started from when that directory is inside the code
+# repository, so a follow-up made from its parent's tree stacks on the parent's work; otherwise
+# it is the code path's HEAD. Uncommitted changes in the code path are not in a tree cut from a
+# commit, so their count is said once, on stderr, and nothing asks.
+# $1 the canonical task folder, $2 the action's own name. Dies through die3.
+task_worktree() {
+  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
+  wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
+  if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
+  project="$(resolve_project_folder "$task_folder")" \
+    || die3 "$who: could not resolve a project folder two levels up from $task_folder, or it has no project.json"
+  code="$(project_code_path_value "$project")"
+  [ -n "$code" ] && [ -d "$code" ] || die3 "$who: the project's codePath is not on disk: ${code:-none recorded}"
+  is_git_repo "$code" || die3 "$who: the project's codePath is not a git repository: $code"
+  code="$(cd "$code" && pwd -P)"
+  branch="$(jq -r '.worktree.branch // empty' "$task_json" 2>/dev/null)"
+  if [ -n "$wt" ]; then
+    printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
+  else
+    id="$(jq -r '.id' "$task_json")"
+    wt="$code/.claude/worktrees/$id"
+    branch="feature/$id"
+    printf 'worktree: %s\n' "$wt" >&2
+  fi
+  base_dir="$code"
+  said="$(git rev-parse --git-common-dir 2>/dev/null)"
+  if [ -n "$said" ] && [ "$(cd "$said" && pwd -P)" = "$(cd "$code" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
+    base_dir="$(pwd -P)"
+  fi
+  base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" || die3 "$who: $base_dir has no commit to cut a worktree from"
+  dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
+  git -C "$code" worktree prune 2>/dev/null
+  if git -C "$code" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
+    said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" || die3 "$who: git worktree add failed: $said"
+  else
+    said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" || die3 "$who: git worktree add failed: $said"
+  fi
+  wt="$(cd "$wt" && pwd -P)"
+  write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" '.worktree = {path: $p, branch: $b}' "$task_json")"
+  printf '%s' "$wt"
 }

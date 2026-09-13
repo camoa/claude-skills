@@ -19,7 +19,8 @@
 # Public functions, in the order they appear below:
 #
 #   resolve_project_folder <task folder>      the project folder two levels up, or returns 1
-#   rv_load_codepath <action>                 sets RV_PROJECT_FOLDER and RV_CODEPATH, or dies
+#   rv_load_codepath <action>                 sets RV_PROJECT_FOLDER and RV_CODEPATH, the task's
+#                                             own worktree, or dies
 #   project_code_path_state <project folder>  missing | unreadable | ok
 #   project_code_path_value <project folder>  the codePath recorded there, or empty
 #   is_git_repo <path>                        true when it is a git work tree
@@ -110,7 +111,9 @@ resolve_project_folder() {
 # RV_PROJECT_FOLDER and RV_CODEPATH. Every action that needs either asks here, so all of them name
 # the same facts in the same words: a project folder that cannot be resolved, a project.json that
 # will not parse, one with no codePath, a codePath that is not on disk, and one that is not a git
-# repository are five different refusals with five different exit codes.
+# repository are five different refusals with five different exit codes. Past those five,
+# RV_CODEPATH is the task's own worktree, made here when task.json does not record one yet
+# (task_worktree in task-helpers.sh, which the caller sources before this file).
 TASK_PATH=""
 RV_PROJECT_FOLDER=""; RV_CODEPATH=""
 rv_load_codepath() {
@@ -127,6 +130,7 @@ rv_load_codepath() {
   command -v git >/dev/null 2>&1 || die 3 "$who: git is required and was not found on PATH"
   is_git_repo "$RV_CODEPATH" \
     || die 5 "$who: this task's project code at $RV_CODEPATH is not a git repository."
+  RV_CODEPATH="$(task_worktree "$TASK_PATH" "$who")" || exit 3
 }
 
 # Prints one of: missing, unreadable, ok, for the JSON file $1. Never dies: a caller decides what

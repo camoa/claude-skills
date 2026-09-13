@@ -20,6 +20,10 @@
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape that check runs)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/task-schema.json         (read by check-task.sh, a later part;
 #                                                            not read by this script)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for task_worktree: create and
+#                                                            split make each task's own worktree
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh           sourced, for the codePath readers
+#                                                            task_worktree needs
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
@@ -45,7 +49,8 @@
 # The value itself is read nowhere below, so nothing here stores it.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints why
-# to stderr and exits 3. A miss that is a real, expected outcome (start or complete or split
+# to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
+# the folder it made first. A miss that is a real, expected outcome (start or complete or split
 # naming a task that does not exist) exits 1 and prints nothing useful to stdout, never confused
 # with 3.
 #
@@ -77,6 +82,14 @@ die3() {
   printf 'task-actions: %s\n' "$1" >&2
   exit 3
 }
+# The two libraries take these from their caller, so a refusal still says which script refused.
+die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
+die1() { die 1 "$1"; }
+for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
+  [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
+  # shellcheck source=/dev/null
+  source "$lib_name" || die3 "the library failed to load: $lib_name"
+done
 
 usage() {
   cat <<'EOF' >&2
@@ -146,7 +159,8 @@ task_summary() {
     "state: " + (.state // "?"),
     "parent: " + (.parent // "none"),
     "children: " + ((.children // []) | join(" ")),
-    "runMode: " + (.runMode // "interactive")' "$1"
+    "runMode: " + (.runMode // "interactive"),
+    "worktree: " + (.worktree.path // "none")' "$1"
 }
 
 # Renders the same five-field commit shape templates/project-commit.md defines, checks its own
@@ -232,6 +246,10 @@ do_create() {
     printf '## Goal\n\n'
     printf '%s\n' "$goal"
   } > "$task_dir/task.md" || die3 "create: could not write $task_dir/task.md"
+
+  # The task's own worktree, made right after the record is written whole, so a second window
+  # can open the tree before any stage runs. A tree that cannot be made leaves no half-made task.
+  ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
 
   commit_task_change "$project_path" \
     "Create task ${id}" \
@@ -691,6 +709,8 @@ do_split() {
         printf '%s' "$ccrit" | jq -r '.[] | "- " + .'
       fi
     } > "$cdir/task.md" || die3 "split: could not write $cdir/task.md"
+    # Each child gets its tree now, so no child waits for a first stage action to make one.
+    task_worktree "$cdir" "split" >/dev/null
 
     i=$((i + 1))
   done

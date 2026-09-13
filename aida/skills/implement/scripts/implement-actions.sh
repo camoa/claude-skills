@@ -411,6 +411,7 @@
 #      chosen for it. Exit 14 stays the separate fact that the file is not valid JSON at all.
 #  78  `dispatch-open` found the run at the ceiling task.json's `budget` sets, in dispatches or in
 #      minutes. The order is halted with `budget spent` and both numbers; the grant path answers it.
+#  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -470,6 +471,7 @@ die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
 # task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
 die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
+die79() { die 79 "$1"; }
 
 # The task-folder resolver, the atomic write and the task start, shared with every other stage.
 [ -f "$TASK_HELPERS_LIB" ] || die 3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
@@ -907,14 +909,15 @@ do_read() {
         project_note="$project_path/project.json is missing"
         ;;
       ok)
-        code_path="$(project_code_path_value "$project_path")"
-        [ -n "$code_path" ] || project_note="$project_path/project.json is valid JSON but has no usable codePath field"
+        [ -n "$(project_code_path_value "$project_path")" ] || project_note="$project_path/project.json is valid JSON but has no usable codePath field"
         ;;
     esac
   else
     project_path=""
     project_note="could not resolve a project folder two levels up from the task folder, or it has no project.json"
   fi
+  # The code this task builds in is its own worktree, read from the field and never made here.
+  code_path="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
 
   local git_is_repo git_branch trunk_derived trunk_branch trunk_note
   git_is_repo=false
@@ -2488,7 +2491,7 @@ EOF
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
     met|undeclared) ;;
-    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record" ;;
+    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
         --argjson report "$record_json" \
@@ -3587,14 +3590,11 @@ do_build_brief() {
 
   # The caller needs the commit this attempt begins from, for --started-at when it records. It was
   # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry.
-  local bb_project bb_codepath bb_head
+  local bb_codepath bb_head
   bb_head=""
-  bb_project="$(resolve_project_folder "$TASK_PATH" 2>/dev/null)" || bb_project=""
-  if [ -n "$bb_project" ]; then
-    bb_codepath="$(project_code_path_value "$bb_project")"
-    if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
-      bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
-    fi
+  bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
+    bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
   fi
   # The report has one named path per attempt, so a later attempt never writes over the answers a
   # reviewer already compared a diff against. The brief is one file per order, rewritten on each
