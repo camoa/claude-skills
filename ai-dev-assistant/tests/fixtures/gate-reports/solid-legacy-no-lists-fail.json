@@ -1,6 +1,0 @@
-{
-  "status": "fail",
-  "violations": [],
-  "metrics": {"circular_dependencies": 3},
-  "principles": {}
-}

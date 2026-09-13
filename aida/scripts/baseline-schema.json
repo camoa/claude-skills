@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation baseline",
+  "description": "What was already broken at the commit the build starts from, at <task folder>/implementation/baseline.json (ideal/implementation.md, 'The deciding checks run before anything judges'). Taken once, by the same `preconditions` step that resolves the recipes, and only when that run's own verdict permits the build to continue: a baseline taken after a condition answered no would measure a broken environment. Every deciding check later in the stage excludes this file's own findings from its own verdict, because a repository with one pre-existing failure would otherwise block every work order forever. Recording a red suite here changes nothing about that recording run's own verdict or exit code; knowing it is the whole point. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "takenAt",
+    "commit",
+    "scope",
+    "suite",
+    "codingStandards",
+    "staticAnalysis",
+    "security",
+    "checkRecipes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date the baseline ran, YYYY-MM-DD. Set by the script, never typed. Kept for the same reason preconditions.json keeps one: a person reading this weeks later needs to know how old it is, because a repository changes."
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit this baseline was taken at, read from the ledger's own startedFrom rather than a fresh git call, so the two records that must agree are read from the same place (ledger-schema.json, startedFrom). A baseline is taken once per commit: a second preconditions run whose ledger started from this same commit leaves this file alone, and a run whose ledger started from a different commit refuses rather than overwrite it, naming both commits."
+    },
+    "scope": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The union of every work order's own ownedFiles from the snapshot, sorted once with duplicates removed. This is what a {paths} token in any of the three tool commands expands to, one argv token per path, narrowed first by that tool's own extensions list where it declares one. suite is never scoped by it, because at this point the orders' own tests do not exist yet and no framework declares a command mapping paths to the tests that cover them."
+    },
+    "suite": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/suiteResult"
+      },
+      "description": "One entry per framework the project declares, running that framework's own `suite` test-command row whole and unscoped, exactly as preconditions.json already resolved and recorded it. A project on two frameworks gets two runs, because the build runs in one repository that is both."
+    },
+    "codingStandards": {
+      "$ref": "#/$defs/toolResult",
+      "description": "What the coding-standards command the caller supplied with --standards found across the scope above. Undeclared when no --standards flag was given. This is the value build-record's own coding-standards check compares a later failure against: a baseline that was met makes a later failure this order's own."
+    },
+    "staticAnalysis": {
+      "$ref": "#/$defs/toolResult",
+      "description": "What the static-analysis command the caller supplied with --static-analysis found across the scope above. Undeclared when no --static-analysis flag was given, and read later the same way codingStandards is."
+    },
+    "security": {
+      "$ref": "#/$defs/toolResult",
+      "description": "What the security command the caller supplied with --security found across the scope above. Undeclared when no --security flag was given, and read later the same way codingStandards is."
+    },
+    "checkRecipes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "framework",
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "framework": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The framework name as project.json records it, the same value suite[].framework carries."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The check recipe file this baseline read for that framework, as the caller handed it over."
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A sha256 over that file. Every tool check later in the stage compares its own result against this baseline, and that comparison is only honest while both ran the same command, so a later run resolving a recipe whose hash differs refuses rather than compare one tool output against another tool baseline."
+          }
+        }
+      },
+      "description": "The check recipe each framework resolved to when this baseline was taken, with a hash of the file. Empty when no --check-recipe named a framework. The three tool fields below hold what those recipes' rows found across the scope."
+    }
+  },
+  "$defs": {
+    "suiteResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framework",
+        "verdict"
+      ],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The framework name as project.json records it, the same value preconditions.json's own frameworks[].framework carries. Joined on, never re-derived."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "met",
+            "unmet",
+            "unknown"
+          ],
+          "description": "met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all: the recipe named no suite row, the row is one of the recipe's own absent rows, its argv did not parse, a placeholder had no supplied --value, or the command could not be found (exit 127). undeclared is not here: a whole framework declining to say how it runs its own tests at all is not a fact this stage has seen yet, and adding the word before a recipe ever needs it would be a guess."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this is unknown, present only on that verdict. Free text rather than a closed set, the same convention preconditions.json's own smoke.reason follows, because one of its causes is a placeholder token no --value supplied and naming which one is the point."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the suite command exited with, present whenever it actually ran."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, present whenever it actually ran, met or not. Unlike preconditions.json's own smoke.output, this is kept for a met run too: a baseline is a record of the whole state at this commit, not only of what pointed at a defect, and a later comparison needs something to compare against. Trimmed to at most the last 4000 characters."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when output is the trimmed tail of a longer capture, absent entirely otherwise, the same convention preconditions.json's own smoke.truncated follows."
+        }
+      }
+    },
+    "toolResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "met",
+            "unmet",
+            "unknown",
+            "undeclared"
+          ],
+          "description": "The same four words every verdict in this stage uses. met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all (it was not found, exit 127, or the command holds {paths} while no work order declares an owned file), and undeclared when the caller supplied no command for this tool or when the tool's own extensions list matched no file in the scope, which means the row did not apply rather than that it passed. A row declaring the signal empty-stdout is unmet on a zero exit that printed on standard output. The baseline has nothing earlier to compare itself against, which is why unmet here is a plain record of a red tool and never a refusal."
+        },
+        "absent": {
+          "type": "boolean",
+          "description": "True when the recipe row for this tool was declared absent, and the reason in `reason` is the recipe's own. Absent from the record otherwise. It exists because undeclared covers two facts that must not read alike: a framework that says it has no such tool answered the question, and a caller who passed no flag answered nothing. Both stay undeclared, because undeclared is never satisfied either way, and this field is what tells a reader which happened."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this verdict, present on undeclared and on unknown, and on the unmet a signal decided. Free text rather than a closed set, the same convention suite[].reason follows."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the tool exited with, present whenever it actually ran."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, present whenever it actually ran, met or not, for the same reason suite[].output is kept on a met run. Trimmed to at most the last 4000 characters. A row carrying the signal empty-stdout has the two streams read apart and then joined, standard output first, so their interleaving is not preserved for that row."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when output is the trimmed tail of a longer capture, absent entirely otherwise."
+        },
+        "signal": {
+          "type": "string",
+          "enum": [
+            "empty-stdout"
+          ],
+          "description": "Present only when the recipe's own check-commands row declares it (dev-guides, process-recipes, '## Check commands' is parsed). empty-stdout marks a tool that cannot fail by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard output is unmet, and a caller that ignores the key has a green light wired to nothing. A non-zero exit is unread by this key and keeps its own meaning."
+        },
+        "extensions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Present only when the recipe's own check-commands row declares it. The file extensions this tool reads; {paths} expanded to only the files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply here."
+        }
+      }
+    }
+  }
+}

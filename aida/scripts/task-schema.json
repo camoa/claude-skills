@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA task file",
+  "description": "The structured file at <task folder>/task.json. Every field a script reads about a task lives here, in one place, the same split a project uses: task.md sits beside this file and holds the goal in user-story style, in prose nothing here derives from and no script parses. Written whole at creation, the same as project.json, so no task ever reads back with an unknown state. A field present in a real task.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "state", "parent", "children"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, not when it was last checked. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9._-]*$",
+      "description": "The task's own identifier, defaulting from its folder name at creation. No path separator, and never `.` or `..`; a bad name is refused, not silently repaired, the same rule version 5 applied. Version 5 prefixed this value `local:`, reserved for a cross-tool identifier scheme nothing in this build reads or writes; dropped here because carrying a namespace prefix nothing consumes is not reuse. A tracker's own id, when this task corresponds to one, belongs in `externalIds` instead, never folded into this value."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["new", "in_progress", "complete"],
+      "default": "new",
+      "description": "The task's own lifecycle state, written by whoever changes it. Version 5 guessed this from which files existed in the task folder, so a task with no artifact yet and a task nobody had touched in months read back the same way, and the header carrying it was usually absent, which is why an unwritten task read back as status unknown instead of new. A task becomes in_progress the first time any stage writes an artifact into it, usually scope but not because scope is special, and complete when it is finished. This project's own state field uses the same three-part shape for the same reason: a small, closed set with no unknown left over."
+    },
+    "parent": {
+      "default": null,
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1 }
+      ],
+      "description": "The id of the task one level up, when this task is a child. Null for a task with no parent. Nesting is two levels deep at most, and a child never lives in another project; both are enforced by whoever writes this field, not by this schema, which checks shape only. Version 5 also carried a `kind` field naming the depth (`epic`, `sub_epic`, `subtask`) explicitly; that is gone here, because whether a task with a parent is itself a sub-epic or a plain subtask is exactly how deep it sits, which walking `parent` already answers."
+    },
+    "children": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The ids of this task's own children, in no particular order. Empty for a task with none. This is what replaces version 5's four-valued `kind` field (`flat`, `epic`, `sub_epic`, `subtask`): a task has children or it does not, and whether an epic sits one level down or two is a question about `parent`, not about this field. A task's own folder never moves when a child is added or removed; only this list changes."
+    },
+    "runMode": {
+      "type": "string",
+      "enum": ["autonomous"],
+      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it."
+    },
+    "mechanismHints": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/mechanismHint" },
+      "description": "Optional hints, carried over from version 5 unchanged in shape, naming an implementation approach a stage should read before choosing one of its own, for example reusing a named service instead of writing a new one. Read if present; a task that sets none is read from its own prose instead, the same fallback version 5 used. Starts empty, and most tasks never set one."
+    },
+    "externalIds": {
+      "type": "object",
+      "default": {},
+      "propertyNames": { "type": "string", "minLength": 1 },
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "description": "This task's id in an external tracker, one entry per system it is known to, for example {\"jira\": \"PROJ-123\"}. Reserved for tracker integration, ported unchanged from version 5, where it had no writer either; most tasks never set one and this stays empty."
+    }
+  },
+  "$defs": {
+    "mechanismHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approach", "status"],
+      "properties": {
+        "approach": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The suggested approach, in the task's own words, for example \"reuse the existing FooService rather than writing a new one\"."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["suggested", "required"],
+          "description": "Whether a stage may weigh this approach against alternatives (suggested) or must follow it (required)."
+        }
+      }
+    }
+  }
+}

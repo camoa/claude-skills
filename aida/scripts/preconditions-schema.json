@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation preconditions record",
+  "description": "What the second step of implementation established before any work order was touched, at <task folder>/implementation/preconditions.json (ideal/implementation.md, 'Before the first order: start, then preconditions'). One record per run, holding one result per framework the project declares. Later steps read the resolved recipe path and the verdicts from here and never resolve again, for the same reason they read the snapshot and never the live records. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. Each framework's recipe also carries a `## Test commands` block, and this step reads and records it here, unresolved and unsubstituted: the row shape and the reasons it may be unreadable, never the running of one. The baseline this step also takes lives in its own record beside this one, `baseline.json`, because it is keyed to a commit rather than to a run and is written once where this file is rewritten on every run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "takenAt", "verdict", "frameworks"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date the checks ran, YYYY-MM-DD. Set by the script, never typed. A person arriving at a halted run weeks later needs to know how old these verdicts are, because a precondition is a fact about a machine and machines change."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["met", "unmet", "unknown", "undeclared"],
+      "description": "The run's answer, taken as the worst of every framework's own verdict and its own smoke run's verdict. `met` only when every framework's conditions and every framework's smoke run both reached `met` (or `undeclared`, for whichever of the two the recipe declared nothing of). It is never derived a second time by a reader: one producer, one value. The order from best to worst is met, undeclared, unknown, unmet, because a recipe that declared nothing is a smaller hole than a check that could not answer, and a check that answered no is the only one that names something to fix."
+    },
+    "frameworks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/frameworkResult" },
+      "description": "One entry per framework in project.json, which requires at least one. A project on two frameworks gets two recipes and two sets of entries, and both must be satisfied, because the build runs in one repository that is both."
+    }
+  },
+  "$defs": {
+    "frameworkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["framework", "lookup", "verdict", "entries", "testCommands", "smoke"],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The framework name as project.json records it. Joined on, never re-derived from the repository."
+        },
+        "lookup": {
+          "type": "string",
+          "enum": ["resolved", "no-recipe", "listing-unreachable", "fetch-failed"],
+          "description": "What the recipe lookup returned. Four values and not two, because a catalog that could not be reached is not a catalog that held nothing (foundations.md). Only `no-recipe` says anything about the framework. Collapsing the other three writes a false finding that nothing later can tell from a true one."
+        },
+        "recipePath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The path the lookup returned, present only when `lookup` is `resolved`. The skill resolves it through the guides navigator, or reads it from a source the project configured itself, and hands it to the script. The script never fetches a catalog address and never reads the navigator's cache behind its back."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "This framework's answer. `met` needs every entry met. `undeclared` means the recipe carried no preconditions heading at all. `unknown` covers a heading with nothing parseable under it, and any entry that could not be decided. A recipe that could not be resolved is `unknown`, never `undeclared`: nobody looked, which is a different fact from a recipe that looked and declared nothing."
+        },
+        "entries": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/entry" },
+          "description": "One entry per parsed precondition, in the order the recipe declared them. Empty is a real state and it is what `undeclared` looks like, and also what an unresolved recipe looks like; `verdict` and `lookup` tell those apart."
+        },
+        "testCommands": {
+          "$ref": "#/$defs/testCommands",
+          "description": "What the recipe's own `## Test commands` block declared for this framework, read alongside its preconditions and never affecting this framework's `verdict`: a framework can decline every test command and still build. Resolves nothing and substitutes nothing, the same restraint `entries[].check` observes for a condition. Its `smoke` row is the one exception: `smoke` below is what came of actually running it."
+        },
+        "smoke": {
+          "$ref": "#/$defs/smoke",
+          "description": "What running this framework's own `smoke` test-command row established, once its own `verdict` above allowed it. This is the one row `testCommands` records that is also run, and what it found feeds the top-level `verdict` the same way this framework's own `verdict` does."
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "what", "verdict"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The entry's own id, as the recipe wrote it. Not minted here and not renamed, so a person reading a refusal can find the line in the recipe."
+        },
+        "what": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The condition in the recipe's own words. This is what a person reads when a run refuses, so it is copied verbatim rather than summarised."
+        },
+        "check": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The command as argument tokens, split on whitespace and run without a shell. Absent when the recipe declared no check, which is a deliberate state and not a defect: a condition nothing can probe stays visible as `unknown` rather than being dropped for being unverifiable. A recipe is data written elsewhere, so a value carrying a shell metacharacter is refused rather than run."
+        },
+        "expect": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A literal string the check's own output must hold, as the recipe declared it, with the document's outer quotes removed. Present only when the recipe carried one. The exit status is read first and keeps every meaning it has; only on a zero exit does this decide, and it decides one way. It exists because some commands answer in what they print rather than in how they exit: `ddev describe -j` reports whether a project is running and exits 0 either way. A substring test and nothing more, for the same reason the command never reaches a shell. An entry recording `unmet` with an exitCode of 0 and an expect is this test deciding, which is why that case carries no reason of its own."
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Who fixes this, by tool or skill name, as the recipe declared it. Absent means the recipe named none. An unmet condition with an owner is an action; without one it is a sentence a person has to interpret, which is how a stage came to improvise an install that a sibling plugin already owned."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown"],
+          "description": "What running the check established. `met` on exit 0, `unmet` on any other exit, `unknown` when nothing could be established. `undeclared` is not here: it describes a recipe, never an entry."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "check-command-not-found",
+            "unsafe-check-shape",
+            "no-check-declared",
+            "entry-unparseable"
+          ],
+          "description": "Why an `unknown` is unknown, present only on that verdict. A missing checker says nothing about the condition, so reporting it as unmet would send a person to fix the wrong thing. These stay separate because they call for different actions: install the checker, fix the recipe, or accept an unverifiable condition. There is no value for a check that hung, because nothing here imposes a time limit: `timeout` is absent from a stock macOS and this runs on bash 3.2 and zsh, so a hanging check hangs the step and saying so beats a value nothing writes."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the check exited with, present whenever one ran. Kept because `unmet` on its own does not say how far the check got, and a person comparing two runs needs the number rather than a word."
+        }
+      }
+    },
+    "testCommands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "rows"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["not-looked", "undeclared", "unparseable", "ok"],
+          "description": "Four values for the same reason `frameworkResult.verdict` keeps `unknown` apart from `undeclared`: nobody looking is not the same fact as a recipe that looked and declared nothing. `not-looked` means this framework's `lookup` was never `resolved`, so no recipe was ever read for it. `undeclared` means a resolved recipe carries no `## Test commands` heading at all. `unparseable` means the heading is there but `test_commands:` never opens under it, indistinguishable from a misspelled key. `ok` means the key opened, however many rows followed it, including none."
+        },
+        "rows": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/testCommandRow" },
+          "description": "One entry per row the recipe declared, in the order it wrote them, only when `state` is `ok`. Empty for every other state: `not-looked` and `undeclared` have nothing to show, and `unparseable` has a heading with nothing readable beneath it."
+        }
+      }
+    },
+    "testCommandRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The row's own id, as the recipe wrote it: `suite`, `file`, `test`, `changed` or `smoke` in every recipe seen so far, but not minted or renamed here, the same reason `entry.id` is not."
+        },
+        "argv": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The command as the recipe wrote it, one token per array element, present only when the recipe gave this row an `argv:` that parsed as a JSON array of strings. A placeholder token (`{file}`, `{test_id}`, `{tier}`, `{paths}`, `{package}`, `{packages}`, `{runner}`) is kept exactly as written; this step resolves nothing and substitutes nothing, so no caller reading this field can mistake a placeholder for a value."
+        },
+        "cost": {
+          "type": "string",
+          "enum": ["end-of-task", "every-attempt"],
+          "description": "What the recipe declared this row costs, present only alongside `argv`. A row with no cost of its own, such as one answered by `absent`, carries none."
+        },
+        "absent": {
+          "type": "boolean",
+          "description": "True when the row carried an `absent:` key at all. The key's own value is folded prose, written for a person and a model reading the recipe itself, never parsed here; this field is the one fact this step keeps from it. Absent entirely, rather than written `false`, on a row that carried no such key, the same convention `entry.owner` follows for a condition with no owner."
+        },
+        "nearest": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The nearest command the recipe offers in place of one it says this framework does not have, present only when the row also carried `absent` and its own `nearest:` parsed as a JSON array of strings. Its placeholders are kept verbatim, the same as `argv`'s."
+        },
+        "unreadable": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["argv", "nearest"] },
+          "description": "Which of `argv:` or `nearest:` the recipe wrote but this step could not parse as a JSON array of strings, present only when at least one failed. The row is kept rather than dropped, because a malformed row is a defect in the recipe worth reporting, and dropping it would report fewer rows than the recipe actually declared."
+        }
+      }
+    },
+    "smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict"],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown", "undeclared"],
+          "description": "What running this framework's own `smoke` test-command row established, the cheapest thing that proves the harness runs and reports. `met` on exit 0, `unmet` on any other exit the command actually returned, `unknown` when it could not be run at all, and `undeclared` when the recipe's own smoke row is one of its `absent:` rows, which `claude-code-plugins` writes for all five. It runs only when this framework's own `verdict` above already came back `met` or `undeclared`: a condition that answered no or could not be decided already explains a failure this run would only rediscover, so it is left `unknown` and never attempted."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the run is `unknown`, present only on that verdict. Free text rather than a closed set, unlike `entry.reason`: one of its causes is a placeholder token no `--value` supplied a value for, and naming which one is the point, so the name is written into the sentence rather than filed apart from it."
+        },
+        "output": {
+          "type": "string",
+          "description": "What the command printed, standard output and standard error together, present only when `verdict` is not `met` and the command actually ran (never for a run blocked before it started, such as by its own conditions or an unsupplied placeholder). Trimmed to at most the last 2000 characters: a person acting on a failed smoke run needs the message, not the whole log. A `met` run records none."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when `output` is the trimmed tail of a longer capture, absent entirely otherwise, the same convention `testCommandRow.absent` follows for a fact that only ever needs recording when true."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "What the smoke command exited with, present whenever it actually ran: `met`, `unmet`, and the `unknown` that comes from exit 127. Absent when nothing ran at all, because the conditions did not permit it, the recipe declared no readable smoke row, or a placeholder went unsupplied."
+        }
+      }
+    }
+  }
+}

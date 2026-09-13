@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA implementation snapshot",
+  "description": "The contract and the work orders as design left them, at <task folder>/implementation/snapshot.json (ideal/implementation.md, 'Freezing, and what a freeze is for'). Written once by the implementation stage's first step and never again: the capture refuses to overwrite, so finding this file means a run is being resumed rather than started. Everything after it reads the criteria and the orders from here, never from the live records, because the tests are written from a work order and the order is what they can drift from. Plain JSON, no fences, no markdown. A field present in a real snapshot but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "takenAt", "hash", "alignment", "workOrders"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field alignment.json, task.json, project.json and every research file carry. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain."
+    },
+    "takenAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date the snapshot was captured, YYYY-MM-DD. Set by the script at the moment of capture, never typed by hand. It answers how old the frozen shape is when a person arrives at a halted run weeks later."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256 over the canonical form of `alignment` and `workOrders` together, computed at capture. Two things read it. The ledger stores the same value, so a ledger and a snapshot that do not belong together are refused rather than read against each other. And the drift check compares this against a hash re-derived from the live records on disk, which is the property version 5 paid for: re-derive, never believe a recorded value."
+    },
+    "alignment": {
+      "type": "object",
+      "description": "The contract, copied verbatim from alignment.json at capture. Not re-validated here, because check-alignment.sh already judged it and a second judge is a second producer for one fact. Copied rather than referenced, because a reference would read the live file and there would be nothing to drift from."
+    },
+    "workOrders": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "object" },
+      "description": "Every work order design wrote, copied verbatim from <task folder>/design/*.json at capture, in id order. Copied for the same reason the contract is. An empty list is a real state and it is what a design that closed with no orders looks like; the first step refuses that separately, with its own message, rather than this schema forbidding the shape."
+    }
+  }
+}

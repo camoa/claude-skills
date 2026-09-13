@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA dispatch record",
+  "description": "What is dispatched right now, at <project path>/dispatch.json. The build is serial, so a project has at most one active dispatch: `dispatch-open` refuses to overwrite one already there, and `dispatch-close` removes it. This is the one record two PreToolUse hooks read to tell a dispatched role's own guardrails apart from a person working their own repository: hooks/deny-prior-source.sh (a test author reading past its own interface record) and hooks/deny-frozen-test-writes.sh (anyone writing to a test this task already froze). Neither hook writes this file; the implement skill writes it immediately before a dispatch and clears it immediately after, through implement-actions.sh's own `dispatch-open` and `dispatch-close` actions. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "role", "task", "unit", "codePath", "denyRead", "allowWrite"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other AIDA record carries."
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The dispatched agent's own plugin-scoped type, matched by both hooks against a payload's `agent_type` field. hooks/deny-prior-source.sh applies this record's denied reads to this role and to no other, and since 2026-09-11 an agent whose type is not this role is allowed through a `systemMessage` naming both values, rather than in silence: that is the case a mistyped or unnamed dispatch lands in. hooks/deny-frozen-test-writes.sh does not gate on this field, because a frozen test is protected from every role. It reads this field only to report the one exception it makes: a test author writing its own unit's frozen test is allowed, and when the reported agent type is not the role recorded here the allow says so through a `systemMessage`. A plugin's agent reports that type as `<plugin>:<agent>` as well as the bare name, so a hook matches both forms; this field itself stores whichever form the dispatch was opened with, since a hook does the pattern matching, not this record. There is no value here for a person working the main thread: the main thread carries no `agent_type` at all, so it can never match a role recorded here, whatever this field says. That absence is what keeps a person editing their own repository from being read as a dispatched builder."
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The task id this dispatch belongs to, the same value task.json's own `id` carries. A hook joins on it to find <project path>/tasks/<task>/implementation, where the frozen test records deny-frozen-test-writes.sh reads actually live."
+    },
+    "unit": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "The work order id this dispatch is for. deny-frozen-test-writes.sh compares this against the unit that owns a frozen test file being written: a test author dispatched for this unit may write this unit's own tests, and never an earlier unit's."
+    },
+    "codePath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The code repository this dispatch runs in, copied from the project's own project.json at the moment the dispatch opened. Both hooks resolve every relative path below against this value, since a dispatched agent's working directory is not guaranteed to be codePath itself. hooks/deny-frozen-test-writes.sh resolved a relative write target against that working directory alone until 2026-09-11, which contradicted this field: the frozen paths it compares against are resolved from codePath, so a relative write from any other directory normalized to a path it could not match. It now resolves a relative write target against codePath first, and against the working directory the payload reports second when that directory is not codePath. A match on either resolution refuses the write. The second test stays because a shell command's own relative path is really relative to the directory the command runs in, and a frozen test must be refused on either reading."
+    },
+    "denyRead": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Paths under codePath a test author may not read, relative to codePath. hooks/deny-prior-source.sh denies a Read whose target falls under one of these, or under one of these itself, for the dispatched role only. Empty means nothing is denied, which is not the same as no dispatch being open: an open dispatch with an empty list still answers hook queries, the hook allows every read, and it reports that it could enforce nothing rather than passing in silence. For the test-author role the list is never assembled by a caller: `dispatch-open` derives it from the owned files every work order in the frozen snapshot declares, and refuses when that set is empty."
+    },
+    "allowWrite": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Paths under codePath the dispatched role is meant to write, relative to codePath. Recorded for a person or a later check reading this file to see what the dispatch was for; neither hook enforces it today. deny-frozen-test-writes.sh decides a write by whether the target is a path this task already froze, not by whether it appears here."
+    }
+  }
+}

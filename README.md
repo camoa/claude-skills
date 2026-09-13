@@ -4,14 +4,15 @@ A marketplace of Claude Code plugins built on one idea: **AI is fast; these tool
 
 ## What it looks like in practice
 
-The flagship, `ai-dev-assistant`, run on a single task:
+The flagship, `aida`, run on a single task:
 
 ```text
-$ /ai-dev-assistant:scope rss_feed      # you set the goal and success criteria (or confirm a draft)
-$ /ai-dev-assistant:research rss_feed   # finds drupal/views_rss already covers ~80%: reuse, don't rebuild
-$ /ai-dev-assistant:design rss_feed     # approach and acceptance criteria
-$ /ai-dev-assistant:implement rss_feed  # test-first
-$ /ai-dev-assistant:review rss_feed     # tdd / solid / security gates pass, PR body written
+$ /aida:scope rss_feed        # you write the contract: goal, non-goals, the criteria that prove it
+$ /aida:research rss_feed     # finds drupal/views_rss already covers most of it: reuse, do not rebuild
+$ /aida:design rss_feed       # work orders with owned files, a diff budget, and the tests each needs
+$ /aida:implement rss_feed    # tests first, frozen, then the code against them
+$ /aida:review rss_feed       # every criterion answered, the checks run from the stack's recipe
+$ /aida:completion rss_feed   # closes on the verdict, writes the pull request body from the records
 ```
 
 It never picked your architecture for you. It just refused to skip the scope, the existing-solution check, the tests, or the review, and it left everything it did on disk, so a decision that later looks wrong is a file you open. That is the idea behind all of these plugins.
@@ -25,7 +26,7 @@ None of it is perfect. The AI still slips a step past us now and then, and when 
 /plugin marketplace add https://github.com/camoa/claude-skills
 
 # Install the plugins you want
-/plugin install ai-dev-assistant@camoa-skills        # pulls dev-guides-navigator automatically
+/plugin install aida@camoa-skills                    # pulls dev-guides-navigator automatically
 /plugin install dev-guides-navigator@camoa-skills
 /plugin install claude-plugin-checks@camoa-skills
 /plugin install code-quality-tools@camoa-skills
@@ -45,15 +46,15 @@ The skills conform to the open [agentskills.io](https://agentskills.io/specifica
 
 ### Building software
 
-**[ai-dev-assistant](ai-dev-assistant/README.md)**: *The AI jumps straight to code: it skips understanding the problem, misses a library that already exists, drifts from your standards, and forgets the tests.* Runs any coding task through a required scope contract, then research, design, implement, and review, with gates it cannot quietly skip. Works on any stack (process recipes carry the framework specifics) and on Claude Code plugin work too. This is the flagship; most of the others plug into its gates.
+**[aida](aida/README.md)**: *The AI jumps straight to code: it skips understanding the problem, misses a library that already exists, drifts from your standards, and forgets the tests.* Runs any coding task through a contract, then research, design, implementation against frozen tests, review, and completion. The checks are scripts reading records, not the model judging its own work. Works on any stack (process recipes carry the framework specifics) and on Claude Code plugin work too. This is the flagship; version 6 of what was `ai-dev-assistant`.
 
-**[dev-guides-navigator](dev-guides-navigator/README.md)**: *The model writes code from whatever it remembered at training time, which is often out of date.* Routes each task to the current best-practice guide from a catalog of 1200+ atomic decision guides, hash-cached so nothing is re-fetched. Required by `ai-dev-assistant`; useful on its own.
+**[dev-guides-navigator](dev-guides-navigator/README.md)**: *The model writes code from whatever it remembered at training time, which is often out of date.* Routes each task to the current best-practice guide from a catalog of 1200+ atomic decision guides, hash-cached so nothing is re-fetched. Required by `aida`; useful on its own.
 
 **[claude-plugin-checks](claude-plugin-checks/README.md)**: *Checking a Claude Code plugin means remembering which of five tools to run, and none of them opens the component files the manifest points at.* One command that runs them all and prints what each said, plus three checks nothing else performs: the external component files, a file that contradicts itself, and leaked home paths or credentials.
 
 ### Checking the work
 
-**[code-quality-tools](code-quality-tools/README.md)**: *Is this code actually safe and sound, or does it just run?* TDD, SOLID, and DRY checks plus multi-layer security scanning (Semgrep, Trivy, Gitleaks, and more) for Drupal and Next.js. Powers `ai-dev-assistant`'s quality gates.
+**[code-quality-tools](code-quality-tools/README.md)**: *Is this code actually safe and sound, or does it just run?* TDD, SOLID, and DRY checks plus multi-layer security scanning (Semgrep, Trivy, Gitleaks, and more) for Drupal and Next.js. Version 5 of the flagship delegated its quality gates here; version 6 runs the tools from the stack's recipe instead.
 
 **[code-paper-test](code-paper-test/README.md)**: *Does this code, skill, or config actually do what it claims, before you run it in anger?* Mental-execution testing that traces logic line by line with concrete values, plus an adversarial test-team, to surface bugs, edge cases, and AI hallucinations. Part of the review method for plugin work.
 
@@ -68,8 +69,6 @@ The skills conform to the open [agentskills.io](https://agentskills.io/specifica
 **[brand-content-design](brand-content-design/README.md)**: *Every deck, carousel, and one-pager drifts a little further from the brand.* Branded presentations, carousels, infographics, and HTML pages generated from one shared brand and design system.
 
 ### Deprecated
-
-**drupal-dev-framework** is the old name of `ai-dev-assistant`, kept only as a one-time migration shell. If you are still on it, [its README](drupal-dev-framework/README.md) has the `/drupal-dev-framework:upgrade` steps; otherwise you can ignore it.
 
 ## Background
 

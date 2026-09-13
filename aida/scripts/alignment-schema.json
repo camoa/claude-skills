@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA alignment file",
+  "description": "The structured file at <task folder>/alignment.json, beside task.json and task.md: the scope contract (ideal/scope.md, 'Where the records live'). It holds the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts. It keeps its own file rather than joining task.json because it is frozen and compared later, while task.json changes on every state move; freezing a file that changes for unrelated reasons would report noise as drift. alignment.md, beside it, is rendered from this file and read by people, and nothing parses alignment.md back. A field present in a real alignment.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "goal", "expectedResult", "criteria", "nonGoals", "nextCriterionId", "nextNonGoalId", "decidedWithoutAPerson"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field task.json and project.json both carry. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
+    },
+    "goal": {
+      "type": "string",
+      "description": "The goal, in a person's words. A plain string, because nothing cites it and nothing counts it, unlike a criterion's own text, which a finding and a stage's own `serves` field both point back to by id (ideal/scope.md, 'Where the records live')."
+    },
+    "expectedResult": {
+      "type": "string",
+      "description": "The observable outcome, in a person's words. A plain string for the same reason `goal` is one: nothing cites it and nothing counts it."
+    },
+    "criteria": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/criterion" },
+      "description": "The acceptance criteria, in authoring order. Every stage after scope is checked against this list in both directions: does every criterion have something in the stage's own work that addresses it, and does everything in the stage's work address some criterion (ideal/scope.md, 'Every stage is checked against the contract, in both directions'). Starts empty and fills as the conversation runs; a cancelled conversation writes nothing."
+    },
+    "nonGoals": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/nonGoal" },
+      "description": "What the task will not do, each carrying its own id. A non-goal has an id for the same reason a criterion does: a finding cites a criterion or a non-goal, never neither, and a non-goal with no id cannot be cited (ideal/scope.md, 'What a criterion holds')."
+    },
+    "nextCriterionId": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The number `c<n>` will use the next time a criterion is minted. Lives in this contract, not a second file beside it, because a retired id is part of the contract's own history and must freeze with the rest of it: an id is never renumbered and never reused after its criterion is removed (ideal/scope.md, 'Why the id exists'), so the highest number ever issued has to survive a removal that leaves no other trace of it in `criteria`. A value at or below the number in an id already present in `criteria` would let the next mint collide with one still on record, so a producer must always write a number strictly greater than every `c<n>` id `criteria` currently holds."
+    },
+    "nextNonGoalId": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The number `n<n>` will use the next time a non-goal is minted. The same fact as `nextCriterionId`, kept in its own field because a non-goal's id space is its own, separate from a criterion's (ideal/scope.md, 'An id is c followed by a number with no leading zero'). A value at or below the number in an id already present in `nonGoals` would let the next mint collide with one still on record."
+    },
+    "decidedWithoutAPerson": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Each entry names one question an unattended run answered on a person's behalf while drafting or updating this contract. An autonomous run drafts the contract from what is on disk, records every criterion as the designer's, and records which questions it answered without anyone present, so a person reviewing the contract later can see exactly where a judgment call was made for them rather than by them (ideal/scope.md, 'The autonomous branch'). Empty for a run made with a person present, and empty is the only value an interactive run ever writes."
+    }
+  },
+  "$defs": {
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "verification", "verifiedBy", "author", "verdict"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "Minted in authoring order, `c` followed by a number with no leading zero. Never renumbered, never reused after a criterion is deleted. Later stages, findings and reviews all cite a criterion by this id and never by its text, because rewording then stays free, a duplicate id is unambiguously an authoring mistake, and two criteria with similar wording stays normal (ideal/scope.md, 'Why the id exists'). An id that does not match this format is refused, never coerced, wherever it arrives from: the producer, an update, or a task split."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The outcome, in a person's words, written from outside the code: what a person can see working when the task is done, not a note about how a stage should work (ideal/scope.md, 'An acceptance criterion is an outcome'). It survives every stage unchanged; only `verdict` changes later."
+        },
+        "verification": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How the outcome is observed. Required on every criterion, because the end review sorts the whole list by this clause, so one without it can be neither run nor asked about, and an outcome nobody can say how to observe is not an outcome yet (ideal/scope.md, 'Every criterion carries a verify clause'). A clause that only restates the criterion is a rubber stamp the conversation must catch; this schema cannot tell the two apart by shape alone."
+        },
+        "verifiedBy": {
+          "type": "string",
+          "enum": ["machine", "person"],
+          "description": "`machine` when something runs the check, `person` when someone looks. A separate field from `verification` on purpose: the end review branches on which kind a criterion is, so a script has to read that directly, and a script reading it back out of a sentence is the exact thing this whole format removes (ideal/scope.md, \"'verification' and 'verifiedBy' are two fields, not one\")."
+        },
+        "author": {
+          "type": "string",
+          "enum": ["owner", "designer"],
+          "description": "Who asked. `owner` when a person confirmed this criterion, `designer` when it was written with no person present. Recorded on every criterion because a builder once wrote a criterion describing a filter it had already decided to build, and four critic rounds checked the filter against that description without anyone able to see the owner never asked for it (ideal/scope.md, 'The contract is the standard, so the builder does not write it'). A missing answer is never read as the owner's."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["unanswered", "met", "unmet"],
+          "default": "unanswered",
+          "description": "The end review's answer, and only the review writes it. Three values, not two, because a criterion nobody could reach is not the same as one that failed: `unanswered` is a third value and never a pass. Starts `unanswered` and stays there until a review runs (ideal/scope.md, \"'verdict' replaces version 5's 'checked', and the rename is deliberate\")."
+        }
+      }
+    },
+    "nonGoal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^n[1-9][0-9]*$",
+          "description": "Minted in authoring order, `n` followed by a number with no leading zero, in its own space, separate from a criterion's `c` ids, so a duplicate id is unambiguous within each (ideal/scope.md, 'An id is c followed by a number with no leading zero')."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the task will not do, in a person's words. Carries an id and nothing more: a non-goal holds the findings that belong to it, boundary, security, and work that strayed outside the task, and a finding cites a criterion or a non-goal by id (ideal/scope.md, 'What a criterion holds')."
+        }
+      }
+    }
+  }
+}

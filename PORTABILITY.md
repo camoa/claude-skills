@@ -55,7 +55,7 @@ Follow your tool's own docs for the most current destination path. The SKILL.md 
 | **drupal-htmx** | 1 | 5 | 3 | yes | **Low** | HTMX-pattern skill; migration commands are the workflow (Tier 2) |
 | **ai-dev-assistant** | 23 | 44 | 10 | yes | **Skills-rich, framework-locked** | 23 skills give knowledge (alignment-reader, project-state-reader, pattern checkers, etc.); the lifecycle orchestration (research → design → implement → review with deterministic gates) is in the commands + agents + hooks |
 
-**Honest verdict:** for `dev-guides-navigator`, Tier 1 gives you the entire plugin. For `code-quality-tools` and `drupal-htmx`, Tier 1 alone gives you a fraction of the value. For `ai-dev-assistant` (renamed from `drupal-dev-framework`), skills give you reusable knowledge but **not** the deterministic 3-phase lifecycle that's the framework's primary value proposition.
+**Honest verdict:** for `dev-guides-navigator`, Tier 1 gives you the entire plugin. For `code-quality-tools` and `drupal-htmx`, Tier 1 alone gives you a fraction of the value. For `ai-dev-assistant`, skills give you reusable knowledge but **not** the deterministic 3-phase lifecycle that's the framework's primary value proposition.
 
 ### How to install (Tier 1)
 
@@ -100,7 +100,7 @@ Your AI handles the rest — frontmatter interpretation, body execution, sub-tas
 
 ### Honest disclosure: deterministic gate degradation
 
-`ai-dev-assistant` (v4.0+, as `drupal-dev-framework`) hardened its quality gates (anti-bypass clauses, mandated wording, audit JSONs) precisely because *hooks* run them — making the gates non-bypassable. In tools without hooks:
+`ai-dev-assistant` (v4.0+) hardened its quality gates (anti-bypass clauses, mandated wording, audit JSONs) precisely because *hooks* run them — making the gates non-bypassable. In tools without hooks:
 
 - The gates degrade to **soft-nudges in the AI's prompt context**. The AI *can* skip them.
 - **There is no audit trail.** No `_pre-analysis.json` / `_coverage-mapping.json` files get written automatically.

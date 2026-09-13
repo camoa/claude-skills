@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA work order file",
+  "description": "One file per work order, at <task folder>/design/<id>.json (ideal/design.md, 'What a work order holds'). Plain JSON, no fences, no markdown. This is the only part a script reads; <id>.md, rendered from it by design-render.sh, is for the four roles who build from a work order to read, and no script parses it. The work orders are the whole deliverable of the design stage: there is no separate architecture document and no aggregate file joining them, so this schema describes one order, standing on its own. A field present in a real work order file but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "criteriaServed",
+    "criteriaOwned",
+    "nonGoals",
+    "dependsOn",
+    "ownedFiles",
+    "interface",
+    "tests",
+    "doneWhen",
+    "reasoning",
+    "diffBudget"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field alignment.json, research.json, task.json and project.json all carry. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "Stable, minted in order, never reused (ideal/design.md, 'What a work order holds'). `wo` followed by a number with no leading zero, the same grammar a criterion's `c<n>` and a non-goal's `n<n>` already use, in its own id space. Dependencies and findings join on this id, never on the title, so a work order's title can be reworded without breaking anything that cites it. This is also the file's own basename: <id>.json."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What this work order builds, in a few words (ideal/design.md, 'What a work order holds')."
+    },
+    "criteriaServed": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "pattern": "^c[1-9][0-9]*$"
+      },
+      "description": "The criterion ids, minted by scope in alignment.json, this order contributes to. Usually several: one criterion often produces several work orders, and one order often serves several criteria (ideal/design.md, 'A work order names the criteria it serves, and the ones it owns'). Every work order must serve at least one criterion; a work order serving none is work nobody asked for, checked by check-design.sh rather than by this schema."
+    },
+    "criteriaOwned": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "pattern": "^c[1-9][0-9]*$"
+      },
+      "description": "The criterion ids whose observable outcome this order produces. Usually none: most orders support another order rather than producing an outcome a person can see directly. Exactly one order owns each criterion, never zero and never two (ideal/design.md, 'A work order names the criteria it serves, and the ones it owns'), checked across every work order by check-design.sh rather than by this schema."
+    },
+    "nonGoals": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "pattern": "^n[1-9][0-9]*$"
+      },
+      "description": "The non-goal ids, minted by scope in alignment.json, a critic needs beside this order to judge a finding that cites one (ideal/design.md, 'What a work order holds'). Empty for most orders: only named when this order sits close enough to a stated boundary that a critic reviewing it needs the boundary in view."
+    },
+    "dependsOn": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "pattern": "^wo[1-9][0-9]*$"
+      },
+      "description": "The work order ids that must finish before this one starts. This is the build order (ideal/design.md, 'What a work order holds'). An order that owns no criterion reaches an owning order by walking this chain; a chain that reaches no owner, or that loops, fails check-design.sh (ideal/design.md, 'An order that owns nothing is a supporting order')."
+    },
+    "ownedFiles": {
+      "type": "array",
+      "default": [],
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared. At least one entry is required: an order that names no file it may write hands the builder no boundary at all."
+    },
+    "surfaces": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The ids of the user visible surfaces this order touches, as the project's surface registry names them. Empty for most orders. Optional: an order written before this field has none. Review runs only what the registry holds, so an order that changes a page a person sees names it here. The registry write from this list is not built yet."
+    },
+    "interface": {
+      "type": "string",
+      "default": "",
+      "description": "What this order exposes to the orders that depend on it: the shape a dependent order can build against without asking what was meant (ideal/design.md, 'Who reads a work order'). Empty for an order nothing depends on."
+    },
+    "tests": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/test"
+      },
+      "description": "Which tests must exist, and at which level, before the code that satisfies them is written (ideal/design.md, 'Tests are part of the work order, not a work order' and 'Why the order names the tests at all'). A work order that owns a criterion whose `verifiedBy` is `machine` must declare at least one test here, checked by check-design.sh. The level names are a recipe's own vocabulary, for example unit, kernel or functional in Drupal, so this field takes any non-empty string rather than a fixed enum."
+    },
+    "doneWhen": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "What must be true for this order to be finished, in a person's words (ideal/design.md, 'What a work order holds'). Specific enough that whoever writes the tests and whoever writes the code do not have to ask what was meant."
+    },
+    "reasoning": {
+      "type": "string",
+      "default": "",
+      "description": "Why this order exists, for a decision shared by several orders, for example why a base class sits here rather than being copied into each order that needs it (ideal/design.md, 'Why the architecture is not a document'). Empty for most orders: only a shared decision needs stating, and most orders need none."
+    },
+    "diffBudget": {
+      "type": "string",
+      "default": "",
+      "minLength": 1,
+      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against."
+    }
+  },
+  "$defs": {
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The test level, in the recipe's own vocabulary for this project's framework, for example unit, kernel or functional. Optional, and design does not set it. Selecting a tier belongs to the stage that writes the test, which is where the framework's own recipe puts it; design says what the test must observe. A level recorded here was written by that later stage (ideal/design.md, 'Why the order names the tests at all')."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What this test observes, specific enough that whoever writes it does not have to ask what was meant (ideal/design.md, 'Why the order names the tests at all')."
+        }
+      }
+    }
+  }
+}

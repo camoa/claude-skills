@@ -50,7 +50,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      # pyyaml is what ai-dev-assistant/scripts/fm-helpers.sh reads task
+      # pyyaml was what the old ai-dev-assistant read task
       # frontmatter with. pytest is what runs
       # brand-content-design/scripts/slides/tests; without it run-tests.sh
       # counts that whole directory as one skip and still exits 0, so those

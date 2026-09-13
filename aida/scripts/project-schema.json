@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA project file",
+  "description": "The structured file at <path>/project.json. Every field a script reads lives here, in one place, so the check is a schema comparison rather than a parser. project_state.md sits beside this file and holds what a person writes; nothing here is derived from it, and no script parses it. A field present in a real project.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "codePath",
+    "name",
+    "frameworks",
+    "worktreeByDefault",
+    "state"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, not when it was last checked. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
+    },
+    "codePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/",
+      "description": "Absolute path to where the project's code lives, never the project's own folder. A project always points at code; there is no docs-only state and no permanently-unknown state, so a greenfield project names where the code will go even before the directory holds anything. Asked directly at creation. Safety on this value (refusing a system root, the home directory, or anything above it; warning outside the home directory) is enforced by whoever writes the file, not by this schema, which checks shape only. The check reports exit code 2, not a missing field, when this path no longer exists on disk: a producer can write a field, but nothing here rewrites a codebase that moved."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "The project's name. Asked directly at creation and never derived from the code folder: deriving it saves one question and buys a collision problem, so the interview asks. Lowercase letters, digits and underscores, starting with a letter, the same shape version 5 used, because this value doubles as the lookup key the registry copies and a folder-safe identifier is what makes that lookup deterministic."
+    },
+    "frameworks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The stack this project is written in, e.g. [\"drupal\"] or [\"python\", \"django\"]. Drives every recipe and source lookup a later stage makes. Detected from the code at creation (a composer file, a package file, a go module, a Python project file, a Drupal info file) and asked only when detection finds nothing. Repaired by re-running that same detection on its own, never the whole interview."
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "complete",
+        "archived"
+      ],
+      "default": "active",
+      "description": "The project's lifecycle state. Active is normal: it appears in the list and is offered as work. Complete means the work is done: it still resolves and is still readable, but stops being offered. Archived means parked: it still resolves, but is left out of the list unless asked for. This is the field version 5 never had, writing 'active' once at creation and never touching it again; every transition here is reversible, and reopening is another write. This project file is authoritative for this value; the registry carries a copy, and the reason for a change lives in the commit, never in this field."
+    },
+    "processRecipes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/processRecipe"
+      },
+      "description": "Where this project's recipes come from, one entry per framework. Not one entry per recipe: the entry remembers a decision about a source, and which recipe answers is worked out when it is needed. Written the first time a framework needs a recipe. Declaring is cheap and happens once; fetching a body is lazy and happens when something actually runs. Starts empty; not produced at creation."
+    },
+    "sources": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "description": "Where guides, playbooks, process recipes and agentic recipes come from. Guides, playbooks, process recipes and agentic recipes are one mechanism, not one source: a project declares as many sources as it wants, and each says what it provides, what it answers for and its own per-kind precedence. Mixing is the point, not a special case: your playbooks can come from your folder, your process recipes from the hosted catalog, and your guides from a site you trust, all at once. A project that configures nothing still resolves once a source naming the hosted catalog for every kind is declared for it; that declaration is not made by this schema. Declared lazily, the first time a stage needs a kind it has no source for; starts empty."
+    },
+    "playbookSubscriptions": {
+      "type": "object",
+      "default": {},
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "Which playbooks apply, recorded per framework, and never inferred from a source declaration. A source says where playbooks can be found; matching a guide happens per task, but subscribing to a playbook is a standing choice, and this is the field that fixes version 5's defect of treating a framework and its playbook as two unrelated facts. Keyed by a name from `frameworks`; each value is the list of playbook locations this project subscribes to for that framework. A key here naming a framework this project never declared is a mistake this schema does not catch; the check runs a separate test for it. Starts empty; declared whenever a person decides, which can be any time."
+    },
+    "worktreeByDefault": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether a task builds in a worktree without being asked first. Set at creation; a project that never says otherwise defaults to false. Settable again at any later time, the same as every other opt-in."
+    },
+    "visualRegression": {
+      "default": null,
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "$ref": "#/$defs/visualRegression"
+        }
+      ],
+      "description": "Whether visual regression is set up, and the path to its surface registry. Null means not set up. Baseline images stay committed inside the code repository, beside the tests that read them, never inside the project folder; this field points at the registry, never at pixel data. Written by a visual-regression setup skill, a later part; not produced by this part."
+    },
+    "e2e": {
+      "default": null,
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "$ref": "#/$defs/e2e"
+        }
+      ],
+      "description": "Whether end-to-end testing is set up. Null means not set up. Version 5 has a setup step and no field for it, so nothing could ask whether it had run; this field exists so that question is answerable. The shape past `enabled` is left open for the e2e setup skill that will write it, a later part; not produced by this part."
+    },
+    "memoryHook": {
+      "default": {
+        "installed": false,
+        "version": null
+      },
+      "type": "object",
+      "$ref": "#/$defs/memoryHook",
+      "description": "Whether the memory hook is installed, and which version it installed. The hook is a copy living in the code repository's own settings, never a reference to the plugin's path, because that path changes at release. Recording the version is what lets the check compare it against the current one and notice drift without guessing; the repair is re-running the installer, which is idempotent and preserves a person's own edits. Written by a memory-hook install skill, a later part; not produced by this part."
+    },
+    "taskRule": {
+      "default": null,
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "$ref": "#/$defs/taskRule"
+        }
+      ],
+      "description": "Stops work starting in this project's repository without a task. Null until the offer has been made; once made, the offer and the answer are recorded together, so a decline is never re-asked every session. Written by a task-rule offer step, a later part; not produced by this part."
+    }
+  },
+  "$defs": {
+    "processRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framework",
+        "source"
+      ],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which framework this answers for, matching an entry in `frameworks`, e.g. \"drupal\"."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which entry in `sources` (by its `location`) this framework's recipes come from. The record names the source instead of carrying a verified flag: a body from a source a person configured is used, and a body from an open search, the only source kind nobody configured, is shown to a person before it is used. That read-time rule lives in one place and is not frozen into this record. A recipe present in a higher-precedence source still wins, so an override needs no entry of its own."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location",
+        "locationType",
+        "provides",
+        "answersFor",
+        "precedence"
+      ],
+      "properties": {
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where this source lives: an absolute folder path, the hosted catalog's own identifier, a site's URL, or a live search's identifier. What the string means is fixed by `locationType`, never guessed from its shape."
+        },
+        "locationType": {
+          "enum": [
+            "folder",
+            "catalog",
+            "site",
+            "search"
+          ],
+          "description": "What kind of place `location` names. Each kind is read a different way, and that is the whole reason this field exists rather than one generic reader: a folder is a directory listing; the catalog goes through the navigator; a site and a search are neither, they can fail or return nothing, and what they return was written by nobody this project configured."
+        },
+        "provides": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "guides",
+              "playbooks",
+              "processRecipes",
+              "agenticRecipes",
+              "toolingRecipes"
+            ]
+          },
+          "description": "Which of the four kinds this source supplies. A source can supply more than one kind, e.g. a team folder holding both its playbooks and its process recipes."
+        },
+        "answersFor": {
+          "$ref": "#/$defs/answersFor",
+          "description": "What this source answers for: everything, only certain stages, or only certain frameworks. The project's own source winning by default is a sensible rule applied per kind through `precedence`, not a claim about scope; this field is the separate answer to a separate question, which is why a source naming one framework and one naming everything can coexist without conflict on their own kinds."
+        },
+        "precedence": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": [
+              "guides",
+              "playbooks",
+              "processRecipes",
+              "agenticRecipes",
+              "toolingRecipes"
+            ]
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "Rank among sources offering the same kind, one number per kind this source provides, because a source's own playbooks winning says nothing about whether its process recipes also win. A lower number answers first. \"The project's own source wins, the hosted catalog is the fallback\" is the sensible default applied here per kind, not one number covering everything a source happens to provide. A key here that does not also appear in `provides`, or a kind in `provides` with no matching key here, is a mistake this schema does not catch: it checks shape, not that the two lists agree, so the check runs a separate test for it."
+        }
+      }
+    },
+    "answersFor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "extent"
+          ],
+          "properties": {
+            "extent": {
+              "const": "everything"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "extent",
+            "stages"
+          ],
+          "properties": {
+            "extent": {
+              "const": "stages"
+            },
+            "stages": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "scope",
+                  "research",
+                  "design",
+                  "implementation",
+                  "review"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "extent",
+            "frameworks"
+          ],
+          "properties": {
+            "extent": {
+              "const": "frameworks"
+            },
+            "frameworks": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ],
+      "description": "One of three shapes: `{\"extent\":\"everything\"}`, `{\"extent\":\"stages\",\"stages\":[...]}` naming one or more of the five stage names, or `{\"extent\":\"frameworks\",\"frameworks\":[...]}` naming one or more entries from this project's own `frameworks`. A `stages` entry outside the five names, or a `frameworks` entry this project never declared, is a mistake this schema does not catch."
+    },
+    "visualRegression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "registryPath"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether visual regression is set up for this project."
+        },
+        "registryPath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Path to the surface registry that names which surfaces and viewports are covered, e.g. \"<codePath>/.visual-review/registry.yml\". Null when not yet set up. This is the registry, never the baseline images: baselines are committed inside the code, beside the tests that consume them."
+        }
+      }
+    },
+    "e2e": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether end-to-end testing is set up for this project."
+        }
+      },
+      "description": "The shape past `enabled` is left open (\"{enabled, ...}\") for the e2e setup skill that will extend it, a later part. Only `enabled` is fixed here."
+    },
+    "memoryHook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "installed",
+        "version"
+      ],
+      "properties": {
+        "installed": {
+          "type": "boolean",
+          "description": "Whether the memory hook is installed for this project."
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The installed hook's version, so staleness against the current one is a comparison rather than a guess. Null when not installed."
+        }
+      }
+    },
+    "taskRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offered",
+        "accepted"
+      ],
+      "properties": {
+        "offered": {
+          "type": "boolean",
+          "description": "Whether the task-rule offer has been made in this project. The offer and its answer are written together, so this is only ever true when `accepted` also holds a real answer."
+        },
+        "accepted": {
+          "type": "boolean",
+          "description": "Whether the offer was accepted. Meaningful only once `offered` is true."
+        }
+      }
+    }
+  }
+}

@@ -16,13 +16,12 @@ body:
       options:
         - dev-guides-navigator
         - claude-plugin-checks
-        - ai-dev-assistant
+        - aida
         - code-quality-tools
         - brand-content-design
         - drupal-htmx
         - drupal-ai-contrib
         - code-paper-test
-        - drupal-dev-framework
         - other / not sure
     validations:
       required: true
