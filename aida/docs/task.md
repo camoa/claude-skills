@@ -44,7 +44,7 @@ or `..`, the same rule a project's own name follows.
 
 ## Picking up work
 
-Run `/next` with nothing named. AIDA looks at every task still open in this
+Run `/aida:next` with nothing named. AIDA looks at every task still open in this
 project and shows them, most recently worked on first. Disk order and priority never enter it:
 if one task matters more right now, say so yourself.
 
@@ -57,7 +57,7 @@ if one task matters more right now, say so yourself.
   silence is not a decline, so AIDA says a task is needed and continues rather than recording a
   refusal nobody made.
 
-Run `/next <name>` to skip all of that and load exactly the task you named. Which task is
+Run `/aida:next <name>` to skip all of that and load exactly the task you named. Which task is
 active is never written down between turns: it is worked out fresh, every time, from which
 tasks are open and how many. A new window asks the same question and gets the same answer.
 

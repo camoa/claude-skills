@@ -5,12 +5,12 @@ recipes it reads. Everything else in AIDA happens inside a project, so a project
 first thing AIDA needs from you.
 
 One skill answers every question about a project: which one owns this folder, create one,
-switch to another, or close one out. Type `/project`, with or without arguments.
+switch to another, or close one out. Type `/aida:project`, with or without arguments.
 
 You type it yourself. Creating, switching, and closing all change what is on disk or which
 project this conversation uses. Nothing here runs on Claude's own judgment: nothing invokes
 it for you. A session-start hook says which project owns your directory before your first
-turn; run `/project` yourself for the full report, or to create, switch, or close one.
+turn; run `/aida:project` yourself for the full report, or to create, switch, or close one.
 
 ## What a project is
 
@@ -42,7 +42,7 @@ rather than picking one quietly.
 
 ## Creating a project
 
-`/project create <path> [framework...]`
+`/aida:project create <path> [framework...]`
 
 Creation asks for three facts: where the code lives, what stack it is written in, and what
 to call it.
@@ -81,7 +81,7 @@ lives there on purpose.
 
 ## Finding your project
 
-Run `/project` with no arguments. AIDA works out which project you mean before you type
+Run `/aida:project` with no arguments. AIDA works out which project you mean before you type
 anything else, in this order.
 
 1. **The current directory sits inside a registered code path.** That project wins. This is
@@ -106,13 +106,13 @@ becomes the active project for this conversation, and the check runs on the way 
 
 ## Switching to another project
 
-`/project switch <name-or-path>`
+`/aida:project switch <name-or-path>`
 
 Switch looks the target up by its exact name or its exact code path, never by ancestry, and
 loads it into the current conversation if found. Not found, AIDA says so and stops.
 
 Switching from inside a directory that is not itself a registered code path is remembered:
-the next time you run `/project` from that same directory with no arguments, this is the
+the next time you run `/aida:project` from that same directory with no arguments, this is the
 project it finds, per case 2 above. Switching from inside a registered code path changes
 only this conversation; a directory that already resolves on its own is not worth
 remembering a second way.

@@ -27,12 +27,14 @@
 # directory misses a frozen test. A shell command's own relative path really is relative to the
 # directory that command runs in, so dropping that second test misses one the other way.
 #
-# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name: allow, silent.
-# No project registered for this working directory, no dispatch.json, dispatch.json unreadable,
-# or no unit has frozen anything yet for this task: allow, through `systemMessage` naming why.
-# Nothing is frozen before the third step of implementation runs, and that is a real state, not a
-# fault, the same distinction dispatch-schema.json's own header draws. An agent that reports a test
-# author type while the record names another role, or names no role, still gets the exception
+# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, no project
+# registered for this working directory, or no dispatch.json: allow, silent. Those last two are
+# every write outside an AIDA task, and a message on each would be noise, the rule version 5's
+# guard kept. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
+# this task: allow, through `systemMessage` naming why. Nothing is frozen before the third step of
+# implementation runs, and that is a real state, not a fault, the same distinction
+# dispatch-schema.json's own header draws. An agent that reports a test author type while the
+# record names another role, or names no role, still gets the exception
 # described above, and that allow reports itself through `systemMessage` as well: the exception
 # belongs to the role the record names, and an agent type the record does not name is the case a
 # mistyped or unnamed dispatch lands in.
@@ -81,14 +83,12 @@ source "$PATHS_LIB" 2>/dev/null \
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 
-MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" \
-  || not_enforced "no registered project owns $CWD, so no dispatch record could be found"
+MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit 0; }
 PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
 [ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
 
 DISPATCH_FILE="$PROJECT_PATH/dispatch.json"
-[ -f "$DISPATCH_FILE" ] \
-  || not_enforced "no dispatch.json at $DISPATCH_FILE; nothing is dispatched right now"
+[ -f "$DISPATCH_FILE" ] || { echo '{}'; exit 0; }
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"
 
