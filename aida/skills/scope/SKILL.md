@@ -188,8 +188,8 @@ turned it on. Read `<projectPath>/project.json` once, at the point criteria are 
   automate this criterion", with a recommended answer. Yes sets `verifiedBy` to `machine` and the
   verify clause names the automated test; no falls back to the ordinary question of how it is
   observed.
-- **`visualRegression.enabled` is true.** Check whether a surface this task changes already has a
-  baseline in the registry at `visualRegression.registryPath`. One that does becomes a criterion
+- **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
+  has a baseline in the surface file at `surfaces.registryPath`. One that does becomes a criterion
   whose verify clause names the visual regression check that must pass. One that does not becomes
   a criterion too, that creating its baseline is this task's own work. Either way this is a
   criterion scope is proposing, not one the person asked for outright: draft it, show it with a

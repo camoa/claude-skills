@@ -23,6 +23,7 @@
 #   review-actions.sh findings <task_folder> --findings <path the reviewer wrote>
 #   review-actions.sh surfaces <task_folder> [--walked <surface id>]...
 #                                            [--accept-baseline <surface id>]...
+#                                            [--value <name>=<value>]...
 #   review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
 #   review-actions.sh step     <name>
 #
@@ -40,7 +41,9 @@
 # rows, because the person answering them has to read them verbatim.
 #
 # `surfaces` takes no recipe flag. It reads the review recipe path `checks` recorded, so the surface
-# block is read from the same file the tool rows came from and review keeps its two lookups.
+# block is read from the same file the tool rows came from and review keeps its two lookups. Its
+# `--value base-url=<address>` is exported as PLAYWRIGHT_BASE_URL for every row, and nothing stores
+# an address (ideal/surfaces.md).
 #
 # `step` prints one of this skill's own step files, from
 # ${CLAUDE_PLUGIN_ROOT}/skills/review/references/<name>.md. The skill reads them through this action
@@ -87,6 +90,8 @@
 #                                                      write_atomic, looks_like_flag and is_blank.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/schema-check.sh  sourced. Every record write is compared
 #                                                      against review-schema.json before it lands.
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/surfaces.sh      sourced. The surface file reader the
+#                                                      surfaces skill's writer is proved by.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/review-schema.json   the shape of the record this script writes.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
@@ -116,6 +121,7 @@ RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
+SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
 REVIEW_SCHEMA="${PLUGIN_ROOT}/scripts/review-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'review-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
@@ -129,7 +135,7 @@ die() { printf 'review-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
 
-for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do
+for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB" "$SURFACES_LIB"; do
   [ -f "$lib_name" ] || die 3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die 3 "the library failed to load: $lib_name"
@@ -165,7 +171,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh brief    <task_folder>
        review-actions.sh findings <task_folder> --findings <path the reviewer wrote>
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
-                                               [--accept-baseline <surface id>]...
+                                               [--accept-baseline <surface id>]... [--value <name>=<value>]...
        review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
        review-actions.sh step     <name>
 EOF
@@ -470,9 +476,9 @@ do_read() {
   if [ -n "$RV_PROJECT_FOLDER" ] && [ "$(json_file_state "$RV_PROJECT_FOLDER/project.json")" = "ok" ]; then
     RW_PROJECT_DOC="$(jq -c '.' "$RV_PROJECT_FOLDER/project.json")"
     frameworks_json="$(printf '%s' "$RW_PROJECT_DOC" | jq -c '.frameworks // []')"
-    e2e_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.e2e // null) == null then "not-set-up" elif (.e2e.enabled // false) then "on" else "off" end')"
-    vr_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.visualRegression // null) == null then "not-set-up" elif (.visualRegression.enabled // false) then "on" else "off" end')"
-    registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.visualRegression.registryPath // ""')"
+    e2e_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not-set-up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
+    vr_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not-set-up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
+    registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')"
     code_state="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.codePath // ""')"
   fi
 
@@ -1484,65 +1490,21 @@ RW_SURFACE_IDS
   RW_SURFACE_ROWS="$all"
 }
 
-# The registry's surfaces, as a JSON array of {id, gates}. The registry is a YAML file whose
-# version 6 producer does not exist yet, so this reads the shape version 5 writes: a `surfaces:`
-# list of `- id:` rows, each with a `gates:` list. A file it cannot read that way yields an empty
-# list, and the caller records unknown with the reason rather than reading an unreadable registry as
-# a project with no surfaces. Sets RW_REGISTRY_SURFACES and RW_REGISTRY_STATE.
-RW_REGISTRY_SURFACES="[]"; RW_REGISTRY_STATE="absent"
-rw_load_registry() {
-  local registry_file="$1" block line trimmed current gates out
-  RW_REGISTRY_SURFACES='[]'; RW_REGISTRY_STATE="absent"
-  [ -n "$registry_file" ] || return 0
-  if [ ! -f "$registry_file" ]; then
-    RW_REGISTRY_STATE="missing"
-    return 0
-  fi
-  block="$(sed -n '/^surfaces:/,$p' "$registry_file" 2>/dev/null | sed '1d')"
-  if [ -z "$block" ]; then
-    RW_REGISTRY_STATE="unreadable"
-    return 0
-  fi
-  RW_REGISTRY_STATE="ok"
-  out='[]'; current=""; gates='[]'
-  while IFS= read -r line; do
-    trimmed="$(pc_trim "$line")"
-    case "$trimmed" in
-      '- id:'*)
-        if [ -n "$current" ]; then
-          out="$(jq -nc --argjson have "$out" --arg id "$current" --argjson gates "$gates" \
-            '$have + [{id: $id, gates: $gates}]')"
-        fi
-        current="$(pc_trim "${trimmed#- id:}")"
-        gates='[]'
-        ;;
-      'gates:'*)
-        gates="$(printf '%s' "$(pc_trim "${trimmed#gates:}")" \
-          | jq -Rc 'gsub("[\\[\\]]"; "") | split(",") | map(gsub("^ +| +$"; "")) | map(select(length > 0))' 2>/dev/null)"
-        [ -n "$gates" ] || gates='[]'
-        ;;
-    esac
-  done <<RW_REGISTRY
-$block
-RW_REGISTRY
-  if [ -n "$current" ]; then
-    out="$(jq -nc --argjson have "$out" --arg id "$current" --argjson gates "$gates" \
-      '$have + [{id: $id, gates: $gates}]')"
-  fi
-  RW_REGISTRY_SURFACES="$out"
-}
-
-# One kind of surface: its row, its run, its registry surfaces and the walk. $1 the check id, $2 the
-# surface row id in the recipe, $3 the registry gate word, $4 whether the project has this kind on,
-# $5 the walked list, $6 the accepted list. Appends the check row to $7 and the surface rows to $8.
+# One kind of surface: its row, its run, its surfaces from the surface file and the walk. $1 the
+# check id, $2 the surface row id in the recipe, $3 the kind word the surface file carries, $4
+# whether the project has this kind on, $5 the walked list, $6 the accepted list. Appends the check
+# row to $7 and the surface rows to $8.
 rw_surface_kind() {
   local check_id="$1" row_id="$2" gate="$3" enabled="$4" walked="$5" accepted="$6"
   local checks_out="$7" surfaces_out="$8"
-  local row rc output mine count i sid verdict rows marker
-  local ran row_verdict detail worst missing_walk accept_here accept_row
+  local row rc output mine count i sid verdict rows marker off
+  local ran row_verdict detail worst missing_walk accept_here accept_row pre_row
 
-  mine="$(printf '%s' "$RW_REGISTRY_SURFACES" | jq -c --arg g "$gate" \
-    '[ .[] | select((.gates // []) | index($g)) ]')"
+  # A disabled surface gets its own row, not run, and is counted in the detail rather than dropped
+  # in silence. The suite skips it itself, so its id is never in the output and never read unmet.
+  off="$(printf '%s' "$SF_SURFACES" | jq -c --arg g "$gate" '[ .[] | select((.kinds | index($g)) and (.enabled | not)) ]')"
+  printf '%s' "$off" | jq -c '.[] | {id, verdict: "undeclared", ran: false, walked: false, reportPath: ""}' >>"$surfaces_out"
+  mine="$(printf '%s' "$SF_SURFACES" | jq -c --arg g "$gate" '[ .[] | select((.kinds | index($g)) and .enabled) ]')"
   count="$(printf '%s' "$mine" | jq 'length')"
   row="$(printf '%s' "$RW_SURFACE_ROWS" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
 
@@ -1571,13 +1533,26 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "$(printf '%s' "$row" | jq -r '.absentReason // "the recipe declares this surface row absent"')" "" "" "$(printf '%s' "$row" | jq -r '.framework // ""')" "absent" >>"$checks_out"
     return 0
   fi
-  if [ "$RW_REGISTRY_STATE" != "ok" ]; then
-    rw_check_row "$check_id" "unknown" "the recipe commands a $row_id run and the registry is $RW_REGISTRY_STATE, so nobody could say which surfaces to answer about." >>"$checks_out"
+  if [ "$SF_STATE" != "ok" ]; then
+    rw_check_row "$check_id" "unknown" "the recipe commands a $row_id run and the surface file is $SF_STATE, so nobody could say which surfaces to answer about." >>"$checks_out"
     return 0
   fi
   if [ "$count" -eq 0 ]; then
-    rw_check_row "$check_id" "undeclared" "the registry holds no surface carrying the $gate gate, so this project has nothing for this check to run." >>"$checks_out"
+    rw_check_row "$check_id" "undeclared" "the surface file holds no enabled surface carrying the $gate kind, so this project has nothing for this check to run. Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')" >>"$checks_out"
     return 0
+  fi
+  # The e2e-preflight row runs before the e2e suite. A non-zero exit records it unmet and the e2e
+  # check unknown, and the suite does not run (ideal/surfaces.md, the reading rule).
+  if [ "$row_id" = "e2e" ]; then
+    pre_row="$(printf '%s' "$RW_SURFACE_ROWS" | jq -c '[ .[] | select(.id == "e2e-preflight" and (has("argv")) and ((.absent // false) == false)) ][0] // null')"
+    if [ "$pre_row" != "null" ]; then
+      rw_surface_row_check "$pre_row" "e2e-preflight" "ran before the e2e suite" >>"$checks_out"
+      if [ -n "$RW_RUN_VERDICT" ] || [ "$RW_RUN_RC" != "0" ]; then
+        rw_check_row "$check_id" "unknown" "the e2e-preflight row did not exit 0, so the e2e suite did not run and nothing here can say what it would have found." >>"$checks_out"
+        printf '%s' "$mine" | jq -c --arg walked " $walked " '.[] | .id as $sid | {id: $sid, verdict: "unknown", ran: false, walked: ($walked | contains(" " + $sid + " ")), reportPath: ""}' >>"$surfaces_out"
+        return 0
+      fi
+    fi
   fi
 
   # A person accepted a new baseline for one of this kind's own surfaces, so the row that writes one
@@ -1595,7 +1570,9 @@ rw_surface_kind() {
       '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ][0] // null')"
     if [ "$accept_row" != "null" ]; then
       RW_ACCEPTED_ROWS="$RW_ACCEPTED_ROWS $row_id-accept"
-      rw_surface_row_check "$accept_row" "$row_id-accept" "ran over the surfaces a person accepted,${accept_here}," >>"$checks_out"
+      # {surfaces} fills with the accepted ids joined by |, so the row rewrites those baselines and no other.
+      rw_surface_row_check "$accept_row" "$row_id-accept" "ran over the surfaces a person accepted,${accept_here}," \
+        "$(printf 'surfaces\t%s\n%s' "$(printf '%s' "$accept_here" | sed 's/^ *//' | tr ' ' '|')" "$RW_VALUES")" >>"$checks_out"
       if [ -z "$RW_RUN_VERDICT" ] && [ "$RW_RUN_RC" = "0" ]; then
         RW_ACCEPTED_DONE="$RW_ACCEPTED_DONE$accept_here"
       fi
@@ -1604,7 +1581,7 @@ rw_surface_kind() {
 
   # {paths} expands to nothing here on purpose: version 6 runs every registered surface, which is
   # why the change-impact globs stay unparsed, so a row ending in {paths} runs the whole set.
-  rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "" ""
+  rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "$RW_VALUES" ""
   rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$row" | jq -r '.framework // "this project"')"
   output="$RW_RUN_OUTPUT"
   ran=false; rc=""; row_verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
@@ -1626,6 +1603,7 @@ rw_surface_kind() {
       detail="the $row_id command exited $rc."
     fi
   fi
+  [ "$off" = "[]" ] || detail="$detail Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')."
 
   # One row per registered surface of this kind, in one pass. A surface the run said nothing about
   # reads unmet rather than borrowing the run's own verdict: a gate that cannot notice its subject
@@ -1659,12 +1637,12 @@ RW_SURFACE_KIND
 
 # Runs one surface row and prints its check row: the wording rw_run_fault gives a run that decided
 # nothing, met on exit 0, unmet on anything else. $1 the row, $2 the id to record it under, $3 what
-# the detail says the row did. The caller reads RW_RUN_VERDICT and RW_RUN_RC afterwards when it needs
-# to know whether the command really ran.
+# the detail says the row did, $4 the tab-separated --value list, RW_VALUES when absent. The caller
+# reads RW_RUN_VERDICT and RW_RUN_RC afterwards when it needs to know whether the command really ran.
 rw_surface_row_check() {
   local one="$1" id="$2" did="$3" fw
   fw="$(printf '%s' "$one" | jq -r '.framework // ""')"
-  rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "" ""
+  rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "${4:-$RW_VALUES}" ""
   rw_run_fault "$id" "the review recipe for ${fw:-this project}"
   if [ -n "$RW_RUN_VERDICT" ]; then
     rw_check_row "$id" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" "" "" "$fw"
@@ -1707,8 +1685,16 @@ rw_surface_extra_rows() {
 
 do_surfaces() {
   local task_arg="" walked="" accepted=""
+  RW_VALUES=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --value)
+        [ "$#" -ge 2 ] || die 3 "surfaces: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die 3 "surfaces: --value takes <name>=<value>, got: $2" ;; esac
+        pc_refuse_forged_value "surfaces" "$2"
+        RW_VALUES="$RW_VALUES$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
       --walked)
         [ "$#" -ge 2 ] || die 3 "surfaces: --walked needs a surface id"
         looks_like_flag "$2" && die 3 "surfaces: --walked was given another flag, not a surface id: $2"
@@ -1741,18 +1727,22 @@ do_surfaces() {
   RW_CATALOG_NOTES="$(printf '%s' "$RW_RECORD_DOC" | jq -c '.catalogNotes // []')"
   RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
   rw_load_surface_rows "surfaces"
+  # The export changes nothing unless the suite reads the variable, which the recipe ask requires.
+  [ -z "$(cr_lookup "$RW_VALUES" base-url)" ] || export PLAYWRIGHT_BASE_URL="$(cr_lookup "$RW_VALUES" base-url)"
 
   local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
   local one_accept all_rows si one_surface merged one_verdict
-  e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.e2e // null) == null then "not set up" elif (.e2e.enabled // false) then "on" else "off" end')"
-  vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.visualRegression // null) == null then "not set up" elif (.visualRegression.enabled // false) then "on" else "off" end')"
-  registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.visualRegression.registryPath // ""')"
-  rw_load_registry "$registry_path"
+  e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
+  vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
+  registry_path="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')"
+  sf_load_surfaces "$registry_path"
 
   # The offer, which the skill makes and this action only records what it can decide. Rows that are
   # not absent are how review knows the framework has surfaces at all.
-  if [ "$RW_REGISTRY_STATE" = "ok" ]; then
+  if [ "$SF_STATE" = "ok" ]; then
     setup="registered"
+  elif [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.declined // false')" = "true" ]; then
+    setup="declined"
   elif [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select((.absent // false) == false) ] | length')" -gt 0 ]; then
     if [ "$RW_RUN_MODE" = "autonomous" ]; then setup="not-offered-autonomous"; else setup="available"; fi
   else
@@ -1767,9 +1757,9 @@ do_surfaces() {
   [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
     && parity_on="on"
   rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
-  rw_surface_kind "$CHECK_VR" "visual-regression" "visual_regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
-  rw_surface_kind "$CHECK_PARITY" "visual-parity" "visual_parity" "$parity_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
-  rw_surface_extra_rows "$checks_file" "e2e visual-regression visual-parity$RW_ACCEPTED_ROWS"
+  rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  rw_surface_kind "$CHECK_PARITY" "visual-parity" "visual-parity" "$parity_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  rw_surface_extra_rows "$checks_file" "e2e e2e-preflight visual-regression visual-parity$RW_ACCEPTED_ROWS"
 
   # A person accepted a baseline for a surface whose kinds declare no accept row. Recording a boolean
   # and writing nothing would say a baseline was replaced when none was.
@@ -1777,15 +1767,15 @@ do_surfaces() {
     [ -n "$one_accept" ] || continue
     case " $RW_ACCEPTED_DONE " in
       *" $one_accept "*) ;;
-      *) die 3 "surfaces: --accept-baseline named $one_accept, and no surface row the review recipe declares writes a baseline for the gates that surface carries. The recipe needs a row whose id is the kind's own id with -accept after it. Nothing was written." ;;
+      *) die 3 "surfaces: --accept-baseline named $one_accept, and no surface row the review recipe declares writes a baseline for the kinds that surface carries. The recipe needs a row whose id is the kind's own id with -accept after it. Nothing was written." ;;
     esac
   done <<RW_ACCEPTED_IN
 $(printf '%s' "$accepted" | tr ' ' '\n')
 RW_ACCEPTED_IN
 
   checks_json="$(jq -s '.' "$checks_file")" || die 3 "surfaces: could not assemble the check rows"
-  # One row per surface, not one per gate. A surface carrying two gates is answered once per gate
-  # above, and the walk is per surface rather than per gate: a person looks at the page once, at every
+  # One row per surface, not one per kind. A surface carrying two kinds is answered once per kind
+  # above, and the walk is per surface rather than per kind: a person looks at the page once, at every
   # viewport. So the answers merge, keeping the worse verdict, and the worse of two verdicts is
   # br_worst_verdict's to decide rather than a second ranking of the four words written here.
   all_rows="$(jq -s -c '[ group_by(.id)[] | {id: .[0].id, rows: .} ]' "$surfaces_file")" \
@@ -1822,11 +1812,12 @@ RW_SURFACE_VERDICTS
   [ -n "$updated" ] || die 3 "surfaces: could not update the record with the surface rows."
   rw_write_record "surfaces" "$updated"
   rw_print_summary "$updated" "surfaces"
-  printf 'registry: %s\n' "${registry_path:-none} ($RW_REGISTRY_STATE)"
-  echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the registry is $RW_REGISTRY_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
+  printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
+  echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   case "$setup" in
-    available)              echo "SURFACES: this framework's recipe carries surface rows and this project has no registry. The setup offer belongs here, once." >&2 ;;
-    not-offered-autonomous) echo "SURFACES: this framework's recipe carries surface rows and this project has no registry. Nobody is present, so the offer was not made." >&2 ;;
+    available)              echo "SURFACES: this framework's recipe carries surface rows and this project has no surface file. The setup offer belongs here, once." >&2 ;;
+    declined)               echo "SURFACES: a person declined the setup, and it is not offered again." >&2 ;;
+    not-offered-autonomous) echo "SURFACES: this framework's recipe carries surface rows and this project has no surface file. Nobody is present, so the offer was not made." >&2 ;;
   esac
   exit 0
 }

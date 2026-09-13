@@ -30,6 +30,8 @@ set -u
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)}"
 # shellcheck source=../../../scripts/lib/registry.sh
 . "${PLUGIN_ROOT}/scripts/lib/registry.sh"
+# shellcheck source=../../../scripts/lib/recipes.sh
+. "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 
 RUN_MODE="interactive"
 if [ "${1:-}" = "--run-mode" ]; then
@@ -126,27 +128,8 @@ fi
 # A recipe with no `sh` block where one is required is refused by name. That is a defect in the
 # recipe, and saying so is more useful than guessing which fence was meant.
 
-# The tag is read with the surrounding space removed, because a trailing space is invisible in an
-# editor and a block its author tagged correctly must not be skipped for one.
-sh_blocks_under() {
-  awk -v want="$1" '
-    function tag(line,   t) {
-      t = line
-      sub(/^`+/, "", t)
-      gsub(/^[ \t]+|[ \t\r]+$/, "", t)
-      return t
-    }
-    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; next }
-    !inSection { next }
-    /^```/ {
-      if (inFence) { inFence = 0; taken = 0; next }
-      inFence = 1
-      taken = (tag($0) == "sh")
-      next
-    }
-    inFence && taken { print }
-  ' "$RECIPE"
-}
+# sh_blocks_under, refuse_if_unsafe, run_recipe_line and recipe_output_summary live in
+# scripts/lib/recipes.sh, because the surfaces skill reads and runs its setup recipes the same way.
 
 # How many `sh` blocks a heading has. Run requires exactly one, so the count is the check.
 sh_block_count_under() {
@@ -171,50 +154,7 @@ sh_block_count_under() {
 
 # How many commands a heading's `sh` blocks hold. A blank line is not a command.
 sh_command_count_under() {
-  sh_blocks_under "$1" | grep -c '[^[:space:]]' || true
-}
-
-# A recipe is data written elsewhere. Refuse anything that would mean more than it says.
-refuse_if_unsafe() {
-  case "$1" in
-    *['`$;&|<>()'$'\n''\\']*|*'"'*|*"'"*)
-      printf 'tool-actions: refused a command carrying a shell character, from %s\n' "$RECIPE" >&2
-      printf 'tool-actions: the command was: %s\n' "$1" >&2
-      return 1 ;;
-  esac
-  return 0
-}
-
-# Runs one recipe line as arguments and appends its output to a file. $1 the line, $2 the file,
-# the rest extra arguments. zsh does not split an unquoted expansion. The split happens in a
-# subshell that sets SH_WORD_SPLIT for zsh, and the option never leaks to the caller.
-run_line() {
-  local line="$1" outfile="$2"
-  shift 2
-  refuse_if_unsafe "$line" || exit 3
-  printf '+ %s\n' "$line"
-  (
-    if [ -n "${ZSH_VERSION:-}" ]; then
-      setopt SH_WORD_SPLIT 2>/dev/null
-    fi
-    set -f
-    # shellcheck disable=SC2086
-    set -- $line "$@"
-    set +f
-    [ "$#" -gt 0 ] || exit 0
-    exec "$@"
-  ) >>"$outfile" 2>&1
-}
-
-# The one summary printer. $1 the exit status, $2 the output file, $3 the line to quote on a
-# failure, counted from one.
-output_summary() {
-  printf 'status: %s\n' "$1"
-  printf 'lines: %s\n' "$(wc -l <"$2" | tr -d '[:space:]')"
-  printf 'output: %s\n' "$2"
-  if [ "$1" -ne 0 ]; then
-    printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
-  fi
+  sh_blocks_under "$RECIPE" "$1" | grep -c '[^[:space:]]' || true
 }
 
 # ------------------------------------------------------------------- actions
@@ -229,7 +169,7 @@ case "$ACTION" in
     if [ "$(sh_block_count_under Install)" = "0" ]; then
       printf '  no block tagged sh, so install refuses this recipe\n'
     else
-      sh_blocks_under Install | sed 's/^/  /'
+      sh_blocks_under "$RECIPE" Install | sed 's/^/  /'
     fi
     printf 'RUN:\n'
     NRUN="$(sh_block_count_under Run)"
@@ -240,15 +180,15 @@ case "$ACTION" in
       printf '  %s blocks tagged sh, and run takes exactly one, so run refuses this recipe\n' "$NRUN"
     elif [ "$NCMD" != "1" ]; then
       printf '  %s commands in one sh block, and run takes exactly one, so run refuses this recipe\n' "$NCMD"
-      sh_blocks_under Run | sed 's/^/  /'
+      sh_blocks_under "$RECIPE" Run | sed 's/^/  /'
     else
-      sh_blocks_under Run | sed 's/^/  /'
+      sh_blocks_under "$RECIPE" Run | sed 's/^/  /'
     fi
     exit 0
     ;;
 
   install)
-    STEPS="$(sh_blocks_under Install)"
+    STEPS="$(sh_blocks_under "$RECIPE" Install)"
     if [ -z "$STEPS" ]; then
       printf 'tool-actions: %s has no block tagged sh under Install\n' "$RECIPE" >&2
       printf 'tool-actions: a command block opens with three backticks and sh, and this recipe has none\n' >&2
@@ -265,14 +205,14 @@ case "$ACTION" in
     while IFS= read -r line; do
       [ -n "${line// /}" ] || continue
       BEFORE="$(wc -l <"$OUTFILE" | tr -d '[:space:]')"
-      if ! run_line "$line" "$OUTFILE"; then
+      if ! run_recipe_line tool-actions "$RECIPE" "$line" "$OUTFILE"; then
         printf 'tool-actions: step failed: %s\n' "$line" >&2
-        output_summary 4 "$OUTFILE" "$((BEFORE + 1))"
+        recipe_output_summary 4 "$OUTFILE" "$((BEFORE + 1))"
         exit 4
       fi
     done <<< "$STEPS"
     printf 'INSTALLED: %s per %s\n' "$TOOL" "$RECIPE"
-    output_summary 0 "$OUTFILE" 1
+    recipe_output_summary 0 "$OUTFILE" 1
     exit 0
     ;;
 
@@ -300,23 +240,23 @@ case "$ACTION" in
       printf 'tool-actions: running the first and dropping the rest would report a success nobody got\n' >&2
       exit 3
     fi
-    CMD="$(sh_blocks_under Run | grep '[^[:space:]]' | head -1)"
+    CMD="$(sh_blocks_under "$RECIPE" Run | grep '[^[:space:]]' | head -1)"
     mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
     OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-run.txt"
     : >"$OUTFILE"
     # The branch on the count is deliberate. `"${EXTRA[@]+"${EXTRA[@]}"}"` hands zsh one empty
     # word for an empty array, and that word reached the tool as an argument.
     if [ "${#EXTRA[@]}" -gt 0 ]; then
-      run_line "$CMD" "$OUTFILE" "${EXTRA[@]}"
+      run_recipe_line tool-actions "$RECIPE" "$CMD" "$OUTFILE" "${EXTRA[@]}"
     else
-      run_line "$CMD" "$OUTFILE"
+      run_recipe_line tool-actions "$RECIPE" "$CMD" "$OUTFILE"
     fi
     RC=$?
     if [ "$RC" -eq 0 ]; then
-      output_summary 0 "$OUTFILE" 1
+      recipe_output_summary 0 "$OUTFILE" 1
       exit 0
     fi
-    output_summary 4 "$OUTFILE" 1
+    recipe_output_summary 4 "$OUTFILE" 1
     exit 4
     ;;
 
