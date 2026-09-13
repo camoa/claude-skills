@@ -4,6 +4,20 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.3] - 2026-09-13
+
+Two gaps from the first pickup of a version 5 project with beta.2 installed.
+
+### Added
+
+- `report`, when nothing owns the directory, names each version 5 folder under the projects base
+  whose code path is this directory. The skill then offers the switch before a new project.
+
+### Changed
+
+- `rebuild-registry` with no argument walks the recorded projects base, not only the built-in
+  default, so a base chosen elsewhere is rebuilt.
+
 ## [6.0.0-beta.2] - 2026-09-13
 
 The version 5 disposition pass. Every version 5 file now has a verdict, and twenty-three
@@ -39,13 +53,8 @@ from the first live run are fixed.
 - The plugin reads the catalog's shipped blocks: `{dirs}`, `silent_pass` per row, the mutation
   score per tool.
 - `switch <path>` picks up a version 5 project folder.
-- `report`, when nothing owns the directory, names each version 5 folder under the projects base
-  whose code path is this directory. The skill then offers the switch before a new project.
 
 ### Changed
-
-- `rebuild-registry` with no argument walks the recorded projects base, not only the built-in
-  default, so a base chosen elsewhere is rebuilt.
 
 - The six stages and `next` are model-invocable, so an autonomous task moves to its next stage
   on its own. `project`, `task`, `tool` and `surfaces` stay user-only.
