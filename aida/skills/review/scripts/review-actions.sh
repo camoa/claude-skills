@@ -1748,7 +1748,7 @@ do_surfaces() {
   RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
   rw_load_surface_rows "surfaces"
   # The export changes nothing unless the suite reads the variable, which the recipe ask requires.
-  [ -z "$(cr_lookup "$RW_VALUES" base-url)" ] || export PLAYWRIGHT_BASE_URL="$(cr_lookup "$RW_VALUES" base-url)"
+  [ -z "$(cr_lookup "$RW_VALUES" base-url)" ] || { PLAYWRIGHT_BASE_URL="$(cr_lookup "$RW_VALUES" base-url)"; export PLAYWRIGHT_BASE_URL; }
 
   local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
   local one_accept all_rows si one_surface merged one_verdict

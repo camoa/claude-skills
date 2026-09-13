@@ -214,7 +214,7 @@ gather_new_tasks() {
     review="$(review_verdict_of "$d")"
     # The newest note under <task>/notes, by its dated file name, or none. The listing is read,
     # never the prose (ideal/task.md, "A save before the window closes").
-    notes="$(ls "$d/notes" 2>/dev/null | grep '^[0-9-]*\.md$' | sort | tail -1)"
+    notes="$(find "$d/notes" -maxdepth 1 -name '[0-9-]*.md' 2>/dev/null | sed 's|.*/||' | sort | tail -1)"
     notes="${notes%.md}"
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),

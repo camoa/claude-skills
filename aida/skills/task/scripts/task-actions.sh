@@ -854,7 +854,7 @@ do_save() {
   task_dir="$(task_dir_for "$project_path" "$id")"
   [ -f "$task_dir/task.json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
 
-  local note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
+  local note; note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
   mkdir -p "$task_dir/notes" || die3 "save: could not create $task_dir/notes"
   printf '## %s\n\n%s\n\n' "$(date -u +%H:%M:%SZ)" "$text" >> "$note" || die3 "save: could not write $note"
 

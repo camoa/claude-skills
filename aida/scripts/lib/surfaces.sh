@@ -38,6 +38,7 @@ sf_load_surfaces() {
     SF_STATE="unreadable"
     return 0
   fi
+  # shellcheck disable=SC2034 # read by the sourcing script, with SF_SURFACES
   SF_STATE="ok"
   # shellcheck disable=SC2034 # read by the sourcing script
   SF_SURFACES="$rows"

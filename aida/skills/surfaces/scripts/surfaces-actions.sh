@@ -181,7 +181,7 @@ do_show_or_install() {
   # Every file is checked before any command runs, so a differing file stops the install whole.
   while IFS="$TAB" read -r n rel; do
     [ -n "$n" ] || continue
-    case "$rel" in /*|*../*|../*|*/..) die 3 "install: $RECIPE names a file outside the code path: $rel" ;; esac
+    case "$rel" in /*|*../*|*/..) die 3 "install: $RECIPE names a file outside the code path: $rel" ;; esac
     target="$CODE_PATH/$rel"
     [ ! -f "$target" ] || cmp -s "$files_dir/$n" "$target" \
       || die 3 "install: $target exists with different content from the $rel block in $RECIPE. Nothing is overwritten; move the file aside or change the recipe."
@@ -302,7 +302,7 @@ SA_IDS
   br_require_clean_tree baseline "$CODE_PATH"
   VALUES="surfaces$TAB$(printf '%s' "$ids" | tr ' ' '|')
 $VALUES"
-  [ -z "$(cr_lookup "$VALUES" base-url)" ] || export PLAYWRIGHT_BASE_URL="$(cr_lookup "$VALUES" base-url)"
+  [ -z "$(cr_lookup "$VALUES" base-url)" ] || { PLAYWRIGHT_BASE_URL="$(cr_lookup "$VALUES" base-url)"; export PLAYWRIGHT_BASE_URL; }
   mkdir -p "$RECORDS_DIR" || die 3 "baseline: could not create $RECORDS_DIR"
   OUTFILE="$RECORDS_DIR/surfaces-baseline.txt"
   result="$(br_run_resolved "$(printf '%s' "$accept" | jq -c '.[0].argv')" "$CODE_PATH" "$OUTFILE" '[]' "$VALUES")"
