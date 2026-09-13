@@ -2,8 +2,9 @@
 
 This step covers three actions that act on the task rather than on one order. `finish` runs once
 every order is closed. `grant-attempt` answers a spent attempt counter, when a person wants to
-grant one more. `restart` follows a mid-build design change: it halted one or more orders, and a
-person wants a fresh build against the new design.
+grant one more, and a spent run budget, once the person has raised it. `restart` follows a
+mid-build design change: it halted one or more orders, and a person wants a fresh build against the
+new design.
 
 ## Finish
 
@@ -50,6 +51,15 @@ reason carrying it would forge a segment nobody wrote.
 
 The grant is the person's to offer and the person's to take. Do not run it on their own behalf
 because an order is halted; put the halt and its recorded attempts to them first.
+
+## Offer the grant, when a halt reads "budget spent"
+
+An order halted with a reason beginning `budget spent` was about to be dispatched when the run
+reached its ceiling. `budget` in `task.json` sets that ceiling, and the halt names the numbers.
+Put them to the person. The spend is recomputed at every dispatch, so a grant alone brings the
+halt straight back. The person raises `budget.dispatches` or `budget.minutes` in `task.json`
+first. Then `grant-attempt` clears the halt as it clears `attempts spent`. It also raises that
+order's attempts by one; say so.
 
 ## Offer the restart, when a halt reads "design drift"
 

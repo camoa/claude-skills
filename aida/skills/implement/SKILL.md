@@ -65,7 +65,7 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
 | An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart | `finish` |
-| An `order(...)` line whose halt holds an `attempts spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
+| An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 
 An order in flight comes before a new one, and a halted order is named only when nothing else can
 move. A resumed run starts at `start` regardless, because that is where drift since the snapshot is
@@ -84,9 +84,14 @@ test is wrong, the order is wrong, or the code is hard and a person writes it. U
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
 
-A halt beginning `attempts spent` or `design drift` has its own next step in `references/finish.md`:
-the grant of one more attempt, or the restart after a design change. Offer either only when a
-person is present to decide it.
+A halt beginning `attempts spent`, `budget spent` or `design drift` has its own next step in
+`references/finish.md`. The first takes the grant of one more attempt. The second takes the same
+grant, after the run's budget is raised. The third takes the restart after a design change. Offer
+any of them only when a person is present to decide it.
+
+A run has a ceiling when the task sets `budget` in its own record, in dispatches or in minutes.
+`dispatch-open` recomputes what was spent from the ledger before every dispatch and halts the
+order at the ceiling. Absent budget means no ceiling, and the per-order caps still hold.
 
 Open the step file through the script, not through the Read tool:
 ```
@@ -120,6 +125,11 @@ unenforced one.
 **A recipe lookup has three answers, not one.** No recipe for this framework, a listing that could
 not be reached, and a failed network are three different things, and only the first says anything
 about the framework. Pass the one that happened, in its own word.
+
+**A test green on its first run has four outcomes.** Wrong test: corrected once. Still green, and
+the author names the existing code that satisfies it: frozen, and the reason recorded. Still
+green with nothing to name: reported, and the step stops. Failed: frozen with its red run.
+`references/tests.md` holds the flags.
 
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
 the action that takes it. `## Test commands` and `## Check commands` are parsed by the script, one
