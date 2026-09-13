@@ -39,8 +39,13 @@ from the first live run are fixed.
 - The plugin reads the catalog's shipped blocks: `{dirs}`, `silent_pass` per row, the mutation
   score per tool.
 - `switch <path>` picks up a version 5 project folder.
+- `report`, when nothing owns the directory, names each version 5 folder under the projects base
+  whose code path is this directory. The skill then offers the switch before a new project.
 
 ### Changed
+
+- `rebuild-registry` with no argument walks the recorded projects base, not only the built-in
+  default, so a base chosen elsewhere is rebuilt.
 
 - The six stages and `next` are model-invocable, so an autonomous task moves to its next stage
   on its own. `project`, `task`, `tool` and `surfaces` stay user-only.

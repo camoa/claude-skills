@@ -429,6 +429,15 @@ do_report() {
   else
     echo "DECLINED: false"
   fi
+  # A version 5 folder under the base whose code path is this directory, so the skill offers the
+  # switch before a new project. Reads only the `**Code path:**` line; registers nothing.
+  local base v5 v5_code
+  base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
+  while IFS= read -r v5; do
+    [ -n "$v5" ] && [ -f "$v5/project_state.md" ] && [ ! -e "$v5/project.json" ] || continue
+    v5_code="$(sed -n 's/^\*\*Code path:\*\* *//p' "$v5/project_state.md" | head -n 1)"
+    [ -n "$v5_code" ] && [ "$(canon_path "$v5_code")" = "$cwd" ] && echo "V5: $v5"
+  done < <(find "$base" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
   echo "PROJECTS:"
   # Offered as work: complete stops being offered and archived is not in the list unless asked
   # for (ideal/project.md, "New"). registry_list_projects filters to this when a state is named.
@@ -945,7 +954,9 @@ do_record_declined() {
 # ------------------------------------------------------------------------------------------------
 
 do_rebuild_registry() {
-  registry_rebuild "$@"
+  local base="${1:-}"
+  [ -n "$base" ] || base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
+  registry_rebuild "$base"
 }
 
 do_read_projects_base() {
