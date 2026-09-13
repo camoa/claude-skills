@@ -1,10 +1,9 @@
 ---
 name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Agent
 ---
 
 # Scope
@@ -188,8 +187,8 @@ turned it on. Read `<projectPath>/project.json` once, at the point criteria are 
   automate this criterion", with a recommended answer. Yes sets `verifiedBy` to `machine` and the
   verify clause names the automated test; no falls back to the ordinary question of how it is
   observed.
-- **`visualRegression.enabled` is true.** Check whether a surface this task changes already has a
-  baseline in the registry at `visualRegression.registryPath`. One that does becomes a criterion
+- **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
+  has a baseline in the surface file at `surfaces.registryPath`. One that does becomes a criterion
   whose verify clause names the visual regression check that must pass. One that does not becomes
   a criterion too, that creating its baseline is this task's own work. Either way this is a
   criterion scope is proposing, not one the person asked for outright: draft it, show it with a
@@ -218,7 +217,7 @@ Yes: every criterion is written as `designer` until a person says yes, so promot
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   update "<task_folder>" --id <id> --author owner
 ```
-Then the conversation is done.
+Then run the distill check below, and the conversation is done.
 
 **Autonomous:** still render the whole document, for the record, but do not wait for an answer and
 do not promote anything: a criterion `designer` because scope proposed it stays `designer`, since
@@ -227,12 +226,29 @@ nobody approved it. Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
   record-decision "<task_folder>" --text "approved the rendered contract on the person's behalf"
 ```
-to report it as approved on the person's behalf, and finish.
+to report it as approved on the person's behalf, then run the distill check below and finish.
+
+## The distill check
+
+The contract is now written. Dispatch the `distiller` role once, with the task folder, the stage
+`scope`, and the path of `alignment.json`. Never a summary of this conversation: it exists to be
+denied that account. It writes `records/scope-distill.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh distill "<task_folder>"
+```
+It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
+`gap:` line. Acting on one is the relevant step above run again; the check never blocks. Exit 2
+means the sidecar was not written; dispatch again. Exit 4 means the sidecar is malformed; say so.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove` or `set-mechanism` again. Only call one of those after the
 person (or, in the autonomous branch, the recommended answer) has actually confirmed that one
 change. Nothing is half-written, because nothing is written speculatively in the first place.
+
+Interactive: stop here. Name the next command for the person, `/aida:research <task-id>`, and never
+invoke it yourself. Autonomous: invoke `aida:research` through the Skill tool, once, with the task
+id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
+stage cannot run out of order. That is why this chain is safe.
 
 ## Changing the contract
 

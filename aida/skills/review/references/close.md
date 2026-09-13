@@ -59,3 +59,8 @@ that the drift is review's own. A reader who is not told reads it as a contract 
 
 Close the report with the three things SKILL.md requires: the checks reading undeclared or unknown,
 the count of criteria reading unanswered, and the count of catalog notes.
+
+Interactive: stop here. Name the next command for the person, `/aida:completion <task-id>`, and
+never invoke it yourself. Autonomous: invoke `aida:completion` through the Skill tool, once, with
+the task id, and stop if it refuses. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.

@@ -46,10 +46,13 @@ those apart.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
-and both are worth more than a green line.
+and both are worth more than a green line. Correct it once. If it is still green because code
+that already exists satisfies it, return a `locks-in` reason for it: one sentence naming that
+code. The test then locks that behaviour in. If you can name no such code, report it as green on
+arrival.
 
 Return one row per test: the path, the test's name, the criterion its name carries, and what the
-failing run printed. Then the list of anything that passed on arrival.
+failing run printed, or its `locks-in` reason. Then the list of anything that passed on arrival.
 
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a

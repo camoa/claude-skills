@@ -1,10 +1,9 @@
 ---
 name: next
 description: This skill should be used when the user asks "what's next", "what should I work on", "continue", "resume", "pick up where I left off", or names a task directly to jump to it. It lists which tasks are open in the current project and where each stands, or loads the one named, and offers to start a task when none are open.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh *), EnterWorktree
 ---
 
 # Next
@@ -53,13 +52,17 @@ Each `OPEN:` line is one of two shapes:
 - `"kind":"new"`: a task with its own `task.json`. Carries `id`, `state` (`new` or
   `in_progress`), `parent`, `children`, `runMode`, and `review`: what `review/review.json` says,
   `passed` or `failed` from its verdict, `unfinished` for a record with no verdict, `none` with no
-  record. An open task reading `passed` or `failed` is reviewed, and completion closes it.
+  record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
+  `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
+  `worktree`: the path of the task's own git worktree, or `none` for a task made before every
+  task had one.
 - `"kind":"legacy"`: a task from before the tasks folder existed. Carries `id`, `epic` (the
   folder it is nested inside, or `null`), `legacyState` (`in_progress` here; `complete` only
   appears under `LEGACY_COMPLETE:`), and `path`.
 
 **Exactly one line under `OPEN:`.** That is the answer. Say which task it is and where it stands,
-and treat it as active. A task reading `review: passed` or `failed` stands at completion; say so. Nothing is asked and nothing is written; there is no session file. A
+and treat it as active. A task reading `review: passed` or `failed` stands at completion; say so. Nothing is asked and nothing is written; there is no session file. Then
+enter the tree, below. A
 `kind: legacy` task is not yet moved into the project's own tasks folder: say plainly that its
 files still live at the `path` printed, and that moving it there is not built yet. Do not treat it
 as if it already had a `task.json`.
@@ -73,6 +76,15 @@ Wait for a plain answer, a number or the task's own id.
 
 If `LEGACY_COMPLETE:` holds any lines, name them once, for visibility: these finished before the
 tasks folder existed and are not part of the choice above.
+
+## Enter the tree
+
+Every stage action of a task runs inside its own git worktree, and refuses from anywhere else.
+Once a task is active, call the `EnterWorktree` tool with its `worktree` path. A path under
+`.claude/worktrees/` enters without a prompt. From a window outside the code repository the tool
+refuses on first entry. Then print the path and `claude --worktree <task-id>`, which opens the
+same tree from the code path, and stop. A task reading `none` has no tree yet; the first stage
+action that needs the code makes one and names it.
 
 ## With nothing open
 
@@ -95,8 +107,9 @@ Run:
 Read the first line.
 
 - **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
-  `children:`, `runMode:` and `review:`. Say which task it is, from its `id`, `state` and
-  `review`, and treat it as active. Nothing else is asked. Read the file at `task-file:` only when another field is needed.
+  `children:`, `runMode:`, `worktree:` and `review:`. Say which task it is, from its `id`,
+  `state` and `review`, and treat it as active. Nothing else is asked. Read the file at
+  `task-file:` only when another field is needed. Then enter the tree, above.
 - **`FOUND: legacy_in_progress` or `FOUND: legacy_complete`.** A `PATH:` line follows, and an
   `EPIC:` line when it is nested inside one. Say plainly that this task predates the tasks folder
   and has not moved: its files live at that path, and no contract is offered on it here.

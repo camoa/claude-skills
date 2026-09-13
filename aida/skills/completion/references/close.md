@@ -67,5 +67,8 @@ run `close` again with the same arguments; that is the repair.
 Give the person the body path and the record path from the summary. Say the verdict the record
 holds and who closed it. Name each follow up task created and each finding left, with its reason.
 Say the person opens the pull request from the body file by hand, changing nothing in it first.
-End by naming `/next`. When the script says every child of the parent is complete, say the parent
-closes next.
+End by naming `/aida:next`. When the script says every child of the parent is complete, say the
+parent closes next.
+
+Interactive or autonomous: name the follow up tasks this step created, and stop. Completion
+has no next stage, so invoke nothing.

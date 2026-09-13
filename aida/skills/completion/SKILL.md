@@ -1,7 +1,6 @@
 ---
 name: completion
 description: This skill should be used when a reviewed task is ready to close, for example "close this task", "finish the task", "mark the task done", "write the pull request body", or "complete the task". It reads the review verdict and offers one follow up task per open finding. It writes a pull request body from the records, records the grounds for closing, and calls the task skill last.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh *)

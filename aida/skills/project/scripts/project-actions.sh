@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # project-actions.sh: the deterministic half of the project skill.
 #
 # The skill body decides what to say and what to ask; this script never asks a question. Every
@@ -78,7 +81,6 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh list [active|complete|archived]...
        project-actions.sh state <name-or-codePath> <active|complete|archived> -- <why...>
        project-actions.sh set-code-path <name-or-codePath> <newCodePath>
-       project-actions.sh set-worktree-default <name-or-codePath> <true|false>
        project-actions.sh add-source <name-or-codePath> <kind> <folder>
        project-actions.sh unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
@@ -300,10 +302,10 @@ do_create() {
   fw_json="$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)"
   code_path_json="$(printf '%s' "$code_path" | jq -R .)"
 
-  # Sources, process recipes, playbook subscriptions, both optional harnesses, the memory hook and
-  # the task rule all start empty or null: ideal/project.md, "Sources" and "Starting a new
-  # project", declares every one of them lazily, the first time a later stage needs it. None of
-  # them is asked here, and none is pre-populated with a default entry.
+  # Sources, process recipes, playbook subscriptions, both optional harnesses and the task rule
+  # all start empty or null: ideal/project.md, "Sources" and "Starting a new project", declares
+  # every one of them lazily, the first time a later stage needs it. None of them is asked here,
+  # and none is pre-populated with a default entry.
   jq -n \
     --argjson codePath "$code_path_json" \
     --arg name "$name" \
@@ -317,10 +319,7 @@ do_create() {
       processRecipes: [],
       sources: [],
       playbookSubscriptions: {},
-      worktreeByDefault: false,
-      visualRegression: null,
-      e2e: null,
-      memoryHook: {installed: false, version: null},
+      surfaces: null,
       taskRule: null
     }' > "$project_path/project.json" || die3 "could not write $project_path/project.json"
 
@@ -445,9 +444,37 @@ do_report() {
 # switch
 # ------------------------------------------------------------------------------------------------
 
+# A version 5 project folder holds project_state.md and no project.json. format-changes.md: the
+# check reports each field missing, and each field's own producer runs once. Only the two lines
+# version 5 wrote first are read, the project folder and the code path, plus the folder name as
+# the project name. Nothing else is parsed: every other field stays missing until its producer
+# runs. Registers the folder and writes the bare project file. Returns 1, having done nothing,
+# when the target is not such a folder. Runs in the caller's shell, never in a substitution, so
+# die3 stops the script.
+register_v5_folder() {
+  local folder="$1" v5_path code_path name
+  [ -d "$folder" ] && [ -f "$folder/project_state.md" ] && [ ! -e "$folder/project.json" ] || return 1
+  folder="$(canon_path "$folder")"
+  v5_path="$(sed -n 's/^\*\*Path:\*\* *//p' "$folder/project_state.md" | head -n 1)"
+  code_path="$(sed -n 's/^\*\*Code path:\*\* *//p' "$folder/project_state.md" | head -n 1)"
+  [ -n "$code_path" ] || die3 "switch: $folder/project_state.md has no **Code path:** line, so nothing says where the code lives."
+  [ "$(canon_path "$v5_path")" = "$folder" ] \
+    || echo "NOTE: project_state.md says the project folder is '$v5_path'. That line is stale; the folder is registered where it is."
+  name="$(basename -- "$folder")"
+  code_path="$(canon_path "$code_path")"
+  registry_add_project "$code_path" "$folder" "$name" || die3 "the registry row for $folder was not written; see the message above."
+  jq -n --arg c "$code_path" --arg n "$name" '{schemaVersion: 1, codePath: $c, name: $n}' \
+    > "$folder/project.json" || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
+  echo "PICKED UP: ${folder}"
+}
+
 do_switch() {
   local target="${1:?switch: a name or a code path is required}" match project_path cwd
   match="$(resolve_target "$target")"
+  if [ -z "$match" ] && register_v5_folder "$target"; then
+    target="$(basename -- "$(canon_path "$target")")"
+    match="$(resolve_target "$target")"
+  fi
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
 
   project_path="$(printf '%s' "$match" | jq -r '.path')"
@@ -624,39 +651,6 @@ do_set_code_path() {
   fi
 
   return "$check_rc"
-}
-
-# ------------------------------------------------------------------------------------------------
-# set-worktree-default: whether a task builds in a worktree without being asked. Settable at
-# creation and, like the task rule, at any later time too.
-# ------------------------------------------------------------------------------------------------
-
-do_set_worktree_default() {
-  local target="${1:?set-worktree-default: a name or a code path is required}"
-  local value="${2:?set-worktree-default: true or false is required}"
-  case "$value" in
-    true|false) : ;;
-    *) die3 "set-worktree-default: must be true or false, got: $value" ;;
-  esac
-
-  local match project_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
-  project_path="$(printf '%s' "$match" | jq -r '.path')"
-
-  local tmp
-  write_project_field "$project_path" "could not update worktreeByDefault in $project_path/project.json" \
-    --argjson w "$value" '.worktreeByDefault = $w'
-
-  commit_project "$project_path" \
-    "Set worktreeByDefault to ${value}" \
-    "requested" \
-    "" \
-    "" \
-    "project" "worktree-default" \
-    || printf 'project-actions: worktreeByDefault was written but not committed.\n' >&2
-
-  run_check "$project_path"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -934,16 +928,6 @@ do_uninstall() {
     echo "TASK RULE: not offered for this project; nothing to remove."
   fi
 
-  local hook_installed
-  hook_installed="$(jq -r '.memoryHook.installed' "$project_path/project.json" 2>/dev/null)"
-  if [ "$hook_installed" = "true" ]; then
-    echo "MEMORY HOOK: recorded as installed, but no installer exists yet in this build to say"
-    echo "  where its primer, its script copy, or its two settings entries live. Nothing was"
-    echo "  removed; this cannot be done safely until that installer is built."
-  else
-    echo "MEMORY HOOK: not installed for this project; nothing to remove."
-  fi
-
   echo "UNINSTALL COMPLETE for $(printf '%s' "$match" | jq -r '.name')."
 }
 
@@ -982,7 +966,6 @@ case "$action" in
   list) do_list "$@" ;;
   state) do_state "$@" ;;
   set-code-path) do_set_code_path "$@" ;;
-  set-worktree-default) do_set_worktree_default "$@" ;;
   add-source) do_add_source "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;

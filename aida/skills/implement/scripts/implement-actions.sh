@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # implement-actions.sh: the deterministic half of the implement skill (ideal/implementation.md).
 #
 # The skill body holds the conversation. This script holds the deterministic half: it freezes the
@@ -33,6 +36,7 @@
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--row <criterion id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
+#                            [--locks-in <test name>=<reason>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
 #                            --interface <path to the record the builder wrote> \
@@ -246,7 +250,7 @@
 #  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
 #  32  `tests-freeze` was given a --red whose file is missing or empty, or that names a test with
 #      no --test row.
-#  33  `tests-freeze` found a test with no --red at all.
+#  33  `tests-freeze` found a test with neither a --red nor a --locks-in naming the existing code.
 #  34  `tests-freeze` was given a --green-on-arrival. Not a defect in the script: it stops the step
 #      and says the test proves nothing, which is the escalation this stage requires.
 #  35  `tests-freeze` found <task_folder>/implementation/tests-<unit_id>.json already recorded at a
@@ -408,6 +412,9 @@
 #      longer exist.
 #  77  `preconditions` read a valid project.json that records no framework, so no recipe can be
 #      chosen for it. Exit 14 stays the separate fact that the file is not valid JSON at all.
+#  78  `dispatch-open` found the run at the ceiling task.json's `budget` sets, in dispatches or in
+#      minutes. The order is halted with `budget spent` and both numbers; the grant path answers it.
+#  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -467,6 +474,7 @@ die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
 # task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
 die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
+die79() { die 79 "$1"; }
 
 # The task-folder resolver, the atomic write and the task start, shared with every other stage.
 [ -f "$TASK_HELPERS_LIB" ] || die 3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
@@ -525,6 +533,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--checklist <criterion id>=<verification text>]...
                             [--row <criterion id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
+                            [--locks-in <test name>=<reason>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
                             --interface <path to the record the builder wrote>
@@ -846,7 +855,7 @@ im_next_step() {
                           or (.lastStep == "code-written" and ((.attemptsUsed // 0) < (.attemptsAllowed // $allowed)))) ] | .[0]) as $bd
     | ([ $live[] | select(.lastStep == null) | select((($deps[.id] // []) - $closed) | length == 0) ] | .[0]) as $ts
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
-    | ([ $orders[] | select((.haltedBecause // "") | contains("attempts spent")) ] | .[0]) as $spent
+    | ([ $orders[] | select((.haltedBecause // "") | (contains("attempts spent") or contains("budget spent"))) ] | .[0]) as $spent
     | ([ $orders[] | select((.haltedBecause // "") != "") ] | length) as $halted
     | if ($precon | not) and ($rv != null or $bd != null or $ts != null) then "preconditions"
       elif $rv != null then
@@ -857,7 +866,7 @@ im_next_step() {
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
-      elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts spent"
+      elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
       elif $halted > 0 then "none: every order that is not closed is halted for a reason neither a grant nor a restart answers"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
@@ -903,14 +912,15 @@ do_read() {
         project_note="$project_path/project.json is missing"
         ;;
       ok)
-        code_path="$(project_code_path_value "$project_path")"
-        [ -n "$code_path" ] || project_note="$project_path/project.json is valid JSON but has no usable codePath field"
+        [ -n "$(project_code_path_value "$project_path")" ] || project_note="$project_path/project.json is valid JSON but has no usable codePath field"
         ;;
     esac
   else
     project_path=""
     project_note="could not resolve a project folder two levels up from the task folder, or it has no project.json"
   fi
+  # The code this task builds in is its own worktree, read from the field and never made here.
+  code_path="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
 
   local git_is_repo git_branch trunk_derived trunk_branch trunk_note
   git_is_repo=false
@@ -1443,7 +1453,7 @@ do_start() {
     fi
   fi
 
-  local final_orders_json final_criteria_json ledger_started_from ledger_run_mode
+  local final_orders_json final_criteria_json ledger_started_from ledger_run_mode ledger_started_at
   if [ "$ledger_present" = "true" ]; then
     opened_as="reopened"
     local stored_snapshot_hash
@@ -1455,6 +1465,9 @@ do_start() {
       || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
     ledger_run_mode="$(ledger_required_string "$ledger_doc" "runMode")" \
       || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+    # A ledger opened before startedAt existed is repaired here, by its one producer running again.
+    ledger_started_at="$(printf '%s' "$ledger_doc" | jq -r '.startedAt // empty')"
+    [ -n "$ledger_started_at" ] || ledger_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     # A drift halt never writes over a reason the order already carries. The old text is kept after
     # the new one, joined by "; earlier: ", so nothing loses a reason; and a start run repeated on
@@ -1471,6 +1484,7 @@ do_start() {
     opened_as="opened"
     ledger_started_from="$started_from"
     ledger_run_mode="$run_mode"
+    ledger_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     local base_orders_json
     base_orders_json="$(printf '%s' "$snapshot_workorders_json" | jq -c '[ .[] | {id: .id, lastStep: null, attemptsUsed: 0, roundsUsed: 0} ]')"
@@ -1490,9 +1504,9 @@ do_start() {
   local ledger_json_out
   ledger_json_out="$(jq -n \
     --arg startedFrom "$ledger_started_from" --arg runMode "$ledger_run_mode" \
-    --arg snapshotHash "$snapshot_hash_on_disk" \
+    --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
-    '{schemaVersion: 1, startedFrom: $startedFrom, runMode: $runMode, snapshotHash: $snapshotHash,
+    '{schemaVersion: 1, startedFrom: $startedFrom, startedAt: $startedAt, runMode: $runMode, snapshotHash: $snapshotHash,
       orders: $orders, criteria: $criteria}')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
 
@@ -2480,7 +2494,7 @@ EOF
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
     met|undeclared) ;;
-    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record" ;;
+    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
         --argjson report "$record_json" \
@@ -2885,21 +2899,21 @@ TF_EOF
 }
 
 # Parses --green-on-arrival values, one per line of $1 (`<test name>=<reason>`), appending one
-# `{name, reason}` JSON object per line to file $2.
+# `{name, reason}` JSON object per line to file $2. --locks-in has the same shape and passes $3.
 tf_parse_goa() {
-  local raw="$1" out="$2" line name reason
+  local raw="$1" out="$2" flag="${3:---green-on-arrival}" line name reason
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     case "$line" in
       *"="*) : ;;
-      *) die 3 "tests-freeze: --green-on-arrival value has no '=' separating the test name from the reason: $line" ;;
+      *) die 3 "tests-freeze: $flag value has no '=' separating the test name from the reason: $line" ;;
     esac
     name="${line%%=*}"
     reason="${line#*=}"
-    [ -n "$name" ]   || die 3 "tests-freeze: --green-on-arrival value has an empty test name: $line"
-    [ -n "$reason" ] || die 3 "tests-freeze: --green-on-arrival value has an empty reason: $line"
+    [ -n "$name" ]   || die 3 "tests-freeze: $flag value has an empty test name: $line"
+    [ -n "$reason" ] || die 3 "tests-freeze: $flag value has an empty reason: $line"
     jq -n --arg name "$name" --arg reason "$reason" '{name: $name, reason: $reason}' >>"$out" \
-      || die 3 "tests-freeze: could not record the --green-on-arrival row for $name"
+      || die 3 "tests-freeze: could not record the $flag row for $name"
   done <<TF_EOF
 $raw
 TF_EOF
@@ -2937,7 +2951,7 @@ tf_relativize_path() {
 }
 
 do_tests_freeze() {
-  local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw=""
+  local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --test)
@@ -2970,6 +2984,11 @@ do_tests_freeze() {
       --green-on-arrival)
         [ "$#" -ge 2 ] || die 3 "tests-freeze: --green-on-arrival needs <test name>=<reason>"
         goa_raw="$goa_raw$2
+"
+        shift 2 ;;
+      --locks-in)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>"
+        locks_raw="$locks_raw$2
 "
         shift 2 ;;
       -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
@@ -3020,26 +3039,29 @@ do_tests_freeze() {
   fi
 
   # --- turn every raw --flag value into JSON, through temporary files beside the implementation dir
-  local tests_tmp reds_tmp checklists_tmp goa_tmp rows_meta_tmp
+  local tests_tmp reds_tmp checklists_tmp goa_tmp rows_meta_tmp locks_tmp
   tests_tmp="$IMPL_DIR/.tests-freeze-tests.$$"
   reds_tmp="$IMPL_DIR/.tests-freeze-reds.$$"
   checklists_tmp="$IMPL_DIR/.tests-freeze-checklists.$$"
   goa_tmp="$IMPL_DIR/.tests-freeze-goa.$$"
   rows_meta_tmp="$IMPL_DIR/.tests-freeze-rowmeta.$$"
-  : >"$tests_tmp"; : >"$reds_tmp"; : >"$checklists_tmp"; : >"$goa_tmp"; : >"$rows_meta_tmp"
+  locks_tmp="$IMPL_DIR/.tests-freeze-locks.$$"
+  : >"$tests_tmp"; : >"$reds_tmp"; : >"$checklists_tmp"; : >"$goa_tmp"; : >"$rows_meta_tmp"; : >"$locks_tmp"
   tf_parse_tests      "$test_raw"      "$tests_tmp"
   tf_parse_reds       "$red_raw"       "$reds_tmp"
   tf_parse_checklists "$checklist_raw" "$checklists_tmp"
   tf_parse_goa        "$goa_raw"       "$goa_tmp"
+  tf_parse_goa        "$locks_raw"     "$locks_tmp" "--locks-in"
   tf_parse_rows       "$row_raw"       "$rows_meta_tmp"
 
-  local tests_json reds_json checklists_json goa_json test_globs_json rows_meta_json
+  local tests_json reds_json checklists_json goa_json test_globs_json rows_meta_json locks_json
   tests_json="$(jq -s '.' "$tests_tmp")"
   reds_json="$(jq -s '.' "$reds_tmp")"
   checklists_json="$(jq -s '.' "$checklists_tmp")"
   goa_json="$(jq -s '.' "$goa_tmp")"
   rows_meta_json="$(jq -s '.' "$rows_meta_tmp")"
-  rm -f "$tests_tmp" "$reds_tmp" "$checklists_tmp" "$goa_tmp" "$rows_meta_tmp"
+  locks_json="$(jq -s '.' "$locks_tmp")"
+  rm -f "$tests_tmp" "$reds_tmp" "$checklists_tmp" "$goa_tmp" "$rows_meta_tmp" "$locks_tmp"
   test_globs_json="$(printf '%s' "$glob_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
 
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
@@ -3269,12 +3291,12 @@ TF_EOF
 
   # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
   local bad_red_names
-  bad_red_names="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" '
+  bad_red_names="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" --argjson locks "$locks_json" '
       ($tests | map(.name)) as $known
-      | [ $reds[] | .name as $n | select(($known | index($n)) == null) | $n ] | unique | join(", ")
+      | [ ($reds + $locks)[] | .name as $n | select(($known | index($n)) == null) | $n ] | unique | join(", ")
     ')"
   [ -z "$bad_red_names" ] \
-    || die 32 "tests-freeze: these --red rows name a test with no --test row: $bad_red_names"
+    || die 32 "tests-freeze: these --red or --locks-in rows name a test with no --test row: $bad_red_names"
 
   local red_count ri red_name red_path bad_red_files=""
   red_count="$(printf '%s' "$reds_json" | jq 'length')"
@@ -3288,14 +3310,14 @@ TF_EOF
   [ -z "$bad_red_files" ] \
     || die 32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
 
-  # --- 33: every declared test needs a --red -------------------------------------------------------
+  # --- 33: every declared test needs a --red, or a --locks-in naming the existing code it locks in --
   local missing_red
-  missing_red="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" '
-      ($reds | map(.name)) as $named
+  missing_red="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" --argjson locks "$locks_json" '
+      (($reds + $locks) | map(.name)) as $named
       | [ $tests[] | .name as $n | select(($named | index($n)) == null) | $n ] | unique | join(", ")
     ')"
   [ -z "$missing_red" ] \
-    || die 33 "tests-freeze: these tests have no --red at all: $missing_red"
+    || die 33 "tests-freeze: these tests have neither a --red nor a --locks-in: $missing_red"
 
   # --- 34: a green-on-arrival stops the step outright -----------------------------------------------
   if [ "$(printf '%s' "$goa_json" | jq 'length')" -gt 0 ]; then
@@ -3331,7 +3353,7 @@ TF_EOF
   # the previous round's value on standard output from the second round on, which corrupts this
   # action's own output for any order serving two criteria (trap 5 in this file's own header).
   local rows_tmp crit_count ci cid ckind
-  local names_json ntests tj tpath trelpath tname tsha tredpath tredtext tests_out_tmp tests_out_json
+  local names_json ntests tj tpath trelpath tname tsha tredpath tredtext tests_out_tmp tests_out_json tlocks
   local checklist_text
   rows_tmp="$IMPL_DIR/.tests-freeze-rows.$$"
   : >"$rows_tmp"
@@ -3355,10 +3377,12 @@ TF_EOF
         [ -n "$tsha" ] || die 3 "tests-freeze: could not compute a sha256 for $tpath"
         tredpath="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].path // empty')"
         tredtext="$(cat "$tredpath" 2>/dev/null)"
+        tlocks="$(printf '%s' "$locks_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].reason // empty')"
         # The record stores the path relative to codePath, never the absolute form: a frozen path
         # must still mean the same file once the checkout moves (see exit 36's own reasoning).
-        jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" \
-          '{path: $path, name: $name, sha256: $sha, red: $red}' >>"$tests_out_tmp" \
+        jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" --arg locks "$tlocks" \
+          '{path: $path, name: $name, sha256: $sha}
+           + (if $red == "" then {} else {red: $red} end) + (if $locks == "" then {} else {locksIn: $locks} end)' >>"$tests_out_tmp" \
           || die 3 "tests-freeze: could not record the test row for $tname"
         tj=$((tj + 1))
       done
@@ -3569,14 +3593,11 @@ do_build_brief() {
 
   # The caller needs the commit this attempt begins from, for --started-at when it records. It was
   # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry.
-  local bb_project bb_codepath bb_head
+  local bb_codepath bb_head
   bb_head=""
-  bb_project="$(resolve_project_folder "$TASK_PATH" 2>/dev/null)" || bb_project=""
-  if [ -n "$bb_project" ]; then
-    bb_codepath="$(project_code_path_value "$bb_project")"
-    if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
-      bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
-    fi
+  bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
+    bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
   fi
   # The report has one named path per attempt, so a later attempt never writes over the answers a
   # reviewer already compared a diff against. The brief is one file per order, rewritten on each
@@ -4613,6 +4634,12 @@ do_review_brief() {
   nongoals_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.nonGoals // [])[] | {id, text} ]')"
   checks_json="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.checks // []')"
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
+  # A locks-in reason is read with the diff, so the brief says where it sits, and never copies it.
+  local locks_note
+  locks_note="$(jq -r --arg f "$IMPL_DIR/tests-$unit_id.json" '[ (.rows // [])[] | (.tests // [])[] | select(has("locksIn")) | .name ]
+    | if length == 0 then "No test was frozen green."
+      else "These tests were frozen green because existing code already satisfies them, and each reason sits beside the test name in \($f): \(join(", "))." end' \
+    "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
 
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the contract, the order, the eight check results with what each tool printed, and both
@@ -4621,6 +4648,7 @@ do_review_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-review.json"
   brief_json="$(jq -n \
     --arg unit "$unit_id" \
+    --arg locksIn "$locks_note" \
     --argjson criteria "$criteria_json" \
     --argjson nonGoals "$nongoals_json" \
     --argjson order "$RV_UNIT_JSON" \
@@ -4642,6 +4670,7 @@ do_review_brief() {
       startedAt: $startedAt,
       commit: $commit,
       frozenTests: $frozenTests,
+      locksIn: $locksIn,
       reportPath: $reportPath,
       checks: $checks,
       interface: { declared: $interfaceDeclared, record: $interfaceRecord },
@@ -5955,16 +5984,16 @@ do_grant_attempt() {
   [ "$last_step" != "closed" ] \
     || die 67 "grant-attempt: $unit_id is closed, so there is no attempt left to grant. Nothing is written."
 
-  # A grant answers one reason and only one: the attempt counter is spent. A halt can hold several
+  # A grant answers a spent attempt counter, or a run budget since raised in task.json. A halt can hold several
   # reasons, newest first, so this looks at every segment rather than the front of the text. The
   # grant then removes that one segment. Any other reason stays, and the order stays halted with it,
   # because clearing a reason a grant does not answer would hide it behind an attempt nobody needed.
   local halt halt_spent halt_rest
   halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
   halt_spent="$(printf '%s' "$halt" | jq -Rr '
-      if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent"))) | join("; earlier: ")) end')"
+      if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent") or startswith("budget spent"))) | join("; earlier: ")) end')"
   halt_rest="$(printf '%s' "$halt" | jq -Rr '
-      if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent") | not)) | join("; earlier: ")) end')"
+      if . == "" then empty else (split("; earlier: ") | map(select((startswith("attempts spent") or startswith("budget spent")) | not)) | join("; earlier: ")) end')"
   if [ -n "$halt" ] && [ -z "$halt_spent" ]; then
     die 67 "grant-attempt: $unit_id is halted for something a grant does not answer: $halt. Nothing is written."
   fi
@@ -6232,6 +6261,37 @@ do_dispatch_open() {
 "
     allow_raw="$allow_raw$(printf '%s' "$mine_json" | jq -r '.[]')
 "
+  fi
+
+  # --- 78: the run's ceiling, when task.json sets one ----------------------------------------------
+  # The attempt and round caps bound one order; `budget` bounds the run. The spend is recomputed
+  # from the ledger every time and stored nowhere, so nothing a builder writes can reset it. A
+  # dispatch is the test author, one attempt, the reviewer, or the fixer and verifier of one round.
+  local budget_json
+  budget_json="$(jq -c '.budget // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  if [ -n "$budget_json" ] && [ -f "$TASK_PATH/implementation/ledger.json" ]; then
+    local bg_ledger bg_spent bg_why
+    bg_ledger="$(jq -c '.' "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+    [ -n "$bg_ledger" ] || die 3 "dispatch-open: $TASK_PATH/implementation/ledger.json could not be read as JSON, and the run's budget is measured from it. Repair or remove it by hand."
+    bg_spent="$(printf '%s' "$bg_ledger" | jq -c '
+      {dispatches: ([ (.orders // [])[]
+          | (if .lastStep == null then 0 else 1 end) + (.attemptsUsed // 0)
+            + (if .lastStep == "reviewed" or .lastStep == "fixed" or .lastStep == "closed" then 1 else 0 end)
+            + 2 * (.roundsUsed // 0) ] | add // 0),
+       minutes: (if has("startedAt") then ((now - (.startedAt | fromdateiso8601)) / 60 | floor) else null end)}')"
+    bg_why="$(jq -nr --argjson b "$budget_json" --argjson s "$bg_spent" '
+      if ($b.dispatches != null and $s.dispatches >= $b.dispatches) then "budget spent: \($s.dispatches) of \($b.dispatches) dispatches"
+      elif ($b.minutes != null and $s.minutes == null) then "unmeasured"
+      elif ($b.minutes != null and $s.minutes >= $b.minutes) then "budget spent: \($s.minutes) of \($b.minutes) minutes"
+      else "" end')"
+    [ "$bg_why" != "unmeasured" ] \
+      || die 3 "dispatch-open: task.json sets budget.minutes, and the ledger holds no startedAt to measure from. start writes it; run start again."
+    if [ -n "$bg_why" ]; then
+      bg_ledger="$(halt_order_in "$bg_ledger" "$unit_id" "$bg_why")"
+      [ -n "$bg_ledger" ] || die 3 "dispatch-open: the halt on $unit_id could not be written."
+      write_atomic "$TASK_PATH/implementation/ledger.json" "$bg_ledger"
+      die 78 "dispatch-open: $unit_id is halted, $bg_why. The run's ceiling is task.json's budget; raise it there, then grant-attempt clears the halt. Nothing was dispatched."
+    fi
   fi
 
   local dispatch_file="$project_folder/dispatch.json"

@@ -7,6 +7,7 @@
   "required": [
     "schemaVersion",
     "startedFrom",
+    "startedAt",
     "runMode",
     "snapshotHash",
     "orders",
@@ -23,6 +24,11 @@
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "The commit the build started from, captured by the first step before anything is written. Rollback is a reset to it, which is what replaces the isolated working copy version 6 decided against. Version 5 captures nothing of the kind and its own ledger needs one."
+    },
+    "startedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "The UTC time the ledger was opened, set by the first step and kept by every reopening. The one clock the run's `budget.minutes` ceiling in task.json is measured from: what was spent is recomputed from this and the wall clock at each dispatch, and stored nowhere, so nothing a builder writes can reset it."
     },
     "runMode": {
       "type": "string",

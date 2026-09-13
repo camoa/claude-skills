@@ -2,7 +2,7 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-worktree-default <name-or-path> <true|false> | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -43,6 +43,10 @@ work", in the order it names, case 3 being case 1 winning when both would otherw
 path and its folder, then the check's own report. Show the report as described in "Reading the check's report" below. Stop here; this
 already touched `lastAccessed` and, for case 2, this is the remembered choice winning because
 nothing else answers.
+
+A file named `reminders.md` beside `project.json` is printed at every session start, under a
+line naming its path. A person writes it by hand, so a standing note for this project reaches
+every window.
 
 **`CASE: 4`.** Neither the directory nor a remembered choice resolves to a project. The output
 then carries `DECLINED: true` or `DECLINED: false`, then `PROJECTS:` followed by one `project:`
@@ -104,9 +108,10 @@ code path; otherwise, and only when the code path names a directory that exists,
 ```
 "${CLAUDE_PLUGIN_ROOT}"/scripts/detect-framework.sh "<codePath>"
 ```
-Union whatever it prints with any framework names already given or mentioned, keeping the given
-ones first. Nothing given and nothing detected, or the code path does not exist yet: interactive
-asks "What is the stack?"; autonomous **halts**, reporting that the frameworks are missing.
+Each line it prints is `<name>: <file>`, the framework and the file that proved it. Union the
+names with any framework names already given or mentioned, keeping the given ones first. Nothing
+given and nothing detected, or the code path does not exist yet: interactive asks "What is the
+stack?"; autonomous **halts**, reporting that the frameworks are missing.
 
 **4. The projects-folder base.** Run
 ```
@@ -161,6 +166,11 @@ only and is not remembered, because a code-path match always wins over a remembe
 directory, and a later plain `report` from here finds this project again on its own. Either way
 it then prints a `project:` line, the project file's path, and the check's report. Show the
 report; read the project file only when a field is needed.
+
+`switch <path>` on a version 5 folder, one holding `project_state.md` and no `project.json`,
+registers it, writes a bare project file, and runs the check. Only the `**Path:**` and
+`**Code path:**` lines are read, and the folder name becomes the project name. The check reports
+every other field missing, and each field's own producer fills it in later, which is the design.
 
 ## `list [active|complete|archived]...`
 
@@ -223,17 +233,6 @@ script restores the old code path in both places before it reports the
 refusal, so nothing is left pointing at a location that was never accepted. Show the whole
 output either way.
 
-## `set-worktree-default <name-or-path> <true|false>`
-
-Whether a task builds in a worktree without being asked. Settable at creation and at any later
-time, the same as the task rule. Run:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
-  set-worktree-default "<target>" <true|false>
-```
-This only ever touches AIDA's own project file, never the user's repository, so it needs no
-confirmation. It writes the field, commits the change, and runs the check. Show the whole output.
-
 ## `add-source <name-or-path> <kind> <folder>`
 
 Declares one folder as where this project's content of one kind comes from. The kind is one of
@@ -292,9 +291,7 @@ and continue:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh uninstall "<target>"
 ```
-Removes the task-rule block when one was installed. Reports on the memory hook rather than
-touching it: no part of this build installs one yet, so `memoryHook.installed` is always `false`
-today, and the honest answer is "nothing to remove," never a guess at files that do not exist.
+Removes the task-rule block when one was installed.
 
 ## `rebuild-registry [projectsHome]`
 

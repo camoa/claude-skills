@@ -23,7 +23,9 @@ folder. Read it first; everything below is in it or named by it.
 
 In review mode, the brief holds the criteria this order serves and owns, the non-goals it names,
 and the order record. It names the diff as a file, the frozen tests, and the builder's report. It
-holds the results of the eight checks that already ran, and both interface texts. Write your
+holds the results of the eight checks that already ran, and both interface texts. Its `locksIn`
+line names any test frozen green because existing code already satisfied it. The reason sits on
+that test's row in the per-test record the line names. Read it with the diff. Write your
 findings to the path the brief gives, in this shape:
 
 ```json

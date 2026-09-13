@@ -28,6 +28,17 @@
       "default": [],
       "items": { "$ref": "#/$defs/finding" },
       "description": "What this search turned up, in the order it was recorded. A search that found nothing still holds one finding whose text says so (ideal/research.md, \"'Looked and found nothing' is a finding\"), because silence and a negative result look identical from outside, and only the recorded negative tells the design stage it is safe to decide without looking again."
+    },
+    "recipeFit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "fits", "reason"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "description": "The process recipe body that was read and judged, so a note about it can be traced." },
+        "fits": { "type": "string", "enum": ["true", "false", "unsure"], "description": "Whether that method describes the work this task does, judged once by research's own model after reading the body." },
+        "reason": { "type": "string", "minLength": 1, "description": "One sentence saying why, always, because a verdict without a reason cannot be read later." }
+      },
+      "description": "Research's verdict on the process recipe it followed (ideal/tooling.md), written by `record` from the three --recipe-* flags on the search inside this project, absent when no recipe was read."
     }
   },
   "$defs": {

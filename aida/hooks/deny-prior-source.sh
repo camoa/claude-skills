@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # deny-prior-source.sh: PreToolUse hook on Read and Grep. Denies a dispatched role the reads its
 # own dispatch record names.
 #
@@ -25,17 +28,19 @@
 # the accidental read, which is the failure this rule exists to prevent.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, a tool that is
-# neither Read nor Grep, or a payload with no agent_type: allow, silent. No project registered for
-# this working directory, no dispatch.json, dispatch.json unreadable, a record naming no role, an
-# agent whose type is not the role the record names, or a dispatch whose denyRead list is empty:
+# neither Read nor Grep, a payload with no agent_type, no project registered for this working
+# directory, or no dispatch.json: allow, silent. Those last two are every read outside an AIDA
+# task, and a message on each would be noise, the rule version 5's guard kept. dispatch.json
+# unreadable, a record naming no role, an agent whose type is not the role the record names, or a
+# dispatch whose denyRead list is empty:
 # allow, but through `systemMessage`, the one hook-output channel the model sees on exit 0, naming
 # why this rule could not be applied. An empty list was the exception here until 2026-09-10, and it
 # was the worst one: a dispatch open with nothing denied looks exactly like a dispatch being
 # enforced. The role mismatch was the second exception, until 2026-09-11, and it is the case a
 # mistyped or unnamed dispatch lands in: an agent that reports no type at all is the person and
 # leaves above, so an agent that reports a type the record does not name is a dispatch nobody can
-# check. Nothing wrongly allowed here is a silent gap: a rule that cannot find its own record, or
-# cannot match the agent that arrived, says so.
+# check. Nothing wrongly allowed here is a silent gap: a rule that cannot read the record it found,
+# or cannot match the agent that arrived, says so.
 #
 # Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
 # the model), on exit 0, so the reason reaches the role.
@@ -74,14 +79,12 @@ source "$PATHS_LIB" 2>/dev/null \
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 
-MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" \
-  || not_enforced "no registered project owns $CWD, so no dispatch record could be found"
+MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit 0; }
 PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
 [ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
 
 DISPATCH_FILE="$PROJECT_PATH/dispatch.json"
-[ -f "$DISPATCH_FILE" ] \
-  || not_enforced "no dispatch.json at $DISPATCH_FILE; nothing is dispatched right now"
+[ -f "$DISPATCH_FILE" ] || { echo '{}'; exit 0; }
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"
 

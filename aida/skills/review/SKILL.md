@@ -1,7 +1,6 @@
 ---
 name: review
-description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over seven lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
-disable-model-invocation: true
+description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Agent
@@ -99,6 +98,8 @@ listing or a failed fetch records them unknown, because nobody looked.
 that takes it. The script parses each row's own argv, its `signal` and `extensions` keys, and which
 rows a framework declares absent. Nothing here retypes a command, so nothing here can drop a
 `signal` key and turn a check into one that always passes.
+Verdict words and a missing heading follow
+`${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 
 ## The run mode decides who answers
 
@@ -126,8 +127,10 @@ reading undeclared as one that passed. Version 5 printed that every layer ran an
 while one tool had not run.
 
 Name the catalog notes by count as well. A note is a guide the code contradicts, a recipe whose
-command no longer runs, or a pattern the framework wants and no guide names. Review writes nothing to
-the catalog. A person decides whether a note becomes a proposal.
+command no longer runs, or a pattern the framework wants and no guide names. A recipe research or
+design judged not to fit this task is a note too. `checks` writes it from the `recipeFit` field of
+each research file and of `design-closed.json`, and a mismatch never fails a review. Review writes
+nothing to the catalog. A person decides whether a note becomes a proposal.
 
 ## What this skill records, and what it does not enforce
 

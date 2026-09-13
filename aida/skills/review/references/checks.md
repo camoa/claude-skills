@@ -65,7 +65,11 @@ check 3 already reports that file as work no order asked for.
 that nothing was selected and exit zero. A silent pass reads unknown, never met.
 
 **Check 4 records the score and every survivor, as the record holds them.** No mutation row reads
-undeclared, never met. The survivors go to the reviewer at the next step, as one more lens.
+undeclared, never met. The survivors go to the reviewer at the next step, as one more lens. The score
+is the line the tool's own recipe names, chosen by the tool in the row. A mutmut run prints no
+survivor by file, so its survivors are recorded as not readable and named as unread in the detail.
+The row still reads met on exit 0, because the coverage half and the score were read. The outcome
+counts are in the score, and `mutmut results` lists the survivors by mutant name.
 
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A hunk inside an
 owned file that serves nothing is the reviewer's to raise, and its finding cites an id or is not

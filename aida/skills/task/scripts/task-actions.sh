@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # task-actions.sh: the deterministic half of the task skill.
 #
 # The skill body decides what to say and what to ask; this script never asks a question. Every
@@ -20,6 +23,10 @@
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape that check runs)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/task-schema.json         (read by check-task.sh, a later part;
 #                                                            not read by this script)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for task_worktree: create and
+#                                                            split make each task's own worktree
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh           sourced, for the codePath readers
+#                                                            task_worktree needs
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
@@ -34,6 +41,8 @@
 #                    [--child <child-id> --goal <goal> [--criterion <text>]...]
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-run-mode --project <path> \
 #                    <task-id> <autonomous|interactive>
+#   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
+#                    -- <text...>
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
@@ -45,7 +54,8 @@
 # The value itself is read nowhere below, so nothing here stores it.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints why
-# to stderr and exits 3. A miss that is a real, expected outcome (start or complete or split
+# to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
+# the folder it made first. A miss that is a real, expected outcome (start or complete or split
 # naming a task that does not exist) exits 1 and prints nothing useful to stdout, never confused
 # with 3.
 #
@@ -77,6 +87,14 @@ die3() {
   printf 'task-actions: %s\n' "$1" >&2
   exit 3
 }
+# The two libraries take these from their caller, so a refusal still says which script refused.
+die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
+die1() { die 1 "$1"; }
+for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
+  [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
+  # shellcheck source=/dev/null
+  source "$lib_name" || die3 "the library failed to load: $lib_name"
+done
 
 usage() {
   cat <<'EOF' >&2
@@ -88,6 +106,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
                                  --child <child-id> --goal <goal> [--criterion <text>]...
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
+       task-actions.sh save     --project <path> <task-id> -- <text...>
 EOF
 }
 
@@ -146,7 +165,8 @@ task_summary() {
     "state: " + (.state // "?"),
     "parent: " + (.parent // "none"),
     "children: " + ((.children // []) | join(" ")),
-    "runMode: " + (.runMode // "interactive")' "$1"
+    "runMode: " + (.runMode // "interactive"),
+    "worktree: " + (.worktree.path // "none")' "$1"
 }
 
 # Renders the same five-field commit shape templates/project-commit.md defines, checks its own
@@ -232,6 +252,10 @@ do_create() {
     printf '## Goal\n\n'
     printf '%s\n' "$goal"
   } > "$task_dir/task.md" || die3 "create: could not write $task_dir/task.md"
+
+  # The task's own worktree, made right after the record is written whole, so a second window
+  # can open the tree before any stage runs. A tree that cannot be made leaves no half-made task.
+  ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
 
   commit_task_change "$project_path" \
     "Create task ${id}" \
@@ -691,6 +715,8 @@ do_split() {
         printf '%s' "$ccrit" | jq -r '.[] | "- " + .'
       fi
     } > "$cdir/task.md" || die3 "split: could not write $cdir/task.md"
+    # Each child gets its tree now, so no child waits for a first stage action to make one.
+    task_worktree "$cdir" "split" >/dev/null
 
     i=$((i + 1))
   done
@@ -795,6 +821,55 @@ do_set_run_mode() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# save: appends a decision no record holds yet to <task>/notes/<date>.md under a `## <UTC time>`
+# heading (ideal/task.md, "A save before the window closes"). A note is never a stage record: each
+# record has one producer, and the note is what the next window reads until that producer runs.
+# The date in the file name is what the hook and next-actions.sh list, so neither reads the prose.
+# ------------------------------------------------------------------------------------------------
+
+do_save() {
+  local project_path="" id=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --) shift; break ;;
+      *)
+        [ -z "$id" ] || die3 "save: unrecognized argument: $1"
+        id="$1"; shift ;;
+    esac
+  done
+  local text="$*"
+
+  [ -n "$project_path" ] || die3 "save: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "save: not a folder: $project_path"
+  project_path="$_resolved_project"
+  [ -n "$id" ] || die3 "save: a task id is required"
+  case "$text" in
+    *[![:space:]]*) : ;;
+    *) die3 "save: the text is required and must not be blank. Nothing to save is said, not written" ;;
+  esac
+
+  local task_dir
+  task_dir="$(task_dir_for "$project_path" "$id")"
+  [ -f "$task_dir/task.json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+
+  local note; note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
+  mkdir -p "$task_dir/notes" || die3 "save: could not create $task_dir/notes"
+  printf '## %s\n\n%s\n\n' "$(date -u +%H:%M:%SZ)" "$text" >> "$note" || die3 "save: could not write $note"
+
+  commit_task_change "$project_path" \
+    "Save a note for ${id}" \
+    "a decision made in the conversation is in no record yet" \
+    "" \
+    "" \
+    "$id" "note" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$note" >&2
+
+  echo "note: ${note}"
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -808,5 +883,6 @@ case "$action" in
   complete) do_complete "$@" ;;
   split) do_split "$@" ;;
   set-run-mode) do_set_run_mode "$@" ;;
+  save) do_save "$@" ;;
   *) usage; exit 3 ;;
 esac

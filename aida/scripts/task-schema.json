@@ -43,6 +43,15 @@
       "enum": ["autonomous"],
       "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it."
     },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dispatches": { "type": "integer", "minimum": 1 },
+        "minutes": { "type": "integer", "minimum": 1 }
+      },
+      "description": "A ceiling on one implementation run, present only when a person set one; absent means no ceiling. `dispatches` counts the roles the implementation skill dispatches over the whole run (the test author, each build attempt, the reviewer, and the fixer and the verifier of each round), and `minutes` counts wall-clock time from the ledger's own startedAt. Either number reached halts the order about to be dispatched with `budget spent`, in the same shape as the attempt cap, and the grant path answers it once this value is raised. The spend is recomputed from the ledger at every dispatch and stored nowhere."
+    },
     "mechanismHints": {
       "type": "array",
       "default": [],
@@ -55,6 +64,16 @@
       "propertyNames": { "type": "string", "minLength": 1 },
       "additionalProperties": { "type": "string", "minLength": 1 },
       "description": "This task's id in an external tracker, one entry per system it is known to, for example {\"jira\": \"PROJ-123\"}. Reserved for tracker integration, ported unchanged from version 5, where it had no writer either; most tasks never set one and this stays empty."
+    },
+    "worktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "branch"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 }
+      },
+      "description": "The git worktree this task builds in, and the branch checked out there: `<codePath>/.claude/worktrees/<id>` on `feature/<id>`, the path in its resolved form. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
     }
   },
   "$defs": {

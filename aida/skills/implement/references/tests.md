@@ -104,9 +104,11 @@ test, it writes what the run printed when the test failed to its own file, under
 below reads that path. Ask it to return a checklist line for each criterion a person verifies,
 copying the verification sentence whole.
 
-**A test that passes before any code exists proves nothing.** It is corrected once. If it still
-passes, it is reported by name and the step stops. It is never deleted quietly and never weakened
-into failing.
+**A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
+Still green, and the author can name the existing code that satisfies it: it locks that behaviour
+in, and the reason is recorded with `--locks-in`. Still green with no existing code to name: it is
+reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
+deleted quietly and never weakened into failing.
 
 **A failure is read from the framework's own signal, never from the exit status.** Three of five
 frameworks exit zero when a filter selects nothing. Only an assertion that ran and did not hold is
@@ -160,6 +162,7 @@ Run, with one flag per test, per failure output, per pattern, and per row:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-freeze "<task_folder>" <order id> \
   --test <path>::<test name>=<criterion id> \
   --red <test name>=<path to a file holding what the run printed> \
+  --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note>
@@ -175,9 +178,11 @@ from here, not back.
 The script checks the file exists, sits inside the code repository, matches the framework's own
 declared pattern, and carries at the end of its name the criterion it claims. It checks every
 criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
-It checks every test has the output of the run that failed. That check is a bound, not a proof: it
+It checks every test has the output of the run that failed, or a `--locks-in` reason in its
+place. A test with neither refuses (exit 33). That check is a bound, not a proof: it
 confirms the file is not empty, and nothing in it confirms the framework's own failure signal
-appears there. A file holding "0 tests ran" passes the same way a real assertion failure does.
+appears there. A file holding "0 tests ran" passes the same way a real assertion failure does. A
+`--locks-in` reason is recorded beside the test, and the review brief says where it is.
 
 **Every machine-verified criterion this order serves or owns needs exactly one row**, naming
 whether it was confirmed or rejected and who judged it. A criterion a person verifies carries a

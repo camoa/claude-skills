@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The surface file, <codePath>/.visual-review/surfaces.json",
+  "description": "The surfaces review runs and the viewports it captures at. Written by the surfaces skill, read by scripts/lib/surfaces.sh, committed with the code because the baselines beside it are. The suite reads this file at run time and names each baseline from the surface id and the viewport name, so one id captured at several viewports is several files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "viewports", "surfaces"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "viewports": {
+      "type": "array",
+      "description": "The recipe's `## Viewports` block, or the list a person gave `install --viewport`. Visual regression only.",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "width", "height"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "surfaces": {
+      "type": "array",
+      "description": "One row per surface, written by `register`. A disabled surface stays in the list: review records it as not run rather than dropping it in silence.",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "url", "kinds", "enabled", "masks"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "Kebab case. The suite names each baseline from it." },
+          "url": { "type": "string", "minLength": 1, "description": "A path under the base URL the run supplies. Never an address." },
+          "kinds": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["e2e", "visual-regression", "visual-parity"] }, "description": "The review recipe's surface row ids. The check and the file share these words." },
+          "enabled": { "type": "boolean", "description": "False until a person passed `register --enable`. Nothing is enabled unattended." },
+          "masks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "CSS selectors hidden before capture, each proposed with the element count it hides." }
+        }
+      }
+    }
+  }
+}

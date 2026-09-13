@@ -1,7 +1,6 @@
 ---
 name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
@@ -55,13 +54,20 @@ Run:
 ```
 This prints summary lines. `contract:` says present or absent and `contract-file:` names the
 file. `criteria:` lists the ids, and `criteria-by-designer:` lists the ids no person ever
-approved. One `search:` line names each research file already on disk with its finding count.
+approved. `worktree:` names the task's own git worktree, where the code is read and the spike
+runs. `none` means the code path, as for a task made before every task had one. One `search:`
+line names each research file already on disk with its finding count.
 Read the criteria's text from the contract file.
 
 `contract: absent`: say so in one line and name the scope skill. Stop.
 
 `search:` lines present: this is a resumed or repeated run. Read each named file before deciding
 what is still missing, rather than starting over.
+
+`inputs:` says what the task's `inputs/` folder holds: `absent`, `empty`, or `present` with one
+`input:` line per file. That folder holds material captured before the task existed. Read every
+`input:` path before any search runs. This material is input, never a finding. It names things to
+search for. Record a claim from it only once a search confirms it with a source.
 
 ## Start the stage
 
@@ -90,7 +96,9 @@ Typical search subjects, named by what they read, not by a fixed roster:
   signal. Search the configuration store the same way where the framework has one, because an
   existing view or content type is prior art that needs no code. A configuration file has no
   docblock, so the recipe says what to read in its place. Core and contributed code are noise
-  here; the outside search covers those.
+  here; the outside search covers those. The project's own task records are prior art as well.
+  The searcher also reads `<project>/tasks/`, so "have we built this" is asked of this project's
+  history. A hit names the task and what it changed.
 - **Prior art outside this project.** A library, a module, a package that already does this.
   Apply the three-part test to anything found: is it maintained, is it used, is it supported. A
   process recipe for this project's own framework may refine that test; when none exists, apply
@@ -108,6 +116,16 @@ Typical search subjects, named by what they read, not by a fixed roster:
   changed. Checking it has three outcomes, not one: true, false, or could not be settled. All
   three finish the check and all three are worth recording; a false assumption is one of the
   most useful things research produces.
+- **A spike.** For a design question no document answers, for example whether one approach
+  handles a case, and only when the searches above came back empty. A spike answers one question
+  and is never kept. It is not dispatched: this conversation writes and runs it. It runs in the
+  task's worktree, the `worktree:` line above, and `<codePath>` below means that tree. Read
+  `<codePath>/.gitignore` first: when no line names `.aida-spike/`, say so and stop, and write
+  nothing. Otherwise write a small runnable experiment under `<codePath>/.aida-spike/` and run
+  it. Record the answer as a finding: `--source` is that folder path, and `--text` holds what
+  ran and what it printed. Delete the folder before the coverage check closes research. The
+  check refuses (exit 6) while it exists, so nothing throwaway ships. Carry the idea forward,
+  never the code: design authors it fresh.
 
 How many searches run is set by what these criteria actually need. A task with three criteria
 that all rest on the same library may need one search, not three. The search inside this project
@@ -115,7 +133,7 @@ is the exception: run it on every task that changes code.
 
 ## Dispatch one agent per search
 
-**Name the role on every dispatch.** Three roles cover every search subject above, and each one
+**Name the role on every dispatch.** Three roles cover every dispatched subject above, and each one
 carries its own tool set and its own limits, applied by the runtime:
 
 | Search subject | Role |
@@ -131,7 +149,9 @@ model, and nothing the roles promise holds. `internal-searcher` has no web tools
 what makes "prior art in this project" a claim about this project rather than about the internet.
 
 For each search decided above, dispatch its role with a narrow brief: the words to search, the
-bound, and the shape of what to return, findings with a source and nothing else. The agent never
+bound, and the shape of what to return, findings with a source and nothing else. The
+`internal-searcher` brief also names the code path, which is the task's worktree from the
+`worktree:` line, and the project folder. The agent never
 sees this conversation and this conversation never sees what the agent read, only what it reports
 back. That isolation is what keeps the cost bounded.
 
@@ -191,6 +211,15 @@ a cached copy directly.
 this project's framework at the research stage. It answers with whether one is available and, when
 it is, a path to the body on disk. Read the body from that path. The body is never streamed into
 the conversation, which is what keeps a recipe affordable.
+Verdict words and a missing heading follow
+`${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
+
+**Judge the fit once, after the body is read and before the first dispatch.** Does this method,
+by its `description`, Goal and Preconditions, describe the work the criteria and non-goals name?
+Record the verdict on the search inside this project, on any one `record` call, with `--recipe-fit
+<true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"`. On `false`, interactive:
+say so with the reason, then ask whether to continue with the recipe, without it (the fallback
+below), or stop. Autonomous: continue with the recipe and record `false`.
 
 **Three answers, not one.** A recipe that does not exist for this framework, a listing that could
 not be reached, and a network that failed are three different things and only the first is a fact
@@ -266,13 +295,24 @@ zero it adds one `open:` line with the uncovered ids and the counts. The report 
 A task whose `research` folder does not exist yet is not an error: it is reported as research not
 started, with every criterion uncovered, the same as an empty `research` folder that does exist.
 
-Exit 0: nothing to do. Report research complete.
+Exit 0: nothing to do. Dispatch the `distiller` role once, with the task folder, the stage
+`research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
+of this conversation. It writes `records/research-distill.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
+```
+It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
+`gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written;
+dispatch again. Exit 4 means the sidecar is malformed; say so. Then report research complete.
 
 Exit 4: a research file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix that file with another `record` call, or by hand, and check again.
 
 Exit 3: the script could not run the check at all. Read its stderr and fix the named problem,
 then check again.
+
+Exit 6: the coverage is clean but the spike folder named on the `spike:` line still exists.
+Delete that folder, then check again. Nothing else is missing.
 
 Exit 5: the schema is fine but the coverage is not. For each id the `open:` line names under
 criteria with no finding, dispatch another search for that criterion specifically. For each entry
@@ -283,6 +323,11 @@ again.
 
 Research is done when this check reaches exit 0, or when every remaining gap has been looked at
 and deliberately left, with the reason recorded in the finding's own text.
+
+Interactive: stop here. Name the next command for the person, `/aida:design <task-id>`, and never
+invoke it yourself. Autonomous: invoke `aida:design` through the Skill tool, once, with the task
+id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
+stage cannot run out of order. That is why this chain is safe.
 
 ## Research never blocks
 

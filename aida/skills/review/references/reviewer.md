@@ -9,7 +9,7 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh brief "<task_folder>"
 ```
-It refuses at exit 62 when `checks` recorded nothing, because five of the seven lenses read its
+It refuses at exit 62 when `checks` recorded nothing, because five of the eight lenses read its
 results.
 
 It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
@@ -28,7 +28,7 @@ it to read that file first. Give it the findings path as well. **The prompt carr
 content.** The role opens every body itself, and pasting one here spends this conversation's context
 on what the file already holds.
 
-**One dispatch carries all seven lenses.** Seven dispatches would read the same diff at seven times
+**One dispatch carries all eight lenses.** Eight dispatches would read the same diff at eight times
 the cost, and a finding does not change because a different context raised it. The lens words are
 fixed, and a check reads its verdict off the lens that raised the finding:
 
@@ -37,10 +37,14 @@ fixed, and a check reads its verdict off the lens that raised the finding:
 | `non-goals` | check 2, the task did what it said it would not do |
 | `solid` | check 9, a principle finding with file, lines and rule |
 | `dry` | check 10, duplication, including against untouched code |
-| `architecture` | check 11, the code does not match the orders design wrote |
+| `architecture` | check 11, the code does not match the orders design wrote, or business logic sits in the UI layer |
 | `guides` | check 12, a guide research cited was not followed |
 | `practices` | check 16, an accepted framework practice was not applied |
 | `mutation` | a survivor inside code a criterion covers |
+| `purpose` | check 3, a hunk that serves nothing, or fails one of the four purposefulness questions |
+
+Check 3 reads met only when the script half found no unowned file and the `purpose` lens returned
+nothing. A `purpose` finding turns the script half's row unmet and keeps the file and lines.
 
 No dispatch record is opened, and none can be: `dispatch-open` requires a work order id, and a task
 level review has no order. SKILL.md says what follows from that. The role holds Read, Glob, Grep and
@@ -64,8 +68,8 @@ Run:
 It refuses at exit 51 when the code path moved, or its tree went dirty, since `checks` ran. A file
 the role left behind is caught there, rather than read as a finding.
 
-It records checks 2, 9 to 12 and 16, and every finding, and it prints one summary line per check with
-the counts. Each of those checks reads met when its lens returned nothing, unmet when that lens
+It records checks 2, 9 to 12 and 16, and every finding. It lowers checks 3 and 4 where their lens
+raised a finding. It prints one summary line per check with the counts. Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
 never a clean one**, and version 5 paid for that four times.
 

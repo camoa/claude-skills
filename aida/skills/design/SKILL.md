@@ -1,7 +1,6 @@
 ---
 name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
-disable-model-invocation: true
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
@@ -57,10 +56,18 @@ to serve is nothing this stage can check.
 `work-orders:` above zero: this is a resumed or repeated run. Read each named file before
 drafting anything new, rather than starting over.
 
+Then start design:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh start "<task_folder>"
+```
+Exit 6: research has not closed on this task. Research is required and is never skipped, so name
+the research skill and stop. A `NOTE:` line names a stated mechanism edited after research
+grounded it; read that claim as ungrounded.
+
 Then read every file under `<task_folder>/research/`, one search at a time. Each holds findings
 for one subject: prior art inside the project, prior art outside it, guides and recipes, what
-reputable sources recommend, or an assumption checked. A criterion with no research at all is not
-a reason to stop; it means design decides from nothing found, same as when research covered it.
+reputable sources recommend, or an assumption checked. A finding that says nothing was found is
+not a reason to stop. Design decides from nothing found, same as when research covered it.
 
 ## Read the guides and recipes research found
 
@@ -78,10 +85,18 @@ answers whether one is available and, when it is, a path to the body on disk. Re
 that path. Never fetch a catalog address yourself and never read a cached copy behind the
 navigator's back. A source this project configured itself, a folder of its own, is read the
 ordinary way.
+Verdict words and a missing heading follow
+`${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 
 **Three answers, not one.** No recipe for this framework, a listing that could not be reached, and
 a failed network are three different things, and only the first says anything about the framework.
 Record which one happened, in those words.
+
+**Judge the fit once, after the body is read and before the first order.** Does this method, by
+its `description`, Goal and Preconditions, describe the work the criteria and non-goals name? Keep
+the verdict, the path and one sentence of reason for `close`. On `false`, interactive: say so with
+the reason, then ask whether to continue with the recipe, without it (the fallback below), or
+stop. Autonomous: continue with the recipe and record `false`.
 
 This is what makes the work orders right, and no check below can replace it. Read it for what
 AIDA cannot know on its own:
@@ -93,8 +108,10 @@ AIDA cannot know on its own:
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
-- What must exist beside a class for the unit to work: a services entry, a route, a permission,
-  a schema. Name these in the order, or whoever builds it invents them.
+- Where business logic belongs, and what a thin layer may contain. An order that puts logic in
+  the thin layer is drafted wrong.
+- The entry point every feature has that is not a screen. Name it in the order that builds the
+  feature, so the feature is reachable without its UI.
 - What order the framework forces, where it forces one.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
@@ -109,9 +126,9 @@ requires and the five things design needs from a framework.
 A task may carry a stated approach in `task.json`'s `mechanismHints`, recorded by scope. Read it
 as a claim, never as a specification, whatever its `status`. Weigh it against what research found
 the ordinary way; a `required` status means it must be followed once judged sound, not that it is
-exempt from judgment. The grounding-hash check that would catch a claim edited after research
-looked at it is not yet built; until it is, read the claim as recorded and judge it on its current
-merits.
+exempt from judgment. `start` compared each claim against the hash research recorded at its close.
+A claim `start` printed a `NOTE:` for was edited after research looked at it, so its grounding no
+longer covers it. Judge it as ungrounded, and send it back to research when it matters.
 
 ## The reuse decision
 
@@ -124,12 +141,25 @@ candidate is not always code; an existing view or content type is a candidate to
 it may produce no code at all.
 
 Record the disposition through the script that will own the work order it lands on, never only in
-your own reasoning: once that work order exists, set its `reasoning` field to name the candidate,
-the disposition, and why, with:
+your own reasoning. Once that work order exists, give the script the candidate, its closeness as
+research stated it, the cost dimensions compared, the verdict, and why:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
-  --id <woId> --reasoning "<candidate, disposition, and why>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
+  dispose "<task_folder>" --id <woId> --candidate "<what research found>" \
+  --distance <same-name|same-directory|same-layer> --cost <build|carry|agent|risk[,...]> \
+  --verdict <reuse|extend|supersede> --why "<why this verdict>" [--confirmed]
 ```
+The script applies a fixed table and writes the outcome into the order's `reasoning`. It prints
+`disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
+only a layer, comes back as `extend`. Autonomous, a supersede comes back as `extend`, with the
+reason in the `reasoning`. A reuse or extend citing no cost dimension stands, with the thin
+reasoning recorded, because there is nothing to downgrade it to.
+
+Interactive, the script refuses a supersede until the person has been asked. Ask this: the
+candidate, how close it is, and that a supersede widens this task and owes a migration; does it
+stand? A yes is `--confirmed`. A no is the verdict the person chose. A supersede citing no cost
+dimension is refused the same way; ask what it compared, then call again.
+
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
 **Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it. Name
@@ -139,7 +169,7 @@ model, and this one has to be read-only to mean anything.
 Give it the written reasoning and the files it cites, and nothing else. Never this conversation's
 own account: being denied that is the entire reason the role exists, and handing it over turns the
 check into the decision reading itself. It answers agree, disagree, or downgrade, with what it
-compared. Record what it found the same way, appended to the same `reasoning` field.
+compared. Record what it found with `update --reasoning`, appended to the text `dispose` wrote.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
@@ -322,8 +352,10 @@ expensive place.
 Once design is done, close it. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
-  close "<task_folder>"
+  close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"
 ```
+Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
+`close` refuses with neither, and a later close restates the verdict rather than carrying it over.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 Closing records what design closed on: a hash over the contract and every work order, the run mode,
@@ -341,6 +373,21 @@ design closed but before implementation started.
 Did a work order change after closing? Close again. A second close is allowed and expected. It
 replaces the old hash with the new one. Closing again is the supported way to change a design that
 already closed.
+
+Once `design-closed.json` is written, dispatch the `distiller` role once, with the task folder,
+the stage `design`, and the paths of `design/*.json` and `design-closed.json`. Never a summary of
+this conversation. It writes `records/design-distill.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
+```
+It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
+`gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
+written; dispatch again. Exit 4 means the sidecar is malformed; say so.
+
+Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
+never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with
+the task id, and stop if it refuses. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## What this skill never does
 

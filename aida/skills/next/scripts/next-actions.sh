@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The plugin root: the variable when the platform sets it (hooks), else this file's own place.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # next-actions.sh: the deterministic half of the next skill.
 #
 # ideal/task.md, "New": "/next answers one question: which tasks are open and where each one
@@ -185,7 +188,7 @@ review_verdict_of() {
 
 gather_new_tasks() {
   local project_path="$1"
-  local tasks_dir="$project_path/tasks" d tj state key line review
+  local tasks_dir="$project_path/tasks" d tj state key line review notes
   [ -d "$tasks_dir" ] || return 0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
@@ -209,9 +212,14 @@ gather_new_tasks() {
     [ "$state" != "complete" ] || continue
     key="$(sort_key "$project_path" "$d")"
     review="$(review_verdict_of "$d")"
-    line="$(jq -c --arg p "$d" --arg review "$review" \
+    # The newest note under <task>/notes, by its dated file name, or none. The listing is read,
+    # never the prose (ideal/task.md, "A save before the window closes").
+    notes="$(find "$d/notes" -maxdepth 1 -name '[0-9-]*.md' 2>/dev/null | sed 's|.*/||' | sort | tail -1)"
+    notes="${notes%.md}"
+    line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
-        children:(.children // []), runMode:(.runMode // null), review:$review, path:$p}' "$tj")"
+        children:(.children // []), runMode:(.runMode // null), review:$review, notes:$notes,
+        worktree:(.worktree.path // "none"), path:$p}' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
     printf '%s\t%s\n' "$key" "$line"
   done < <(find "$tasks_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
@@ -319,7 +327,8 @@ do_open() {
       "state: " + (.state // "new"),
       "parent: " + (.parent // "none"),
       "children: " + ((.children // []) | join(" ")),
-      "runMode: " + (.runMode // "interactive")' "$tj"
+      "runMode: " + (.runMode // "interactive"),
+      "worktree: " + (.worktree.path // "none")' "$tj"
     echo "review: $(review_verdict_of "$project_path/tasks/$target")"
     return 0
   fi

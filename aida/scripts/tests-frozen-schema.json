@@ -71,7 +71,7 @@
     "test": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "name", "sha256", "red"],
+      "required": ["path", "name", "sha256"],
       "properties": {
         "path": {
           "type": "string",
@@ -90,7 +90,12 @@
         },
         "red": {
           "type": "string",
-          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Never empty and never synthesised: a test with no red run at all is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either."
+          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Never empty and never synthesised: a test with neither a red run nor a `locksIn` reason is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either. Absent only when `locksIn` is present."
+        },
+        "locksIn": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present when the test was green on its first run, after one correction, because code that already existed satisfies it: one sentence from the test author naming that code, copied from the `--locks-in` flag. The test then locks that behaviour in rather than driving new code, the outcome version 5's tdd-companion called ratified. The reviewer reads this reason with the diff, so the review brief says where it is."
         }
       }
     }
