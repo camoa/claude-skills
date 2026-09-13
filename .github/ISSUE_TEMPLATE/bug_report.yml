@@ -15,7 +15,7 @@ body:
       description: Which plugin is affected?
       options:
         - dev-guides-navigator
-        - plugin-creation-tools
+        - claude-plugin-checks
         - aida
         - code-quality-tools
         - brand-content-design

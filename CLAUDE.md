@@ -60,10 +60,16 @@ make `plugin.json` disagree with the catalog entry. `make manifests` and
 
 The short run does not do three things. Read them before you use it.
 
-**`make test-<plugin>` scope.** The old `ai-dev-assistant` carried 134 of the 142 spec files
+**`make test-<plugin>` scope.** The old `ai-dev-assistant` carried nearly every bash spec file
 and is gone. `aida` ships its fixtures outside the repository for now, so `make test-aida` runs
-nothing until they move in. The rest of the spec files belong to code-quality-tools,
-plugin-creation-tools, and the root `scripts/tests/claim-check-spec.sh`.
+nothing until they move in. The rest of the bash spec files belong to code-quality-tools,
+claude-plugin-checks, and the root `scripts/tests/claim-check-spec.sh`.
+
+**Python tests are discovered too, and not by a written-down list.** Any tracked
+`*/tests/` directory holding `test_*.py` is run with pytest, one `run_one` entry
+per directory. There are two: `brand-content-design/scripts/slides/tests` and
+`claude-plugin-checks/tests`. Adding a suite means adding the files; nothing in
+`scripts/run-tests.sh` names them.
 
 **The specs cross plugin borders.** code-quality-tools specs make assertions about
 `drupal-ai-contrib`. The root `claim-check-spec.sh` is outside every plugin and tests

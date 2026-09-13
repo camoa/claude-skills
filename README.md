@@ -28,7 +28,7 @@ None of it is perfect. The AI still slips a step past us now and then, and when 
 # Install the plugins you want
 /plugin install aida@camoa-skills                    # pulls dev-guides-navigator automatically
 /plugin install dev-guides-navigator@camoa-skills
-/plugin install plugin-creation-tools@camoa-skills
+/plugin install claude-plugin-checks@camoa-skills
 /plugin install code-quality-tools@camoa-skills
 /plugin install code-paper-test@camoa-skills
 /plugin install drupal-ai-contrib@camoa-skills
@@ -50,7 +50,7 @@ The skills conform to the open [agentskills.io](https://agentskills.io/specifica
 
 **[dev-guides-navigator](dev-guides-navigator/README.md)**: *The model writes code from whatever it remembered at training time, which is often out of date.* Routes each task to the current best-practice guide from a catalog of 1200+ atomic decision guides, hash-cached so nothing is re-fetched. Required by `aida`; useful on its own.
 
-**[plugin-creation-tools](plugin-creation-tools/README.md)**: *Building a Claude Code plugin means guessing at the structure of skills, commands, agents, hooks, and MCP servers.* An authoring and audit toolkit with a `validate` gate that catches structural problems (and leaked home-paths or secrets) before you publish.
+**[claude-plugin-checks](claude-plugin-checks/README.md)**: *Checking a Claude Code plugin means remembering which of five tools to run, and none of them opens the component files the manifest points at.* One command that runs them all and prints what each said, plus three checks nothing else performs: the external component files, a file that contradicts itself, and leaked home paths or credentials.
 
 ### Checking the work
 

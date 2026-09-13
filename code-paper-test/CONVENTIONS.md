@@ -38,5 +38,5 @@
 - Skill/config testing uses instruction tracing, not code tracing — see `references/skill-and-config-testing.md`
 
 ## Release Hygiene
-- Run `/plugin-creation-tools:validate --strict` before every PR. `--strict` catches S14 (inline model overflow), FM01 (frontmatter parse errors), and X02 (description length) in addition to the standard checks.
+- Run `bash claude-plugin-checks/scripts/run-checks.sh code-paper-test --strict` before every PR. It runs `claude plugin validate`, plugin-dev's linters, and the containment, external-component and structure-consistency checks; `--strict` promotes warnings to failures.
 - Bump the version everywhere it appears: `.claude-plugin/plugin.json`, the `skills/paper-test/SKILL.md` `version:` field, this plugin's entry **and** `metadata.version` in the root `marketplace.json`, the `README.md` version line, and a `CHANGELOG.md` entry.

@@ -114,9 +114,9 @@ For CI integration, aggregation, or programmatic consumption, invoke with `--jso
 /code-paper-test:test-team --json src/Service/PaymentService.php
 ```
 
-## Pairing with `skill-quality-reviewer` for Skill Testing
+## Pairing with a deterministic checker for Skill Testing
 
-When paper-testing a skill, command, or agent file, run `plugin-creation-tools:skill-quality-reviewer` first (deterministic: stale SDK refs, dropped imperatives, frontmatter gaps) then paper-test for the semantic analysis (instruction fidelity, trigger coverage, context budget). See `references/skill-and-config-testing.md` §"Deterministic + Agentic pairing". In skill-mode, after verifying tool/file/skill references exist, verify each referenced capability PRODUCES what the calling step consumes — see `references/behavioral-verification.md` §B2.
+When paper-testing a skill, command, or agent file, run `claude-plugin-checks`' `check` skill first (deterministic: structure, self-consistency, and every validator installed) then paper-test for the semantic analysis (instruction fidelity, trigger coverage, context budget). See `references/skill-and-config-testing.md` §"Deterministic + Agentic pairing". In skill-mode, after verifying tool/file/skill references exist, verify each referenced capability PRODUCES what the calling step consumes — see `references/behavioral-verification.md` §B2.
 
 **Layering with native security review.** The Red Team Attacker lens in `/code-paper-test:test-team` complements the security-guidance plugin — security-guidance catches issues in Claude's own edits in real time; the Red Team Attacker finds adversarial vulnerabilities in the target code at analysis time. They cover different moments and are not substitutes.
 

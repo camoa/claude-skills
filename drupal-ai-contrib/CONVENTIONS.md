@@ -109,9 +109,10 @@ Two contracts govern the `review` → `submit` boundary (v0.4.0):
 
 ## Release hygiene
 
-- Run `/plugin-creation-tools:validate --strict` before every release. `--strict`
-  promotes S14 (sub-1M `model:` pins on a skill) and other warnings to errors, so the
-  inline-overflow footgun cannot slip into a release as a tolerated warning. A release is
+- Run `bash claude-plugin-checks/scripts/run-checks.sh drupal-ai-contrib --strict` before
+  every release. It runs `claude plugin validate`, plugin-dev's linters, and the
+  containment, external-component and structure-consistency checks; `--strict` promotes
+  warnings to errors so nothing slips into a release as a tolerated warning. A release is
   clean only when `--strict` passes.
 - Bump `.claude-plugin/plugin.json`, sync the root `.claude-plugin/marketplace.json`
   entry **and** `metadata.version`, add a `CHANGELOG.md` entry, and update `README.md` in

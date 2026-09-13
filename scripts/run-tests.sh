@@ -132,13 +132,29 @@ else
 fi
 
 # ── python tests ──────────────────────────────────────────────────────────────
+# Any tracked tests/ directory holding test_*.py, rather than a written-down
+# list. A new suite is picked up by adding it, the same as a bash spec.
+PYDIRS="$(git ls-files '*/tests/test_*.py' 2>/dev/null | sed 's|/[^/]*$||' | sort -u)"
 SLIDES="brand-content-design/scripts/slides/tests"
-if want_plugin brand-content-design && [ -d "$SLIDES" ]; then
+if [ -d "$SLIDES" ] && ! printf '%s\n' "$PYDIRS" | grep -qx "$SLIDES"; then
+  PYDIRS="$(printf '%s\n%s\n' "$PYDIRS" "$SLIDES" | sed '/^$/d' | sort -u)"
+fi
+if [ -n "$PYDIRS" ]; then
   if command -v pytest >/dev/null 2>&1; then
-    run_one "$SLIDES" pytest -q "$SLIDES"
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      [ -d "$d" ] || continue
+      want_plugin "${d%%/*}" || continue
+      run_one "$d" pytest -q "$d"
+    done <<< "$PYDIRS"
   else
-    SKIP=$((SKIP + 1))
-    printf '  skip  %s (pytest is not installed)\n' "$SLIDES"
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      [ -d "$d" ] || continue
+      want_plugin "${d%%/*}" || continue
+      SKIP=$((SKIP + 1))
+      printf '  skip  %s (pytest is not installed)\n' "$d"
+    done <<< "$PYDIRS"
   fi
 fi
 

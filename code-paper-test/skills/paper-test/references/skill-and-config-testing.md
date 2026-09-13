@@ -4,18 +4,18 @@ Extend paper testing to non-code artifacts by tracing instructions through Claud
 
 ## Deterministic + Agentic Pairing (Recommended Order)
 
-Before paper-testing a skill, command, or agent file, run the deterministic reviewer from `plugin-creation-tools` — it catches mechanical issues in seconds that would otherwise burn paper-test cycles.
+Before paper-testing a skill, command, or agent file, run the deterministic checks from `claude-plugin-checks` — they catch mechanical issues in seconds that would otherwise burn paper-test cycles.
 
 **Order:**
 
-1. **`plugin-creation-tools:skill-quality-reviewer` (deterministic, fast)** — grep-level checks: stale `claude-code-sdk` / `ClaudeCodeOptions` references, missing trigger phrases, dropped `MUST` / `PROACTIVELY` imperatives, removed `!`-backtick injections, frontmatter field gaps, broken internal links.
+1. **`claude-plugin-checks` (deterministic, fast)** — every validator installed on the machine, plus structural checks nothing else runs: frontmatter that is not on line one and so is inert, a tool granted and denied at once, an execution line inside a fenced example, a component file the manifest declares and no validator opens.
 2. **`paper-test` (semantic, deeper)** — trace the instructions as Claude would execute them: does step 5 reference a file step 2 never wrote? Is the context budget realistic? Do trigger phrases actually cover the intended user phrasings? Can adversarial `$ARGUMENTS` derail the workflow?
 
 Invocation:
 
 ```
 # Step 1 — deterministic pass
-Use the plugin-creation-tools:skill-quality-reviewer agent on <skill/command/agent file>
+Run claude-plugin-checks against the plugin containing <skill/command/agent file>
 
 # Step 2 — semantic pass
 /paper-test <skill/command/agent file>

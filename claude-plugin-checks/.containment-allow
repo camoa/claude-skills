@@ -1,0 +1,7 @@
+# containment-scan allowlist (one extended regular expression per line;
+# blank lines and # comments ignored).
+#
+# Nothing is listed. Test fixtures that have to look like a leak are assembled
+# at run time instead, so the check can be run over this plugin with no
+# suppressions at all. Adding an entry here means the check stops looking at
+# something, so it should be rare and it should say why.

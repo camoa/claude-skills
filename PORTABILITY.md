@@ -49,7 +49,7 @@ Follow your tool's own docs for the most current destination path. The SKILL.md 
 |---|---|---|---|---|---|---|
 | **dev-guides-navigator** | 1 | 0 | 0 | yes | **High** | The whole plugin — it's a pure-skill plugin |
 | **code-paper-test** | 1 | 1 | 0 | yes | **Medium** | Paper-testing skill (mental execution methodology) — the `/test` command is the wrapper |
-| **plugin-creation-tools** | 3 | 3 | 2 | yes | **Medium** | Skill-quality / plugin-structure / skill-conventions guidance |
+| **claude-plugin-checks** | 1 | 0 | 0 | no | **High** | One skill over four bash scripts; nothing framework-specific to emulate |
 | **brand-content-design** | 4 | 19 | 1 | yes | **Low–Medium** | Brand-analyst + design-system generation skills; commands provide the user-facing surface |
 | **code-quality-tools** | 1 | 13 | 0 | yes | **Low** | One overarching audit skill; the value is in 13 audit commands (Tier 2) |
 | **drupal-htmx** | 1 | 5 | 3 | yes | **Low** | HTMX-pattern skill; migration commands are the workflow (Tier 2) |

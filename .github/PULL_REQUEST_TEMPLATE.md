@@ -11,7 +11,7 @@
       root `.claude-plugin/marketplace.json` entry — and `metadata.version` in
       `marketplace.json` was bumped per the patch/minor/major rule
 - [ ] `CHANGELOG.md` entry added for this change (if user-visible)
-- [ ] `/plugin-creation-tools:validate <plugin-path>` run for any plugin-structure change (commands/skills/agents/hooks/frontmatter) and passing
+- [ ] `bash claude-plugin-checks/scripts/run-checks.sh <plugin-path>` run for any plugin-structure change (commands/skills/agents/hooks/frontmatter) and passing
 - [ ] No secrets, credentials, or machine-specific absolute paths introduced
 
 ## Notes for the maintainer
