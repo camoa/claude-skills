@@ -91,6 +91,12 @@ ordinary way.
 a failed network are three different things, and only the first says anything about the framework.
 Record which one happened, in those words.
 
+**Judge the fit once, after the body is read and before the first order.** Does this method, by
+its `description`, Goal and Preconditions, describe the work the criteria and non-goals name? Keep
+the verdict, the path and one sentence of reason for `close`. On `false`, interactive: say so with
+the reason, then ask whether to continue with the recipe, without it (the fallback below), or
+stop. Autonomous: continue with the recipe and record `false`.
+
 This is what makes the work orders right, and no check below can replace it. Read it for what
 AIDA cannot know on its own:
 
@@ -344,8 +350,10 @@ expensive place.
 Once design is done, close it. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
-  close "<task_folder>"
+  close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"
 ```
+Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
+`close` refuses with neither, and a later close restates the verdict rather than carrying it over.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 Closing records what design closed on: a hash over the contract and every work order, the run mode,

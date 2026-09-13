@@ -43,6 +43,17 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$",
       "description": "sha256 over the canonical form of alignment.json and every design/*.json together, in work order id order, computed at closing by scripts/lib/records-hash.sh. Implementation calls the same function against the live files and refuses to start when the two disagree, rather than freezing whatever it finds. This is the field that makes closing load-bearing: a design closed, then edited, then started without closing again is refused instead of silently frozen as if the edit had been what design closed on."
+    },
+    "recipeFit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "fits", "reason"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "description": "The process recipe body design read and judged, so a note about it can be traced." },
+        "fits": { "type": "string", "enum": ["true", "false", "unsure"], "description": "Whether that method describes the work this task does, judged once by design's own model after reading the body." },
+        "reason": { "type": "string", "minLength": 1, "description": "One sentence saying why, always, because a verdict without a reason cannot be read later." }
+      },
+      "description": "Design's verdict on the process recipe it followed (ideal/tooling.md), written by `close` from the three --recipe-* flags, absent after --no-recipe, restated by every later close."
     }
   }
 }

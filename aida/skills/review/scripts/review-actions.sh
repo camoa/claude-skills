@@ -1082,6 +1082,21 @@ RW_FRAMEWORKS
   fi
   RW_BLOCK_NOTE="$(pc_trim "$RW_BLOCK_NOTE")"
 
+  # A recipe research or design judged not to fit is a catalog note, never a check (ideal/tooling.md).
+  local fit_file fit_stage fit_json
+  while IFS= read -r fit_file; do
+    [ -f "$fit_file" ] || continue
+    case "$fit_file" in */research/*) fit_stage="research" ;; *) fit_stage="design" ;; esac
+    if ! fit_json="$(jq -c '.recipeFit // empty | select(.fits == "false")' "$fit_file" 2>/dev/null)"; then
+      echo "CHECKS: $fit_file could not be read, so no recipe fit verdict was taken from it." >&2
+      continue
+    fi
+    [ -z "$fit_json" ] || rw_catalog_note "$fit_stage judged the recipe it followed does not fit this task: $(printf '%s' "$fit_json" | jq -r '.reason')" "$(printf '%s' "$fit_json" | jq -r '.path')"
+  done <<RW_FIT
+$(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
+$TASK_PATH/design-closed.json
+RW_FIT
+
   # --- the change set, read and never derived -----------------------------------------------------
   range="$(printf '%s' "$RW_FINISHED_DOC" | jq -r '.commitRange // ""')"
   case "$range" in
