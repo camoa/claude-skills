@@ -6,17 +6,29 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.3] - 2026-09-13
 
-Two gaps from the first pickup of a version 5 project with beta.2 installed.
+Eight gaps from the first pickup of a version 5 project with beta.2 installed.
 
 ### Added
 
 - `report`, when nothing owns the directory, names each version 5 folder under the projects base
   whose code path is this directory. The skill then offers the switch before a new project.
+- A version 5 pickup runs the framework detector on the code path and writes what it names.
+- `set-frameworks <name-or-path> <framework>...` writes the stack by hand when the detector
+  named none. The skill asks "What is the stack?" once after a pickup that still lacks it.
+- The skill offers `git init` once, interactively, when the check names it as the repair.
 
 ### Changed
 
 - `rebuild-registry` with no argument walks the recorded projects base, not only the built-in
   default, so a base chosen elsewhere is rebuilt.
+- On exit 1 the skill names each missing field, its producer, and any repair printed beside them.
+
+### Fixed
+
+- A version 5 pickup records the folder's parent as the projects base when none is recorded.
+- `report` exits 0 at case 4. Exit 1 collided with the check's "field missing" code.
+- `switch` no longer prints "belongs to another project" when the owner is the target itself.
+- A version 5 pickup writes `state: active` into the project file, matching its registry row.
 
 ## [6.0.0-beta.2] - 2026-09-13
 

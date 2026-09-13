@@ -2,7 +2,7 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -38,6 +38,7 @@ Run:
 
 Read the first line, `CASE: 1`, `CASE: 2`, or `CASE: 4`. This is ideal/project.md's "Picking up
 work", in the order it names, case 3 being case 1 winning when both would otherwise apply.
+The exit code is the check's at cases 1 and 2, and 0 at case 4.
 
 **`CASE: 1` or `CASE: 2`.** A `project:` line follows, naming the project, its state, its code
 path and its folder, then the check's own report. Show the report as described in "Reading the check's report" below. Stop here; this
@@ -176,8 +177,19 @@ report; read the project file only when a field is needed.
 
 `switch <path>` on a version 5 folder, one holding `project_state.md` and no `project.json`,
 registers it, writes a bare project file, and runs the check. Only the `**Path:**` and
-`**Code path:**` lines are read, and the folder name becomes the project name. The check reports
-every other field missing, and each field's own producer fills it in later, which is the design.
+`**Code path:**` lines are read, and the folder name becomes the project name. The folder's
+parent becomes the projects base when none is recorded yet. The project file gets `state` and,
+when the detector recognises the code path, `frameworks`. The check reports every other field
+missing, and each field's own producer fills it in later, which is the design.
+
+When the check still reports `frameworks` missing, interactive asks "What is the stack?" once and
+runs `set-frameworks` below with the answer. Autonomous **halts**, reporting that the frameworks
+are missing, the same rule as create's step 3.
+
+A version 5 folder is usually not a git repository, and the check names `git init` there as the
+repair. Interactive: offer it once, in one line, and on yes run `git -C "<folder>" init`. The
+script has no action that runs the check alone, so the next action that touches this project
+shows the repair gone. Autonomous: name the repair and continue.
 
 ## `list [active|complete|archived]...`
 
@@ -239,6 +251,16 @@ means the same refused location it means at creation. This action undoes the sam
 script restores the old code path in both places before it reports the
 refusal, so nothing is left pointing at a location that was never accepted. Show the whole
 output either way.
+
+## `set-frameworks <name-or-path> <framework>...`
+
+Sets the stack by hand, for a project whose code path the detector did not recognise. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  set-frameworks "<target>" <fw1> [<fw2> ...]
+```
+Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
+the list into the project file, commits the change, and runs the check. Show the whole output.
 
 ## `add-source <name-or-path> <kind> <folder>`
 
@@ -322,7 +344,7 @@ Read its exit code to decide what happens next, never its text alone:
 | Exit code | What it means | What this skill does |
 |---|---|---|
 | 0 | Everything checked passed. | Nothing further; the report already said so. |
-| 1 | A project-file field is missing or the wrong shape. | The report names each one and the step that produces it. Say nothing further; that field is filled in by its own producer, later, not by this skill. |
+| 1 | A project-file field is missing or the wrong shape. | Name each missing field and its producer as the report printed them. Also name any repair the report printed beside them, such as `git init` for a folder that is not a git repository. One exit code carries only the highest condition, so a lower one shows only in the text. |
 | 2 | The code path does not exist on disk. | Right after `create`, this is expected; say so and move on. Elsewhere, only the project's owner can say where the code went, and nothing here fixes it. Say that plainly and stop. |
 | 3 | The check itself could not run. | Show the error text and stop. |
 | 4 | The registry disagrees with the project file, has no row for it, or two rows share a name. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above; a shared name needs a person to rename one project. |

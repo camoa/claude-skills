@@ -81,6 +81,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh list [active|complete|archived]...
        project-actions.sh state <name-or-codePath> <active|complete|archived> -- <why...>
        project-actions.sh set-code-path <name-or-codePath> <newCodePath>
+       project-actions.sh set-frameworks <name-or-codePath> <framework>...
        project-actions.sh add-source <name-or-codePath> <kind> <folder>
        project-actions.sh unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
@@ -446,7 +447,9 @@ do_report() {
     [ -n "$row" ] || continue
     project_line "$row"
   done < <(registry_list_projects active)
-  return 1
+  # The answer is the CASE: line. Exit 0 here: 1 would collide with the check's own "field
+  # missing" code, which cases 1 and 2 pass through.
+  return 0
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -472,8 +475,21 @@ register_v5_folder() {
   name="$(basename -- "$folder")"
   code_path="$(canon_path "$code_path")"
   registry_add_project "$code_path" "$folder" "$name" || die3 "the registry row for $folder was not written; see the message above."
-  jq -n --arg c "$code_path" --arg n "$name" '{schemaVersion: 1, codePath: $c, name: $n}' \
+  # The folder's parent is the projects base when none is recorded yet, so a first version 6 run
+  # on a machine with version 5 projects finds the rest of them. The helper keeps an existing base.
+  settings_set_projects_base_if_unset "$(dirname -- "$folder")" \
+    || printf 'project-actions: the projects base could not be recorded; the next creation may ask for it.\n' >&2
+  # state is written here too: a project being picked up is active, the same fact the registry
+  # row just recorded, and the check compares the two.
+  jq -n --arg c "$code_path" --arg n "$name" '{schemaVersion: 1, codePath: $c, name: $n, state: "active"}' \
     > "$folder/project.json" || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
+  # frameworks has one producer, the detector. Exit 0 names at least one; any other exit leaves
+  # the field missing for set-frameworks to fill.
+  local detected
+  if detected="$("${PLUGIN_ROOT}/scripts/detect-framework.sh" "$code_path" 2>/dev/null)"; then
+    write_project_field "$folder" "could not write frameworks into $folder/project.json" \
+      --argjson f "$(printf '%s\n' "$detected" | sed 's/:.*$//' | jq -R . | jq -s .)" '.frameworks = $f'
+  fi
   echo "PICKED UP: ${folder}"
 }
 
@@ -493,8 +509,12 @@ do_switch() {
   # code path already answers for. Standing inside some other project's own code and switching
   # by hand is a fact about this conversation only. Persisting it would make the switch outlive
   # the session and later read as the "surprising failure" case 3 exists to prevent.
-  if registry_resolve_by_directory "$cwd" >/dev/null 2>&1; then
-    echo "NOTE: this directory already belongs to another project by its own code path. This switch applies to this conversation only and is not remembered."
+  # The owner being the target itself is every version 5 pickup run from the code folder: the code
+  # path already answers, so there is no note and no choice to record.
+  local owner
+  if owner="$(registry_resolve_by_directory "$cwd" 2>/dev/null)"; then
+    [ "$(printf '%s' "$owner" | jq -r '.path')" = "$project_path" ] \
+      || echo "NOTE: this directory already belongs to another project by its own code path. This switch applies to this conversation only and is not remembered."
   else
     registry_record_directory_choice "$cwd" "$(printf '%s' "$match" | jq -r '.name')"
   fi
@@ -660,6 +680,29 @@ do_set_code_path() {
   fi
 
   return "$check_rc"
+}
+
+# ------------------------------------------------------------------------------------------------
+# set-frameworks: the stack, given by a person when the detector named none
+# ------------------------------------------------------------------------------------------------
+
+do_set_frameworks() {
+  local target="${1:?set-frameworks: a name or a code path is required}"
+  shift
+  [ "$#" -ge 1 ] || die3 "set-frameworks: at least one framework is required"
+  local match project_path
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+
+  write_project_field "$project_path" "could not update frameworks in $project_path/project.json" \
+    --argjson f "$(printf '%s\n' "$@" | jq -R . | jq -s .)" '.frameworks = $f'
+
+  commit_project "$project_path" "Set frameworks to $*" "requested" "" "" "project" "frameworks" \
+    || printf 'project-actions: the frameworks were written but not committed.\n' >&2
+
+  echo "FRAMEWORKS: $*"
+  run_check "$project_path"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -977,6 +1020,7 @@ case "$action" in
   list) do_list "$@" ;;
   state) do_state "$@" ;;
   set-code-path) do_set_code_path "$@" ;;
+  set-frameworks) do_set_frameworks "$@" ;;
   add-source) do_add_source "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
