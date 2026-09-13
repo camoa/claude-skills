@@ -195,11 +195,17 @@ review_verdict_of() {
   jq -r '.verdict // "unfinished"' "$rj"
 }
 
-# True (exit 0) when the folder holds version 5's alignment.md and no alignment.json: a moved task
-# whose contract and research version 6 never reads back (skills/scope/SKILL.md), so its stage is
-# scope again and the report says so. $1 the task folder.
-has_legacy_records() {
-  [ -f "$1/alignment.md" ] && [ ! -f "$1/alignment.json" ]
+# The stages whose version 5 file the repair kept under a .v5 name and whose version 6 record is
+# absent, in stage order: a moved task's contract, research and architecture, which version 6
+# never reads back on its own. The first run of each stage reads the .v5 file as its input and
+# writes the record, so this is the list the next skill offers to run. Prints them space
+# separated, nothing when none is pending. $1 the task folder.
+legacy_stages() {
+  local d="$1" out=""
+  [ -f "$d/alignment.v5.md" ] && [ ! -f "$d/alignment.json" ] && out="scope"
+  { [ -f "$d/research.v5.md" ] || [ -d "$d/research.v5" ]; } && [ ! -f "$d/records/research-check.json" ] && out="$out research"
+  [ -f "$d/architecture.v5.md" ] && [ ! -f "$d/design-closed.json" ] && out="$out design"
+  printf '%s' "${out# }"
 }
 
 gather_new_tasks() {
@@ -233,13 +239,13 @@ gather_new_tasks() {
     notes="$(find "$d/notes" -maxdepth 1 -name '[0-9-]*.md' 2>/dev/null | sed 's|.*/||' | sort | tail -1)"
     notes="${notes%.md}"
     stage="$(task_stage "$d" "$review")"
-    legacy=""; ! has_legacy_records "$d" || legacy="true"
+    legacy="$(legacy_stages "$d")"
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
       --arg legacy "$legacy" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
         children:(.children // []), runMode:(.runMode // null), review:$review, notes:$notes,
         worktree:(.worktree.path // "none"), stage:$stage, path:$p}
-       | if $legacy == "true" then . + {legacyRecords:true} else . end' "$tj")"
+       | if $legacy != "" then . + {legacyStages:($legacy | split(" "))} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
     printf '%s\t%s\n' "$key" "$line"
   done < <(find "$tasks_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
@@ -353,7 +359,9 @@ do_open() {
     review="$(review_verdict_of "$project_path/tasks/$target")"
     echo "review: $review"
     echo "stage: $(task_stage "$project_path/tasks/$target" "$review")"
-    ! has_legacy_records "$project_path/tasks/$target" || echo "legacyRecords: true"
+    local stages
+    stages="$(legacy_stages "$project_path/tasks/$target")"
+    [ -z "$stages" ] || echo "legacyStages: $stages"
     return 0
   fi
 

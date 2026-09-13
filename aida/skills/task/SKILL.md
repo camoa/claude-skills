@@ -83,6 +83,12 @@ rather than moving something it cannot verify. It reads the goal, and the parent
 an old header carries them, back from the new location before it reports success. Show the whole
 output either way.
 
+Inside the new folder it renames `alignment.md`, `research.md`, `architecture.md` and `research/`
+to `alignment.v5.md`, `research.v5.md`, `architecture.v5.md` and `research.v5/`, each when
+present. It prints one `KEPT:` line per rename. Version 6 writes under those names, and the old
+files are the input the first run of each stage reads. It refuses, before moving anything, when
+a `.v5` name already exists in the old folder.
+
 Which old tasks still need this is `/aida:next`'s job: it lists them as `kind: legacy` and runs
 this action on the one it loads.
 

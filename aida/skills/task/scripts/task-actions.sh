@@ -319,6 +319,25 @@ read_old_parent_and_children() {
   jq -nc --argjson p "$parent_json" --argjson c "$children_json" '{parent:$p, children:$c}'
 }
 
+# Version 6 writes alignment.md, research.md, architecture.md and research/ itself, and the
+# version 5 files under those names are the input the first run of each stage reads. So the move
+# keeps each one present under a .v5 name. $1 the folder, $2 "check" or "rename": check returns 1
+# when a .v5 name is already taken, so nothing is renamed over; rename moves each present one and
+# prints a KEPT: line for it.
+keep_v5_files() {
+  local folder="$1" mode="$2" old new
+  for old in alignment.md research.md architecture.md research; do
+    case "$old" in *.md) new="${old%.md}.v5.md" ;; *) new="$old.v5" ;; esac
+    if [ "$mode" = check ]; then
+      [ ! -e "$folder/$new" ] || { echo "REFUSED: $folder/$new already exists. Nothing was moved." >&2; return 1; }
+      continue
+    fi
+    [ -e "$folder/$old" ] || continue
+    mv -- "$folder/$old" "$folder/$new" || die3 "repair: could not rename $folder/$old to $new. Look at $folder by hand"
+    echo "KEPT: $old as $new"
+  done
+}
+
 do_repair() {
   local project_path="" old_folder=""
   while [ "$#" -gt 0 ]; do
@@ -367,9 +386,11 @@ do_repair() {
   local new_task_dir
   new_task_dir="$(task_dir_for "$project_path" "$id")"
   [ ! -e "$new_task_dir" ] || die3 "repair: $new_task_dir already exists. This task looks already repaired"
+  keep_v5_files "$old_folder" check || return 1
 
   mkdir -p "$project_path/tasks" || die3 "repair: cannot create $project_path/tasks"
   mv -- "$old_folder" "$new_task_dir" || die3 "repair: could not move $old_folder to $new_task_dir"
+  keep_v5_files "$new_task_dir" rename
 
   # The move reads back what it claims to have preserved before it reports success
   # (ideal/task.md, "New": version 5's own migration lost a contract once and a ticket number
