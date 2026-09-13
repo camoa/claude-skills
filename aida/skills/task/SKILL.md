@@ -1,10 +1,10 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", or "run this task autonomously". It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, or sets a task's run mode.
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", or "save what we decided". It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, or saves a mid-stage decision as a note.
 disable-model-invocation: true
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive>]"
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id>]"
 arguments: [action, target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent
 ---
 
 # Task
@@ -146,3 +146,31 @@ asked. Run:
 ```
 `autonomous` writes the field. `interactive` removes it: there is no `"interactive"` value to
 write, since the field's absence already means that. Show the whole output.
+
+## `save <task-id>`
+
+A person stops mid-stage, and a decision this conversation made is in no record yet. This writes
+it down for the next window. Only a person invokes it; nothing dispatches it.
+
+Derive the current stage as the session-start hook does, the first whose close record is absent.
+That is scope without `alignment.json`, research without `records/research-check.json` at
+`exitCode` 0, design without `design-closed.json`. Read that stage's sidecar,
+`records/<stage>-distill.json`. When none exists, dispatch the `distiller` role with the task
+folder, the stage, and the stage's record paths, then read the sidecar it writes. A record path
+absent mid-stage is normal; the distiller names it as a gap.
+
+Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
+files hold. Each is one sentence: what was decided and what it applies to. Show the list and ask
+for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line.
+
+Yes: run once per sentence, or once with all of them:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  save --project "<projectPath>" "<task-id>" -- <text...>
+```
+It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` heading, commits,
+and prints `note:` with the path. Empty text is refused at exit 3. Show the `note:` line.
+
+A note is never a stage record: the stage action that later records the same decision makes it
+stale, and the record wins. The session-start hook names the newest note after `Stage:`, and
+`/next` lists its date, so the next window reads it before its first turn.

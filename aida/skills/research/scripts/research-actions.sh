@@ -22,6 +22,7 @@
 #                          --search <slug> --searched-for <text> --text <text> \
 #                          --source <text> [--criteria-served <id[,id...]>]
 #   research-actions.sh check  <task_folder>
+#   research-actions.sh distill <task_folder>
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, unmodified
@@ -65,6 +66,8 @@
 #      schemaVersion, goal, expectedResult, and criteria/nonGoals as arrays). Research reads the
 #      contract's criteria to know what it is answering for (ideal/research.md, 'The criteria are
 #      what stops research'), so it refuses to start without one rather than starting blind.
+#      Or `distill` found no records/research-distill.json, so the distiller has not been
+#      dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--search` that is not lowercase letters, digits and
 #      single hyphens; a `--criteria-served` entry that is not a valid criterion id shape; a
@@ -78,7 +81,8 @@
 #   4  `check` ran and found a research file that cannot be read as this format: not valid JSON,
 #      not an object, or a missing, malformed or unknown top-level field (check-research.sh's own
 #      exit 1, remapped here so it never collides with this script's own exit 1, "not a task
-#      folder").
+#      folder"). Or `distill` found a sidecar that fails scripts/distill-schema.json, or says
+#      standsAlone false with no gap.
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
 #      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
 #      criterion in the contract (check-research.sh's own exit 4).
@@ -121,6 +125,7 @@ command -v jq >/dev/null 2>&1 || { printf 'research-actions: jq is required and 
 die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'research-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'research-actions: %s\n' "$1" >&2; exit 3; }
+die4() { printf 'research-actions: %s\n' "$1" >&2; exit 4; }
 
 usage() {
   cat <<'EOF' >&2
@@ -130,6 +135,7 @@ usage: research-actions.sh read   <task_folder>
                                    --text <text> --source <text> \
                                    [--criteria-served <id[,id...]>]
        research-actions.sh check  <task_folder>
+       research-actions.sh distill <task_folder>
 EOF
 }
 
@@ -464,6 +470,13 @@ do_check() {
   exit "$verdict"
 }
 
+# Reads the sidecar the distiller wrote after `check` exited 0; the read is distill_read in task-helpers.sh.
+do_distill() {
+  [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
+  distill_read "$TASK_PATH" research
+  exit 0
+}
+
 # ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
@@ -493,5 +506,6 @@ case "$ACTION" in
   start)   do_start   "$@" ;;
   record)  do_record  "$@" ;;
   check)   do_check   "$@" ;;
+  distill) do_distill "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

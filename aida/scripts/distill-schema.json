@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA distill sidecar",
+  "description": "What the distiller found when it read one stage's close record fresh, at <task folder>/records/<stage>-distill.json (ideal/agents.md, 'distiller'). It lives under records/ because it is derived and the check runs again; the project's ignore list keeps that folder out of history. Two readers: the `distill` action of the scope, research and design scripts, through distill_read in scripts/lib/task-helpers.sh, and the task skill's `save`. A field present in a real sidecar but absent from `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "stage", "standsAlone", "decisions", "gaps"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other record carries. Bumped only when a later change to this schema says so."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["scope", "research", "design"],
+      "description": "The stage whose close record was read. It names the record: alignment.json for scope, research/*.json with records/research-check.json for research, design/*.json with design-closed.json for design."
+    },
+    "standsAlone": {
+      "type": "boolean",
+      "description": "Whether a fresh reader, given the record and nothing else, would choose the same way the stage did. False exactly when `gaps` is not empty; distill_read refuses a false beside an empty list."
+    },
+    "decisions": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {"type": "string", "minLength": 1},
+      "description": "The decisions the record holds, one sentence each, five at most. The handle a window carries in place of the conversation, never a summary of the whole record."
+    },
+    "gaps": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "description": "Each one sentence a person can act on, naming what is missing and where it belongs: an approach with no reason, a rejected alternative left unnamed, a constraint or a library the text assumes, a record path that does not exist. Empty when the record stands alone. A gap is advisory; acting on it is the stage's own action run again."
+    }
+  }
+}

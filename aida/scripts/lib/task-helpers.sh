@@ -4,10 +4,10 @@
 # scope-actions.sh, research-actions.sh and design-actions.sh each carried their own copy of these
 # four. One implementation, not three copies drifting apart, the same reason schema-check.sh exists.
 #
-# The caller defines die1 and die3 before it sources this file, each with its own script name in
-# the message, so a refusal still says which script refused, and PLUGIN_ROOT, so this library can
-# find the task script. Those are the only things this library takes from its caller rather than
-# owning.
+# The caller defines die1, die2, die3 and die4 before it sources this file, each with its own
+# script name in the message, so a refusal still says which script refused, and PLUGIN_ROOT, so
+# this library can find the task script. Those are the only things this library takes from its
+# caller rather than owning.
 #
 # Public functions:
 #
@@ -16,6 +16,7 @@
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   mark_task_in_progress <folder> <why>  moves the task to in_progress once, before a first write
+#   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
 
 # The task folder must already exist and already hold a task.json (ideal/scope.md, "Scope runs
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
@@ -78,4 +79,25 @@ mark_task_in_progress() {
       "$(basename -- "$task_folder")" -- "$why" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die3 "task start refused for $task_folder, so nothing was written. Repair the task first"; }
   echo "task-state: $state -> in_progress"
+}
+
+# Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
+# (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
+# blocks, so both values exit 0. schema-check.sh is sourced here because no stage script sources
+# it on its own. $1 the canonical task folder, $2 the stage.
+distill_read() {
+  local task_folder="$1" stage="$2" sidecar schema result faults
+  sidecar="$task_folder/records/$stage-distill.json"
+  schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
+  [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/schema-check.sh" || die3 "distill: the schema-check library failed to load"
+  result="$(schema_check_compare "$schema" "$sidecar")" || die4 "distill: $sidecar could not be read as JSON"
+  faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
+  [ -z "$faults" ] || die4 "distill: $sidecar does not match $schema: $faults"
+  if [ "$(jq -r '(.standsAlone == false) != ((.gaps | length) > 0)' "$sidecar")" = "true" ]; then
+    die4 "distill: $sidecar has standsAlone and gaps that disagree. False needs a gap, and a gap needs false"
+  fi
+  echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
+  jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }

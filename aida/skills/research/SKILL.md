@@ -283,7 +283,15 @@ zero it adds one `open:` line with the uncovered ids and the counts. The report 
 A task whose `research` folder does not exist yet is not an error: it is reported as research not
 started, with every criterion uncovered, the same as an empty `research` folder that does exist.
 
-Exit 0: nothing to do. Report research complete.
+Exit 0: nothing to do. Dispatch the `distiller` role once, with the task folder, the stage
+`research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
+of this conversation. It writes `records/research-distill.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
+```
+It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
+`gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written;
+dispatch again. Exit 4 means the sidecar is malformed; say so. Then report research complete.
 
 Exit 4: a research file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix that file with another `record` call, or by hand, and check again.

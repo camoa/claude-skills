@@ -95,6 +95,7 @@ if [ -n "$MATCH" ]; then
     TASK_PATH="$(printf '%s' "$OPEN_TASKS" | jq -r '.path')"
     TASK_REVIEW="$(printf '%s' "$OPEN_TASKS" | jq -r '.review')"
     TASK_RUN_MODE="$(printf '%s' "$OPEN_TASKS" | jq -r '.runMode // empty')"
+    TASK_NOTES="$(printf '%s' "$OPEN_TASKS" | jq -r '.notes // "none"')"
     if [ ! -f "$TASK_PATH/alignment.json" ]; then
       STAGE="scope"
     elif [ "$(jq -r '.exitCode // 1' "$TASK_PATH/records/research-check.json" 2>/dev/null)" != "0" ]; then
@@ -110,6 +111,9 @@ if [ -n "$MATCH" ]; then
     fi
     echo "Task in progress: ${TASK_ID}"
     echo "Stage: ${STAGE}"
+    # The newest saved note, read off the same task line. The window reads it before its first
+    # turn; a note older than the record it overlaps was overtaken by that record's producer.
+    [ "$TASK_NOTES" = "none" ] || echo "Notes: ${TASK_NOTES}, ${TASK_PATH}/notes/${TASK_NOTES}.md"
     [ "$TASK_RUN_MODE" != "autonomous" ] || echo "Run mode: autonomous"
     echo ""
   elif [ "$IN_PROGRESS" -gt 1 ]; then
