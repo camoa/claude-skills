@@ -213,5 +213,8 @@
         "brand-depth"
       ]
     }
-  ]
+  ],
+  "renames": {
+    "ai-dev-assistant": "aida"
+  }
 }
