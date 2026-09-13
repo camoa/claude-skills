@@ -319,8 +319,7 @@ do_create() {
       processRecipes: [],
       sources: [],
       playbookSubscriptions: {},
-      visualRegression: null,
-      e2e: null,
+      surfaces: null,
       taskRule: null
     }' > "$project_path/project.json" || die3 "could not write $project_path/project.json"
 

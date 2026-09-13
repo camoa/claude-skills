@@ -11,7 +11,7 @@ lacks a heading or a row, so a consumer never meets a partial block.
 | Heading | Recipe | Key | Ids, in this order |
 |---|---|---|---|
 | `## Check commands` | `checks.md` | `check_commands` | `coding-standards`, `static-analysis`, `security`, `duplication`, `design-metrics` |
-| `## Surface commands` | `checks.md` | `surface_commands` | `e2e`, `visual-regression`, `visual-regression-accept`, `visual-parity`, `visual-parity-accept` |
+| `## Surface commands` | `checks.md` | `surface_commands` | `e2e-preflight`, `e2e`, `visual-regression`, `visual-regression-accept`, `visual-parity`, `visual-parity-accept` |
 | `## Test commands` | `test-execution.md` | `test_commands` | `suite`, `file`, `test`, `changed`, `smoke`, `mutation` |
 
 A row carries `id`, then `argv` or `absent`, never both. An `absent` row carries no other key,

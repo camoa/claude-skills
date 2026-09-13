@@ -5,10 +5,10 @@ what the recipe declares. A person looks at every surface. Both halves are recor
 
 ## They run only when they are set up
 
-The project record carries `visualRegression` and `e2e`, each with an `enabled` flag. Review runs
-nothing that is off. `visualRegression.registryPath` is the only pointer at the registry, and **one
-registry serves all three kinds**, so read that field whichever kind is on. A project with end to end
-alone has no pointer, and that is recorded in `deferred-changes.md` rather than worked around here.
+The project record carries one field, `surfaces`, with `e2e.enabled` and `visualRegression.enabled`.
+Review runs nothing that is off. `surfaces.registryPath` is the only pointer at the surface file,
+and **one surface file serves all three kinds**, so read that field whichever kind is on. The
+`surfaces` skill writes the field and the file.
 
 The surface block comes from the `review` recipe the `checks` step already resolved. The script reads
 the path the record holds, so this step resolves no recipe and runs no lookup.

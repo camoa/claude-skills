@@ -51,6 +51,12 @@
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
+#   fenced_blocks_under <recipe> <heading> <tag>  the lines of every block with that tag, in order
+#   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
+#   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
+#   recipe_files_into <recipe> <heading> <dir>  one file per fenced block; prints <n><TAB><path>
+#   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a shell
+#   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
 #
 # What this library takes from its caller, and never defines itself:
 #
@@ -982,6 +988,89 @@ br_worst_verdict() {
 # files, and one copy is what keeps their refusals listing their sets in the same shape.
 md_basenames_in() {
   find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
+
+# ------------------------------------------------------------------------------------------------
+# Fenced blocks. The tool skill and the surfaces skill read a recipe's `## Install` and `## Files`
+# by the tag on the fence, never by position, so a configuration example sits safely beside the
+# commands. Both came from skills/tool/scripts/tool-actions.sh, which now calls them here.
+# ------------------------------------------------------------------------------------------------
+
+# The lines inside every block tagged $3 under the H2 $2 of the recipe $1, in order. The tag is
+# read with the surrounding space removed, because a trailing space is invisible in an editor.
+fenced_blocks_under() {
+  awk -v want="$2" -v tag="$3" '
+    function fence_tag(line,   t) { t = line; sub(/^`+/, "", t); gsub(/^[ \t]+|[ \t\r]+$/, "", t); return t }
+    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; next }
+    !inSection { next }
+    /^```/ { if (inFence) { inFence = 0; taken = 0; next }; inFence = 1; taken = (fence_tag($0) == tag); next }
+    inFence && taken { print }
+  ' "$1"
+}
+
+sh_blocks_under() { fenced_blocks_under "$1" "$2" "sh"; }
+
+# A recipe is data written elsewhere. Refuse a line that would mean more than it says. $1 the
+# script's own name, $2 the recipe, $3 the line. Returns 1 and names both on a refusal.
+refuse_if_unsafe() {
+  case "$3" in
+    *['`$;&|<>()'$'\n''\\']*|*'"'*|*"'"*)
+      printf '%s: refused a command carrying a shell character, from %s\n' "$1" "$2" >&2
+      printf '%s: the command was: %s\n' "$1" "$3" >&2
+      return 1 ;;
+  esac
+  return 0
+}
+
+# Writes every fenced block under the H2 $2 of the recipe $1 whose fence names a path as its second
+# word into $3/<n>, and prints one `<n><TAB><path>` line per block. A fence with no second word is
+# a code example, and it is skipped.
+recipe_files_into() {
+  awk -v want="$2" -v dir="$3" '
+    /^## / { inSection = ($0 == "## " want); inFence = 0; next }
+    !inSection { next }
+    /^```/ {
+      if (inFence) { inFence = 0; if (out != "") close(out); out = ""; next }
+      inFence = 1; out = ""
+      t = $0; sub(/^`+/, "", t); n = split(t, w, /[ \t]+/)
+      if (n >= 2 && w[2] != "") { count++; out = dir "/" count; printf "%d\t%s\n", count, w[2] }
+      next
+    }
+    inFence && out != "" { print > out }
+  ' "$1"
+}
+
+# Runs one recipe line as arguments and appends its output to $4. $1 the script's own name, $2 the
+# recipe, $3 the line, the rest extra arguments. Exits 3 on a refused line. zsh does not split an
+# unquoted expansion. The split happens in a subshell that sets SH_WORD_SPLIT for zsh, and the
+# option never leaks to the caller.
+run_recipe_line() {
+  local who="$1" recipe="$2" line="$3" outfile="$4"
+  shift 4
+  refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
+  printf '+ %s\n' "$line"
+  (
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      setopt SH_WORD_SPLIT 2>/dev/null
+    fi
+    set -f
+    # shellcheck disable=SC2086
+    set -- $line "$@"
+    set +f
+    [ "$#" -gt 0 ] || exit 0
+    exec "$@"
+  ) >>"$outfile" 2>&1
+}
+
+# The one summary printer for a recipe command's run. $1 the exit status, $2 the output file, $3
+# the line to quote on a failure, counted from one.
+recipe_output_summary() {
+  printf 'status: %s\n' "$1"
+  printf 'lines: %s\n' "$(wc -l <"$2" | tr -d '[:space:]')"
+  printf 'output: %s\n' "$2"
+  if [ "$1" -ne 0 ]; then
+    printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
+  fi
 }
 
 # ------------------------------------------------------------------------------------------------

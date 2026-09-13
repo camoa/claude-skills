@@ -1,0 +1,106 @@
+---
+name: surfaces
+description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "take the first baselines", "add a page to the visual review", or when review offered the setup and the person said yes. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
+disable-model-invocation: true
+argument-hint: "<read | show | install | register | baseline | decline> [<kind or id>]"
+arguments: [action, subject]
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh *), Agent
+---
+
+# Surfaces
+
+Set up the surfaces review runs: end to end and visual regression. The framework decides how, and
+that answer lives in a recipe outside this plugin. Setup runs at project level, with no task, the
+way the tool skill does. The review skill runs the surfaces; this skill only sets them up.
+
+Every call below runs `surfaces-actions.sh`, named in this skill's own grant, so it runs without
+asking. Read the exit code first, never the text alone. Exit 1 means no project owns this
+directory: say so, name the project skill, and stop.
+
+## Determine the run mode
+
+Read the active task's run mode. A task that states none is interactive, and so is a call with no
+task active. Pass `--run-mode autonomous` on every call only when the task states it. Decide this
+once, at the start. Exit 70 means a person's answer was passed with nobody present.
+
+## Read the state first
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh read
+```
+It prints the project, the `surfaces` field, and the surface file with its state. It prints one
+line per surface, and a version 5 `registry.yml` when one sits beside the file. That registry is
+left in place. Its ids and URLs are candidates for discovery, below.
+
+## Resolve the recipes
+
+Dispatch `catalog-identifier`, naming the role, once per point. The points are `e2e-setup` for
+the `e2e` kind, `visual-regression` for the `visual-regression` kind, and `review` when a baseline
+is taken. Each dispatch names every framework the project records. A point is a point of AIDA's
+process, never a keyword search. Pass the answer in its own word, one flag per framework. A path on
+disk is `--recipe <framework>=<path>`. A failed lookup is `--lookup-failed <framework>=<word>`,
+with `no-recipe`, `listing-unreachable` or `fetch-failed`. Only the first word says anything about
+the framework. Never retype a command out of a recipe. The script reads the blocks.
+
+## Show, then install
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh show <kind> <recipe flags>
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> install <kind> <recipe flags>
+```
+`show` prints the recipe, its commands, the files it writes, its viewports and its seed surfaces,
+and runs nothing. Interactive: run `show` first, print the commands and the files, and wait for a
+plain yes before `install`. Autonomous: halt here and say the install needs a person, because an
+install changes the project and nobody is there to approve it.
+
+`install` runs every command in order and writes each file only when absent. It writes the
+surface file when absent, and turns the kind on in the project record. It runs again safely.
+
+| Exit code | Meaning | What to do |
+|---|---|---|
+| 0 | Every step ran, or `not-applicable`: no framework has a recipe. | Nothing more for this kind. |
+| 3 | A refused command, a file present with different content, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
+| 4 | A step failed. | The `first:` line quotes its first line of output. Show it; do not install by hand. |
+| 72 | Two frameworks each carry a recipe. | Say which two, and stop. |
+
+`--viewport <name>=<w>x<h>` replaces the recipe's viewport list. It is a person's answer, so pass
+it only when a person gave it.
+
+## Discover the surfaces, then a person confirms
+
+After `install`, open the discovery step through the script and follow it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh step discover
+```
+A `Read` rule naming the plugin root does not reliably expand, which is why the step is read this
+way. Discovery ends with one `register` call per surface the person confirmed:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... --enable
+```
+Pass `--enable` only for a surface the person confirmed. Nothing is enabled unattended. Exit 62
+means `install` has not run. Exit 3 names an id already registered with different fields.
+
+## Take the first baselines
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> baseline [<id>]... --check-recipe <framework>=<path> [--value base-url=<address>]
+```
+Without `--confirmed` it prints the plan: the ids given, or every enabled visual regression
+surface, at every viewport. Show the plan and take the person's yes. Then run it again with
+`--confirmed`. It runs the review recipe's accept row over those ids only, and commits the
+baselines with the reason in the message. Never write a baseline unattended, and never by hand.
+
+Ask for the base URL once, interactive, and pass it as `--value base-url=<address>`. Nothing stores
+it. Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirty.
+
+## Decline
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline
+```
+Records that the person declined the setup. Review reads it and does not offer again. It is a
+person's answer, so it refuses unattended at 70.
+
+## What this skill never does
+
+It never edits a recipe, and it never runs a command a recipe supplied through a shell.
