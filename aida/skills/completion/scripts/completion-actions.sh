@@ -48,6 +48,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      comes back from task-actions.sh at 3 too, and its own line is relayed as printed.
 #  70  --reason or --leave was passed on a run with nobody present. The number tests-freeze and
 #      review already give a person's answer arriving on an autonomous run.
+#  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Depends on, shipped by other builders of this same project and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh   sourced, for resolve_task_folder,
@@ -100,6 +101,7 @@ die() { printf 'completion-actions: %s\n' "$2" >&2; exit "$1"; }
 # task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
 die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
+die79() { die 79 "$1"; }
 
 for lib_name in "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do
   [ -f "$lib_name" ] || die 3 "cannot find the library at $lib_name"
@@ -395,7 +397,7 @@ CP_WANTED
 # printed; its path is. $1 the record this close is about to write.
 cp_render_body() {
   jq -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
-    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" '
+    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
     ["# " + $task, ""]
@@ -409,7 +411,10 @@ cp_render_body() {
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)
     + section("Commit range";
         (if $finished == null then ["no build record; no range"] else [$finished.commitRange // ""] end)
-        + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end))
+        + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
+        + (if ($taskDoc.worktree // null) == null then [] else
+            ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there.",
+             "After the merge: git worktree remove " + $taskDoc.worktree.path + " and git branch -d " + $taskDoc.worktree.branch] end))
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]

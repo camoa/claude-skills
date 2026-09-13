@@ -96,6 +96,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   4  a script this action calls ran and failed. `render` calls alignment-render.sh; that
 #      script's own stderr is the answer, printed here rather than duplicated. For `distill`, the
 #      sidecar exists but fails scripts/distill-schema.json, or says standsAlone false with no gap.
+#   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule task-actions.sh and check-alignment.sh
@@ -142,6 +143,7 @@ die1() { printf 'scope-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'scope-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'scope-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'scope-actions: %s\n' "$1" >&2; exit 4; }
+die79() { printf 'scope-actions: %s\n' "$1" >&2; exit 79; }
 
 usage() {
   cat <<'EOF' >&2

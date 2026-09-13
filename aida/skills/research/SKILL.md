@@ -55,7 +55,9 @@ Run:
 ```
 This prints summary lines. `contract:` says present or absent and `contract-file:` names the
 file. `criteria:` lists the ids, and `criteria-by-designer:` lists the ids no person ever
-approved. One `search:` line names each research file already on disk with its finding count.
+approved. `worktree:` names the task's own git worktree, where the code is read and the spike
+runs. `none` means the code path, as for a task made before every task had one. One `search:`
+line names each research file already on disk with its finding count.
 Read the criteria's text from the contract file.
 
 `contract: absent`: say so in one line and name the scope skill. Stop.
@@ -117,7 +119,8 @@ Typical search subjects, named by what they read, not by a fixed roster:
   most useful things research produces.
 - **A spike.** For a design question no document answers, for example whether one approach
   handles a case, and only when the searches above came back empty. A spike answers one question
-  and is never kept. It is not dispatched: this conversation writes and runs it. Read
+  and is never kept. It is not dispatched: this conversation writes and runs it. It runs in the
+  task's worktree, the `worktree:` line above, and `<codePath>` below means that tree. Read
   `<codePath>/.gitignore` first: when no line names `.aida-spike/`, say so and stop, and write
   nothing. Otherwise write a small runnable experiment under `<codePath>/.aida-spike/` and run
   it. Record the answer as a finding: `--source` is that folder path, and `--text` holds what
@@ -148,7 +151,8 @@ what makes "prior art in this project" a claim about this project rather than ab
 
 For each search decided above, dispatch its role with a narrow brief: the words to search, the
 bound, and the shape of what to return, findings with a source and nothing else. The
-`internal-searcher` brief also names the code path and the project folder. The agent never
+`internal-searcher` brief also names the code path, which is the task's worktree from the
+`worktree:` line, and the project folder. The agent never
 sees this conversation and this conversation never sees what the agent read, only what it reports
 back. That isolation is what keeps the cost bounded.
 

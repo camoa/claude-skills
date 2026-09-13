@@ -96,6 +96,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      throwaway experiment research writes to answer one question (skills/research/SKILL.md,
 #      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
 #      report is still written. A coverage gap outranks this: a spike open mid-research is fine.
+#   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # `read` also reports <task_folder>/inputs/, the material captured before the task existed. Its
 # three states stay apart: absent (no folder), empty (a folder holding nothing but its own
@@ -132,6 +133,7 @@ die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'research-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'research-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'research-actions: %s\n' "$1" >&2; exit 4; }
+die79() { printf 'research-actions: %s\n' "$1" >&2; exit 79; }
 
 usage() {
   cat <<'EOF' >&2
@@ -233,6 +235,7 @@ do_read() {
   echo "criteria: $(printf '%s' "$criteria_json" | jq -r '[.[].id] | join(" ")')"
   echo "criteria-by-designer: $(printf '%s' "$criteria_json" | jq -r '[.[] | select(.author == "designer") | .id] | join(" ")')"
   echo "decided-without-a-person: $decided"
+  echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
 
   research_state="not started"
   file_count=0
@@ -450,11 +453,13 @@ do_check() {
     *) die3 "check: check-research.sh exited with an unexpected code $rc" ;;
   esac
   # Clean coverage is the close, and a spike still on disk refuses it. No project or no codePath
-  # means no place a spike could be, so there is nothing to refuse.
+  # means no place a spike could be, so there is nothing to refuse. The place is the task's own
+  # worktree when task.json records one, and the code path when it does not.
   local spike_dir="" project_folder
   if [ "$verdict" -eq 0 ] && project_folder="$(resolve_project_folder "$TASK_PATH")" \
       && [ "$(project_code_path_state "$project_folder")" = "ok" ]; then
-    spike_dir="$(project_code_path_value "$project_folder")"
+    spike_dir="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+    [ -n "$spike_dir" ] || spike_dir="$(project_code_path_value "$project_folder")"
     spike_dir="${spike_dir:+$spike_dir/.aida-spike}"
     [ -n "$spike_dir" ] && [ -d "$spike_dir" ] && verdict=6
   fi

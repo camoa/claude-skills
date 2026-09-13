@@ -4,7 +4,7 @@ description: This skill should be used when the user wants to "create a task", "
 disable-model-invocation: true
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id>]"
 arguments: [action, target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
 
 # Task
@@ -52,9 +52,19 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   create --project "<projectPath>" --name "<name>" -- <goal...>
 ```
-It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`,
-then commits. Show the whole output. Exit code 3 means the name collided with an existing task or
-failed validation the script also enforces; say what it printed and ask for a different name.
+It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
+It then makes the task's own git worktree at `<codePath>/.claude/worktrees/<name>` on the branch
+`feature/<name>`, records both in `task.json`, and commits. Show the whole output. Exit code 3
+means one of three things: the name collided with an existing task, it failed the validation
+the script also enforces, or the worktree could not be made. In the last case the folder is
+removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
+repair the message gives and stop.
+
+**4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
+from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
+so scoping in this same window is not refused. From a window outside the code repository the
+tool refuses on first entry. Then print the path and `claude --worktree <name>`, which opens the
+same tree from the code path, and stop.
 
 ## `repair <old-task-folder>`
 
@@ -130,7 +140,8 @@ always lives in the same project as its parent, never another one. Run:
 ```
 Repeat `--child ... --goal ... [--criterion ...]` once per child, at least twice. It creates each
 child's folder and `task.json` with `parent` set to the split task's own id, writes each child's
-goal and any handed-down criteria into its `task.md`, adds every new id to the parent's own
+goal and any handed-down criteria into its `task.md`, makes each child's own worktree the way
+`create` does, adds every new id to the parent's own
 `children` list, reads all of that back, and commits everything together. Exit code 1 means it
 stopped before writing anything: `NOT FOUND` says the named task does not exist, `REFUSED` says
 the two-level limit stopped it. Say which and stop. Show the whole output otherwise.
