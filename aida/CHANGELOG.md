@@ -4,6 +4,28 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.7] - 2026-09-13
+
+Rows 25 to 30 of the live run: a task picked up from version 5 with scope and research done.
+The old work is carried forward now, and nothing overwrites it.
+
+### Fixed
+- Row 25: `render` overwrote the version 5 `alignment.md`, which lives under the name version 6
+  renders to. `repair` now keeps `alignment.md`, `research.md`, `architecture.md` and `research/`
+  under `.v5` names, prints one `KEPT:` line each, and refuses when a `.v5` name exists.
+- Row 30: `next` prints `legacyStages`, the stages version 5 finished that version 6 holds no
+  record of, and offers to run the first one. A yes invokes that stage; autonomous invokes it
+  without asking. The producer runs again; there is no converter.
+- Row 26: scope reads `alignment.v5.md` as the person's earlier words on a first run, keeps the
+  criteria in order so the ids line up, shows what changed, and asks the usual approval.
+  Research does the same with `research.v5.md` and `research.v5/`, recording a finding that
+  still holds under `--search version-5-<file>` and searching only for what they do not cover.
+- Row 27: `processRecipes` is gone; nothing wrote it and nothing read it. After a pickup, the
+  project skill offers to rewrite a version 5 task rule in the code repository's `CLAUDE.md`, and
+  `task-rule`, `task-rule-remove` and `uninstall` match version 5's markers.
+- Row 28: scope names `surfaces.e2e.enabled`, the field that exists, not `e2e.enabled`.
+- Row 29: not a defect; the record and the rendered page hold one verify line per criterion.
+
 ## [6.0.0-beta.6] - 2026-09-13
 
 Playbooks: the rules a person wants followed, put in front of every role that writes or judges

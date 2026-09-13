@@ -49,14 +49,6 @@
       "default": "active",
       "description": "The project's lifecycle state. Active is normal: it appears in the list and is offered as work. Complete means the work is done: it still resolves and is still readable, but stops being offered. Archived means parked: it still resolves, but is left out of the list unless asked for. This is the field version 5 never had, writing 'active' once at creation and never touching it again; every transition here is reversible, and reopening is another write. This project file is authoritative for this value; the registry carries a copy, and the reason for a change lives in the commit, never in this field."
     },
-    "processRecipes": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/processRecipe"
-      },
-      "description": "Where this project's recipes come from, one entry per framework. Not one entry per recipe: the entry remembers a decision about a source, and which recipe answers is worked out when it is needed. Written the first time a framework needs a recipe. Declaring is cheap and happens once; fetching a body is lazy and happens when something actually runs. Starts empty; not produced at creation."
-    },
     "sources": {
       "type": "array",
       "default": [],
@@ -110,26 +102,6 @@
     }
   },
   "$defs": {
-    "processRecipe": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "framework",
-        "source"
-      ],
-      "properties": {
-        "framework": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Which framework this answers for, matching an entry in `frameworks`, e.g. \"drupal\"."
-        },
-        "source": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Which entry in `sources` (by its `location`) this framework's recipes come from. The record names the source instead of carrying a verified flag: a body from a source a person configured is used, and a body from an open search, the only source kind nobody configured, is shown to a person before it is used. That read-time rule lives in one place and is not frozen into this record. A recipe present in a higher-precedence source still wins, so an override needs no entry of its own."
-        }
-      }
-    },
     "source": {
       "type": "object",
       "additionalProperties": false,
