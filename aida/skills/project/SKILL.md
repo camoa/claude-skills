@@ -55,7 +55,9 @@ then carries `DECLINED: true` or `DECLINED: false`, then zero or more `V5:` line
 (empty when none are registered yet).
 
 A `V5:` line names a version 5 folder under the projects base whose code path is this directory.
-When one or more are present, offer the switch first, in one line: "This directory is the code
+When no base is recorded yet, the scan looks under the base that version 5 recorded in
+`~/.claude/ai-dev-assistant/active_projects.json`, so a first run finds them. When one or more
+are present, offer the switch first, in one line: "This directory is the code
 path of the version 5 project <folder>. Pick it up? (runs switch)". Yes runs "switch" below with
 that folder. No falls through to the create offer below. Autonomously, do not ask: say the folder
 exists and that `switch <folder>` picks it up, and continue.
@@ -180,7 +182,9 @@ registers it, writes a bare project file, and runs the check. Only the `**Path:*
 `**Code path:**` lines are read, and the folder name becomes the project name. The folder's
 parent becomes the projects base when none is recorded yet. The project file gets `state` and,
 when the detector recognises the code path, `frameworks`. The check reports every other field
-missing, and each field's own producer fills it in later, which is the design.
+missing, and each field's own producer fills it in later, which is the design. Each `LEGACY:`
+line after `PICKED UP:` names a task still in version 5's own folder, untouched by the pickup.
+Name them. Then name `/aida:next` as the step that moves the one the person picks.
 
 The pickup writes two files into the folder: `project.json`, and the check's own record at
 `records/check-project.json`. To undo a pickup, run `unregister` below and remove those two

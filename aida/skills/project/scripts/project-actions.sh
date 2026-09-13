@@ -144,6 +144,18 @@ settings_get_projects_base() {
   printf '%s' "$v"
 }
 
+# Version 5 recorded its base in its own file. A fresh version 6 install has no base recorded, so
+# the report's scan for version 5 folders would look under the default and miss them; this reader
+# finds them where version 5 left them. It writes nothing: create and a completed pickup record
+# the version 6 base. Prints nothing and exits 1 when the file or the folder it names is absent.
+v5_projects_base() {
+  local f="$HOME/.claude/ai-dev-assistant/active_projects.json" v
+  [ -r "$f" ] || return 1
+  v="$(jq -r '.projectsBase // empty' "$f" 2>/dev/null)"
+  [ -n "$v" ] && [ -d "$v" ] || return 1
+  printf '%s' "$v"
+}
+
 # Writes the base only when none is recorded yet, so the first project ever created decides the
 # default and every later one reuses it silently, never asked again.
 settings_set_projects_base_if_unset() {
@@ -434,8 +446,9 @@ do_report() {
   fi
   # A version 5 folder under the base whose code path is this directory, so the skill offers the
   # switch before a new project. Reads only the `**Code path:**` line; registers nothing.
+  # No version 6 base recorded: version 5's own base is scanned, so a first run finds them.
   local base v5 v5_code
-  base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
+  base="$(settings_get_projects_base 2>/dev/null)" || base="$(v5_projects_base)" || base="$PROJECTS_HOME_DEFAULT"
   while IFS= read -r v5; do
     [ -n "$v5" ] && [ -f "$v5/project_state.md" ] && [ ! -e "$v5/project.json" ] || continue
     v5_code="$(sed -n 's/^\*\*Code path:\*\* *//p' "$v5/project_state.md" | head -n 1)"
@@ -490,6 +503,12 @@ register_v5_folder() {
   write_project_file "$folder" "$code_path" "$name" "$fw_json" \
     || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
   echo "PICKED UP: ${folder}"
+  # The tasks the folder already holds, in version 5's own place, one line each, so the skill
+  # can name them and the step that moves one. Folder names only; nothing inside them is read.
+  local legacy
+  while IFS= read -r legacy; do
+    [ -n "$legacy" ] && echo "LEGACY: $(basename -- "$legacy")"
+  done < <(find "$folder/implementation_process/in_progress" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 }
 
 do_switch() {
@@ -1023,7 +1042,9 @@ do_rebuild_registry() {
 }
 
 do_read_projects_base() {
-  settings_get_projects_base
+  local base
+  base="$(settings_get_projects_base)" || return 1
+  printf '%s\n' "$base"
 }
 
 # ------------------------------------------------------------------------------------------------

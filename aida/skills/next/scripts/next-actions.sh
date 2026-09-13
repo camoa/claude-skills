@@ -17,6 +17,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Depends on, shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh   (sourced, never executed)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh (sourced, for task_stage only)
 #
 # Usage:
 #   next-actions.sh [--run-mode <interactive|autonomous>] report
@@ -39,7 +40,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # open looks a target up first as a folder name under <project>/tasks, then as a top-level folder
 # under either legacy folder, then one level deeper inside a legacy epic folder (version 5 nests a
 # split task's children one level inside its own folder, ideal/task.md "Kept from version 5
-# without change": the two-level nesting limit). Never fuzzy, never by ancestry.
+# without change": the two-level nesting limit). A legacy folder counts only when it holds
+# task.md, the same rule legacy-tasks.sh lists by, so a stage sub-folder (research, review, ...)
+# is never found as a task. Never fuzzy, never by ancestry.
 #
 # Exit codes for `report`:
 #   0  a project was found and it has at least one open task; the listing is on stdout.
@@ -99,6 +102,12 @@ command -v jq >/dev/null 2>&1 || die3 "jq is required and was not found on PATH"
 
 # shellcheck source=/dev/null
 source "$REGISTRY_LIB"
+# task_stage is the one copy of the stage rule; the session-start hook reads the stage off this
+# script's lines. The library's other functions take die1, die2 and die4 from the caller and are
+# not called here, and task_stage calls none of them.
+TASK_HELPERS="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS" || die3 "the library failed to load: $TASK_HELPERS"
 
 # A folder placed here without a valid task.json is worth naming, but the report as a whole must
 # still succeed: this is the count-before-it-halts pattern registry_rebuild already uses for a
@@ -186,9 +195,16 @@ review_verdict_of() {
   jq -r '.verdict // "unfinished"' "$rj"
 }
 
+# True (exit 0) when the folder holds version 5's alignment.md and no alignment.json: a moved task
+# whose contract and research version 6 never reads back (skills/scope/SKILL.md), so its stage is
+# scope again and the report says so. $1 the task folder.
+has_legacy_records() {
+  [ -f "$1/alignment.md" ] && [ ! -f "$1/alignment.json" ]
+}
+
 gather_new_tasks() {
   local project_path="$1"
-  local tasks_dir="$project_path/tasks" d tj state key line review notes
+  local tasks_dir="$project_path/tasks" d tj state key line review notes stage legacy
   [ -d "$tasks_dir" ] || return 0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
@@ -216,10 +232,14 @@ gather_new_tasks() {
     # never the prose (ideal/task.md, "A save before the window closes").
     notes="$(find "$d/notes" -maxdepth 1 -name '[0-9-]*.md' 2>/dev/null | sed 's|.*/||' | sort | tail -1)"
     notes="${notes%.md}"
-    line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" \
+    stage="$(task_stage "$d" "$review")"
+    legacy=""; ! has_legacy_records "$d" || legacy="true"
+    line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
+      --arg legacy "$legacy" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
         children:(.children // []), runMode:(.runMode // null), review:$review, notes:$notes,
-        worktree:(.worktree.path // "none"), path:$p}' "$tj")"
+        worktree:(.worktree.path // "none"), stage:$stage, path:$p}
+       | if $legacy == "true" then . + {legacyRecords:true} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
     printf '%s\t%s\n' "$key" "$line"
   done < <(find "$tasks_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
@@ -329,21 +349,25 @@ do_open() {
       "children: " + ((.children // []) | join(" ")),
       "runMode: " + (.runMode // "interactive"),
       "worktree: " + (.worktree.path // "none")' "$tj"
-    echo "review: $(review_verdict_of "$project_path/tasks/$target")"
+    local review
+    review="$(review_verdict_of "$project_path/tasks/$target")"
+    echo "review: $review"
+    echo "stage: $(task_stage "$project_path/tasks/$target" "$review")"
+    ! has_legacy_records "$project_path/tasks/$target" || echo "legacyRecords: true"
     return 0
   fi
 
   local legacy_ip="$project_path/implementation_process/in_progress/$target"
   local legacy_done="$project_path/implementation_process/completed/$target"
 
-  if [ -d "$legacy_ip" ]; then
+  if [ -f "$legacy_ip/task.md" ]; then
     echo "FOUND: legacy_in_progress"
     echo "PROJECT: ${project_path}"
     echo "PATH: ${legacy_ip}"
     echo "NOTE: this task predates the tasks folder and has not moved. Its files are still at the path above."
     return 0
   fi
-  if [ -d "$legacy_done" ]; then
+  if [ -f "$legacy_done/task.md" ]; then
     echo "FOUND: legacy_complete"
     echo "PROJECT: ${project_path}"
     echo "PATH: ${legacy_done}"
@@ -355,8 +379,9 @@ do_open() {
   local base found_path found_state
   for base in "$project_path/implementation_process/in_progress" "$project_path/implementation_process/completed"; do
     [ -d "$base" ] || continue
-    found_path="$(find "$base" -mindepth 2 -maxdepth 2 -type d -name "$target" 2>/dev/null | head -n 1)"
+    found_path="$(find "$base" -mindepth 3 -maxdepth 3 -type f -path "*/$target/task.md" 2>/dev/null | head -n 1)"
     if [ -n "$found_path" ]; then
+      found_path="$(dirname -- "$found_path")"
       found_state="in_progress"
       [ "$base" = "$project_path/implementation_process/completed" ] && found_state="complete"
       echo "FOUND: legacy_${found_state}"

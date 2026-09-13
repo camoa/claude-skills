@@ -324,6 +324,38 @@ again.
 Research is done when this check reaches exit 0, or when every remaining gap has been looked at
 and deliberately left, with the reason recorded in the finding's own text.
 
+## Offer a split
+
+Research asks the split question once, here, because closed research is the first real evidence
+of how many pieces the task holds. The recommendation is the value and a person decides; nothing
+in this section splits on its own.
+
+After `distill` reports, dispatch the `split-advisor` role once, with the task folder and nothing
+else. It writes `records/research-split.json`. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh split-read "<task_folder>"
+```
+It prints `recommendation:`, `children:`, one `child:` line per child with its criterion count,
+and `reason:` with the first sentence. Show those lines.
+
+Exit 2: the advisor wrote no sidecar. Dispatch once more. Run `split-read` again. Still exit 2:
+say the advisor wrote no sidecar. Go on flat. Exit 4: say the sidecar is malformed, with the
+script's stderr line. Go on flat.
+
+`recommendation: flat`: say so in one line. Go on.
+
+`recommendation: split`, interactive: read the sidecar's `children`. Show each child's id,
+goal and criterion ids. Ask one question: split as recommended, change it, or keep it flat. On
+yes, invoke the task skill through the Skill tool, once, with `split` and the parent's task id.
+Pass the children, goals and criteria exactly as recommended. That action takes each criterion's
+text, not its id; read the texts from the contract file named on the `contract-file:` line. Then
+name `/aida:scope <child-id>` for each child. Stop. On a
+change, take the person's children, goals and criteria. Run the same. On no, record nothing
+more. Go on.
+
+`recommendation: split`, autonomous: say in one line that the advisor recommended a split and
+recorded it at the sidecar path. Go on flat. A person decides at the next window.
+
 Interactive: stop here. Name the next command for the person, `/aida:design <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:design` through the Skill tool, once, with the task
 id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
@@ -331,10 +363,11 @@ stage cannot run out of order. That is why this chain is safe.
 
 ## Research never blocks
 
-Research decides nothing, so there is nothing for a person to approve. It never asks permission
-to look something up, and every finding carries its source, so a wrong finding is checkable
-afterward by anyone. Autonomous mode runs every step above the same way, taking the noted branch
-at a missing recipe or an unaccepted source instead of stopping to ask.
+Research decides nothing about the problem, so there is nothing for a person to approve. It never
+asks permission to look something up, and every finding carries its source, so a wrong finding is
+checkable afterward by anyone. The one question it asks is the split, and only after its own work
+is done. Autonomous mode runs every step above the same way, taking the noted branch at a missing
+recipe or an unaccepted source instead of stopping to ask.
 
 ## What this skill never does
 

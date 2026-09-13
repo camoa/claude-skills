@@ -4,6 +4,42 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.5] - 2026-09-13
+
+Rows of the first live run from the first task on a picked-up project.
+
+### Fixed
+- Row 14: the `V5:` offer never fired on a fresh install, because no version 6 base was recorded
+  yet. With none recorded, the report now scans the base that version 5 recorded in
+  `~/.claude/ai-dev-assistant/active_projects.json`. Nothing is written.
+- Row 15: `read-projects-base` ends its line with a newline.
+- Row 21: after a version 5 pickup, `switch` prints one `LEGACY:` line per task still under
+  `implementation_process/in_progress/`, and the skill names `/aida:next` as the step that moves
+  the one the person picks.
+- Row 16: a legacy task never reaches "Enter the tree"; the move comes first.
+- Row 17: `LEGACY_COMPLETE:` listed every stage sub-folder of a completed version 5 task as a
+  task. A folder is a task only when it holds `task.md`, one level down as a child of its epic.
+  `open <name>` follows the same rule and never finds a stage sub-folder by name.
+- Row 18: the report's `CASE:` and `RUN_MODE:` lines are named in the skill.
+- Row 20: every open task line carries `stage`, the first stage whose close record is absent.
+  The rule lives once, in `task_stage` in `scripts/lib/task-helpers.sh`; the session-start hook
+  reads the field instead of deriving it, and `task save` points at the same field.
+- Row 22: a task holding a version 5 `alignment.md` and no `alignment.json` reads
+  `legacyRecords: true`, and the skill says the old contract and research are there to read while
+  the stage writes its own record.
+- Row 23: `task` is model-invocable. The flag made the person type `/aida:task create` after
+  saying yes to `next`'s offer, and refused `repair`. The guards stay as prose: `create` runs only
+  on the person's ask or yes, and `set-run-mode` only when a person explicitly asks.
+- Row 24: the split recommendation after research, never built. A `split-advisor` agent reads the
+  contract and the findings once after research closes and writes one recommendation, flat or
+  split with the children and the criteria each takes. `split-read` checks every criterion is
+  claimed once. Research shows it and asks; a yes runs the task skill's `split` as recommended.
+  Autonomous records it and stays flat. The advisor, and a person, decide; no count gates it.
+- Row 19: `next` said that moving a version 5 task into `tasks/` "is not built yet". The live run
+  concluded it had to delete and recreate the task. `next` now runs the task skill's `repair`
+  itself on the legacy task it loads, so a person never types it. `task` no longer calls `next`
+  unbuilt.
+
 ## [6.0.0-beta.4] - 2026-09-13
 
 Rows 5 to 13 of the first live run, all from picking up a version 5 project. The pickup now ends

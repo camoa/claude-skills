@@ -19,6 +19,7 @@
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
+#   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
 #
 # task_worktree also takes resolve_project_folder, project_code_path_value and is_git_repo from
 # scripts/lib/recipes.sh, and the refusal in resolve_task_folder takes die79 from the caller.
@@ -114,6 +115,29 @@ distill_read() {
   fi
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
+}
+
+# The stage a task stands at, one of scope, research, design, implementation, review, completion.
+# Derived from the records in the task folder every time, never stored: each stage writes one
+# record when it closes, and the stage is the first whose record is absent. This is the one copy
+# of that rule; the session-start hook and the next skill's report both print what it says.
+# $1 the task folder, $2 the review word next-actions.sh derives from review/review.json (passed,
+# failed, unfinished or none). Calls no die function.
+task_stage() {
+  local task_folder="$1" review="$2"
+  if [ ! -f "$task_folder/alignment.json" ]; then
+    echo "scope"
+  elif [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
+    echo "research"
+  elif [ ! -f "$task_folder/design-closed.json" ]; then
+    echo "design"
+  elif [ ! -f "$task_folder/implementation/finished.json" ]; then
+    echo "implementation"
+  elif [ "$review" != "passed" ] && [ "$review" != "failed" ]; then
+    echo "review"
+  else
+    echo "completion"
+  fi
 }
 
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"). Prints the path

@@ -85,33 +85,21 @@ if [ -n "$MATCH" ]; then
   echo ""
 
   # The task in progress, and where it stands. The stage is derived from the records in the task
-  # folder every time, never stored. Each stage writes one record when it closes, and the stage
-  # is the first whose record is absent. Task discovery and the review verdict come from the next
-  # skill's own script, read off its OPEN: lines. So there is no second walk of the tasks folder.
-  # Version 5 kept this in a per-prompt hook and a session file. Version 6 keeps one copy of the
-  # state, in the records, so this block reads and never writes.
+  # folder every time, never stored: task_stage in scripts/lib/task-helpers.sh is the one copy of
+  # that rule, and the next skill's script prints its answer as the stage field of each OPEN:
+  # line. Task discovery, the review verdict and the stage are all read off that line. So there
+  # is no second walk of the tasks folder. Version 5 kept this in a per-prompt hook and a session
+  # file. Version 6 keeps one copy of the state, in the records, so this block reads and never
+  # writes.
   OPEN_TASKS="$("$NEXT_SCRIPT" report 2>/dev/null | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' \
     | grep '^{' | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
   IN_PROGRESS="$(printf '%s\n' "$OPEN_TASKS" | grep -c '^{')"
   if [ "$IN_PROGRESS" -eq 1 ]; then
     TASK_ID="$(printf '%s' "$OPEN_TASKS" | jq -r '.id')"
     TASK_PATH="$(printf '%s' "$OPEN_TASKS" | jq -r '.path')"
-    TASK_REVIEW="$(printf '%s' "$OPEN_TASKS" | jq -r '.review')"
     TASK_RUN_MODE="$(printf '%s' "$OPEN_TASKS" | jq -r '.runMode // empty')"
     TASK_NOTES="$(printf '%s' "$OPEN_TASKS" | jq -r '.notes // "none"')"
-    if [ ! -f "$TASK_PATH/alignment.json" ]; then
-      STAGE="scope"
-    elif [ "$(jq -r '.exitCode // 1' "$TASK_PATH/records/research-check.json" 2>/dev/null)" != "0" ]; then
-      STAGE="research"
-    elif [ ! -f "$TASK_PATH/design-closed.json" ]; then
-      STAGE="design"
-    elif [ ! -f "$TASK_PATH/implementation/finished.json" ]; then
-      STAGE="implementation"
-    elif [ "$TASK_REVIEW" != "passed" ] && [ "$TASK_REVIEW" != "failed" ]; then
-      STAGE="review"
-    else
-      STAGE="completion"
-    fi
+    STAGE="$(printf '%s' "$OPEN_TASKS" | jq -r '.stage')"
     echo "Task in progress: ${TASK_ID}"
     echo "Stage: ${STAGE}"
     # The newest saved note, read off the same task line. The window reads it before its first

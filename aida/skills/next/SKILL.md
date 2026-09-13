@@ -3,7 +3,7 @@ name: next
 description: This skill should be used when the user asks "what's next", "what should I work on", "continue", "resume", "pick up where I left off", or names a task directly to jump to it. It lists which tasks are open in the current project and where each stands, or loads the one named, and offers to start a task when none are open.
 argument-hint: "[<task-id>]"
 arguments: [target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh *), EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh repair *), EnterWorktree
 ---
 
 # Next
@@ -13,17 +13,20 @@ where each one stands. Read the argument once. No argument: show what is open, b
 treat it as a task id and go straight to "A task named directly," below.
 
 This skill never creates a task and never offers a contract, even when it ends up recommending
-that one be started. Creating one is the task skill's own job.
+that one be started. Creating one is the task skill's own job. Its one write is the move of a
+legacy task, below, which the task skill owns.
 
-Every call below runs `next-actions.sh`, named in this skill's own grant, so it runs without
-asking, in both run modes. Any other Bash command still asks for approval.
+Every call below runs `next-actions.sh`, or the one `task-actions.sh repair` call. Both are named
+in this skill's own grant, so each runs without asking, in both run modes. Any other Bash command
+still asks for approval.
 
 ## Determine the run mode
 
 No task is active yet. Deciding which one is active is this skill's own job, so there is nothing
 to read a stated run mode from. Treat this invocation as interactive, the safe default, unless the
 whole session is already known to be running unattended from outside any task. Only then pass
-`--run-mode autonomous` on every call below. Decide this once, at the start.
+`--run-mode autonomous` on every `next-actions.sh` call below. The move call takes no run mode
+flag. Decide this once, at the start.
 
 ## No argument: what is open
 
@@ -41,8 +44,10 @@ Read the exit code first, never the text alone.
 | 2 | A project was found, but it has no open task. | Go to "With nothing open," below. |
 | 3 | The script could not do its job. | Show the error text and stop. |
 
-On exit 0 or 2, the output carries `PROJECT:` (the project folder), then an `OPEN:` section
-holding one JSON object per line, most recently worked first, then a `LEGACY_COMPLETE:` section.
+On exit 0 or 2, the output begins with `CASE:` and `RUN_MODE:`. `CASE:` is the resolution case
+as the project skill numbers them; `RUN_MODE:` is the mode passed in. Neither changes what to do
+next. Then comes `PROJECT:` (the project folder), then an `OPEN:` section holding one JSON
+object per line, most recently worked first. A `LEGACY_COMPLETE:` section ends it.
 A line beginning `next-actions:` is a warning: one task file could not be read and was skipped,
 never silently. A final `WARN:` line means at least one of those happened; say so in one line
 rather than letting it pass unremarked.
@@ -55,21 +60,26 @@ Each `OPEN:` line is one of two shapes:
   record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
   `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
   `worktree`: the path of the task's own git worktree, or `none` for a task made before every
-  task had one.
+  task had one. And `stage`: where the task stands, the first stage whose close record is absent,
+  one of `scope`, `research`, `design`, `implementation`, `review`, `completion`.
+  `legacyRecords: true` appears only when the folder holds a version 5 `alignment.md` and no
+  `alignment.json`; otherwise the key is absent. When it is true, say that the version 5 contract
+  and research are in the folder to read. Version 6 writes its own record when that stage runs.
 - `"kind":"legacy"`: a task from before the tasks folder existed. Carries `id`, `epic` (the
   folder it is nested inside, or `null`), `legacyState` (`in_progress` here; `complete` only
   appears under `LEGACY_COMPLETE:`), and `path`.
 
-**Exactly one line under `OPEN:`.** That is the answer. Say which task it is and where it stands,
-and treat it as active. A task reading `review: passed` or `failed` stands at completion; say so. Nothing is asked and nothing is written; there is no session file. Then
+**Exactly one line under `OPEN:`.** That is the answer. Say which task it is and its `stage`.
+Name `/aida:<stage>` as the skill to run next. Treat it as active. This step asks nothing and writes nothing, except the move of a legacy task; there is no session file. Then
 enter the tree, below. A
-`kind: legacy` task is not yet moved into the project's own tasks folder: say plainly that its
-files still live at the `path` printed, and that moving it there is not built yet. Do not treat it
-as if it already had a `task.json`.
+`kind: legacy` task still lives outside the project's own tasks folder. Move it, below. Then run
+the report again. Read the task as `kind: new`. Never delete it: the move keeps it.
 
 **More than one line.** List them in the order printed, each numbered, showing the id, its
 state and its review word (or, for a legacy entry, its epic and that it predates the tasks folder). Ask which one.
-Wait for a plain answer, a number or the task's own id.
+Wait for a plain answer, a number or the task's own id. A chosen legacy entry goes to the move,
+below, and then to "A task named directly", below. Any other choice goes to "A task named
+directly" as it is.
 
 - **Autonomous.** Do not ask. Show the list, say that several tasks are open and none was chosen,
   and continue. Choosing one for the person would bind every later step to a guess.
@@ -84,7 +94,8 @@ Once a task is active, call the `EnterWorktree` tool with its `worktree` path. A
 `.claude/worktrees/` enters without a prompt. From a window outside the code repository the tool
 refuses on first entry. Then print the path and `claude --worktree <task-id>`, which opens the
 same tree from the code path, and stop. A task reading `none` has no tree yet; the first stage
-action that needs the code makes one and names it.
+action that needs the code makes one and names it. A legacy line never reaches this step: the
+move, below, comes first, and this skill then reads the task again as `kind: new`.
 
 ## With nothing open
 
@@ -97,6 +108,17 @@ Offer to start one, in one line. Wait for a plain yes or no.
 - **No.** Stop.
 - **Autonomous.** Do not ask. Say that no task is open, and continue.
 
+## Moving a legacy task
+
+A legacy task predates the tasks folder and has no `task.json`. The move that brings it in is the
+task skill's `repair`. This skill runs it, so a person never types it. The task skill says what the
+move does and when it refuses. Ask nothing first. With the `PROJECT:` line and the task's `path`
+(or its `PATH:` line), run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh repair --project "<projectPath>" "<path>"
+```
+Show the whole output. On success, say what moved and where.
+
 ## A task named directly
 
 Run:
@@ -107,12 +129,14 @@ Run:
 Read the first line.
 
 - **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
-  `children:`, `runMode:`, `worktree:` and `review:`. Say which task it is, from its `id`,
-  `state` and `review`, and treat it as active. Nothing else is asked. Read the file at
-  `task-file:` only when another field is needed. Then enter the tree, above.
-- **`FOUND: legacy_in_progress` or `FOUND: legacy_complete`.** A `PATH:` line follows, and an
-  `EPIC:` line when it is nested inside one. Say plainly that this task predates the tasks folder
-  and has not moved: its files live at that path, and no contract is offered on it here.
+  `children:`, `runMode:`, `worktree:`, `review:` and `stage:`, with `legacyRecords: true` when
+  it applies. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
+  `/aida:<stage>` as the skill to run next. Treat it as active. Nothing else is asked. Read
+  the file at `task-file:` only when another field is needed. Then enter the tree, above.
+- **`FOUND: legacy_in_progress`.** A `PATH:` line follows, and an `EPIC:` line when it is nested
+  inside one. Move it, above. Then run the same action again. Read it as `FOUND: new`.
+- **`FOUND: legacy_complete`.** The same lines follow. Say plainly that this task finished before
+  the tasks folder existed and stays where it is: no contract is offered on it here.
 - **`REFUSED: ...`** on stderr. The name is not a safe task id (a path separator, `.` or `..`).
   Say so and ask for a different one.
 - **`NOT FOUND: <target>`** on stderr. Say so, then offer the same choice as "With nothing open,"

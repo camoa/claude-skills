@@ -1,7 +1,6 @@
 ---
 name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", or "save what we decided". It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, or saves a mid-stage decision as a note.
-disable-model-invocation: true
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
@@ -13,7 +12,7 @@ A task is one unit of work inside a project: a folder holding `task.json` (every
 reads) and `task.md` (the goal, in prose, that nothing parses). This skill makes one, moves an old
 one into place, changes its state, splits it into a parent with children, or sets its run mode. It
 does not run any of the five stages, and it does not pick which task is active: that is
-`/aida:next`, not built yet.
+`/aida:next`.
 
 Every action below needs the active project's own folder (the one holding `project.json`, never
 the code folder). Resolve that first, with the project skill, before using anything here.
@@ -35,6 +34,8 @@ printed path when another field is needed.
 ## `create <name>`
 
 Makes the task and nothing else: no contract, no interview, no stage. It takes a name and a goal.
+Run it only when the person asked for this task in this conversation, by name or by a yes to an
+offer. Another skill's hand-off carries that yes. Nothing here invents one.
 
 **1. Name.** Ask what to call it, unless already said. Validate against
 `^[A-Za-z0-9_][A-Za-z0-9._-]*$`: it must start with a letter, digit or underscore, and hold only
@@ -82,8 +83,8 @@ rather than moving something it cannot verify. It reads the goal, and the parent
 an old header carries them, back from the new location before it reports success. Show the whole
 output either way.
 
-Which old tasks still need this, and listing both the new and the old locations side by side while
-some remain, is `/aida:next`'s job, not built yet.
+Which old tasks still need this is `/aida:next`'s job: it lists them as `kind: legacy` and runs
+this action on the one it loads.
 
 ## `start <task-id>`
 
@@ -125,9 +126,9 @@ build, no atomic swap and no rollback copy: version 5 needed all of that because
 folders; here nothing does.
 
 Every fact this needs must already be decided before calling it: which children, each child's own
-goal, and which criteria hand down to it. This skill never derives them; that is a later part's
-job once research is organised by goal. Checking that every criterion was claimed by some child,
-and that no child's criteria went unresearched, is that later part's job too. This only performs
+goal, and which criteria hand down to it. This skill never derives them. The research skill's
+split advisor recommends the children and their criteria after research closes. That skill's
+`split-read` action checks that every criterion is claimed once, before this action runs. This only performs
 the mechanical split.
 
 The two-level limit stays: a task that already has a parent cannot be split again, and a child
@@ -163,7 +164,8 @@ write, since the field's absence already means that. Show the whole output.
 A person stops mid-stage, and a decision this conversation made is in no record yet. This writes
 it down for the next window. Only a person invokes it; nothing dispatches it.
 
-Derive the current stage as the session-start hook does, the first whose close record is absent.
+The current stage is the `stage` the next skill's report prints for this task, the first whose
+close record is absent.
 That is scope without `alignment.json`, research without `records/research-check.json` at
 `exitCode` 0, design without `design-closed.json`. Read that stage's sidecar,
 `records/<stage>-distill.json`. When none exists, dispatch the `distiller` role with the task
