@@ -19,7 +19,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # never resolves which project is active on its own (ideal/task.md, "What a task is").
 #
 # Depends on, both shipped by other builders of this same part and never edited here:
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/check-commit-shape.sh   (the commit-message shape check)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape that check runs)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/task-schema.json         (read by check-task.sh, a later part;
 #                                                            not read by this script)
@@ -75,7 +75,6 @@ if [ -n "${ZSH_VERSION:-}" ]; then
 fi
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
-COMMIT_SHAPE_SCRIPT="${PLUGIN_ROOT}/scripts/check-commit-shape.sh"
 CHECK_TASK_SCRIPT="${PLUGIN_ROOT}/scripts/check-task.sh"
 
 if [ "${1:-}" = "--run-mode" ]; then
@@ -90,7 +89,7 @@ die3() {
 # The two libraries take these from their caller, so a refusal still says which script refused.
 die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
-for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
+for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh" "${PLUGIN_ROOT}/scripts/lib/project-commit.sh"; do
   [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die3 "the library failed to load: $lib_name"
@@ -169,43 +168,9 @@ task_summary() {
     "worktree: " + (.worktree.path // "none")' "$1"
 }
 
-# Renders the same five-field commit shape templates/project-commit.md defines, checks its own
-# shape before use, then commits it in the project folder's own git repository. AIDA commits its
-# own files there and never in the code repository (foundations.md, History). This is a private
-# copy of project-actions.sh's own commit_project, not a shared library: neither file imports the
-# other, and nothing yet ships a commit library both could source.
-commit_task_change() {
-  local project_path="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
-  local msg_file
-  msg_file="$(mktemp)" || die3 "cannot create a temp file for the commit message"
-  {
-    printf '%s\n' "$subject"
-    printf '\n'
-    printf 'Why: %s\n' "$why"
-    printf 'Principle: %s\n' "$principle"
-    printf 'Ruled out: %s\n' "$ruled_out"
-    printf 'Task/stage: %s/%s\n' "$task" "$stage"
-  } > "$msg_file"
-
-  if [ -x "$COMMIT_SHAPE_SCRIPT" ] || [ -f "$COMMIT_SHAPE_SCRIPT" ]; then
-    if ! bash "$COMMIT_SHAPE_SCRIPT" "$msg_file" >/dev/null 2>&1; then
-      rm -f "$msg_file"
-      die3 "the rendered commit message did not pass its own shape check. This is a defect in task-actions.sh, not in the task being committed"
-    fi
-  fi
-
-  git -C "$project_path" add -A -- tasks
-  if git -C "$project_path" diff --cached --quiet 2>/dev/null; then
-    rm -f "$msg_file"
-    return 0
-  fi
-  git -C "$project_path" \
-    -c user.email="aida@localhost" -c user.name="aida" \
-    commit -q -F "$msg_file"
-  local rc=$?
-  rm -f "$msg_file"
-  return $rc
-}
+# One call to the shared commit, restricted to tasks/: a task change never sweeps up a project
+# file edit that was left uncommitted beside it.
+commit_task_change() { commit_project "$1" "$2" "$3" "$4" "$5" "$6" "$7" tasks; }
 
 # ------------------------------------------------------------------------------------------------
 # create: makes the task and nothing else. No contract, no interview, no stage.

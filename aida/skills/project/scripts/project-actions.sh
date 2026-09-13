@@ -13,8 +13,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Depends on, both shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh        (sourced, never executed)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/check-commit-shape.sh   (the commit-message shape check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
 # Usage: any action this script does not recognize, including none, prints the usage function
@@ -50,7 +50,7 @@ set -uo pipefail  # not -e: several branches test a command's exit code on purpo
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
 CHECK_SCRIPT="${PLUGIN_ROOT}/scripts/check-project.sh"
-COMMIT_SHAPE_SCRIPT="${PLUGIN_ROOT}/scripts/check-commit-shape.sh"
+COMMIT_LIB="${PLUGIN_ROOT}/scripts/lib/project-commit.sh"
 REGISTRY_FILE="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
 PROJECTS_HOME_DEFAULT="${AIDA_PROJECTS_HOME:-$HOME/.claude/aida/projects}"
 SETTINGS_FILE="${AIDA_SETTINGS_PATH:-$HOME/.claude/aida/settings.json}"
@@ -84,6 +84,8 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-frameworks <name-or-codePath> <framework>...
        project-actions.sh git-init <name-or-codePath>
        project-actions.sh add-source <name-or-codePath> <kind> <folder>
+       project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
+       project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
        project-actions.sh task-rule-remove <name-or-codePath>
@@ -99,6 +101,8 @@ require_jq
 
 # shellcheck source=/dev/null
 source "$REGISTRY_LIB"
+# shellcheck source=/dev/null
+source "$COMMIT_LIB"
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -225,47 +229,6 @@ init_project_repo() {
   [ -e "$project_path/.gitignore" ] || write_project_gitignore "$project_path"
   git -C "$project_path" init -q || die3 "git init failed in $project_path"
   commit_project "$project_path" "$subject" "$why" "" "" "project" "$stage"
-}
-
-# Renders the five-field commit shape from templates/project-commit.md, checks its own shape
-# before use (never trust an unrendered corner case to slip past silently), then commits it as
-# the project folder's own git identity. AIDA commits its own files in the project folder and
-# never in the code repository. Every git call below is "-C <path>", and codePath is
-# never passed to git as a working directory anywhere in this file.
-commit_project() {
-  local project_path="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
-  local msg_file
-  msg_file="$(mktemp)" || die3 "cannot create a temp file for the commit message"
-  {
-    printf '%s\n' "$subject"
-    printf '\n'
-    printf 'Why: %s\n' "$why"
-    printf 'Principle: %s\n' "$principle"
-    printf 'Ruled out: %s\n' "$ruled_out"
-    printf 'Task/stage: %s/%s\n' "$task" "$stage"
-  } > "$msg_file"
-
-  if [ -x "$COMMIT_SHAPE_SCRIPT" ] || [ -f "$COMMIT_SHAPE_SCRIPT" ]; then
-    if ! bash "$COMMIT_SHAPE_SCRIPT" "$msg_file" >/dev/null 2>&1; then
-      rm -f "$msg_file"
-      die3 "the rendered commit message did not pass its own shape check. This is a defect in project-actions.sh, not in the project being committed"
-    fi
-  fi
-
-  # A folder that is not a repository yet returns 1 before any git call, so git prints no
-  # error. The caller says the write was not committed. A version 5 pickup is such a folder.
-  git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || { rm -f "$msg_file"; return 1; }
-  git -C "$project_path" add -A
-  if git -C "$project_path" diff --cached --quiet 2>/dev/null; then
-    rm -f "$msg_file"
-    return 0
-  fi
-  git -C "$project_path" \
-    -c user.email="aida@localhost" -c user.name="aida" \
-    commit -q -F "$msg_file"
-  local rc=$?
-  rm -f "$msg_file"
-  return $rc
 }
 
 # Writes one top-level field into a project's own project.json, through a temporary file, so a
@@ -796,6 +759,42 @@ do_add_source() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# subscribe-playbook and unsubscribe-playbook: the one writer of playbookSubscriptions
+# ------------------------------------------------------------------------------------------------
+
+# Writes or removes one set id under playbookSubscriptions[<framework>] (ideal/playbooks.md,
+# "Subscribing and listing"). The framework must be one the project declares, the rule the check
+# tests, so the refusal here uses the check's own words. A set id is <framework>/best-practices/
+# <author>. Nothing is fetched: the first `playbooks load` records a set the catalog lacks as
+# unreachable. A framework left with no set loses its key, since the schema wants one item.
+# $1 add or remove, then the target, the framework and the set id.
+do_subscription() {
+  local op="$1" target="${2:?$1-playbook: a name or a code path is required}"
+  local fw="${3:?$1-playbook: a framework is required}" set_id="${4:?$1-playbook: a set id is required}"
+  local match project_path
+  printf '%s' "$set_id" | grep -Eq '^[a-z0-9-]+/best-practices/[a-z0-9-]+$' \
+    || die3 "$op-playbook: a set id is <framework>/best-practices/<author>, got: $set_id"
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  if [ "$(jq --arg k "$fw" '(.frameworks // []) | index($k) != null' "$project_path/project.json")" != "true" ]; then
+    printf 'project-actions: %s-playbook: key "%s" names a framework this project never declared\n' "$op" "$fw" >&2
+    return 1
+  fi
+  if [ "$op" = subscribe ]; then
+    write_project_field "$project_path" "could not update playbookSubscriptions in $project_path/project.json" \
+      --arg k "$fw" --arg id "$set_id" '.playbookSubscriptions[$k] = (((.playbookSubscriptions // {})[$k] // []) + [$id] | unique)'
+  else
+    write_project_field "$project_path" "could not update playbookSubscriptions in $project_path/project.json" \
+      --arg k "$fw" --arg id "$set_id" '.playbookSubscriptions[$k] = ((.playbookSubscriptions[$k] // []) - [$id]) | if .playbookSubscriptions[$k] == [] then del(.playbookSubscriptions[$k]) else . end'
+  fi
+  commit_project "$project_path" "$(printf '%s' "$op" | sed 's/^s/S/; s/^u/U/') $fw playbook $set_id" "requested" "" "" "project" "playbook" \
+    || printf 'project-actions: the subscription was written but not committed.\n' >&2
+  echo "SUBSCRIPTIONS: $(jq -r --arg k "$fw" '$k + " " + ((.playbookSubscriptions[$k] // []) | join(" "))' "$project_path/project.json")"
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
 # unregister: drops the row, leaves both folders untouched
 # ------------------------------------------------------------------------------------------------
 
@@ -1064,6 +1063,8 @@ case "$action" in
   set-frameworks) do_set_frameworks "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
+  subscribe-playbook) do_subscription subscribe "$@" ;;
+  unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
   task-rule-remove) do_task_rule_remove "$@" ;;

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA playbooks record",
+  "description": "The plays every role that writes or judges code follows, at <task folder>/records/playbooks.json (ideal/playbooks.md, 'The record'). Written by `playbooks load`, which reads the person's file and the project's file itself and merges the catalog record the playbook-loader agent wrote. records/playbooks.md beside it is rendered from this file and no script parses it back. A field present in a real record but absent from `properties` is a defect in the schema, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "loadedAt", "sources", "plays"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field every other record carries. Bumped only when a later change to this schema says so."
+    },
+    "loadedAt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "When `playbooks load` wrote this file, ISO 8601 UTC. Running load again is the repair for a stale record."
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" },
+      "description": "One entry per source read, in precedence order: person, project, then each catalog set. The four states are distinct on purpose: a person with no file is `absent`, a set the navigator could not reach is `unreachable`, a file with no plays is `empty`. Only `loaded` with a count is coverage, and review's framework-practices check reads these states for its floor."
+    },
+    "plays": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/play" },
+      "description": "Every play from every loaded source, in source order. A role follows each play whose `when` covers the files it owns, and a reviewer's finding cites the play's `id`."
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "state", "plays"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1, "description": "`person`, `project`, or a set id shaped <framework>/best-practices/<author>." },
+        "state": { "type": "string", "enum": ["loaded", "absent", "unreachable", "empty"], "description": "What reading this source found." },
+        "plays": { "type": "integer", "minimum": 0, "description": "How many plays this source contributed. Zero for every state but loaded." }
+      }
+    },
+    "play": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "domain", "title", "what", "rationale", "when", "example", "guide"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[^:]+:[a-z0-9-]+$", "description": "<source>:<slug>. The slug is the title lowercased, runs of non-alphanumerics to one hyphen, trimmed; `pb_slug` in scripts/lib/playbooks.sh is the one rule." },
+        "source": { "type": "string", "minLength": 1, "description": "The source this play came from, one of the `sources` entries." },
+        "domain": { "type": "string", "description": "The `## <Domain>` heading the play sits under, or the catalog topic." },
+        "title": { "type": "string", "minLength": 1, "description": "The `### <Title>` line: the rule, as a statement." },
+        "what": { "type": "string", "description": "The **What:** line. A play with none loads with its title here, and load warned once." },
+        "rationale": { "type": "string", "description": "The **Rationale:** line: why, and what breaks without it." },
+        "when": { "type": "string", "description": "The **When it applies:** line: file types, contexts, exceptions. A role matches the files it owns against this." },
+        "example": { "type": "string", "description": "The fenced block after **Example:**, fences included, verbatim. Empty when the play has none." },
+        "guide": { "type": ["string", "null"], "description": "<topic>/<file>.md for a catalog play, the guide that holds the detail. Null for a play from a file." }
+      }
+    }
+  }
+}
