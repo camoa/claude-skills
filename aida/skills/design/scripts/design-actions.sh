@@ -38,8 +38,11 @@
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
+#   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
+#                        --candidate <text> --distance <same-name|same-directory|same-layer> \
+#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed]
 #
-# --run-mode is accepted on every action and `close` requires it. A close record says who was
+# --run-mode is accepted on every action and `close` and `dispose` require it. A close record says who was
 # present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
 # record a person nobody saw. Every other action ignores it.
 #
@@ -100,7 +103,8 @@
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
-#      a valid id shape in its own space; a work order file already on disk that is not valid
+#      a valid id shape in its own space; a `dispose` refused attended (no cost dimension, or a
+#      supersede without --confirmed); a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
@@ -117,6 +121,9 @@
 #      cycle, an order that reaches no owner, overlapping owned files, or an id naming nothing
 #      real (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
 #      files, before writing anything.
+#   6  `start` was asked to begin design on a task research has not closed: no
+#      records/research-check.json, or one whose exitCode is not 0. Research is required (the
+#      owner's rule: no skip), and the way through is the research skill.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule research-actions.sh and
@@ -162,6 +169,7 @@ die2() { printf 'design-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'design-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
 die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
+die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -190,6 +198,9 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder>
+       design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
+                                         --candidate <text> --distance <same-name|same-directory|same-layer> \
+                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed]
 EOF
 }
 
@@ -371,16 +382,38 @@ do_read() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# start: makes sure the contract exists before design begins, and makes sure the design folder
-# exists. Idempotent, the same as research's own `start`: no aggregate file here could be
-# overwritten by a second call.
+# start: makes sure the contract exists and research has closed before design begins, and makes
+# sure the design folder exists. Idempotent, the same as research's own `start`: no aggregate
+# file here could be overwritten by a second call.
+#
+# The grounding hash (ideal/design.md, "Acting on a claim about a mechanism"): research's `check`
+# records one sha256 per mechanismHints[].approach when it closes clean. `start` re-derives the list
+# and prints a NOTE: per position that differs. Never a refusal: the claim may still be right, but
+# the evidence no longer covers it.
 # ------------------------------------------------------------------------------------------------
+
+# One sha256 per approach in $1/task.json, as a JSON array, in order. Each approach is hashed as
+# its own compact JSON string, one line each, so a multi-line approach never breaks the loop.
+# research-actions.sh computes the same list the same way at its close.
+mechanism_hashes_json() {
+  local hashes='[]' line h
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    h="$(printf '%s' "$line" | "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1)"
+    hashes="$(printf '%s' "$hashes" | jq --arg h "$h" '. + [$h]')"
+  done < <(jq -c '.mechanismHints[]? | .approach' "$1/task.json" 2>/dev/null)
+  printf '%s' "$hashes"
+}
 
 do_start() {
   [ "$#" -eq 0 ] || die3 "start: unrecognized argument: $1"
 
   [ "$(contract_ok)" = "true" ] \
     || die2 "start: $ALIGNMENT_FILE not found, unreadable, or not a contract. Run the scope skill on this task first"
+  [ -f "$RESEARCH_CHECK_FILE" ] && [ "$(jq -r '.exitCode // 1' "$RESEARCH_CHECK_FILE" 2>/dev/null)" = "0" ] \
+    || die6 "start: research has not closed on this task ($RESEARCH_CHECK_FILE is absent or not clean). Research is required; run the research skill first"
+
+  records_hash__resolve_sha256_cmd || die3 "start: neither sha256sum nor 'shasum -a 256' was found on PATH"
 
   mark_task_in_progress "$TASK_PATH" "design started"
   mkdir -p "$DESIGN_DIR" || die3 "start: could not create $DESIGN_DIR"
@@ -388,6 +421,13 @@ do_start() {
   echo "STARTED: $DESIGN_DIR"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
+
+  local recorded live
+  recorded="$(jq -c '.mechanismHashes // []' "$RESEARCH_CHECK_FILE" 2>/dev/null)"
+  live="$(mechanism_hashes_json "$TASK_PATH")"
+  jq -nr --argjson r "$recorded" --argjson l "$live" '
+    range([($r | length), ($l | length)] | max) | select($r[.] != $l[.])
+    | "NOTE: mechanism hint " + ((. + 1) | tostring) + " in task.json was edited after research grounded it; read it as ungrounded"'
   exit 0
 }
 
@@ -860,6 +900,93 @@ do_close() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# dispose: records a reuse decision on a work order by table, never by the model's own reasoning
+# (ideal/design.md, "The reuse decision lands here"; version 5's prior-art-disposition.sh). The
+# caller gives the candidate, its closeness, the cost dimensions compared, the verdict and why. The
+# table decides what stands, and the outcome lands in `reasoning`, the write `update` makes.
+#
+# The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
+# because it removes nothing.
+#   distance    cost cited       verdict       mode        outcome
+#   any         none recognised  any           attended    refused: a verdict naming no cost compared nothing; ask the person
+#   any         none recognised  any           unattended  extend: nobody to ask
+#   any         build only       supersede     any         extend: build is paid once, carry, agent and risk forever
+#   same-layer  any              supersede     any         extend: sharing only a layer, it is not absorbed; a second implementation
+#   name|dir    recurring        supersede     attended    stands with --confirmed, else refused: it widens the task and owes a migration
+#   name|dir    recurring        supersede     unattended  extend: no person to ask; re-surfaces on the next attended run
+#   any         recognised       reuse|extend  any         stands
+# ------------------------------------------------------------------------------------------------
+
+do_dispose() {
+  [ -n "$RUN_MODE" ] || die3 "dispose: --run-mode is required. The table reads it, and it is never assumed"
+  local id="" candidate="" distance="" cost="" verdict="" why="" confirmed=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)        need_value "dispose" "--id" "$#" "${2:-}";        id="$2"; shift 2 ;;
+      --candidate) need_value "dispose" "--candidate" "$#" "${2:-}"; candidate="$2"; shift 2 ;;
+      --distance)  need_value "dispose" "--distance" "$#" "${2:-}";  distance="$2"; shift 2 ;;
+      --cost)      need_value "dispose" "--cost" "$#" "${2:-}";      cost="$2"; shift 2 ;;
+      --verdict)   need_value "dispose" "--verdict" "$#" "${2:-}";   verdict="$2"; shift 2 ;;
+      --why)       need_value "dispose" "--why" "$#" "${2:-}";       why="$2"; shift 2 ;;
+      --confirmed) confirmed=true; shift ;;
+      *) die3 "dispose: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "dispose" "$id"
+  is_blank "$candidate" && die3 "dispose: --candidate is required and must not be blank"
+  is_blank "$why" && die3 "dispose: --why is required and must not be blank"
+  is_blank "$cost" && die3 "dispose: --cost is required and must not be blank"
+  case "$distance" in
+    same-name|same-directory|same-layer) ;;
+    *) die3 "dispose: --distance must be same-name, same-directory or same-layer, got '${distance:-<nothing>}'" ;;
+  esac
+  case "$verdict" in
+    reuse|extend|supersede) ;;
+    *) die3 "dispose: --verdict must be reuse, extend or supersede, got '${verdict:-<nothing>}'" ;;
+  esac
+
+  # Which cost classes were cited. An unknown class never counts, so "vibes" clears no bar.
+  local known=false recurring=false dim
+  while IFS= read -r dim; do
+    case "$dim" in
+      build) known=true ;;
+      carry|agent|risk) known=true; recurring=true ;;
+    esac
+  done < <(printf '%s\n' "$cost" | tr ',' '\n')
+
+  local outcome="$verdict" rule="stands"
+  if [ "$known" != "true" ]; then
+    [ "$RUN_MODE" = "interactive" ] \
+      && die3 "dispose: no recognised cost dimension named (build, carry, agent, risk). Ask the person what this verdict compared, then call again"
+    outcome=extend; rule="downgraded: no cost dimension cited and nobody present to ask"
+  elif [ "$verdict" = "supersede" ]; then
+    if [ "$recurring" != "true" ]; then
+      outcome=extend; rule="downgraded: a supersede resting on build cost alone; build is paid once, carry, agent and risk forever"
+    elif [ "$distance" = "same-layer" ]; then
+      outcome=extend; rule="downgraded: a candidate sharing only a layer is not absorbed by a replacement"
+    elif [ "$RUN_MODE" = "interactive" ]; then
+      [ "$confirmed" = "true" ] \
+        || die3 "dispose: a supersede widens the task and owes a migration. Ask the person whether it stands, then call again with --confirmed"
+      rule="stands: the person confirmed the supersede"
+    else
+      outcome=extend; rule="downgraded: a supersede with no person present; it re-surfaces on the next attended run"
+    fi
+  fi
+
+  local file doc
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "dispose: $file exists but is not valid JSON"
+  doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing $cost. Disposition: $outcome ($rule). $why" '.reasoning = $v' "$file")"
+  write_atomic "$file" "$doc"
+  echo "DISPOSED: $file"
+  echo "proposed: $verdict"
+  echo "disposition: $outcome"
+  wo_summary "$doc"
+  render_wo "$id"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -882,6 +1009,7 @@ ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
 CLOSED_FILE="$TASK_PATH/design-closed.json"
 CHECK_FILE="$TASK_PATH/records/design-check.json"
+RESEARCH_CHECK_FILE="$TASK_PATH/records/research-check.json"
 
 case "$ACTION" in
   read)           do_read           "$@" ;;
@@ -894,5 +1022,6 @@ case "$ACTION" in
   render)         do_render         "$@" ;;
   check)          do_check          "$@" ;;
   close)          do_close          "$@" ;;
+  dispose)        do_dispose        "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

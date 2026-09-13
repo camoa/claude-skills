@@ -57,10 +57,18 @@ to serve is nothing this stage can check.
 `work-orders:` above zero: this is a resumed or repeated run. Read each named file before
 drafting anything new, rather than starting over.
 
+Then start design:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh start "<task_folder>"
+```
+Exit 6: research has not closed on this task. Research is required and is never skipped, so name
+the research skill and stop. A `NOTE:` line names a stated mechanism edited after research
+grounded it; read that claim as ungrounded.
+
 Then read every file under `<task_folder>/research/`, one search at a time. Each holds findings
 for one subject: prior art inside the project, prior art outside it, guides and recipes, what
-reputable sources recommend, or an assumption checked. A criterion with no research at all is not
-a reason to stop; it means design decides from nothing found, same as when research covered it.
+reputable sources recommend, or an assumption checked. A finding that says nothing was found is
+not a reason to stop. Design decides from nothing found, same as when research covered it.
 
 ## Read the guides and recipes research found
 
@@ -93,8 +101,10 @@ AIDA cannot know on its own:
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
-- What must exist beside a class for the unit to work: a services entry, a route, a permission,
-  a schema. Name these in the order, or whoever builds it invents them.
+- Where business logic belongs, and what a thin layer may contain. An order that puts logic in
+  the thin layer is drafted wrong.
+- The entry point every feature has that is not a screen. Name it in the order that builds the
+  feature, so the feature is reachable without its UI.
 - What order the framework forces, where it forces one.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
@@ -109,9 +119,9 @@ requires and the five things design needs from a framework.
 A task may carry a stated approach in `task.json`'s `mechanismHints`, recorded by scope. Read it
 as a claim, never as a specification, whatever its `status`. Weigh it against what research found
 the ordinary way; a `required` status means it must be followed once judged sound, not that it is
-exempt from judgment. The grounding-hash check that would catch a claim edited after research
-looked at it is not yet built; until it is, read the claim as recorded and judge it on its current
-merits.
+exempt from judgment. `start` compared each claim against the hash research recorded at its close.
+A claim `start` printed a `NOTE:` for was edited after research looked at it, so its grounding no
+longer covers it. Judge it as ungrounded, and send it back to research when it matters.
 
 ## The reuse decision
 
@@ -124,12 +134,24 @@ candidate is not always code; an existing view or content type is a candidate to
 it may produce no code at all.
 
 Record the disposition through the script that will own the work order it lands on, never only in
-your own reasoning: once that work order exists, set its `reasoning` field to name the candidate,
-the disposition, and why, with:
+your own reasoning. Once that work order exists, give the script the candidate, its closeness as
+research stated it, the cost dimensions compared, the verdict, and why:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
-  --id <woId> --reasoning "<candidate, disposition, and why>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
+  dispose "<task_folder>" --id <woId> --candidate "<what research found>" \
+  --distance <same-name|same-directory|same-layer> --cost <build|carry|agent|risk[,...]> \
+  --verdict <reuse|extend|supersede> --why "<why this verdict>" [--confirmed]
 ```
+The script applies a fixed table and writes the outcome into the order's `reasoning`. It prints
+`disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
+only a layer, comes back as `extend`. Autonomous, a supersede and a verdict citing no cost
+dimension both come back as `extend`, with the reason in the `reasoning`.
+
+Interactive, the script refuses a supersede until the person has been asked. Ask this: the
+candidate, how close it is, and that a supersede widens this task and owes a migration; does it
+stand? A yes is `--confirmed`. A no is the verdict the person chose. A verdict citing no cost
+dimension is refused the same way; ask what it compared, then call again.
+
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
 **Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it. Name
@@ -139,7 +161,7 @@ model, and this one has to be read-only to mean anything.
 Give it the written reasoning and the files it cites, and nothing else. Never this conversation's
 own account: being denied that is the entire reason the role exists, and handing it over turns the
 check into the decision reading itself. It answers agree, disagree, or downgrade, with what it
-compared. Record what it found the same way, appended to the same `reasoning` field.
+compared. Record what it found with `update --reasoning`, appended to the text `dispose` wrote.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 

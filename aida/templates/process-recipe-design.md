@@ -37,8 +37,9 @@ produce a document and it writes nothing.
 ## Opinion
 
 The rules that make an architecture right in this framework, each with its reason. Where business
-logic belongs. What a thin layer is allowed to contain. What the language or the framework enforces
-for you, and what it leaves to discipline.
+logic belongs. What a thin layer is allowed to contain. The entry point every feature has that is
+not a screen, and what it calls. What the language or the framework enforces for you, and what it
+leaves to discipline.
 
 **Design decides; it does not build.** Say it here. No code, no registration, no install.
 

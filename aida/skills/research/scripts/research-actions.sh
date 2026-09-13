@@ -139,6 +139,11 @@ TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 [ -f "$TASK_HELPERS_LIB" ] || die3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
 # shellcheck source=/dev/null
 source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
+# The sha256 tool, resolved once, for the mechanism hashes `check` records at its close.
+RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
+[ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
+# shellcheck source=/dev/null
+source "$RECORDS_HASH_LIB" || die3 "the records-hash library failed to load: $RECORDS_HASH_LIB"
 # resolve_project_folder and the codePath readers, for `check`'s spike refusal. Sourced before
 # TASK_PATH is set, because the library blanks that name at load.
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
@@ -422,6 +427,19 @@ do_check() {
     spike_dir="$(project_code_path_value "$project_folder")"
     spike_dir="${spike_dir:+$spike_dir/.aida-spike}"
     [ -n "$spike_dir" ] && [ -d "$spike_dir" ] && verdict=6
+  fi
+  # A clean check is the close, when a stated mechanism counts as grounded. One sha256 per
+  # mechanismHints[].approach in task.json, each hashed as its own compact JSON string, goes into
+  # the report so design's `start` can tell a claim edited later. Same computation there.
+  if [ "$verdict" -eq 0 ]; then
+    records_hash__resolve_sha256_cmd || die3 "check: neither sha256sum nor 'shasum -a 256' was found on PATH"
+    local hashes='[]' line h
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      h="$(printf '%s' "$line" | "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1)"
+      hashes="$(printf '%s' "$hashes" | jq --arg h "$h" '. + [$h]')"
+    done < <(jq -c '.mechanismHints[]? | .approach' "$TASK_PATH/task.json" 2>/dev/null)
+    write_atomic "$CHECK_FILE" "$(jq --argjson h "$hashes" '.mechanismHashes = $h' "$CHECK_FILE")"
   fi
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
   echo "action: check"
