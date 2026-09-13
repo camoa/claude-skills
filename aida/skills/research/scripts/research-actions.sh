@@ -95,7 +95,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   6  `check` found the coverage clean, but <codePath>/.aida-spike/ still exists. A spike is a
 #      throwaway experiment research writes to answer one question (skills/research/SKILL.md,
 #      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
-#      report is still written. A coverage gap outranks this: a spike open mid-research is fine.
+#      report is still written, with exitCode 6. A coverage gap outranks this: a spike open
+#      mid-research is fine.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # `read` also reports <task_folder>/inputs/, the material captured before the task existed. Its
@@ -463,6 +464,9 @@ do_check() {
     spike_dir="${spike_dir:+$spike_dir/.aida-spike}"
     [ -n "$spike_dir" ] && [ -d "$spike_dir" ] && verdict=6
   fi
+  # The report's exitCode is what design's `start` reads, so a spike refusal must land there too.
+  # check-research.sh wrote 0; left alone, design would accept a task research refused.
+  [ "$verdict" -eq 6 ] && write_atomic "$CHECK_FILE" "$(jq '.exitCode = 6' "$CHECK_FILE")"
   # A clean check is the close, when a stated mechanism counts as grounded. One sha256 per
   # mechanismHints[].approach in task.json, each hashed as its own compact JSON string, goes into
   # the report so design's `start` can tell a claim edited later. Same computation there.

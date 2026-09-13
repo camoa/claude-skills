@@ -85,6 +85,8 @@ answers whether one is available and, when it is, a path to the body on disk. Re
 that path. Never fetch a catalog address yourself and never read a cached copy behind the
 navigator's back. A source this project configured itself, a folder of its own, is read the
 ordinary way.
+Verdict words and a missing heading follow
+`${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 
 **Three answers, not one.** No recipe for this framework, a listing that could not be reached, and
 a failed network are three different things, and only the first says anything about the framework.
@@ -149,12 +151,13 @@ research stated it, the cost dimensions compared, the verdict, and why:
 ```
 The script applies a fixed table and writes the outcome into the order's `reasoning`. It prints
 `disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
-only a layer, comes back as `extend`. Autonomous, a supersede and a verdict citing no cost
-dimension both come back as `extend`, with the reason in the `reasoning`.
+only a layer, comes back as `extend`. Autonomous, a supersede comes back as `extend`, with the
+reason in the `reasoning`. A reuse or extend citing no cost dimension stands, with the thin
+reasoning recorded, because there is nothing to downgrade it to.
 
 Interactive, the script refuses a supersede until the person has been asked. Ask this: the
 candidate, how close it is, and that a supersede widens this task and owes a migration; does it
-stand? A yes is `--confirmed`. A no is the verdict the person chose. A verdict citing no cost
+stand? A yes is `--confirmed`. A no is the verdict the person chose. A supersede citing no cost
 dimension is refused the same way; ask what it compared, then call again.
 
 A rejection that lives only in the conversation is not a rejection anyone can check later.

@@ -211,6 +211,8 @@ a cached copy directly.
 this project's framework at the research stage. It answers with whether one is available and, when
 it is, a path to the body on disk. Read the body from that path. The body is never streamed into
 the conversation, which is what keeps a recipe affordable.
+Verdict words and a missing heading follow
+`${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 
 **Judge the fit once, after the body is read and before the first dispatch.** Does this method,
 by its `description`, Goal and Preconditions, describe the work the criteria and non-goals name?

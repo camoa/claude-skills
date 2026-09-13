@@ -12,8 +12,8 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *)
 A task is one unit of work inside a project: a folder holding `task.json` (every field a script
 reads) and `task.md` (the goal, in prose, that nothing parses). This skill makes one, moves an old
 one into place, changes its state, splits it into a parent with children, or sets its run mode. It
-does not run any of the five stages, and it does not pick which task is active: that is `/next`,
-not built yet.
+does not run any of the five stages, and it does not pick which task is active: that is
+`/aida:next`, not built yet.
 
 Every action below needs the active project's own folder (the one holding `project.json`, never
 the code folder). Resolve that first, with the project skill, before using anything here.
@@ -83,7 +83,7 @@ an old header carries them, back from the new location before it reports success
 output either way.
 
 Which old tasks still need this, and listing both the new and the old locations side by side while
-some remain, is `/next`'s job, not built yet.
+some remain, is `/aida:next`'s job, not built yet.
 
 ## `start <task-id>`
 
@@ -184,4 +184,4 @@ and prints `note:` with the path. Empty text is refused at exit 3. Show the `not
 
 A note is never a stage record: the stage action that later records the same decision makes it
 stale, and the record wins. The session-start hook names the newest note after `Stage:`, and
-`/next` lists its date, so the next window reads it before its first turn.
+`/aida:next` lists its date, so the next window reads it before its first turn.

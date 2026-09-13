@@ -110,8 +110,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
-#      a valid id shape in its own space; a `dispose` refused attended (no cost dimension, or a
-#      supersede without --confirmed); a work order file already on disk that is not valid
+#      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
+#      one without --confirmed); a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
@@ -938,10 +938,12 @@ do_close() {
 # table decides what stands, and the outcome lands in `reasoning`, the write `update` makes.
 #
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
-# because it removes nothing.
+# because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
+# stands and the thin reasoning is recorded for a person to see (version 5's rule).
 #   distance    cost cited       verdict       mode        outcome
-#   any         none recognised  any           attended    refused: a verdict naming no cost compared nothing; ask the person
-#   any         none recognised  any           unattended  extend: nobody to ask
+#   any         none recognised  reuse|extend  any         stands: nothing to downgrade to; the reasoning says no cost was cited
+#   any         none recognised  supersede     attended    refused: a supersede naming no cost compared nothing; ask the person
+#   any         none recognised  supersede     unattended  extend: nobody to ask
 #   any         build only       supersede     any         extend: build is paid once, carry, agent and risk forever
 #   same-layer  any              supersede     any         extend: sharing only a layer, it is not absorbed; a second implementation
 #   name|dir    recurring        supersede     attended    stands with --confirmed, else refused: it widens the task and owes a migration
@@ -987,10 +989,12 @@ do_dispose() {
   done < <(printf '%s\n' "$cost" | tr ',' '\n')
 
   local outcome="$verdict" rule="stands"
-  if [ "$known" != "true" ]; then
+  if [ "$known" != "true" ] && [ "$verdict" != "supersede" ]; then
+    rule="stands: no recognised cost dimension cited; a $verdict has nothing to downgrade to"
+  elif [ "$known" != "true" ]; then
     [ "$RUN_MODE" = "interactive" ] \
-      && die3 "dispose: no recognised cost dimension named (build, carry, agent, risk). Ask the person what this verdict compared, then call again"
-    outcome=extend; rule="downgraded: no cost dimension cited and nobody present to ask"
+      && die3 "dispose: no recognised cost dimension named (build, carry, agent, risk). Ask the person what this supersede compared, then call again"
+    outcome=extend; rule="downgraded: a supersede with no cost dimension cited and nobody present to ask"
   elif [ "$verdict" = "supersede" ]; then
     if [ "$recurring" != "true" ]; then
       outcome=extend; rule="downgraded: a supersede resting on build cost alone; build is paid once, carry, agent and risk forever"

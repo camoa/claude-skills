@@ -583,7 +583,7 @@ CP_LEAVES2
 
   local parent siblings_open
   parent="$(printf '%s' "$CP_TASK_DOC" | jq -r '.parent // ""')"
-  echo "CLOSE: $CP_TASK_ID is complete. The pull request body is at $BODY_FILE; open the pull request from it by hand. Run /next." >&2
+  echo "CLOSE: $CP_TASK_ID is complete. The pull request body is at $BODY_FILE; open the pull request from it by hand. Run /aida:next." >&2
   if [ -n "$parent" ] && [ -f "$TASKS_DIR/$parent/task.json" ]; then
     siblings_open="$(jq -r '(.children // [])[]' "$TASKS_DIR/$parent/task.json" 2>/dev/null | while IFS= read -r fid; do
       [ -n "$fid" ] || continue

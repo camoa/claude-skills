@@ -98,6 +98,8 @@ listing or a failed fetch records them unknown, because nobody looked.
 that takes it. The script parses each row's own argv, its `signal` and `extensions` keys, and which
 rows a framework declares absent. Nothing here retypes a command, so nothing here can drop a
 `signal` key and turn a check into one that always passes.
+Verdict words and a missing heading follow
+`${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 
 ## The run mode decides who answers
 
