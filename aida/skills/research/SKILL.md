@@ -3,7 +3,7 @@ name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Agent
 ---
 
 # Research
@@ -22,9 +22,10 @@ Every finding names where it came from and when it was looked at. A finding with
 not a finding, and the model's own recall is never the answer, only a lead worth confirming with
 one search.
 
-Every write below goes through `research-actions.sh`, named in this skill's own grant, so it
-runs without asking. Any other Bash command still asks for approval. Dispatching an agent needs
-no approval either; it is also named in this skill's own grant.
+Every write below goes through `research-actions.sh`, or `playbook-actions.sh` for the playbook
+load. Both are named in this skill's own grant, so they run without asking. Any other Bash
+command still asks for approval. Dispatching an agent needs no approval either; it is also named
+in this skill's own grant.
 
 ## Determine the run mode
 
@@ -77,6 +78,18 @@ Run:
 ```
 This creates the task's `research` folder and prints the criterion ids again, for reference
 while planning searches. It is safe to run more than once; it never overwrites anything.
+
+`subscriptions:` names the catalog playbook sets this project subscribes to, or says `none`.
+When it names any, dispatch the `playbook-loader` role once, with the task folder and those ids
+and nothing else. It writes `records/playbooks-catalog.json`. Then, in every case, run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/playbooks/scripts/playbook-actions.sh load "<task_folder>"
+```
+It reads the person's file, the project's file and the loader's record, and writes
+`records/playbooks.json`. Show its `record:`, `rendered:`, `source:` and `plays:` lines. Say an
+`unreachable` set in one line, and go on; the next run tries again. The plays are the rules
+every later role follows. This step loads them once, where the task's evidence starts, so design
+and implementation read one record and never fetch. Research itself cites no play.
 
 ## Decide which searches are needed
 

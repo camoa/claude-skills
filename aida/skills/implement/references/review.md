@@ -27,7 +27,8 @@ It writes `implementation/brief-<order id>-review.json`:
 - the diff as a path, the frozen tests, and the builder's report path;
 - the eight check results;
 - both interface texts;
-- the path the reviewer's findings go to.
+- the path the reviewer's findings go to;
+- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the diff path, the findings path and the report path. It prints one
 line per check with its verdict, and counts. Never the brief.
@@ -97,7 +98,8 @@ start over it. It writes `implementation/brief-<order id>-fix-<round>.json`:
 - the frozen tests;
 - this round's own report path, and the order's diff budget;
 - the round number;
-- `headNow`, the code repository's own commit at the moment of this call.
+- `headNow`, the code repository's own commit at the moment of this call;
+- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path and `headNow`. It prints one line per finding with its
 severity and what it cites, and the scope. Never the evidence.

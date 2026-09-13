@@ -79,6 +79,13 @@ acted on.
 got one answers from that one, and names what it did not get. Otherwise one network failure stops
 every review, which is how version 5 trained the habit of skipping a gate.
 
+**Check 16 has a floor the `findings` step applies before its lens.** The `practices` lens reads
+the plays research loaded into `records/playbooks.json`. The check reads unknown, with the detail
+"playbooks not loaded", when that record is absent. It also reads unknown when no source in the
+record is `loaded` while `project.json` carries a playbook subscription or the project folder
+holds `playbook.md`. Otherwise the lens verdict stands. A missing load means the lens did not run,
+never that there was nothing to follow. The repair is running `playbooks load` on the task.
+
 ## Report what the range itself said
 
 An empty range is reported as empty. Say which of two things happened: the range held no commit, or

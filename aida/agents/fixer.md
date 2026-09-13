@@ -30,6 +30,13 @@ first. It holds the open findings for this round, in severity order, each with i
 criterion or non-goal it cites. It holds the fix scope union, the frozen tests that cover it, the
 diff budget, and the path of your report file.
 
+**Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
+or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
+plays are the person's own rules, so a play outranks a guide's default where the two differ. A
+play's `guide` names the catalog guide behind it. You cannot reach the catalog. When a play's `what`
+is not enough, name the play and its guide in your report. Name the ids of the plays you followed
+in your report.
+
 Fix each listed finding, inside the scope, in the order given. Do not fix anything a finding did
 not name, and do not refactor or reformat a line the finding does not require. A problem you
 notice that nothing named goes in your report, never into the diff.

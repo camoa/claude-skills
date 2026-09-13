@@ -23,6 +23,13 @@ and owns, each with the sentence saying how it is verified and who verifies it. 
 non-goals the unit names and the unit's own declared interface. It holds the interface records of
 the units it depends on. Read the brief first.
 
+**Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
+or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
+plays are the person's own rules, so a play outranks a guide's default where the two differ. A
+play's `guide` names the catalog guide behind it. You cannot reach the catalog. When a play's `what`
+is not enough, name the play and its guide in your report. Name the ids of the plays you followed
+in your report.
+
 **Open the recipe yourself.** You are given its path, not its text. Read it before you choose a
 level or a file name. You are given exactly one recipe path; a second one is not yours to open, and
 a hook refuses it.

@@ -2,7 +2,7 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -286,6 +286,20 @@ declares no source, so a stage that needs a kind and finds none declared asks fo
 It writes one entry, ranked first for that kind. A second call for the same folder adds the kind
 to that entry rather than writing a second one. It commits the change and runs the check. Nothing
 is fetched; a stage reads the folder the first time it needs something. Show the whole output.
+
+## `subscribe-playbook <name-or-path> <framework> <set-id>`
+
+Subscribes the project to one catalog playbook set for one framework it declares. The set id is
+`<framework>/best-practices/<author>`. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  subscribe-playbook "<target>" <framework> <set-id>
+```
+Exit 1 with a framework this project never declared: say so, name `set-frameworks`, and stop.
+It writes the id under that framework, commits the change, and runs the check. Subscribing
+fetches nothing; the first `playbooks load` on a task reports a set the catalog does not hold as
+unreachable. `unsubscribe-playbook` takes the same three arguments and removes the id. Show the
+whole output.
 
 ## `unregister <name-or-path>`
 

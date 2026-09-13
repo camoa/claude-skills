@@ -11,7 +11,9 @@
     "reviewVerdict",
     "closedBy",
     "reason",
-    "followUps"
+    "followUps",
+    "capturesOffered",
+    "capturesSkipped"
   ],
   "properties": {
     "schemaVersion": {
@@ -49,6 +51,16 @@
       "default": [],
       "items": { "$ref": "#/$defs/followUp" },
       "description": "One row per finding in the review record carrying `disposition: follow-up`. The task id comes from the folder check under tasks/, null when none exists, and the reason from --leave. A high severity finding with no task and no reason refuses the close, because leaving a queued security fault ships it. Empty when the review raised no such finding, or when no review ran."
+    },
+    "capturesOffered": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many of the task's notes completion offered as plays for the project's playbook, passed by the skill as --captures-offered. A play accepted is written by playbook-actions.sh capture, never here. 0 when the task had no notes, or when nobody was present."
+    },
+    "capturesSkipped": {
+      "type": "string",
+      "enum": ["", "autonomous"],
+      "description": "Why no note was offered: `autonomous` when nobody was present to name a play, the empty string when the offer ran. A decision saved mid-stage is only a candidate; a person names the play."
     }
   },
   "$defs": {

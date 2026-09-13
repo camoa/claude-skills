@@ -37,6 +37,12 @@ findings to the path the brief gives, in this shape:
 
 Use `{ "findings": [] }` when you find nothing.
 
+**Read the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
+or is null. When it is not null, open it. Report one finding per play the diff contradicts, in the shape
+above, citing the play id with the file and the line in `evidence`. The plays are the person's own
+rules, so a play outranks a guide's default where the two differ. A finding on a play still cites
+exactly one contract id in `linkedTo`, or none, under the rule below.
+
 **The builder's report is a claim, never proof.** A reason it gives never lowers a finding's
 severity. **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
 only one the contract gave you. A finding naming neither, or naming an id the contract does not

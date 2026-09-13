@@ -28,7 +28,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes six things to
+It reads the frozen copy and the frozen tests. It writes seven things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
@@ -36,7 +36,8 @@ It reads the frozen copy and the frozen tests. It writes six things to
 - every order it depends on, with its declared interface;
 - this attempt's report path;
 - how many attempts this order has used of the count it is allowed;
-- `headNow`, the code repository's own commit at the moment of this call.
+- `headNow`, the code repository's own commit at the moment of this call;
+- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path, `headNow`, the attempt count and counts, never the
 brief. The allowed count is two unless a person has granted this order one more; see

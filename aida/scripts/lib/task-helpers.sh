@@ -20,6 +20,8 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
+#   playbooks_record_path <folder>        prints the path of the playbook record research loads
+#   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
 #
 # task_worktree also takes resolve_project_folder, project_code_path_value and is_git_repo from
 # scripts/lib/recipes.sh, and the refusal in resolve_task_folder takes die79 from the caller.
@@ -115,6 +117,19 @@ distill_read() {
   fi
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
+}
+
+# The playbook record research loads, `<task_folder>/records/playbooks.json`. One spelling for
+# every reader: the four implementation briefs, the architecture review brief and check 16's floor.
+# The JSON form is null rather than a path when the file is absent, so a role never opens a file
+# to learn that nothing was loaded. $1 the task folder. Calls no die function.
+playbooks_record_path() {
+  printf '%s/records/playbooks.json' "$1"
+}
+playbooks_path_json() {
+  local record
+  record="$(playbooks_record_path "$1")"
+  if [ -f "$record" ]; then jq -n --arg p "$record" '$p'; else printf 'null'; fi
 }
 
 # The stage a task stands at, one of scope, research, design, implementation, review, completion.
