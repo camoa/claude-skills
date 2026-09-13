@@ -4,6 +4,35 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.8] - 2026-09-13
+
+Rows 31 and 32 of the live run: the end to end and visual regression setup is offered where a
+page is first named, and the setup lands in the tree the task runs in.
+
+### Added
+- Row 31: scope offers the surfaces setup once, when the goal names a page, a form, a screen or
+  a journey, neither kind is on and the project has not declined. Three answers: yes invokes the
+  `surfaces` skill and scope reads the project again; "not this task" records nothing; no
+  records the decline that every later offer reads. Design makes the same offer once per task
+  when a work order first names a page. Review's offer stays. Autonomous runs get no offer.
+- `surfaces` `install` commits what it wrote, with the reason in the message, the way `baseline`
+  does, and refuses a dirty tree at 61 before writing anything.
+
+### Fixed
+- Row 32: `surfaces` wrote the harness, the surface file and the baseline commit at the code
+  path while every stage action runs from the task's worktree, so review ran a harness the tree
+  did not hold. Setup now runs in the tree it is called from: the task's worktree when inside
+  one, the code path otherwise. `registryPath` is stored relative, `.visual-review/surfaces.json`,
+  and every reader joins it to the tree it runs in.
+- `task_worktree` writes `.claude/worktrees/` into the repository's local exclude file once,
+  before making a tree. Git listed the nested worktree as an untracked folder, so every
+  clean-tree check refused the code path once any task existed.
+
+### Changed
+- The `surfaces` skill drops `disable-model-invocation`, the way `task` did in beta.5, so a
+  stage's offer can invoke it. The guards are in the script: `--enable` and `decline` refuse
+  unattended, and the skill waits for a plain yes before `install`.
+
 ## [6.0.0-beta.7] - 2026-09-13
 
 Rows 25 to 30 of the live run: a task picked up from version 5 with scope and research done.

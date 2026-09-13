@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "The surface file, <codePath>/.visual-review/surfaces.json",
+  "title": "The surface file, .visual-review/surfaces.json in the tree setup ran in",
   "description": "The surfaces review runs and the viewports it captures at. Written by the surfaces skill, read by scripts/lib/surfaces.sh, committed with the code because the baselines beside it are. The suite reads this file at run time and names each baseline from the surface id and the viewport name, so one id captured at several viewports is several files.",
   "type": "object",
   "additionalProperties": false,

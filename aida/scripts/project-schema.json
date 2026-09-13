@@ -247,7 +247,7 @@
             "string",
             "null"
           ],
-          "description": "The surface file, \"<codePath>/.visual-review/surfaces.json\". Null until `install` writes it. One pointer beside every kind, because a project with end to end alone had none when the pointer lived inside visual regression."
+          "description": "The surface file, \".visual-review/surfaces.json\" relative to the tree setup ran in: a task's worktree, or the code path with none active. Null until `install` writes it. A reader joins it to the tree it runs in; an absolute path, from a record written before row 32 of audit/14-live-run-gaps.md, is used as it is. One pointer beside every kind, because a project with end to end alone had none when the pointer lived inside visual regression."
         },
         "declined": {
           "type": "boolean",

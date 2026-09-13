@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
 ---
 
 # Design
@@ -260,6 +260,16 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 
 Name a `--surface` when the order changes a page or a screen a person sees, by its id in the
 surface registry. Most orders name none.
+
+Before naming one: this order changes a page, `<projectPath>/project.json` has neither kind on,
+and `surfaces.declined` is false. Interactive only, offer the setup once per task. Say so in one
+line. Ask whether to set the surfaces up now, with a recommended answer. Give three answers: yes,
+not this task, or no. Say in the ask that "no" is project-wide and "not this task" is not. Yes
+invokes the `surfaces` skill through the Skill tool, and this order then names the id the setup
+registered. "Not this task" records nothing. No runs
+`"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline`, project-wide, and
+the question is never asked again. Autonomous: nothing is offered. A page scope did not see is
+often first named here.
 
 Then, one call per item, add what the order still needs:
 ```
