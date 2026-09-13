@@ -4,6 +4,16 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.5] - 2026-09-13
+
+Rows of the first live run from the first task on a picked-up project.
+
+### Fixed
+- Row 19: `next` said that moving a version 5 task into `tasks/` "is not built yet". The live run
+  concluded it had to delete and recreate the task. `next` now runs the task skill's `repair`
+  itself on the legacy task it loads, so a person never types it. `task` no longer calls `next`
+  unbuilt.
+
 ## [6.0.0-beta.4] - 2026-09-13
 
 Rows 5 to 13 of the first live run, all from picking up a version 5 project. The pickup now ends

@@ -13,7 +13,7 @@ A task is one unit of work inside a project: a folder holding `task.json` (every
 reads) and `task.md` (the goal, in prose, that nothing parses). This skill makes one, moves an old
 one into place, changes its state, splits it into a parent with children, or sets its run mode. It
 does not run any of the five stages, and it does not pick which task is active: that is
-`/aida:next`, not built yet.
+`/aida:next`.
 
 Every action below needs the active project's own folder (the one holding `project.json`, never
 the code folder). Resolve that first, with the project skill, before using anything here.
@@ -82,8 +82,8 @@ rather than moving something it cannot verify. It reads the goal, and the parent
 an old header carries them, back from the new location before it reports success. Show the whole
 output either way.
 
-Which old tasks still need this, and listing both the new and the old locations side by side while
-some remain, is `/aida:next`'s job, not built yet.
+Which old tasks still need this is `/aida:next`'s job: it lists them as `kind: legacy` and runs
+this action on the one it loads.
 
 ## `start <task-id>`
 
