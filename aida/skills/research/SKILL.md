@@ -63,6 +63,11 @@ Read the criteria's text from the contract file.
 `search:` lines present: this is a resumed or repeated run. Read each named file before deciding
 what is still missing, rather than starting over.
 
+`inputs:` says what the task's `inputs/` folder holds: `absent`, `empty`, or `present` with one
+`input:` line per file. That folder holds material captured before the task existed. Read every
+`input:` path before any search runs. This material is input, never a finding. It names things to
+search for. Record a claim from it only once a search confirms it with a source.
+
 ## Start the stage
 
 Run:
@@ -90,7 +95,9 @@ Typical search subjects, named by what they read, not by a fixed roster:
   signal. Search the configuration store the same way where the framework has one, because an
   existing view or content type is prior art that needs no code. A configuration file has no
   docblock, so the recipe says what to read in its place. Core and contributed code are noise
-  here; the outside search covers those.
+  here; the outside search covers those. The project's own task records are prior art as well.
+  The searcher also reads `<project>/tasks/`, so "have we built this" is asked of this project's
+  history. A hit names the task and what it changed.
 - **Prior art outside this project.** A library, a module, a package that already does this.
   Apply the three-part test to anything found: is it maintained, is it used, is it supported. A
   process recipe for this project's own framework may refine that test; when none exists, apply
@@ -108,6 +115,15 @@ Typical search subjects, named by what they read, not by a fixed roster:
   changed. Checking it has three outcomes, not one: true, false, or could not be settled. All
   three finish the check and all three are worth recording; a false assumption is one of the
   most useful things research produces.
+- **A spike.** For a design question no document answers, for example whether one approach
+  handles a case, and only when the searches above came back empty. A spike answers one question
+  and is never kept. It is not dispatched: this conversation writes and runs it. Read
+  `<codePath>/.gitignore` first: when no line names `.aida-spike/`, say so and stop, and write
+  nothing. Otherwise write a small runnable experiment under `<codePath>/.aida-spike/` and run
+  it. Record the answer as a finding: `--source` is that folder path, and `--text` holds what
+  ran and what it printed. Delete the folder before the coverage check closes research. The
+  check refuses (exit 6) while it exists, so nothing throwaway ships. Carry the idea forward,
+  never the code: design authors it fresh.
 
 How many searches run is set by what these criteria actually need. A task with three criteria
 that all rest on the same library may need one search, not three. The search inside this project
@@ -115,7 +131,7 @@ is the exception: run it on every task that changes code.
 
 ## Dispatch one agent per search
 
-**Name the role on every dispatch.** Three roles cover every search subject above, and each one
+**Name the role on every dispatch.** Three roles cover every dispatched subject above, and each one
 carries its own tool set and its own limits, applied by the runtime:
 
 | Search subject | Role |
@@ -131,7 +147,8 @@ model, and nothing the roles promise holds. `internal-searcher` has no web tools
 what makes "prior art in this project" a claim about this project rather than about the internet.
 
 For each search decided above, dispatch its role with a narrow brief: the words to search, the
-bound, and the shape of what to return, findings with a source and nothing else. The agent never
+bound, and the shape of what to return, findings with a source and nothing else. The
+`internal-searcher` brief also names the code path and the project folder. The agent never
 sees this conversation and this conversation never sees what the agent read, only what it reports
 back. That isolation is what keeps the cost bounded.
 
@@ -273,6 +290,9 @@ malformed required field. Fix that file with another `record` call, or by hand, 
 
 Exit 3: the script could not run the check at all. Read its stderr and fix the named problem,
 then check again.
+
+Exit 6: the coverage is clean but the spike folder named on the `spike:` line still exists.
+Delete that folder, then check again. Nothing else is missing.
 
 Exit 5: the schema is fine but the coverage is not. For each id the `open:` line names under
 criteria with no finding, dispatch another search for that criterion specifically. For each entry

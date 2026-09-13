@@ -82,6 +82,15 @@
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
 #      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
 #      criterion in the contract (check-research.sh's own exit 4).
+#   6  `check` found the coverage clean, but <codePath>/.aida-spike/ still exists. A spike is a
+#      throwaway experiment research writes to answer one question (skills/research/SKILL.md,
+#      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
+#      report is still written. A coverage gap outranks this: a spike open mid-research is fine.
+#
+# `read` also reports <task_folder>/inputs/, the material captured before the task existed. Its
+# three states stay apart: absent (no folder), empty (a folder holding nothing but its own
+# README.md), present (one `input:` line per file). "Nobody captured anything" and "the material
+# was lost" are different facts, and the second must never read as the first.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule scope-actions.sh and check-alignment.sh
@@ -130,6 +139,12 @@ TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 [ -f "$TASK_HELPERS_LIB" ] || die3 "cannot find the task-helper library at $TASK_HELPERS_LIB"
 # shellcheck source=/dev/null
 source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
+# resolve_project_folder and the codePath readers, for `check`'s spike refusal. Sourced before
+# TASK_PATH is set, because the library blanks that name at load.
+RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
+[ -f "$RECIPES_LIB" ] || die3 "cannot find the recipes library at $RECIPES_LIB"
+# shellcheck source=/dev/null
+source "$RECIPES_LIB" || die3 "the recipes library failed to load: $RECIPES_LIB"
 
 # Prints "true" when the contract at $ALIGNMENT_FILE exists, is readable, parses as JSON, and is
 # shaped like a contract (an object carrying schemaVersion, goal, expectedResult, and
@@ -219,6 +234,17 @@ do_read() {
   echo "research: $research_state"
   echo "research-dir: $RESEARCH_DIR"
   echo "searches: $file_count"
+
+  local inputs_state="absent"
+  if [ -d "$INPUTS_DIR" ]; then
+    inputs_state="empty"
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      inputs_state="present"
+      echo "input: $f"
+    done < <(find "$INPUTS_DIR" -mindepth 1 -maxdepth 1 -type f ! -name 'README.md' 2>/dev/null | sort)
+  fi
+  echo "inputs: $inputs_state"
   exit 0
 }
 
@@ -388,12 +414,25 @@ do_check() {
     4) verdict=5 ;;
     *) die3 "check: check-research.sh exited with an unexpected code $rc" ;;
   esac
+  # Clean coverage is the close, and a spike still on disk refuses it. No project or no codePath
+  # means no place a spike could be, so there is nothing to refuse.
+  local spike_dir="" project_folder
+  if [ "$verdict" -eq 0 ] && project_folder="$(resolve_project_folder "$TASK_PATH")" \
+      && [ "$(project_code_path_state "$project_folder")" = "ok" ]; then
+    spike_dir="$(project_code_path_value "$project_folder")"
+    spike_dir="${spike_dir:+$spike_dir/.aida-spike}"
+    [ -n "$spike_dir" ] && [ -d "$spike_dir" ] && verdict=6
+  fi
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
   echo "action: check"
   echo "status: $verdict"
   echo "lines: $lines"
   echo "report: $CHECK_FILE"
-  if [ "$verdict" -ne 0 ]; then
+  if [ "$verdict" -eq 6 ]; then
+    echo "spike: $spike_dir"
+    printf 'research-actions: check: coverage is clean, but the spike folder %s still exists. Delete it, then check again; nothing throwaway ships\n' "$spike_dir" >&2
+  fi
+  if [ "$verdict" -eq 4 ] || [ "$verdict" -eq 5 ]; then
     echo "open: $(jq -r '
       [ ("criteria with no finding: " + ((.coverage.criteriaWithNoFinding // []) | map(.id) | join(" "))
           | select(endswith(": ") | not)),
@@ -428,6 +467,7 @@ RESOLVE_RC=$?
 [ "$RESOLVE_RC" -eq 0 ] || exit "$RESOLVE_RC"
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 RESEARCH_DIR="$TASK_PATH/research"
+INPUTS_DIR="$TASK_PATH/inputs"
 CHECK_FILE="$TASK_PATH/records/research-check.json"
 
 case "$ACTION" in
