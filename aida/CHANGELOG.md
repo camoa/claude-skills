@@ -30,6 +30,11 @@ Rows of the first live run from the first task on a picked-up project.
 - Row 23: `task` is model-invocable. The flag made the person type `/aida:task create` after
   saying yes to `next`'s offer, and refused `repair`. The guards stay as prose: `create` runs only
   on the person's ask or yes, and `set-run-mode` only when a person explicitly asks.
+- Row 24: the split recommendation after research, never built. A `split-advisor` agent reads the
+  contract and the findings once after research closes and writes one recommendation, flat or
+  split with the children and the criteria each takes. `split-read` checks every criterion is
+  claimed once. Research shows it and asks; a yes runs the task skill's `split` as recommended.
+  Autonomous records it and stays flat. The advisor, and a person, decide; no count gates it.
 - Row 19: `next` said that moving a version 5 task into `tasks/` "is not built yet". The live run
   concluded it had to delete and recreate the task. `next` now runs the task skill's `repair`
   itself on the legacy task it loads, so a person never types it. `task` no longer calls `next`

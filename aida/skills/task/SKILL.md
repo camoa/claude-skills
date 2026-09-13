@@ -126,9 +126,9 @@ build, no atomic swap and no rollback copy: version 5 needed all of that because
 folders; here nothing does.
 
 Every fact this needs must already be decided before calling it: which children, each child's own
-goal, and which criteria hand down to it. This skill never derives them; that is a later part's
-job once research is organised by goal. Checking that every criterion was claimed by some child,
-and that no child's criteria went unresearched, is that later part's job too. This only performs
+goal, and which criteria hand down to it. This skill never derives them. The research skill's
+split advisor recommends the children and their criteria after research closes. That skill's
+`split-read` action checks that every criterion is claimed once, before this action runs. This only performs
 the mechanical split.
 
 The two-level limit stays: a task that already has a parent cannot be split again, and a child

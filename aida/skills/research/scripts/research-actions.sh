@@ -27,6 +27,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
 #   research-actions.sh check  <task_folder>
 #   research-actions.sh distill <task_folder>
+#   research-actions.sh split-read <task_folder>
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, unmodified
@@ -73,6 +74,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      what stops research'), so it refuses to start without one rather than starting blind.
 #      Or `distill` found no records/research-distill.json, so the distiller has not been
 #      dispatched yet.
+#      Or `split-read` found no records/research-split.json, so the split-advisor has not
+#      been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--search` that is not lowercase letters, digits and
 #      single hyphens; a `--criteria-served` entry that is not a valid criterion id shape; a
@@ -89,6 +92,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exit 1, remapped here so it never collides with this script's own exit 1, "not a task
 #      folder"). Or `distill` found a sidecar that fails scripts/distill-schema.json, or says
 #      standsAlone false with no gap.
+#      Or `split-read` found a sidecar that is not in the split-advisor's shape, or whose
+#      children do not claim every contract criterion exactly once (the id is on stderr).
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
 #      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
 #      criterion in the contract (check-research.sh's own exit 4).
@@ -146,6 +151,7 @@ usage: research-actions.sh read   <task_folder>
                                    [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
        research-actions.sh check  <task_folder>
        research-actions.sh distill <task_folder>
+       research-actions.sh split-read <task_folder>
 EOF
 }
 
@@ -510,6 +516,47 @@ do_distill() {
   exit 0
 }
 
+# Reads the sidecar the split-advisor wrote, checks it against the contract, and prints summary
+# lines. The recommendation is the value and a person decides; nothing here splits.
+do_split_read() {
+  [ "$#" -eq 0 ] || die3 "split-read: unrecognized argument: $1"
+  local sidecar="$TASK_PATH/records/research-split.json" fault
+  [ -f "$sidecar" ] || die2 "split-read: no sidecar at $sidecar. Dispatch the split-advisor first"
+  jq empty "$sidecar" 2>/dev/null || die4 "split-read: $sidecar could not be read as JSON"
+  # One jq program prints the first fault, or nothing when the sidecar holds. The child id pattern
+  # is the one scripts/task-schema.json declares; a criterion is a fault when no child claims it
+  # or two do, since the split hands each one down exactly once.
+  fault="$(jq -r --argjson ids "$(contract_criteria_json | jq -c '[.[].id]')" '
+    if type != "object" then "not an object"
+    elif .schemaVersion != 1 then "schemaVersion is not 1"
+    elif (.recommendation | IN("flat", "split") | not) then "recommendation is not flat or split"
+    elif ((.reason | type) != "string") or (.reason == "") then "reason is missing or empty"
+    elif ((.children | type) != "array") then "children is not an array"
+    elif .recommendation == "flat" then
+      (if (.children | length) > 0 then "flat with children" else empty end)
+    elif (.children | length) < 2 then "split with fewer than two children"
+    elif ([.children[] | select((.id | type) != "string" or (.id | test("^[A-Za-z0-9_][A-Za-z0-9._-]*$") | not))] | length) > 0
+      then "a child id is not a valid task id"
+    elif ([.children[] | select((.goal | type) != "string" or .goal == "")] | length) > 0 then "a child has no goal"
+    elif ([.children[] | select((.criteria | type) != "array")] | length) > 0 then "a child has no criteria list"
+    else ([.children[].criteria[]] | group_by(.) | map({id: .[0], n: length})) as $claims
+      | ($claims | map(.id)) as $claimed
+      | (first($claims[] | select(.n > 1) | .id) // null) as $twice
+      | (first($ids[] | select(IN($claimed[]) | not)) // null) as $none
+      | (first($claimed[] | select(IN($ids[]) | not)) // null) as $unknown
+      | if $twice then "criterion \($twice) is claimed by more than one child"
+        elif $none then "criterion \($none) is claimed by no child"
+        elif $unknown then "criterion \($unknown) is not in the contract"
+        else empty end
+    end' "$sidecar")"
+  [ -z "$fault" ] || die4 "split-read: $sidecar: $fault"
+  echo "recommendation: $(jq -r '.recommendation' "$sidecar")"
+  echo "children: $(jq -r '.children | length' "$sidecar")"
+  jq -r '.children[] | "child: " + .id + " " + (.criteria | length | tostring) + " criteria"' "$sidecar"
+  echo "reason: $(jq -r '.reason | split(". ")[0]' "$sidecar")"
+  exit 0
+}
+
 # ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
@@ -540,5 +587,6 @@ case "$ACTION" in
   record)  do_record  "$@" ;;
   check)   do_check   "$@" ;;
   distill) do_distill "$@" ;;
+  split-read) do_split_read "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac
