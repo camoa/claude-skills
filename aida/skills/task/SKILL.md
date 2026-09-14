@@ -1,7 +1,7 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", or "save what we decided". It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, or saves a mid-stage decision as a note.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id>]"
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", or "bring the site up" for a task's worktree. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, or brings the worktree's own site up and down.
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id> | environment <task-id> <show|up|down>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -66,6 +66,43 @@ from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool
 so scoping in this same window is not refused. From a window outside the code repository the
 tool refuses on first entry. Then print the path and `claude --worktree <name>`, which opens the
 same tree from the code path, and stop.
+
+**5. Offer the site.** A worktree has the branch's files and no site, so a review or a baseline
+taken there would capture the served checkout instead. Dispatch `catalog-identifier` once for the
+`worktree-environment` point, naming every framework the project records, the same words the
+surfaces skill uses for its points. Pass the answer as `--recipe <framework>=<path>` or
+`--lookup-failed <framework>=<word>`, one flag per framework, and run `environment <name> show`.
+The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script refuses any other.
+`not-applicable` ends the step: say once that this worktree has files and no site. Otherwise,
+interactive: show the commands and the prose, and ask once whether to bring the site up now. A
+yes runs `environment <name> up`. A no records nothing; say `up` with the same flags does it
+later. Autonomous: never bring it up, and say so once.
+
+## `environment <task-id> <show|up|down>`
+
+The worktree's own running site, from the framework's `worktree-environment` recipe. The recipe
+holds the commands; this plugin holds none. `show` and `up` take the recipe flags step 5 names.
+`down` takes none: it reads the recipe path the record holds.
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  environment --project "<projectPath>" "<task-id>" <show|up|down> <recipe flags>
+```
+`show` prints the recipe path, the preconditions prose, the bring-up, address and tear-down
+commands, and the build-in-place prose, with `{codePath}` filled, and runs nothing. A recipe with
+no bring-up block, or no address block, exits 3 from `show` too, so its exit code says what `up`
+would do.
+
+`up` is a person's yes, so it refuses unattended at 70. It runs every bring-up line in the task's
+worktree, output to `records/environment-up.txt`, and stops at the first failure with exit 4 and
+a `first:` line. Show that line; do not bring the site up by hand. Then it runs the address command
+and records `environment` in `task.json`: the address, the recipe and when. It prints `address:`.
+Running it twice is safe: the recipe promises every step runs again cleanly.
+
+`down` runs the tear-down lines, output to `records/environment-down.txt`, and removes
+`environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
+nothing up it says so and exits 0. Run it before the worktree is removed, or the framework keeps
+an orphaned registry entry; the completion body names it when a site is up. Review and `baseline`
+read `environment.address` before asking for a base URL.
 
 ## `repair <old-task-folder>`
 

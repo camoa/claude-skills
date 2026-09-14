@@ -105,7 +105,8 @@ surface, at every viewport. Show the plan and take the person's yes. Then run it
 baselines with the reason in the message. Never write a baseline unattended, and never by hand.
 
 Ask for the base URL once, interactive, and pass it as `--value base-url=<address>`. Nothing stores
-it. Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirty.
+it. When the task record has `environment.address`, pass that as `--value base-url=` and do not ask.
+Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirty.
 
 ## Decline
 

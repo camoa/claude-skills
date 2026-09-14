@@ -413,8 +413,9 @@ cp_render_body() {
         (if $finished == null then ["no build record; no range"] else [$finished.commitRange // ""] end)
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         + (if ($taskDoc.worktree // null) == null then [] else
-            ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there.",
-             "After the merge: git worktree remove " + $taskDoc.worktree.path + " and git branch -d " + $taskDoc.worktree.branch] end))
+            ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
+            + (if ($taskDoc.environment // null) == null then [] else ["Tear the site down first: `task environment " + $task + " down`"] end)
+            + ["After the merge: git worktree remove " + $taskDoc.worktree.path + " and git branch -d " + $taskDoc.worktree.branch] end))
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]

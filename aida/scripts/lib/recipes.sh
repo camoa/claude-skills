@@ -51,6 +51,8 @@
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
+#   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
+#   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
 #   fenced_blocks_under <recipe> <heading> <tag>  the lines of every block with that tag, in order
 #   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
 #   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
@@ -988,6 +990,63 @@ br_worst_verdict() {
 # files, and one copy is what keeps their refusals listing their sets in the same shape.
 md_basenames_in() {
   find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
+
+# ------------------------------------------------------------------------------------------------
+# One recipe per point. Both came from skills/surfaces/scripts/surfaces-actions.sh, which now calls
+# them here, as does the task skill's `environment` action. Both read the caller's globals rather
+# than arguments, because a refusal inside a `$(...)` capture would exit that subshell alone:
+# ACTION, the action's own name; RUN_MODE, interactive or autonomous; KIND, the point the recipe
+# answers; FRAMEWORKS, the project's frameworks one per line. Sets RECIPE and RECIPE_FW.
+# `--viewport <v>` is appended to VIEWPORTS_ARG for the one caller that reads it, surfaces.
+# ------------------------------------------------------------------------------------------------
+RECIPE=""; RECIPE_FW=""; VIEWPORTS_ARG=""
+
+# Exit 70. $1 the flag, $2 what it says a person did.
+cr_require_person() {
+  [ "$RUN_MODE" = "autonomous" ] || return 0
+  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written."
+}
+
+# One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends
+# the action: no recipe anywhere is not-applicable (exit 0), a lookup nobody completed is unknown
+# (exit 3), and two recipes are two answers to one question (exit 72). The words are the ones
+# cr_lookup_failure_pair accepts, and nothing here reads a fourth.
+cr_resolve_recipe() {
+  local recipes="" failures="" fw pair reason unknown=""
+  while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || die 3 "$ACTION: $1 needs a value"
+    case "$1" in
+      --recipe)        cr_recipe_pair "$ACTION" --recipe "$2"; recipes="$recipes$CR_PAIR
+" ;;
+      --lookup-failed) cr_lookup_failure_pair "$ACTION" --lookup-failed "$2"; failures="$failures$CR_PAIR
+" ;;
+      --viewport)      VIEWPORTS_ARG="$VIEWPORTS_ARG$2
+" ;;
+      *) die 3 "$ACTION: unrecognized argument: $1" ;;
+    esac
+    shift 2
+  done
+  while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    pair="$(cr_lookup "$recipes" "$fw")"; reason="$(cr_lookup "$failures" "$fw")"
+    [ -n "$pair" ] || [ -n "$reason" ] || die 3 "$ACTION: nothing was said about the framework $fw. Pass --recipe $fw=<path> or --lookup-failed $fw=<word>."
+    if [ -n "$pair" ]; then
+      [ -z "$RECIPE" ] || die 72 "$ACTION: $RECIPE_FW and $fw each carry a $KIND recipe, and nothing here may choose between two answers to one question."
+      RECIPE="$pair"; RECIPE_FW="$fw"
+    fi
+    case "$reason" in listing-unreachable|fetch-failed) unknown="$unknown $fw=$reason" ;; esac
+  done <<CR_FRAMEWORKS
+$FRAMEWORKS
+CR_FRAMEWORKS
+  [ -n "$RECIPE" ] && return 0
+  if [ -n "$unknown" ]; then
+    printf '%s: unknown%s\n' "$ACTION" "$unknown"
+    die 3 "$ACTION: nobody looked for a $KIND recipe:$unknown. Nothing was written."
+  fi
+  printf '%s: not-applicable\n' "$ACTION"
+  printf '%s: no framework of this project has a %s recipe, so there is no %s setup here.\n' "$ACTION" "$KIND" "$KIND" >&2
+  exit 0
 }
 
 # ------------------------------------------------------------------------------------------------

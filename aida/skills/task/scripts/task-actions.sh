@@ -43,15 +43,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    <task-id> <autonomous|interactive>
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
 #                    -- <text...>
+#   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
+#                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
-# mode). No action here currently branches on it: nothing below ever asks a question, so there is
-# nothing for a run mode to change yet. It is accepted anyway, in the same place and shape
+# mode). Nothing below asks a question, so only `environment up` reads it: a site coming up is a
+# person's yes, and it refuses unattended at 70. It is accepted in the same place and shape
 # project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
-# The value itself is read nowhere below, so nothing here stores it.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints why
 # to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
@@ -77,9 +78,10 @@ fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 CHECK_TASK_SCRIPT="${PLUGIN_ROOT}/scripts/check-task.sh"
 
+RUN_MODE="interactive"
 if [ "${1:-}" = "--run-mode" ]; then
   [ $# -ge 2 ] || { printf 'task-actions: --run-mode needs a value\n' >&2; exit 3; }
-  shift 2
+  RUN_MODE="$2"; shift 2
 fi
 
 die3() {
@@ -106,6 +108,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
        task-actions.sh save     --project <path> <task-id> -- <text...>
+       task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
 EOF
 }
 
@@ -856,6 +859,127 @@ do_save() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# environment: the worktree's own running site, from the framework's `worktree-environment` recipe
+# (dev-guides/proposals/worktree-environment-ask.md): a worktree has the branch's files and no
+# site, so a review or a baseline taken there would capture the served checkout. `## Bring up`,
+# `## Address` and `## Tear down` are sh blocks run as arguments in the worktree, the way surfaces
+# runs `## Install`; `## Preconditions` and `## Build in place` are prose. `{codePath}` is the one
+# token filled. `up` records `environment: {address, recipe, upAt}` in task.json; `down` reads the
+# recipe path from that record, so it takes no recipe flags, and removes it.
+# ------------------------------------------------------------------------------------------------
+
+# Fills every `{codePath}` in $1 with $CODE_PATH. A shell loop rather than sed, so the path may
+# hold any character.
+fill_code_path() {
+  local line="$1"
+  while [ "${line#*"{codePath}"}" != "$line" ]; do line="${line%%"{codePath}"*}$CODE_PATH${line#*"{codePath}"}"; done
+  printf '%s' "$line"
+}
+
+# The prose under the H2 $2 of the recipe $1, indented, the way surfaces prints `## Discovery`.
+recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/d; s/^/  /'; }
+
+# Runs every line of $1 in $2 with output appended to $3, `{codePath}` filled, and exits 4 at the
+# first failure with the `first:` line, the way surfaces install does. $4 the label for stderr.
+run_recipe_lines() {
+  local steps="$1" dir="$2" outfile="$3" who="$4" line before
+  cd "$dir" || die3 "environment: could not enter $dir"
+  while IFS= read -r line; do
+    [ -n "${line// /}" ] || continue
+    before="$(wc -l <"$outfile" | tr -d '[:space:]')"
+    run_recipe_line "$who" "$RECIPE" "$(fill_code_path "$line")" "$outfile" && continue
+    printf 'environment: %s step failed: %s\n' "$who" "$line" >&2
+    recipe_output_summary 4 "$outfile" "$((before + 1))"; exit 4
+  done <<TA_STEPS
+$steps
+TA_STEPS
+}
+
+do_environment() {
+  local project_path="" id="" sub=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --*) break ;;
+      *)
+        if [ -z "$id" ]; then id="$1"; shift
+        elif [ -z "$sub" ]; then sub="$1"; shift
+        else die3 "environment: unrecognized argument: $1"
+        fi
+        ;;
+    esac
+  done
+  [ -n "$project_path" ] || die3 "environment: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "environment: not a folder: $project_path"
+  project_path="$_resolved_project"
+  require_project_folder "$project_path" "environment"
+  [ -n "$id" ] || die3 "environment: a task id is required"
+  case "$sub" in show|up|down) ;; *) die3 "environment: the action is show, up or down, got: ${sub:-nothing}" ;; esac
+
+  local task_dir task_json wt outfile
+  task_dir="$(task_dir_for "$project_path" "$id")"
+  task_json="$task_dir/task.json"
+  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  CODE_PATH="$(project_code_path_value "$project_path")"
+  [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die3 "environment: the project's codePath is not on disk: ${CODE_PATH:-none recorded}"
+
+  if [ "$sub" = "down" ]; then
+    [ "$#" -eq 0 ] || die3 "environment: down reads the recipe the record names and takes no flag, got: $1"
+    RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")"
+    [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
+    [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
+    wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
+    mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
+    run_recipe_lines "$(sh_blocks_under "$RECIPE" "Tear down")" "$wt" "$outfile" down
+    write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+    commit_task_change "$project_path" "Tear down the site of ${id}" "requested" "" "" "$id" "environment" \
+      || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    printf 'environment: down\n'; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
+    return 0
+  fi
+
+  # show and up resolve the recipe the same way, so show's exit code says what up would do.
+  ACTION="environment"; KIND="worktree-environment"
+  FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
+  cr_resolve_recipe "$@"
+  local bring_up address tear_down err_file addr_file result address_value tab; tab="$(printf '\t')"
+  bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
+  address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
+  tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
+  printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
+  [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
+  [ -n "$address" ] || die3 "environment: $RECIPE has no block tagged sh under Address, so up would record no address"
+  if [ "$sub" = "show" ]; then
+    printf 'PRECONDITIONS:\n'; recipe_prose_under "$RECIPE" Preconditions
+    printf 'BRING UP:\n'; fill_code_path "$bring_up" | sed 's/^/  /'; printf '\n'
+    printf 'ADDRESS:\n  %s\n' "$(fill_code_path "$address")"
+    printf 'TEAR DOWN:\n'; fill_code_path "$tear_down" | sed 's/^/  /'; printf '\n'
+    printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
+    return 0
+  fi
+  cr_require_person up "a person approved the site coming up"
+  wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
+  mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
+  run_recipe_lines "$bring_up" "$wt" "$outfile" up
+  # The address is the command's first line of standard output, so its standard error is kept
+  # apart and appended to the record afterwards.
+  address="$(fill_code_path "$address")"
+  refuse_if_unsafe environment "$RECIPE" "$address" || exit 3
+  addr_file="$(mktemp)" && err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
+  printf '+ %s\n' "$address"
+  result="$(br_run_resolved "$(printf '%s' "$address" | jq -Rc 'split(" ") | map(select(. != ""))')" "$wt" "$addr_file" '[]' "" "$err_file")"
+  cat "$addr_file" "$err_file" >>"$outfile"; address_value="$(head -n 1 "$addr_file")"; rm -f "$addr_file" "$err_file"
+  case "$result" in RAN*) ;; *) die3 "environment: the address line holds no command, or a token nothing fills: ${result#*"$tab"}. {codePath} is the only token filled" ;; esac
+  [ "${result#*"$tab"}" = "0" ] && [ -n "$address_value" ] || { printf 'environment: the address command failed or printed nothing\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+  write_atomic "$task_json" "$(jq --arg a "$address_value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.environment = {address: $a, recipe: $r, upAt: $t}' "$task_json")"
+  commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+  printf 'address: %s\n' "$address_value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -870,5 +994,6 @@ case "$action" in
   split) do_split "$@" ;;
   set-run-mode) do_set_run_mode "$@" ;;
   save) do_save "$@" ;;
+  environment) do_environment "$@" ;;
   *) usage; exit 3 ;;
 esac

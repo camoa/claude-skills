@@ -56,12 +56,6 @@ ACTION="${1:-}"; [ -n "$ACTION" ] || die 3 "needs an action: read, show, install
 shift
 TAB="$(printf '\t')"
 
-# Exit 70. $1 the flag, $2 what it says a person did.
-require_person() {
-  [ "$RUN_MODE" = "autonomous" ] || return 0
-  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written."
-}
-
 if [ "$ACTION" = "step" ]; then
   names="$(md_basenames_in "$STEPS_DIR")"
   [ "$#" -eq 1 ] || die 3 "step: one step name is required. The steps are: $names"
@@ -116,11 +110,8 @@ sa_commit_if_changed() {
 }
 
 # ----------------------------------------------------------------- the recipe
-# One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends
-# the action: no recipe anywhere is not-applicable (exit 0), a lookup nobody completed is unknown
-# (exit 3), and two recipes are two answers to one question (exit 72). The words are the ones
-# cr_lookup_failure_pair accepts, and nothing here reads a fourth.
-RECIPE=""; RECIPE_FW=""; VIEWPORTS_ARG=""; VIEWPORTS_JSON="[]"; VALUES=""; KIND=""; KEY=""
+# cr_resolve_recipe in scripts/lib/recipes.sh sets RECIPE and RECIPE_FW, or ends the action.
+VIEWPORTS_JSON="[]"; VALUES=""; KIND=""; KEY=""
 
 # Maps a kind word to the project record's key, or dies at 3 naming both kinds. Sets KEY. $1 the kind.
 kind_key() {
@@ -131,43 +122,6 @@ kind_key() {
   esac
 }
 
-resolve_recipe() {
-  local recipes="" failures="" fw pair reason unknown=""
-  while [ "$#" -gt 0 ]; do
-    [ "$#" -ge 2 ] || die 3 "$ACTION: $1 needs a value"
-    case "$1" in
-      --recipe)        cr_recipe_pair "$ACTION" --recipe "$2"; recipes="$recipes$CR_PAIR
-" ;;
-      --lookup-failed) cr_lookup_failure_pair "$ACTION" --lookup-failed "$2"; failures="$failures$CR_PAIR
-" ;;
-      --viewport)      VIEWPORTS_ARG="$VIEWPORTS_ARG$2
-" ;;
-      *) die 3 "$ACTION: unrecognized argument: $1" ;;
-    esac
-    shift 2
-  done
-  while IFS= read -r fw; do
-    [ -n "$fw" ] || continue
-    pair="$(cr_lookup "$recipes" "$fw")"; reason="$(cr_lookup "$failures" "$fw")"
-    [ -n "$pair" ] || [ -n "$reason" ] || die 3 "$ACTION: nothing was said about the framework $fw. Pass --recipe $fw=<path> or --lookup-failed $fw=<word>."
-    if [ -n "$pair" ]; then
-      [ -z "$RECIPE" ] || die 72 "$ACTION: $RECIPE_FW and $fw each carry a $KIND recipe, and nothing here may choose between two answers to one question."
-      RECIPE="$pair"; RECIPE_FW="$fw"
-    fi
-    case "$reason" in listing-unreachable|fetch-failed) unknown="$unknown $fw=$reason" ;; esac
-  done <<SA_FRAMEWORKS
-$FRAMEWORKS
-SA_FRAMEWORKS
-  [ -n "$RECIPE" ] && return 0
-  if [ -n "$unknown" ]; then
-    printf '%s: unknown%s\n' "$ACTION" "$unknown"
-    die 3 "$ACTION: nobody looked for a $KIND recipe:$unknown. Nothing was written."
-  fi
-  printf '%s: not-applicable\n' "$ACTION"
-  printf 'SURFACES: no framework of this project has a %s recipe, so there is no %s setup here.\n' "$KIND" "$KIND" >&2
-  exit 0
-}
-
 # The `## Viewports` block of the recipe, or the --viewport list, into VIEWPORTS_JSON. A global,
 # because a refusal inside a `$(...)` capture would exit that subshell alone.
 load_viewports() {
@@ -176,7 +130,7 @@ load_viewports() {
     out="$(fenced_blocks_under "$RECIPE" Viewports json | jq -c 'if type == "array" then . else empty end' 2>/dev/null)"
     VIEWPORTS_JSON="${out:-[]}"; return 0
   fi
-  require_person "--viewport" "a person chose the viewports"
+  cr_require_person "--viewport" "a person chose the viewports"
   out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
@@ -193,7 +147,7 @@ do_show_or_install() {
   local steps files_dir list n rel target kept=0 written=0 line before doc
   KIND="${1:-}"
   kind_key "$KIND"
-  shift; resolve_recipe "$@"
+  shift; cr_resolve_recipe "$@"
   steps="$(sh_blocks_under "$RECIPE" Install)"
   files_dir="$(mktemp -d)" || die 3 "$ACTION: could not create a temporary folder"
   list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
@@ -266,7 +220,7 @@ do_register() {
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --enable) require_person "--enable" "a person confirmed this surface"; enabled=true; shift; continue ;;
+      --enable) cr_require_person "--enable" "a person confirmed this surface"; enabled=true; shift; continue ;;
       --critical) critical=true; shift; continue ;;
       --url|--kind|--mask|--path) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
       *) die 3 "register: unrecognized argument: $1" ;;
@@ -337,7 +291,7 @@ do_baseline() {
 $(printf '%s' "$ids" | tr ' ' '\n')
 SA_IDS
   if [ "$confirmed" = false ]; then printf 'confirm: run again with --confirmed to write these baselines\n'; exit 0; fi
-  [ "$RUN_MODE" = "interactive" ] || { printf 'baselines: none\n'; require_person "--confirmed" "a person confirmed the baselines"; }
+  [ "$RUN_MODE" = "interactive" ] || { printf 'baselines: none\n'; cr_require_person "--confirmed" "a person confirmed the baselines"; }
   br_require_clean_tree baseline "$TREE"
   VALUES="surfaces$TAB$(printf '%s' "$ids" | tr ' ' '|')
 $VALUES"
@@ -363,7 +317,7 @@ $VALUES"
 do_decline() {
   local kind="${1:-}"
   kind_key "$kind"
-  require_person decline "a person declined the setup"
+  cr_require_person decline "a person declined the setup"
   write_project_field '.'"$KEY"'.declined = true'
   printf 'declined: %s\nproject-file: %s\n' "$kind" "$PROJECT_FILE"
 }
