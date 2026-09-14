@@ -165,8 +165,11 @@ trap 'rm -f "$TMP_FILE"' EXIT
       C_VERIFICATION="$(printf '%s' "$row" | jq -r 'if (.verification? | type) == "string" and (.verification | length) > 0 then .verification else "(not set)" end')"
       C_AUTHOR="$(printf '%s' "$row" | jq -r '.author? // "(not set)"')"
       C_VERDICT="$(printf '%s' "$row" | jq -r '.verdict? // "(not set)"')"
+      # A clause a person wrote often ends with its own full stop; the line adds one only when it
+      # does not, so the rendered page a person approves never reads "..entered.."
+      case "$C_VERIFICATION" in *.) ;; *) C_VERIFICATION="$C_VERIFICATION." ;; esac
       printf '**%d.** %s\n\n' "$N" "$C_TEXT"
-      printf '*Verified by %s: %s. Asked for by %s. Verdict: %s. (`%s`)*\n\n' "$C_VERIFIED_BY" "$C_VERIFICATION" "$C_AUTHOR" "$C_VERDICT" "$C_ID"
+      printf '*Verified by %s: %s Asked for by %s. Verdict: %s. (`%s`)*\n\n' "$C_VERIFIED_BY" "$C_VERIFICATION" "$C_AUTHOR" "$C_VERDICT" "$C_ID"
     done < <(jq -c '.criteria[]' "$ALIGNMENT_FILE")
   fi
 
