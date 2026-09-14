@@ -456,7 +456,9 @@ this conversation. It writes `records/design-distill.json`. Then run:
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
-written; dispatch again. Exit 4 means the sidecar is malformed; say so.
+written. Send the same agent one message: write the file and read it back. An agent has reported
+a write it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar is
+malformed; say so.
 
 Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
 never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with
