@@ -70,7 +70,7 @@
         "type": "string",
         "pattern": "^wo[1-9][0-9]*$"
       },
-      "description": "The work order ids that must finish before this one starts. This is the build order (ideal/design.md, 'What a work order holds'). An order that owns no criterion reaches an owning order by walking this chain; a chain that reaches no owner, or that loops, fails check-design.sh (ideal/design.md, 'An order that owns nothing is a supporting order')."
+      "description": "The work order ids that must finish before this one starts. This is the build order (ideal/design.md, 'What a work order holds'). An order that owns no criterion is reached when an owning order depends on it, directly or through this chain; an order no owner reaches, or a chain that loops, fails check-design.sh (ideal/design.md, 'An order that owns nothing is a supporting order')."
     },
     "ownedFiles": {
       "type": "array",
