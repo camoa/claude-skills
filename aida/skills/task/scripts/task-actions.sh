@@ -45,12 +45,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    -- <text...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
 #                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
+#   task-actions.sh [--run-mode <interactive|autonomous>] prune --project <path> [--all] [<task-id>]...
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
-# mode). Nothing below asks a question, so only `environment up` reads it: a site coming up is a
-# person's yes, and it refuses unattended at 70. It is accepted in the same place and shape
-# project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
+# mode). Nothing below asks a question, so only `environment up` and `prune` read it: a site
+# coming up and a tree going are a person's yes, and both refuse unattended at 70. It is
+# accepted in the same place and shape project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
 #
@@ -109,6 +110,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
        task-actions.sh save     --project <path> <task-id> -- <text...>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
+       task-actions.sh prune    --project <path> [--all] [<task-id>]...
 EOF
 }
 
@@ -834,18 +836,25 @@ do_save() {
   _resolved_project="$(canon_existing_dir "$project_path")" || die3 "save: not a folder: $project_path"
   project_path="$_resolved_project"
   [ -n "$id" ] || die3 "save: a task id is required"
+  # Blank text writes no note. The call still stamps savedAt, which is what hooks/pre-compact.sh
+  # compares against, so a person with nothing to say can still clear its refusal.
   case "$text" in
     *[![:space:]]*) : ;;
-    *) die3 "save: the text is required and must not be blank. Nothing to save is said, not written" ;;
+    *) text="" ;;
   esac
 
   local task_dir
   task_dir="$(task_dir_for "$project_path" "$id")"
   [ -f "$task_dir/task.json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
 
-  local note; note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
-  mkdir -p "$task_dir/notes" || die3 "save: could not create $task_dir/notes"
-  printf '## %s\n\n%s\n\n' "$(date -u +%H:%M:%SZ)" "$text" >> "$note" || die3 "save: could not write $note"
+  local note=""
+  if [ -n "$text" ]; then
+    note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
+    mkdir -p "$task_dir/notes" || die3 "save: could not create $task_dir/notes"
+    printf '## %s\n\n%s\n\n' "$(date -u +%H:%M:%SZ)" "$text" >> "$note" || die3 "save: could not write $note"
+  fi
+  local saved_at; saved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  write_atomic "$task_dir/task.json" "$(jq --arg at "$saved_at" '.savedAt = $at' "$task_dir/task.json")"
 
   commit_task_change "$project_path" \
     "Save a note for ${id}" \
@@ -853,9 +862,10 @@ do_save() {
     "" \
     "" \
     "$id" "note" \
-    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$note" >&2
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "${note:-$task_dir/task.json}" >&2
 
-  echo "note: ${note}"
+  echo "savedAt: ${saved_at}"
+  [ -z "$note" ] || echo "note: ${note}"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -980,6 +990,109 @@ do_environment() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# prune: the worktrees of complete tasks. A tree kept after completion costs disk and a site each,
+# and a tree removed too early loses uncommitted work. So with no id it only lists, which is the
+# whole action unattended, and it removes the named trees one at a time: the site down first, so
+# the framework keeps no orphaned registry entry, then the tree, then the branch when it is merged.
+# Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune).
+# ------------------------------------------------------------------------------------------------
+
+# One line per complete task that records a worktree. $1 the project folder, $2 the merged
+# branches, one per line.
+prune_list() {
+  local project_path="$1" merged="$2" tab d row id wt branch env yes_no; tab="$(printf '\t')"
+  find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r d; do
+    row="$(jq -r 'select(.state == "complete" and .worktree != null)
+      | [.id, .worktree.path, .worktree.branch, (if .environment == null then "no" else "yes" end)] | @tsv' \
+      "$d/task.json" 2>/dev/null)"
+    [ -n "$row" ] || continue
+    IFS="$tab" read -r id wt branch env <<TA_ROW
+$row
+TA_ROW
+    printf '%s\n' "$merged" | grep -Fqx "$branch" && yes_no=yes || yes_no=no
+    printf 'id: %s worktree: %s branch: %s merged: %s disk: %s environment: %s\n' \
+      "$id" "$wt" "$branch" "$yes_no" "$([ -d "$wt" ] && echo yes || echo no)" "$env"
+  done
+}
+
+do_prune() {
+  local project_path="" all=no ids=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --all) all=yes; shift ;;
+      --*) die3 "prune: unrecognized argument: $1" ;;
+      *) ids="$ids$1
+"; shift ;;
+    esac
+  done
+  [ -n "$project_path" ] || die3 "prune: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "prune: not a folder: $project_path"
+  project_path="$_resolved_project"
+  require_project_folder "$project_path" "prune"
+  CODE_PATH="$(project_code_path_value "$project_path")"
+  [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die3 "prune: the project's codePath is not on disk: ${CODE_PATH:-none recorded}"
+  is_git_repo "$CODE_PATH" || die3 "prune: the project's codePath is not a git repository: $CODE_PATH"
+  # Git still registers a tree whose directory is gone, and refuses to remove a registered path.
+  git -C "$CODE_PATH" worktree prune 2>/dev/null
+  local current merged listed
+  current="$(git -C "$CODE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  merged="$(git -C "$CODE_PATH" branch --format='%(refname:short)' --merged 2>/dev/null)"
+  listed="$(prune_list "$project_path" "$merged")"
+  if [ "$all" = no ] && [ -z "$ids" ]; then
+    [ -n "$listed" ] && printf '%s\n' "$listed" || printf 'prune: none, no complete task records a worktree\n'
+    return 0
+  fi
+  ACTION="prune"
+  cr_require_person "a task id or --all" "a person chose which trees to remove"
+  [ "$all" = no ] || ids="$(printf '%s\n' "$listed" | awk '{print $2}')"
+
+  # Every named task is checked before any tree goes: a task that is not complete is a reason to
+  # remove nothing, because its tree is where its work is.
+  local id task_dir task_json state wt branch said branch_word
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    task_json="$(task_dir_for "$project_path" "$id")/task.json"
+    [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+    state="$(jq -r '.state // "?"' "$task_json")"
+    [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
+    [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
+  done <<TA_IDS
+$ids
+TA_IDS
+
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    task_dir="$(task_dir_for "$project_path" "$id")"; task_json="$task_dir/task.json"
+    wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
+    # Git's refusal is checked first, so a dirty tree loses nothing: not its site, not its record.
+    [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
+      || die3 "prune: $wt has uncommitted changes. Commit or stash there first; prune never forces"
+    # The tear-down runs in a subshell: its own cd into the tree must not be where the remove runs.
+    if [ -n "$(jq -r '.environment.recipe // empty' "$task_json")" ]; then
+      ( do_environment --project "$project_path" "$id" down ) \
+        || die3 "prune: the tear-down of $id failed, so $wt stays. See $task_dir/records/environment-down.txt"
+    fi
+    if [ -d "$wt" ]; then
+      said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
+        || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
+    fi
+    if printf '%s\n' "$merged" | grep -Fqx "$branch"; then
+      git -C "$CODE_PATH" branch -d "$branch" >/dev/null 2>&1 && branch_word="removed" || branch_word="kept, git refused to delete it"
+    else
+      branch_word="kept, not merged into $current"
+    fi
+    write_atomic "$task_json" "$(jq 'del(.worktree, .environment)' "$task_json")"
+    commit_task_change "$project_path" "Prune the worktree of ${id}" "the task is complete and a person chose this tree" "" "" "$id" "prune" \
+      || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    printf 'pruned: %s %s branch %s %s\n' "$id" "$wt" "$branch" "$branch_word"
+  done <<TA_IDS
+$ids
+TA_IDS
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -995,5 +1108,6 @@ case "$action" in
   set-run-mode) do_set_run_mode "$@" ;;
   save) do_save "$@" ;;
   environment) do_environment "$@" ;;
+  prune) do_prune "$@" ;;
   *) usage; exit 3 ;;
 esac

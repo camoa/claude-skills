@@ -1,7 +1,7 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", or "bring the site up" for a task's worktree. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, or brings the worktree's own site up and down.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id> | environment <task-id> <show|up|down>]"
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id> | environment <task-id> <show|up|down> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -37,7 +37,7 @@ Makes the task and nothing else: no contract, no interview, no stage. It takes a
 Run it only when the person asked for this task in this conversation, by name or by a yes to an
 offer. Another skill's hand-off carries that yes. Nothing here invents one.
 
-**1. Name.** Ask what to call it, unless already said. Validate against
+**1. Name.** Ask what to call it, unless already said. Check it against
 `^[A-Za-z0-9_][A-Za-z0-9._-]*$`: it must start with a letter, digit or underscore, and hold only
 letters, digits, underscores, dots and hyphens after that. No path separator, no space. On a
 mismatch, say so and ask again; the script refuses it too, so this check only saves a round trip.
@@ -56,7 +56,7 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree at `<codePath>/.claude/worktrees/<name>` on the branch
 `feature/<name>`, records both in `task.json`, and commits. Show the whole output. Exit code 3
-means one of three things: the name collided with an existing task, it failed the validation
+means one of three things: the name collided with an existing task, it failed the name rule
 the script also enforces, or the worktree could not be made. In the last case the folder is
 removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
@@ -103,6 +103,35 @@ Running it twice is safe: the recipe promises every step runs again cleanly.
 nothing up it says so and exits 0. Run it before the worktree is removed, or the framework keeps
 an orphaned registry entry; the completion body names it when a site is up. Review and `baseline`
 read `environment.address` before asking for a base URL.
+
+## `prune [<task-id>]...`
+
+The worktrees of complete tasks. A worktree kept after completion costs disk and a DDEV project
+each, and a tree removed too early loses uncommitted work. So this lists first, asks per tree,
+and removes only what a person named. Run it from the main checkout, never from inside a tree
+it may remove.
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  prune --project "<projectPath>" [--all] [<task-id>]...
+```
+**1. List.** With no id the script prints one `id:` line per complete task that records a
+worktree. The line holds the path, the branch, and whether the branch is merged into the code
+path's current branch. It also says whether the tree is on disk and whether a site is up.
+`prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole action.
+Say once that a tree goes only on a person's yes, and stop. The script refuses an id unattended
+at 70.
+
+**2. Ask per tree.** For each listed tree ask a plain yes or no, one at a time, with the line.
+Never ask once for all of them. An unmerged branch is a reason to say so before asking: the
+tree goes, the branch stays.
+
+**3. Remove.** Run the action once with every id that got a yes, in the order given, or with
+`--all` when every tree got one. For each tree the script tears the site down when one is up,
+then removes the tree. It deletes the branch when it is merged. It clears `worktree` and
+`environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
+happened to the branch. Show them. Exit 3 names the tree it stopped at and why. The task is not
+complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
+that tree was touched, and nothing is ever forced. Say what it printed and stop.
 
 ## `repair <old-task-folder>`
 
@@ -217,15 +246,17 @@ absent mid-stage is normal; the distiller names it as a gap.
 
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
 files hold. Each is one sentence: what was decided and what it applies to. Show the list and ask
-for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line.
+for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line, and
+`save` still runs with no text. That records the time, which clears the compaction hook's refusal.
 
 Yes: run once per sentence, or once with all of them:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   save --project "<projectPath>" "<task-id>" -- <text...>
 ```
-It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` heading, commits,
-and prints `note:` with the path. Empty text is refused at exit 3. Show the `note:` line.
+It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` heading. It
+records `savedAt` in `task.json`, commits, and prints `savedAt:` and `note:` with the path. With no text
+it writes no note and prints `savedAt:` only. Show the lines.
 
 A note is never a stage record: the stage action that later records the same decision makes it
 stale, and the record wins. The session-start hook names the newest note after `Stage:`, and
