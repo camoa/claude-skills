@@ -72,7 +72,7 @@
     "rowsJudgedByModel": {
       "type": "integer",
       "minimum": 0,
-      "description": "How many of the checkpoint's judgements a model made rather than a person, across every criterion and every order's doneWhen row. An unattended run's evidence is weaker than an attended one's, and this number is what a person returning reads first to decide which rows to judge again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
+      "description": "How many of the checkpoint's judgements a model made rather than a person, across every criterion and every order's doneWhen row. A model's row is weaker evidence than a person's reading, in either mode since live-run row 70, and this number is what a person returning reads first to decide which rows to judge again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
     }
   },
   "$defs": {
