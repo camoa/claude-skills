@@ -326,7 +326,15 @@ of this conversation. It writes `records/research-distill.json`. Then run:
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written;
-dispatch again. Exit 4 means the sidecar is malformed; say so. Then report research complete.
+dispatch again. Exit 4 means the sidecar is malformed; say so.
+
+Then show what research found, before anything else. This is a presentation, not a question:
+research asks nothing here, and the person speaks up only when something looks missing. Read
+each rendered `research/<search>.md` and show, per search, one line per finding with its
+source. Then, on their own: the guides and recipes the catalog identified, by name; each prior
+art candidate with its reading (reuse, extend, or build); and each assumption from scope that
+came back false, in one sentence each. A count and a next command are not a presentation. The
+findings are what design acts on, so the person sees them here or not at all.
 
 Exit 4: a research file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix that file with another `record` call, or by hand, and check again.
