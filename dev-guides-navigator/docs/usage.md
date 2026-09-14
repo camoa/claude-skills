@@ -12,6 +12,8 @@ It is a routing and caching layer over a published catalog of guides, so an AI s
 - **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`): reports what covers a topic and opens nothing, for a caller that must name what exists without paying to read it.
 - **Playbook lookup** (`llms.txt`, then a topic's `plays.json`): resolved by playbook set id, called only by `ai-dev-assistant`, at research and when a project subscribes to a set. Like process-recipe lookup, it returns a store path and a report, never the body.
 
+Each mode runs as one call to `scripts/dev-guides-lookup.sh <mode> [args]`, so the skill runs one plain command per step. A session isolated in a git worktree refuses a compound shell block it cannot prove stays inside the worktree. Every `ai-dev-assistant` stage runs in one. The script prints the mode's JSON report or a store path, never a body.
+
 Every fetch goes through a deterministic cache kernel and uses `curl`, never `WebFetch` (the frontmatter hard-blocks it): WebFetch summarizes content through AI, which destroys the structured markdown the routing logic depends on. Guide bodies, task-recipe bodies, and process-recipe bodies are content-addressed in a shared blob store (keyed by sha256 or sha8, whichever the catalog publishes), so the same body is fetched once per content version and reused after that, even across projects. A per-project lockfile records what that project actually touched.
 
 If you maintain the dev-guides source repo yourself, a genuine guide-search miss (nothing in the catalog, nothing in the offline fallback table) triggers a create-on-miss offer: detect the source repo, ask before doing anything, then hand off to that repo's own `/create-guide` command, which researches a guide, pauses for your review, partitions it, and opens a PR (never merges or deploys). Consumer installs (no source repo detected) see no behavior change.
@@ -26,7 +28,7 @@ Skip it for edits that don't touch a pattern: a rename, a typo fix, a one-line c
 
 ## Prerequisites
 
-- **`curl` and `jq`** for the cache kernel (`scripts/dev-guides-store.sh`) and the fetches themselves. Without `jq`/`curl`, the cache pre-warming hook simply skips and the skill fills the cache lazily on first use instead.
+- **`curl` and `jq`** for the cache kernel (`scripts/dev-guides-store.sh`), the lookup script (`scripts/dev-guides-lookup.sh`) and the fetches themselves. Without `jq`/`curl`, the cache pre-warming hook simply skips and the skill fills the cache lazily on first use instead.
 - **Network access** to `camoa.github.io` (indexes and hashes) and `raw.githubusercontent.com` (guide, recipe, and process-recipe bodies). A network failure on guide search falls back to the last-fetched index in the shared store (`index-content llms`), which is the full catalog as of the last successful fetch; a network failure on recipe search or process-recipe lookup reports unavailable rather than fabricating a result.
 - **No plugin dependencies.** This plugin installs standalone; nothing else has to be present first.
 - **Claude Code v2.1.129+** only if you want the `skillOverrides` setting to dial back proactive triggering; earlier CLI versions still get the skill, just without that override.

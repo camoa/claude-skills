@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Every mode runs as one script call.** `scripts/dev-guides-lookup.sh <mode> [args]` holds
+  the five flows: `guide`, `recipe`, `process-recipe`, `identify` and `playbook`. The skill
+  body used to give them as inline compound shell blocks. It keeps its prose and contracts
+  and names the one command per step. A Claude Code session isolated in a git worktree
+  refuses a compound command it cannot prove stays inside the worktree. Every
+  `ai-dev-assistant` stage runs in one, so each navigator call from a stage had to be split
+  by hand. The script calls `dev-guides-store.sh` for every store operation and writes
+  nothing itself.
+- Guide search and recipe search print the body's store path and the mode reads that file;
+  no body is printed. Recipe search serves the last-fetched index on a revalidate error, as
+  guide search does. Process-recipe lookup reports `available:false` with reason
+  `body fetch failed` when the body fetch or store fails. The inline flow could report a
+  path that was not on disk.
+
 ## 0.14.0 (2026-09-13)
 
 ### Added

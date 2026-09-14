@@ -36,13 +36,17 @@ The navigator does **not** hardcode an order. The **caller** owns ordering — t
 
 ## Kernel
 
-All fetch and cache operations go through the deterministic store kernel:
+All fetch and cache operations go through the deterministic store kernel,
+`${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-store.sh`. `CLAUDE_PLUGIN_ROOT` is set by Claude Code
+when this plugin's skill is active.
 
-```bash
-STORE_SH="${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-store.sh"
-```
-
-`CLAUDE_PLUGIN_ROOT` is set by Claude Code when this plugin's skill is active.
+**Every mode runs as one script call.** The flows live in
+`${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh <mode> [args]`, which calls the kernel for
+every store operation. Run the one command each step names. Do not paste the flow inline as a
+compound block. A session isolated in a git worktree refuses a compound command it cannot prove
+stays inside the worktree. It accepts a plain command with arguments. Where a step is a
+decision, the script stops and prints what the decision needs. The next step names the command
+to run after it.
 
 **NEVER use WebFetch.** All web fetches use `curl -s` (invoked inside the kernel for index revalidation, or directly for guide bodies). WebFetch summarizes content through AI, destroying structured formats needed for matching. The frontmatter `disallowed-tools: WebFetch` makes this a hard block.
 
@@ -56,8 +60,9 @@ What differs is what happens to a *found* body, and it splits by caller:
 
 - **Modes 1 & 2 (guide search, recipe search)** run *in the main conversation*: they
   resolve through the store and then **apply the body in place** (guide step 7 / recipe
-  step 4). The body necessarily enters context — applying a guide means reading it. These
-  modes do not return a path; they deliver the resolved patterns.
+  step 4). The body necessarily enters context — applying a guide means reading it. The
+  script prints the body's store path and the mode reads that file; what the mode delivers
+  is the resolved patterns, never a path.
 - **Mode 3 (process-recipe lookup)** is called by an orchestrator (`ai-dev-assistant`) at a
   lifecycle boundary: it resolves to the body's **store path** and returns that path as the
   payload. The body is **never** streamed into the conversation — the caller reads the file.
@@ -70,19 +75,15 @@ What differs is what happens to a *found* body, and it splits by caller:
 ### 1. Get `llms.txt` via kernel
 
 ```bash
-RESULT=$("$STORE_SH" revalidate llms \
-  "https://camoa.github.io/dev-guides/llms.txt" \
-  "https://camoa.github.io/dev-guides/llms.hash")
-STATUS=$(printf '%s' "$RESULT" | jq -r '.status')
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" guide <words>
 ```
 
-On `status=error`: report failure and do not proceed.
+The words are the task's search terms, one or more. The script revalidates `llms.txt` through
+the kernel, prints `status:`, and then prints `candidates:` with every index line any word
+hits. `candidates: 0` prints the store path of the whole index instead, so you can scan it.
 
-Then retrieve the index text:
-
-```bash
-INDEX_TEXT=$("$STORE_SH" index-content llms)
-```
+On `status: error` the script serves the store's last-fetched index and says `fallback:`. When
+nothing is cached it stops with exit 2: report the failure and do not proceed.
 
 The kernel owns the two-hash revalidation and stores the result at
 `~/.claude/dev-guides-store/indexes/llms.json`. It fetches and re-stores only
@@ -90,17 +91,8 @@ when the remote hash differs from what is already cached.
 
 **Legacy shim** (compat only — dropped after `ai-dev-assistant` cuts over to the
 lockfile). `ai-dev-assistant` currently reads `dev-guides-cache.json` directly at
-the dashed-cwd path. After `revalidate llms` succeeds, copy the store's index
-JSON to the legacy path:
-
-```bash
-DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-LEGACY_DIR="$HOME/.claude/projects/${DASHED}/memory"
-STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
-mkdir -p "$LEGACY_DIR"
-# indexes/llms.json has the same {hash, fetched_at, content} shape — cp suffices
-cp "${STORE_ROOT}/indexes/llms.json" "${LEGACY_DIR}/dev-guides-cache.json"
-```
+the dashed-cwd path. The same call copies the store's index JSON to the legacy path after
+`revalidate llms` succeeds; `indexes/llms.json` has the same `{hash, fetched_at, content}` shape.
 
 **Guide body caching (active):** guide bodies are content-cached in the shared
 blob store, keyed by the per-file `sha256` the data layer publishes in each topic's
@@ -124,15 +116,15 @@ The URL in `llms.txt` is a GitHub Pages URL like `https://camoa.github.io/dev-gu
 
 ### 3. Fetch Topic Index
 
-**IMPORTANT:** Do NOT use WebFetch on GitHub Pages URLs — MkDocs renders them into 400KB+ HTML pages with navigation shells, hiding the actual content. Use `curl` with raw GitHub URLs instead.
+**IMPORTANT:** Do NOT use WebFetch on GitHub Pages URLs — MkDocs renders them into 400KB+ HTML pages with navigation shells, hiding the actual content. The script fetches the raw GitHub URL with `curl`.
 
 ```bash
-curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/{topic-path}/index.md
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" guide --topic <topic-path>
 ```
 
-Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/forms/index.md`
+Example: `"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" guide --topic drupal/forms`
 
-This returns the raw markdown containing:
+This prints the raw markdown containing:
 
 - **"I need to..." routing table** — maps user intent to specific guide
 - **`guide-meta:` frontmatter** — KG metadata for disambiguation and relationships
@@ -172,39 +164,20 @@ table lists guide filenames. The body is served from the shared blob store, fetc
 per content version**:
 
 ```bash
-TOPIC="drupal/forms"          # topic path from step 2
-FILE="form-validation.md"     # guide filename from the routing table
-
-# Resolve the body's content hash from the topic manifest. Fetch this on use:
-# guide-index.json is NOT gated by llms.hash — a body edit changes its sha256 here
-# even when llms.txt is unchanged, so it must be fetched to detect body changes.
-MANIFEST=$(curl -fsSL "https://camoa.github.io/dev-guides/${TOPIC}/guide-index.json" 2>/dev/null)
-SHA256=$(printf '%s' "$MANIFEST" | jq -r --arg f "$FILE" '.[$f] // ""')
-
-if [ -n "$SHA256" ] && BODY=$("$STORE_SH" blob-get "$SHA256" 2>/dev/null); then
-  : # blob hit — $BODY is the cached guide body, no network fetch
-else
-  # blob miss (or manifest unavailable) — fetch the raw markdown once.
-  # Do NOT use WebFetch / GitHub Pages URLs — they return rendered HTML, not the guide.
-  TMP=$(mktemp)
-  curl -fsSL -o "$TMP" \
-    "https://raw.githubusercontent.com/camoa/dev-guides/main/docs/${TOPIC}/${FILE}"
-  if [ -n "$SHA256" ]; then
-    "$STORE_SH" blob-put "$SHA256" "$TMP"
-    DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-    MEM_DIR="$HOME/.claude/projects/${DASHED}/memory"
-    mkdir -p "$MEM_DIR"
-    # guides footprint — { "<topic>/<file>": "<sha256>" }
-    "$STORE_SH" lock-set "$MEM_DIR" guides "${TOPIC}/${FILE}" "\"${SHA256}\""
-  fi
-  BODY=$(cat "$TMP")
-  rm -f "$TMP"
-fi
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" guide --topic <topic-path> --file <file.md>
 ```
 
-The store path for the body is `~/.claude/dev-guides-store/blobs/${SHA256}`. If the
-manifest is unavailable (network/error), the body is still fetched and applied — it just
-is not cached that turn (graceful degradation).
+The topic path comes from step 2 and the filename from the routing table. The script resolves
+the body's sha256 from the topic manifest, `guide-index.json`, fetched on use. That manifest is
+not gated by `llms.hash`: a body edit changes its sha256 even when `llms.txt` is unchanged. On
+a blob hit the script prints `cached: true` and no network fetch happens. On a miss it fetches
+the raw markdown once, stores it under its sha256, and records the guides footprint
+`{ "<topic>/<file>": "<sha256>" }` in the project lockfile.
+
+The script prints `body_path:`, the store path `~/.claude/dev-guides-store/blobs/<sha256>`.
+Read that file; the body is not printed. If the manifest is unavailable (network/error), the
+body is still fetched but has no store path, so it follows a `body:` line on stdout. It is
+applied but not cached that turn (graceful degradation).
 
 ### 7. Apply the Guide (Critical)
 
@@ -249,19 +222,15 @@ guides cache.
 ### 1. Get `agentic-recipes.txt` via kernel
 
 ```bash
-RESULT=$("$STORE_SH" revalidate agentic-recipes \
-  "https://camoa.github.io/dev-guides/agentic-recipes.txt" \
-  "https://camoa.github.io/dev-guides/agentic-recipes.hash")
-INDEX_TEXT=$("$STORE_SH" index-content agentic-recipes)
-
-# Compat shim: rebuild the legacy dev-guides-recipes-cache.json that the
-# recipe-loader consumer reads directly. Write it now (index part + any
-# already-cached recipes), BEFORE any body fetch, so a recipe-loader index
-# match works; step 3 refreshes it after each new body is cached.
-DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-MEM_DIR="$HOME/.claude/projects/${DASHED}/memory"
-"$STORE_SH" legacy-recipes-shim agentic-recipes task_recipes "$MEM_DIR" 2>/dev/null || true
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" recipe <words>
 ```
+
+The words are the capability's search terms. The script revalidates the index through the
+kernel and prints `candidates:` with every index line any word hits. On `status: error` it
+serves the store's last-fetched index and says `fallback:`, as guide search does. When nothing
+is cached it stops with exit 2; nothing is fabricated. Before any body fetch it rebuilds the
+legacy `dev-guides-recipes-cache.json` that the recipe-loader consumer reads. A recipe-loader
+index match then works, and step 3 refreshes the file after each new body is cached.
 
 The kernel handles the two-hash revalidation and stores the result at
 `~/.claude/dev-guides-store/indexes/agentic-recipes.json`. The per-project
@@ -274,47 +243,30 @@ working until it cuts over to the store/lockfile. See `references/cache-format.m
 Scan the index lines and match on **`capability`** (the machine key in `[...]`) plus the
 **when-to-use description**. Keep this lean — **do not fetch any recipe body during matching.**
 
-- **Match** → proceed to step 3 with that line's `<name>`, `<sha>`, and `<site-url>`.
+- **Match** → proceed to step 3 with that line's `<name>`.
 - **No match** → report "no recipe for this capability; fall back to guide search" and **STOP**.
-  Never fabricate a recipe.
+  Never fabricate a recipe. The script prints `result: not-found` with that reason when no
+  line matches the words. A candidate line that does not fit the capability is the same answer.
 
 ### 3. Fetch the body (download-once via blob store)
 
-Read the matched line's `<name>`, `<sha8>`, and `<site-url>`. Compute the memory dir:
-
 ```bash
-DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-MEM_DIR="$HOME/.claude/projects/${DASHED}/memory"
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" recipe --name <name>
 ```
 
-Check the blob store first:
+The script reads the matched line's `<sha8>` and `<site-url>` from the cached index and checks
+the blob store first.
 
-```bash
-BODY=$("$STORE_SH" blob-get "$SHA8")
-BLOB_EXIT=$?
-```
+- **Hit:** it prints `cached: true` and `body_path:`. No network fetch.
+- **Miss:** it derives the raw GitHub URL from `<site-url>`, the transformation in the
+  catalog contract above. It replaces the GitHub Pages prefix with the raw GitHub prefix,
+  strips the trailing slash and adds `.md`. A `<site-url>` that lacks the expected prefix is refused
+  with `reason: refusing non-canonical body URL`. The prefix replace would be a no-op on it
+  and leave an attacker-controlled value for `curl` (SSRF guard). It then fetches the body
+  once, stores it under its sha8, and records the `task_recipes` footprint. It refreshes the
+  legacy compat shim so recipe-loader sees the new recipe, and prints `body_path:`.
 
-- **Exit 0 (hit):** use `BODY` directly. No network fetch.
-- **Exit 3 (miss):** derive the raw GitHub URL from `<site-url>` (same transformation as
-  the catalog contract above: replace the GitHub Pages hostname+prefix with the raw
-  GitHub prefix, strip the trailing slash, add `.md`). **Assert the result begins with
-  `https://raw.githubusercontent.com/camoa/dev-guides/main/docs/` before any `curl` — the
-  prefix-replace is a no-op on a `<site-url>` that lacks the expected prefix, leaving an
-  attacker-controlled value (SSRF guard); refuse it.** Then fetch and store:
-
-  ```bash
-  TMP=$(mktemp)
-  curl -fsSL -o "$TMP" "$RAW_URL"
-  "$STORE_SH" blob-put "$SHA8" "$TMP"
-  rm -f "$TMP"
-  mkdir -p "$MEM_DIR"
-  "$STORE_SH" lock-set "$MEM_DIR" task_recipes "$RECIPE_NAME" "\"${SHA8}\""
-  BODY=$("$STORE_SH" blob-get "$SHA8")
-  # Refresh the legacy compat shim so this newly-cached recipe is visible to recipe-loader.
-  "$STORE_SH" legacy-recipes-shim agentic-recipes task_recipes "$MEM_DIR" 2>/dev/null || true
-  ```
-
-A body is downloaded **exactly once per content version** and reused while its sha is unchanged.
+Read the file at `body_path`; the body is never printed. A body is downloaded **exactly once per content version** and reused while its sha is unchanged.
 
 ### 4. Apply (hand off + surface the verifier)
 
@@ -358,83 +310,35 @@ The navigator surfaces availability; it does not present UX.
 
 ### Flow
 
-**Step 1 — Revalidate the process-recipes index:**
+The whole lookup is one call:
 
 ```bash
-RESULT=$("$STORE_SH" revalidate process-recipes \
-  "https://camoa.github.io/dev-guides/process-recipes.txt" \
-  "https://camoa.github.io/dev-guides/process-recipes.hash")
-STATUS=$(printf '%s' "$RESULT" | jq -r '.status')
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" process-recipe <phase> <framework>
 ```
 
-On `status=error` (network error or index unavailable): emit
-`{"key":null,"available":false,"reason":"index unavailable or network error"}` and STOP.
+It prints one JSON report and exits 0 at every stop point. The steps it runs:
 
-```bash
-INDEX_TEXT=$("$STORE_SH" index-content process-recipes 2>/dev/null) || {
-  printf '{"key":null,"available":false,"reason":"no index cached"}\n'
-  # STOP
-}
-```
+**Step 1 — Revalidate the process-recipes index.** On `status=error` (network error or index
+unavailable) it emits `{"key":null,"available":false,"reason":"index unavailable or network
+error"}` and stops. No cached index: the same report with reason `no index cached`.
 
-**Step 2 — Match `(phase, framework)`:**
+**Step 2 — Match `(phase, framework)`.** It takes the first line whose bracket contains
+`phase=<PHASE>` AND `framework=<FRAMEWORK>`. It reads `<sha8>` and `<site-url>` from it. No
+line: it emits `{"key":null,"available":false}` and stops. The site-url is the LAST ` — `
+field of the line, because when-to-use descriptions legitimately contain ` — `. The url-slug
+is the trailing path segment of the site-url (per `store-contract.md`), not `<name>`. The
+key is `<phase>/<framework>/<url-slug>`.
 
-Scan `INDEX_TEXT` for lines whose bracket contains `phase=<PHASE>` AND
-`framework=<FRAMEWORK>`. Extract `<name>`, `<sha8>`, and `<site-url>` from the matched
-line. If no line matches, emit `{"key":null,"available":false}` and STOP.
-
-```bash
-# Extraction (illustrative):
-RECIPE_NAME=$(printf '%s' "$MATCH_LINE" | sed 's/^- \([^ ]*\) .*/\1/')
-SHA8=$(printf '%s' "$MATCH_LINE" | sed 's/.*sha:\([^)]*\).*/\1/')
-# Take the LAST ' — ' field ($NF): recipe when-to-use descriptions legitimately
-# contain ' — ', so switching to the second field would silently grab the wrong field and break
-# URL/slug derivation. Always $NF.
-SITE_URL=$(printf '%s' "$MATCH_LINE" | awk -F' — ' '{print $NF}' | tr -d '\n\r')
-# url-slug = trailing path segment of the site-url (per store-contract.md), NOT <name>.
-SLUG=$(printf '%s' "$SITE_URL" | sed 's#/*$##; s#.*/##')
-KEY="${PHASE}/${FRAMEWORK}/${SLUG}"
-```
-
-**Step 3 — Ensure the body blob is present (auto-fresh), then return its store path:**
-
-Serve the line's current `(sha:…)`. Check the store; fetch the body only when that sha's
-blob is absent — the same download-once-per-version discipline as guides and task recipes.
-A changed upstream sha is fetched, never pinned. Then record a plain-string footprint in
-the lockfile and return the **store path** (the body is never streamed into the conversation).
-
-```bash
-DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-MEM_DIR="$HOME/.claude/projects/${DASHED}/memory"
-STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
-BLOB_PATH="${STORE_ROOT}/blobs/${SHA8}"
-
-if [ ! -f "$BLOB_PATH" ]; then
-  # Derive RAW_URL from SITE_URL (same transformation as recipe search).
-  RAW_URL=$(printf '%s' "$SITE_URL" | \
-    sed 's|https://camoa.github.io/dev-guides/|https://raw.githubusercontent.com/camoa/dev-guides/main/docs/|; s|/$|.md|')
-  # SSRF guard: the sed is a no-op when SITE_URL lacks the expected prefix, which
-  # would leave an attacker-controlled value (file://…, another host) for curl.
-  # Only ever fetch from the canonical raw host+repo prefix.
-  case "$RAW_URL" in
-    https://raw.githubusercontent.com/camoa/dev-guides/main/docs/*) ;;
-    *)
-      printf '{"key":null,"available":false,"reason":"refusing non-canonical body URL"}\n'
-      exit 0 ;;
-  esac
-  TMP=$(mktemp)
-  curl -fsSL -o "$TMP" "$RAW_URL"
-  "$STORE_SH" blob-put "$SHA8" "$TMP"
-  rm -f "$TMP"
-fi
-
-# Footprint of what this project touched — a plain sha8 string, not a pin.
-mkdir -p "$MEM_DIR"
-"$STORE_SH" lock-set "$MEM_DIR" process_recipes "$KEY" "\"${SHA8}\""
-
-printf '{"key":"%s","available":true,"sha":"%s","body_path":"%s","body_cached":true}\n' \
-  "$KEY" "$SHA8" "$BLOB_PATH"
-```
+**Step 3 — Ensure the body blob is present (auto-fresh), then return its store path.** It
+serves the line's current `(sha:…)`. It fetches the body only when that sha's blob is
+absent, the download-once-per-version discipline of guides and task recipes. A
+changed upstream sha is fetched, never pinned. The raw URL is derived from the site-url as
+in recipe search. A site-url without the canonical prefix is refused with reason `refusing
+non-canonical body URL`, the SSRF guard. A fetch or store that fails reports
+`available:false` with reason `body fetch failed`. A path is only ever reported for a file
+that is on disk. It then records a plain sha8 footprint under `process_recipes` in the
+lockfile and emits the report with the **store path**. The body is never streamed into the
+conversation.
 
 The caller (`ai-dev-assistant`) reads the body from `body_path`. If the upstream sha
 changed, the new body is simply fetched — same as guides and task recipes.
@@ -471,13 +375,21 @@ Guides, agentic recipes and tooling recipes. **Not process recipes.** A process 
 
 Each index is revalidated by its own `.hash` the same way every other mode does it, and read with `index-content`. Every line already carries what this mode returns: a name, a when-to-use description, a `(sha:…)` and a site-url.
 
-`tooling-recipes.txt` **does not exist yet.** Until the catalog publishes it, this mode reports the tooling catalog as unavailable rather than returning no tooling matches. Those two are not the same answer, and a caller told "no tooling recipe covers this" when nothing was searched will record a false negative it cannot later tell from a real one.
+A catalog whose index cannot be revalidated is reported as unavailable by name, never as a catalog with no matches. Those two are not the same answer. A caller told "no tooling recipe covers this" when nothing was searched will record a false negative it cannot later tell from a real one.
 
 ### Flow
 
+The whole lookup is one call:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" identify <words> --framework <framework>
+```
+
+`--framework` is optional. It prints the JSON report below and nothing else. The steps it runs:
+
 **Step 1 — Revalidate each requested index.** One `revalidate` per catalog, then `index-content`. An index that errors is recorded as unavailable by name and does not stop the others.
 
-**Step 2 — Match the search words against each index's lines.** Match on the name and on the when-to-use description. When the caller supplied a framework, drop lines belonging to another one. Rank by how well the line matches; do not cut the list to one, because the caller is naming candidates rather than choosing.
+**Step 2 — Match the search words against each index's lines.** Match on the name and on the when-to-use description. When the caller supplied a framework, drop lines belonging to another one. A recipe line belongs to the `framework=` token it carries, and `none` belongs to every framework. A guide line belongs to its topic path's first segment when that segment is a framework name the recipe catalogs know. Rank by how many words the line matches; do not cut the list to one, because the caller is naming candidates rather than choosing.
 
 **Step 3 — Report.** Emit the JSON below. Do not fetch a body. Do not apply anything. Do not suggest what the caller should do with a match.
 
@@ -492,7 +404,7 @@ Each index is revalidated by its own `.hash` the same way every other mode does 
      "name": "<name from the index line>",
      "description": "<when-to-use, from the index line>",
      "url": "<site-url>",
-     "sha": "<sha8>"}
+     "sha": "<sha8, or null for a guide line, which carries none>"}
   ],
   "searched": ["guides", "agentic-recipes"],
   "unavailable": [{"catalog": "tooling-recipes", "reason": "no published index"}]
@@ -524,59 +436,32 @@ the body's store path. The navigator surfaces availability; it does not present 
 
 ### Flow
 
-**Step 1. Find the set's line in `llms.txt`:**
-
-Run core workflow step 1 (`revalidate llms`, then `index-content llms`). On `status=error`,
-emit `{"set":"<set-id>","available":false,"reason":"listing-unreachable"}` and STOP.
+The whole lookup is one call:
 
 ```bash
-# A set id is a topic path. Refuse anything that could leave the site prefix.
-case "$SET_ID" in
-  "" | /* | */ | *..* | *[!a-z0-9./-]*)
-    printf '{"set":"%s","available":false,"reason":"no-topic"}\n' "$SET_ID"
-    exit 0 ;;
-esac
-SITE_URL="https://camoa.github.io/dev-guides/${SET_ID}/"
-MATCH_LINE=$(printf '%s\n' "$INDEX_TEXT" | grep -F "](${SITE_URL})" | head -n 1)
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" playbook <set-id>
 ```
 
-No line: emit `{"set":"<set-id>","available":false,"reason":"no-topic"}` and STOP.
+It prints one JSON report and exits 0 at every stop point. The steps it runs:
 
-```bash
-TITLE=$(printf '%s' "$MATCH_LINE" | sed 's/^- \[\([^]]*\)\].*/\1/')
-```
+**Step 1. Find the set's line in `llms.txt`.** It runs core workflow step 1 through the
+kernel. On `status=error` it emits `{"set":"<set-id>","available":false,"reason":"listing-unreachable"}`
+and stops. A set id is a topic path. One that is empty, starts or ends with `/`, contains
+`..`, or holds a character outside `a-z0-9./-` could leave the site prefix. Such an id is
+refused and reported as `no-topic`. The set's line is the one whose site URL is
+`https://camoa.github.io/dev-guides/<set-id>/`. No line: it emits the same report with reason
+`no-topic` and stops. The title is the link text of that line.
 
-**Step 2. Fetch `plays.json`:**
+**Step 2. Fetch `plays.json`.** HTTP `404`: the topic is not a playbook, and it emits the
+report with reason `not-a-playbook`. Any other curl failure, or a body `jq` cannot parse as
+an array, is reason `fetch-failed`. Either way the temporary file is removed and it stops.
 
-```bash
-TMP=$(mktemp)
-HTTP=$(curl -fsSL -o "$TMP" -w '%{http_code}' "${SITE_URL}plays.json" 2>/dev/null)
-```
-
-`HTTP` is `404`: the topic is not a playbook. Emit
-`{"set":"<set-id>","available":false,"reason":"not-a-playbook"}`, remove `$TMP`, and STOP.
-Any other non-zero curl exit, or a body `jq` cannot parse as an array: emit the same report
-with `reason` `fetch-failed`, remove `$TMP`, and STOP.
-
-**Step 3. Store the body, record the footprint, report:**
-
-```bash
-# The hex digest is the first 64 characters of either tool's line. No positional variable
-# here: Claude Code substitutes `$` followed by a digit in a skill body with an invocation argument.
-SHA256=$( (sha256sum "$TMP" 2>/dev/null || shasum -a 256 "$TMP") | cut -c1-64)
-"$STORE_SH" blob-put "$SHA256" "$TMP" >/dev/null
-rm -f "$TMP"
-STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
-BODY_PATH="${STORE_ROOT}/blobs/${SHA256}"
-DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-MEM_DIR="$HOME/.claude/projects/${DASHED}/memory"
-mkdir -p "$MEM_DIR"
-"$STORE_SH" lock-set "$MEM_DIR" playbooks "$SET_ID" "\"${SHA256}\"" >/dev/null
-
-jq -n -c --arg s "$SET_ID" --arg t "$TITLE" --arg p "$BODY_PATH" \
-  --arg h "$(printf '%s' "$SHA256" | cut -c1-8)" --argjson n "$(jq 'length' "$BODY_PATH")" \
-  '{set:$s, title:$t, available:true, body_path:$p, sha:$h, plays:$n}'
-```
+**Step 3. Store the body, record the footprint, report.** The sha256 is computed over the
+fetched bytes, the first 64 characters of the hashing tool's line. The script, not the skill
+body, holds that line: Claude Code substitutes `$` followed by a digit in a skill body with an
+invocation argument. The body is stored under that sha256 and the `playbooks` footprint is
+recorded in the lockfile. The report carries `body_path`, the first eight characters of the
+sha256 as `sha`, and the array's length as `plays`.
 
 ### Output contract
 
