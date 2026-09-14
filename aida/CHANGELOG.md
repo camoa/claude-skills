@@ -4,6 +4,63 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.9] - 2026-09-14
+
+Rows 33 to 42 of the live run, the seven items the owner reopened on 2026-09-13, and the
+catalog's answers to three asks. The worktree moves out of the repository.
+
+### Added
+- Narrowing. A surface declares the paths that render it, `register --path <glob>` repeatable,
+  and `--critical`. Review runs a surface when the diff touched one of its paths, when it is
+  critical, or when it declares none; the rest are recorded as not run and named. The ids
+  reach the suite through the `{surfaces}` token; a recipe row without the token runs the
+  whole set and says so.
+- `task environment <id> show|up|down`: a task's worktree gets its own running site from the
+  catalog's `worktree-environment` recipe. `up` writes and commits the recipe's files, runs
+  its `## Tokens`, the bring-up before `## Address`, the address command whose `key: value`
+  lines become tokens and are kept in the record, then the rest, then each enabled surfaces
+  kind's setup install in the tree. The task skill offers it once after the worktree is made,
+  and at `start` for a task opened later. Review and `baseline` read the recorded address.
+- `task prune`: lists the worktrees of complete tasks and removes them one yes at a time,
+  tearing the site down first, deleting only a merged branch, never forcing. Autonomous lists
+  and stops. Completion's after-merge line names it.
+- The design critique: before the close, three fresh `design-critic` readers, one lens each
+  (contract, reuse, buildability), write findings a person answers one by one. Autonomous
+  records and goes on. The close names the files and the count and never blocks on them.
+- `hooks/pre-compact.sh`: a manual `/compact` with task work newer than the last `task save`
+  is refused with the save command; an automatic compaction leaves a marker session start
+  names once. `task save` with no text records `savedAt`.
+- `review-actions.sh audit`: one line per check with its verdict and how it arose (ran, read,
+  could-not-look, off), one per surface, and a counts line. The skill shows it before the
+  verdict word; completion's body carries it above the verdict.
+- `tests/vocabulary.txt` and `tests/vocabulary-spec.sh`: the controlled vocabulary and the
+  check that flags every banned synonym in shipped prose. `docs/glossary.md` is now
+  `docs/vocabulary.md`, written.
+- The playbook loader reads a set's `plays.json` through the navigator's `playbook` mode, so
+  `rationale` and `when` reach the roles; `project subscribe-playbook` refuses a topic that is
+  not a playbook.
+- `templates/process-recipe-setup.md`, the shape a setup recipe follows; `tests/execute-bits-spec.sh`.
+
+### Changed
+- The worktree is a sibling of the checkout, `<parent>/<repo>-<task id>`, because a nested
+  one is handed to the parent DDEV project and a tear-down there deleted the main site. A
+  new task id is lowercase letters, digits and hyphens, since the folder name becomes a
+  hostname label. The skills print `cd <path> && claude`.
+- The end to end and visual regression setup is offered, taken and declined one kind at a
+  time; `decline <kind>` writes `surfaces.<kind>.declined`.
+- `surfaces register` commits the surface file, so `baseline` finds a clean tree; `show`
+  exits 3 on a recipe with no install block; `read` prints each surface's paths and critical
+  mark; the project record and the surface file are written pretty.
+- `catalog-identifier` has a 30-turn budget, since a cold recipe lookup takes 16 tool uses.
+- One recipe run loop, file writer and commit helper in `scripts/lib/recipes.sh`, called by the
+  task, surfaces and tool scripts; `resolve_recipe` and `require_person` live there too.
+
+### Fixed
+- Rows 33 and 34: scope named the decline field it reads; three scripts lacked their execute bit.
+- The library reset a caller's `RECIPE` at load, which had silently broken `recipe-lint.sh`.
+- The compaction hook's worktree match never matched; a task with several in progress now
+  names the marker of the one holding the session's directory.
+
 ## [6.0.0-beta.8] - 2026-09-13
 
 Rows 31 and 32 of the live run: the end to end and visual regression setup is offered where a
