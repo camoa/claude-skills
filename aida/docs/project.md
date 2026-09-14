@@ -68,10 +68,12 @@ Then the check runs once. If the code already exists on disk, the check normally
 nothing to report. If it does not exist yet, the check says so, and that is expected for a
 fresh project, not a problem.
 
-Later stages fill in the rest as they run: which recipe each stage adopted, which sources
-answer for which kind of content, whether visual regression or end-to-end testing is set
-up, whether a memory hook is installed, and whether the task rule has been offered. None of
-this is asked at creation; each field is filled in by the stage that first needs it.
+Creation then asks two more things, once each. The first is whether to add the task rule to
+your repository's `CLAUDE.md`. The second is where playbooks come from: a catalog set per
+framework, or a folder of your own. A no is not asked again. Later stages fill in the rest as
+they run: which recipe each stage adopted, which other sources answer for which kind of
+content, whether visual regression or end-to-end testing is set up, and whether a memory hook
+is installed. Each of those is filled in by the stage that first needs it.
 
 **Safety on the code path.** This value is the root for everything AIDA later does against
 your disk: worktrees, harness installs, the task rule, prior-art search. A path naming a
