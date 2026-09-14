@@ -44,7 +44,7 @@ STEPS_DIR="${PLUGIN_ROOT}/skills/surfaces/references"
 command -v jq >/dev/null 2>&1 || { printf 'surfaces-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 die() { printf 'surfaces-actions: %s\n' "$2" >&2; exit "$1"; }
 die3() { die 3 "$1"; }  # write_atomic in task-helpers.sh refuses through this name
-for lib_name in registry task-helpers records-hash recipes paths surfaces; do
+for lib_name in registry task-helpers records-hash recipes paths surfaces project-commit; do
   # shellcheck source=/dev/null
   . "${PLUGIN_ROOT}/scripts/lib/${lib_name}.sh" || die 3 "the library failed to load: ${lib_name}.sh"
 done
@@ -80,11 +80,20 @@ SURFACE_FILE="$TREE/$SURFACE_REL"
 RECORDS_DIR="$PROJECT_DIR/records"
 
 # The project record's `surfaces` field, initialised on the first write. $1 a jq filter over it.
+# Commits project.json in the project folder too, so a person never finds it modified and
+# uncommitted after this skill runs (live-run row 44). A project folder that is not a repository,
+# or a failed commit, is reported and left as is: the field itself is already written.
 write_project_field() {
-  local doc
+  local doc subject why
   doc="$(jq --arg sf "$SURFACE_REL" '.surfaces = ((.surfaces // {registryPath: null, e2e: {enabled: false, declined: false}, visualRegression: {enabled: false, declined: false}}) | '"$1"')' "$PROJECT_FILE")" \
     || die 3 "$ACTION: could not update the surfaces field"
   write_atomic "$PROJECT_FILE" "$doc"
+  case "$ACTION" in
+    decline) subject="Decline $KIND surfaces"; why="a person declined" ;;
+    *)       subject="Install $KIND surfaces"; why="installed through the surfaces skill" ;;
+  esac
+  commit_project "$PROJECT_DIR" "$subject" "$why" "" "" "project" "surfaces" "project.json" \
+    || printf 'surfaces-actions: the surfaces field was written but not committed.\n' >&2
 }
 
 # Loads the surface file and refuses every state but ok: missing is a step out of order (62).
@@ -101,13 +110,14 @@ require_surface_file() {
 # cr_resolve_recipe in scripts/lib/recipes.sh sets RECIPE and RECIPE_FW, or ends the action.
 VIEWPORTS_JSON="[]"; VALUES=""; KIND=""; KEY=""
 
-# Maps a kind word to the project record's key, or dies at 3 naming both kinds. Sets KEY. $1 the kind.
+# Maps a kind word to the project record's key, or dies at 3 naming both kinds. Sets KEY and KIND. $1 the kind.
 kind_key() {
   case "$1" in
     e2e)                KEY="e2e" ;;
     visual-regression)  KEY="visualRegression" ;;
     *) die 3 "$ACTION: the kind is e2e or visual-regression, got: ${1:-nothing}" ;;
   esac
+  KIND="$1"
 }
 
 # The `## Viewports` block of the recipe, or the --viewport list, into VIEWPORTS_JSON. A global,
