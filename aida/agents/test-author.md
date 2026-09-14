@@ -60,7 +60,9 @@ that fails because the harness never reached the behaviour has not been watched 
 that selected nothing has proved nothing at all. Read the output; the exit status alone cannot tell
 those apart. When the unit's own module does not exist yet, every test errors before it asserts.
 Report that as a setup gap, with the output, and stop. Do not write the module's own files to make
-a test fail: you may write no production file.
+a test fail: you may write no production file. When this order creates the module, that first run
+erroring where the harness enables it is the expected red. The freeze records it as such; write no
+scaffold to get another.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,

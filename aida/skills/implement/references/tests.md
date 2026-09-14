@@ -15,10 +15,10 @@ SKILL.md holds both rules.
 **The `test-authoring` point.** This answers where a test file goes, which levels exist and when
 each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
 
-**The `implement` point, for one thing only.** Take the file patterns from its `## Oracle files`
+**The `implement` point, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
-naming test files, so this is not a guess at what the block is for. Pass those globs to the freeze
-below. This is the one recipe this step reads itself, because it needs the patterns as data rather
+naming test files, so this is not a guess at what the block is for. Pass those globs and the path
+to the freeze below. This is the one recipe this step reads itself, because it needs the patterns as data rather
 than as instruction.
 
 Do not give this recipe to the test author. It carries the standards and the steps that write
@@ -212,6 +212,7 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
   --test <path>::<test name>=<order id> \
   --red <test name>=<path to a file holding what the run printed> \
   --test-recipe <framework>=<path to the test-execution recipe> \
+  --implement-recipe <framework>=<path to the implement recipe> \
   --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
@@ -224,7 +225,9 @@ the order's done-when, and its name ends with the order id.
 
 `--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
 at `frameworks[].recipePath`, the same way the build step reads it. The script reads the recipe's
-`failure_signal` block itself. Do not read the body here.
+`failure_signal` block itself. Do not read the body here. `--implement-recipe` is the path
+resolved above, one per framework, the same path the build step passes to `build-record`. The
+script reads its `## Unit declaration` block itself, for the one exception below.
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
@@ -247,9 +250,13 @@ place. A test with neither refuses (exit 33). It reads each `--red` file against
 test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
 A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a
 setup gap, and the freeze refuses it (exit 80) saying so. The harness never reached the
-behaviour, so nothing in that file says the behaviour is absent. For a new module that is the
-expected first run, because no test can assert before the module exists, and the step stops
-there. The author does not scaffold the module to get past it: it may write no production file.
+behaviour, so nothing in that file says the behaviour is absent. One order is the exception: the
+order that creates the unit. The implement recipe's `## Unit declaration` names the file whose
+presence makes a unit exist. When an owned file of this order matches one of its globs, the
+freeze accepts the harness-only file as its red, recorded `redSignal: harness-new-unit`. No
+test can assert before the module exists, so that is the only red the order
+can have. The author does not scaffold the module to get a better one: it may write no production
+file. With no `--implement-recipe`, no block, or no matching owned file, the refusal stands.
 A file holding neither marker is a red when a line matches `failure_line`. That is how a red is
 read under a recipe whose assertion span is a shape rather than a marker. A file none of the
 three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes

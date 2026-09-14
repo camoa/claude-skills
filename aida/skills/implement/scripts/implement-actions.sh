@@ -33,6 +33,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
 #                            [--red <test name>=<path to a file holding what the run printed>]...
 #                            [--test-recipe <framework>=<path>]...
+#                            [--implement-recipe <framework>=<path>]...
 #                            [--test-glob <glob>]...
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
@@ -433,7 +434,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      test-execution recipes declare under `failure_signal:` and no line their suite row's
 #      `failure_line` names (`--test-recipe`, the flag `build-record` already takes), so the run it
 #      holds did not fail a test. A file that holds a harness marker instead is named as a setup
-#      gap: the run never reached the behaviour (live-run row 68). The same exit when no
+#      gap: the run never reached the behaviour (live-run row 68), unless the order creates the
+#      unit: an owned file matches a glob under `## Unit declaration` in an `--implement-recipe`,
+#      and the file is then accepted as `harness-new-unit`. The same exit when no
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
 #
@@ -552,6 +555,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
                             [--red <test name>=<path to a file holding what the run printed>]...
                             [--test-recipe <framework>=<path>]...
+                            [--implement-recipe <framework>=<path>]...
                             [--test-glob <glob>]...
                             [--checklist <criterion id>=<verification text>]...
                             [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
@@ -3089,7 +3093,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
-  local test_recipes=""
+  local test_recipes="" unit_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --test)
@@ -3106,6 +3110,12 @@ do_tests_freeze() {
         [ "$#" -ge 2 ] || die 3 "tests-freeze: --test-recipe needs <framework>=<path>"
         cr_recipe_pair "tests-freeze" "--test-recipe" "$2"
         test_recipes="$test_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --implement-recipe)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --implement-recipe needs <framework>=<path>"
+        cr_recipe_pair "tests-freeze" "--implement-recipe" "$2"
+        unit_recipes="$unit_recipes$CR_PAIR
 "
         shift 2 ;;
       --test-glob)
@@ -3522,6 +3532,37 @@ $test_recipes
 TF_EOF
     rm -f "$red_rows_tmp"
   fi
+  # A harness-only red is the one red the order that creates the unit can have (live-run row 68,
+  # second half): every test errors where the harness enables the module, before an assertion
+  # runs, and nothing in the build may write the module first. The implement recipe names, under
+  # `## Unit declaration`, the file whose presence makes a unit exist, and an owned file matching
+  # one of its globs makes this order that order. The globs of every recipe handed over are read
+  # together, the way the markers above are. No flag, no block or no matching owned file leaves
+  # the setup-gap refusal below as it is.
+  local unit_recipe_path unit_glob owned_file unit_file="" unit_file_glob="" unit_file_recipe=""
+  if [ "$red_count" -gt 0 ] && [ -n "$unit_recipes" ]; then
+    while IFS= read -r unit_recipe_path; do
+      [ -n "$unit_recipe_path" ] || continue
+      unit_recipe_path="$(printf '%s' "$unit_recipe_path" | cut -f2-)"
+      while IFS= read -r unit_glob; do
+        [ -n "$unit_glob" ] || continue
+        unit_glob="$(pc_unquote "$unit_glob")"
+        while IFS= read -r owned_file; do
+          [ -n "$owned_file" ] || continue
+          [ -z "$unit_file" ] || continue
+          if tf_path_matches_catalog_glob "$owned_file" "$unit_glob"; then
+            unit_file="$owned_file"; unit_file_glob="$unit_glob"; unit_file_recipe="$unit_recipe_path"
+          fi
+        done <<TF_OWNED
+$(printf '%s' "$UNIT_JSON" | jq -r '(.ownedFiles // [])[]')
+TF_OWNED
+      done <<TF_GLOBS
+$(cc_unit_declaration_globs "$unit_recipe_path")
+TF_GLOBS
+    done <<TF_RECIPES
+$unit_recipes
+TF_RECIPES
+  fi
   local red_signal marker unread_reds="" setup_gap_reds="" marker_words signals_tmp
   marker_words="$(printf '%s' "$assertion_markers" | grep -v '^$' | sort -u | sed "s/.*/'&'/" | tr '\n' ' ')"
   signals_tmp="$IMPL_DIR/.tests-freeze-signals.$$"
@@ -3539,11 +3580,15 @@ $assertion_markers
 TF_EOF
     # The harness marker is read before the selector. PHPUnit numbers a test that errored in
     # setUp() the same way as one that failed (`1) Class::method`), so the row 68 output matches
-    # the selector, and reading the selector first would freeze it as a red again.
+    # the selector, and reading the selector first would freeze it as a red again. For the order
+    # that creates the unit the same file is its red, recorded as harness-new-unit.
     if [ -z "$red_signal" ]; then
       while IFS= read -r marker; do
         [ -n "$marker" ] || continue
-        if pc_output_holds "$red_path" "$marker"; then red_signal="harness"; setup_gap_reds="$setup_gap_reds$red_name (holds '$marker'), "; break; fi
+        if pc_output_holds "$red_path" "$marker"; then
+          if [ -n "$unit_file" ]; then red_signal="harness-new-unit"; break; fi
+          red_signal="harness"; setup_gap_reds="$setup_gap_reds$red_name (holds '$marker'), "; break
+        fi
       done <<TF_EOF
 $harness_markers
 TF_EOF
@@ -3569,7 +3614,7 @@ TF_EOF
   if [ -n "$unread_reds" ]; then
     rm -f "$signals_tmp"
     [ -z "$setup_gap_reds" ] \
-      || die 80 "tests-freeze: these --red files hold the recipe's harness marker and no assertion marker: ${setup_gap_reds%, }. The harness stopped in an error before any assertion held or failed, which is a setup gap and not a red: for a unit whose module does not exist yet, nothing can fail an assertion before it does. Nothing is frozen. Repair the harness or the unit's own declaration, never the test, and run that test on its own again. An assertion failure prints one of ${marker_words% }. Every file read as no red: ${unread_reds%, }."
+      || die 80 "tests-freeze: these --red files hold the recipe's harness marker and no assertion marker: ${setup_gap_reds%, }. The harness stopped in an error before any assertion held or failed, which is a setup gap and not a red: for a unit whose module does not exist yet, nothing can fail an assertion before it does. Nothing is frozen. Repair the harness or the unit's own declaration, never the test, and run that test on its own again. An order that creates the unit passes --implement-recipe <framework>=<path>, so its unit declaration can be read. An assertion failure prints one of ${marker_words% }. Every file read as no red: ${unread_reds%, }."
     die 80 "tests-freeze: these --red files hold none of the assertion markers the test-execution recipe declares, and no line its suite row's failure_line names: ${unread_reds%, }. A run that did not fail an assertion is not a red. An assertion failure prints one of ${marker_words% }; read the file, and run the test again until it fails for the reason it names."
   fi
   # The signal each red was accepted on rides with its --red row into the record (redSignal).
@@ -3579,6 +3624,9 @@ TF_EOF
   rm -f "$signals_tmp"
   if [ "$red_count" -gt 0 ] && [ -z "$assertion_markers" ] && [ -z "$failure_lines" ]; then
     echo "TESTS-FREEZE: red files unchecked, the test-execution recipe declares no assertion marker and no suite failure_line to read them against: $(printf '%s' "$test_recipes" | cut -f2- | grep -v '^$' | tr '\n' ' ')"
+  fi
+  if printf '%s' "$reds_json" | jq -e 'any(.[]; .signal == "harness-new-unit")' >/dev/null; then
+    echo "TESTS-FREEZE: $unit_id creates a unit: $unit_file matches $unit_file_glob under ## Unit declaration in $unit_file_recipe. A red holding only the harness marker is accepted for it, because nothing can fail an assertion before the unit exists."
   fi
 
   # --- 33: every declared test needs a --red, or a --locks-in naming the existing code it locks in --

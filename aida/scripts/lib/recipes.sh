@@ -31,7 +31,9 @@
 #   tc_parse_recipe <recipe> <out>            one JSON object per `## Test commands` row
 #   cc_parse_recipe <recipe> <heading> <key> <out>      the same for a check or surface block
 #   cc_markers_in_text <text>                 the literal markers in one silent-pass text
+#   cc_failure_signal_markers <recipe> <key>  the same, from one key of a test recipe's failure_signal
 #   cc_silent_pass_markers <recipe>           the same, from the file-level key of a test recipe
+#   cc_unit_declaration_globs <recipe>        the globs under ## Unit declaration of an implement recipe
 #   cr_recipe_pair <action> <flag> <value>    parses <framework>=<path> into CR_PAIR
 #   cr_resolve                                resolves the recipes into CR_DOC
 #   cr_lookup <tab list> <name>               the value that name was given, as whole text
@@ -507,6 +509,30 @@ cc_failure_signal_markers() {
 # declares no silent-pass text, which is when the caller's own `--nothing-ran` flag still applies.
 cc_silent_pass_markers() {
   cc_failure_signal_markers "$1" "silent_pass"
+}
+
+# Prints, one per line, the globs under `unit_declaration: globs:` in the `## Unit declaration`
+# block of the implement recipe at $1: the patterns of the file whose presence makes a unit exist,
+# `**/*.info.yml` for Drupal. Prints nothing when the recipe carries no block, and that means no
+# file declares a unit in this framework. Cut by recipe_block_into, the same reader the command
+# blocks use; the list ends at the closing fence or at the next key. Each glob is printed as
+# written, quotes and all, the way `failure_line` is; the caller strips them.
+cc_unit_declaration_globs() {
+  local recipe_file="$1" block_file line trimmed in_globs=0
+  block_file="$(mktemp)" || return 0
+  if [ "$(recipe_block_into "$recipe_file" "Unit declaration" "unit_declaration" "$block_file")" = "ok" ]; then
+    while IFS= read -r line; do
+      trimmed="$(pc_trim "$line")"
+      case "$trimmed" in
+        '```'*|'##'*) break ;;
+        'globs:'*) in_globs=1 ;;
+        '- '*) [ "$in_globs" = "1" ] && printf '%s\n' "$(pc_trim "${trimmed#- }")" ;;
+        *:*) in_globs=0 ;;
+      esac
+    done <"$block_file"
+  fi
+  rm -f "$block_file"
+  return 0
 }
 
 # Parses one `<framework>=<path>` flag value and sets CR_PAIR to the tab-separated line the caller
