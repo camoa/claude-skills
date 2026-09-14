@@ -3395,7 +3395,7 @@ TF_EOF
   fi
 
   # --- 35: a record already exists for this unit at a different commit -----------------------------
-  local record_file existing_doc existing_commit
+  local record_file existing_doc existing_commit=""
   record_file="$IMPL_DIR/tests-$unit_id.json"
   if [ -f "$record_file" ]; then
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
@@ -3404,8 +3404,9 @@ TF_EOF
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
     [ -n "$existing_commit" ] \
       || die 3 "tests-freeze: $record_file exists but has no usable commit field."
-    [ "$existing_commit" = "$current_commit" ] \
-      || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit. A record is taken once per commit; investigate before proceeding."
+    # A different commit is decided once the rows are built, below: the freeze itself commits, so
+    # HEAD moves with every order frozen, and a re-run with the same tests is unchanged wherever
+    # HEAD stands. Only changed tests under a moved HEAD refuse with 35.
   fi
 
   # --- every check passed: build the rows ----------------------------------------------------------
@@ -3468,6 +3469,22 @@ TF_EOF
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
   [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
+
+  # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
+  # The freeze commits (below), so freezing wo1, then wo2, then wo1 again finds HEAD moved by wo2's
+  # commit. The same rows are the same freeze; different rows under a moved HEAD are the case 35
+  # exists for, tests changed under a record nobody re-took.
+  if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ]; then
+    local existing_rows new_rows
+    existing_rows="$(jq -cS '{unit, testGlobs, rows}' "$record_file" 2>/dev/null)"
+    new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows}')"
+    if [ "$existing_rows" = "$new_rows" ]; then
+      echo "TESTS-FREEZE: unchanged (already frozen at commit $existing_commit with the same tests)"
+      printf '%s\n' "$record_file"
+      exit 0
+    fi
+    die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
+  fi
 
   # --- the test files go into a commit before anything is measured against them --------------------
   # The intent puts the commit before the build ("Tests are committed and hash-frozen before the

@@ -242,5 +242,6 @@ stops the step rather than recording it, which is the right outcome: a test nobo
 not a reference. This is a bound, not a rule the script enforces on its own: nothing here notices a
 green-on-arrival test the caller does not flag, so the flag is on you.
 
-A record is taken once per commit. A second run at the same commit leaves it alone. One taken at a
-different commit refuses and names both.
+A record is taken once. A second run with the same tests leaves it alone, whatever commit the
+tree is at now, because every freeze moves the tree. Different tests at a different commit
+refuse and name both commits.
