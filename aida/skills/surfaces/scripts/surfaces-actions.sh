@@ -96,19 +96,6 @@ require_surface_file() {
   esac
 }
 
-# Commits everything install, register or baseline wrote in $TREE, printing `committed: <sha>`; prints
-# `committed: none, $1` when the tree was already clean, so nothing of this call's own is in it.
-# $1 what to say wrote nothing, $2 the commit message. Dies through $ACTION's own name.
-sa_commit_if_changed() {
-  if [ -z "$(git -C "$TREE" status --porcelain)" ]; then
-    printf 'committed: none, %s\n' "$1"
-  else
-    git -C "$TREE" add -A && git -C "$TREE" commit -q -m "$2" \
-      || die 3 "$ACTION: the commit failed"
-    printf 'committed: %s\n' "$(git -C "$TREE" rev-parse --short HEAD)"
-  fi
-}
-
 # ----------------------------------------------------------------- the recipe
 # cr_resolve_recipe in scripts/lib/recipes.sh sets RECIPE and RECIPE_FW, or ends the action.
 VIEWPORTS_JSON="[]"; VALUES=""; KIND=""; KEY=""
@@ -144,7 +131,7 @@ SA_VIEWPORTS
 
 # --------------------------------------------------------- show and install
 do_show_or_install() {
-  local steps files_dir list n rel target kept=0 written=0 line before doc
+  local steps files_dir list doc
   KIND="${1:-}"
   kind_key "$KIND"
   shift; cr_resolve_recipe "$@"
@@ -159,44 +146,18 @@ do_show_or_install() {
     printf 'FILES:\n'; printf '%s\n' "$list" | cut -f2 | sed 's/^./  &/'
     printf 'VIEWPORTS: %s\n' "$(fenced_blocks_under "$RECIPE" Viewports json | jq -c '.' 2>/dev/null)"
     printf 'SEED:\n'; fenced_blocks_under "$RECIPE" Surfaces json | jq -r '.[] | "  \(.id) url=\(.url) kinds=\(.kinds | join(","))"' 2>/dev/null
-    printf 'DISCOVERY:\n'; sed -n '/^## Discovery$/,/^## /p' "$RECIPE" | sed '1d; /^## /d; /^$/d; s/^/  /'
+    printf 'DISCOVERY:\n'; recipe_prose_under "$RECIPE" Discovery
     rm -rf "$files_dir"; exit 0
   fi
-  # Every file is checked before any command runs, so a differing file stops the install whole.
-  while IFS="$TAB" read -r n rel; do
-    [ -n "$n" ] || continue
-    case "$rel" in /*|*../*|*/..) die 3 "install: $RECIPE names a file outside the tree: $rel" ;; esac
-    target="$TREE/$rel"
-    [ ! -f "$target" ] || cmp -s "$files_dir/$n" "$target" \
-      || die 3 "install: $target exists with different content from the $rel block in $RECIPE. Nothing is overwritten; move the file aside or change the recipe."
-  done <<SA_FILES
-$list
-SA_FILES
+  recipe_files_refuse_differing install "$RECIPE" "$list" "$TREE" "$files_dir"
   br_require_clean_tree install "$TREE"
   load_viewports
   [ "$RUN_MODE" = "interactive" ] && { printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"; printf '%s\n' "$steps" | sed 's/^/  /'; }
   mkdir -p "$RECORDS_DIR" "$TREE/.visual-review" || die 3 "install: could not create the records folder"
   OUTFILE="$RECORDS_DIR/surfaces-$KIND-install.txt"; : >"$OUTFILE"
   cd "$TREE" || die 3 "install: could not enter $TREE"
-  while IFS= read -r line; do
-    [ -n "${line// /}" ] || continue
-    before="$(wc -l <"$OUTFILE" | tr -d '[:space:]')"
-    run_recipe_line install "$RECIPE" "$line" "$OUTFILE" && continue
-    printf 'install: step failed: %s\n' "$line" >&2
-    recipe_output_summary 4 "$OUTFILE" "$((before + 1))"; exit 4
-  done <<SA_STEPS
-$steps
-SA_STEPS
-  while IFS="$TAB" read -r n rel; do
-    [ -n "$n" ] || continue
-    target="$TREE/$rel"
-    if [ -f "$target" ]; then kept=$((kept + 1)); continue; fi
-    mkdir -p "$(dirname -- "$target")" && cp "$files_dir/$n" "$target" || die 3 "install: could not write $target"
-    written=$((written + 1)); printf 'file: %s\n' "$target"
-  done <<SA_FILES
-$list
-SA_FILES
-  rm -rf "$files_dir"
+  run_recipe_lines install "$RECIPE" "$steps" "$OUTFILE" "install:"
+  recipe_files_write install "$list" "$TREE" "$files_dir"; rm -rf "$files_dir"
   sf_load_surfaces "$SURFACE_FILE"
   case "$SF_STATE" in
     missing) doc="$(jq -n --argjson v "$VIEWPORTS_JSON" '{schemaVersion: 1, viewports: $v, surfaces: []}')" ;;
@@ -207,8 +168,8 @@ SA_FILES
   write_atomic "$SURFACE_FILE" "$doc"
   write_project_field '.registryPath = $sf | .'"$KEY"'.enabled = true'
   printf 'INSTALLED: %s per %s\nfiles: %s written, %s kept\nsurface-file: %s\nproject-file: %s\n' \
-    "$KIND" "$RECIPE" "$written" "$kept" "$SURFACE_FILE" "$PROJECT_FILE"
-  sa_commit_if_changed "install wrote nothing new" "New $KIND surfaces setup, installed through the surfaces skill"
+    "$KIND" "$RECIPE" "$RF_WRITTEN" "$RF_KEPT" "$SURFACE_FILE" "$PROJECT_FILE"
+  recipe_commit_if_changed "$TREE" "$ACTION" "install wrote nothing new" "New $KIND surfaces setup, installed through the surfaces skill"
   recipe_output_summary 0 "$OUTFILE" 1
 }
 
@@ -251,7 +212,7 @@ do_register() {
   write_atomic "$SURFACE_FILE" "$doc"
   printf 'surface: %s enabled=%s kinds=%s paths=%s critical=%s\nsurface-file: %s\n' "$id" "$enabled" \
     "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$(printf '%s' "$paths" | jq 'length')" "$critical" "$SURFACE_FILE"
-  sa_commit_if_changed "register wrote nothing new" "Register the $id surface through the surfaces skill"
+  recipe_commit_if_changed "$TREE" "$ACTION" "register wrote nothing new" "Register the $id surface through the surfaces skill"
 }
 
 # -------------------------------------------------------------------- baseline
@@ -306,7 +267,7 @@ $VALUES"
   esac
   [ "$rc" = "0" ] || { recipe_output_summary 4 "$OUTFILE" 1; exit 4; }
   # Review refuses a dirty tree, and the message is the record of why these baselines changed.
-  sa_commit_if_changed "the accept row wrote nothing" "New visual regression baselines for $ids, confirmed by a person through the surfaces skill"
+  recipe_commit_if_changed "$TREE" "$ACTION" "the accept row wrote nothing" "New visual regression baselines for $ids, confirmed by a person through the surfaces skill"
   printf 'baselines: %s\n' "$ids"
   recipe_output_summary 0 "$OUTFILE" 1
 }

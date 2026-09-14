@@ -131,7 +131,7 @@ fi
 # A recipe with no `sh` block where one is required is refused by name. That is a defect in the
 # recipe, and saying so is more useful than guessing which fence was meant.
 
-# sh_blocks_under, refuse_if_unsafe, run_recipe_line and recipe_output_summary live in
+# sh_blocks_under, refuse_if_unsafe, run_recipe_lines and recipe_output_summary live in
 # scripts/lib/recipes.sh, because the surfaces skill reads and runs its setup recipes the same way.
 
 # How many `sh` blocks a heading has. Run requires exactly one, so the count is the check.
@@ -204,16 +204,7 @@ case "$ACTION" in
     mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
     OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-install.txt"
     : >"$OUTFILE"
-    BEFORE=0
-    while IFS= read -r line; do
-      [ -n "${line// /}" ] || continue
-      BEFORE="$(wc -l <"$OUTFILE" | tr -d '[:space:]')"
-      if ! run_recipe_line tool-actions "$RECIPE" "$line" "$OUTFILE"; then
-        printf 'tool-actions: step failed: %s\n' "$line" >&2
-        recipe_output_summary 4 "$OUTFILE" "$((BEFORE + 1))"
-        exit 4
-      fi
-    done <<< "$STEPS"
+    run_recipe_lines tool-actions "$RECIPE" "$STEPS" "$OUTFILE" "tool-actions:"
     printf 'INSTALLED: %s per %s\n' "$TOOL" "$RECIPE"
     recipe_output_summary 0 "$OUTFILE" 1
     exit 0

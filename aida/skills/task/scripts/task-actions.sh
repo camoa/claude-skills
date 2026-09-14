@@ -902,9 +902,6 @@ TA_TOKENS
   printf '%s' "$line"
 }
 
-# The prose under the H2 $2 of the recipe $1, indented, the way surfaces prints `## Discovery`.
-recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/d; s/^/  /'; }
-
 # The `## Bring up` lines of the recipe $1 before ($2 `before`) or after ($2 `after`) its
 # `## Address` heading. The recipe places the address between two bring-up headings, and only the
 # position says which block runs on which side of it.
@@ -915,24 +912,14 @@ bring_up_half() {
   sh_blocks_under "$half" "Bring up"; rm -f "$half"
 }
 
-# Runs every line of $1 in $2 with output appended to $3, every `{name}` filled, and exits 4 at
-# the first failure with the `first:` line, the way surfaces install does. $4 the label for
-# stderr, $5 the recipe the lines came from, $RECIPE when absent. A line still holding a `{name}`
-# after the fill exits 3 naming it: a token nothing filled would otherwise run literally.
-run_recipe_lines() {
-  local steps="$1" dir="$2" outfile="$3" who="$4" recipe="${5:-$RECIPE}" line before rest
-  cd "$dir" || die3 "environment: could not enter $dir"
-  while IFS= read -r line; do
-    [ -n "${line// /}" ] || continue
-    line="$(fill_tokens "$line")"
-    case "$line" in *'{'*'}'*) rest="${line#*\{}"; die3 "environment: $who line holds a token nothing fills: {${rest%%\}*}}. The tokens are {codePath}, the ## Tokens names and the address keys" ;; esac
-    before="$(wc -l <"$outfile" | tr -d '[:space:]')"
-    run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
-    printf 'environment: %s step failed: %s\n' "$who" "$line" >&2
-    recipe_output_summary 4 "$outfile" "$((before + 1))"; exit 4
-  done <<TA_STEPS
-$steps
-TA_STEPS
+# Prints the line $1 with every `{name}` filled, for run_recipe_lines in scripts/lib/recipes.sh.
+# A line still holding a `{name}` after the fill exits 3 naming it, under the label $2: a token
+# nothing filled would otherwise run literally.
+fill_line_or_refuse() {
+  local line rest
+  line="$(fill_tokens "$1")"
+  case "$line" in *'{'*'}'*) rest="${line#*\{}"; die3 "environment: $2 line holds a token nothing fills: {${rest%%\}*}}. The tokens are {codePath}, the ## Tokens names and the address keys" ;; esac
+  printf '%s' "$line"
 }
 
 # Runs the one line $1 in $2 and writes its standard output to $4, which a token and the address
@@ -987,7 +974,7 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down) ;; *) die3 "environment: the action is show, up or down, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile tab; tab="$(printf '\t')"
+  local task_dir task_json wt outfile
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
@@ -1005,7 +992,8 @@ do_environment() {
     TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt") | "\(.key)\t\(.value)"' "$task_json")"
     wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
-    run_recipe_lines "$(sh_blocks_under "$RECIPE" "Tear down")" "$wt" "$outfile" down
+    cd "$wt" || die3 "environment: could not enter $wt"
+    run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
     write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
     commit_task_change "$project_path" "Tear down the site of ${id}" "requested" "" "" "$id" "environment" \
       || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
@@ -1017,7 +1005,7 @@ do_environment() {
   ACTION="environment"; KIND="worktree-environment"
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
-  local bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup
+  local bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
   bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
   address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
   tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
@@ -1025,6 +1013,10 @@ do_environment() {
   # already reads: one file per block, named by its order, and a `<n><TAB><name>` line each.
   tokens_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
   token_list="$(recipe_files_into "$RECIPE" Tokens "$tokens_dir")"
+  # The `## Files` blocks, written before the tokens run: the shipped recipe's first token runs a
+  # script the recipe itself declares, which a fresh worktree holds only once a commit carried it.
+  files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  file_list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
   printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
   [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
   [ -n "$address" ] || die3 "environment: $RECIPE has no block tagged sh under Address, so up would record no address"
@@ -1037,11 +1029,21 @@ TA_TOKEN_LIST
     printf 'ADDRESS:\n  %s\n' "$(fill_tokens "$address")"
     printf 'TEAR DOWN:\n'; fill_tokens "$tear_down" | sed 's/^/  /'; printf '\n'
     printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
-    rm -rf "$tokens_dir"; return 0
+    printf 'FILES:\n'; printf '%s\n' "$file_list" | cut -f2 | sed 's/^./  &/'
+    rm -rf "$tokens_dir" "$files_dir"; return 0
   fi
   cr_require_person up "a person approved the site coming up"
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
-  mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
+  mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
+  cd "$wt" || die3 "environment: could not enter $wt"
+  recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
+  : >"$outfile"
+  recipe_files_write environment "$file_list" "$wt" "$files_dir"; rm -rf "$files_dir"
+  printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+  # Only the written files are staged and committed. A person's uncommitted or staged work beside
+  # them is never taken into this commit and never refuses it.
+  [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
+    "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"
@@ -1056,7 +1058,7 @@ TA_TOKEN_LIST
 $token_list
 TA_TOKEN_LIST
   rm -rf "$tokens_dir"
-  run_recipe_lines "$(bring_up_half "$RECIPE" before)" "$wt" "$outfile" up
+  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" before)" "$outfile" "environment: up" fill_line_or_refuse
   run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
   value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
   [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
@@ -1066,7 +1068,7 @@ TA_TOKEN_LIST
   root="$(cr_lookup "$keys" root)"
   [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
     || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
-  run_recipe_lines "$(bring_up_half "$RECIPE" after)" "$wt" "$outfile" up
+  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" after)" "$outfile" "environment: up" fill_line_or_refuse
   # The harness in the worktree: a setup recipe's `## Install` is declared safe to run twice, and
   # it is where npm lives. Without its path the site is still up, and the install is the person's
   # next step.
@@ -1074,7 +1076,10 @@ TA_TOKEN_LIST
     [ "$(jq -r --arg k "$kind" '.surfaces[if $k == "e2e" then "e2e" else "visualRegression" end].enabled // false' "$project_path/project.json")" = "true" ] || continue
     setup="$(cr_lookup "$setup_recipes" "$kind")"
     [ -n "$setup" ] || { printf 'environment: %s is on for this project and no --setup-recipe %s=<path> was given, so its harness is not installed in the worktree\n' "$kind" "$kind" >&2; continue; }
-    run_recipe_lines "$(sh_blocks_under "$setup" Install)" "$wt" "$outfile" "install $kind" "$setup"
+    run_recipe_lines "install $kind" "$setup" "$(sh_blocks_under "$setup" Install)" "$outfile" "environment: install $kind" fill_line_or_refuse
+    # The install may change a tracked file, package-lock.json. Nothing here commits it: the
+    # paths are the recipe's to know, and a commit of everything would sweep other work in.
+    [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
   done
   write_atomic "$task_json" "$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \

@@ -98,24 +98,28 @@ and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the 
 ```
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
 the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
+It prints the paths of the `## Files` blocks, the files `up` writes.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
 says what `up` would do.
 
 `up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with the
-output in `records/environment-up.txt`, in this order. First each `## Tokens` command, whose
-first output line is the token's value. A token command that prints nothing or fails refuses at
-4 by the token's name. Then the bring-up lines before the `## Address` heading. Then the address
-command, whose output is `key: value` lines. `address:` is required, and every other key is a
-token for the later lines and for the tear-down. A `root:` line that is not the worktree stops
-at 3 before the later lines: the environment resolved to another tree. Then the bring-up lines
-after the heading. Then, for each surfaces kind the project has on, the `## Install` lines of
-the setup recipe given as `--setup-recipe`. With no path for a kind it says so and goes on, and
-the harness is the person's next step. A line still holding an unfilled `{token}` stops at 3 and
-names it. A
-failing line stops at 4 with a `first:` line. Show that line; do not bring the site up by hand.
-It records `environment` in `task.json`: the address, the recipe, when, and the other address
-keys. It prints `address:`. Running it twice is safe: the recipe promises every step runs again
-cleanly.
+output in `records/environment-up.txt`, in this order. First it writes each `## Files` block
+absent from the worktree and commits those files alone, so other changed or staged work is
+never taken in. A file present with other content refuses at 3. Then
+each `## Tokens` command, whose first output line is the token's value. A token command that
+prints nothing or fails refuses at 4 by the token's name. Then the bring-up lines before the
+`## Address` heading. Then the address command, whose output is `key: value` lines. `address:`
+is required, and every other key is a token for the later lines and for the tear-down. A `root:`
+line that is not the worktree stops at 3 before the later lines: the environment resolved to
+another tree. Then the bring-up lines after the heading. Then, for each surfaces kind the
+project has on, the `## Install` lines of the setup recipe given as `--setup-recipe`. It
+commits nothing after that; what the install left uncommitted is named and stays for the task's
+own commit. With no path for a kind it says so and goes on, and the
+harness is the person's next step. A line still holding an unfilled `{token}` stops at 3 and
+names it. A failing line stops at 4 with a `first:` line. Show that line; do not bring the site
+up by hand. It records `environment` in `task.json`: the address, the recipe, when, and the
+other address keys. It prints `address:`. Running it twice is safe: the recipe promises every
+step runs again cleanly.
 
 `down` runs the tear-down lines, output to `records/environment-down.txt`, and removes
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
