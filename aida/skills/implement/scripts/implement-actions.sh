@@ -1807,17 +1807,6 @@ pc_run_check() {
   printf '%s' "$?"
 }
 
-# Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the
-# value can carry quotes of its own, and the outer pair belongs to the document rather than to the
-# string being looked for.
-pc_unquote() {
-  case "$1" in
-    "'"*"'") printf '%s' "$1" | sed "s/^'//; s/'$//" ;;
-    '"'*'"') printf '%s' "$1" | sed 's/^"//; s/"$//' ;;
-    *)       printf '%s' "$1" ;;
-  esac
-}
-
 # The entry being read, held between lines. Bash 3.2 has no nameref, so the parse loop and its
 # flush share these rather than passing a record around.
 PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
@@ -4016,98 +4005,6 @@ BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 BRC_GATE_RECIPES=""
-
-# One line of tool or suite output as a key for comparing two runs: every run of digits removed,
-# every run of dots one dot, every run of whitespace one space, the ends trimmed. One rule for
-# every tool and every framework, in place of a parser per tool: it covers `path:12`,
-# ` 12 | ERROR |`, a counts line, a duration, a percentage, and the progress line that grows with
-# every test an order adds. Two lines that differ only in a number read as one; that is the price.
-br_line_keys() {
-  sed 's/[0-9][0-9]*//g; s/\.\.*/./g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' "$1"
-}
-
-# The lines of the run at $2 whose key is absent from the run at $1: the first 20, in their own
-# words and order, written to $3, and the count of all of them in BR_NEW_COUNT. A line whose key
-# comes out empty is never new. A global for the count and a file for the lines, never a printed
-# value, for the reason br_seven_checks states: a refusal inside a `$(...)` exits that subshell
-# alone.
-BR_NEW_COUNT=0
-br_lines_not_in() {
-  local base="$1" now="$2" out="$3" base_keys now_keys nums picks
-  base_keys="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-  now_keys="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-  br_line_keys "$base" | sort -u >"$base_keys"
-  br_line_keys "$now" >"$now_keys"
-  # -a: a byte that is not UTF-8 in a line would otherwise make grep print "binary file matches"
-  # and no line number, and the check would read met over a line it never compared.
-  nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
-  BR_NEW_COUNT="$(printf '%s\n' "$nums" | grep -c '^[0-9]')"
-  picks="$(printf '%s\n' "$nums" | grep '^[0-9]' | head -20 | sed 's/$/p/' | paste -s -d ';' -)"
-  : >"$out"
-  [ -z "$picks" ] || sed -n "$picks" "$now" >"$out"
-  rm -f "$base_keys" "$now_keys"
-}
-
-# Subtracts the baseline run at $1 from the run now at $2, for a check whose baseline row was
-# unmet. $3 a word for the message, $4 how the command failed, $5 an optional selector: a regular
-# expression the recipe's suite row declared as `failure_line`, and only the lines matching it,
-# on both sides, are compared. Sets BR_SUB_VERDICT and BR_SUB_DETAIL, and BR_SUB_NEW, a JSON
-# array of the first 20 new lines, with BR_SUB_COUNT the count of all of them. met when no line
-# is new: what failed now already failed at the commit the build started from. unmet when one is,
-# naming the count. unknown only when there is nothing to subtract from or with: a baseline row
-# that kept no output, a run that printed none, a selector that matches no line of the run now
-# (the failure is not one the selector names), or a selector grep cannot compile. It cannot see a
-# finding whose text changed, which reads as new, or one fixed and reintroduced, which reads as
-# old, or a new finding worded like an old one in another file, which reads as old too.
-BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
-br_subtract_baseline() {
-  local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" new_file base_sel now_sel with
-  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
-  if [ -z "$base" ] || [ ! -s "$base" ]; then
-    BR_SUB_VERDICT="unknown"
-    BR_SUB_DETAIL="the $label command $how, and the baseline recorded it unmet at the commit the build started from but kept no output to subtract (a baseline taken before outputs were kept, or its file removed), so this cannot tell an old finding from a new one."
-    return 0
-  fi
-  if [ ! -s "$now" ]; then
-    BR_SUB_VERDICT="unknown"
-    BR_SUB_DETAIL="the $label command $how and printed nothing, so there is nothing to compare with the baseline's output."
-    return 0
-  fi
-  with="with numbers set aside"
-  if [ -n "$selector" ]; then
-    grep -a -E -e "$selector" /dev/null 2>/dev/null
-    if [ "$?" -eq 2 ]; then
-      BR_SUB_VERDICT="unknown"
-      BR_SUB_DETAIL="the $label command $how, and the recipe's failure_line selector ($selector) is not a regular expression grep can compile, so no line was compared."
-      return 0
-    fi
-    base_sel="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-    now_sel="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-    grep -a -E -e "$selector" "$base" >"$base_sel" 2>/dev/null
-    grep -a -E -e "$selector" "$now" >"$now_sel" 2>/dev/null
-    if [ ! -s "$now_sel" ]; then
-      rm -f "$base_sel" "$now_sel"
-      BR_SUB_VERDICT="unknown"
-      BR_SUB_DETAIL="the $label command $how, and no line of its output matches the recipe's failure_line selector ($selector), so the failure is not one the selector names; read the output."
-      return 0
-    fi
-    base="$base_sel"; now="$now_sel"
-    with="on the lines matching failure_line ($selector), with numbers set aside"
-  fi
-  new_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-  br_lines_not_in "$base" "$now" "$new_file"
-  if [ "$BR_NEW_COUNT" -eq 0 ]; then
-    BR_SUB_VERDICT="met"
-    BR_SUB_DETAIL="the $label command $how, and every line it printed is in the baseline's output $with, so nothing here is new; the baseline recorded it unmet at the commit the build started from."
-  else
-    BR_SUB_COUNT="$BR_NEW_COUNT"
-    BR_SUB_NEW="$(jq -Rsc 'split("\n") | map(select(length > 0))' "$new_file")"
-    BR_SUB_VERDICT="unmet"
-    BR_SUB_DETAIL="the $label command $how, and $BR_SUB_COUNT of its lines are absent from the baseline's output $with; this order introduced them. newLines holds the first 20."
-  fi
-  rm -f "$new_file"
-  [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
-}
 
 # One tool check: coding standards, static analysis, or the security tool. $1 the check id, $2 the
 # baseline field holding the same tool's own verdict, $3 a word for the message. The command itself

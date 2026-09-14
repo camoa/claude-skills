@@ -209,6 +209,25 @@
           "type": "string",
           "minLength": 1,
           "description": "The framework whose recipe carried this row. Present only on a check that ran a command. One tool row may carry a command from one framework only: two frameworks each declaring one refuses before any check runs (exit 72)."
+        },
+        "newLines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "string"
+          },
+          "description": "Present only on suite, coding-standards, static-analysis and security, and only when the baseline recorded that framework or tool unmet and the run now printed lines the baseline's own output did not hold: the first 20 of them, in the command's own words. The comparison is the build's own (build-record-schema.json, newLines): every run of digits removed, runs of dots and whitespace squeezed and the ends trimmed, so a shifted line number, a count or a duration does not read as new. On the suite, the lines of every framework are folded here in framework order. These lines are what made the verdict unmet; a person reads them to see what this task introduced."
+        },
+        "newLineCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many lines were new in all, present with newLines. newLines is capped at 20 and this is not."
+        },
+        "failureLine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present only on suite, and only when a framework's baseline was unmet and its test-execution recipe declared failure_line on the suite row: one line per such framework, `<framework>: <selector>`, the selector as read from the recipe with its quotes stripped. The subtraction compared only the lines matching it, on both sides, so a reader can see which lines the verdict rests on."
         }
       }
     },

@@ -61,8 +61,16 @@ the build is not this task's, and blocking on it blocks every task forever. The 
 the orders' owned files, so a finding in a file no order owns reads as this task's. That is right:
 check 3 already reports that file as work no order asked for.
 
+The subtraction is the build's own. A tool the baseline recorded unmet has that baseline's kept
+output subtracted from the run now, line by line. Numbers and dots are set aside first. No new
+line is met. A new line is unmet, and the record lists the first twenty under `newLines` with the
+count.
+The check reads unknown only when the baseline kept no output or the run printed nothing.
+
 **Check 8 reads the recipe's outcome words, not the exit status.** Three of the five frameworks print
-that nothing was selected and exit zero. A silent pass reads unknown, never met.
+that nothing was selected and exit zero. A silent pass reads unknown, never met. A failing suite on
+a framework the baseline recorded unmet subtracts the same way. When the suite row declares
+`failure_line`, only the lines it selects are compared, and the record names it under `failureLine`.
 
 **Check 4 records the score and every survivor, as the record holds them.** No mutation row reads
 undeclared, never met. The survivors go to the reviewer at the next step, as one more lens. The score

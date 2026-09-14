@@ -571,15 +571,20 @@ RW_FAILURES
 }
 
 # One check row, as JSON. $1 id, $2 verdict, $3 detail, and the rest optional: $4 exit code or the
-# empty string, $5 output, $6 framework, $7 `absent` when the recipe declared the row absent.
+# empty string, $5 output, $6 framework, $7 `absent` when the recipe declared the row absent, $8 the
+# JSON array of new lines a baseline subtraction found with $9 their count, $10 the failure_line
+# selector a suite subtraction read.
 rw_check_row() {
   jq -n --arg id "$1" --arg verdict "$2" --arg detail "$3" \
         --arg exitCode "${4:-}" --arg output "${5:-}" --arg framework "${6:-}" \
-        --arg absent "${7:-}" '
+        --arg absent "${7:-}" --argjson newLines "${8:-[]}" --argjson newLineCount "${9:-0}" \
+        --arg failureLine "${10:-}" '
     {id: $id, verdict: $verdict, detail: $detail}
     + (if $framework == "" then {} else {framework: $framework} end)
     + (if $exitCode   == "" then {} else {exitCode: ($exitCode | tonumber), output: $output} end)
-    + (if $absent     == "" then {} else {absent: true} end)'
+    + (if $absent     == "" then {} else {absent: true} end)
+    + (if $newLineCount == 0 then {} else {newLines: $newLines, newLineCount: $newLineCount} end)
+    + (if $failureLine == "" then {} else {failureLine: $failureLine} end)'
 }
 
 # The worst of two verdicts, through the library's own ranking, so nothing here carries a second
@@ -861,14 +866,15 @@ rw_baseline_field_for() {
 # flag: a caller retyping a row drops a key, and a dropped `signal` turns a tool that cannot fail by
 # exit status into a check that always passes. A failure is compared against the baseline step two
 # took, because a finding that predates this build is not this task's, and blocking on it blocks
-# every task forever.
+# every task forever. A baseline that was unmet has its kept output subtracted line by line
+# (br_subtract_baseline, the build's own), so only a finding absent then reads as this task's.
 rw_tool_row_check() {
   local row="$1" row_id framework argv signal exts scoped scoped_count has_paths
   local rc output failed how
-  local verdict detail field baseline_doc baseline_verdict
+  local verdict detail field baseline_doc baseline_verdict baseline_output new_json new_count
   row_id="$(printf '%s' "$row" | jq -r '.id')"
   framework="$(printf '%s' "$row" | jq -r '.framework // ""')"
-  verdict=""; detail=""; output=""; rc=""
+  verdict=""; detail=""; output=""; rc=""; new_json="[]"; new_count=0
 
   if [ "$(printf '%s' "$row" | jq -r '.absent // false')" = "true" ]; then
     rw_check_row "$row_id" "undeclared" "$(printf '%s' "$row" | jq -r '.absentReason // "the recipe declares this row absent"')" "" "" "$framework" "absent"
@@ -916,18 +922,26 @@ rw_tool_row_check() {
       detail="the $row_id command exited 0 over the files this change touched."
     else
       field="$(rw_baseline_field_for "$row_id")"
-      baseline_verdict=""
+      baseline_verdict=""; baseline_output=""
       if [ -n "$field" ] && [ -f "$BASELINE_FILE" ]; then
         baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
         [ -z "$baseline_doc" ] || baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
+        [ -z "$baseline_doc" ] || baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].outputFile // ""')"
+        [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BASELINE_FILE")/$baseline_output"
       fi
       case "${field:+$baseline_verdict}" in
         met)
           verdict="unmet"
           detail="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; this task introduced the finding." ;;
-        unmet|unknown|undeclared)
+        unmet)
+          # The baseline joined the two streams the same way, standard output first.
+          [ -z "$RW_RUN_ERRFILE" ] || cat "$RW_RUN_ERRFILE" >>"$RW_RUN_OUTFILE" 2>/dev/null
+          br_subtract_baseline "$baseline_output" "$RW_RUN_OUTFILE" "$row_id" "$how"
+          verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
+          new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT" ;;
+        unknown|undeclared)
           verdict="unknown"
-          detail="the $row_id command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so this cannot tell an old finding from an old one plus a new one." ;;
+          detail="the $row_id command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one." ;;
         *)
           # Two ways to get here, and the detail tells them apart: the baseline holds no field for
           # this row at all, which is every row beyond the three the baseline knows, or it holds one
@@ -941,16 +955,20 @@ rw_tool_row_check() {
   verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
   verdict="$(rw_worse "$verdict" "$RW_CHECK_FLOOR")"
   detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
-  rw_check_row "$row_id" "$verdict" "$(pc_trim "$detail")" "$rc" "$output" "$framework"
+  rw_check_row "$row_id" "$verdict" "$(pc_trim "$detail")" "$rc" "$output" "$framework" "" "$new_json" "$new_count"
 }
 
 # Check 8: the whole suite, at the final commit, once per framework. It reads the recipe's own
 # outcome words and not the exit status alone: three of the five frameworks print that nothing was
-# selected and exit zero, and a silent pass reads unknown, never met.
+# selected and exit zero, and a silent pass reads unknown, never met. A failure on a framework the
+# baseline recorded unmet has that baseline's kept output subtracted (br_subtract_baseline, the
+# build's own), on the lines the suite row's failure_line selects when it declares one, so a test
+# red then and red now is not this task's. The record names the selector under failureLine.
 rw_check_suite() {
-  local fw_count fwi fw_obj fw cmd outfile rc output
+  local fw_count fwi fw_obj fw cmd outfile rc output selector
   local verdict detail marker combined outputs exit_max
-  combined=""; detail=""; outputs=""; exit_max=""
+  local baseline_doc baseline_verdict baseline_output new_json new_count selectors
+  combined=""; detail=""; outputs=""; exit_max=""; new_json="[]"; new_count=0; selectors=""
   fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
   fwi=0; marker=""
@@ -989,8 +1007,28 @@ rw_check_suite() {
           verdict="met"
           detail="$detail $fw: the suite exited 0 at the final commit."
         else
-          verdict="unmet"
-          detail="$detail $fw: the suite exited $rc at the final commit, so the finished task fails its own tests."
+          baseline_doc=""; baseline_verdict=""; baseline_output=""
+          [ ! -f "$BASELINE_FILE" ] || baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
+          if [ -n "$baseline_doc" ]; then
+            baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg fw "$fw" \
+              '[ (.suite // [])[] | select(.framework == $fw) ][0].verdict // ""')"
+            baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg fw "$fw" \
+              '[ (.suite // [])[] | select(.framework == $fw) ][0].outputFile // ""')"
+            [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BASELINE_FILE")/$baseline_output"
+          fi
+          if [ "$baseline_verdict" = "unmet" ]; then
+            selector="$(pc_unquote "$(printf '%s' "$cmd" | jq -r '.failureLine // ""')")"
+            [ -z "$selector" ] || selectors="$selectors$fw: $selector
+"
+            br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw at the final commit" "$selector"
+            verdict="$BR_SUB_VERDICT"
+            detail="$detail $fw: $BR_SUB_DETAIL"
+            new_json="$(jq -nc --argjson have "$new_json" --argjson add "$BR_SUB_NEW" '($have + $add) | .[:20]')"
+            new_count=$((new_count + BR_SUB_COUNT))
+          else
+            verdict="unmet"
+            detail="$detail $fw: the suite exited $rc at the final commit, so the finished task fails its own tests."
+          fi
         fi
       fi
       rw_run_done
@@ -1005,7 +1043,9 @@ rw_check_suite() {
   combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
   combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
   detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
-  rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" "$exit_max" "$outputs"
+  rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" "$exit_max" "$outputs" "" "" \
+    "$new_json" "$new_count" "${selectors%
+}"
 }
 
 do_checks() {
