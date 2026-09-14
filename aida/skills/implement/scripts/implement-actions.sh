@@ -3889,7 +3889,8 @@ br_require_real_base() {
 #                       tool row with its argv, its signal and its extensions. Every command this
 #                       function runs comes from here, never from a flag a caller typed
 #   BRC_SELECTED_JSON   the paths a `{paths}` or `{file}` token in the selected-tests row expands
-#                       to: this order's own frozen test files, relative to codePath
+#                       to: this order's own frozen test files, relative to codePath. The three
+#                       tool rows leave these same paths out of their own expansion
 #   BRC_VALUES          the tab-separated `--value` list every other placeholder is read from
 #   BRC_NOTHING_RAN, BRC_HAVE_NOTHING_RAN   the caller's own marker for a green run that selected
 #                       nothing, used only where the framework's recipe declares none of its own
@@ -4021,7 +4022,9 @@ br_tool_check() {
   local verdict detail exit_json output outfile errfile rc has_paths
   local owned_json owned_count scoped_json scoped_count stdout_len failed how
   local baseline_doc baseline_verdict baseline_output result kind payload new_json new_count
+  local left_out_json paths_json expanded_json oi entry
   verdict=""; detail=""; exit_json="null"; output=""; new_json="[]"; new_count=0
+  left_out_json="[]"; paths_json="null"
 
   row="$(printf '%s' "$BRC_RECIPES" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
   absent_declared=""
@@ -4056,9 +4059,33 @@ br_tool_check() {
   printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
   owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
   owned_count="$(printf '%s' "$owned_json" | jq 'length')"
-  scoped_json="$owned_json"
+  # The tools judge the files the builder may write. A frozen test is owned, so the diff may touch
+  # it, but the implementer may not: hooks/deny-frozen-test-writes.sh refuses the write, and the
+  # only role that may edit it has already returned (live-run row 71). So the frozen paths, which
+  # the caller already resolved into BRC_SELECTED_JSON, come out of the expansion first, and the
+  # record names both what the token expanded to and what was left out. An owned entry may be a
+  # directory (design-schema.json), and a whole-string subtraction would hand the tool the frozen
+  # tests under it, so a directory is expanded to the files the repository tracks under it first.
+  expanded_json="[]"
+  oi=0
+  while [ "$oi" -lt "$owned_count" ]; do
+    entry="$(printf '%s' "$owned_json" | jq -r --argjson i "$oi" '.[$i]')"
+    if [ -d "$BRC_CODEPATH/$entry" ]; then
+      expanded_json="$(git -C "$BRC_CODEPATH" ls-files -- "$entry" 2>/dev/null \
+        | jq -Rsc --argjson acc "$expanded_json" '$acc + (split("\n") | map(select(length > 0)))')"
+    else
+      expanded_json="$(printf '%s' "$expanded_json" | jq -c --arg e "$entry" '. + [$e]')"
+    fi
+    oi=$((oi + 1))
+  done
+  if [ "$has_paths" = "true" ]; then
+    left_out_json="$(jq -cn --argjson owned "$expanded_json" --argjson frozen "$BRC_SELECTED_JSON" \
+      '[ $owned[] | select(. as $p | $frozen | index($p) != null) ]')"
+  fi
+  scoped_json="$(jq -cn --argjson owned "$expanded_json" --argjson frozen "$BRC_SELECTED_JSON" \
+    '[ $owned[] | select(. as $p | $frozen | index($p) == null) ]')"
   if [ -n "$exts_json" ]; then
-    scoped_json="$(br_filter_extensions "$owned_json" "$exts_json")"
+    scoped_json="$(br_filter_extensions "$scoped_json" "$exts_json")"
   fi
   scoped_count="$(printf '%s' "$scoped_json" | jq 'length')"
 
@@ -4067,11 +4094,17 @@ br_tool_check() {
     # the whole repository under this order's name. That is a wrong verdict, not a missing one.
     verdict="unknown"
     detail="the $label command holds a path placeholder, and this order declares no ownedFiles, so the command would run over no path at all."
-  elif [ "$has_paths" = "true" ] && [ -n "$exts_json" ] && [ "$scoped_count" -eq 0 ]; then
-    # The order owns files, and none of them is a file this tool reads. The row did not apply here.
+  elif [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
+    # The order owns files, and none of them is a file this tool judges: every one is a frozen test,
+    # or none carries an extension the tool reads. The row did not apply here.
     verdict="undeclared"
-    detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions, so the row does not apply to it."
+    if [ -n "$exts_json" ]; then
+      detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions outside its frozen tests, so the row does not apply to it."
+    else
+      detail="every file this order owns is a frozen test, which the implementer may not write, so the row does not apply to it."
+    fi
   else
+    [ "$has_paths" = "false" ] || paths_json="$scoped_json"
     outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
     errfile=""
     stdout_len=0
@@ -4159,6 +4192,7 @@ br_tool_check() {
         --argjson exitCode "$exit_json" --arg output "$output" \
         --arg signal "$signal" --arg exts "${exts_json:-}" \
         --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
+        --argjson paths "$paths_json" --argjson leftOut "$left_out_json" \
         --arg framework "$(printf '%s' "$row" | jq -r '.framework // ""')" '
     {id: $id, verdict: $verdict, detail: $detail}
     + (if $framework == "" then {} else {framework: $framework} end)
@@ -4166,6 +4200,8 @@ br_tool_check() {
     + (if $newLineCount == 0 then {} else {newLines: $newLines, newLineCount: $newLineCount} end)
     + (if $signal == "" then {} else {signal: $signal} end)
     + (if $exts   == "" then {} else {extensions: ($exts | fromjson)} end)
+    + (if $paths == null then {} else {paths: $paths} end)
+    + (if ($leftOut | length) == 0 then {} else {frozenTestsLeftOut: $leftOut} end)
   '
 }
 

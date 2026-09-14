@@ -142,6 +142,13 @@ frameworks exit zero when a filter selects nothing. Only an assertion that ran a
 a red run. A harness that never reached the behaviour is a setup gap, and a run that selected
 nothing looks like success and is the dangerous one.
 
+**When the author returns, run the coding-standards row over the new test files.** Take the
+command from the check recipe `references/preconditions.md` resolved, with `{paths}` as the test
+paths the author returned, and run it here. Send any finding back to the author before the
+freeze. No script action runs one recipe row on its own, so this conversation runs the command.
+This is the one place the tests' own standards are judged. The build step leaves the frozen tests
+out of its tool rows, because the implementer may not write them.
+
 ## Put the rows to the person, before anything is frozen
 
 Show one row per criterion the tests name: the criterion, its verification sentence, and the names

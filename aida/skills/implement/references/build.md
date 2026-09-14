@@ -130,7 +130,9 @@ commands` and `## Check commands` itself: the suite command, the command that ru
 own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
 `signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
 command. A `{paths}` token expands to this order's own owned files, relative to codePath, and never
-reaches a shell.
+reaches a shell. For the three tool rows, the order's own frozen test files come out of that
+expansion first. The implementer may not write them, so the tools judge only what it may write.
+The record names the paths the token expanded to and the frozen tests left out.
 
 **Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit
 72) applies here: a project whose two frameworks each carry a coding-standards row, say, gives

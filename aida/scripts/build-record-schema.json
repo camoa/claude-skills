@@ -202,6 +202,23 @@
           },
           "description": "Present only on a tool check whose recipe row declares it. The file extensions this tool reads; {paths} expanded to only the order's own owned files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply to this order."
         },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Present only on a tool check whose command held {paths} or {file}: the paths that token expanded to, relative to codePath, whether or not the command then ran. This order's owned files, a directory entry expanded to the files the repository tracks under it, minus its own frozen test files, minus any file the row's extensions exclude. The frozen tests come out because the implementer may not write them, a hook refuses it, so a finding in one is not this order's to fix; a reader compares this against the order's ownedFiles to see exactly what the tool judged."
+        },
+        "frozenTestsLeftOut": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Present only on a tool check whose command held {paths} or {file}, and only when at least one of this order's owned files is one of its own frozen tests: those paths, relative to codePath, which the tool was not handed. They are judged once, by the tests step before the freeze, and never here."
+        },
         "output": {
           "type": "string",
           "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode. Kept whole and unmodified so a person or a later step can see exactly what the --nothing-ran marker check itself saw. A tool row carrying the signal empty-stdout has the two streams read apart and then joined, standard output first, so their interleaving is not preserved for that row."
