@@ -253,8 +253,9 @@ to report it as approved on the person's behalf, then run the distill check belo
 
 ## The distill check
 
-The contract is now written. Dispatch the `distiller` role once, with the task folder, the stage
-`scope`, and the path of `alignment.json`. Never a summary of this conversation: it exists to be
+The contract is now written. The record is committed when the stage closes: the `distill` call
+below commits the task folder, and the mid-stage edits above commit nothing. Dispatch the
+`distiller` role once, with the task folder, the stage `scope`, and the path of `alignment.json`. Never a summary of this conversation: it exists to be
 denied that account. It writes `records/scope-distill.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh distill "<task_folder>"

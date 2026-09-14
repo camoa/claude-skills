@@ -16,6 +16,11 @@
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   mark_task_in_progress <folder> <why>  moves the task to in_progress once, before a first write
+#   commit_task_change <project> <subject> <why> <principle> <ruled out> <task> <stage>
+#                                         commits tasks/ in the project folder, five-field shape
+#   commit_stage_close <folder> <stage> <subject> <why>
+#                                         the stage-boundary commit of one task folder; says so
+#                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
@@ -98,6 +103,32 @@ mark_task_in_progress() {
       "$(basename -- "$task_folder")" -- "$why" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die3 "task start refused for $task_folder, so nothing was written. Repair the task first"; }
   echo "task-state: $state -> in_progress"
+}
+
+# One call to the shared commit, restricted to tasks/: a task change never sweeps up a project
+# file edit that was left uncommitted beside it. Moved here from task-actions.sh so the stage
+# closes commit the same way the task actions do. project-commit.sh is sourced here because only
+# task-actions.sh sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
+commit_task_change() {
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/project-commit.sh" || die3 "the project-commit library failed to load"
+  commit_project "$1" "$2" "$3" "$4" "$5" "$6" "$7" tasks
+}
+
+# The stage-boundary commit (foundations.md, History: "AIDA commits at stage boundaries, and the
+# commit message is the record"). Mid-stage edits stay uncommitted; the close commits the task
+# folder once, with the stage's own result as the reason. $1 the canonical task folder, $2 the
+# stage, $3 the subject, $4 the why, read from the record the close just wrote and never invented.
+# The project folder is two levels up, where mark_task_in_progress sends the task script. A
+# folder that is not a repository, or a commit that fails, leaves the record written and says so
+# once on stderr, the way playbook-actions.sh reports its capture; the close still exits 0. The
+# subshell turns a refusal inside the commit into that same line rather than ending the close.
+commit_stage_close() {
+  local task_folder="$1" stage="$2" subject="$3" why="$4" project id
+  project="$(dirname -- "$(dirname -- "$task_folder")")"
+  id="$(jq -r '.id // empty' "$task_folder/task.json" 2>/dev/null)"
+  ( commit_task_change "$project" "$subject" "$why" "" "" "$id" "$stage" ) \
+    || printf 'the %s record was written but not committed. Commit %s/tasks by hand.\n' "$stage" "$project" >&2
 }
 
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json

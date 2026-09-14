@@ -20,7 +20,8 @@ dirty code repository as well, because the commit range it records is a claim ab
 repository holds.
 
 On success it writes `implementation/finished.json`: the commit range this stage produced, and each
-order's own range and rounds used. It also records each criterion's row state and who judged it.
+order's own range and rounds used. The record is committed when the stage closes: `finish` commits
+the task folder, in the project folder and never in the code repository. It also records each criterion's row state and who judged it.
 The checklists for the criteria a person verifies are copied in too, from the frozen test records.
 The review stage reads this one file rather than one per order. It records the findings ruled
 deferred with their reasons, and how many rows a model judged rather than a person. It prints

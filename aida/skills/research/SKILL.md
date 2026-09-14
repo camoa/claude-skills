@@ -317,8 +317,9 @@ zero it adds one `open:` line with the uncovered ids and the counts. The report 
 A task whose `research` folder does not exist yet is not an error: it is reported as research not
 started, with every criterion uncovered, the same as an empty `research` folder that does exist.
 
-Exit 0: nothing to do. Dispatch the `distiller` role once, with the task folder, the stage
-`research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
+Exit 0: nothing to do. The record is committed when the stage closes: a clean check commits the
+task folder, and `record` commits nothing. Dispatch the `distiller` role once, with the task
+folder, the stage `research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
 of this conversation. It writes `records/research-distill.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"

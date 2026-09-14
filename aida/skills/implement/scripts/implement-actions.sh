@@ -5924,6 +5924,10 @@ do_finish() {
     }')"
   [ -n "$record_json" ] || die 3 "finish: could not assemble the finished record for $task_id."
   write_atomic "$record_file" "$record_json"
+  # The stage boundary: the task folder is committed, with the order count and the range the
+  # record just fixed as the reason. The code repository is not touched; its range is the claim.
+  commit_stage_close "$TASK_PATH" implementation "Finish implementation for $task_id" \
+    "$(printf '%s' "$record_json" | jq -r '"\(.orders | length | if . == 1 then "1 order" else "\(.) orders" end) finished over \(.commitRange)"')"
 
   # The summary. The checklists, the deferred findings and every criterion's row are in the record,
   # which the review stage reads from the path named here.

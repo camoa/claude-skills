@@ -403,7 +403,8 @@ Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recip
 `close` refuses with neither, and a later close restates the verdict rather than carrying it over.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
-Closing records what design closed on: a hash over the contract and every work order, the run mode,
+The record is committed when the stage closes: `close` commits the task folder, and the work order
+edits above commit nothing. Closing records what design closed on: a hash over the contract and every work order, the run mode,
 and who was present. Pass the run mode you settled at the start. An interactive close records
 `person`, an autonomous one records `nobody`, and implementation reads which. It also records the
 critique files under `records/` and their finding count, so a person sees what was read before closing.

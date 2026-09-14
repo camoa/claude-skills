@@ -2120,6 +2120,10 @@ RW_ROWS
       [ $rows[] | . as $r | select(((($live[0].criteria // []) | map(.id)) | index($r.id)) == null) | .id ] | join(", ")')"
   fi
 
+  # The stage boundary: the task folder is committed, the record and the contract's verdicts
+  # together, with the verdict word as the reason and, on a failure, what caused it.
+  commit_stage_close "$TASK_PATH" review "Close review for $(jq -r '.id' "$TASK_PATH/task.json")" \
+    "the review $verdict_word${failing:+: $failing}"
   rw_print_summary "$updated" "close"
   printf 'contract: %s\n' "$ALIGNMENT_FILE"
   local undeclared_list unknown_list note_count

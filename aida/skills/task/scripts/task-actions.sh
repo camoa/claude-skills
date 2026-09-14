@@ -19,12 +19,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # never resolves which project is active on its own (ideal/task.md, "What a task is").
 #
 # Depends on, both shipped by other builders of this same part and never edited here:
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (commit_project, reached through
+#                                                            commit_task_change in task-helpers.sh)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape that check runs)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/task-schema.json         (read by check-task.sh, a later part;
 #                                                            not read by this script)
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for task_worktree: create and
-#                                                            split make each task's own worktree
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for commit_task_change and
+#                                                            for task_worktree: create and split
+#                                                            make each task's own worktree
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh           sourced, for the codePath readers
 #                                                            task_worktree needs
 #
@@ -94,7 +96,7 @@ die3() {
 # The two libraries take these from their caller, so a refusal still says which script refused.
 die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
-for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh" "${PLUGIN_ROOT}/scripts/lib/project-commit.sh"; do
+for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
   [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die3 "the library failed to load: $lib_name"
@@ -171,10 +173,6 @@ task_summary() {
     "runMode: " + (.runMode // "interactive"),
     "worktree: " + (.worktree.path // "none")' "$1"
 }
-
-# One call to the shared commit, restricted to tasks/: a task change never sweeps up a project
-# file edit that was left uncommitted beside it.
-commit_task_change() { commit_project "$1" "$2" "$3" "$4" "$5" "$6" "$7" tasks; }
 
 # ------------------------------------------------------------------------------------------------
 # create: makes the task and nothing else. No contract, no interview, no stage.

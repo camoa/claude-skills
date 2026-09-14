@@ -948,6 +948,10 @@ do_close() {
     '.critique = {files: ($files | split("\n") | map(select(length > 0))), findings: $n}')"
 
   write_atomic "$CLOSED_FILE" "$doc"
+  # The stage boundary: the task folder is committed, with the order count the check just
+  # walked and who closed as the reason. Closing again commits again, over the new hash.
+  commit_stage_close "$TASK_PATH" design "Close design for $(jq -r '.id' "$TASK_PATH/task.json")" \
+    "$(printf '%s' "$check_report_json" | jq -r '.files | length | if . == 1 then "1 work order" else "\(.) work orders" end'), closed by $closed_by"
   echo "CLOSED: $CLOSED_FILE"
   echo "closedBy: $closed_by"
   echo "runMode: $RUN_MODE"
