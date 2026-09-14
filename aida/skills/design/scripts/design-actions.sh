@@ -12,6 +12,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the design check. Deciding whether design is done belongs to whoever calls this, never to this
 # script.
 #
+# `close` also records the critique files under <task_folder>/records/ and their finding count.
+#
 # What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
 # summary lines and the paths it wrote, and never a record body. A caller that needs a field reads
 # the file at the printed path. `check` writes check-design.sh's report to
@@ -922,6 +924,28 @@ do_close() {
     --arg runMode "$RUN_MODE" --arg closedBy "$closed_by" \
     '{schemaVersion: 1, closedAt: $closedAt, runMode: $runMode, closedBy: $closedBy, hash: $hash}')"
   [ -z "$fit_json" ] || doc="$(printf '%s' "$doc" | jq --argjson rf "$fit_json" '.recipeFit = $rf')"
+
+  # The critique files the design skill's critics wrote before this close: their paths and the
+  # total of their `findings: N` last lines, so the close says what was read before it. Absent when
+  # no critic ran. A file without that line was not finished by its critic, and a count read from
+  # it would be invented, so that file is left out of the record and named on stderr. The critique
+  # blocks nothing, which is the design: a critic that can stop a close trains a design that
+  # writes for the critic.
+  local critique_files critique_total crit_file crit_n
+  critique_files=""; critique_total=0
+  while IFS= read -r crit_file; do
+    [ -n "$crit_file" ] || continue
+    crit_n="$(grep -E '^findings: [0-9]+$' "$crit_file" | tail -n 1 | sed 's/^findings: //')"
+    if [ -z "$crit_n" ]; then
+      printf 'close: %s has no findings line, so its critic did not finish; it is not counted\n' "$crit_file" >&2
+      continue
+    fi
+    critique_total=$((critique_total + crit_n))
+    critique_files="$critique_files$crit_file
+"
+  done < <(find "$TASK_PATH/records" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
+  [ -z "$critique_files" ] || doc="$(printf '%s' "$doc" | jq --arg files "$critique_files" --argjson n "$critique_total" \
+    '.critique = {files: ($files | split("\n") | map(select(length > 0))), findings: $n}')"
 
   write_atomic "$CLOSED_FILE" "$doc"
   echo "CLOSED: $CLOSED_FILE"

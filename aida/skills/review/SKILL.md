@@ -3,7 +3,7 @@ name: review
 description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
 ---
 
 # Review
@@ -126,11 +126,35 @@ unknown, in its own word, and give the count of criteria reading unanswered. Nev
 reading undeclared as one that passed. Version 5 printed that every layer ran and found nothing
 while one tool had not run.
 
+After `close` has written the record, run `audit` and print its lines before you say the
+verdict word, so a person sees what did not run first. `close` writes the last check, which is
+why `audit` runs after it.
+
 Name the catalog notes by count as well. A note is a guide the code contradicts, a recipe whose
 command no longer runs, or a pattern the framework wants and no guide names. A recipe research or
 design judged not to fit this task is a note too. `checks` writes it from the `recipeFit` field of
 each research file and of `design-closed.json`, and a mismatch never fails a review. Review writes
 nothing to the catalog. A person decides whether a note becomes a proposal.
+
+## audit
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh audit "<task_folder>"
+```
+It reads the review record and changes nothing. It prints one line per check, in the record's
+order: the id, the verdict, and one word for how the verdict came about.
+
+| Word | What it says |
+|---|---|
+| `ran` | a command or a lens ran and returned the verdict |
+| `read` | a record field decided it, and nothing ran |
+| `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent |
+| `could-not-look` | a recipe, a row, a file or a tool was absent, so the verdict is unknown or undeclared |
+
+Then one line per surface: run, or not run with the reason, `disabled`, `unaffected` or `no harness`.
+Then one line with the counts per word. Exit 3 with no record, naming the file. Run it at any step
+after `checks`; the list grows as the record does.
 
 ## What this skill records, and what it does not enforce
 

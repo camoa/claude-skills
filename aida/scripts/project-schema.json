@@ -85,7 +85,7 @@
           "$ref": "#/$defs/surfaces"
         }
       ],
-      "description": "Whether end to end and visual regression are set up, the path to the surface file, and whether a person declined the setup. Null means nobody has run the surfaces skill, which is its one producer. Baseline images stay committed inside the code repository, beside the suite that reads them; this field points at the surface file, never at pixel data. Visual parity has no producer, so it has no key here: review reads it off the recipe row."
+      "description": "Whether end to end and visual regression are set up, the path to the surface file, and whether a person declined either kind's setup. Null means nobody has run the surfaces skill, which is its one producer. Baseline images stay committed inside the code repository, beside the suite that reads them; this field points at the surface file, never at pixel data. Visual parity has no producer, so it has no key here: review reads it off the recipe row."
     },
     "taskRule": {
       "default": null,
@@ -237,7 +237,6 @@
       "additionalProperties": false,
       "required": [
         "registryPath",
-        "declined",
         "e2e",
         "visualRegression"
       ],
@@ -249,19 +248,20 @@
           ],
           "description": "The surface file, \".visual-review/surfaces.json\" relative to the tree setup ran in: a task's worktree, or the code path with none active. Null until `install` writes it. A reader joins it to the tree it runs in; an absolute path, from a record written before row 32 of audit/14-live-run-gaps.md, is used as it is. One pointer beside every kind, because a project with end to end alone had none when the pointer lived inside visual regression."
         },
-        "declined": {
-          "type": "boolean",
-          "description": "True when a person declined the setup review offered. Review reads it and does not offer again, because an offer repeated every task is a nag."
-        },
         "e2e": {
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "enabled"
+            "enabled",
+            "declined"
           ],
           "properties": {
             "enabled": {
               "type": "boolean"
+            },
+            "declined": {
+              "type": "boolean",
+              "description": "True when a person declined end to end setup; review reads it and does not offer end to end again."
             }
           }
         },
@@ -269,16 +269,21 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "enabled"
+            "enabled",
+            "declined"
           ],
           "properties": {
             "enabled": {
               "type": "boolean"
+            },
+            "declined": {
+              "type": "boolean",
+              "description": "True when a person declined visual regression setup; review reads it and does not offer visual regression again."
             }
           }
         }
       },
-      "description": "The keys keep version 5's camel case, so nothing that reads the record changes its key. `install` maps the kind words `e2e` and `visual-regression` to them, and nothing else does."
+      "description": "The keys keep version 5's camel case, so nothing that reads the record changes its key. `install` and `decline` map the kind words `e2e` and `visual-regression` to them, through one helper, and nothing else does."
     },
     "taskRule": {
       "type": "object",

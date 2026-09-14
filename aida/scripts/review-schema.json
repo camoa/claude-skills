@@ -89,7 +89,7 @@
     "surfaceSetup": {
       "type": "string",
       "enum": ["not-applicable", "available", "not-offered-autonomous", "registered", "declined"],
-      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a framework whose recipe carries surface rows that are not absent while the project has no registry, which is when the skill offers setup once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. `declined` is a project whose record says a person declined the setup, which the surfaces skill writes, so the offer is not made again."
+      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a kind that is off, not declined, and carried by the recipe's surface rows, whichever kinds are already on, which is when the skill offers that kind once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. `declined` is a project where every such kind was declined by a person, which the surfaces skill writes per kind."
     },
     "mutation": {
       "type": "object",

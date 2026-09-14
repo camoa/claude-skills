@@ -15,11 +15,14 @@ the path the record holds, so this step resolves no recipe and runs no lookup.
 
 ## Offer the setup once
 
-Offer setup when the framework's recipe carries surface rows that are not absent, and the project has
-no registry. Rows that are not absent are how review knows the framework has surfaces at all.
+Offer setup for each kind that is off, not declined, and carries surface rows in the recipe. Name
+every such kind on its own, and take an answer per kind. The two are separate capabilities, so a
+person may take one and refuse the other.
 
-Ask once. A recorded refusal is never asked again, because an offer repeated every task is a nag, and
-a nag gets clicked through. Autonomous, the offer is not made, and the record says it was not offered.
+Ask once per kind. A yes on a kind invokes the `surfaces` skill through the Skill tool, naming that
+kind. A no on a kind runs `decline <kind>`, and that kind is never asked again. An offer repeated
+every task is a nag, and a nag gets clicked through. Autonomous, the offer is not made, and the
+record says it was not offered.
 
 ## Run them
 
@@ -29,10 +32,18 @@ Run:
 ```
 It runs every row the surface block declares, and it records checks 13 to 15 and one row per
 registered surface, with the verdict and whether it ran. It prints one summary line per surface. A
-harness's own output stays in the record, per SKILL.md.
+harness's own output stays in the record, per SKILL.md. When the task record has
+`environment.address`, pass it as `--value base-url=<address>` and do not ask for one.
+
+**Review narrows by the paths each surface declares.** A surface runs when the diff touched one of
+its paths. A critical surface always runs. A surface with no declared paths always runs. The rest
+are recorded as not run, and the check's detail names them. A kind whose surfaces were all
+unaffected reads met: no run was asked for, which is not a run that selected nothing. A recipe
+row without a `{surfaces}` token cannot be narrowed, so the whole set runs and the detail says
+so.
 
 **Zero tests ran is never a pass.** A run that selected nothing reads unknown. A registry surface
-with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform.
+with no result reads unmet, because a check that cannot notice its subject going absent cannot inform.
 
 **Every command waits for the recipe.** Until the surface block lands in the `review` recipe, the
 script records checks 13 to 15 as undeclared and says why. **Visual parity gets no more than that**:

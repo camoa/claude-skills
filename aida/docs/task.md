@@ -33,14 +33,15 @@ A dedicated step creates a task and nothing else. It asks nothing about goals, n
 the work will be checked; that conversation belongs to scope, the first stage, and runs on its
 own after the task exists. Creating a task only needs two things from you: a short name, and a
 sentence or two on what it is for. That writes the folder, the structured file with a fresh id
-and its state set to new, and the goal file carrying what you said.
+and its state set to new, and the goal file carrying what you said. It also makes the task's own
+git worktree beside the code checkout, named after the checkout and the task, on the task's branch.
 
 Interactively, AIDA asks for whichever of the two you did not already give. A name and a goal are
 the two facts nothing can guess. Autonomously, a run missing either halts and reports which one,
 the same way a missing code path halts project creation.
 
-A bad name is refused outright rather than quietly repaired: no path separators, and never `.`
-or `..`, the same rule a project's own name follows.
+A bad name is refused outright rather than quietly repaired: lowercase letters, digits and
+hyphens only. The worktree folder takes the name, and that folder name becomes a hostname label.
 
 ## Picking up work
 
@@ -91,7 +92,7 @@ pieces are already built around treating the task as one.
 Accepting a split hands three things down to the new child tasks, each its own task in the sense
 above:
 
-- **The goal.** Each child gets the slice of the original goal that is its own to finish.
+- **The goal.** Each child gets the part of the original goal that is its own to finish.
 - **The criteria.** Every criterion from the contract goes to exactly one child, the one that
   will satisfy it. A criterion no child claims, and a child whose criteria nothing researched,
   both come back as findings rather than passing quietly.

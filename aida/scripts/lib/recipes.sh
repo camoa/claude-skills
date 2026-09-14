@@ -51,12 +51,19 @@
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
+#   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
+#   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
 #   fenced_blocks_under <recipe> <heading> <tag>  the lines of every block with that tag, in order
 #   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
 #   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
 #   recipe_files_into <recipe> <heading> <dir>  one file per fenced block; prints <n><TAB><path>
 #   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a shell
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
+#   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
+#   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
+#   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file
+#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files; sets RF_WRITTEN, RF_KEPT
+#   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
 #
 # What this library takes from its caller, and never defines itself:
 #
@@ -495,6 +502,9 @@ cr_recipe_pair() {
   [ -n "$fw" ] || die 3 "$who: $flag was given no framework name: $value"
   [ -n "$rp" ] || die 3 "$who: $flag was given no path for framework $fw."
   [ -f "$rp" ] || die 3 "$who: the recipe handed over for $fw is not a file: $rp"
+  # Absolute, because a caller may change directory before it reads the file, and a recorded
+  # path is read again later from another directory.
+  rp="$(cd "$(dirname -- "$rp")" && pwd -P)/$(basename -- "$rp")"
   CR_PAIR="$(printf '%s\t%s' "$fw" "$rp")"
 }
 
@@ -931,7 +941,8 @@ cr_require_baseline_recipes() {
 # that compares two commits, so a write nobody committed is invisible to it alone and reads as met.
 # The same uncommitted write then leaves the round's diff empty, and a verifier reading an empty
 # diff can call a finding addressed. So both record steps refuse a tree that is not clean before
-# any check runs. $1 the action's own name, $2 the code repository.
+# any check runs. The surfaces actions that commit everything they find refuse for another reason:
+# that commit would sweep a person's work in. $1 the action's own name, $2 the repository.
 #
 # Modified, staged and untracked all count. An untracked file is a file this order may have added
 # and never declared, which is exactly what the owned-files check exists to catch.
@@ -963,7 +974,10 @@ br_require_clean_tree() {
     write_atomic "$ledger_file" "$halted_doc"
     echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is halted. $why" >&2
   fi
-  die 61 "$who: the working tree at $repo is not clean, and the checks below would read a tree the record cannot describe. The owned-files check compares two commits, so an uncommitted change passes it while staying in the tree. Commit this role's work, then write the record. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
+  # One message for every caller. For the record step the reason is that the owned-files check
+  # compares two commits, so an uncommitted change would pass it while staying in the tree; for
+  # an install or a bring-up it is that the commit which follows would sweep the change in.
+  die 61 "$who: the working tree at $repo is not clean, so nothing here can commit or record it faithfully. Commit or move the changes aside, then run $who again. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 
 
@@ -988,6 +1002,65 @@ br_worst_verdict() {
 # files, and one copy is what keeps their refusals listing their sets in the same shape.
 md_basenames_in() {
   find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
+
+# ------------------------------------------------------------------------------------------------
+# One recipe per point. Both came from skills/surfaces/scripts/surfaces-actions.sh, which now calls
+# them here, as does the task skill's `environment` action. Both read the caller's globals rather
+# than arguments, because a refusal inside a `$(...)` capture would exit that subshell alone:
+# ACTION, the action's own name; RUN_MODE, interactive or autonomous; KIND, the point the recipe
+# answers; FRAMEWORKS, the project's frameworks one per line. Sets RECIPE and RECIPE_FW.
+# `--viewport <v>` is appended to VIEWPORTS_ARG for the one caller that reads it, surfaces.
+# ------------------------------------------------------------------------------------------------
+# Defaults only: a caller that set one before loading this file keeps its value.
+: "${RECIPE:=}"; : "${RECIPE_FW:=}"; : "${VIEWPORTS_ARG:=}"
+
+# Exit 70. $1 the flag, $2 what it says a person did.
+cr_require_person() {
+  [ "$RUN_MODE" = "autonomous" ] || return 0
+  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written."
+}
+
+# One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends
+# the action: no recipe anywhere is not-applicable (exit 0), a lookup nobody completed is unknown
+# (exit 3), and two recipes are two answers to one question (exit 72). The words are the ones
+# cr_lookup_failure_pair accepts, and nothing here reads a fourth.
+cr_resolve_recipe() {
+  RECIPE=""; RECIPE_FW=""; VIEWPORTS_ARG=""
+  local recipes="" failures="" fw pair reason unknown=""
+  while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || die 3 "$ACTION: $1 needs a value"
+    case "$1" in
+      --recipe)        cr_recipe_pair "$ACTION" --recipe "$2"; recipes="$recipes$CR_PAIR
+" ;;
+      --lookup-failed) cr_lookup_failure_pair "$ACTION" --lookup-failed "$2"; failures="$failures$CR_PAIR
+" ;;
+      --viewport)      VIEWPORTS_ARG="$VIEWPORTS_ARG$2
+" ;;
+      *) die 3 "$ACTION: unrecognized argument: $1" ;;
+    esac
+    shift 2
+  done
+  while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    pair="$(cr_lookup "$recipes" "$fw")"; reason="$(cr_lookup "$failures" "$fw")"
+    [ -n "$pair" ] || [ -n "$reason" ] || die 3 "$ACTION: nothing was said about the framework $fw. Pass --recipe $fw=<path> or --lookup-failed $fw=<word>."
+    if [ -n "$pair" ]; then
+      [ -z "$RECIPE" ] || die 72 "$ACTION: $RECIPE_FW and $fw each carry a $KIND recipe, and nothing here may choose between two answers to one question."
+      RECIPE="$pair"; RECIPE_FW="$fw"
+    fi
+    case "$reason" in listing-unreachable|fetch-failed) unknown="$unknown $fw=$reason" ;; esac
+  done <<CR_FRAMEWORKS
+$FRAMEWORKS
+CR_FRAMEWORKS
+  [ -n "$RECIPE" ] && return 0
+  if [ -n "$unknown" ]; then
+    printf '%s: unknown%s\n' "$ACTION" "$unknown"
+    die 3 "$ACTION: nobody looked for a $KIND recipe:$unknown. Nothing was written."
+  fi
+  printf '%s: not-applicable\n' "$ACTION"
+  printf '%s: no framework of this project has a %s recipe, so there is no %s setup here.\n' "$ACTION" "$KIND" "$KIND" >&2
+  exit 0
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1070,6 +1143,81 @@ recipe_output_summary() {
   printf 'output: %s\n' "$2"
   if [ "$1" -ne 0 ]; then
     printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
+  fi
+}
+
+# Runs every non-blank line of $3 as one command where the caller stands, output appended to $4,
+# and exits 4 at the first failure with the `first:` line. $1 the name run_recipe_line refuses
+# under, $2 the recipe the lines came from, $5 the text the failure message opens with. $6, when
+# given, is a function that prints each line filled before it runs, or exits 3 to refuse it; it
+# runs in a command substitution, so its exit status is the loop's. Every recipe skill ran this
+# loop itself before it lived here, and the messages are each caller's own.
+run_recipe_lines() {
+  local who="$1" recipe="$2" steps="$3" outfile="$4" label="$5" fill="${6:-}" line before
+  while IFS= read -r line; do
+    [ -n "${line// /}" ] || continue
+    if [ -n "$fill" ]; then line="$("$fill" "$line" "$who")" || exit $?; fi
+    before="$(wc -l <"$outfile" | tr -d '[:space:]')"
+    run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
+    printf '%s step failed: %s\n' "$label" "$line" >&2
+    recipe_output_summary 4 "$outfile" "$((before + 1))"; exit 4
+  done <<RL_STEPS
+$steps
+RL_STEPS
+}
+
+# The prose under the H2 $2 of the recipe $1, indented, the way show prints it.
+recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/d; s/^/  /'; }
+
+# Refuses at 3 a file the recipe $2 declares that sits in $4 with other content, or that names a
+# path outside the tree. $1 the action, $3 the `<n><TAB><path>` list recipe_files_into printed,
+# $5 the folder it wrote the blocks to. Every file is checked before anything runs or is written,
+# so a differing file stops the whole action.
+recipe_files_refuse_differing() {
+  local who="$1" recipe="$2" list="$3" tree="$4" files_dir="$5" n rel target tab; tab="$(printf '\t')"
+  while IFS="$tab" read -r n rel; do
+    [ -n "$n" ] || continue
+    case "$rel" in /*|*../*|*/..) die 3 "$who: $recipe names a file outside the tree: $rel" ;; esac
+    target="$tree/$rel"
+    [ ! -f "$target" ] || cmp -s "$files_dir/$n" "$target" \
+      || die 3 "$who: $target exists with different content from the $rel block in $recipe. Nothing is overwritten; move the file aside or change the recipe."
+  done <<RF_FILES
+$list
+RF_FILES
+}
+
+# Writes each file of the list $2 that is absent from $3, from the folder $4, printing `file:` per
+# write, and counts into RF_WRITTEN and RF_KEPT. $1 the action. A file that exists is kept as it is.
+recipe_files_write() {
+  local who="$1" list="$2" tree="$3" files_dir="$4" n rel target tab; tab="$(printf '\t')"
+  RF_WRITTEN=0; RF_KEPT=0
+  while IFS="$tab" read -r n rel; do
+    [ -n "$n" ] || continue
+    target="$tree/$rel"
+    if [ -f "$target" ]; then RF_KEPT=$((RF_KEPT + 1)); continue; fi
+    mkdir -p "$(dirname -- "$target")" && cp "$files_dir/$n" "$target" || die 3 "$who: could not write $target"
+    RF_WRITTEN=$((RF_WRITTEN + 1)); printf 'file: %s\n' "$target"
+  done <<RF_FILES
+$list
+RF_FILES
+}
+
+# Commits everything the action wrote in the tree $1, printing `committed: <sha>`; prints
+# `committed: none, $3` when the tree was already clean, so nothing of this call's own is in it.
+# $2 the action, $4 the commit message, the record of why the tree changed.
+# $5, optional: paths, one per line. Then only those are staged and committed, through a pathspec
+# on both commands, so nothing a person had staged or changed beside them is taken. Absent: all.
+recipe_commit_if_changed() {
+  local paths="${5:-}"
+  if [ -z "$(git -C "$1" status --porcelain)" ]; then
+    printf 'committed: none, %s\n' "$3"
+  elif [ -n "$paths" ]; then
+    printf '%s\n' "$paths" | git -C "$1" add --pathspec-from-file=- \
+      && printf '%s\n' "$paths" | git -C "$1" commit -q -m "$4" --pathspec-from-file=- || die 3 "$2: the commit failed"
+    printf 'committed: %s\n' "$(git -C "$1" rev-parse --short HEAD)"
+  else
+    git -C "$1" add -A && git -C "$1" commit -q -m "$4" || die 3 "$2: the commit failed"
+    printf 'committed: %s\n' "$(git -C "$1" rev-parse --short HEAD)"
   fi
 }
 

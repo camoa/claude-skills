@@ -311,7 +311,7 @@ lock-read)
 
 # ---------------------------------------------------------------------------
 # lock-set <project-memory-dir> <class> <key> <value-json>
-# <class> must be one of: guides | task_recipes | process_recipes
+# <class> must be one of: guides | task_recipes | process_recipes | playbooks
 # Merges .<class>[<key>] = <value-json> into the lockfile.
 # Preserves all other top-level keys. Malformed existing lockfile → {}.
 # Prints the updated lockfile (compact) and writes it. Exit 0 on success,
@@ -329,9 +329,9 @@ lock-set)
   LOCK_FILE="${MEM_DIR}/dev-guides.lock.json"
 
   case "$CLASS" in
-    guides|task_recipes|process_recipes) ;;
+    guides|task_recipes|process_recipes|playbooks) ;;
     *)
-      printf 'dev-guides-store: invalid class "%s" — must be guides, task_recipes, or process_recipes\n' \
+      printf 'dev-guides-store: invalid class "%s" — must be guides, task_recipes, process_recipes, or playbooks\n' \
         "$CLASS" >&2
       exit 2
       ;;

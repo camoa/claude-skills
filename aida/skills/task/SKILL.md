@@ -1,7 +1,7 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", or "save what we decided". It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, or saves a mid-stage decision as a note.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id>]"
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id> | environment <task-id> <show|up|down> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -37,10 +37,11 @@ Makes the task and nothing else: no contract, no interview, no stage. It takes a
 Run it only when the person asked for this task in this conversation, by name or by a yes to an
 offer. Another skill's hand-off carries that yes. Nothing here invents one.
 
-**1. Name.** Ask what to call it, unless already said. Validate against
-`^[A-Za-z0-9_][A-Za-z0-9._-]*$`: it must start with a letter, digit or underscore, and hold only
-letters, digits, underscores, dots and hyphens after that. No path separator, no space. On a
-mismatch, say so and ask again; the script refuses it too, so this check only saves a round trip.
+**1. Name.** Ask what to call it, unless already said. Check it against `^[a-z0-9][a-z0-9-]*$`:
+lowercase letters, digits and hyphens, starting with a letter or digit. The worktree folder takes
+this name and becomes a hostname label, and DDEV lowercases and rewrites the rest. Existing
+tasks keep their ids. On a mismatch, say so and ask again; the script refuses it too, so this
+check only saves a round trip.
 Autonomous with no name given: **halt.** A task cannot be filed without one.
 
 **2. Goal.** Ask what this task is for, in the spirit of a user story: what someone wants to
@@ -54,18 +55,106 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
   create --project "<projectPath>" --name "<name>" -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
-It then makes the task's own git worktree at `<codePath>/.claude/worktrees/<name>` on the branch
-`feature/<name>`, records both in `task.json`, and commits. Show the whole output. Exit code 3
-means one of three things: the name collided with an existing task, it failed the validation
+It then makes the task's own git worktree beside the code path, at
+`<parent of codePath>/<basename of codePath>-<name>`, on the branch `feature/<name>`, records
+both in `task.json`, and commits. The tree is a sibling for one reason. A nested worktree is
+invisible to a tool that registers projects by folder, and DDEV hands it to the parent project.
+Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
 the script also enforces, or the worktree could not be made. In the last case the folder is
 removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
 from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
-so scoping in this same window is not refused. From a window outside the code repository the
-tool refuses on first entry. Then print the path and `claude --worktree <name>`, which opens the
-same tree from the code path, and stop.
+so scoping in this same window is not refused. The tool asks for approval, because the path is
+outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
+tool refuses on first entry. Then print the path and `cd <path> && claude`, which opens a window
+in the tree. Say that the site offer comes at `start`, and stop.
+
+**5. Offer the site.** Runs here when this window entered the tree, and at `start` otherwise. A
+worktree has the branch's files and no site, so a review or a baseline taken there would capture
+the served checkout instead. Dispatch `catalog-identifier` once for the `worktree-environment`
+point, naming every framework the project records, the same words the surfaces skill uses for
+its points. When the project record has `surfaces.e2e.enabled` or
+`surfaces.visualRegression.enabled`, name `e2e-setup` or `visual-regression` in the same
+dispatch, so `up` can install that harness in the tree. Pass the answer as
+`--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one flag per framework,
+and each setup recipe as `--setup-recipe <kind>=<path>`, where the kind is `e2e` or
+`visual-regression`, then run `environment <name> show`.
+The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script refuses any other.
+`not-applicable` ends the step: say once that this worktree has files and no site. Otherwise,
+interactive: show the commands and the prose, and ask once whether to bring the site up now. A
+yes runs `environment <name> up` with the same flags. A no records nothing; say `up` with the
+same flags does it later. Autonomous: never bring it up, and say so once.
+
+## `environment <task-id> <show|up|down>`
+
+The worktree's own running site, from the framework's `worktree-environment` recipe. The recipe
+holds the commands; this plugin holds none. `show` and `up` take the recipe flags step 5 names,
+and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the record holds.
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  environment --project "<projectPath>" "<task-id>" <show|up|down> <recipe flags>
+```
+`show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
+the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
+It prints the paths of the `## Files` blocks, the files `up` writes.
+A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
+says what `up` would do.
+
+`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with the
+output in `records/environment-up.txt`, in this order. First it writes each `## Files` block
+absent from the worktree and commits those files alone, so other changed or staged work is
+never taken in. A file present with other content refuses at 3. Then
+each `## Tokens` command, whose first output line is the token's value. A token command that
+prints nothing or fails refuses at 4 by the token's name. Then the bring-up lines before the
+`## Address` heading. Then the address command, whose output is `key: value` lines. `address:`
+is required, and every other key is a token for the later lines and for the tear-down. A `root:`
+line that is not the worktree stops at 3 before the later lines: the environment resolved to
+another tree. Then the bring-up lines after the heading. Then, for each surfaces kind the
+project has on, the `## Install` lines of the setup recipe given as `--setup-recipe`. It
+commits nothing after that; what the install left uncommitted is named and stays for the task's
+own commit. With no path for a kind it says so and goes on, and the
+harness is the person's next step. A line still holding an unfilled `{token}` stops at 3 and
+names it. A failing line stops at 4 with a `first:` line. Show that line; do not bring the site
+up by hand. It records `environment` in `task.json`: the address, the recipe, when, and the
+other address keys. It prints `address:`. Running it twice is safe: the recipe promises every
+step runs again cleanly.
+
+`down` runs the tear-down lines, output to `records/environment-down.txt`, and removes
+`environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
+nothing up it says so and exits 0. Run it before the worktree is removed, or the framework keeps
+an orphaned registry entry; the completion body names it when a site is up. Review and `baseline`
+read `environment.address` before asking for a base URL.
+
+## `prune [<task-id>]...`
+
+The worktrees of complete tasks. A worktree kept after completion costs disk and a DDEV project
+each, and a tree removed too early loses uncommitted work. So this lists first, asks per tree,
+and removes only what a person named. Run it from the main checkout, never from inside a tree
+it may remove.
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  prune --project "<projectPath>" [--all] [<task-id>]...
+```
+**1. List.** With no id the script prints one `id:` line per complete task that records a
+worktree. The line holds the path, the branch, and whether the branch is merged into the code
+path's current branch. It also says whether the tree is on disk and whether a site is up.
+`prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole action.
+Say once that a tree goes only on a person's yes, and stop. The script refuses an id unattended
+at 70.
+
+**2. Ask per tree.** For each listed tree ask a plain yes or no, one at a time, with the line.
+Never ask once for all of them. An unmerged branch is a reason to say so before asking: the
+tree goes, the branch stays.
+
+**3. Remove.** Run the action once with every id that got a yes, in the order given, or with
+`--all` when every tree got one. For each tree the script tears the site down when one is up,
+then removes the tree. It deletes the branch when it is merged. It clears `worktree` and
+`environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
+happened to the branch. Show them. Exit 3 names the tree it stopped at and why. The task is not
+complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
+that tree was touched, and nothing is ever forced. Say what it printed and stop.
 
 ## `repair <old-task-folder>`
 
@@ -106,6 +195,9 @@ Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `com
 since a completed task is not reopened here. Otherwise it writes the new state, commits, and runs
 the task check. Show the whole output. The check reports and never repairs, so a finding here is
 the one thing to repair now, before the stage writes anything.
+
+When a person runs this by hand and the record has no `environment`, run `create`'s step 5 here.
+The window that made the task may not have entered the tree. A `not-applicable` ends it silently.
 
 ## `complete <task-id>`
 
@@ -180,15 +272,17 @@ absent mid-stage is normal; the distiller names it as a gap.
 
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
 files hold. Each is one sentence: what was decided and what it applies to. Show the list and ask
-for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line.
+for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line, and
+`save` still runs with no text. That records the time, which clears the compaction hook's refusal.
 
 Yes: run once per sentence, or once with all of them:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   save --project "<projectPath>" "<task-id>" -- <text...>
 ```
-It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` heading, commits,
-and prints `note:` with the path. Empty text is refused at exit 3. Show the `note:` line.
+It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` heading. It
+records `savedAt` in `task.json`, commits, and prints `savedAt:` and `note:` with the path. With no text
+it writes no note and prints `savedAt:` only. Show the lines.
 
 A note is never a stage record: the stage action that later records the same decision makes it
 stale, and the record wins. The session-start hook names the newest note after `Stage:`, and

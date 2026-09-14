@@ -20,8 +20,8 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
-#   active_tree_for <codePath> <dir>      prints <dir>'s git top level when it lies under
-#                                         <codePath>/.claude/worktrees/, else <codePath>
+#   active_tree_for <codePath> <dir>      prints <dir>'s git top level when it is a worktree of
+#                                         the <codePath> repository, else <codePath>
 #   playbooks_record_path <folder>        prints the path of the playbook record research loads
 #   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
 #
@@ -157,8 +157,10 @@ task_stage() {
   fi
 }
 
-# The task's own git worktree (ideal/task.md, "A worktree per task, always"). Prints the path
-# task.json records. When the field is absent it makes the tree and writes the field first; that
+# The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
+# code path named <basename of codePath>-<id>: a tree nested under the code path is invisible to
+# a tool that registers projects by folder, and DDEV hands it to the parent project. Prints the
+# path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
 # git refuses a path it still registers; a branch gone too starts from HEAD again. The base is
@@ -168,7 +170,7 @@ task_stage() {
 # commit, so their count is said once, on stderr, and nothing asks.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
-  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id exclude
+  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -182,7 +184,7 @@ task_worktree() {
     printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
   else
     id="$(jq -r '.id' "$task_json")"
-    wt="$code/.claude/worktrees/$id"
+    wt="$(dirname -- "$code")/$(basename -- "$code")-$id"
     branch="feature/$id"
     printf 'worktree: %s\n' "$wt" >&2
   fi
@@ -195,12 +197,6 @@ task_worktree() {
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   git -C "$code" worktree prune 2>/dev/null
-  # Git lists a nested worktree as an untracked folder in the main tree, and every clean-tree
-  # check would then refuse the code path. The exclude file is local and never committed.
-  exclude="$(cd "$code" && cd "$(git rev-parse --git-common-dir)" && pwd -P)/info/exclude"
-  if ! grep -qx '.claude/worktrees/' "$exclude" 2>/dev/null; then
-    mkdir -p "$(dirname "$exclude")" && printf '.claude/worktrees/\n' >>"$exclude"
-  fi
   if git -C "$code" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
     said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" || die3 "$who: git worktree add failed: $said"
   else
@@ -213,16 +209,19 @@ task_worktree() {
 
 # Which tree a script with no task folder to read should write into (ideal/surfaces.md, "Setup
 # runs in the tree the task runs in"). $1 the project's code path. $2 a directory, usually
-# $(pwd -P). Prints $2's own git top level when that lies under $1/.claude/worktrees/, so setup
-# started from inside a task's worktree lands there; prints $1 otherwise, including when $2 is
-# not in a git work tree at all. Calls no die function.
+# $(pwd -P). Prints $2's own git top level when that is a worktree of $1's repository, wherever
+# it sits: its git common dir resolves to $1's. So setup started from inside a task's worktree
+# lands there. Prints $1 otherwise, including when $2 is not in a git work tree at all. Calls no
+# die function.
 active_tree_for() {
-  local code="$1" dir="$2" top
+  local code="$1" dir="$2" top common
   code="$(cd "$code" && pwd -P)"
   top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || { printf '%s' "$code"; return 0; }
   top="$(cd "$top" && pwd -P)"
-  case "$top" in
-    "$code"/.claude/worktrees/*) printf '%s' "$top" ;;
-    *) printf '%s' "$code" ;;
-  esac
+  common="$(cd "$top" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+  if [ "$common" = "$(cd "$code" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
+    printf '%s' "$top"
+  else
+    printf '%s' "$code"
+  fi
 }

@@ -29,7 +29,9 @@
           "url": { "type": "string", "minLength": 1, "description": "A path under the base URL the run supplies. Never an address." },
           "kinds": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["e2e", "visual-regression", "visual-parity"] }, "description": "The review recipe's surface row ids. The check and the file share these words." },
           "enabled": { "type": "boolean", "description": "False until a person passed `register --enable`. Nothing is enabled unattended." },
-          "masks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "CSS selectors hidden before capture, each proposed with the element count it hides." }
+          "masks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "CSS selectors hidden before capture, each proposed with the element count it hides." },
+          "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Globs relative to the code tree, in the catalog glob language, naming the files that render this surface. Review runs the surface when the diff touches one of them, and a surface declaring none runs on every review. Optional and read as [] when absent, because install seeds no entries. A row written before the field existed is edited by hand, one at a time, since register refuses a changed row." },
+          "critical": { "type": "boolean", "description": "True for a surface that runs on every review whatever the diff touched. Optional and read as false when absent, for the same reason paths is." }
         }
       }
     }

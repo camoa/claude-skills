@@ -42,13 +42,15 @@ Schema:
 {
   "guides":          { "<topic>/<file.md>": "<sha256>" },
   "task_recipes":    { "<name>": "<sha8>" },
-  "process_recipes": { "<phase>/<framework>/<url-slug>": "<sha8>" }
+  "process_recipes": { "<phase>/<framework>/<url-slug>": "<sha8>" },
+  "playbooks":       { "<set-id>": "<sha256>" }
 }
 ```
 
-Example process-recipe key: `e2e-setup/drupal/e2e-setup-atk`.
+Example process-recipe key: `e2e-setup/drupal/e2e-setup-atk`. Example playbook key:
+`drupal/best-practices/camoa`, the set's topic path.
 
-- All three classes are plain footprints of what the project touched — a `"<key>": "<id>"`
+- All four classes are plain footprints of what the project touched, a `"<key>": "<id>"`
   string map. Nothing is pinned.
 - `guides` entries (guide-body caching — **active**) record `"<topic>/<file.md>": "<sha256>"`,
   where the sha256 comes from the topic's `guide-index.json` manifest
@@ -57,6 +59,8 @@ Example process-recipe key: `e2e-setup/drupal/e2e-setup-atk`.
 - `task_recipes` value is a plain JSON string (the sha8).
 - `process_recipes` value is a plain JSON string (the sha8) — identical in shape to
   `task_recipes`.
+- `playbooks` value is the sha256 of the set's `plays.json` bytes, computed by the navigator,
+  because the site publishes no hash for that file. Written whenever the file is materialized.
 - The `<url-slug>` (name segment) is the **trailing path segment of the recipe's `site-url`**
   (e.g. for `https://camoa.github.io/dev-guides/process-recipes/drupal/e2e-setup-atk/` the
   slug is `e2e-setup-atk`), NOT the `<name>` field from the index line — this avoids
@@ -75,6 +79,7 @@ re-computation by the caller:
 | Task recipes | 8-char hex sha8 | `(sha:XXXXXXXX)` from the `agentic-recipes.txt` line |
 | Process recipes | 8-char hex sha8 | `(sha:XXXXXXXX)` from the `process-recipes.txt` line |
 | Guide bodies | sha256 | per-topic `guide-index.json` manifest (`{ "<file.md>": "<sha256>" }`) |
+| Playbook sets | sha256 | computed over the fetched `plays.json` bytes; no published id exists |
 
 The lockfile stores the same id that addressed the blob — so `lockfile[key].sha` is
 always a valid argument to `blob-get`.
@@ -83,13 +88,14 @@ always a valid argument to `blob-get`.
 
 ## 4. Freshness Policy
 
-All three classes share **one** policy: **auto-fresh**.
+All four classes share **one** policy: **auto-fresh**.
 
 | Class | Policy |
 |-------|--------|
 | Guides (index + bodies) | Auto-fresh — revalidate index on every use; re-fetch body when sha changes |
 | Task recipes (index + bodies) | Auto-fresh — same two-hash discipline |
 | Process recipes (index + bodies) | Auto-fresh — same two-hash discipline; nothing pinned |
+| Playbook sets (`plays.json`) | Auto-fresh: fetched on every call, no `.hash` sidecar exists; the blob store dedups |
 
 **Guide-body freshness — fetch `guide-index.json` on use.** A guide body manifest is
 **not** gated by `llms.hash`. A body edit changes that file's sha256 in the topic's

@@ -27,7 +27,7 @@ The order never changes. These change what happens inside a step.
 | If this is true | Read |
 |---|---|
 | You want a task to run without you answering questions | [Run modes](run-modes.md) |
-| Your task is too large for one pass | [A task](task.md), on epics |
+| Your task is too large for one pass | [A task](task.md), on splitting |
 | You want your own guides or recipes instead of the hosted catalog | [Where content comes from](sources.md) |
 | Your project has screenshots or browser tests to keep passing | [Visual and end-to-end tests](testing.md) |
 | You are picking work up in a new window | [Carrying work across sessions](continuity.md) |
@@ -37,4 +37,4 @@ The order never changes. These change what happens inside a step.
 Version 6 is being written. A page exists once the part of AIDA it describes is built, and each
 page below says which part it is waiting on. A full pass over all of it runs before release.
 
-See also the [glossary](glossary.md), which fixes what each word means.
+See also the [vocabulary](vocabulary.md), which fixes what each word means.

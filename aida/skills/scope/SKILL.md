@@ -206,21 +206,21 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
   designer`, whatever the person says to the draft. It stays `designer` until it is promoted at
   "Approval" below, once the whole rendered document is approved; a yes on the draft alone does
   not promote it.
-- **`surfaces` is null, or both kinds are off, and the project has not declined.** Interactive
-  only. Look at the goal once, at this same point. When it names something a person opens in a
-  browser, a page, a form, a screen, a journey, say so in one line. Ask once whether to set the
-  surfaces up now, with a recommended answer. Give three answers: yes, not this task, or no. Say
-  the difference between "not this task" and "no" in the ask itself, so the person knows what a
-  "no" silences. Yes invokes the `surfaces` skill through the Skill tool, then reads `project.json`
-  again, so the two bullets above apply to this task. "Not this task" records nothing; the next
-  stage that names a page may ask again. No runs
-  `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline`, project-wide, and
-  the question is never asked again; name `/aida:surfaces` as the way to turn it on later. A goal
-  that names nothing a person sees gets no question. Autonomous: nothing is offered, and say so.
-  The offer at review comes after the page has already changed, when no baseline can be taken of
-  what it was. Otherwise, a declined project or a single enabled kind, ask nothing. Turning a
-  capability on is a person's decision, made through this offer or `/aida:surfaces`, never scope's
-  to infer beyond it.
+- **A kind is off and not declined, or `surfaces` is null.** The decline is that kind's
+  `declined` field in `project.json`. Interactive only. Look at the goal once, at this same point.
+  When it names something a person opens in a browser, a page, a form, a screen, a journey, say so
+  in one line. Ask once, naming every kind still open, with a recommended answer per kind. Give
+  three answers per kind: yes, not this task, or no. Say the difference between "not this task"
+  and "no" in the ask itself, so the person knows what a "no" silences. A yes on a kind invokes the
+  `surfaces` skill through the Skill tool, naming that kind. Do this once per kind said yes to.
+  Then read `project.json` again, so the two bullets above apply to this task. "Not this task"
+  records nothing for that kind; the next stage that names a page may ask again. A no on a kind
+  runs `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>`,
+  project-wide, and that kind is never asked again. Name `/aida:surfaces` as the way to turn it on
+  later. A goal that names nothing a person sees gets no question. Autonomous: nothing is offered,
+  and say so. The offer at review comes after the page has already changed, when no baseline can
+  be taken of what it was. Turning a capability on is a person's decision, made through this offer
+  or `/aida:surfaces`, never scope's to infer beyond it.
 
 ## Approval
 

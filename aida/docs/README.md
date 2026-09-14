@@ -21,7 +21,7 @@ not the internals of any one command: read a command's own description for that.
 | [Playbooks](playbooks.md) | The rules you want followed: three sources, one file format, capture at completion, and where the plays reach the roles. |
 | [Visual and end-to-end tests](testing.md) | The two optional test harnesses, and what review does with each. |
 | [Carrying work across sessions](continuity.md) | Picking up work in a new window, or after context is compacted. |
-| [Glossary](glossary.md) | Every word AIDA uses in exactly one sense. |
+| [Vocabulary](vocabulary.md) | Every word AIDA holds to one sense, and the check that enforces it. |
 
 ## Status
 
@@ -30,7 +30,7 @@ a place. [The project](project.md) and [a task](task.md) are the topic pages wri
 creating, finding, and switching a project, the check, ending a project, cleaning up, and using
 your own sources; then what a task holds, starting one, picking up work, its three states,
 splitting a large one, and finishing it.
-[Scope](scope.md) through [the glossary](glossary.md) are placeholders: each names what it will
+[Scope](scope.md) through [continuity](continuity.md) are placeholders: each names what it will
 cover and which part of the rewrite fills it in. A full pass over the whole set runs before
 release.
 

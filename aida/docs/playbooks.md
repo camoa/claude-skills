@@ -13,8 +13,9 @@ Plays come from three places, in precedence order:
 1. **Your own file**, `~/.claude/aida/playbook.md`. Your preferences, on every project.
 2. **The project's file**, `<project folder>/playbook.md`. What this project decided.
 3. **Catalog sets**, one per framework the project declares, recorded in the project's
-   state file under `playbookSubscriptions`. A set is a catalog topic, one guide per rule and
-   one summary row per guide in its routing table. The row is the play; the guide is the detail.
+   state file under `playbookSubscriptions`. A set is a catalog topic marked as a playbook,
+   one guide per rule, published with a `plays.json` that lifts each guide's rule, rationale
+   and scope out. The entry is the play; the guide is the detail.
 
 The loaded record lists the plays in that order, your file first. A role reading it meets
 your own rules before the project's and the catalog's.
@@ -53,8 +54,9 @@ A missing field refuses nothing. A play's id is its source and its title as a sl
 `/aida:project subscribe-playbook <project> <framework> <set-id>`
 
 The set id is `<framework>/best-practices/<author>`, and the framework must be one the project
-declares. Subscribing writes the id and fetches nothing: the first load on a task reports a set
-the catalog does not hold as `unreachable`. `unsubscribe-playbook` takes the same arguments.
+declares. Subscribing asks the catalog first and refuses a topic that is not a playbook. When
+the catalog cannot be reached, the subscription is written and the next task's load tries again.
+`unsubscribe-playbook` takes the same arguments.
 
 ## Capturing a play
 

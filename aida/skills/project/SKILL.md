@@ -109,7 +109,7 @@ facts creation cannot guess.
 
 **2. Name.** Always asked, whether or not one was already mentioned, because deriving it from the
 code folder saves one question and buys a collision problem the moment two projects share a
-folder name (ideal/project.md, "Considered and rejected"). Validate against
+folder name (ideal/project.md, "Considered and rejected"). Check against
 `^[a-z][a-z0-9_]*$`; on a mismatch, say so and ask again. Autonomous with no name given: **halt**,
 report that the name is missing, stop.
 
@@ -297,16 +297,21 @@ is fetched; a stage reads the folder the first time it needs something. Show the
 ## `subscribe-playbook <name-or-path> <framework> <set-id>`
 
 Subscribes the project to one catalog playbook set for one framework it declares. The set id is
-`<framework>/best-practices/<author>`. Run:
+`<framework>/best-practices/<author>`. Before writing, invoke the `dev-guides-navigator` skill
+through the Skill tool, in its `playbook <set-id>` mode. `not-a-playbook` or `no-topic` refuses:
+name the topic, say a playbook topic carries `playbook: true` in the catalog, and stop.
+`listing-unreachable` or `fetch-failed` does not refuse. Say the catalog could not be reached,
+say the loader tries again at the next task's research, and continue. A subscription to a
+topic with no plays loads nothing, silently, every task, which is why the check runs before the
+write. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   subscribe-playbook "<target>" <framework> <set-id>
 ```
 Exit 1 with a framework this project never declared: say so, name `set-frameworks`, and stop.
-It writes the id under that framework, commits the change, and runs the check. Subscribing
-fetches nothing; the first `playbooks load` on a task reports a set the catalog does not hold as
-unreachable. `unsubscribe-playbook` takes the same three arguments and removes the id. Show the
-whole output.
+It writes the id under that framework, commits the change, and runs the check.
+`unsubscribe-playbook` takes the same three arguments and removes the id, with no such check.
+Show the whole output.
 
 ## `unregister <name-or-path>`
 

@@ -4,8 +4,9 @@
 # it, and both source this, so the writer is proved by the reader review uses (ideal/surfaces.md).
 #
 #   sf_load_surfaces <file>          sets SF_STATE (absent, missing, unreadable, ok) and
-#                                    SF_SURFACES, a JSON array of {id, url, kinds, enabled, masks},
-#                                    empty unless ok
+#                                    SF_SURFACES, a JSON array of {id, url, kinds, enabled, masks,
+#                                    paths, critical}, empty unless ok; paths reads [] and
+#                                    critical false when a row lacks them
 #   sf_surface_path <registryPath> <tree>   prints the surface file's absolute path: <registryPath>
 #                                    joined to <tree> when it is relative, or <registryPath> as it
 #                                    is when a record written before row 32 of
@@ -37,7 +38,7 @@ sf_load_surfaces() {
   rows="$(jq -c '
     if (.surfaces | type) == "array"
        and all(.surfaces[]; (.id | type) == "string" and (.kinds | type) == "array" and (.enabled | type) == "boolean")
-    then [ .surfaces[] | {id, url: (.url // ""), kinds, enabled, masks: (.masks // [])} ] else empty end' \
+    then [ .surfaces[] | {id, url: (.url // ""), kinds, enabled, masks: (.masks // []), paths: (.paths // []), critical: (.critical // false)} ] else empty end' \
     "$surface_file" 2>/dev/null)"
   if [ -z "$rows" ]; then
     SF_STATE="unreadable"

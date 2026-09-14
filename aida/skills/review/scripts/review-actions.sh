@@ -28,6 +28,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--accept-baseline <surface id>]...
 #                                            [--value <name>=<value>]...
 #   review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+#   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
 #   review-actions.sh step     <name>
 #
 # `--recipe` names the `test-execution` recipe, for its `## Test commands` block, which carries the
@@ -182,6 +183,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
        review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+       review-actions.sh audit    <task_folder>
        review-actions.sh step     <name>
 EOF
 }
@@ -589,6 +591,17 @@ rw_worse() {
 
 RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""; RW_HEAD=""
 RW_VALUES=""; RW_CATALOG_NOTES="[]"
+
+# The files the range $1..$2 changed, into RW_CHANGED_JSON and RW_CHANGED_COUNT. One producer:
+# checks reads it for the range it records, and surfaces reads it again for that recorded range.
+# --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
+# the new path, so a deleted file no order owns would never appear in the changed list.
+rw_load_changed() {
+  RW_CHANGED_JSON="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$1" "$2" 2>/dev/null \
+    | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  [ -n "$RW_CHANGED_JSON" ] || RW_CHANGED_JSON='[]'
+  RW_CHANGED_COUNT="$(printf '%s' "$RW_CHANGED_JSON" | jq 'length')"
+}
 
 # One catalog note. Review writes nothing to the catalog: it records what it saw and names the count
 # at close, and a person decides whether a note becomes a proposal.
@@ -1139,12 +1152,7 @@ RW_FIT
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
   git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null \
     || die 3 "checks: could not write the diff for $range to $DIFF_FILE"
-  # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
-  # the new path, so a deleted file no order owns would never appear in the changed list.
-  RW_CHANGED_JSON="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$base" "$head_end" 2>/dev/null \
-    | jq -Rsc 'split("\n") | map(select(length > 0))')"
-  [ -n "$RW_CHANGED_JSON" ] || RW_CHANGED_JSON='[]'
-  RW_CHANGED_COUNT="$(printf '%s' "$RW_CHANGED_JSON" | jq 'length')"
+  rw_load_changed "$base" "$head_end"
   empty_range="no"
   [ "$base" = "$RW_HEAD" ] && empty_range="yes"
   upstream="$(git -C "$RV_CODEPATH" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
@@ -1542,6 +1550,29 @@ RW_SURFACE_IDS
   RW_SURFACE_ROWS="$all"
 }
 
+# True when the surface $1 must run: a person accepted a baseline for it ($2 the accepted list), it
+# is critical, it declares no paths, or one of its paths matches a changed file. The match is the
+# one rw_check_serves makes, and the changed list is walked the same way.
+rw_surface_affected() {
+  local surface="$1" paths glob one
+  case " $2 " in *" $(printf '%s' "$surface" | jq -r '.id') "*) return 0 ;; esac
+  [ "$(printf '%s' "$surface" | jq -r '.critical')" = "true" ] && return 0
+  paths="$(printf '%s' "$surface" | jq -r '.paths[]')"
+  [ -n "$paths" ] || return 0
+  while IFS= read -r glob; do
+    [ -n "$glob" ] || continue
+    while IFS= read -r one; do
+      [ -n "$one" ] || continue
+      tf_path_matches_catalog_glob "$one" "$glob" && return 0
+    done <<RW_CHANGED_ONE
+$(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
+RW_CHANGED_ONE
+  done <<RW_GLOBS
+$paths
+RW_GLOBS
+  return 1
+}
+
 # One kind of surface: its row, its run, its surfaces from the surface file and the walk. $1 the
 # check id, $2 the surface row id in the recipe, $3 the kind word the surface file carries, $4
 # whether the project has this kind on, $5 the walked list, $6 the accepted list. Appends the check
@@ -1549,13 +1580,15 @@ RW_SURFACE_IDS
 rw_surface_kind() {
   local check_id="$1" row_id="$2" gate="$3" enabled="$4" walked="$5" accepted="$6"
   local checks_out="$7" surfaces_out="$8"
-  local row rc output mine count i sid verdict rows marker off
+  local row rc output mine count i sid verdict rows marker off not_run
   local ran row_verdict detail worst missing_walk accept_here accept_row pre_row
+  local one run unaffected narrow_note="" values
 
   # A disabled surface gets its own row, not run, and is counted in the detail rather than dropped
   # in silence. The suite skips it itself, so its id is never in the output and never read unmet.
   off="$(printf '%s' "$SF_SURFACES" | jq -c --arg g "$gate" '[ .[] | select((.kinds | index($g)) and (.enabled | not)) ]')"
-  printf '%s' "$off" | jq -c '.[] | {id, verdict: "undeclared", ran: false, walked: false, reportPath: ""}' >>"$surfaces_out"
+  not_run='.[] | {id, verdict: "undeclared", ran: false, walked: false, reportPath: ""}'
+  printf '%s' "$off" | jq -c "$not_run" >>"$surfaces_out"
   mine="$(printf '%s' "$SF_SURFACES" | jq -c --arg g "$gate" '[ .[] | select((.kinds | index($g)) and .enabled) ]')"
   count="$(printf '%s' "$mine" | jq 'length')"
   row="$(printf '%s' "$RW_SURFACE_ROWS" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
@@ -1593,6 +1626,42 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "the surface file holds no enabled surface carrying the $gate kind, so this project has nothing for this check to run. Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')" >>"$checks_out"
     return 0
   fi
+
+  # Narrowing: the person who registered a surface declared the paths that render it, and review
+  # runs the surface when the diff touched one of them, when it is critical, or when it declares
+  # none. No agent guesses. The rest get their own row, not run, and the detail says why. The
+  # changed list is the one checks read, derived again for the range the record holds.
+  [ -n "$RW_RANGE" ] || { RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange // ""')"; rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"; }
+  run='[]'; unaffected='[]'
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$mine" | jq -c --argjson i "$i" '.[$i]')"
+    if rw_surface_affected "$one" "$accepted"; then run="$(printf '%s' "$run" | jq -c --argjson s "$one" '. + [$s]')"
+    else unaffected="$(printf '%s' "$unaffected" | jq -c --argjson s "$one" '. + [$s]')"; fi
+    i=$((i + 1))
+  done
+  if [ "$unaffected" != "[]" ]; then
+    if [ "$(printf '%s' "$row" | jq '.argv | index("{surfaces}")')" = "null" ]; then
+      # A row that takes no id list runs the whole set, and the sentence tells the catalog
+      # maintainer what to add.
+      narrow_note=" The $row_id row carries no {surfaces} token, so narrowing did not apply to this run. The diff at $RW_RANGE touched no declared path of: $(printf '%s' "$unaffected" | jq -r '[ .[].id ] | join(", ")')."
+      run="$mine"
+    else
+      printf '%s' "$unaffected" | jq -c "$not_run" >>"$surfaces_out"
+      narrow_note=" Not run, because the diff at $RW_RANGE touched none of their declared paths: $(printf '%s' "$unaffected" | jq -r '[ .[].id ] | join(", ")')."
+      if [ "$run" = "[]" ]; then
+        detail="every enabled $gate surface declares paths, and the diff at $RW_RANGE touched none of them, so nothing ran.$narrow_note"
+        [ "$off" = "[]" ] || detail="$detail Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')."
+        rw_check_row "$check_id" "met" "$detail" >>"$checks_out"
+        return 0
+      fi
+    fi
+  fi
+  mine="$run"; count="$(printf '%s' "$mine" | jq 'length')"
+  # {surfaces} fills with the ids that run, joined by |, the way the accept row is filled. A row
+  # without the token never reads the value.
+  values="$(printf 'surfaces\t%s\n%s' "$(printf '%s' "$mine" | jq -r '[ .[].id ] | join("|")')" "$RW_VALUES")"
+
   # The e2e-preflight row runs before the e2e suite. A non-zero exit records it unmet and the e2e
   # check unknown, and the suite does not run (ideal/surfaces.md, the reading rule).
   if [ "$row_id" = "e2e" ]; then
@@ -1631,9 +1700,9 @@ rw_surface_kind() {
     fi
   fi
 
-  # {paths} expands to nothing here on purpose: version 6 runs every registered surface, which is
-  # why the change-impact globs stay unparsed, so a row ending in {paths} runs the whole set.
-  rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "$RW_VALUES" ""
+  # {paths} expands to nothing here on purpose: the surfaces that run are named through {surfaces}
+  # above, never through the changed files, so a row ending in {paths} runs the whole set.
+  rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "$values" ""
   rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$row" | jq -r '.framework // "this project"')"
   output="$RW_RUN_OUTPUT"
   ran=false; rc=""; row_verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
@@ -1656,6 +1725,7 @@ rw_surface_kind() {
     fi
   fi
   [ "$off" = "[]" ] || detail="$detail Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')."
+  detail="$detail$narrow_note"
 
   # One row per registered surface of this kind, in one pass. A surface the run said nothing about
   # reads unmet rather than borrowing the run's own verdict: a gate that cannot notice its subject
@@ -1784,19 +1854,34 @@ do_surfaces() {
 
   local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
   local one_accept all_rows si one_surface merged one_verdict
+  local e2e_declined vr_declined open_kinds relevant_off
   e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
 
-  # The offer, which the skill makes and this action only records what it can decide. Rows that are
-  # not absent are how review knows the framework has surfaces at all.
-  if [ "$SF_STATE" = "ok" ]; then
-    setup="registered"
-  elif [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.declined // false')" = "true" ]; then
-    setup="declined"
-  elif [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select((.absent // false) == false) ] | length')" -gt 0 ]; then
+  # Per kind: off, not declined, and the recipe carries its surface row. Rows that are not absent
+  # are how review knows the framework has that kind at all. The two are separate capabilities, so
+  # declining one never silences the other's offer.
+  e2e_declined="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.e2e.declined // false')"
+  vr_declined="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.visualRegression.declined // false')"
+  open_kinds=""; relevant_off=""
+  if [ "$e2e_on" != "on" ] && [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select(.id == "e2e" and (.absent // false) == false) ] | length')" -gt 0 ]; then
+    relevant_off="yes"
+    [ "$e2e_declined" = "true" ] || open_kinds="end to end"
+  fi
+  if [ "$vr_on" != "on" ] && [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select(.id == "visual-regression" and (.absent // false) == false) ] | length')" -gt 0 ]; then
+    relevant_off="yes"
+    [ "$vr_declined" = "true" ] || open_kinds="${open_kinds:+$open_kinds and }visual regression"
+  fi
+
+  # The offer, which the skill makes and this action only records what it can decide.
+  if [ -n "$open_kinds" ]; then
     if [ "$RW_RUN_MODE" = "autonomous" ]; then setup="not-offered-autonomous"; else setup="available"; fi
+  elif [ "$SF_STATE" = "ok" ]; then
+    setup="registered"
+  elif [ -n "$relevant_off" ]; then
+    setup="declined"
   else
     setup="not-applicable"
   fi
@@ -1867,9 +1952,9 @@ RW_SURFACE_VERDICTS
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
   echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   case "$setup" in
-    available)              echo "SURFACES: this framework's recipe carries surface rows and this project has no surface file. The setup offer belongs here, once." >&2 ;;
-    declined)               echo "SURFACES: a person declined the setup, and it is not offered again." >&2 ;;
-    not-offered-autonomous) echo "SURFACES: this framework's recipe carries surface rows and this project has no surface file. Nobody is present, so the offer was not made." >&2 ;;
+    available)              echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
+    declined)               echo "SURFACES: every kind that is off has been declined, and none of them is offered again." >&2 ;;
+    not-offered-autonomous) echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Nobody is present, so the offer was not made." >&2 ;;
   esac
   exit 0
 }
@@ -2050,6 +2135,57 @@ RW_ROWS
 }
 
 # ------------------------------------------------------------------------------------------------
+# `audit`: which checks fired or were bypassed, read off the record and nothing else.
+# ------------------------------------------------------------------------------------------------
+
+# One line per check, in the record's order, with the word for how its verdict came about. `ran`: a
+# command or a lens ran and returned it. `read`: a record field decided it and nothing ran. `off`:
+# the project turned the thing off, a kind disabled, a row the recipe declares absent, an accept
+# row nobody asked for. `could-not-look`: a recipe, a row, a file or a tool was absent. Then one
+# line per surface row, run or not, with the reason: disabled, unaffected, or no harness when the
+# run itself did not happen. Then the counts per word over the checks.
+#
+# The row's own fields decide where they can: exitCode, absent, the id, the verdict, and the
+# mutation object's output, which is the one field a mutation run leaves. Three sets of rows write the same fields for different reasons, and there the
+# detail's fixed wording decides: a tool row undeclared with no command, a surface check undeclared
+# with no command, and a surface row not run. The wording is this script's own, and a field on
+# the row saying why nothing ran would make each a field read. Nothing here changes a verdict.
+do_audit() {
+  [ "$#" -ge 1 ] || die 3 "audit: a task folder is required"
+  [ "$#" -le 1 ] || die 3 "audit: unrecognized extra argument: $2"
+  rw_paths "audit" "$1"
+  rw_load_record "audit"
+  [ -n "$RW_RECORD_DOC" ] || die 3 "audit: $RECORD_FILE not found, so no review has run for this task and there is nothing to audit. Run checks first."
+  printf '%s' "$RW_RECORD_DOC" | jq -r --arg lenses " non-goals solid dry architecture-fit guides framework-practices " '
+    . as $r
+    | def how: .id as $id | .verdict as $v | .detail as $d |
+        if has("exitCode") then "ran"
+        elif (.absent // false) then "off"
+        elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" then "could-not-look" else "ran" end)
+        elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
+        elif $id == "test-and-mutation" then
+          (if ($r.mutation | has("output")) then "ran" elif $v == "unknown" then "could-not-look" else "read" end)
+        elif ($id | endswith("-accept")) then "off"
+        elif $v == "met" then "read"
+        elif ($d | test("the project record says|holds no enabled surface|declares its suite row absent")) then "off"
+        elif ($d | test("does not apply to it|changed no file")) then "read"
+        else "could-not-look" end;
+      # The two lists a surface check names in its detail, one id each, across every surface check.
+      def named($lead): [ $r.checks[] | .detail | scan($lead + "[^.]*") | sub($lead; "") | split(", ") ] | add // [];
+      (named("Disabled and not run: ")) as $disabled
+    | (named("touched none of their declared paths: ")) as $unaffected
+    | ([ .checks[] | {id, verdict, how: how} ]) as $rows
+    | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)" ]
+      + [ .surfaces[] | .id as $sid | "surface(\($sid)): " + (if .ran then "run"
+            elif ($disabled | index($sid)) != null then "not run: disabled"
+            elif ($unaffected | index($sid)) != null then "not run: unaffected"
+            else "not run: no harness" end) ]
+      + [ "audit: " + ([ "ran", "read", "could-not-look", "off" ] | map(. as $w | $w + "=" + ([ $rows[] | select(.how == $w) ] | length | tostring)) | join(" ")) ]
+    | .[]' || die 3 "audit: $RECORD_FILE could not be read as a review record."
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # `step`: print one step file.
 # ------------------------------------------------------------------------------------------------
 
@@ -2086,6 +2222,7 @@ case "$ACTION" in
   findings) do_findings  "$@" ;;
   surfaces) do_surfaces "$@" ;;
   close)    do_close    "$@" ;;
+  audit)    do_audit    "$@" ;;
   step)     do_step     "$@" ;;
   *) usage; die 3 "unknown action: $ACTION" ;;
 esac

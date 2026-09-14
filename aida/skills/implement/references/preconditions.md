@@ -62,7 +62,7 @@ record; name the path rather than reading it here.
 
 A framework's cheapest test command may carry a placeholder, such as the runner a Python project
 declares. Pass it with `--value <name>=<value>`. The script never guesses one and never reads a
-default out of a recipe's prose: an unsupplied placeholder makes the run undecidable and names
+default out of a recipe's prose: an unsupplied placeholder makes the run unknown and names
 which one had no value.
 
 ## Read the four verdicts to the person
@@ -88,7 +88,7 @@ not be reached was not checked, and reporting the run as clean would be false.
 ## The smoke run and the baseline
 
 After the conditions, the step runs each framework's cheapest test command, the one that proves the
-harness reports at all. It runs only where that framework's conditions came back satisfied or
+harness reports at all. It runs only where that framework's conditions came back met or
 undeclared, because running it after a condition answered no would fail for a reason already known.
 Its result folds into the same verdict, and where it did not succeed the record keeps what the
 command printed.

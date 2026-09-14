@@ -43,15 +43,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    <task-id> <autonomous|interactive>
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
 #                    -- <text...>
+#   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
+#                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
+#                    [--setup-recipe <kind>=<path>]...
+#   task-actions.sh [--run-mode <interactive|autonomous>] prune --project <path> [--all] [<task-id>]...
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
-# mode). No action here currently branches on it: nothing below ever asks a question, so there is
-# nothing for a run mode to change yet. It is accepted anyway, in the same place and shape
-# project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
+# mode). Nothing below asks a question, so only `environment up` and `prune` read it: a site
+# coming up and a tree going are a person's yes, and both refuse unattended at 70. It is
+# accepted in the same place and shape project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
-# The value itself is read nowhere below, so nothing here stores it.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints why
 # to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
@@ -77,9 +80,11 @@ fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 CHECK_TASK_SCRIPT="${PLUGIN_ROOT}/scripts/check-task.sh"
 
+RUN_MODE="interactive"
 if [ "${1:-}" = "--run-mode" ]; then
   [ $# -ge 2 ] || { printf 'task-actions: --run-mode needs a value\n' >&2; exit 3; }
-  shift 2
+  # shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
+  RUN_MODE="$2"; shift 2
 fi
 
 die3() {
@@ -106,6 +111,9 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
        task-actions.sh save     --project <path> <task-id> -- <text...>
+       task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
+                                 [--setup-recipe <kind>=<path>]...
+       task-actions.sh prune    --project <path> [--all] [<task-id>]...
 EOF
 }
 
@@ -126,22 +134,18 @@ canon_existing_dir() {
   printf '%s' "$p"
 }
 
-# The task-schema.json id pattern, enforced the same way project-actions.sh enforces its own name
-# pattern: two `case` globs, never `[[ =~ ]]`, so this runs the same under an old bash and under
-# zsh. Ported from version 5's task-name refusal (commands/scope.md:47-49): no path separator, and
-# the pattern's own first-character class already makes "." and ".." impossible to match, so
-# there is nothing left to check for those two by hand.
+# A new id is `^[a-z0-9][a-z0-9-]*$`, narrower than the task-schema.json pattern, which still
+# admits the ids made before this rule so they are not renamed. The worktree folder is named
+# after the id and becomes a hostname label, and DDEV lowercases and rewrites the rest: a `_`
+# turns into `-`, a dot stays and splits the label. Two `case` globs, never `[[ =~ ]]`, so this
+# runs the same under an old bash and under zsh; the tr comparison holds the lowercase rule where
+# a locale reads `[a-z]` as wider than ASCII.
 validate_task_id() {
-  local id="$1" who="$2"
+  local id="$1" who="$2" ok=yes
   [ -n "$id" ] || die3 "$who: a task id is required"
-  case "$id" in
-    [A-Za-z0-9_]*) : ;;
-    *) die3 "$who: task id '$id' must start with a letter, digit or underscore" ;;
-  esac
-  case "$id" in
-    *[!A-Za-z0-9._-]*)
-      die3 "$who: task id '$id' must contain only letters, digits, underscores, dots and hyphens; no path separator and no space" ;;
-  esac
+  case "$id" in *[!a-z0-9-]*|-*) ok=no ;; esac
+  [ "$id" = "$(printf '%s' "$id" | tr 'A-Z' 'a-z')" ] || ok=no
+  [ "$ok" = yes ] || die3 "$who: task id '$id' must be lowercase letters, digits and hyphens, starting with a letter or digit. The folder name becomes a hostname label, and a tool lowercases and rewrites the rest"
 }
 
 # A project folder for this script is exactly what check-project.sh already calls one: the folder
@@ -831,18 +835,25 @@ do_save() {
   _resolved_project="$(canon_existing_dir "$project_path")" || die3 "save: not a folder: $project_path"
   project_path="$_resolved_project"
   [ -n "$id" ] || die3 "save: a task id is required"
+  # Blank text writes no note. The call still stamps savedAt, which is what hooks/pre-compact.sh
+  # compares against, so a person with nothing to say can still clear its refusal.
   case "$text" in
     *[![:space:]]*) : ;;
-    *) die3 "save: the text is required and must not be blank. Nothing to save is said, not written" ;;
+    *) text="" ;;
   esac
 
   local task_dir
   task_dir="$(task_dir_for "$project_path" "$id")"
   [ -f "$task_dir/task.json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
 
-  local note; note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
-  mkdir -p "$task_dir/notes" || die3 "save: could not create $task_dir/notes"
-  printf '## %s\n\n%s\n\n' "$(date -u +%H:%M:%SZ)" "$text" >> "$note" || die3 "save: could not write $note"
+  local note=""
+  if [ -n "$text" ]; then
+    note="$task_dir/notes/$(date -u +%Y-%m-%d).md"
+    mkdir -p "$task_dir/notes" || die3 "save: could not create $task_dir/notes"
+    printf '## %s\n\n%s\n\n' "$(date -u +%H:%M:%SZ)" "$text" >> "$note" || die3 "save: could not write $note"
+  fi
+  local saved_at; saved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  write_atomic "$task_dir/task.json" "$(jq --arg at "$saved_at" '.savedAt = $at' "$task_dir/task.json")"
 
   commit_task_change "$project_path" \
     "Save a note for ${id}" \
@@ -850,9 +861,341 @@ do_save() {
     "" \
     "" \
     "$id" "note" \
-    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$note" >&2
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "${note:-$task_dir/task.json}" >&2
 
-  echo "note: ${note}"
+  echo "savedAt: ${saved_at}"
+  [ -z "$note" ] || echo "note: ${note}"
+}
+
+# ------------------------------------------------------------------------------------------------
+# environment: the worktree's own running site, from the framework's `worktree-environment` recipe
+# (dev-guides/proposals/worktree-environment-ask.md and -tokens-ask.md): a worktree has the
+# branch's files and no site, so a review or a baseline taken there would capture the served
+# checkout. `## Tokens`, `## Bring up`, `## Address` and `## Tear down` are sh blocks run as
+# arguments in the worktree, the way surfaces runs `## Install`; `## Preconditions` and
+# `## Build in place` are prose. `{codePath}` is the one token this script fills on its own.
+# Each `## Tokens` block, its fence's second word the token's name, runs first and its first
+# stdout line is the value. Then the bring-up blocks before the `## Address` heading, the address
+# command, whose stdout is `key: value` lines, then the blocks after it. `address:` is required;
+# every other key is a token for the later blocks and for `## Tear down`, kept in the record. A
+# `root:` that is not the worktree stops before the later blocks: the environment resolved to
+# another tree. After the last block, `up` runs the `## Install` blocks of each enabled surfaces
+# kind's setup recipe, given as `--setup-recipe <kind>=<path>`, because a worktree has no
+# node_modules. `up` records `environment: {address, recipe, upAt, <keys>}` in task.json; `down`
+# reads the recipe path and the keys from that record, so it takes no recipe flag.
+# ------------------------------------------------------------------------------------------------
+
+# The tab-separated `<name><TAB><value>` list every `{name}` is filled from, the shape cr_lookup
+# reads. `codePath` heads it; the tokens and the address keys follow.
+TOKENS=""
+
+# Fills every `{name}` in $1 from TOKENS. A shell loop rather than sed, so a value may hold any
+# character.
+fill_tokens() {
+  local line="$1" entry name value
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    name="{${entry%%	*}}"; value="${entry#*	}"
+    while [ "${line#*"$name"}" != "$line" ]; do line="${line%%"$name"*}$value${line#*"$name"}"; done
+  done <<TA_TOKENS
+$TOKENS
+TA_TOKENS
+  printf '%s' "$line"
+}
+
+# The `## Bring up` lines of the recipe $1 before ($2 `before`) or after ($2 `after`) its
+# `## Address` heading. The recipe places the address between two bring-up headings, and only the
+# position says which block runs on which side of it.
+bring_up_half() {
+  local half
+  half="$(mktemp)" || die3 "environment: could not create a temporary file"
+  awk -v want="$2" '/^## Address$/ { seen = 1 } (want == "before") != (seen == 1)' "$1" >"$half"
+  sh_blocks_under "$half" "Bring up"; rm -f "$half"
+}
+
+# Prints the line $1 with every `{name}` filled, for run_recipe_lines in scripts/lib/recipes.sh.
+# A line still holding a `{name}` after the fill exits 3 naming it, under the label $2: a token
+# nothing filled would otherwise run literally.
+fill_line_or_refuse() {
+  local line rest
+  line="$(fill_tokens "$1")"
+  case "$line" in *'{'*'}'*) rest="${line#*\{}"; die3 "environment: $2 line holds a token nothing fills: {${rest%%\}*}}. The tokens are {codePath}, the ## Tokens names and the address keys" ;; esac
+  printf '%s' "$line"
+}
+
+# Runs the one line $1 in $2 and writes its standard output to $4, which a token and the address
+# are read from. Both streams are appended to $3, standard error after standard output, so the
+# record holds them and the caller reads a clean value. Returns the command's exit status. A line
+# refused by refuse_if_unsafe, holding no command, or still holding a `{name}` exits 3.
+run_recipe_capture() {
+  local line="$1" dir="$2" outfile="$3" capture="$4" err_file result tab; tab="$(printf '\t')"
+  line="$(fill_tokens "$line")"
+  refuse_if_unsafe environment "$RECIPE" "$line" || exit 3
+  err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
+  printf '+ %s\n' "$line"
+  result="$(br_run_resolved "$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')" "$dir" "$capture" '[]' "" "$err_file")"
+  cat "$capture" "$err_file" >>"$outfile"; rm -f "$err_file"
+  case "$result" in RAN*) return "${result#*"$tab"}" ;; esac
+  die3 "environment: the line holds no command, or a token nothing fills: ${result#*"$tab"}. The tokens are {codePath}, the ## Tokens names and the address keys"
+}
+
+do_environment() {
+  local project_path="" id="" sub="" setup_recipes="" n tab; tab="$(printf '\t')"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --*) break ;;
+      *)
+        if [ -z "$id" ]; then id="$1"; shift
+        elif [ -z "$sub" ]; then sub="$1"; shift
+        else die3 "environment: unrecognized argument: $1"
+        fi
+        ;;
+    esac
+  done
+  # The setup recipes are this action's own flag, so they are taken out before the recipe flags
+  # reach cr_resolve_recipe, which refuses a flag it does not know. The rest keep their order.
+  n=$#
+  while [ "$n" -gt 0 ]; do
+    if [ "$1" = "--setup-recipe" ]; then
+      [ "$n" -ge 2 ] || die3 "environment: --setup-recipe needs a value"
+      cr_recipe_pair environment --setup-recipe "$2"
+      case "${CR_PAIR%%"$tab"*}" in e2e|visual-regression) ;; *) die3 "environment: the setup kind is e2e or visual-regression, got: ${CR_PAIR%%"$tab"*}" ;; esac
+      setup_recipes="$setup_recipes$CR_PAIR
+"; shift 2; n=$((n - 2))
+    else
+      set -- "$@" "$1"; shift; n=$((n - 1))
+    fi
+  done
+  [ -n "$project_path" ] || die3 "environment: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "environment: not a folder: $project_path"
+  project_path="$_resolved_project"
+  require_project_folder "$project_path" "environment"
+  [ -n "$id" ] || die3 "environment: a task id is required"
+  case "$sub" in show|up|down) ;; *) die3 "environment: the action is show, up or down, got: ${sub:-nothing}" ;; esac
+
+  local task_dir task_json wt outfile
+  task_dir="$(task_dir_for "$project_path" "$id")"
+  task_json="$task_dir/task.json"
+  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  CODE_PATH="$(project_code_path_value "$project_path")"
+  [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die3 "environment: the project's codePath is not on disk: ${CODE_PATH:-none recorded}"
+  TOKENS="codePath$tab$CODE_PATH
+"
+
+  if [ "$sub" = "down" ]; then
+    [ "$#" -eq 0 ] || die3 "environment: down reads the recipe the record names and takes no flag, got: $1"
+    RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")"
+    [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
+    [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
+    # The address keys the record kept, so `{worktreeProject}` reaches the tear-down.
+    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt") | "\(.key)\t\(.value)"' "$task_json")"
+    wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
+    mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
+    cd "$wt" || die3 "environment: could not enter $wt"
+    run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
+    write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+    commit_task_change "$project_path" "Tear down the site of ${id}" "requested" "" "" "$id" "environment" \
+      || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    printf 'environment: down\n'; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
+    return 0
+  fi
+
+  # show and up resolve the recipe the same way, so show's exit code says what up would do.
+  # shellcheck disable=SC2034 # the three are read by cr_resolve_recipe in scripts/lib/recipes.sh
+  ACTION="environment"
+  # shellcheck disable=SC2034
+  KIND="worktree-environment"
+  # shellcheck disable=SC2034
+  FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
+  cr_resolve_recipe "$@"
+  local bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
+  bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
+  address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
+  tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
+  # The token blocks carry the token's name as the fence's second word, the shape `## Files`
+  # already reads: one file per block, named by its order, and a `<n><TAB><name>` line each.
+  tokens_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  token_list="$(recipe_files_into "$RECIPE" Tokens "$tokens_dir")"
+  # The `## Files` blocks, written before the tokens run: the shipped recipe's first token runs a
+  # script the recipe itself declares, which a fresh worktree holds only once a commit carried it.
+  files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  file_list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
+  printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
+  [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
+  [ -n "$address" ] || die3 "environment: $RECIPE has no block tagged sh under Address, so up would record no address"
+  if [ "$sub" = "show" ]; then
+    printf 'PRECONDITIONS:\n'; recipe_prose_under "$RECIPE" Preconditions
+    printf 'TOKENS:\n'; while IFS="$tab" read -r n name; do [ -n "$n" ] && printf '  %s: %s\n' "$name" "$(fill_tokens "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")")"; done <<TA_TOKEN_LIST
+$token_list
+TA_TOKEN_LIST
+    printf 'BRING UP:\n'; fill_tokens "$bring_up" | sed 's/^/  /'; printf '\n'
+    printf 'ADDRESS:\n  %s\n' "$(fill_tokens "$address")"
+    printf 'TEAR DOWN:\n'; fill_tokens "$tear_down" | sed 's/^/  /'; printf '\n'
+    printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
+    printf 'FILES:\n'; printf '%s\n' "$file_list" | cut -f2 | sed 's/^./  &/'
+    rm -rf "$tokens_dir" "$files_dir"; return 0
+  fi
+  cr_require_person up "a person approved the site coming up"
+  wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
+  mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
+  cd "$wt" || die3 "environment: could not enter $wt"
+  recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
+  : >"$outfile"
+  recipe_files_write environment "$file_list" "$wt" "$files_dir"; rm -rf "$files_dir"
+  printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+  # Only the written files are staged and committed. A person's uncommitted or staged work beside
+  # them is never taken into this commit and never refuses it.
+  [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
+    "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
+  # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
+  # refuses by the token's name at 4, before any bring-up line runs.
+  capture="$(mktemp)" || die3 "environment: could not create a temporary file"
+  while IFS="$tab" read -r n name; do
+    [ -n "$n" ] || continue
+    run_recipe_capture "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")" "$wt" "$outfile" "$capture"; result=$?
+    value="$(head -n 1 "$capture")"
+    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+    TOKENS="$TOKENS$name$tab$value
+"
+  done <<TA_TOKEN_LIST
+$token_list
+TA_TOKEN_LIST
+  rm -rf "$tokens_dir"
+  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" before)" "$outfile" "environment: up" fill_line_or_refuse
+  run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
+  value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
+  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+  keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"
+  TOKENS="$TOKENS$keys
+"
+  root="$(cr_lookup "$keys" root)"
+  [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
+    || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
+  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" after)" "$outfile" "environment: up" fill_line_or_refuse
+  # The harness in the worktree: a setup recipe's `## Install` is declared safe to run twice, and
+  # it is where npm lives. Without its path the site is still up, and the install is the person's
+  # next step.
+  for kind in e2e visual-regression; do
+    [ "$(jq -r --arg k "$kind" '.surfaces[if $k == "e2e" then "e2e" else "visualRegression" end].enabled // false' "$project_path/project.json")" = "true" ] || continue
+    setup="$(cr_lookup "$setup_recipes" "$kind")"
+    [ -n "$setup" ] || { printf 'environment: %s is on for this project and no --setup-recipe %s=<path> was given, so its harness is not installed in the worktree\n' "$kind" "$kind" >&2; continue; }
+    run_recipe_lines "install $kind" "$setup" "$(sh_blocks_under "$setup" Install)" "$outfile" "environment: install $kind" fill_line_or_refuse
+    # The install may change a tracked file, package-lock.json. Nothing here commits it: the
+    # paths are the recipe's to know, and a commit of everything would sweep other work in.
+    [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
+  done
+  write_atomic "$task_json" "$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
+    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
+  commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+  printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
+}
+
+# ------------------------------------------------------------------------------------------------
+# prune: the worktrees of complete tasks. A tree kept after completion costs disk and a site each,
+# and a tree removed too early loses uncommitted work. So with no id it only lists, which is the
+# whole action unattended, and it removes the named trees one at a time: the site down first, so
+# the framework keeps no orphaned registry entry, then the tree, then the branch when it is merged.
+# Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune).
+# ------------------------------------------------------------------------------------------------
+
+# One line per complete task that records a worktree. $1 the project folder, $2 the merged
+# branches, one per line.
+prune_list() {
+  local project_path="$1" merged="$2" tab d row id wt branch env yes_no; tab="$(printf '\t')"
+  find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r d; do
+    row="$(jq -r 'select(.state == "complete" and .worktree != null)
+      | [.id, .worktree.path, .worktree.branch, (if .environment == null then "no" else "yes" end)] | @tsv' \
+      "$d/task.json" 2>/dev/null)"
+    [ -n "$row" ] || continue
+    IFS="$tab" read -r id wt branch env <<TA_ROW
+$row
+TA_ROW
+    printf '%s\n' "$merged" | grep -Fqx "$branch" && yes_no=yes || yes_no=no
+    printf 'id: %s worktree: %s branch: %s merged: %s disk: %s environment: %s\n' \
+      "$id" "$wt" "$branch" "$yes_no" "$([ -d "$wt" ] && echo yes || echo no)" "$env"
+  done
+}
+
+do_prune() {
+  local project_path="" all=no ids=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --all) all=yes; shift ;;
+      --*) die3 "prune: unrecognized argument: $1" ;;
+      *) ids="$ids$1
+"; shift ;;
+    esac
+  done
+  [ -n "$project_path" ] || die3 "prune: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "prune: not a folder: $project_path"
+  project_path="$_resolved_project"
+  require_project_folder "$project_path" "prune"
+  CODE_PATH="$(project_code_path_value "$project_path")"
+  [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die3 "prune: the project's codePath is not on disk: ${CODE_PATH:-none recorded}"
+  is_git_repo "$CODE_PATH" || die3 "prune: the project's codePath is not a git repository: $CODE_PATH"
+  # Git still registers a tree whose directory is gone, and refuses to remove a registered path.
+  git -C "$CODE_PATH" worktree prune 2>/dev/null
+  local current merged listed
+  current="$(git -C "$CODE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  merged="$(git -C "$CODE_PATH" branch --format='%(refname:short)' --merged 2>/dev/null)"
+  listed="$(prune_list "$project_path" "$merged")"
+  if [ "$all" = no ] && [ -z "$ids" ]; then
+    [ -n "$listed" ] && printf '%s\n' "$listed" || printf 'prune: none, no complete task records a worktree\n'
+    return 0
+  fi
+  # shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
+  ACTION="prune"
+  cr_require_person "a task id or --all" "a person chose which trees to remove"
+  [ "$all" = no ] || ids="$(printf '%s\n' "$listed" | awk '{print $2}')"
+
+  # Every named task is checked before any tree goes: a task that is not complete is a reason to
+  # remove nothing, because its tree is where its work is.
+  local id task_dir task_json state wt branch said branch_word
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    task_json="$(task_dir_for "$project_path" "$id")/task.json"
+    [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+    state="$(jq -r '.state // "?"' "$task_json")"
+    [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
+    [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
+  done <<TA_IDS
+$ids
+TA_IDS
+
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    task_dir="$(task_dir_for "$project_path" "$id")"; task_json="$task_dir/task.json"
+    wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
+    # Git's refusal is checked first, so a dirty tree loses nothing: not its site, not its record.
+    [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
+      || die3 "prune: $wt has uncommitted changes. Commit or stash there first; prune never forces"
+    # The tear-down runs in a subshell: its own cd into the tree must not be where the remove runs.
+    if [ -n "$(jq -r '.environment.recipe // empty' "$task_json")" ]; then
+      ( do_environment --project "$project_path" "$id" down ) \
+        || die3 "prune: the tear-down of $id failed, so $wt stays. See $task_dir/records/environment-down.txt"
+    fi
+    if [ -d "$wt" ]; then
+      said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
+        || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
+    fi
+    if printf '%s\n' "$merged" | grep -Fqx "$branch"; then
+      git -C "$CODE_PATH" branch -d "$branch" >/dev/null 2>&1 && branch_word="removed" || branch_word="kept, git refused to delete it"
+    else
+      branch_word="kept, not merged into $current"
+    fi
+    write_atomic "$task_json" "$(jq 'del(.worktree, .environment)' "$task_json")"
+    commit_task_change "$project_path" "Prune the worktree of ${id}" "the task is complete and a person chose this tree" "" "" "$id" "prune" \
+      || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    printf 'pruned: %s %s branch %s %s\n' "$id" "$wt" "$branch" "$branch_word"
+  done <<TA_IDS
+$ids
+TA_IDS
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -870,5 +1213,7 @@ case "$action" in
   split) do_split "$@" ;;
   set-run-mode) do_set_run_mode "$@" ;;
   save) do_save "$@" ;;
+  environment) do_environment "$@" ;;
+  prune) do_prune "$@" ;;
   *) usage; exit 3 ;;
 esac
