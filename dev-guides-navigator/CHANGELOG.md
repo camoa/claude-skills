@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.1 (2026-09-14)
 
 ### Changed
 - **Every mode runs as one script call.** `scripts/dev-guides-lookup.sh <mode> [args]` holds
