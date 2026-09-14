@@ -29,6 +29,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # metacharacter in it would mean something its author did not write.
 
 set -u
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)}"
 # shellcheck source=../../../scripts/lib/registry.sh

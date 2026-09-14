@@ -46,6 +46,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # nothing, exits 1 and prints nothing to stdout, never confused with 3.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"

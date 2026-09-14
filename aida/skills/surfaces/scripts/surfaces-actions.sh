@@ -38,6 +38,7 @@
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no variable as a case pattern.
 
 set -uo pipefail
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -- "$(dirname -- "$SCRIPT_SOURCE")/../../.." >/dev/null 2>&1 && pwd -P)}"
 STEPS_DIR="${PLUGIN_ROOT}/skills/surfaces/references"

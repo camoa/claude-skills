@@ -74,6 +74,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # flag. Sorting uses LC_ALL=C so byte order, not the caller's locale, decides "most recent."
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"

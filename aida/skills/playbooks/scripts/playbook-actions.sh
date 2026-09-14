@@ -27,6 +27,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no variable as a case pattern.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 command -v jq >/dev/null 2>&1 || { printf 'playbook-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 

@@ -69,6 +69,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # heading read return empty on Debian and Ubuntu in version 5).
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 # Under zsh, array indices start at 1 by default; bash always starts at 0. do_split below indexes
 # its child_ids/child_goals/child_criteria_json arrays the bash way throughout (a plain `i=0`

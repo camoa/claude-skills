@@ -31,6 +31,9 @@ Live-run rows 43 to 53.
   `fetch-failed` when the file is absent.
 
 ### Fixed
+- Every action script ignores SIGPIPE, so a caller that pipes an action through `head` cannot
+  lose the writes that follow the lines it keeps. Found through `record`, whose render came
+  after its summary; a sweep found sixteen more actions in that shape, and the trap covers all.
 - A never-saved task blocks compaction only once it holds a version 6 record, so a repaired
   version 5 task with no version 6 run compacts freely.
 - `task create` step 4 stops only on the refused worktree entry.

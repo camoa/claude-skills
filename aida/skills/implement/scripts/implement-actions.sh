@@ -444,6 +444,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      Declare every name the loop uses above the loop, and assign inside it.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 if [ -n "${ZSH_VERSION:-}" ]; then
   setopt KSH_ARRAYS 2>/dev/null

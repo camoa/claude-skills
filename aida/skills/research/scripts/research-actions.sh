@@ -115,6 +115,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # glob (`c[1-9][0-9]*`), never a regular expression, the same way scope-actions.sh checks one.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+# A caller that pipes this through `head` closes the pipe after the lines it keeps. With SIGPIPE
+# at its default the next echo kills the script, and every write after that echo is lost (live-run
+# row 56). Ignored, a blocked print is a write error the script survives; the writes still happen.
+trap '' PIPE
 
 if [ -n "${ZSH_VERSION:-}" ]; then
   setopt KSH_ARRAYS 2>/dev/null
