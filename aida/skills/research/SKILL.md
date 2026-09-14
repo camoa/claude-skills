@@ -325,8 +325,10 @@ of this conversation. It writes `records/research-distill.json`. Then run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
-`gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written;
-dispatch again. Exit 4 means the sidecar is malformed; say so.
+`gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written.
+Send the same agent one message: write the file and read it back. An agent has reported a write
+it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar is
+malformed; say so.
 
 Then show what research found, before anything else. This is a presentation, not a question.
 Research asks nothing here, and the person speaks up only when something looks missing. Read
@@ -370,7 +372,8 @@ else. It writes `records/research-split.json`. Then run:
 It prints `recommendation:`, `children:`, one `child:` line per child with its criterion count,
 and `reason:` with the first sentence. Show those lines.
 
-Exit 2: the advisor wrote no sidecar. Dispatch once more. Run `split-read` again. Still exit 2:
+Exit 2: the advisor wrote no sidecar. Send it one message to write and read back, then run
+`split-read` again. Still exit 2:
 say the advisor wrote no sidecar. Go on flat. Exit 4: say the sidecar is malformed, with the
 script's stderr line. Go on flat.
 

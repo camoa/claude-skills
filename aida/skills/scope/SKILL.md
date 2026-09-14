@@ -298,7 +298,9 @@ denied that account. It writes `records/scope-distill.json`. Then run:
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line. Acting on one is the relevant step above run again; the check never blocks. Exit 2
-means the sidecar was not written; dispatch again. Exit 4 means the sidecar is malformed; say so.
+means the sidecar was not written. Send the same agent one message: write the file and read it
+back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2
+repeats. Exit 4 means the sidecar is malformed; say so.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove` or `set-mechanism` again. A drafted line is `designer`, and

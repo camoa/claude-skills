@@ -65,7 +65,7 @@ set -uo pipefail  # not -e: a sourced file must not exit the caller's shell on a
 SCHEMA_CHECK__COMPARE_JQ='
   # Expected JSON-Schema type names for one property definition. Both schema files this ships with
   # use only three shapes for a field: a plain "type", a nullable "oneOf" of null plus one other
-  # option, or a bare "$ref" (only ever to an object $def). A jq comparison, never a full
+  # option, or a bare "$ref" (only ever to an object under `$defs`). A jq comparison, never a full
   # JSON-Schema validator. This reads exactly the three shapes those files actually use.
   def expected_types:
     if has("type") then
@@ -85,20 +85,21 @@ SCHEMA_CHECK__COMPARE_JQ='
   # Constraints declared directly on one property definition, checked only once the value type
   # already matches, so a string check never runs against a number, and so on. Checks exactly
   # four keywords, because those are the only ones a schema this library serves declares directly
-  # on a property: minLength and pattern for strings, minItems for arrays, enum for any type.
-  def constraint_failures($def; $t; $v):
+  # on a property: minLength and pattern for strings, minItems for arrays, enum for any type. The
+# parameter is not named $def: jq 1.6, the version Ubuntu 22.04 ships, rejects a keyword there.
+  def constraint_failures($fieldDef; $t; $v):
     [
-      ( if $t == "string" and ($def | has("minLength")) and (($v | length) < $def.minLength)
-        then {constraint: "minLength", detail: ("must be at least " + ($def.minLength | tostring) + " character(s) long, found " + ($v | length | tostring))}
+      ( if $t == "string" and ($fieldDef | has("minLength")) and (($v | length) < $fieldDef.minLength)
+        then {constraint: "minLength", detail: ("must be at least " + ($fieldDef.minLength | tostring) + " character(s) long, found " + ($v | length | tostring))}
         else empty end ),
-      ( if $t == "string" and ($def | has("pattern")) and (($v | test($def.pattern)) | not)
-        then {constraint: "pattern", detail: ("must match the pattern " + $def.pattern)}
+      ( if $t == "string" and ($fieldDef | has("pattern")) and (($v | test($fieldDef.pattern)) | not)
+        then {constraint: "pattern", detail: ("must match the pattern " + $fieldDef.pattern)}
         else empty end ),
-      ( if $t == "array" and ($def | has("minItems")) and (($v | length) < $def.minItems)
-        then {constraint: "minItems", detail: ("must have at least " + ($def.minItems | tostring) + " item(s), found " + ($v | length | tostring))}
+      ( if $t == "array" and ($fieldDef | has("minItems")) and (($v | length) < $fieldDef.minItems)
+        then {constraint: "minItems", detail: ("must have at least " + ($fieldDef.minItems | tostring) + " item(s), found " + ($v | length | tostring))}
         else empty end ),
-      ( if ($def | has("enum")) and (($def.enum | index($v)) == null)
-        then {constraint: "enum", detail: ("must be one of: " + ($def.enum | map(tostring) | join(", ")))}
+      ( if ($fieldDef | has("enum")) and (($fieldDef.enum | index($v)) == null)
+        then {constraint: "enum", detail: ("must be one of: " + ($fieldDef.enum | map(tostring) | join(", ")))}
         else empty end )
     ];
   ($schema[0].properties // {}) as $props

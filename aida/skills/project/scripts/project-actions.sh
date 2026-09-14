@@ -409,13 +409,14 @@ do_report() {
     echo "DECLINED: false"
   fi
   # A version 5 folder under the base whose code path is this directory, so the skill offers the
-  # switch before a new project. Reads only the `**Code path:**` line; registers nothing.
+  # switch before a new project. Reads only the `**Code path:**` line, in either case of P, the
+  # way version 5 wrote it; registers nothing.
   # No version 6 base recorded: version 5's own base is scanned, so a first run finds them.
   local base v5 v5_code
   base="$(settings_get_projects_base 2>/dev/null)" || base="$(v5_projects_base)" || base="$PROJECTS_HOME_DEFAULT"
   while IFS= read -r v5; do
     [ -n "$v5" ] && [ -f "$v5/project_state.md" ] && [ ! -e "$v5/project.json" ] || continue
-    v5_code="$(sed -n 's/^\*\*Code path:\*\* *//p' "$v5/project_state.md" | head -n 1)"
+    v5_code="$(sed -n 's/^\*\*Code [Pp]ath:\*\* *//p' "$v5/project_state.md" | head -n 1)"
     [ -n "$v5_code" ] && [ "$(canon_path "$v5_code")" = "$cwd" ] && echo "V5: $v5"
   done < <(find "$base" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
   echo "PROJECTS:"
@@ -447,7 +448,7 @@ register_v5_folder() {
   [ -d "$folder" ] && [ -f "$folder/project_state.md" ] && [ ! -e "$folder/project.json" ] || return 1
   folder="$(canon_path "$folder")"
   v5_path="$(sed -n 's/^\*\*Path:\*\* *//p' "$folder/project_state.md" | head -n 1)"
-  code_path="$(sed -n 's/^\*\*Code path:\*\* *//p' "$folder/project_state.md" | head -n 1)"
+  code_path="$(sed -n 's/^\*\*Code [Pp]ath:\*\* *//p' "$folder/project_state.md" | head -n 1)"
   [ -n "$code_path" ] || die3 "switch: $folder/project_state.md has no **Code path:** line, so nothing says where the code lives."
   [ "$(canon_path "$v5_path")" = "$folder" ] \
     || echo "NOTE: project_state.md says the project folder is '$v5_path'. That line is stale; the folder is registered where it is."
@@ -567,7 +568,7 @@ do_state() {
       "$why" \
       "" \
       "" \
-      "project" "$new_state" \
+      "project" "$new_state" project.json \
       || printf 'project-actions: the state change was written but not committed. Commit it by hand.\n' >&2
 
     echo "STATE: ${old_state} -> ${new_state}"
@@ -635,7 +636,7 @@ do_set_code_path() {
     "requested" \
     "" \
     "" \
-    "project" "code-path" \
+    "project" "code-path" project.json \
     || printf 'project-actions: the code-path change was written but not committed.\n' >&2
 
   run_check "$project_path"
@@ -657,7 +658,7 @@ do_set_code_path() {
       "the proposed code path named a refused location; see the safety report" \
       "" \
       "" \
-      "project" "code-path" \
+      "project" "code-path" project.json \
       || printf 'project-actions: the restore was written but not committed.\n' >&2
 
     printf 'project-actions: %s names a refused location. The code path was restored to %s.\n' "$new_path" "$old_path" >&2
@@ -684,7 +685,7 @@ do_set_frameworks() {
   write_project_field "$project_path" "could not update frameworks in $project_path/project.json" \
     --argjson f "$(printf '%s\n' "$@" | jq -R . | jq -s .)" '.frameworks = $f'
 
-  commit_project "$project_path" "Set frameworks to $*" "requested" "" "" "project" "frameworks" \
+  commit_project "$project_path" "Set frameworks to $*" "requested" "" "" "project" "frameworks" project.json \
     || printf 'project-actions: the frameworks were written but not committed.\n' >&2
 
   echo "FRAMEWORKS: $*"
@@ -756,7 +757,7 @@ do_add_source() {
     "requested" \
     "" \
     "" \
-    "project" "source" \
+    "project" "source" project.json \
     || printf 'project-actions: the source was written but not committed.\n' >&2
 
   echo "SOURCE: ${folder} provides ${kind}"
@@ -793,7 +794,7 @@ do_subscription() {
     write_project_field "$project_path" "could not update playbookSubscriptions in $project_path/project.json" \
       --arg k "$fw" --arg id "$set_id" '.playbookSubscriptions[$k] = ((.playbookSubscriptions[$k] // []) - [$id]) | if .playbookSubscriptions[$k] == [] then del(.playbookSubscriptions[$k]) else . end'
   fi
-  commit_project "$project_path" "$(printf '%s' "$op" | sed 's/^s/S/; s/^u/U/') $fw playbook $set_id" "requested" "" "" "project" "playbook" \
+  commit_project "$project_path" "$(printf '%s' "$op" | sed 's/^s/S/; s/^u/U/') $fw playbook $set_id" "requested" "" "" "project" "playbook" project.json \
     || printf 'project-actions: the subscription was written but not committed.\n' >&2
   echo "SUBSCRIPTIONS: $(jq -r --arg k "$fw" '$k + " " + ((.playbookSubscriptions[$k] // []) | join(" "))' "$project_path/project.json")"
   run_check "$project_path"
@@ -889,7 +890,7 @@ do_task_rule() {
       "$why" \
       "" \
       "" \
-      "project" "task-rule" \
+      "project" "task-rule" project.json \
       || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
     echo "DECLINED: the task rule was offered for ${project_name} and will not be offered again."
     run_check "$project_path"
@@ -959,7 +960,7 @@ do_task_rule() {
     "$why" \
     "" \
     "" \
-    "project" "task-rule" \
+    "project" "task-rule" project.json \
     || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
 
   run_check "$project_path"
@@ -1003,7 +1004,7 @@ do_task_rule_remove() {
   write_project_field "$project_path" "could not update taskRule in $project_path/project.json" \
     '.taskRule = (if .taskRule == null then null else (.taskRule + {accepted: false}) end)'
 
-  commit_project "$project_path" "Remove the task rule" "requested" "" "" "project" "task-rule" \
+  commit_project "$project_path" "Remove the task rule" "requested" "" "" "project" "task-rule" project.json \
     || printf 'project-actions: the task-rule removal was written but not committed.\n' >&2
 
   run_check "$project_path"
