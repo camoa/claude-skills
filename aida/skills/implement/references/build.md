@@ -5,9 +5,11 @@ reference now. Nothing below may change one.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `implement`
-point and each framework the project declares. Name the role, and pass the lookup's answer in its
-own word: SKILL.md holds both rules.
+Dispatch `catalog-identifier` for the `implement` point and each framework, but only when no
+earlier step of this build has resolved it, the tests step included. Name the role, and pass the
+lookup's answer in its own word: SKILL.md holds both rules. Once resolved, reuse the path per
+framework for every order in this build. No record holds these paths. They live in the
+conversation, so a fresh window resolves them again.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.
@@ -15,11 +17,15 @@ the path. Do not read the body here.
 Do not give the test-authoring recipe to the implementer. It chooses a level and names a test, and
 this reader may do neither. Pass its path to `dispatch-open` as `--deny-read`.
 
-Dispatch `catalog-identifier` twice more, for the `test-execution` point and the `review` point,
-each for this order's framework. These are two more recipes, neither the `implement` one above.
-Pass both paths straight through to `build-record` below. The script reads their command blocks
-itself, per SKILL.md, and these are the same two files preconditions already resolved for the
-baseline.
+Read the `test-execution` and `review` recipe paths from the records preconditions already wrote,
+instead of asking the navigator again. `implementation/preconditions.json` holds the
+test-execution recipe at `frameworks[].recipePath`, for each framework whose lookup resolved.
+`implementation/baseline.json` holds the review recipe at `checkRecipes[].path`, for each
+framework that had one. A framework absent from a list had no recipe at the baseline; pass no
+flag for it, the way the baseline ran without one. Pass the paths straight through to
+`build-record` below. The script reads their
+command blocks itself, per SKILL.md. The check recipe must equal the one the baseline used, so
+reading it from that record costs nothing extra.
 
 ## Assemble what the implementer may see
 
