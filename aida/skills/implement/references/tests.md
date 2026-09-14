@@ -67,14 +67,16 @@ Open it first:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" test-author <order id> \
   --deny-read <path of the recipe that carries the coding standards> \
-  --allow-write <path the tests go in>
+  --allow-write <path the tests go in> \
+  --test-glob <pattern from the implement recipe>
 ```
-The script refuses a role name that matches no agent this plugin ships, and for this role it adds
-the production source to the denied reads itself, taken from the owned files every work order in
-the frozen snapshot declares. An owned file under the `--allow-write` path is a test file, and it
-stays readable, so the author can read back what it writes. Never type those paths here. It
-prints what it denied; read that list, because it is the whole of what separates the tests from
-the code they judge.
+One `--test-glob` per pattern, the same ones the freeze below takes. The script refuses a role
+name that matches no agent this plugin ships, and for this role it adds the production source to
+the denied reads itself, taken from the owned files every work order in the frozen snapshot
+declares. An owned file that matches a test glob is a test, and it stays readable, so the author
+can read back what it writes. The globs decide, not the write path, because a framework may keep
+its tests beside the source. Never type the denied paths here. It prints what it denied; read
+that list, because it is the whole of what separates the tests from the code they judge.
 
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
 next dispatch refuse, and it names the role and order still holding it.

@@ -66,7 +66,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh restart <task_folder> --reason <text>
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
-#                            [--allow-write <path relative to codePath>]...
+#                            [--allow-write <path relative to codePath>]... \
+#                            [--test-glob <glob>]...
 #
 # `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
 # that matches none of them. For the four roles that read or write the code, it also derives the
@@ -565,6 +566,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
+                            [--test-glob <glob from the implement recipe>]...
        implement-actions.sh dispatch-close <task_folder>
        implement-actions.sh step <name>
 EOF
@@ -6137,7 +6139,7 @@ do_restart() {
 # ------------------------------------------------------------------------------------------------
 
 do_dispatch_open() {
-  local task_arg="" role="" unit_id="" deny_raw="" allow_raw=""
+  local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --deny-read)
@@ -6148,6 +6150,11 @@ do_dispatch_open() {
       --allow-write)
         [ "$#" -ge 2 ] || die 3 "dispatch-open: --allow-write needs a path relative to codePath"
         allow_raw="$allow_raw$2
+"
+        shift 2 ;;
+      --test-glob)
+        [ "$#" -ge 2 ] || die 3 "dispatch-open: --test-glob needs a glob from the implement recipe"
+        test_glob_raw="$test_glob_raw$2
 "
         shift 2 ;;
       -*) die 3 "dispatch-open: unrecognized argument: $1" ;;
@@ -6238,19 +6245,34 @@ do_dispatch_open() {
   # failure the checkpoint exists to catch (ideal/implementation.md, "The trace matrix and its
   # checkpoint").
   if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "row-checker" ]; then
-    local owned_json owned_count allow_now_json
-    # An owned file that sits under a path this dispatch may write is a test file, not production
-    # source: design lists an order's tests under ownedFiles so the overlap check sees them, and
-    # denying them here denied the test author the one file it was dispatched to write (live-run
-    # row 58). The allowed write paths are the caller's, given before the derivation runs.
-    allow_now_json="$(printf '%s' "$allow_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
-    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson allow "$allow_now_json" \
-      '[.workOrders[]?.ownedFiles[]?] | unique
-       | map(select(. as $f | ($allow | any(. as $a | $f == $a or ($f | startswith($a + "/")))) | not))')"
+    local owned_json owned_count kept="" f g
+    # An owned file that matches a test-file glob is a test, not production source: design lists
+    # an order's tests under ownedFiles so the overlap check sees them, and denying them here
+    # denied the test author the one file it was dispatched to write (live-run row 58). The globs
+    # are the implement recipe's own, the ones tests-freeze pins, so a framework whose tests sit
+    # beside the source (Go) keeps every source file denied; an allowed directory would not.
+    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
+    if [ -n "$test_glob_raw" ]; then
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        local is_test=false
+        while IFS= read -r g; do
+          [ -n "$g" ] || continue
+          tf_path_matches_catalog_glob "$f" "$g" && is_test=true
+        done <<TG_GLOBS
+$test_glob_raw
+TG_GLOBS
+        [ "$is_test" = true ] || kept="$kept$f
+"
+      done <<TG_OWNED
+$(printf '%s' "$owned_json" | jq -r '.[]')
+TG_OWNED
+      owned_json="$(printf '%s' "$kept" | jq -R -s 'split("\n") | map(select(length>0))')"
+    fi
     owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \
-      || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+      || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file outside the test globs, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi
