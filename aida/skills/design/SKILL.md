@@ -362,6 +362,36 @@ both claim, and two orders declaring the same file. Implementation refuses to st
 and tells the person to finish design, so leaving one open only moves the stop to a later and more
 expensive place.
 
+## Critique the design
+
+Once the check comes back clean, and before closing, have three readers who were not in this
+conversation read the orders. The check counted ids; it read no sentence. Dispatch the
+`design-critic` role three times, in parallel, each with the task folder and one lens:
+`contract`, `reuse`, `buildability`. Name the role; a dispatch that names none runs as the
+general agent with write tools. Give it the task folder and the lens, never a summary of this
+conversation: being denied that account is why the role exists.
+
+Each critic writes `<task_folder>/records/design-critique-<lens>.md`, a findings table and a
+`findings: N` last line. Wait for all three files. A file that never arrives, or arrives without
+its `findings:` line, means that lens was not read. Dispatch it again, once. If it fails twice,
+say so and go on: the close leaves that file out and names it. Read the three files, never the
+dispatch replies.
+
+A person reads the findings, because a critic that can block trains the builder to write for the
+critic. The critic decides nothing about closing, and neither does the count.
+
+**Interactive:** show the findings grouped by work order, each with its severity, what it found,
+why it matters and what would fix it. Take one answer per finding: change the order, or leave
+it. A change is one of the `update`, `add-owned-file`, `add-done-when` or `add-test` calls above,
+then `check` again. A leave needs a reason from the person. Write it into that order's
+`reasoning` with `update`, appended to what is there, so the reason outlives this conversation.
+A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
+the contract has to change.
+
+**Autonomous:** ask nothing and change nothing. The findings stay in the three files, and the
+close below records their paths and the count, so a person sees them later. Say once, at the
+end of this run, that the critique's findings were recorded and not judged.
+
 ## Close the design
 
 Once design is done, close it. Run:
@@ -375,7 +405,8 @@ Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recip
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 Closing records what design closed on: a hash over the contract and every work order, the run mode,
 and who was present. Pass the run mode you settled at the start. An interactive close records
-`person`, an autonomous one records `nobody`, and implementation reads which.
+`person`, an autonomous one records `nobody`, and implementation reads which. It also records the
+critique files under `records/` and their finding count, so a person sees what was read before closing.
 
 A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
 Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and
