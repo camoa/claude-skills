@@ -23,7 +23,10 @@ folder. Read it first; everything below is in it or named by it.
 
 In review mode, the brief holds the criteria this order serves and owns, the non-goals it names,
 and the order record. It names the diff as a file, the frozen tests, and the builder's report. It
-holds the results of the eight checks that already ran, and both interface texts. Its `locksIn`
+holds the results of the eight checks that already ran, and both interface texts. On an order
+whose proof is `gate`, read the `configuration-gate` output: a line 2 that printed `There are
+no changes to import` means the export changed nothing against the seed, and the order is
+refused with a high finding, as the recipe says. Its `locksIn`
 line names any test frozen green because existing code already met it. The reason sits on
 that test's row in the per-test record the line names. Read it with the diff. Write your
 findings to the path the brief gives, in this shape:

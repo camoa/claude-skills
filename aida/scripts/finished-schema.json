@@ -135,10 +135,11 @@
             "type": "string",
             "enum": [
               "person",
-              "model"
+              "model",
+              "gate"
             ]
           },
-          "description": "Who judged this criterion's rows, each value once. Two orders serving one criterion can be judged by a person and by a model, and both are named rather than folded into one answer."
+          "description": "Who judged this criterion's rows, each value once. Two orders serving one criterion can be judged by a person and by a model, and both are named rather than folded into one answer. `gate` is the configuration check of an order whose proof is gate: machine-judged, never counted in rowsJudgedByModel."
         }
       }
     },

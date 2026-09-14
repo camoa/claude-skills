@@ -112,6 +112,7 @@
           "type": "string",
           "enum": [
             "order-tests",
+            "configuration-gate",
             "suite-regression",
             "coding-standards",
             "static-analysis",
@@ -120,7 +121,7 @@
             "frozen-tests",
             "interface-record"
           ],
-          "description": "Which of the eight checks this is. The ids are in the same order docs/implementation.md names the checks in: order-tests and suite-regression are 'Every test of this order passes' and 'No test outside the baseline fails'; coding-standards, static-analysis and security are the three tool checks; owned-files and frozen-tests are 'The realized diff touches only files this order owns' and 'Every frozen test file is unchanged'; interface-record is 'The interface record matches what the order declared'."
+          "description": "Which of the eight checks this is. The ids are in the same order docs/implementation.md names the checks in: order-tests and suite-regression are 'Every test of this order passes' and 'No test outside the baseline fails'; configuration-gate takes the order-tests slot on an order whose proof is gate: the `## Configuration gate` lines of the implement recipe, run in the worktree, met when every line exits 0, unmet naming the first line that did not, unknown when the task records no environment, no implement recipe was passed, or the recipe carries no such block (live-run row 65). It is the floor for such an order the way order-tests is for every other; coding-standards, static-analysis and security are the three tool checks; owned-files and frozen-tests are 'The realized diff touches only files this order owns' and 'Every frozen test file is unchanged'; interface-record is 'The interface record matches what the order declared'."
         },
         "verdict": {
           "type": "string",

@@ -37,7 +37,13 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/row" },
-      "description": "One entry per machine-verified criterion a `--test` named, one per person-verified criterion the unit serves or owns, and one for the unit's own doneWhen when a `--test` proves it. A machine-verified criterion the unit only serves and no test names gets no row: its proof lives with the order that owns it (live-run row 59). A criterion the unit neither serves nor owns never gets a row, whatever a `--test` might have claimed for it: that claim is refused before this file is ever written. Never empty: a record with no row is refused (exit 74)."
+      "description": "One entry per machine-verified criterion a `--test` named, one per person-verified criterion the unit serves or owns, and one for the unit's own doneWhen when a `--test` proves it. A machine-verified criterion the unit only serves and no test names gets no row: its proof lives with the order that owns it (live-run row 59). A criterion the unit neither serves nor owns never gets a row, whatever a `--test` might have claimed for it: that claim is refused before this file is ever written. Never empty when `proof` is tests: a record with no row is refused (exit 74). When `proof` is gate the unit takes no `--test`, so this holds only the checklist rows of its person-verified criteria, and may be empty."
+    },
+    "proof": {
+      "type": "string",
+      "enum": ["tests", "gate"],
+      "default": "tests",
+      "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). Absent on a record written before this field existed, which reads as tests."
     }
   },
   "$defs": {

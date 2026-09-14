@@ -123,6 +123,12 @@
       "default": "",
       "minLength": 1,
       "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against."
+    },
+    "proof": {
+      "type": "string",
+      "enum": ["tests", "gate"],
+      "default": "tests",
+      "description": "What proves this order built what it says. `tests`, the default and what an order written before this field existed reads as: the tests it declares, frozen before the code is written. `gate`, for a unit whose deliverable is exported configuration: it declares no test (check-design.sh refuses one), no test author is dispatched, and its build runs the `## Configuration gate` lines of the framework's implement recipe as its own check, every line exit 0. Its owned machine criteria are judged by that check at close. Such a unit is sized around the operation and owns every file the operation rewrites; the behavioural proof lives with the order that consumes what it configures (live-run rows 65 and 66, audit/14-live-run-gaps.md). TDD is about code, not configuration: a test that reads YAML back restates the file and cannot fail for the right reason."
     }
   },
   "$defs": {

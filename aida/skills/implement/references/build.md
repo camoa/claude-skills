@@ -107,9 +107,13 @@ Run:
   --started-at <the commit the attempt began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
+  [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
+`--implement-recipe` is the path resolved above, the one the implementer was given. Pass it for
+an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
+runs them as the order's own check. Every other order ignores it.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
@@ -145,7 +149,12 @@ that marker and this flag is not read.
 
 This step runs all eight deciding checks. The record holds every one.
 
-- **order-tests.** Do this order's own frozen tests pass.
+- **order-tests.** Do this order's own frozen tests pass. On an order whose proof is `gate` this
+  slot is `configuration-gate` instead. Does every `## Configuration gate` line of the
+  implement recipe exit 0, run in the worktree. The first line that does not is named, with its
+  output. It reads unknown when the task records no environment, when no `--implement-recipe`
+  was passed, or when that recipe carries no such block. The detail says which. A line 2 that
+  printed `There are no changes to import` is a finding for the reviewer, not for this check.
 - **suite-regression.** Does anything that passed at the baseline now fail.
 - **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
   have.
@@ -184,7 +193,8 @@ An unknown on interface-record does not spend the attempt. The declaration named
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
 other unmet or unknown does.
 
-**order-tests is the floor.** Every other check may answer undeclared and still let the order go on
+**order-tests is the floor,** or `configuration-gate` on a `gate` order. Every other check may
+answer undeclared and still let the order go on
 to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
 may not. It is the one check that says this order's own code does what its tests ask. Undeclared or
 unknown there means nothing here ran, so the order stays at `code-written`, whatever the other

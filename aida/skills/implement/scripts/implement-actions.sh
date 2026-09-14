@@ -44,6 +44,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            --started-at <commit the attempt began from> \
 #                            [--test-recipe <framework>=<path>]... \
 #                            [--check-recipe <framework>=<path>]... \
+#                            [--implement-recipe <framework>=<path>]... \
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
@@ -54,6 +55,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            --started-at <commit the round began from> \
 #                            [--test-recipe <framework>=<path>]... \
 #                            [--check-recipe <framework>=<path>]... \
+#                            [--implement-recipe <framework>=<path>]... \
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>] \
 #                            [--scope-insufficient <finding id>=<reason>]...
@@ -250,7 +252,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  29  `tests-freeze` found a criterion the unit owns whose verifiedBy is machine with no --test
 #      row naming it. A criterion the unit only serves needs no test from it: exactly one order
 #      owns a criterion, and that order's tests are the ones that can observe it (live-run row
-#      59). A serving order freezes its tests against its own doneWhen instead.
+#      59). A serving order freezes its tests against its own doneWhen instead. An order whose
+#      proof is gate is exempt: it takes no --test at all, and its owned machine criterion is
+#      judged by the recipe's `## Configuration gate` lines at build time (live-run row 65).
 #  30  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is person with no
 #      --checklist row.
 #  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
@@ -409,7 +413,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
-#      freezes a reference that proves nothing.
+#      freezes a reference that proves nothing. An order whose proof is gate is exempt from the
+#      second half: its record holds no test row on purpose.
 #  75  `dispatch-close` was given a task folder that is not the one the open record names. The
 #      record lives at the project root and two tasks in one project is a supported state, so a
 #      second task's close would clear the first task's live permission record. The message names
@@ -3138,6 +3143,15 @@ do_tests_freeze() {
   tt_load_snapshot "tests-freeze"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-freeze"
 
+  # An order whose proof is gate freezes no test: its deliverable is exported configuration, and
+  # its build runs the implement recipe's `## Configuration gate` lines as its own check (live-run
+  # row 65). It still takes a --checklist for a person-verified criterion it serves or owns.
+  local tf_proof
+  tf_proof="$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')"
+  if [ "$tf_proof" = "gate" ] && [ -n "$test_raw" ]; then
+    die 3 "tests-freeze: $unit_id is proved by the configuration gate and takes no --test. A test for exported configuration reads the YAML back and cannot fail for the right reason; the gate lines are its check."
+  fi
+
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
   # Every guard below iterates a per-criterion list, so an order with none passes all of them and
   # freezes a record with no test and no glob in it. The reference then proves nothing, and the
@@ -3303,7 +3317,7 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_machine" ] \
+  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] \
     || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
@@ -3544,7 +3558,7 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
-  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] \
+  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -3633,8 +3647,8 @@ TF_EOF
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
-    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" \
-    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows}')"
+    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" \
+    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof}')"
 
   if [ -f "$record_file" ]; then
     local existing_no_date new_no_date
@@ -3869,11 +3883,15 @@ br_require_real_base() {
 #   BRC_VALUES          the tab-separated `--value` list every other placeholder is read from
 #   BRC_NOTHING_RAN, BRC_HAVE_NOTHING_RAN   the caller's own marker for a green run that selected
 #                       nothing, used only where the framework's recipe declares none of its own
+#   BRC_GATE_RECIPES    the tab-separated `--implement-recipe` list, one `<framework>\t<path>` per
+#                       line, read only for an order whose proof is gate: the recipe whose
+#                       `## Configuration gate` lines are that order's own check
 # ------------------------------------------------------------------------------------------------
 BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
+BRC_GATE_RECIPES=""
 
 # One line of tool or suite output as a key for comparing two runs: every run of digits removed,
 # every run of dots one dot, every run of whitespace one space, the ends trimmed. One rule for
@@ -4315,13 +4333,97 @@ br_test_check() {
   '
 }
 
+# The configuration check, in the order-tests slot of an order whose proof is gate (live-run row
+# 65). Its deliverable is exported configuration, which no test of its own can prove, so the
+# implement recipe's `## Configuration gate` lines are its check: every line exit 0 is met; the
+# first line that does not is unmet, named with its exit and its output; unknown when nothing
+# could run, and the detail says which. The lines are read by the same block reader the tool and
+# environment skills use, refused on a shell character the same way, split on spaces and run as
+# argv from the worktree through br_run_resolved, so `{paths}` expands to this order's owned files
+# and every other token comes from --value. The first line restores the snapshot the environment's
+# bring-up took, so a task with no environment recorded reads unknown before any line runs. Two
+# recipes each carrying the block are two answers to one question, exit 72. Prints the check object.
+br_gate_check() {
+  local verdict="" detail="" rc="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
+  local line n=0 argv_json result kind payload owned_json run_out
+  if [ "$(jq -r '.environment | type' "$TASK_PATH/task.json" 2>/dev/null)" != "object" ]; then
+    verdict="unknown"
+    detail="task.json records no environment, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
+  elif [ -z "$BRC_GATE_RECIPES" ]; then
+    verdict="unknown"
+    detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."
+  else
+    while IFS="$(printf '\t')" read -r fw rp; do
+      [ -n "$fw" ] || continue
+      lines="$(sh_blocks_under "$rp" "Configuration gate" | grep '[^[:space:]]')"
+      [ -n "$lines" ] || continue
+      count=$((count + 1))
+      [ "$count" -le 1 ] \
+        || die 72 "$BRC_WHO: $gate_fw and $fw each carry a ## Configuration gate, and nothing here may choose between two answers to one question."
+      gate_fw="$fw"; gate_recipe="$rp"; gate_lines="$lines"
+    done <<BR_GATE
+$BRC_GATE_RECIPES
+BR_GATE
+    if [ -z "$gate_recipe" ]; then
+      verdict="unknown"
+      detail="the implement recipe carries no ## Configuration gate block, so nothing here can prove exported configuration: $(printf '%s' "$BRC_GATE_RECIPES" | cut -f2 | paste -s -d ' ' -). The recipe lacks it."
+    else
+      owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+      outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+      run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        n=$((n + 1))
+        refuse_if_unsafe "$BRC_WHO" "$gate_recipe" "$line" || die 3 "$BRC_WHO: the ## Configuration gate line above is refused."
+        printf '+ %s\n' "$line" >>"$outfile"
+        argv_json="$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')"
+        result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$run_out" "$owned_json" "$BRC_VALUES")"
+        cat "$run_out" >>"$outfile"
+        kind="$(printf '%s' "$result" | cut -f1)"
+        payload="$(printf '%s' "$result" | cut -f2-)"
+        if [ "$kind" = "UNRESOLVED" ]; then
+          verdict="unknown"; rc=""
+          detail="the token {$payload} in gate line $n ($line) has no supplied value; pass --value $payload=<value>."
+          break
+        fi
+        rc="$payload"
+        if [ "$rc" != "0" ]; then
+          verdict="unmet"
+          detail="gate line $n ($line) exited $rc on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0."
+          break
+        fi
+      done <<BR_GATE_LINES
+$gate_lines
+BR_GATE_LINES
+      if [ -z "$verdict" ]; then
+        verdict="met"
+        detail="every ## Configuration gate line ($n of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output."
+      fi
+      if [ -n "$rc" ]; then
+        jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --arg out "$(cat "$outfile")" \
+          '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
+        rm -f "$outfile" "$run_out"
+        return 0
+      fi
+      rm -f "$outfile" "$run_out"
+    fi
+  fi
+  jq -n --arg verdict "$verdict" --arg detail "$detail" \
+    '{id: "configuration-gate", verdict: $verdict, detail: $detail}'
+}
+
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
-# coding-standards, static-analysis, security, owned-files, frozen-tests. Prints the JSON array.
+# coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
+# is gate the first slot holds configuration-gate instead. Prints the JSON array.
 br_seven_checks() {
   local parts_file
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
-  br_test_check "order-tests"      "orderTests" "order-tests" >>"$parts_file"
+  if [ "$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.proof // "tests"')" = "gate" ]; then
+    br_gate_check >>"$parts_file"
+  else
+    br_test_check "order-tests"    "orderTests" "order-tests" >>"$parts_file"
+  fi
   br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
   br_tool_check "coding-standards" "codingStandards" "coding-standards" >>"$parts_file"
   br_tool_check "static-analysis"  "staticAnalysis"  "static-analysis"  >>"$parts_file"
@@ -4382,6 +4484,9 @@ BR_DIFF
   if [ -n "$changed_tests" ]; then
     ftc_verdict="unmet"
     ftc_detail="these frozen test files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
+  elif [ "$frozen_count" -eq 0 ]; then
+    ftc_verdict="met"
+    ftc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') froze no test file, so there is nothing to hash."
   else
     ftc_verdict="met"
     ftc_detail="every frozen test file for $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') is unchanged."
@@ -4412,13 +4517,13 @@ br_executed_count() {
 # Two rules, and the second is the floor. Every check must answer met or undeclared, with the one
 # exempt unknown allowed. And order-tests must have answered met: that check is the only one that
 # says this order's own code does what its tests ask, so undeclared or unknown there is an order
-# nothing executed. Undeclared on every other check still continues, which is the rule step two
+# nothing executed. configuration-gate is the same floor for an order whose proof is gate. Undeclared on every other check still continues, which is the rule step two
 # already applies to a precondition a recipe declared nothing for.
 br_checks_pass() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     (all(.[]; .verdict == "met" or .verdict == "undeclared"
               or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
-    and (any(.[]; .id == "order-tests" and .verdict == "met"))'
+    and (any(.[]; (.id == "order-tests" or .id == "configuration-gate") and .verdict == "met"))'
 }
 
 # The first check that stopped the order in $1, in the recorded order, with $2 the exempt id as
@@ -4427,7 +4532,7 @@ br_first_stopper() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     [ .[] | select(.verdict == "unmet"
                    or (.verdict == "unknown" and ($exempt == "" or .id != $exempt))
-                   or (.id == "order-tests" and .verdict != "met")) ]
+                   or ((.id == "order-tests" or .id == "configuration-gate") and .verdict != "met")) ]
     | .[0] // {id:"none",verdict:"",detail:""}
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
 }
@@ -4473,7 +4578,7 @@ br_interface_check() {
 do_build_record() {
   local task_arg="" unit_id="" interface_path="" report_path="" started_at=""
   local nothing_ran="" have_nothing_ran=false
-  local test_recipes="" check_recipes="" values=""
+  local test_recipes="" check_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --interface)
@@ -4498,6 +4603,12 @@ do_build_record() {
         [ "$#" -ge 2 ] || die 3 "build-record: --check-recipe needs <framework>=<path>"
         cr_recipe_pair "build-record" "--check-recipe" "$2"
         check_recipes="$check_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --implement-recipe)
+        [ "$#" -ge 2 ] || die 3 "build-record: --implement-recipe needs <framework>=<path>"
+        cr_recipe_pair "build-record" "--implement-recipe" "$2"
+        gate_recipes="$gate_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -4642,6 +4753,7 @@ do_build_record() {
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
+  BRC_GATE_RECIPES="$gate_recipes"
 
   local seven_file seven_json interface_check_json checks_json
   seven_file="$(mktemp)" || die 3 "build-record: could not create a temporary file"
@@ -5273,7 +5385,7 @@ do_fix_brief() {
 do_fix_record() {
   local task_arg="" unit_id="" report_path="" started_at=""
   local nothing_ran="" have_nothing_ran=false
-  local test_recipes="" check_recipes="" values="" scope_raw=""
+  local test_recipes="" check_recipes="" gate_recipes="" values="" scope_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --report)
@@ -5301,6 +5413,12 @@ do_fix_record() {
         [ "$#" -ge 2 ] || die 3 "fix-record: --check-recipe needs <framework>=<path>"
         cr_recipe_pair "fix-record" "--check-recipe" "$2"
         check_recipes="$check_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --implement-recipe)
+        [ "$#" -ge 2 ] || die 3 "fix-record: --implement-recipe needs <framework>=<path>"
+        cr_recipe_pair "fix-record" "--implement-recipe" "$2"
+        gate_recipes="$gate_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -5472,6 +5590,7 @@ RV_SCOPE
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
+  BRC_GATE_RECIPES="$gate_recipes"
 
   local seven_file checks_json
   seven_file="$(mktemp)" || die 3 "fix-record: could not create a temporary file"
@@ -6043,6 +6162,30 @@ do_close() {
     --arg range "$started_at..$head_now" '
     .orders = (.orders | map(if .id == $id then (.lastStep = "closed" | .commitRange = $range) else . end))')"
   [ -n "$new_ledger" ] || die 3 "close: the ledger update for $unit_id failed."
+
+  # An order whose proof is gate froze no test and left no row at the freeze, so the judgement of
+  # every machine criterion it owns is written here, from the configuration-gate check of the
+  # record this close reads: the build record, or the last fix record. met is confirmed, judged by
+  # the gate, and the derivation below then confirms the criterion the way it does for any owner.
+  # Not met writes nothing, and the row stays not-judged. The judge is a third value because a
+  # model's row is weaker evidence queued for a person and a person's row claims a reader; the
+  # recipe's own lines are neither (live-run row 65).
+  local gate_verdict gate_detail
+  if [ "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.proof // "tests"')" = "gate" ]; then
+    gate_verdict="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].verdict // ""' "$last_record" 2>/dev/null)"
+    gate_detail="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].detail // ""' "$last_record" 2>/dev/null)"
+    if [ "$gate_verdict" = "met" ]; then
+      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg note "$gate_detail" \
+        --argjson owned "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" \
+        --argjson kinds "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]')" '
+        .criteria = ((.criteria // []) | map(
+          if ((.id as $i | $owned | index($i)) != null) and ((.id as $i | $kinds | index($i)) != null)
+          then . + {judgements: ((((.judgements // []) | map(select(.unit != $unit))))
+                                 + [{unit: $unit, verdict: "confirmed", judgedBy: "gate", note: $note}])}
+          else . end))')"
+      [ -n "$new_ledger" ] || die 3 "close: the gate judgement for $unit_id could not be written."
+    fi
+  fi
 
   # Every criterion this order serves or owns is decided now, and only now. A criterion design split
   # across several orders has no honest answer before the last of them closes, so confirmed needs

@@ -108,7 +108,8 @@ AIDA cannot know on its own:
 - What kinds of thing a work order can be about here. In Drupal a module, a service, a plugin, a
   theme, a component, a configuration entity. This is what an order is sized around.
 - What is built with configuration rather than code. A view or a content type is a work order
-  with no code in it, and it still states a test.
+  with no code in it. It states no test. Its proof is the implement recipe's
+  `## Configuration gate` lines, so it is created with `--proof gate`. The recipe's sizing rule decides what it owns.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -251,7 +252,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--surface <id>]...
+  [--proof <tests|gate>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -276,13 +277,20 @@ Then, one call per item, add what the order still needs:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-owned-file "<task_folder>" \
   --id <woId> --path "<a file or a directory this order may write, never a glob>"
+```
+A configuration unit is sized around the operation, by the recipe's rule, and owns every file
+that operation rewrites. Deleting a field owns each display that lists it. An order that owns
+the field files alone and leaves the displays to other orders cannot import on its own.
+```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. A criterion whose `verifiedBy` is
+here; the check below refuses an order that skips this. The one exception is an order created
+with `--proof gate`. It declares no test, and the configuration check judges its owned machine
+criterion at build time. A criterion whose `verifiedBy` is
 `person` needs no test, though one is never wrong to add.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
@@ -291,7 +299,8 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--surface <id>]...
+  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate>] \
+  [--surface <id>]...
 ```
 
 ## Serving a criterion is not completing it
@@ -324,7 +333,9 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every criterion with no work order serving it, and every criterion owned by zero or by more
   than one work order;
 - every work order serving no criterion;
-- every work order that owns a machine-verified criterion and declares no test;
+- every work order that owns a machine-verified criterion and declares no test, unless its proof
+  is `gate`;
+- every work order whose proof is `gate` and that declares a test;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -342,6 +353,8 @@ problem. Read the report file when the line is not enough, and fix the specific 
     exactly one order claims it;
   - a work order serving nothing needs a real `--criteria-served`, or it should not exist;
   - a work order missing a required test needs an `add-test` call;
+  - a `gate` order declaring a test needs that test removed by hand, or `--proof tests` if it
+    builds code after all;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The
@@ -371,8 +384,10 @@ Once the check comes back clean, and before closing, have three readers who were
 conversation read the orders. The check counted ids; it read no sentence. Dispatch the
 `design-critic` role three times, in parallel, each with the task folder and one lens:
 `contract`, `reuse`, `buildability`. Name the role; a dispatch that names none runs as the
-general agent with write tools. Give it the task folder and the lens, never a summary of this
-conversation: being denied that account is why the role exists.
+general agent with write tools. Give it the task folder, the lens, and the path of the design
+recipe read above, when one was. Never give it a summary of this conversation: being denied that
+account is why the role exists. The `buildability` critic reads the recipe's own sentence on a
+configuration unit and asks it of every `gate` order.
 
 Each critic writes `<task_folder>/records/design-critique-<lens>.md`, a findings table and a
 `findings: N` last line. Wait for all three files. A file that never arrives, or arrives without

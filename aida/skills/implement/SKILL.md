@@ -133,7 +133,7 @@ green with nothing to name: reported, and the step stops. Failed: frozen with it
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
 the action that takes it. `## Test commands` and `## Check commands` are parsed by the script, one
 entry per tool, each with its own argv, its `{paths}` placeholder, and its `signal` and `extensions`
-keys where present. It refuses (exit 72) when two frameworks each command one tool.
+keys where present. `## Configuration gate` is parsed the same way for an order whose proof is `gate`. It refuses (exit 72) when two frameworks each command one tool.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 

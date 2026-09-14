@@ -28,12 +28,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --title <text> [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
 #   design-actions.sh update     <task_folder> \
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
 #   design-actions.sh add-done-when  <task_folder> \
@@ -69,7 +69,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A work order file is plain JSON at <task_folder>/design/<id>.json: no fences, no markdown
 # (scripts/design-schema.json). `create` mints `id`, then writes schemaVersion, title,
 # criteriaServed, criteriaOwned, nonGoals, dependsOn, ownedFiles, interface, tests, doneWhen,
-# reasoning and diffBudget in one call; ownedFiles, tests and doneWhen start empty and grow one
+# reasoning, diffBudget and proof in one call; ownedFiles, tests and doneWhen start empty and grow one
 # entry at a time through their own add- actions, the same append-one-at-a-time shape
 # research-actions.sh's own `record` uses, because a test or a done-when sentence is free text
 # that cannot safely be packed into one comma-separated argument the way an id list can.
@@ -198,13 +198,13 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
        design-actions.sh update         <task_folder> --id <woId> [--title <text>] \
                                          [--criteria-served <id[,id...]>] \
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
@@ -337,7 +337,8 @@ wo_summary() {
     "dependsOn: " + ((.dependsOn // []) | join(",")),
     "ownedFiles: " + ((.ownedFiles // []) | length | tostring),
     "tests: " + ((.tests // []) | length | tostring),
-    "doneWhen: " + ((.doneWhen // []) | length | tostring)'
+    "doneWhen: " + ((.doneWhen // []) | length | tostring),
+    "proof: " + (.proof // "tests")'
 }
 
 # One line naming everything a check report left open, for `check` and `close` alike.
@@ -349,6 +350,7 @@ open_summary_of() {
         ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
         ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
         ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
+        ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
@@ -482,9 +484,18 @@ next_wo_id() {
 # grow them one entry at a time.
 # ------------------------------------------------------------------------------------------------
 
+# --proof takes one of two words. A unit whose deliverable is exported configuration is proved by
+# the recipe's `## Configuration gate` lines and declares no test (live-run row 65).
+proof_word_ok() {
+  case "$2" in
+    tests|gate) ;;
+    *) die3 "$1: --proof takes tests or gate, got: $2" ;;
+  esac
+}
+
 do_create() {
   local title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" diff_budget="" surfaces_json='[]'
+  local interface="" reasoning="" diff_budget="" surfaces_json='[]' proof="tests"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --title)
@@ -511,6 +522,10 @@ do_create() {
       --diff-budget)
         need_value "create" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; shift 2 ;;
+      --proof)
+        need_value "create" "--proof" "$#" "${2:-}"
+        proof_word_ok "create" "$2"
+        proof="$2"; shift 2 ;;
       --surface)
         need_value "create" "--surface" "$#" "${2:-}"
         surfaces_json="$(printf '%s' "$surfaces_json" | jq --arg id "$2" '. + [$id]')"; shift 2 ;;
@@ -538,11 +553,11 @@ do_create() {
     --argjson criteriaServed "$served_json" --argjson criteriaOwned "$owned_json" \
     --argjson nonGoals "$nongoals_json" --argjson dependsOn "$dependson_json" \
     --arg interface "$interface" --arg reasoning "$reasoning" --arg diffBudget "$diff_budget" \
-    --argjson surfaces "$surfaces_json" \
+    --argjson surfaces "$surfaces_json" --arg proof "$proof" \
     '{schemaVersion: 1, id: $id, title: $title,
       criteriaServed: $criteriaServed, criteriaOwned: $criteriaOwned, nonGoals: $nonGoals,
       dependsOn: $dependsOn, ownedFiles: [], surfaces: $surfaces, interface: $interface, tests: [], doneWhen: [],
-      reasoning: $reasoning, diffBudget: $diffBudget}')"
+      reasoning: $reasoning, diffBudget: $diffBudget, proof: $proof}')"
 
   write_atomic "$file" "$doc"
 
@@ -561,9 +576,9 @@ do_create() {
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" diff_budget="" surfaces_json='[]'
+  local interface="" reasoning="" diff_budget="" surfaces_json='[]' proof=""
   local set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
-  local set_interface=false set_reasoning=false set_diffbudget=false set_surfaces=false
+  local set_interface=false set_reasoning=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
@@ -593,6 +608,10 @@ do_update() {
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
+      --proof)
+        need_value "update" "--proof" "$#" "${2:-}"
+        proof_word_ok "update" "$2"
+        proof="$2"; set_proof=true; shift 2 ;;
       --surface)
         need_value "update" "--surface" "$#" "${2:-}"
         surfaces_json="$(printf '%s' "$surfaces_json" | jq --arg id "$2" '. + [$id]')"; set_surfaces=true; shift 2 ;;
@@ -641,6 +660,9 @@ do_update() {
   fi
   if [ "$set_surfaces" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --argjson v "$surfaces_json" '.surfaces = $v')"
+  fi
+  if [ "$set_proof" = "true" ]; then
+    doc="$(printf '%s' "$doc" | jq --arg v "$proof" '.proof = $v')"
   fi
 
   write_atomic "$file" "$doc"
