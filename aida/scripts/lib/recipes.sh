@@ -62,7 +62,7 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file
-#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files; sets RF_WRITTEN, RF_KEPT
+#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files; sets RF_WRITTEN, RF_KEPT, RF_WRITTEN_PATHS
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
 #
 # What this library takes from its caller, and never defines itself:
@@ -1188,15 +1188,18 @@ RF_FILES
 
 # Writes each file of the list $2 that is absent from $3, from the folder $4, printing `file:` per
 # write, and counts into RF_WRITTEN and RF_KEPT. $1 the action. A file that exists is kept as it is.
+# RF_WRITTEN_PATHS holds the written paths relative to $3, one per line, so a caller that refuses
+# after the write can remove those and no other.
 recipe_files_write() {
   local who="$1" list="$2" tree="$3" files_dir="$4" n rel target tab; tab="$(printf '\t')"
-  RF_WRITTEN=0; RF_KEPT=0
+  RF_WRITTEN=0; RF_KEPT=0; RF_WRITTEN_PATHS=""
   while IFS="$tab" read -r n rel; do
     [ -n "$n" ] || continue
     target="$tree/$rel"
     if [ -f "$target" ]; then RF_KEPT=$((RF_KEPT + 1)); continue; fi
     mkdir -p "$(dirname -- "$target")" && cp "$files_dir/$n" "$target" || die 3 "$who: could not write $target"
-    RF_WRITTEN=$((RF_WRITTEN + 1)); printf 'file: %s\n' "$target"
+    RF_WRITTEN=$((RF_WRITTEN + 1)); RF_WRITTEN_PATHS="$RF_WRITTEN_PATHS$rel
+"; printf 'file: %s\n' "$target"
   done <<RF_FILES
 $list
 RF_FILES

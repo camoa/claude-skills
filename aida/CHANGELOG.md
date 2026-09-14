@@ -6,7 +6,30 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [Unreleased]
 
+Live-run rows 43 to 53.
+
+### Added
+- Every stage's closing action commits the task folder, with the stage's own result as the
+  reason: scope's `distill`, research's coverage `check`, design `close`, implement `finish`,
+  review `close`. Mid-stage writes stay uncommitted until then, and each skill says so.
+- `task environment up` runs the recipe's `## Preconditions` line after it writes the
+  `## Files` and before it commits anything. A non-zero exit removes what that run wrote,
+  commits nothing, and exits 3 with the script's message. `show` lists the line it will run.
+- `project create` asks once where playbooks come from, per framework: a catalog set or a
+  local folder. `subscribe-playbook` proposes the framework from the project's declared ones
+  and the set id from the catalog when either is not given.
+- The surfaces skill commits `project.json` after `install` and `decline`.
+
+### Changed
+- The session-start line says `playbook file:` and the pick-up line names `/aida:next`.
+- The report reads an absent `runMode` as `interactive`, the value every other reader prints.
+- The catalog identifier tests a store path before answering with it, and answers
+  `fetch-failed` when the file is absent.
+
 ### Fixed
+- A never-saved task blocks compaction only once it holds a version 6 record, so a repaired
+  version 5 task with no version 6 run compacts freely.
+- `task create` step 4 stops only on the refused worktree entry.
 - A recipe step that reads standard input no longer swallows the steps after it. The step loop
   fed its lines through the loop's own stdin, and a command such as `ddev composer require`
   read them, so the install ended early with no error. Every step now runs with stdin closed,
