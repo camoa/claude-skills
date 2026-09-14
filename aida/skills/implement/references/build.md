@@ -38,7 +38,8 @@ It reads the frozen copy and the frozen tests. It writes seven things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
-- the frozen tests for it, with the criterion each carries;
+- the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
+  the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
 - this attempt's report path;
 - how many attempts this order has used of the count it is allowed;

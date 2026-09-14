@@ -42,7 +42,7 @@ Run:
 It reads the frozen copy and never the live files. It writes exactly five things to
 `implementation/brief-<order id>-tests.json`:
 
-- this order's own record;
+- this order's own record, with the criteria it owns named in `criteriaOwned`;
 - the criteria it serves and owns, with their verification and who verifies each;
 - the boundaries it names;
 - the declared interface of every order it depends on;
@@ -103,11 +103,18 @@ it in. The recipe runs to well over a hundred lines per framework, and reading i
 conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
 reading it is the role's.
 
-Ask it to return, for each test, the path, the name, and the criterion the name carries. For each
-test, it writes what the run printed when the test failed to its own file, under the task folder's
-`implementation/` folder, one file per test, and returns that file's path in its report. `--red`
-below reads that path. Ask it to return a checklist line for each criterion a person verifies,
-copying the verification sentence whole.
+Ask it to return, for each test, the path, the name, and the criterion the name carries. A test of
+the order's own done-when returns the order id in place of a criterion. For each test, it writes
+what the run printed when the test failed to its own file, under the task folder's `implementation/`
+folder, one file per test, and returns that file's path in its report. `--red` below reads that
+path. Ask it to return a checklist line for each criterion a person verifies, copying the
+verification sentence whole.
+
+**A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
+criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
+later order builds, so its tests are written against its own done-when. Such a test ends its name
+with the order id, `Wo1`, and no criterion id. The author writes a test for every machine-verified
+criterion the order owns, and for its done-when where nothing it owns covers that.
 
 **A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
 Still green, and the author can name the existing code that satisfies it: it locks that behaviour
@@ -122,13 +129,16 @@ nothing looks like success and is the dangerous one.
 
 ## Put the rows to the person, before anything is frozen
 
-Show one row per criterion: the criterion, its verification sentence, and the names of the tests
-that prove it. Show the rows and not the test code. The question is whether the tests named
-exercise the sentence beside them, and test code invites a review of the code instead.
+Show one row per criterion the tests name: the criterion, its verification sentence, and the names
+of the tests that prove it. Show one more row when a test proves the order's done-when: the order
+id, its done-when text, and those tests. Show the rows and not the test code. The question is
+whether the tests named exercise the sentence beside them, and test code invites a review of the
+code instead.
 
 **Interactive, ask row by row.** Each answer becomes one
 `--row <criterion id>=confirmed::person::<the person's words>` or
-`--row <criterion id>=rejected::person::<the person's words>` for the freeze below. A row the
+`--row <criterion id>=rejected::person::<the person's words>` for the freeze below. The done-when
+row is keyed by the order id in place of a criterion id: `--row wo1=confirmed::person::...`. A row the
 person rejects goes back to the test author before any freeze runs. Never run the freeze with a
 rejected row still standing. `tests-freeze` refuses it and writes nothing. Send that row back
 first, and freeze once every row for this order reads confirmed. A note may not hold the text
@@ -147,9 +157,10 @@ open, the hook denies nothing. The checker's own instructions to stay off the im
 then just words, with nothing enforcing them.
 
 **Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's rows
-and the path its verdict file goes to, under the task folder, and nothing else. It reads the verify
-clause and each named test, never the implementation, and answers confirmed or rejected with a note
-for each row. Close the dispatch record as soon as it returns, per SKILL.md.
+and the path its verdict file goes to, under the task folder, and nothing else. A done-when row
+carries the order id and the done-when text where a criterion row carries the id and the verify
+clause. It reads that text and each named test, never the implementation, and answers confirmed or
+rejected with a note for each row. Close the dispatch record as soon as it returns, per SKILL.md.
 
 Turn its answers into `--row <criterion id>=<verdict>::model::<its note>` for the freeze. A row it
 rejects is not sent back to the test author the way a person's rejection is. Nobody is present to
@@ -166,12 +177,17 @@ Run, with one flag per test, per failure output, per pattern, and per row:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-freeze "<task_folder>" <order id> \
   --test <path>::<test name>=<criterion id> \
+  --test <path>::<test name>=<order id> \
   --red <test name>=<path to a file holding what the run printed> \
   --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
-  --row <criterion id>=<confirmed|rejected>::<person|model>::<note>
+  --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
+  --row <order id>=<confirmed|rejected>::<person|model>::<note>
 ```
+
+A `--test` names its criteria or the order's own id, never both. The second form marks a test of
+the order's done-when, and its name ends with the order id.
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
@@ -181,21 +197,29 @@ longer exist. Use `references/finish.md`'s restart when the design moved; this o
 from here, not back.
 
 The script checks the file exists, sits inside the code repository, matches the framework's own
-declared pattern, and carries at the end of its name the criterion it claims. It checks every
-criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
+declared pattern, and carries at the end of its name the criterion it claims. A done-when test
+carries the order id there instead. It checks every machine-verified criterion this order owns has
+a test, and every criterion a person verifies has a checklist line. A criterion this order only
+serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
+list). A test that names neither a criterion this order serves or owns nor this order's id refuses
+(exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold
+no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
 place. A test with neither refuses (exit 33). That check is a bound, not a proof: it
 confirms the file is not empty, and nothing in it confirms the framework's own failure signal
 appears there. A file holding "0 tests ran" passes the same way a real assertion failure does. A
 `--locks-in` reason is recorded beside the test, and the review brief says where it is.
 
-**Every machine-verified criterion this order serves or owns needs exactly one row**, naming
-whether it was confirmed or rejected and who judged it. A criterion a person verifies carries a
+**Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
+confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the
+order id. Rows follow the tests. A criterion this order only serves and names on no test needs no
+row from it; the row for it belongs to its owner. A criterion a person verifies carries a
 checklist instead, never a row: it has no judgement, and completion is what confirms it. A row for
-a criterion this order does not serve or own refuses the freeze, the same way a missing row does.
-So does a row for a criterion a person verifies. Every accepted row is appended to that criterion's
-own record in the ledger. `close` is what decides the criterion from it, once every order serving
-it has closed.
+anything no test of this order claims refuses the freeze, the same way a missing row does. So does
+a row for a criterion a person verifies. Every accepted criterion row is appended to that
+criterion's own record in the ledger, and the done-when row to this order's own entry. `close` is
+what decides a criterion from its rows, once every order serving it has closed and its owner has
+judged it.
 
 Then it records a hash for each test file. That hash is the freeze. From here a hook refuses a
 write to one of those files from every dispatched role except the test author of the order that

@@ -21,6 +21,12 @@ covers only part of the verify clause, answer whether these tests observe that p
 whether the whole clause is true yet. The whole clause is settled once, when the last order serving
 it closes. That is not your call.
 
+**A done-when row names the order, not a criterion.** It carries the order id, the order's own
+done-when text, and the tests that claim to prove it. Read the done-when text where you would read
+a verify clause, and answer the same question: if these tests pass, is the done-when true? An order
+that serves a criterion it does not own freezes its tests this way. The thing that criterion
+observes is built by its owner later. Key your verdict by the order id.
+
 For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. A rejection's note names the gap. A confirmation's note says what
@@ -35,9 +41,12 @@ anywhere. Write it in this shape:
 
 ```json
 { "rows": [
-  { "criterion": "c1", "verdict": "confirmed|rejected", "note": "..." }
+  { "criterion": "c1", "verdict": "confirmed|rejected", "note": "..." },
+  { "criterion": "wo1", "verdict": "confirmed|rejected", "note": "..." }
 ] }
 ```
+
+The second entry is the done-when row, present only when the rows you were given carry one.
 
 You have no Bash tool. You cannot run anything. Reason from the test file's text alone. You are
 not given another row's tests from this order, another order's rows, or the task's goal prose.

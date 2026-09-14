@@ -30,11 +30,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
 #   implement-actions.sh tests-freeze <task_folder> <unit_id> \
-#                            [--test <path>::<test name>=<criterion id>[,<criterion id>...]]...
+#                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
 #                            [--red <test name>=<path to a file holding what the run printed>]...
 #                            [--test-glob <glob>]...
 #                            [--checklist <criterion id>=<verification text>]...
-#                            [--row <criterion id>=<confirmed|rejected>::<person|model>::<note>]...
+#                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
 #                            [--locks-in <test name>=<reason>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
@@ -243,9 +243,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
 #  28  `tests-freeze` was given a --test whose test name does not carry, at its own end, the
-#      criterion id (or ids, chained from the right) it claims.
-#  29  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is machine with no
-#      --test row naming it.
+#      criterion id (or ids, chained from the right) it claims, or the unit's own id when the test
+#      proves the unit's doneWhen instead of a criterion.
+#  29  `tests-freeze` found a criterion the unit owns whose verifiedBy is machine with no --test
+#      row naming it. A criterion the unit only serves needs no test from it: exactly one order
+#      owns a criterion, and that order's tests are the ones that can observe it (live-run row
+#      59). A serving order freezes its tests against its own doneWhen instead.
 #  30  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is person with no
 #      --checklist row.
 #  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
@@ -362,11 +365,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      The range this would write would name work nothing in this stage judged.
 #
 # The exit codes the checkpoint, the finish, the grant and the restart add.
-#  64  `tests-freeze`'s own `--row` flags and this order's criteria do not correspond: a
-#      machine-verified criterion the order serves or owns with no row, a row naming a criterion the
-#      order neither serves nor owns, a row naming a criterion a person verifies, or two rows naming
-#      one criterion. The message names which. A row set this script half understands would put a
-#      judgement on the wrong criterion, which nothing later could tell from a real one.
+#  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
+#      machine-verified criterion a --test names with no row, a doneWhen test with no doneWhen row,
+#      a row naming a criterion no --test claims or the doneWhen with no doneWhen test, a row
+#      naming a criterion a person verifies, or two rows naming one thing. The message names
+#      which. A row set this script half understands would put a judgement on the wrong criterion,
+#      which nothing later could tell from a real one.
 #  65  `tests-freeze` was given a `--row` that answers rejected. Not a defect in the script: the
 #      freeze stops, writes no test record, and the row goes back to the test author, the same way
 #      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
@@ -400,8 +404,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  73  the check recipe resolved for a framework now is not the one the baseline was taken with: its
 #      sha256 differs. Every tool check compares its own result against that baseline, so a changed
 #      recipe compares one tool's output against another tool's baseline. Take the baseline again.
-#  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all. Every
-#      guard in that step reads a per-criterion list, so an order with none passes all of them and
+#  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
+#      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
+#      in that step reads a per-criterion list, so an order with none passes all of them and
 #      freezes a reference that proves nothing.
 #  75  `dispatch-close` was given a task folder that is not the one the open record names. The
 #      record lives at the project root and two tasks in one project is a supported state, so a
@@ -529,11 +534,11 @@ usage: implement-actions.sh read  <task_folder>
                             [--value <name>=<value>]...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
        implement-actions.sh tests-freeze <task_folder> <unit_id>
-                            [--test <path>::<test name>=<criterion id>[,<criterion id>...]]...
+                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
                             [--red <test name>=<path to a file holding what the run printed>]...
                             [--test-glob <glob>]...
                             [--checklist <criterion id>=<verification text>]...
-                            [--row <criterion id>=<confirmed|rejected>::<person|model>::<note>]...
+                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
                             [--locks-in <test name>=<reason>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
@@ -979,8 +984,10 @@ do_read() {
           criteriaCount: ((.criteria // []) | length),
           criteriaByRowState: ((.criteria // []) | group_by(.rowState) | map({key: .[0].rowState, value: length}) | from_entries),
           orderStates: [ (.orders // [])[] | {id: .id, lastStep: .lastStep, haltedBecause: (.haltedBecause // null)} ],
-          rowsJudgedByModel: ([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length),
-          rowsJudgedByModelCriteria: ([ (.criteria // [])[] | select((.judgements // []) | map(.judgedBy == "model") | any) | .id ])
+          rowsJudgedByModel: (([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
+                              + ([ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length)),
+          rowsJudgedByModelCriteria: ([ (.criteria // [])[] | select((.judgements // []) | map(.judgedBy == "model") | any) | .id ]
+                                      + [ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") | .id ])
         }' "$LEDGER_FILE" 2>/dev/null)"
       [ -n "$ledger_summary" ] || ledger_summary='null'
     fi
@@ -2706,7 +2713,8 @@ do_tests_brief() {
   criteria_out="$(printf '%s' "$CRITERIA_JSON" | jq -c \
     '[ .[] | {id, text, verification, verifiedBy} ]')"
   unit_out="$(printf '%s' "$UNIT_JSON" | jq -c \
-    '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
+    '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), criteriaOwned: (.criteriaOwned // []),
+      interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
 
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
@@ -2955,12 +2963,45 @@ tf_relativize_path() {
   printf 'OUTSIDE\t%s' "$abs"
 }
 
+# The frozen entries for the --test rows in $1 (each already carrying absPath and relPath), as one
+# JSON array on stdout: path relative to codePath, name, sha256, and the red run from $2 or the
+# locks-in reason from $3. One copy of this block, called once per criterion row and once for the
+# doneWhen row. A die inside ends only the command substitution that called this, so each caller
+# re-raises the status with `|| exit "$?"`.
+tf_frozen_tests_of() {
+  local names_json="$1" reds_json="$2" locks_json="$3"
+  local ntests tj tpath trelpath tname tsha tredpath tredtext tlocks tests_out_tmp
+  ntests="$(printf '%s' "$names_json" | jq 'length')"
+  tests_out_tmp="$IMPL_DIR/.tests-freeze-rowtests.$$"
+  : >"$tests_out_tmp"
+  tj=0
+  while [ "$tj" -lt "$ntests" ]; do
+    tpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].absPath')"
+    tname="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].name')"
+    trelpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].relPath')"
+    tsha="$(tf_sha256_of "$tpath")"
+    [ -n "$tsha" ] || die 3 "tests-freeze: could not compute a sha256 for $tpath"
+    tredpath="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].path // empty')"
+    tredtext="$(cat "$tredpath" 2>/dev/null)"
+    tlocks="$(printf '%s' "$locks_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].reason // empty')"
+    # The record stores the path relative to codePath, never the absolute form: a frozen path
+    # must still mean the same file once the checkout moves (see exit 36's own reasoning).
+    jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" --arg locks "$tlocks" \
+      '{path: $path, name: $name, sha256: $sha}
+       + (if $red == "" then {} else {red: $red} end) + (if $locks == "" then {} else {locksIn: $locks} end)' >>"$tests_out_tmp" \
+      || die 3 "tests-freeze: could not record the test row for $tname"
+    tj=$((tj + 1))
+  done
+  jq -s '.' "$tests_out_tmp"
+  rm -f "$tests_out_tmp"
+}
+
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --test)
-        [ "$#" -ge 2 ] || die 3 "tests-freeze: --test needs <path>::<test name>=<criterion id>[,<criterion id>...]"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --test needs <path>::<test name>=<criterion id>[,<criterion id>...], or =<unit id> for a test of the unit's own doneWhen"
         test_raw="$test_raw$2
 "
         shift 2 ;;
@@ -2980,7 +3021,7 @@ do_tests_freeze() {
 "
         shift 2 ;;
       --row)
-        [ "$#" -ge 2 ] || die 3 "tests-freeze: --row needs <criterion id>=<confirmed|rejected>::<person|model>::<note>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --row needs <criterion id or unit id>=<confirmed|rejected>::<person|model>::<note>"
         [ -n "$2" ] || die 3 "tests-freeze: --row was given an empty value."
         halt_refuse_separator "tests-freeze" "--row" "$2"
         row_raw="$row_raw$2
@@ -3069,6 +3110,15 @@ do_tests_freeze() {
   rm -f "$tests_tmp" "$reds_tmp" "$checklists_tmp" "$goa_tmp" "$rows_meta_tmp" "$locks_tmp"
   test_globs_json="$(printf '%s' "$glob_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
 
+  # A --test whose value is this unit's own id proves the unit's doneWhen, not a criterion. A
+  # supporting order serves criteria it cannot observe, because the thing they observe is built by
+  # the owner later (live-run row 59), so its tests are frozen against what the order itself said
+  # it would make true. Such a test carries no criterion, and the doneWhen row below judges it.
+  tests_json="$(printf '%s' "$tests_json" | jq -c --arg unit "$unit_id" \
+    'map(if .criteria == [$unit] then (.criteria = [] | .provesDoneWhen = true) else . end)')"
+  local has_done_when_tests
+  has_done_when_tests="$(printf '%s' "$tests_json" | jq 'any(.[]; .provesDoneWhen == true)')"
+
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
   local project_folder codepath
   rv_load_codepath "tests-freeze"
@@ -3147,29 +3197,37 @@ TF_EOF
   [ -z "$unmatched_paths" ] \
     || die 27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
 
-  # --- 28: a test name must carry, at its own end, the criterion id(s) it claims -------------------
+  # --- 28: a test name must carry, at its own end, the criterion id(s) it claims, or the unit's own
+  # id when it proves the doneWhen. The same check either way: an order id is one more token the
+  # name ends with, and the case rule for its first letter is the one a criterion id already gets.
   local test_rows_count ti name id_list bad_carry=""
   test_rows_count="$(printf '%s' "$tests_json" | jq 'length')"
   ti=0
   while [ "$ti" -lt "$test_rows_count" ]; do
     name="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" '.[$ti].name')"
-    id_list="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" '.[$ti].criteria | join(",")')"
+    id_list="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" --arg unit "$unit_id" \
+      'if .[$ti].provesDoneWhen == true then $unit else (.[$ti].criteria | join(",")) end')"
     tf_name_carries "$name" "$id_list" || bad_carry="$bad_carry$name (claims $id_list), "
     ti=$((ti + 1))
   done
   [ -z "$bad_carry" ] \
-    || die 28 "tests-freeze: these test names do not carry, at the end, the criterion id they claim: ${bad_carry%, }"
+    || die 28 "tests-freeze: these test names do not carry, at the end, the criterion id they claim, or $unit_id for a test of its own doneWhen: ${bad_carry%, }"
 
-  # --- 29: every machine-verified criterion the unit serves or owns needs a --test row -------------
-  local missing_machine
-  missing_machine="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" '
+  # --- 29: every machine-verified criterion the unit owns needs a --test row ----------------------
+  # Owns, not serves. Exactly one order owns a criterion and most own none (ideal/design.md), and
+  # the owner is the order whose tests can observe it. A served criterion's proof lives with its
+  # owner, and this order's own tests are frozen against its doneWhen.
+  local owned_ids_json missing_machine
+  owned_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')"
+  missing_machine="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" --argjson owned "$owned_ids_json" '
       ($tests | map(.criteria) | add // []) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid
+          | select(($owned | index($cid)) != null)
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
   [ -z "$missing_machine" ] \
-    || die 29 "tests-freeze: these machine-verified criteria have no --test row naming them: $missing_machine"
+    || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
   local missing_person
@@ -3234,27 +3292,27 @@ TF_EOF
       || die 70 "tests-freeze: these rows say a model judged them, and this run is interactive: $wrong_judge. A person is here, and their reading is the stronger evidence, so the record must not say a checker stood in for them. Nothing is written."
   fi
 
-  # --- 64: the --row set and this order's criteria must correspond, in all four ways ---------------
-  # A machine-verified criterion this order serves or owns needs exactly one row: the checkpoint
-  # asks, per order, whether these tests observe the part of the verify clause this order is
-  # responsible for. A person-verified criterion never gets one, because it carries a checklist and
-  # completion is what confirms it (ideal/implementation.md, "A criterion a person inspects has no
-  # tests").
-  local rows_missing rows_unknown rows_person rows_twice
-  rows_missing="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
+  # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------
+  # Rows follow the tests' claims. A machine-verified criterion a --test names needs exactly one
+  # row: the checkpoint asks, per order, whether these tests observe the part of the verify clause
+  # this order is responsible for. Every owned machine criterion is named, by exit 29 above; a
+  # served one is named only when this order chose to claim part of it. A doneWhen test needs the
+  # doneWhen row, keyed by the unit's own id, judged against the doneWhen text. A person-verified
+  # criterion never gets a row, because it carries a checklist and completion is what confirms it
+  # (ideal/implementation.md, "A criterion a person inspects has no tests").
+  local rows_expected_json rows_missing rows_unknown rows_person rows_twice
+  rows_expected_json="$(jq -nc --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" \
+      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" '
+      ($tests | map(.criteria) | add // []) as $named
+      | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
+        + (if $dw then [$unit] else [] end)
+    ')"
+  rows_missing="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
       ($rows | map(.criterion)) as $named
-      | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid
-          | select(($named | index($cid)) == null) | $cid ]
-      | join(", ")
+      | [ $expected[] as $k | select(($named | index($k)) == null) | $k ] | join(", ")
     ')"
   [ -z "$rows_missing" ] \
-    || die 64 "tests-freeze: these machine-verified criteria have no --row: $rows_missing. Every row of the trace matrix is judged before the tests are frozen."
-  rows_unknown="$(jq -nr --argjson allowed "$CRITERIA_IDS_JSON" --argjson rows "$rows_meta_json" '
-      [ $rows[] | .criterion as $cid | select(($allowed | index($cid)) == null) | $cid ]
-      | unique | join(", ")
-    ')"
-  [ -z "$rows_unknown" ] \
-    || die 64 "tests-freeze: a --row names criteria $unit_id does not serve or own: $rows_unknown"
+    || die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it, is judged before the tests are frozen."
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
       | [ $rows[] | .criterion as $cid | select(($people | index($cid)) != null) | $cid ]
@@ -3262,6 +3320,11 @@ TF_EOF
     ')"
   [ -z "$rows_person" ] \
     || die 64 "tests-freeze: a --row names $rows_person, which a person verifies. Such a criterion carries a checklist and never a judgement; completion confirms it."
+  rows_unknown="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
+      [ $rows[] | .criterion as $k | select(($expected | index($k)) == null) | $k ] | unique | join(", ")
+    ')"
+  [ -z "$rows_unknown" ] \
+    || die 64 "tests-freeze: a --row names something no --test of $unit_id claims: $rows_unknown. A row judges the tests named against it; the row for a criterion this order only serves belongs to its owner."
   rows_twice="$(jq -nr --argjson rows "$rows_meta_json" '
       [ $rows | group_by(.criterion)[] | select(length > 1) | .[0].criterion ] | join(", ")
     ')"
@@ -3345,9 +3408,13 @@ TF_EOF
       || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit. A record is taken once per commit; investigate before proceeding."
   fi
 
-  # --- every check passed: build the rows, one per criterion the unit serves or owns ---------------
+  # --- every check passed: build the rows ----------------------------------------------------------
+  # One per machine criterion the tests name, one per person criterion the unit serves or owns, and
+  # one for the doneWhen when a test proves it. A served machine criterion no test names gets no
+  # row here: its proof lives with its owner, and a row with no test under it is what the frozen-
+  # tests check later reads as unknown.
   local need_sha
-  need_sha="$(printf '%s' "$CRITERIA_JSON" | jq -r 'map(select(.verifiedBy == "machine")) | length > 0')"
+  need_sha="$(printf '%s' "$tests_json" | jq -r 'length > 0')"
   if [ "$need_sha" = "true" ]; then
     records_hash__resolve_sha256_cmd \
       || die 3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
@@ -3358,7 +3425,7 @@ TF_EOF
   # the previous round's value on standard output from the second round on, which corrupts this
   # action's own output for any order serving two criteria (trap 5 in this file's own header).
   local rows_tmp crit_count ci cid ckind
-  local names_json ntests tj tpath trelpath tname tsha tredpath tredtext tests_out_tmp tests_out_json tlocks
+  local names_json tests_out_json
   local checklist_text
   rows_tmp="$IMPL_DIR/.tests-freeze-rows.$$"
   : >"$rows_tmp"
@@ -3370,32 +3437,12 @@ TF_EOF
     if [ "$ckind" = "machine" ]; then
       names_json="$(printf '%s' "$tests_json" | jq -c --arg cid "$cid" \
         '[ .[] | select(.criteria | index($cid) != null) ]')"
-      ntests="$(printf '%s' "$names_json" | jq 'length')"
-      tests_out_tmp="$IMPL_DIR/.tests-freeze-rowtests.$$"
-      : >"$tests_out_tmp"
-      tj=0
-      while [ "$tj" -lt "$ntests" ]; do
-        tpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].absPath')"
-        tname="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].name')"
-        trelpath="$(printf '%s' "$names_json" | jq -r --argjson tj "$tj" '.[$tj].relPath')"
-        tsha="$(tf_sha256_of "$tpath")"
-        [ -n "$tsha" ] || die 3 "tests-freeze: could not compute a sha256 for $tpath"
-        tredpath="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].path // empty')"
-        tredtext="$(cat "$tredpath" 2>/dev/null)"
-        tlocks="$(printf '%s' "$locks_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].reason // empty')"
-        # The record stores the path relative to codePath, never the absolute form: a frozen path
-        # must still mean the same file once the checkout moves (see exit 36's own reasoning).
-        jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" --arg locks "$tlocks" \
-          '{path: $path, name: $name, sha256: $sha}
-           + (if $red == "" then {} else {red: $red} end) + (if $locks == "" then {} else {locksIn: $locks} end)' >>"$tests_out_tmp" \
-          || die 3 "tests-freeze: could not record the test row for $tname"
-        tj=$((tj + 1))
-      done
-      tests_out_json="$(jq -s '.' "$tests_out_tmp")"
-      rm -f "$tests_out_tmp"
-      jq -n --arg cid "$cid" --argjson tests "$tests_out_json" \
-        '{criterion: $cid, kind: "machine", tests: $tests}' >>"$rows_tmp" \
-        || die 3 "tests-freeze: could not record the row for $cid"
+      if [ "$(printf '%s' "$names_json" | jq 'length')" -gt 0 ]; then
+        tests_out_json="$(tf_frozen_tests_of "$names_json" "$reds_json" "$locks_json")" || exit "$?"
+        jq -n --arg cid "$cid" --argjson tests "$tests_out_json" \
+          '{criterion: $cid, kind: "machine", tests: $tests}' >>"$rows_tmp" \
+          || die 3 "tests-freeze: could not record the row for $cid"
+      fi
     else
       checklist_text="$(printf '%s' "$checklists_json" | jq -r --arg id "$cid" \
         '[ .[] | select(.id == $id) ][0].text // empty')"
@@ -3405,9 +3452,22 @@ TF_EOF
     fi
     ci=$((ci + 1))
   done
+  # The doneWhen row keeps `kind: machine`, so every later reader that selects machine rows for
+  # their tests (the frozen-tests check, the selected-tests command, the two briefs) runs and
+  # hashes these tests the same as a criterion's.
+  if [ "$has_done_when_tests" = "true" ]; then
+    names_json="$(printf '%s' "$tests_json" | jq -c '[ .[] | select(.provesDoneWhen == true) ]')"
+    tests_out_json="$(tf_frozen_tests_of "$names_json" "$reds_json" "$locks_json")" || exit "$?"
+    jq -n --argjson tests "$tests_out_json" \
+      '{criterion: null, kind: "machine", provesDoneWhen: true, tests: $tests}' >>"$rows_tmp" \
+      || die 3 "tests-freeze: could not record the doneWhen row for $unit_id"
+  fi
   local rows_json
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
+  # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
+  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] \
+    || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- the checkpoint's verdict goes into the ledger, one judgement per order per criterion --------
   # Written before the record below, and on both paths through it, because a second freeze at the
@@ -3423,16 +3483,24 @@ TF_EOF
     ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
     [ -n "$ledger_doc_now" ] \
       || die 3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
+    # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
+    # criterion judgement this order already left is replaced rather than added to.
     ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
       --arg unit "$unit_id" --argjson rows "$rows_meta_json" '
-      .criteria = ((.criteria // []) | map(
+      ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
+      | .criteria = ((.criteria // []) | map(
         . as $c
         | ([ $rows[] | select(.criterion == $c.id) ][0]) as $r
         | if $r == null then $c
           else ($c + {judgements: (
                   (($c.judgements // []) | map(select(.unit != $unit)))
                   + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
-          end))')"
+          end))
+      | .orders = ((.orders // []) | map(
+        if .id != $unit then .
+        elif $dw == null then del(.doneWhenJudgement)
+        else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end))')"
     [ -n "$ledger_with_judgements" ] \
       || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
     write_atomic "$ledger_file_now" "$ledger_with_judgements"
@@ -5723,21 +5791,24 @@ do_close() {
 
   # Every criterion this order serves or owns is decided now, and only now. A criterion design split
   # across several orders has no honest answer before the last of them closes, so confirmed needs
-  # every serving order closed, a judgement from every one of them, and every one of those
-  # judgements confirmed. One rejected judgement decides it the other way, whichever order left it.
-  # Two of the three clauses are defensive, and neither is reachable through the actions. The
-  # rejection cannot arrive, because `tests-freeze` refuses a rejected row outright. A serving order
-  # closed without leaving a judgement cannot arrive either, because the freeze refuses a machine
-  # criterion with no row and an order reaches `close` only through the freeze. Both are derived
-  # rather than assumed: a state nothing can produce today is still a state to read correctly, and a
-  # hand-edited ledger can produce either. A criterion a person verifies is left where it is, at not-judged. It carries a
+  # every serving order closed, a judgement from its owner, and every judgement left on it
+  # confirmed. One rejected judgement decides it the other way, whichever order left it. The owner
+  # is the one order whose tests observe the criterion, so its judgement is the one that is owed;
+  # a serving order leaves one only when its tests claimed part of the clause, and leaves none when
+  # it froze against its own doneWhen instead (live-run row 59). Two clauses are defensive, and
+  # neither is reachable through the actions. The rejection cannot arrive, because `tests-freeze`
+  # refuses a rejected row outright. An owner closed without leaving a judgement cannot arrive
+  # either, because the freeze asks a test and a row of every owned machine criterion and an order
+  # reaches `close` only through the freeze. Both are derived rather than assumed: a state nothing
+  # can produce today is still a state to read correctly, and a hand-edited ledger can produce
+  # either. A criterion a person verifies is left where it is, at not-judged. It carries a
   # checklist and no judgement, and completion is what confirms it (ideal/implementation.md, "A
   # criterion a person inspects has no tests"). The kind is read from the frozen contract, which is
   # the one producer of it; the frozen test record's own `kind` is a copy of that same field.
   local served_json serving_map_json kinds_json
   served_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '((.criteriaServed // []) + (.criteriaOwned // [])) | unique')"
   serving_map_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
-    '[ .workOrders[]? | {id: .id, serves: (((.criteriaServed // []) + (.criteriaOwned // [])) | unique)} ]')"
+    '[ .workOrders[]? | {id: .id, serves: (((.criteriaServed // []) + (.criteriaOwned // [])) | unique), owns: (.criteriaOwned // [])} ]')"
   kinds_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]')"
   new_ledger="$(printf '%s' "$new_ledger" | jq -c \
     --argjson served "$served_json" --argjson serving "$serving_map_json" --argjson kinds "$kinds_json" '
@@ -5748,11 +5819,13 @@ do_close() {
           elif (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) != "machine") then $c
           else
             ([ $serving[] | select((.serves | index($c.id)) != null) | .id ]) as $servers
+            | ([ $serving[] | select((.owns | index($c.id)) != null) | .id ]) as $owners
             | ([ $l.orders[] | select((.id as $i | $servers | index($i)) != null) ]) as $entries
             | (($c.judgements // [])) as $js
             | if ($js | map(.verdict) | index("rejected")) != null then ($c + {rowState: "rejected"})
               elif ((($entries | map(.lastStep == "closed")) | all)
-                     and (($servers - ([ $js[] | .unit ])) | length) == 0
+                     and ($owners | length) > 0
+                     and (($owners - ([ $js[] | .unit ])) | length) == 0
                      and (($js | map(.verdict == "confirmed")) | all))
                 then ($c + {rowState: "confirmed"})
               else ($c + {rowState: "not-judged"}) end
@@ -5774,7 +5847,8 @@ do_close() {
        criterion: [ (.criteria // [])[] | select((.id as $i | $served | index($i)) != null)
                     | {id: .id, rowState: .rowState,
                        judgedBy: ("judgedBy=" + (([ (.judgements // [])[] | .judgedBy ] | unique) | if length == 0 then "nobody" else join(",") end))} ],
-       rowsJudgedByModel: ([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length),
+       rowsJudgedByModel: (([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
+                           + ([ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length)),
        ledger: $ledger,
        next: $next}')"
   exit 0
@@ -5923,7 +5997,8 @@ do_finish() {
                      judgedBy: ([ ($c.judgements // [])[] | .judgedBy ] | unique)} ],
       checklists: $checklists,
       deferred: $deferred,
-      rowsJudgedByModel: ([ ($ledger.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
+      rowsJudgedByModel: (([ ($ledger.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
+                          + ([ ($ledger.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length))
     }')"
   [ -n "$record_json" ] || die 3 "finish: could not assemble the finished record for $task_id."
   write_atomic "$record_file" "$record_json"

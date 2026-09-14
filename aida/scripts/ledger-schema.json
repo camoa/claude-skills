@@ -125,6 +125,17 @@
             "$ref": "#/$defs/grant"
           },
           "description": "One entry per attempt a person has granted on this order, in the order they were granted. Present only when at least one was. A grant with no record of who asked for what is a cap nobody can audit afterwards."
+        },
+        "doneWhenJudgement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "judgedBy", "note"],
+          "properties": {
+            "verdict": { "$ref": "#/$defs/judgement/properties/verdict" },
+            "judgedBy": { "$ref": "#/$defs/judgement/properties/judgedBy" },
+            "note": { "$ref": "#/$defs/judgement/properties/note" }
+          },
+          "description": "The checkpoint's verdict on the tests that prove this order's own doneWhen rather than a criterion: the `--row` keyed by the order's id, written by `tests-freeze` and replaced on every freeze of this order. Present only when the order froze such a test. A supporting order serves criteria it cannot observe, so its tests are judged against its doneWhen text instead of a verify clause (live-run row 59). Counted with the criterion judgements in every rowsJudgedByModel, so a model's reading here is listed for a person to judge again like any other."
         }
       }
     },
@@ -155,7 +166,7 @@
           "items": {
             "$ref": "#/$defs/judgement"
           },
-          "description": "One entry per order serving this criterion, appended by `tests-freeze` when that order's rows are frozen. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
+          "description": "One entry per order whose frozen tests name this criterion, appended by `tests-freeze` when that order's rows are frozen; a serving order whose tests name only its own done-when appends none, and its judgement sits on its ledger entry as doneWhenJudgement. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
         }
       }
     },

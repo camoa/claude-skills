@@ -37,13 +37,17 @@ a hook refuses it.
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.
 
-For each criterion verified by machine, write at least one test. For each verified by a person,
-write a checklist line instead, saying what that person must look at.
+For each machine-verified criterion this order owns, write at least one test. The brief names
+them in `criteriaOwned`. A criterion the order serves but does not own is proved by its owner. The
+thing it observes is built by a later order, so do not name it on a test that cannot observe it.
+Write this order's own tests against its `doneWhen` instead. For each criterion verified by a
+person, write a checklist line, saying what that person must look at.
 
 Choose the level from the recipe, not from habit. The recipe names the levels this framework has and
 what each one reaches.
 
 Put the criterion id at the end of the test's own name, so a later run can select the tests for one
+criterion. A test of the order's `doneWhen` ends with the order id instead, `Wo1`, and names no
 criterion. The recipe says how the id is spelled here.
 
 Run every test and record what the run printed. **A test must fail for the reason it names.** A test
@@ -59,7 +63,8 @@ code. The test then locks that behaviour in. If you can name no such code, repor
 arrival.
 
 Return one row per test: the path, the test's name, the criterion its name carries, and what the
-failing run printed, or its `locks-in` reason. Then the list of anything that passed on arrival.
+failing run printed, or its `locks-in` reason. A done-when test returns the order id in place of a
+criterion. Then the list of anything that passed on arrival.
 
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a
