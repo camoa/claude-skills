@@ -66,9 +66,9 @@ person's earlier words: the goal, the expected result, each criterion in its ord
 non-goal. Propose the contract from it, through the same `init`, `set-goal`, `add` and
 `add-non-goal` calls below. Keep the criteria in the version 5 order, so the ids line up with the
 old numbering. Each criterion still needs its verify clause and its machine or person judgment.
-The version 5 text seldom states those. Draft them. Confirm each one. Before each write, show what
-changed from the version 5 text. The writes come first and the approval after, at "Approval"
-below, as that section says. Version 6 parses nothing back. So the stage that reads the old
+The version 5 text seldom states those. Draft them. When the draft is shown, say what changed from
+the version 5 text. The writes come first and the approval after, at "Approval" below, as that
+section says. Version 6 parses nothing back. So the stage that reads the old
 contract is the conversion, and there is no converter.
 
 The single freshest source of what the person wants is whatever they typed on the invocation line
@@ -76,27 +76,58 @@ that started this conversation. Read it before asking anything. Setting it aside
 blank interview anyway is a fault, and it is exactly what version 5 shipped once: a run that threw
 away what the user had just said and asked them to restate it.
 
-## Choose a posture, then hold the conversation
+## Choose a posture, then draft the whole contract
 
 Three postures, and the choice is how much is already on the table between the invocation line,
 an existing `alignment.json`, and, on a first run, the handed-down prose in `task.md` of a split
 child or the version 5 contract in `alignment.v5.md`:
 
-- **Reflect and refine.** A goal and most of a contract are already there. State back what is
-  recorded and ask only about gaps or points that need sharpening.
-- **Draft and confirm.** Something is there, not enough to reflect. Draft the missing pieces,
-  goal, expected result, criteria, and show each draft for confirmation.
-- **Explore openly.** Genuinely nothing is on the table. Ask from scratch.
+- **Reflect and refine.** A goal and most of a contract are already there. Render it, show the
+  whole rendered file, and ask what is wrong or missing.
+- **Draft and confirm.** Something is there, not enough to reflect. Draft the whole contract
+  from it, as "Draft the whole contract first" says.
+- **Explore openly.** Genuinely nothing is on the table. Ask one opening question: what should
+  be true when this is done? It carries no recommended answer, because nothing is on the table to
+  draw one from. Then draft the whole contract from the answer, the same way.
 
 Reaching "explore openly" because the invocation line was set aside is a fault, not a genuine
 third choice: check the two prior sections first.
 
-Whichever posture, hold the rest of the conversation the same way:
+### Draft the whole contract first
 
-- **One question at a time.** Never several at once, and never a blank question. State a
-  recommended answer with every question, so the person is confirming or correcting rather than
-  starting from nothing.
-- **Autonomous:** nobody answers. Take the recommended answer, then run:
+On a first run, draft every field before asking anything. The sources are the invocation line,
+`task.md`, `alignment.v5.md`, or the answer to the opening question. Draft the goal, the expected
+result, every criterion with its verify clause, and the candidate non-goals. Write them at once,
+through `init`, `set-goal`, `add --author designer` and `add-non-goal`, as the sections below say.
+Then `render`, as "Approval" says, and show the whole rendered file once. Ask one thing: what is
+wrong or missing. Say in one sentence that every line is a draft until the person approves.
+
+A whole draft shown once puts less work on the person than a chain of single questions. Version 5's
+ordinary mode drafted whole fields and asked what was missing; its one-question mode was opt-in.
+
+### Then converse on what is wrong
+
+Each correction the person gives becomes one write, in the person's words. The goal or the
+expected result they rephrase is `set-goal`; a criterion or non-goal they rephrase is `update`; a
+criterion they add is `add`; one they drop is `remove`; a non-goal they name is `add-non-goal`. A
+criterion the person rephrases or adds is `--author owner` at once, on that same call. Keep going
+until they say it is right, then go to "Approval" below.
+
+A question is one at a time, with a recommended answer. A draft is not a question: show the whole
+draft, and ask what is wrong. The draft carries everything that can be drafted, and what is left
+is asked once each:
+
+- A gap the draft could not fill: no goal anywhere, or a criterion with no observable outcome.
+- The non-goal probes, asked on their own because they are the part people skip.
+- The surfaces offer under "Tests and checks", which is asked once and only where the goal names
+  something a person sees.
+
+Never ask a blank question. State a recommended answer with each one, so the person confirms or
+corrects rather than starting from nothing. The opening question of "explore openly" is the one
+exception, for the reason given there.
+
+**Autonomous:** nobody answers. Take the draft as it is, and take the recommended answer on every
+single question. For each one, run:
   ```
   "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
     record-decision "<task_folder>" --text "<the question, and the recommended answer taken>"
@@ -106,13 +137,14 @@ Whichever posture, hold the rest of the conversation the same way:
 
 ### The goal and the expected result
 
-Confirm both as plain sentences, in the person's own words. Once agreed, run:
+Draft both as plain sentences, in the person's own words where they gave them. No goal anywhere
+is a gap: ask for one, with a recommended answer. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   init "<task_folder>"
 ```
 only on a first run, before anything else is written; it refuses when `alignment.json` already
-exists. Then, on a first run and on any later change to either sentence, run:
+exists. Then, on a first run and on any later correction to either sentence, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   set-goal "<task_folder>" --goal "<goal text>" --expected-result "<expected result text>"
@@ -140,17 +172,17 @@ admin can download the user list as CSV." It is written from outside the code. I
 class, a file, or a stage. It is not a note about how a stage should work, a reminder to check
 something, or a task for one stage to do.
 
-For each one, in order:
+For each one, in order, in the draft:
 
-1. Agree the outcome, in that outward phrasing, one criterion at a time.
-2. Agree how it is observed, its verify clause, and whether a machine runs that check or a person
-   looks. A clause that only restates the criterion names no signal; ask again rather than accept
-   it. See "Tests and checks" below for what changes when the project has end to end testing or
-   visual regression on.
-3. Record who asked. `owner` when a person actually answered this criterion, in this
-   conversation. `designer` when nobody was present to answer, or when this is scope drafting on
-   its own in the autonomous branch. There is no third value, and a missing answer is never
-   `owner`.
+1. Draft the outcome, in that outward phrasing.
+2. Draft how it is observed, its verify clause, and whether a machine runs that check or a person
+   looks. A clause that only restates the criterion names no signal. A criterion with no
+   observable outcome is a gap: ask, one question, with a recommended answer, rather than write
+   the restatement. See "Tests and checks" below for what changes when the project has end to
+   end testing or visual regression on.
+3. Record who asked. `designer` for every line the draft wrote, until the whole-document yes at
+   "Approval". `owner` when a person wrote or corrected this criterion, in this conversation.
+   There is no third value, and a missing answer is never `owner`.
 4. Write it:
    ```
    "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
@@ -162,17 +194,21 @@ Never pass a verdict. It starts `unanswered` and stays there until an end of tas
 scope never sets it, on `add` or on `update`.
 
 A criterion handed down from a split, found in `task.md` on a first run, is read exactly like this:
-its wording is the starting draft for step 1, not something already agreed. Confirm it the same as
-any other criterion before it is written.
+its wording is the draft for step 1, not something already agreed. It is written `designer`, the
+same as any other drafted line.
+
+One criterion is the unit of a correction, not of the conversation. Each correction the person
+gives to a criterion is one `update`, `add` or `remove`, as "Then converse on what is wrong" says.
 
 **Autonomous:** for every criterion, draft steps 1 and 2 from what is on disk and record `author`
 as `designer`. Continue through the whole list; do not stop for lack of an answer.
 
 ### Non-goals
 
-Non-goals are asked for, never waited for. Do not wait for the person to raise one. Raise, one at
-a time, the things adjacent to the goal that nobody has mentioned, each with a recommended answer
-of in or out. On "out", write it:
+Non-goals are asked for, never waited for. The draft carries every non-goal the sources name
+outright. After the draft is shown, raise the things adjacent to the goal that nobody has
+mentioned. Raise them one at a time, each with a recommended answer of in or out. These are the
+single questions people skip, so they are asked on their own. On "out", write it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   add-non-goal "<task_folder>" --text "<what the task will not do>"
@@ -193,10 +229,9 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
 - **`surfaces.e2e.enabled` is true.** An end to end test is an acceptance criterion automated: a
   criterion already phrased as an outcome is already the script. So do not ask a separate
-  question about coverage. When agreeing a criterion's verify clause (step 2 above), ask instead
-  "shall I automate this criterion", with a recommended answer. Yes sets `verifiedBy` to
-  `machine` and the verify clause names the automated test; no falls back to the ordinary
-  question of how it is observed.
+  question about coverage, and do not ask per criterion whether to automate it. In the whole
+  draft, write each criterion's verify clause (step 2 above) as `machine`, naming the automated
+  test. The person corrects a line back to `person` like any other line, with `update`.
 - **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
   has a baseline in the surface file, `.visual-review/surfaces.json` in the tree scope runs from.
   One that does becomes a criterion whose verify clause names the visual regression check that
@@ -235,7 +270,8 @@ or no on that text, not on a recap of it.
 
 No: say what still needs to change, go back to the relevant step above, then render and ask again.
 
-Yes: every criterion is written as `designer` until a person says yes, so promote each one now:
+Yes: every drafted criterion is `designer` until a person says yes, so promote each one still
+`designer` now:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   update "<task_folder>" --id <id> --author owner
@@ -265,9 +301,10 @@ It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either valu
 means the sidecar was not written; dispatch again. Exit 4 means the sidecar is malformed; say so.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
-`add-non-goal`, `update`, `remove` or `set-mechanism` again. Only call one of those after the
-person (or, in the autonomous branch, the recommended answer) has actually confirmed that one
-change. Nothing is half-written, because nothing is written speculatively in the first place.
+`add-non-goal`, `update`, `remove` or `set-mechanism` again. A drafted line is `designer`, and
+stays so until the person approves the whole document, so a cancelled draft claims nobody's yes.
+A correction is written only after the person (or, in the autonomous branch, the recommended
+answer) has actually given that one change.
 
 Interactive: stop here. Name the next command for the person, `/aida:research <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:research` through the Skill tool, once, with the task
@@ -280,7 +317,8 @@ Scope has an update path, not only an authoring path, reachable at any point, in
 middle of research or design when a goal turns out to be missing. Invoke this skill again on the
 same task. `read` above finds the existing `alignment.json`, and the posture is ordinarily "reflect
 and refine": state what changed and hold the relevant part of the conversation above for just that
-change.
+change. When the invocation line already carries the change, apply it, then render and ask what
+else is wrong.
 
 To edit an existing criterion or non-goal rather than add or remove one:
 ```

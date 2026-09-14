@@ -21,6 +21,10 @@ Live-run rows 43 to 53.
 - The surfaces skill commits `project.json` after `install` and `decline`.
 
 ### Changed
+- Scope drafts the whole contract from what is on the table, renders it once and asks what is
+  wrong or missing; corrections become single writes in the person's words. Single questions
+  remain for a gap the draft cannot fill, the non-goal probes and the surfaces offer. Version 6
+  had made version 5's opt-in interrogation the ordinary behaviour; the owner found it painful.
 - The session-start line says `playbook file:` and the pick-up line names `/aida:next`.
 - The report reads an absent `runMode` as `interactive`, the value every other reader prints.
 - The catalog identifier tests a store path before answering with it, and answers
