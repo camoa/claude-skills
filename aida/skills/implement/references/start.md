@@ -39,3 +39,11 @@ same to the person: nothing was compared yet, not that a check found nothing.
 A resumed run that halts one or more work orders for drift is not a failure. Say plainly which
 orders halted and why. A halted order stays halted until a person looks at it; nothing here
 un-halts one automatically, and nothing here decides whether the drift is acceptable.
+
+Only a started order halts for drift: one with a step reached, a frozen test record or a build
+record. A drifted order that has not started is taken fresh from the live design instead, and
+nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
+The `resnapshotted:` line names those orders, and the ledger records each with the two hashes.
+This needs design closed on the live files; otherwise the run refuses with exit 13 and says to
+close design again. The `haltedDependents:` line names only orders the ledger halts, each of which
+depends on a started drifted order, directly or through another order.

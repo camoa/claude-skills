@@ -199,7 +199,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      JSON, not an object, or its hash field is missing or the wrong shape. Close design again.
 #  13  a new run found design-closed.json, readable, but its recorded hash disagrees with a hash
 #      re-derived from the live alignment.json and design/*.json. Design changed after it closed,
-#      without closing again. Close design again.
+#      without closing again. Close design again. A resumed run answers the same when a drifted
+#      order that has not started would take its live copy, and `restart` when the halted orders
+#      would: a live copy design did not close on is never frozen.
 #  14  the task's own project.json exists but is not valid JSON, so its codePath cannot be read.
 #      A different fact from exit 3's "no usable codePath", which is a valid file with the field
 #      absent or empty.
@@ -388,7 +390,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  68  `grant-attempt` or `restart` was called on an autonomous run. Both are a person's judgement,
 #      and an unattended run has none to offer. The same number for both, because it is one fact.
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
-#      restart that moved the implementation folder anyway would throw away a build that is fine.
+#      restart that reset an order anyway would throw away a build that is fine.
 #  70  `tests-freeze` was given a `--row` whose judge does not match the run. An autonomous run has
 #      no person to judge a row, so `person` there is a claim nobody made; an interactive run has a
 #      person, so `model` there records weaker evidence than the run actually had. The residue the
@@ -716,6 +718,22 @@ snapshot_self_hash() {
   [ "$rc" -eq 0 ] && [ -n "$hash" ] || return 1
   printf '%s' "$hash"
   return 0
+}
+
+# The snapshot document $1 with the orders named in $2 (a JSON array of ids) replaced by their
+# live copies from $3 (the live work orders), and its hash re-derived through snapshot_self_hash.
+# Prints the new document, or nothing and returns 1 when the hash could not be derived. takenAt
+# is kept: the ledger's resnapshots entry carries the date of the replacement. An order is frozen
+# when it starts, not when the stage starts, so an order nothing was built against takes the live
+# shape design closed on (ideal/implementation.md, the 2026-09-14 paragraph under "Freezing").
+snapshot_with_live_orders() {
+  local doc="$1" ids="$2" live="$3" orders alignment hash
+  orders="$(printf '%s' "$doc" | jq -c --argjson ids "$ids" --argjson live "$live" '
+      ($live | map({(.id): .}) | add // {}) as $lm
+      | .workOrders | map(. as $o | if (($ids | index($o.id)) != null) then $lm[$o.id] else $o end)')"
+  alignment="$(printf '%s' "$doc" | jq -c '.alignment')"
+  hash="$(snapshot_self_hash "$alignment" "$orders")" || return 1
+  printf '%s' "$doc" | jq -c --arg hash "$hash" --argjson orders "$orders" '.hash = $hash | .workOrders = $orders'
 }
 
 # Every design/*.json under $1, parsed and sorted by numeric work order id (wo1, wo2, ... wo10),
@@ -1282,6 +1300,7 @@ do_start() {
   local drifted_orders_json='[]' contract_changed=false new_live_order_ids_json='[]'
   local dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
+  local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash=''
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -1362,6 +1381,33 @@ do_start() {
                 end
             ]
         ')"
+      # A drifted order that has not started is not halted: nothing was built against its old
+      # shape, so it is replaced in the snapshot by the live copy instead, and its dependents are
+      # untouched (live-run row 72). Started means a ledger step reached or an attempt spent, a
+      # frozen test record, or a build record. An order gone from the live design has no copy to
+      # take and stays a halt. The live copy is taken only when design closed on it, the same
+      # rule a new run applies to the whole design.
+      local started_ids_json drifted_id
+      started_ids_json="$(jq -c '[ (.orders // [])[] | select(.lastStep != null or (.attemptsUsed // 0) > 0) | .id ]' "$LEDGER_FILE" 2>/dev/null)"
+      [ -n "$started_ids_json" ] || started_ids_json='[]'
+      for drifted_id in $(printf '%s' "$drifted_orders_json" | jq -r '.[].id'); do
+        if [ -e "$IMPL_DIR/tests-$drifted_id.json" ] || [ -e "$IMPL_DIR/build-$drifted_id.json" ]; then
+          started_ids_json="$(printf '%s' "$started_ids_json" | jq -c --arg id "$drifted_id" '. + [$id]')"
+        fi
+      done
+      resnapshot_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
+          ($live | map(.id)) as $liveIds
+          | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
+      if [ "$(printf '%s' "$resnapshot_ids_json" | jq 'length')" -gt 0 ]; then
+        [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
+          || die 13 "start: these work orders changed since the snapshot was taken and have not started: $(printf '%s' "$resnapshot_ids_json" | jq -r 'join(", ")'). Each would be taken fresh from the live design, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run start."
+        resnapshot_doc="$(snapshot_with_live_orders "$snapshot_doc" "$resnapshot_ids_json" "$live_workorders_json")" \
+          || die 3 "start: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
+        resnapshot_hash="$(printf '%s' "$resnapshot_doc" | jq -r '.hash')"
+        snapshot_workorders_json="$(printf '%s' "$resnapshot_doc" | jq -c '.workOrders')"
+        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson ids "$resnapshot_ids_json" \
+          '[ $drifted[] | . as $d | select(($ids | index($d.id)) == null) ]')"
+      fi
       # An order that depends on a drifted one, directly or through another order, is halted too.
       # It would otherwise build against an interface that moved, which is the same unbounded work
       # the drifted order itself is halted for (ideal/implementation.md, the unattended-answers
@@ -1385,7 +1431,8 @@ do_start() {
           | [ $trimmed[] | .id as $x
               | select(($bad | index($x)) == null)
               | (reach($adj; $x)) as $r
-              | ([ $r[] | select(($bad | index(.)) != null) ]) as $hits
+              # Bound first: after the pipe `.` would be $bad, and an array always finds itself.
+              | ([ $r[] | . as $d | select(($bad | index($d)) != null) ]) as $hits
               | select(($hits | length) > 0)
               | {id: $x, reason: ("design drift: " + $x + " depends on " + ($hits | join(", ")) + ", directly or through another order, and that design file changed since the snapshot was taken")}
             ]
@@ -1510,14 +1557,29 @@ do_start() {
     final_criteria_json="$(printf '%s' "$snapshot_criteria_json" | jq -c '[ .[] | {id: .id, rowState: "not-judged"} ]')"
   fi
 
+  # The re-snapshot lands after the ledger's hash check above, which reads the hash the ledger was
+  # opened against; the ledger written below carries the new one, and one line per replaced order
+  # naming both, so a reader can tell which shape each order was built from.
+  local resnapshots_json='[]'
+  [ -z "$ledger_doc" ] || resnapshots_json="$(printf '%s' "$ledger_doc" | jq -c '.resnapshots // []')"
+  if [ -n "$resnapshot_doc" ]; then
+    write_atomic "$SNAPSHOT_FILE" "$resnapshot_doc"
+    resnapshots_json="$(jq -cn --argjson have "$resnapshots_json" --argjson ids "$resnapshot_ids_json" \
+      --arg from "$snapshot_hash_on_disk" --arg to "$resnapshot_hash" --arg at "$(date -u +%Y-%m-%d)" \
+      '$have + [ $ids[] | {id: ., from: $from, to: $to, at: $at} ]')"
+    snapshot_hash_on_disk="$resnapshot_hash"
+  fi
+
   mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
   local ledger_json_out
   ledger_json_out="$(jq -n \
     --arg startedFrom "$ledger_started_from" --arg runMode "$ledger_run_mode" \
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
+    --argjson resnapshots "$resnapshots_json" \
     '{schemaVersion: 1, startedFrom: $startedFrom, startedAt: $startedAt, runMode: $runMode, snapshotHash: $snapshotHash,
-      orders: $orders, criteria: $criteria}')"
+      orders: $orders, criteria: $criteria}
+     | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
 
   # --- step 13: the report --------------------------------------------------------------------------
@@ -1595,6 +1657,7 @@ do_start() {
     --arg drift "$(if [ "$drift_checked" = "true" ]; then printf 'checked | contractChanged=%s' "$contract_changed_json"; else printf 'not checked: a first run has no earlier snapshot to compare against'; fi)" \
     --argjson drifted "$(printf '%s' "$drifted_orders_json" | jq -c '[ .[] | .id ]')" \
     --argjson haltedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
+    --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
     --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
@@ -1602,7 +1665,7 @@ do_start() {
     --arg state "$run_state" --arg next "$st_next" '
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom,
-     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, newLiveOrders: $newLiveOrders,
+     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted, newLiveOrders: $newLiveOrders,
      halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}')"
   exit 0
 }
@@ -6370,6 +6433,28 @@ do_restart() {
   rv_load_codepath "restart"
   br_require_clean_tree "restart" "$RV_CODEPATH"
 
+  # Only the halted orders start over. Their records move aside, their ledger entries go back to
+  # not started, and the snapshot takes their live copies, which design must have closed on: the
+  # same rule a new run applies to the whole design. Every other order keeps its freeze, its build
+  # records and its place in the ledger, because nothing it was built from changed (live-run row
+  # 72). An order gone from the live design has no copy to take; removing an order from a running
+  # build is not built, so that refuses and names the by-hand path.
+  ALIGNMENT_FILE="$TASK_PATH/alignment.json"
+  DESIGN_DIR="$TASK_PATH/design"
+  CLOSED_FILE="$TASK_PATH/design-closed.json"
+  local drifted_ids_json live_workorders_json live_hash missing
+  drifted_ids_json="$(printf '%s' "$drifted" | jq -Rc 'split(", ")')"
+  live_workorders_json="$(gather_workorders_json "$DESIGN_DIR")"
+  [ -z "$READ_FAILED" ] || die 3 "restart: $READ_FAILED is under design/ but could not be read as JSON."
+  live_hash="$(records_hash_for "$TASK_PATH")" \
+    || die 3 "restart: could not compute a hash over the live alignment.json and design/*.json."
+  [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
+    || die 13 "restart: the halted orders would be taken fresh from the live design, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run restart."
+  missing="$(jq -nr --argjson ids "$drifted_ids_json" --argjson live "$live_workorders_json" \
+    '($live | map(.id)) as $l | [ $ids[] | . as $d | select(($l | index($d)) == null) ] | join(", ")')"
+  [ -z "$missing" ] \
+    || die 3 "restart: these halted orders no longer exist in the live design: $missing. Removing an order from a running build is not built. For a whole-stage restart, move $IMPL_DIR aside by hand, close design, and run start."
+
   local head_short today target
   head_short="$(git -C "$RV_CODEPATH" rev-parse --short HEAD 2>/dev/null)"
   [ -n "$head_short" ] \
@@ -6379,19 +6464,52 @@ do_restart() {
   [ ! -e "$target" ] \
     || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
 
-  # The reason is written inside the folder being moved aside, because that folder is what it
-  # explains. Nothing reads this file yet; a person does.
+  local new_snapshot new_hash new_ledger
+  new_snapshot="$(snapshot_with_live_orders "$SNAPSHOT_DOC" "$drifted_ids_json" "$live_workorders_json")" \
+    || die 3 "restart: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
+  new_hash="$(printf '%s' "$new_snapshot" | jq -r '.hash')"
+  # A halted order's entry goes back to what start opens it as. The judgements its freeze wrote
+  # go too, and every criterion it serves goes back to not judged, since close confirms a row only
+  # once every serving order is closed.
+  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --argjson ids "$drifted_ids_json" --argjson snap "$SNAPSHOT_DOC" \
+    --arg from "$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.snapshotHash')" --arg to "$new_hash" --arg at "$today" '
+    ([ ($snap.workOrders // [])[] | . as $o | select(($ids | index($o.id)) != null)
+       | ((.criteriaServed // []) + (.criteriaOwned // []))[] ] | unique) as $touched
+    | .snapshotHash = $to
+    | .orders = (.orders | map(. as $o | if (($ids | index($o.id)) != null)
+        then {id: $o.id, lastStep: null, attemptsUsed: 0, roundsUsed: 0} else $o end))
+    | .criteria = (.criteria | map(. as $c
+        | if (($touched | index($c.id)) == null) then $c
+          else ($c | .rowState = "not-judged"
+                | if has("judgements") then .judgements = [ .judgements[] | . as $j | select(($ids | index($j.unit)) == null) ] else . end)
+          end))
+    | .resnapshots = ((.resnapshots // []) + [ $ids[] | {id: ., from: $from, to: $to, at: $at} ])')"
+  [ -n "$new_ledger" ] || die 3 "restart: the ledger update failed."
+
+  mkdir -p "$target" || die 3 "restart: could not create $target"
+  # The reason is written beside the records moved aside, because they are what it explains.
+  # Nothing reads this file yet; a person does.
   local restart_json
   restart_json="$(jq -n --arg restartedAt "$today" --arg reason "$reason" --arg head "$head_short" \
-    --arg drifted "$drifted" \
+    --argjson drifted "$drifted_ids_json" \
     '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
-      ordersHaltedForDrift: ($drifted | split(", "))}')"
-  write_atomic "$IMPL_DIR/restarted.json" "$restart_json"
+      ordersHaltedForDrift: $drifted}')"
+  write_atomic "$target/restarted.json" "$restart_json"
+  # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
+  # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
+  # interface record. find, not a glob: zsh stops on a glob with no match.
+  local one_id moved
+  for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
+    while IFS= read -r moved; do
+      [ -n "$moved" ] || continue
+      mv "$moved" "$target/" || die 3 "restart: could not move $moved to $target"
+    done < <(find "$IMPL_DIR" -mindepth 1 -maxdepth 1 -type f \( -name "*-$one_id.*" -o -name "*-$one_id-*" \) 2>/dev/null)
+  done
+  write_atomic "$IMPL_DIR/snapshot.json" "$new_snapshot"
+  write_atomic "$FN_LEDGER_FILE" "$new_ledger"
 
-  mv "$IMPL_DIR" "$target" || die 3 "restart: could not move $IMPL_DIR to $target"
-
-  echo "RESTART: $IMPL_DIR moved aside. Orders halted for drift: $drifted"
-  echo "RESTART: run start on this task to take a fresh snapshot from the live design."
+  echo "RESTART: records of $drifted moved to $target; every other order keeps its records."
+  echo "RESTART: $drifted start over from the live design; run start on this task to continue."
   printf '%s\n' "$target"
   exit 0
 }

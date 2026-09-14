@@ -58,6 +58,13 @@
         "$ref": "#/$defs/criterionEntry"
       },
       "description": "One entry per criterion in the snapshot's contract, opened by the first step as not judged. This holds whether the tests claiming to prove a criterion were confirmed to do so, never the criterion itself, which lives in the snapshot."
+    },
+    "resnapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resnapshot"
+      },
+      "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and `restart` for each order it resets, both after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
     }
   },
   "$defs": {
@@ -167,6 +174,33 @@
             "$ref": "#/$defs/judgement"
           },
           "description": "One entry per order whose frozen tests name this criterion, appended by `tests-freeze` when that order's rows are frozen; a serving order whose tests name only its own done-when appends none, and its judgement sits on its ledger entry as doneWhenJudgement. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
+        }
+      }
+    },
+    "resnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The order whose live copy the snapshot took."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The snapshot's hash before the copy was taken."
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The snapshot's hash after, which snapshotHash also became."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date the copy was taken, YYYY-MM-DD. Set by the script, never typed."
         }
       }
     },

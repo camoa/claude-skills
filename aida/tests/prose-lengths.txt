@@ -18,10 +18,10 @@ skills/completion/references/close.md 94
 skills/design/SKILL.md 457
 skills/implement/SKILL.md 172
 skills/implement/references/build.md 207
-skills/implement/references/finish.md 91
+skills/implement/references/finish.md 95
 skills/implement/references/preconditions.md 111
 skills/implement/references/review.md 250
-skills/implement/references/start.md 41
+skills/implement/references/start.md 49
 skills/implement/references/tests.md 247
 skills/next/SKILL.md 162
 skills/playbooks/SKILL.md 83
