@@ -6237,8 +6237,15 @@ do_dispatch_open() {
   # failure the checkpoint exists to catch (ideal/implementation.md, "The trace matrix and its
   # checkpoint").
   if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "row-checker" ]; then
-    local owned_json owned_count
-    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
+    local owned_json owned_count allow_now_json
+    # An owned file that sits under a path this dispatch may write is a test file, not production
+    # source: design lists an order's tests under ownedFiles so the overlap check sees them, and
+    # denying them here denied the test author the one file it was dispatched to write (live-run
+    # row 58). The allowed write paths are the caller's, given before the derivation runs.
+    allow_now_json="$(printf '%s' "$allow_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
+    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson allow "$allow_now_json" \
+      '[.workOrders[]?.ownedFiles[]?] | unique
+       | map(select(. as $f | ($allow | any(. as $a | $f == $a or ($f | startswith($a + "/")))) | not))')"
     owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \

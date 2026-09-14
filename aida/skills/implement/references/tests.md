@@ -71,8 +71,10 @@ Open it first:
 ```
 The script refuses a role name that matches no agent this plugin ships, and for this role it adds
 the production source to the denied reads itself, taken from the owned files every work order in
-the frozen snapshot declares. Never type those paths here. It prints what it denied; read that
-list, because it is the whole of what separates the tests from the code they judge.
+the frozen snapshot declares. An owned file under the `--allow-write` path is a test file, and it
+stays readable, so the author can read back what it writes. Never type those paths here. It
+prints what it denied; read that list, because it is the whole of what separates the tests from
+the code they judge.
 
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
 next dispatch refuse, and it names the role and order still holding it.
