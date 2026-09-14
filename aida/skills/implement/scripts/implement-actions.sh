@@ -6355,15 +6355,25 @@ do_dispatch_open() {
     # an order's tests under ownedFiles so the overlap check sees them, and denying them here
     # denied the test author the one file it was dispatched to write (live-run row 58). The globs
     # are the implement recipe's own, the ones tests-freeze pins, so a framework whose tests sit
-    # beside the source (Go) keeps every source file denied; an allowed directory would not.
+    # beside the source (Go) keeps every source file denied; an allowed directory would not. A
+    # glob was written for the delete guard and names test cases only; the author also writes
+    # base classes, traits and fixtures under the same test tree (live-run row 67). So an owned
+    # file under a directory the glob names literally, such as `tests` in `**/tests/**/*Test.php`,
+    # is a test-tree file too. A glob with no literal directory, Go's `**/*_test.go`, adds none.
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
     if [ -n "$test_glob_raw" ]; then
       while IFS= read -r f; do
         [ -n "$f" ] || continue
-        local is_test=false
+        local is_test=false seg
         while IFS= read -r g; do
           [ -n "$g" ] || continue
           tf_path_matches_catalog_glob "$f" "$g" && is_test=true
+          while IFS= read -r seg; do
+            case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
+            case "/$f/" in */"$seg"/*) is_test=true ;; esac
+          done <<TG_SEGS
+$(printf '%s' "${g%/*}" | tr '/' '\n')
+TG_SEGS
         done <<TG_GLOBS
 $test_glob_raw
 TG_GLOBS

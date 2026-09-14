@@ -74,8 +74,10 @@ One `--test-glob` per pattern, the same ones the freeze below takes. The script 
 name that matches no agent this plugin ships, and for this role it adds the production source to
 the denied reads itself, taken from the owned files every work order in the frozen snapshot
 declares. An owned file that matches a test glob is a test, and it stays readable, so the author
-can read back what it writes. The globs decide, not the write path, because a framework may keep
-its tests beside the source. Never type the denied paths here. It prints what it denied; read
+can read back what it writes. So is an owned file under a directory the glob names literally,
+`tests` in `**/tests/**/*Test.php`, because the author also writes base classes and fixtures
+there. The globs decide, not the write path, because a framework may keep its tests beside the
+source; a glob that names no directory adds nothing. Never type the denied paths here. It prints what it denied; read
 that list, because it is the whole of what separates the tests from the code they judge.
 
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
