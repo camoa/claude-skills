@@ -342,8 +342,10 @@ problem. Read the report file when the line is not enough, and fix the specific 
     exactly one order claims it;
   - a work order serving nothing needs a real `--criteria-served`, or it should not exist;
   - a work order missing a required test needs an `add-test` call;
-  - an order that reaches no owner needs a `--depends-on` pointing toward the order it supports,
-    or it is dead work and should be dropped;
+  - an order that owns nothing is reached only when an owning order depends on it, so add it to
+    that owner's `--depends-on`; the edge points from the owner to the order it needs, never the
+    other way. An order no owner needs either owns a criterion of its own, which is the case for
+    a second entry point the design recipe asks for, or it is dead work and should be dropped;
   - a cycle needs one of the `dependsOn` edges in it removed;
   - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat;
   - a wildcard in an owned file needs the directory named instead, or each file added, because

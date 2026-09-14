@@ -349,7 +349,7 @@ open_summary_of() {
         ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
         ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
-        ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and reaches no owner"),
+        ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
         ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape")
       ] | join("; ")
