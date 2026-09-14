@@ -11,7 +11,7 @@
 #   surfaces-actions.sh [--run-mode ...] register <id> --url <url> --kind <kind>... [--mask <css>]... [--enable]
 #   surfaces-actions.sh [--run-mode ...] baseline [<id>]... --check-recipe <framework>=<path>...
 #                                                 [--value <name>=<value>]... [--confirmed]
-#   surfaces-actions.sh decline
+#   surfaces-actions.sh decline <kind>
 #   surfaces-actions.sh step <name>
 #
 # The recipe flags are `--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one
@@ -86,7 +86,7 @@ RECORDS_DIR="$PROJECT_DIR/records"
 # The project record's `surfaces` field, initialised on the first write. $1 a jq filter over it.
 write_project_field() {
   local doc
-  doc="$(jq -c --arg sf "$SURFACE_REL" '.surfaces = ((.surfaces // {registryPath: null, declined: false, e2e: {enabled: false}, visualRegression: {enabled: false}}) | '"$1"')' "$PROJECT_FILE")" \
+  doc="$(jq -c --arg sf "$SURFACE_REL" '.surfaces = ((.surfaces // {registryPath: null, e2e: {enabled: false, declined: false}, visualRegression: {enabled: false, declined: false}}) | '"$1"')' "$PROJECT_FILE")" \
     || die 3 "$ACTION: could not update the surfaces field"
   write_atomic "$PROJECT_FILE" "$doc"
 }
@@ -120,6 +120,16 @@ sa_commit_if_changed() {
 # (exit 3), and two recipes are two answers to one question (exit 72). The words are the ones
 # cr_lookup_failure_pair accepts, and nothing here reads a fourth.
 RECIPE=""; RECIPE_FW=""; VIEWPORTS_ARG=""; VIEWPORTS_JSON="[]"; VALUES=""; KIND=""; KEY=""
+
+# Maps a kind word to the project record's key, or dies at 3 naming both kinds. Sets KEY. $1 the kind.
+kind_key() {
+  case "$1" in
+    e2e)                KEY="e2e" ;;
+    visual-regression)  KEY="visualRegression" ;;
+    *) die 3 "$ACTION: the kind is e2e or visual-regression, got: ${1:-nothing}" ;;
+  esac
+}
+
 resolve_recipe() {
   local recipes="" failures="" fw pair reason unknown=""
   while [ "$#" -gt 0 ]; do
@@ -181,7 +191,7 @@ SA_VIEWPORTS
 do_show_or_install() {
   local steps files_dir list n rel target kept=0 written=0 line before doc
   KIND="${1:-}"
-  case "$KIND" in e2e) KEY="e2e" ;; visual-regression) KEY="visualRegression" ;; *) die 3 "$ACTION: the kind is e2e or visual-regression, got: ${KIND:-nothing}" ;; esac
+  kind_key "$KIND"
   shift; resolve_recipe "$@"
   steps="$(sh_blocks_under "$RECIPE" Install)"
   files_dir="$(mktemp -d)" || die 3 "$ACTION: could not create a temporary folder"
@@ -338,10 +348,21 @@ $VALUES"
   recipe_output_summary 0 "$OUTFILE" 1
 }
 
+# --------------------------------------------------------------------- decline
+# A person declined one kind's setup. Takes a kind the way install does, since the two kinds are
+# separate capabilities: a person may take one and refuse the other.
+do_decline() {
+  local kind="${1:-}"
+  kind_key "$kind"
+  require_person decline "a person declined the setup"
+  write_project_field '.'"$KEY"'.declined = true'
+  printf 'declined: %s\nproject-file: %s\n' "$kind" "$PROJECT_FILE"
+}
+
 # ------------------------------------------------------------------------ read
 do_read() {
   printf 'project: %s\ncode-path: %s\n' "$PROJECT_DIR" "$TREE"
-  printf 'surfaces-field: %s\n' "$(jq -r 'if .surfaces == null then "none" else "e2e=\(if .surfaces.e2e.enabled then "on" else "off" end) visual-regression=\(if .surfaces.visualRegression.enabled then "on" else "off" end) declined=\(.surfaces.declined)" end' "$PROJECT_FILE")"
+  printf 'surfaces-field: %s\n' "$(jq -r 'if .surfaces == null then "none" else "e2e=\(if .surfaces.e2e.enabled then "on" elif .surfaces.e2e.declined then "declined" else "off" end) visual-regression=\(if .surfaces.visualRegression.enabled then "on" elif .surfaces.visualRegression.declined then "declined" else "off" end)" end' "$PROJECT_FILE")"
   sf_load_surfaces "$SURFACE_FILE"
   printf 'surface-file: %s (%s)\n' "$SURFACE_FILE" "$SF_STATE"
   [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) url=\(.url) masks=\(.masks | length)"'
@@ -355,6 +376,6 @@ case "$ACTION" in
   show|install) do_show_or_install "$@" ;;
   register)     do_register "$@" ;;
   baseline)     do_baseline "$@" ;;
-  decline)      require_person decline "a person declined the setup"; write_project_field '.declined = true'; printf 'declined: true\nproject-file: %s\n' "$PROJECT_FILE" ;;
+  decline)      do_decline "$@" ;;
   *)            die 3 "unknown action $ACTION, expected read, show, install, register, baseline, decline or step" ;;
 esac

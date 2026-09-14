@@ -261,15 +261,16 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 Name a `--surface` when the order changes a page or a screen a person sees, by its id in the
 surface registry. Most orders name none.
 
-Before naming one: this order changes a page, `<projectPath>/project.json` has neither kind on,
-and `surfaces.declined` is false. Interactive only, offer the setup once per task. Say so in one
-line. Ask whether to set the surfaces up now, with a recommended answer. Give three answers: yes,
-not this task, or no. Say in the ask that "no" is project-wide and "not this task" is not. Yes
-invokes the `surfaces` skill through the Skill tool, and this order then names the id the setup
-registered. "Not this task" records nothing. No runs
-`"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline`, project-wide, and
-the question is never asked again. Autonomous: nothing is offered. A page scope did not see is
-often first named here.
+Before naming one: this order changes a page, and `<projectPath>/project.json` has `surfaces` null
+or a kind that is off and not declined. Interactive only, offer the setup once per task, naming
+every such kind. Say so in one line. Ask whether to set the surfaces up now, per kind, with a
+recommended answer per kind. Give three answers per kind: yes, not this task, or no. Say in the ask
+that "no" is project-wide and "not this task" is not. A yes on a kind invokes the `surfaces` skill
+through the Skill tool, naming that kind. Do this once per kind said yes to. This order then
+names the id the setup registered. "Not this task" records nothing for that kind. A no on a kind
+runs `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>`,
+project-wide, and that kind is never asked again. Autonomous: nothing is offered. A page scope did
+not see is often first named here.
 
 Then, one call per item, add what the order still needs:
 ```

@@ -15,11 +15,14 @@ the path the record holds, so this step resolves no recipe and runs no lookup.
 
 ## Offer the setup once
 
-Offer setup when the framework's recipe carries surface rows that are not absent, and the project has
-no registry. Rows that are not absent are how review knows the framework has surfaces at all.
+Offer setup for each kind that is off, not declined, and carries surface rows in the recipe. Name
+every such kind on its own, and take an answer per kind. The two are separate capabilities, so a
+person may take one and refuse the other.
 
-Ask once. A recorded refusal is never asked again, because an offer repeated every task is a nag, and
-a nag gets clicked through. Autonomous, the offer is not made, and the record says it was not offered.
+Ask once per kind. A yes on a kind invokes the `surfaces` skill through the Skill tool, naming that
+kind. A no on a kind runs `decline <kind>`, and that kind is never asked again. An offer repeated
+every task is a nag, and a nag gets clicked through. Autonomous, the offer is not made, and the
+record says it was not offered.
 
 ## Run them
 

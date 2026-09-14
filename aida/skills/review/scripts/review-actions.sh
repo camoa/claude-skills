@@ -1784,19 +1784,34 @@ do_surfaces() {
 
   local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file checks_json surfaces_json updated
   local one_accept all_rows si one_surface merged one_verdict
+  local e2e_declined vr_declined open_kinds relevant_off
   e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
 
-  # The offer, which the skill makes and this action only records what it can decide. Rows that are
-  # not absent are how review knows the framework has surfaces at all.
-  if [ "$SF_STATE" = "ok" ]; then
-    setup="registered"
-  elif [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.declined // false')" = "true" ]; then
-    setup="declined"
-  elif [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select((.absent // false) == false) ] | length')" -gt 0 ]; then
+  # Per kind: off, not declined, and the recipe carries its surface row. Rows that are not absent
+  # are how review knows the framework has that kind at all. The two are separate capabilities, so
+  # declining one never silences the other's offer.
+  e2e_declined="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.e2e.declined // false')"
+  vr_declined="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.visualRegression.declined // false')"
+  open_kinds=""; relevant_off=""
+  if [ "$e2e_on" != "on" ] && [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select(.id == "e2e" and (.absent // false) == false) ] | length')" -gt 0 ]; then
+    relevant_off="yes"
+    [ "$e2e_declined" = "true" ] || open_kinds="end to end"
+  fi
+  if [ "$vr_on" != "on" ] && [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select(.id == "visual-regression" and (.absent // false) == false) ] | length')" -gt 0 ]; then
+    relevant_off="yes"
+    [ "$vr_declined" = "true" ] || open_kinds="${open_kinds:+$open_kinds and }visual regression"
+  fi
+
+  # The offer, which the skill makes and this action only records what it can decide.
+  if [ -n "$open_kinds" ]; then
     if [ "$RW_RUN_MODE" = "autonomous" ]; then setup="not-offered-autonomous"; else setup="available"; fi
+  elif [ "$SF_STATE" = "ok" ]; then
+    setup="registered"
+  elif [ -n "$relevant_off" ]; then
+    setup="declined"
   else
     setup="not-applicable"
   fi
@@ -1867,9 +1882,9 @@ RW_SURFACE_VERDICTS
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
   echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   case "$setup" in
-    available)              echo "SURFACES: this framework's recipe carries surface rows and this project has no surface file. The setup offer belongs here, once." >&2 ;;
-    declined)               echo "SURFACES: a person declined the setup, and it is not offered again." >&2 ;;
-    not-offered-autonomous) echo "SURFACES: this framework's recipe carries surface rows and this project has no surface file. Nobody is present, so the offer was not made." >&2 ;;
+    available)              echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
+    declined)               echo "SURFACES: every kind that is off has been declined, and none of them is offered again." >&2 ;;
+    not-offered-autonomous) echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Nobody is present, so the offer was not made." >&2 ;;
   esac
   exit 0
 }

@@ -1,6 +1,6 @@
 ---
 name: surfaces
-description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "take the first baselines", "add a page to the visual review", or when a stage's offer, at scope, design or review, gets a yes. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
+description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "take the first baselines", "add a page to the visual review", or when a stage's offer, at scope, design or review, gets a yes on a kind. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
 argument-hint: "<read | show | install | register | baseline | decline> [<kind or id>]"
 arguments: [action, subject]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh *), Agent
@@ -33,6 +33,9 @@ once, at the start. Exit 70 means a person's answer was passed with nobody prese
 It prints the project, the `surfaces` field, and the surface file with its state. It prints one
 line per surface, and a version 5 `registry.yml` when one sits beside the file. That registry is
 left in place. Its ids and URLs are candidates for discovery, below.
+
+A stage's offer names the kind in its invocation. Run by hand with no kind, ask which kind after
+`read`, naming each kind's state, and then work that kind only.
 
 ## Resolve the recipes
 
@@ -101,10 +104,11 @@ it. Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirt
 ## Decline
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>
 ```
-Records that the person declined the setup. Every stage's offer, at scope, design and review,
-reads it and does not ask again. It is a person's answer, so it refuses unattended at 70.
+Records that the person declined that kind's setup. Every stage's offer, at scope, design and
+review, reads it and does not ask again for that kind. It is a person's answer, so it refuses
+unattended at 70. No kind, or an unknown one, refuses at 3, naming `e2e` and `visual-regression`.
 
 ## What this skill never does
 
