@@ -396,10 +396,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and an unattended run has none to offer. The same number for both, because it is one fact.
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
 #      restart that reset an order anyway would throw away a build that is fine.
-#  70  `tests-freeze` was given a `--row` whose judge does not match the run. An autonomous run has
-#      no person to judge a row, so `person` there is a claim nobody made; an interactive run has a
-#      person, so `model` there records weaker evidence than the run actually had. The residue the
-#      record keeps is only worth keeping when it is true, so both refuse and nothing is written.
+#  70  `tests-freeze` was given a `--row` judged by a person on an autonomous run. An autonomous run
+#      has no person to judge a row, so `person` there is a claim nobody made. Nothing is written.
+#      `model` is accepted on both runs. The row-checker judges every row in both modes, and a
+#      person on an attended run answers only a row it rejected (live-run row 70).
 #
 # The codes the paper test added. Each one is a fact nothing refused before.
 #  71  `build-record` or `fix-record` was given a `--started-at` that cannot be the commit the work
@@ -3369,9 +3369,9 @@ TF_EOF
 
   # --- the run's own mode, read once: the row checks below and the rejected-row halt both use it ---
   # A ledger that is present and unreadable refuses here rather than further down. The mode decides
-  # which judge a row may carry, so reading it as interactive because the file would not parse would
-  # refuse an autonomous run with a sentence about a run it is not on. A ledger that is absent is a
-  # different fact, left to the steps below, which refuse on it by name.
+  # whether a person's row may stand, so reading it as interactive because the file would not parse
+  # would accept a person's row on an autonomous run, a claim nobody made. A ledger that is absent
+  # is a different fact, left to the steps below, which refuse on it by name.
   local tf_ledger_file tf_ledger_doc tf_run_mode
   tf_ledger_file="$IMPL_DIR/ledger.json"
   tf_ledger_doc=""
@@ -3396,18 +3396,16 @@ TF_EOF
   [ -z "$bad_kinds" ] \
     || die 64 "tests-freeze: $unit_id serves or owns criteria whose verifiedBy is neither machine nor person: $bad_kinds. Such a criterion takes no test, no checklist and no row, so freezing it would record nothing at all. Fix the contract and close design again."
 
-  # --- 70: the judge of a row must match the run this task is on -----------------------------------
+  # --- 70: a person's row is a claim only an attended run can make ---------------------------------
+  # A model's row is accepted on both runs. The row-checker judges every row in both modes, and on
+  # an attended run the person answers only a row it rejected. So `model` on an interactive run is
+  # the common case, not a checker standing in for a person (live-run row 70).
   local wrong_judge
   if [ "$tf_run_mode" = "autonomous" ]; then
     wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.judgedBy == "person") | .criterion ] | join(", ")')"
     [ -z "$wrong_judge" ] \
       || die 70 "tests-freeze: these rows say a person judged them, and this run is autonomous: $wrong_judge. No person is here to read a row, and a row recorded as a person's is one nobody can list again later. Nothing is written."
-  else
-    wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
-        [ .[] | select(.judgedBy == "model") | .criterion ] | join(", ")')"
-    [ -z "$wrong_judge" ] \
-      || die 70 "tests-freeze: these rows say a model judged them, and this run is interactive: $wrong_judge. A person is here, and their reading is the stronger evidence, so the record must not say a checker stood in for them. Nothing is written."
   fi
 
   # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------

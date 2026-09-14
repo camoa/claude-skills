@@ -108,9 +108,9 @@ step earlier. A hook refuses the read while the dispatch record is open.
 
 **It may not write production code.** It writes the test, watches it fail, and stops.
 
-**Set the tier on the dispatch.** A mid tier where a person will read the rows before anything is
-frozen. The top tier where the run is unattended, because then nobody reads them and the whole
-build is measured against work nothing checked first.
+**Set the tier on the dispatch.** A mid tier, in both modes. The checker reads every row at the
+top tier before anything is frozen, and a person reads the rows it rejected. So the author's work
+is checked before the build is measured against it, whether or not a person is present.
 
 Give it the **path** to the test-authoring recipe for its framework, the **path** of the brief
 `tests-brief` wrote, and nothing else. It opens both itself. Do not read either body here and paste
@@ -149,27 +149,19 @@ freeze. No script action runs one recipe row on its own, so this conversation ru
 This is the one place the tests' own standards are judged. The build step leaves the frozen tests
 out of its tool rows, because the implementer may not write them.
 
-## Put the rows to the person, before anything is frozen
+## Put the rows to the checker, before anything is frozen
 
-Show one row per criterion the tests name: the criterion, its verification sentence, and the names
-of the tests that prove it. Show one more row when a test proves the order's done-when: the order
-id, its done-when text, and those tests. Show the rows and not the test code. The question is
-whether the tests named exercise the sentence beside them, and test code invites a review of the
-code instead.
+Build one row per criterion the tests name: the criterion, its verification sentence, and the names
+of the tests that prove it. Build one more row when a test proves the order's done-when: the order
+id, its done-when text, and those tests. The rows carry names and not test code. The question is
+whether the tests named exercise the sentence beside them.
 
-**Interactive, ask row by row.** Each answer becomes one
-`--row <criterion id>=confirmed::person::<the person's words>` or
-`--row <criterion id>=rejected::person::<the person's words>` for the freeze below. The done-when
-row is keyed by the order id in place of a criterion id: `--row wo1=confirmed::person::...`. A row the
-person rejects goes back to the test author before any freeze runs. Never run the freeze with a
-rejected row still standing. `tests-freeze` refuses it and writes nothing. Send that row back
-first, and freeze once every row for this order reads confirmed. A note may not hold the text
-`; earlier: `, the text this stage joins one halt reason to another with; a note carrying it would
-forge a halt nobody wrote, so `tests-freeze` refuses the flag rather than write it.
-
-**Unattended, there is nobody to ask.** Dispatch `row-checker`. This reading stands in for the one
-place a person is the only check on whether a test asserts deeply enough. Pay the top tier for what
-is left. Open the dispatch record first, the same way every other role gets one:
+**Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
+recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a
+case the recipe asks for that no test covers, and a test that measures something easier than the
+sentence. Asking the person every row added a turn and no judgement the checker had not given
+(live-run row 70). Pay the top tier. Open the dispatch record first, the same way every other role
+gets one:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id>
 ```
@@ -178,20 +170,38 @@ owned files. So `row-checker` cannot open the production source behind a hook. W
 open, the hook denies nothing. The checker's own instructions to stay off the implementation are
 then just words, with nothing enforcing them.
 
-**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's rows
-and the path its verdict file goes to, under the task folder, and nothing else. A done-when row
-carries the order id and the done-when text where a criterion row carries the id and the verify
-clause. It reads that text and each named test, never the implementation, and answers confirmed or
-rejected with a note for each row. Close the dispatch record as soon as it returns, per SKILL.md.
+**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's
+rows, the **path** to the test-authoring recipe resolved above, and the path of its verdict file
+under the task folder. Nothing else. A done-when row carries the order id and the done-when
+text where a criterion row carries the id and the verify clause. It reads that text, the recipe and
+each named test, never the implementation, and answers confirmed or rejected with a note for each
+row. Close the dispatch record as soon as it returns, per SKILL.md.
 
-Turn its answers into `--row <criterion id>=<verdict>::model::<its note>` for the freeze. A row it
-rejects is not sent back to the test author the way a person's rejection is. Nobody is present to
-judge the correction, so `tests-freeze` writes the halt onto the order, with the checker's own note
-as the reason. Then it refuses. Report the halt, and take the next ready order instead.
+**A confirmed row is the checker's, in both modes.** It becomes
+`--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
+by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
+confirmed row to the person. The record says a model judged it, so a person can list those rows
+later and read any of them again.
 
-**The judge has to match the run mode.** A row judged `person` on an autonomous run, or judged
-`model` on an interactive one, refuses. The freeze exists to record who actually looked, and a
-mismatched row would let one stand in for the other silently.
+**Interactive, a rejected row goes to the person, one question per row.** Show the row, the
+checker's note, and the answer the note recommends. The person's answer becomes
+`--row <criterion id>=confirmed::person::<the person's words>` or
+`--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
+the test author before any freeze runs. Never run the freeze with a rejected row still standing.
+`tests-freeze` refuses it and writes nothing. Send that row back first. A repaired test goes
+through the checker again. Freeze once every row for this order reads confirmed. A note may not
+hold the text `; earlier: `. This stage joins one halt reason to another with that text, so a note
+carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
+
+**Unattended, there is nobody to ask.** A rejected row becomes
+`--row <criterion id>=rejected::model::<its note>`, and it is not sent back to the test author the
+way a person's rejection is. Nobody is present to judge the correction, so `tests-freeze` writes
+the halt onto the order, with the checker's own note as the reason. Then it refuses. Report the
+halt, and take the next ready order instead.
+
+**A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
+nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs
+on both. The freeze exists to record who actually looked.
 
 ## Freeze what came back
 
