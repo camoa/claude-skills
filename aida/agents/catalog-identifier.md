@@ -1,6 +1,6 @@
 ---
 name: catalog-identifier
-description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, design, implement, surfaces and task skills. Identifies only, and never opens a guide body.
+description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, implement, review, surfaces and task skills. Identifies only, and never opens a guide body.
 tools: Skill, Read, Bash, Glob, Grep
 disallowedTools: Agent
 model: sonnet
@@ -21,8 +21,8 @@ URL.
 **Why you hold Bash.** The navigator's process-recipe lookup is a shell sequence. It revalidates
 the index, checks its own cache, and fetches a body with `curl` when the cache misses. The Skill
 tool loads the navigator's instructions into you. It does not run them. Without Bash you can read
-the steps and do none of them. Bash is for the navigator's lookup only. Do not create, edit or
-delete any file with it.
+the steps and do none of them. Bash is for the navigator's lookup and for the one check on its
+answer below. Do not create, edit or delete any file with it.
 
 Return two lists, kept apart:
 

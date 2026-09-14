@@ -69,7 +69,7 @@ from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool
 so scoping in this same window is not refused. The tool asks for approval, because the path is
 outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
 tool refuses on first entry. On that refusal, print the path and `cd <path> && claude`, which
-opens a window in the tree, say that the site offer comes at `start`, and stop. On a successful
+opens a window in the tree. Say that the site offer comes at `start`, and stop. On a successful
 entry, go on to step 5.
 
 **5. Offer the site.** Runs here when this window entered the tree, and at `start` otherwise. A
