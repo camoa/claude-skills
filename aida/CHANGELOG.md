@@ -9,8 +9,9 @@ All notable changes to this plugin are recorded here. The format follows
 ### Fixed
 - A recipe step that reads standard input no longer swallows the steps after it. The step loop
   fed its lines through the loop's own stdin, and a command such as `ddev composer require`
-  read them, so the install ended early with no error. Every step now runs with stdin closed.
-  Reported by the catalog side while consuming the setup recipes.
+  read them, so the install ended early with no error. Every step now runs with stdin closed,
+  and so does every `## Tokens` command and check row. Reported by the catalog side while
+  consuming the setup recipes.
 
 ## [6.0.0-beta.9] - 2026-09-14
 

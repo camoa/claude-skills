@@ -891,10 +891,10 @@ br_run_resolved() {
     return 0
   fi
   if [ -n "$errfile" ]; then
-    ( cd "$dir" || exit 127; exec "$@" ) >"$outfile" 2>"$errfile"
+    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
     rc=$?
   else
-    ( cd "$dir" || exit 127; exec "$@" ) >"$outfile" 2>&1
+    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1
     rc=$?
   fi
   printf 'RAN\t%s' "$rc"
