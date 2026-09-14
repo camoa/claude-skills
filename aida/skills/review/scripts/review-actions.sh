@@ -28,6 +28,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--accept-baseline <surface id>]...
 #                                            [--value <name>=<value>]...
 #   review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+#   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
 #   review-actions.sh step     <name>
 #
 # `--recipe` names the `test-execution` recipe, for its `## Test commands` block, which carries the
@@ -182,6 +183,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
        review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+       review-actions.sh audit    <task_folder>
        review-actions.sh step     <name>
 EOF
 }
@@ -2133,6 +2135,57 @@ RW_ROWS
 }
 
 # ------------------------------------------------------------------------------------------------
+# `audit`: which checks fired or were bypassed, read off the record and nothing else.
+# ------------------------------------------------------------------------------------------------
+
+# One line per check, in the record's order, with the word for how its verdict came about. `ran`: a
+# command or a lens ran and returned it. `read`: a record field decided it and nothing ran. `off`:
+# the project turned the thing off, a kind disabled, a row the recipe declares absent, an accept
+# row nobody asked for. `could-not-look`: a recipe, a row, a file or a tool was absent. Then one
+# line per surface row, run or not, with the reason: disabled, unaffected, or no harness when the
+# run itself did not happen. Then the counts per word over the checks.
+#
+# The row's own fields decide where they can: exitCode, absent, the id, the verdict, and the
+# mutation object's output, which is the one field a mutation run leaves. Three sets of rows write the same fields for different reasons, and there the
+# detail's fixed wording decides: a tool row undeclared with no command, a surface check undeclared
+# with no command, and a surface row not run. The wording is this script's own, and a field on
+# the row saying why nothing ran would make each a field read. Nothing here changes a verdict.
+do_audit() {
+  [ "$#" -ge 1 ] || die 3 "audit: a task folder is required"
+  [ "$#" -le 1 ] || die 3 "audit: unrecognized extra argument: $2"
+  rw_paths "audit" "$1"
+  rw_load_record "audit"
+  [ -n "$RW_RECORD_DOC" ] || die 3 "audit: $RECORD_FILE not found, so no review has run for this task and there is nothing to audit. Run checks first."
+  printf '%s' "$RW_RECORD_DOC" | jq -r --arg lenses " non-goals solid dry architecture-fit guides framework-practices " '
+    . as $r
+    | def how: .id as $id | .verdict as $v | .detail as $d |
+        if has("exitCode") then "ran"
+        elif (.absent // false) then "off"
+        elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" then "could-not-look" else "ran" end)
+        elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
+        elif $id == "test-and-mutation" then
+          (if ($r.mutation | has("output")) then "ran" elif $v == "unknown" then "could-not-look" else "read" end)
+        elif ($id | endswith("-accept")) then "off"
+        elif $v == "met" then "read"
+        elif ($d | test("the project record says|holds no enabled surface|declares its suite row absent")) then "off"
+        elif ($d | test("does not apply to it|changed no file")) then "read"
+        else "could-not-look" end;
+      # The two lists a surface check names in its detail, one id each, across every surface check.
+      def named($lead): [ $r.checks[] | .detail | scan($lead + "[^.]*") | sub($lead; "") | split(", ") ] | add // [];
+      (named("Disabled and not run: ")) as $disabled
+    | (named("touched none of their declared paths: ")) as $unaffected
+    | ([ .checks[] | {id, verdict, how: how} ]) as $rows
+    | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)" ]
+      + [ .surfaces[] | .id as $sid | "surface(\($sid)): " + (if .ran then "run"
+            elif ($disabled | index($sid)) != null then "not run: disabled"
+            elif ($unaffected | index($sid)) != null then "not run: unaffected"
+            else "not run: no harness" end) ]
+      + [ "audit: " + ([ "ran", "read", "could-not-look", "off" ] | map(. as $w | $w + "=" + ([ $rows[] | select(.how == $w) ] | length | tostring)) | join(" ")) ]
+    | .[]' || die 3 "audit: $RECORD_FILE could not be read as a review record."
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # `step`: print one step file.
 # ------------------------------------------------------------------------------------------------
 
@@ -2169,6 +2222,7 @@ case "$ACTION" in
   findings) do_findings  "$@" ;;
   surfaces) do_surfaces "$@" ;;
   close)    do_close    "$@" ;;
+  audit)    do_audit    "$@" ;;
   step)     do_step     "$@" ;;
   *) usage; die 3 "unknown action: $ACTION" ;;
 esac

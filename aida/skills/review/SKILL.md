@@ -126,11 +126,35 @@ unknown, in its own word, and give the count of criteria reading unanswered. Nev
 reading undeclared as one that passed. Version 5 printed that every layer ran and found nothing
 while one tool had not run.
 
+After `close` has written the record, run `audit` and print its lines before you say the
+verdict word, so a person sees what did not run first. `close` writes the last check, which is
+why `audit` runs after it.
+
 Name the catalog notes by count as well. A note is a guide the code contradicts, a recipe whose
 command no longer runs, or a pattern the framework wants and no guide names. A recipe research or
 design judged not to fit this task is a note too. `checks` writes it from the `recipeFit` field of
 each research file and of `design-closed.json`, and a mismatch never fails a review. Review writes
 nothing to the catalog. A person decides whether a note becomes a proposal.
+
+## audit
+
+Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh audit "<task_folder>"
+```
+It reads the review record and changes nothing. It prints one line per check, in the record's
+order: the id, the verdict, and one word for how the verdict came about.
+
+| Word | What it says |
+|---|---|
+| `ran` | a command or a lens ran and returned the verdict |
+| `read` | a record field decided it, and nothing ran |
+| `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent |
+| `could-not-look` | a recipe, a row, a file or a tool was absent, so the verdict is unknown or undeclared |
+
+Then one line per surface: run, or not run with the reason, `disabled`, `unaffected` or `no harness`.
+Then one line with the counts per word. Exit 3 with no record, naming the file. Run it at any step
+after `checks`; the list grows as the record does.
 
 ## What this skill records, and what it does not enforce
 

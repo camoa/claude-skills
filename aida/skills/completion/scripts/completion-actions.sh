@@ -63,6 +63,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                       lands.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/completed-schema.json the shape of the record this script writes.
 #   ${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh   every task write: create, complete.
+#   ${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh  `audit`, the list the body carries.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk. The
 # five zsh traps implement-actions.sh's header lists hold here too: never a variable named `path`
@@ -90,6 +91,7 @@ RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
 TASK_SCRIPT="${PLUGIN_ROOT}/skills/task/scripts/task-actions.sh"
+REVIEW_SCRIPT="${PLUGIN_ROOT}/skills/review/scripts/review-actions.sh"
 COMPLETED_SCHEMA="${PLUGIN_ROOT}/scripts/completed-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'completion-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
@@ -110,6 +112,7 @@ for lib_name in "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do
 done
 [ -f "$COMPLETED_SCHEMA" ] || die 3 "cannot find the record shape at $COMPLETED_SCHEMA"
 [ -f "$TASK_SCRIPT" ] || die 3 "cannot find the task script at $TASK_SCRIPT"
+[ -f "$REVIEW_SCRIPT" ] || die 3 "cannot find the review script at $REVIEW_SCRIPT"
 
 usage() {
   cat <<'EOF' >&2
@@ -394,10 +397,11 @@ CP_WANTED
 
 # Renders the pull request body from the records only. Completion computes nothing: each section
 # reads one field, and a missing record is written in words, never left blank. The body is never
-# printed; its path is. $1 the record this close is about to write.
+# printed; its path is. $1 the record this close is about to write, $2 the lines the review
+# script's `audit` printed, empty when there is no review record.
 cp_render_body() {
   jq -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
-    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" '
+    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
     ["# " + $task, ""]
@@ -414,8 +418,10 @@ cp_render_body() {
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         + (if ($taskDoc.worktree // null) == null then [] else
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
-            + (if ($taskDoc.environment // null) == null then [] else ["Tear the site down first: `task environment " + $task + " down`"] end)
-            + ["After the merge: git worktree remove " + $taskDoc.worktree.path + " and git branch -d " + $taskDoc.worktree.branch] end))
+            + ["After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end))
+    + section("Review audit";
+        if $review == null then ["no review record; nothing was checked"]
+        else ($audit | split("\n") | map(select(length > 0) | "- " + .)) end)
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]
@@ -567,9 +573,14 @@ CP_LEAVES2
      capturesOffered: $offered, capturesSkipped: $skipped}')"
   [ -n "$record" ] || die 3 "close: could not assemble the record for $CP_TASK_ID."
 
-  local body
+  local body audit_lines
+  audit_lines=""
+  if [ "$CP_REVIEW_STATE" = "ok" ]; then
+    audit_lines="$("$REVIEW_SCRIPT" audit "$TASK_PATH")" \
+      || die 3 "close: review-actions.sh audit refused for $TASK_PATH, so the body's audit list could not be rendered. Its own line is above."
+  fi
   mkdir -p "$COMPLETION_DIR" || die 3 "close: could not create $COMPLETION_DIR"
-  body="$(cp_render_body "$record")"
+  body="$(cp_render_body "$record" "$audit_lines")"
   [ -n "$body" ] || die 3 "close: could not render the pull request body for $CP_TASK_ID."
   write_atomic "$BODY_FILE" "$body"
   cp_write_record "close" "$record"
