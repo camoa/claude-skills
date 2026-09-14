@@ -84,10 +84,13 @@ After `install`, open the discovery step through the script and follow it:
 A `Read` rule naming the plugin root does not reliably expand, which is why the step is read this
 way. Discovery ends with one `register` call per surface the person confirmed:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... --enable
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... [--path <glob>]... [--critical] --enable
 ```
 Pass `--enable` only for a surface the person confirmed. Nothing is enabled unattended. Each
-`register` commits the surface file, the way `install` does, so `baseline` finds a clean tree.
+`--path` is a glob, relative to the code tree, naming files that render the surface. Review runs
+the surface only when the diff touches one of them. `--critical` makes it run on every review.
+A surface with no `--path` runs on every review too. Each `register` commits the surface file,
+the way `install` does, so `baseline` finds a clean tree.
 Exit 62 means `install` has not run. Exit 3 names an id already registered with different
 fields. Exit 61 means the tree is dirty with something else.
 

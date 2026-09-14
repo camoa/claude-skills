@@ -35,12 +35,20 @@ The recipe's `## Viewports` block is the framework's default, and `install` wrot
 discovery prose may say how to read the theme's breakpoints and propose a change. Propose it, and
 the person confirms with `install --viewport`. Unattended, the recipe's list stands unchanged.
 
+## Declare the paths that render each surface
+
+For each surface the person keeps, ask which paths render it. On Drupal that is a theme's
+templates folder, a module, or a block's template. Each answer is one `--path` glob, relative to
+the code tree. A bare directory covers every file under it; `dir/*` matches only its direct
+children. Ask whether the surface is critical, and pass `--critical` when it is. A surface
+with no declared paths runs on every review, so declaring is what makes review affordable.
+
 ## Write what the person kept
 
-Show the list: id, url, kinds, masks. The person adds, removes and edits. Then, for each row the
-person kept:
+Show the list: id, url, kinds, masks, paths, critical. The person adds, removes and edits. Then,
+for each row the person kept:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... --enable
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... [--path <glob>]... [--critical] --enable
 ```
 A row the person did not confirm is not written. Autonomous, `--enable` refuses at 70, so nothing
 is enabled unattended: register nothing and say the list needs a person.

@@ -34,6 +34,11 @@ It runs every row the surface block declares, and it records checks 13 to 15 and
 registered surface, with the verdict and whether it ran. It prints one summary line per surface. A
 harness's own output stays in the record, per SKILL.md.
 
+**Review narrows by the paths each surface declares.** A surface runs when the diff touched one of
+its paths. A critical surface always runs. A surface with no declared paths always runs. The rest
+are recorded as not run, and the check's detail names them. A recipe row without a `{surfaces}`
+token cannot be narrowed, so the whole set runs and the detail says so.
+
 **Zero tests ran is never a pass.** A run that selected nothing reads unknown. A registry surface
 with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform.
 

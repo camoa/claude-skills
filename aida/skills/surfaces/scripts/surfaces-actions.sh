@@ -8,7 +8,8 @@
 #   surfaces-actions.sh [--run-mode <interactive|autonomous>] read
 #   surfaces-actions.sh [--run-mode ...] show     <kind> <recipe flags>
 #   surfaces-actions.sh [--run-mode ...] install  <kind> <recipe flags> [--viewport <name>=<w>x<h>]...
-#   surfaces-actions.sh [--run-mode ...] register <id> --url <url> --kind <kind>... [--mask <css>]... [--enable]
+#   surfaces-actions.sh [--run-mode ...] register <id> --url <url> --kind <kind>... [--mask <css>]...
+#                                                 [--path <glob>]... [--critical] [--enable]
 #   surfaces-actions.sh [--run-mode ...] baseline [<id>]... --check-recipe <framework>=<path>...
 #                                                 [--value <name>=<value>]... [--confirmed]
 #   surfaces-actions.sh decline <kind>
@@ -259,14 +260,15 @@ SA_FILES
 
 # -------------------------------------------------------------------- register
 do_register() {
-  local id="${1:-}" url="" kinds='[]' masks='[]' enabled=false row have doc
+  local id="${1:-}" url="" kinds='[]' masks='[]' paths='[]' critical=false enabled=false row have doc
   [ -n "$id" ] || die 3 "register: a surface id is required"
   case "$id" in *[!a-z0-9-]*|-*|*-|*--*) die 3 "register: a surface id is kebab case, got: $id" ;; esac
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --enable) require_person "--enable" "a person confirmed this surface"; enabled=true; shift; continue ;;
-      --url|--kind|--mask) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
+      --critical) critical=true; shift; continue ;;
+      --url|--kind|--mask|--path) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
       *) die 3 "register: unrecognized argument: $1" ;;
     esac
     case "$1" in
@@ -274,14 +276,17 @@ do_register() {
       --kind) case "$2" in e2e|visual-regression|visual-parity) ;; *) die 3 "register: a kind is e2e, visual-regression or visual-parity, got: $2" ;; esac
               kinds="$(printf '%s' "$kinds" | jq -c --arg k "$2" '. + [$k] | unique')" ;;
       --mask) masks="$(printf '%s' "$masks" | jq -c --arg m "$2" '. + [$m]')" ;;
+      --path) paths="$(printf '%s' "$paths" | jq -c --arg g "$2" '. + [$g]')" ;;
     esac
     shift 2
   done
   [ -n "$url" ] || die 3 "register: --url is required"
   [ "$kinds" != "[]" ] || die 3 "register: at least one --kind is required"
   require_surface_file
+  # The key order is the reader's own, so a re-register compares equal to what sf_load_surfaces read.
   row="$(jq -nc --arg id "$id" --arg url "$url" --argjson kinds "$kinds" --argjson enabled "$enabled" --argjson masks "$masks" \
-    '{id: $id, url: $url, kinds: $kinds, enabled: $enabled, masks: $masks}')"
+    --argjson paths "$paths" --argjson critical "$critical" \
+    '{id: $id, url: $url, kinds: $kinds, enabled: $enabled, masks: $masks, paths: $paths, critical: $critical}')"
   have="$(printf '%s' "$SF_SURFACES" | jq -c --arg id "$id" '[ .[] | select(.id == $id) ][0] // empty')"
   if [ -n "$have" ]; then
     [ "$have" = "$row" ] && { printf 'surface: %s unchanged\n' "$id"; exit 0; }
@@ -290,7 +295,8 @@ do_register() {
   br_require_clean_tree register "$TREE"
   doc="$(jq --argjson row "$row" '.surfaces += [$row]' "$SURFACE_FILE")" || die 3 "register: could not read $SURFACE_FILE"
   write_atomic "$SURFACE_FILE" "$doc"
-  printf 'surface: %s enabled=%s kinds=%s\nsurface-file: %s\n' "$id" "$enabled" "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$SURFACE_FILE"
+  printf 'surface: %s enabled=%s kinds=%s paths=%s critical=%s\nsurface-file: %s\n' "$id" "$enabled" \
+    "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$(printf '%s' "$paths" | jq 'length')" "$critical" "$SURFACE_FILE"
   sa_commit_if_changed "register wrote nothing new" "Register the $id surface through the surfaces skill"
 }
 
