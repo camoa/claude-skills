@@ -243,7 +243,7 @@ gather_new_tasks() {
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
       --arg legacy "$legacy" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
-        children:(.children // []), runMode:(.runMode // null), review:$review, notes:$notes,
+        children:(.children // []), runMode:(.runMode // "interactive"), review:$review, notes:$notes,
         worktree:(.worktree.path // "none"), stage:$stage, path:$p}
        | if $legacy != "" then . + {legacyStages:($legacy | split(" "))} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
