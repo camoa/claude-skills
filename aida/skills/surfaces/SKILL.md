@@ -54,9 +54,10 @@ the framework. Never retype a command out of a recipe. The script reads the bloc
 "${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> install <kind> <recipe flags>
 ```
 `show` prints the recipe, its commands, the files it writes, its viewports and its seed surfaces,
-and runs nothing. Interactive: run `show` first, print the commands and the files, and wait for a
-plain yes before `install`. Autonomous: halt here and say the install needs a person, because an
-install changes the project and nobody is there to approve it.
+and runs nothing. A recipe with no install block exits 3 from `show` too, so the exit code
+says what `install` would do. Interactive: run `show` first, print the commands and the files,
+and wait for a plain yes before `install`. Autonomous: halt here and say the install needs a
+person, because an install changes the project and nobody is there to approve it.
 
 `install` runs every command in order and writes each file only when absent. It writes the
 surface file when absent, and turns the kind on in the project record. It runs again safely.
@@ -66,7 +67,7 @@ reason in the message, the way `baseline` does.
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran, or `not-applicable`: no framework has a recipe. | Nothing more for this kind. Name `templates/process-recipe-setup.md` in this plugin as the shape a catalog recipe follows. |
-| 3 | A refused command, a file present with different content, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
+| 3 | A recipe with no install block, a refused command, a file present with different content, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
 | 4 | A step failed. | The `first:` line quotes its first line of output. Show it; do not install by hand. |
 | 61 | The tree is dirty. | Say which paths. Commit or move them aside, then run install again. |
 | 72 | Two frameworks each carry a recipe. | Say which two, and stop. |
@@ -85,8 +86,10 @@ way. Discovery ends with one `register` call per surface the person confirmed:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... --enable
 ```
-Pass `--enable` only for a surface the person confirmed. Nothing is enabled unattended. Exit 62
-means `install` has not run. Exit 3 names an id already registered with different fields.
+Pass `--enable` only for a surface the person confirmed. Nothing is enabled unattended. Each
+`register` commits the surface file, the way `install` does, so `baseline` finds a clean tree.
+Exit 62 means `install` has not run. Exit 3 names an id already registered with different
+fields. Exit 61 means the tree is dirty with something else.
 
 ## Take the first baselines
 

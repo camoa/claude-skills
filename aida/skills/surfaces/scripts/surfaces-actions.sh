@@ -29,7 +29,7 @@
 #   3  could not do its job: a bad argument, a refused command, a differing file, a recipe with no
 #      block, a lookup nobody completed, an id registered with different fields, an absent accept row
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
-#  61  the tree is dirty, so an install or baseline commit would sweep other work in
+#  61  the tree is dirty, so an install, register or baseline commit would sweep other work in
 #  62  `register` or `baseline` before `install` wrote the surface file
 #  70  a person's answer was passed with nobody present
 #  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
@@ -86,7 +86,7 @@ RECORDS_DIR="$PROJECT_DIR/records"
 # The project record's `surfaces` field, initialised on the first write. $1 a jq filter over it.
 write_project_field() {
   local doc
-  doc="$(jq -c --arg sf "$SURFACE_REL" '.surfaces = ((.surfaces // {registryPath: null, e2e: {enabled: false, declined: false}, visualRegression: {enabled: false, declined: false}}) | '"$1"')' "$PROJECT_FILE")" \
+  doc="$(jq --arg sf "$SURFACE_REL" '.surfaces = ((.surfaces // {registryPath: null, e2e: {enabled: false, declined: false}, visualRegression: {enabled: false, declined: false}}) | '"$1"')' "$PROJECT_FILE")" \
     || die 3 "$ACTION: could not update the surfaces field"
   write_atomic "$PROJECT_FILE" "$doc"
 }
@@ -101,7 +101,7 @@ require_surface_file() {
   esac
 }
 
-# Commits everything install or baseline wrote in $TREE, printing `committed: <sha>`; prints
+# Commits everything install, register or baseline wrote in $TREE, printing `committed: <sha>`; prints
 # `committed: none, $1` when the tree was already clean, so nothing of this call's own is in it.
 # $1 what to say wrote nothing, $2 the commit message. Dies through $ACTION's own name.
 sa_commit_if_changed() {
@@ -197,15 +197,16 @@ do_show_or_install() {
   files_dir="$(mktemp -d)" || die 3 "$ACTION: could not create a temporary folder"
   list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
   printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
+  # Checked before show prints, so a recipe that install would refuse never reads as fine on exit 0.
+  [ -n "$steps" ] || die 3 "$ACTION: $RECIPE has no block tagged sh under Install, so install refuses this recipe"
   if [ "$ACTION" = "show" ]; then
-    printf 'INSTALL:\n'; printf '%s\n' "${steps:-no block tagged sh, so install refuses this recipe}" | sed 's/^/  /'
+    printf 'INSTALL:\n'; printf '%s\n' "$steps" | sed 's/^/  /'
     printf 'FILES:\n'; printf '%s\n' "$list" | cut -f2 | sed 's/^./  &/'
     printf 'VIEWPORTS: %s\n' "$(fenced_blocks_under "$RECIPE" Viewports json | jq -c '.' 2>/dev/null)"
     printf 'SEED:\n'; fenced_blocks_under "$RECIPE" Surfaces json | jq -r '.[] | "  \(.id) url=\(.url) kinds=\(.kinds | join(","))"' 2>/dev/null
     printf 'DISCOVERY:\n'; sed -n '/^## Discovery$/,/^## /p' "$RECIPE" | sed '1d; /^## /d; /^$/d; s/^/  /'
     rm -rf "$files_dir"; exit 0
   fi
-  [ -n "$steps" ] || die 3 "install: $RECIPE has no block tagged sh under Install"
   # Every file is checked before any command runs, so a differing file stops the install whole.
   while IFS="$TAB" read -r n rel; do
     [ -n "$n" ] || continue
@@ -243,8 +244,8 @@ SA_FILES
   rm -rf "$files_dir"
   sf_load_surfaces "$SURFACE_FILE"
   case "$SF_STATE" in
-    missing) doc="$(jq -nc --argjson v "$VIEWPORTS_JSON" '{schemaVersion: 1, viewports: $v, surfaces: []}')" ;;
-    ok)      doc="$(jq -c --argjson v "$VIEWPORTS_JSON" --arg given "$VIEWPORTS_ARG" \
+    missing) doc="$(jq -n --argjson v "$VIEWPORTS_JSON" '{schemaVersion: 1, viewports: $v, surfaces: []}')" ;;
+    ok)      doc="$(jq --argjson v "$VIEWPORTS_JSON" --arg given "$VIEWPORTS_ARG" \
                'if $given != "" or ((.viewports // []) | length) == 0 then .viewports = $v else . end' "$SURFACE_FILE")" ;;
     *)       die 3 "install: $SURFACE_FILE is $SF_STATE, and the surface file is never overwritten" ;;
   esac
@@ -286,9 +287,11 @@ do_register() {
     [ "$have" = "$row" ] && { printf 'surface: %s unchanged\n' "$id"; exit 0; }
     die 3 "register: $id is already registered with different fields. Registered: $have. Given: $row. A duplicate id makes the file invalid, so edit the file or choose another id."
   fi
-  doc="$(jq -c --argjson row "$row" '.surfaces += [$row]' "$SURFACE_FILE")" || die 3 "register: could not read $SURFACE_FILE"
+  br_require_clean_tree register "$TREE"
+  doc="$(jq --argjson row "$row" '.surfaces += [$row]' "$SURFACE_FILE")" || die 3 "register: could not read $SURFACE_FILE"
   write_atomic "$SURFACE_FILE" "$doc"
   printf 'surface: %s enabled=%s kinds=%s\nsurface-file: %s\n' "$id" "$enabled" "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$SURFACE_FILE"
+  sa_commit_if_changed "register wrote nothing new" "Register the $id surface through the surfaces skill"
 }
 
 # -------------------------------------------------------------------- baseline

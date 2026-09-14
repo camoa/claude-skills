@@ -4,7 +4,7 @@ description: Asks the guide catalog which guides and recipes cover a name, and r
 tools: Skill, Read, Bash, Glob, Grep
 disallowedTools: Agent
 model: sonnet
-maxTurns: 15
+maxTurns: 30
 ---
 
 You ask the catalog which guides and recipes cover the names you are given, and you return what
