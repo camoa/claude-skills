@@ -61,6 +61,9 @@ What differs is what happens to a *found* body, and it splits by caller:
 - **Mode 3 (process-recipe lookup)** is called by an orchestrator (`ai-dev-assistant`) at a
   lifecycle boundary: it resolves to the body's **store path** and returns that path as the
   payload. The body is **never** streamed into the conversation — the caller reads the file.
+- **Playbook lookup** does the same for a playbook set's `plays.json`: a store path and a
+  report, never the body.
+- **Identify** resolves nothing: it reads the indexes and returns the names that matched.
 
 ## Core Workflow
 
