@@ -388,7 +388,7 @@ line. If no line matches, emit `{"key":null,"available":false}` and STOP.
 RECIPE_NAME=$(printf '%s' "$MATCH_LINE" | sed 's/^- \([^ ]*\) .*/\1/')
 SHA8=$(printf '%s' "$MATCH_LINE" | sed 's/.*sha:\([^)]*\).*/\1/')
 # Take the LAST ' — ' field ($NF): recipe when-to-use descriptions legitimately
-# contain ' — ', so switching to $2 would silently grab the wrong field and break
+# contain ' — ', so switching to the second field would silently grab the wrong field and break
 # URL/slug derivation. Always $NF.
 SITE_URL=$(printf '%s' "$MATCH_LINE" | awk -F' — ' '{print $NF}' | tr -d '\n\r')
 # url-slug = trailing path segment of the site-url (per store-contract.md), NOT <name>.
@@ -561,7 +561,9 @@ with `reason` `fetch-failed`, remove `$TMP`, and STOP.
 **Step 3. Store the body, record the footprint, report:**
 
 ```bash
-SHA256=$( (sha256sum "$TMP" 2>/dev/null || shasum -a 256 "$TMP") | awk '{print $1}')
+# The hex digest is the first 64 characters of either tool's line. No positional variable
+# here: Claude Code substitutes `$` followed by a digit in a skill body with an invocation argument.
+SHA256=$( (sha256sum "$TMP" 2>/dev/null || shasum -a 256 "$TMP") | cut -c1-64)
 "$STORE_SH" blob-put "$SHA256" "$TMP" >/dev/null
 rm -f "$TMP"
 STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
