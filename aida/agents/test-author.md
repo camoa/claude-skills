@@ -52,10 +52,15 @@ Put the criterion id at the end of the test's own name, so a later run can selec
 criterion. A test of the order's `doneWhen` ends with the order id instead, `Wo1`, and names no
 criterion. The recipe says how the id is spelled here.
 
-Run every test and record what the run printed. **A test must fail for the reason it names.** A test
-that fails because the harness never reached the behaviour has not been watched failing, and a run
+Run every test and record what the run printed. **A test must fail for the reason it names.** The
+recipe's `failure_signal` block names two markers. One is what the harness prints when an assertion
+did not hold. The other is what it prints when it never reached the behaviour. A red must hold the
+first. A test
+that fails because the harness never reached the behaviour has not been watched failing. A run
 that selected nothing has proved nothing at all. Read the output; the exit status alone cannot tell
-those apart.
+those apart. When the unit's own module does not exist yet, every test errors before it asserts.
+Report that as a setup gap, with the output, and stop. Do not write the module's own files to make
+a test fail: you may write no production file.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,

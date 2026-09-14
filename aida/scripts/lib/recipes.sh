@@ -482,22 +482,27 @@ cc_markers_in_text() {
   return 0
 }
 
-# Prints, one per line, the literal markers the recipe at $1 declares for a run that passed while
-# nothing was selected (`failure_signal:`, `silent_pass:`), through cc_markers_in_text. Prints
-# nothing when the recipe declares no silent-pass text, which is when the caller's own
-# `--nothing-ran` flag still applies. This reads the file-level key under `failure_signal:` in a
-# test-execution recipe; a surface row's own key is read per row by cc_parse_recipe.
-cc_silent_pass_markers() {
-  local recipe_file="$1" block
+# Prints, one per line, the literal markers under one key ($2: `silent_pass`, `assertion` or
+# `harness`) of the file-level `failure_signal:` block in the test-execution recipe at $1, through
+# cc_markers_in_text. Prints nothing when the recipe declares no text under that key. A surface
+# row's own `silent_pass:` is read per row by cc_parse_recipe, never here.
+cc_failure_signal_markers() {
+  local recipe_file="$1" key="$2" block
   # Bounded twice, because one bound is not enough. The range ends at the closing fence, and
   # inside it the first line that opens another key ends the scalar. Without the second bound the
   # range ran to the next key at column 0, which is past the fence, and the Drupal recipe then
   # returned twelve markers harvested from its own prose, one of them ", ": every passing test run
   # held it, so every green read unknown.
-  block="$(sed -n '/^[[:space:]]*silent_pass:/,/^```/p' "$recipe_file" 2>/dev/null \
+  block="$(sed -n "/^[[:space:]]*$key:/,/^\`\`\`/p" "$recipe_file" 2>/dev/null \
     | sed -n '1p; 1!{ /^```/q; /^[[:space:]]*[a-z_][a-z_]*:/q; p; }')"
   [ -n "$block" ] || return 0
-  cc_markers_in_text "$(printf '%s' "$block" | sed '1s/^[[:space:]]*silent_pass://; 1s/^[[:space:]]*[>|][+-]*//')"
+  cc_markers_in_text "$(printf '%s' "$block" | sed "1s/^[[:space:]]*$key://; 1s/^[[:space:]]*[>|][+-]*//")"
+}
+
+# The markers for a run that passed while nothing was selected. Prints nothing when the recipe
+# declares no silent-pass text, which is when the caller's own `--nothing-ran` flag still applies.
+cc_silent_pass_markers() {
+  cc_failure_signal_markers "$1" "silent_pass"
 }
 
 # Parses one `<framework>=<path>` flag value and sets CR_PAIR to the tab-separated line the caller

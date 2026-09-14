@@ -101,7 +101,12 @@
         },
         "red": {
           "type": "string",
-          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Never empty and never synthesised: a test with neither a red run nor a `locksIn` reason is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either. Absent only when `locksIn` is present."
+          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Checked to hold one of the assertion markers the test-execution recipe declares under `failure_signal`, or a line its suite row's `failure_line` names (exit 80); `redSignal` says which. A run that never reached a test, a harness error included, is refused before this file is written. Never empty and never synthesised: a test with neither a red run nor a `locksIn` reason is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either. Absent only when `locksIn` is present."
+        },
+        "redSignal": {
+          "type": "string",
+          "enum": ["assertion", "failure-line", "unchecked"],
+          "description": "Present whenever `red` is. How `tests-freeze` read the red file as a failed test: `assertion`, it holds a marker the recipe's `failure_signal.assertion` declares; `failure-line`, a line matches the suite row's `failure_line` selector, which also covers a test that errored in its own body while another failed, because PHPUnit then prints ERRORS! and no FAILURES!; `unchecked`, the recipes handed over declare neither a usable marker nor a selector, so only the non-empty check ran, and the freeze said so in one summary line."
         },
         "locksIn": {
           "type": "string",

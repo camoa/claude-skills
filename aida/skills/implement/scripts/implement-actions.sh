@@ -32,6 +32,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh tests-freeze <task_folder> <unit_id> \
 #                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
 #                            [--red <test name>=<path to a file holding what the run printed>]...
+#                            [--test-recipe <framework>=<path>]...
 #                            [--test-glob <glob>]...
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
@@ -428,6 +429,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  78  `dispatch-open` found the run at the ceiling task.json's `budget` sets, in dispatches or in
 #      minutes. The order is halted with `budget spent` and both numbers; the grant path answers it.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
+#  80  `tests-freeze` was given a --red whose file holds none of the assertion markers the
+#      test-execution recipes declare under `failure_signal:` and no line their suite row's
+#      `failure_line` names (`--test-recipe`, the flag `build-record` already takes), so the run it
+#      holds did not fail a test. A file that holds a harness marker instead is named as a setup
+#      gap: the run never reached the behaviour (live-run row 68). The same exit when no
+#      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
+#      declaring neither a marker nor a selector records the red unchecked instead of refusing.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -543,6 +551,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh tests-freeze <task_folder> <unit_id>
                             [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
                             [--red <test name>=<path to a file holding what the run printed>]...
+                            [--test-recipe <framework>=<path>]...
                             [--test-glob <glob>]...
                             [--checklist <criterion id>=<verification text>]...
                             [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
@@ -3062,7 +3071,7 @@ tf_relativize_path() {
 # re-raises the status with `|| exit "$?"`.
 tf_frozen_tests_of() {
   local names_json="$1" reds_json="$2" locks_json="$3"
-  local ntests tj tpath trelpath tname tsha tredpath tredtext tlocks tests_out_tmp
+  local ntests tj tpath trelpath tname tsha tredpath tredtext tredsig tlocks tests_out_tmp
   ntests="$(printf '%s' "$names_json" | jq 'length')"
   tests_out_tmp="$IMPL_DIR/.tests-freeze-rowtests.$$"
   : >"$tests_out_tmp"
@@ -3075,12 +3084,13 @@ tf_frozen_tests_of() {
     [ -n "$tsha" ] || die 3 "tests-freeze: could not compute a sha256 for $tpath"
     tredpath="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].path // empty')"
     tredtext="$(cat "$tredpath" 2>/dev/null)"
+    tredsig="$(printf '%s' "$reds_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].signal // empty')"
     tlocks="$(printf '%s' "$locks_json" | jq -r --arg n "$tname" '[ .[] | select(.name == $n) ][0].reason // empty')"
     # The record stores the path relative to codePath, never the absolute form: a frozen path
     # must still mean the same file once the checkout moves (see exit 36's own reasoning).
-    jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" --arg locks "$tlocks" \
+    jq -n --arg path "$trelpath" --arg name "$tname" --arg sha "$tsha" --arg red "$tredtext" --arg sig "$tredsig" --arg locks "$tlocks" \
       '{path: $path, name: $name, sha256: $sha}
-       + (if $red == "" then {} else {red: $red} end) + (if $locks == "" then {} else {locksIn: $locks} end)' >>"$tests_out_tmp" \
+       + (if $red == "" then {} else {red: $red, redSignal: $sig} end) + (if $locks == "" then {} else {locksIn: $locks} end)' >>"$tests_out_tmp" \
       || die 3 "tests-freeze: could not record the test row for $tname"
     tj=$((tj + 1))
   done
@@ -3090,6 +3100,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
+  local test_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --test)
@@ -3100,6 +3111,12 @@ do_tests_freeze() {
       --red)
         [ "$#" -ge 2 ] || die 3 "tests-freeze: --red needs <test name>=<path to a file holding what the run printed>"
         red_raw="$red_raw$2
+"
+        shift 2 ;;
+      --test-recipe)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --test-recipe needs <framework>=<path>"
+        cr_recipe_pair "tests-freeze" "--test-recipe" "$2"
+        test_recipes="$test_recipes$CR_PAIR
 "
         shift 2 ;;
       --test-glob)
@@ -3478,6 +3495,105 @@ TF_EOF
   done
   [ -z "$bad_red_files" ] \
     || die 32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
+
+  # --- 80: a --red file must hold the failure signal the test-execution recipe declares ------------
+  # A non-empty file is not a red. wo7's six kernel tests all errored in setUp() before any
+  # assertion ran, and the freeze took that file as a red (live-run row 68). The recipe declares,
+  # under failure_signal, what the harness prints when an assertion ran and did not hold
+  # (`assertion:`) and what it prints when it never reached the behaviour (`harness:`), and its
+  # suite row declares `failure_line`, one line per test the harness numbered. Two readings accept
+  # a file: an assertion marker, or, where no harness marker is present, a line the selector
+  # matches. The second is what reads a red under a recipe whose assertion span is a shape rather
+  # than a marker (pytest's `FAILED <node id>`). The markers and selectors of every recipe
+  # handed over are read together, the way build-record reads silent_pass. A file that neither
+  # reading accepts refuses; when it holds a harness marker the refusal says setup gap, and the
+  # repair is the harness or the unit's own declaration, never the test. A recipe set declaring
+  # no assertion marker and no selector leaves nothing to read: the file is recorded unchecked,
+  # said in one summary line, rather than refused, because three catalog recipes declare a shape
+  # in place of a marker today and refusing would stop every red under them.
+  local red_recipe_path recipe_markers red_rows_tmp red_selector
+  local assertion_markers="" harness_markers="" failure_lines=""
+  if [ "$red_count" -gt 0 ]; then
+    [ -n "$test_recipes" ] \
+      || die 80 "tests-freeze: a --red was given and no --test-recipe, so no failure marker can be read and no red can be told from a run that never asserted. Pass --test-recipe <framework>=<path> for each framework, from implementation/preconditions.json frameworks[].recipePath."
+    red_rows_tmp="$IMPL_DIR/.tests-freeze-recipe-rows.$$"
+    while IFS= read -r red_recipe_path; do
+      [ -n "$red_recipe_path" ] || continue
+      red_recipe_path="$(printf '%s' "$red_recipe_path" | cut -f2-)"
+      recipe_markers="$(cc_failure_signal_markers "$red_recipe_path" "assertion")"
+      [ -z "$recipe_markers" ] || assertion_markers="$assertion_markers$recipe_markers
+"
+      recipe_markers="$(cc_failure_signal_markers "$red_recipe_path" "harness")"
+      [ -z "$recipe_markers" ] || harness_markers="$harness_markers$recipe_markers
+"
+      : >"$red_rows_tmp"
+      tc_parse_recipe "$red_recipe_path" "$red_rows_tmp"
+      red_selector="$(pc_unquote "$(jq -s -r '[ .[] | select(.id == "suite") ][0].failureLine // ""' "$red_rows_tmp" 2>/dev/null)")"
+      [ -z "$red_selector" ] || failure_lines="$failure_lines$red_selector
+"
+    done <<TF_EOF
+$test_recipes
+TF_EOF
+    rm -f "$red_rows_tmp"
+  fi
+  local red_signal marker unread_reds="" setup_gap_reds="" marker_words signals_tmp
+  marker_words="$(printf '%s' "$assertion_markers" | grep -v '^$' | sort -u | sed "s/.*/'&'/" | tr '\n' ' ')"
+  signals_tmp="$IMPL_DIR/.tests-freeze-signals.$$"
+  : >"$signals_tmp"
+  ri=0
+  while [ "$ri" -lt "$red_count" ]; do
+    red_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].name')"
+    red_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
+    red_signal=""
+    while IFS= read -r marker; do
+      [ -n "$marker" ] || continue
+      if pc_output_holds "$red_path" "$marker"; then red_signal="assertion"; break; fi
+    done <<TF_EOF
+$assertion_markers
+TF_EOF
+    # The harness marker is read before the selector. PHPUnit numbers a test that errored in
+    # setUp() the same way as one that failed (`1) Class::method`), so the row 68 output matches
+    # the selector, and reading the selector first would freeze it as a red again.
+    if [ -z "$red_signal" ]; then
+      while IFS= read -r marker; do
+        [ -n "$marker" ] || continue
+        if pc_output_holds "$red_path" "$marker"; then red_signal="harness"; setup_gap_reds="$setup_gap_reds$red_name (holds '$marker'), "; break; fi
+      done <<TF_EOF
+$harness_markers
+TF_EOF
+    fi
+    if [ -z "$red_signal" ]; then
+      while IFS= read -r red_selector; do
+        [ -n "$red_selector" ] || continue
+        # Exit 2 is a selector grep cannot compile, read as no match, the same as build-record.
+        if grep -a -E -q -e "$red_selector" "$red_path" 2>/dev/null; then red_signal="failure-line"; break; fi
+      done <<TF_EOF
+$failure_lines
+TF_EOF
+    fi
+    if [ -z "$red_signal" ] && [ -z "$assertion_markers" ] && [ -z "$failure_lines" ]; then
+      red_signal="unchecked"
+    fi
+    case "$red_signal" in
+      ""|harness) unread_reds="$unread_reds$red_name ($red_path), " ;;
+    esac
+    printf '%s\t%s\n' "$red_name" "$red_signal" >>"$signals_tmp"
+    ri=$((ri + 1))
+  done
+  if [ -n "$unread_reds" ]; then
+    rm -f "$signals_tmp"
+    [ -z "$setup_gap_reds" ] \
+      || die 80 "tests-freeze: these --red files hold the recipe's harness marker and no assertion marker: ${setup_gap_reds%, }. The harness stopped in an error before any assertion held or failed, which is a setup gap and not a red: for a unit whose module does not exist yet, nothing can fail an assertion before it does. Nothing is frozen. Repair the harness or the unit's own declaration, never the test, and run that test on its own again. An assertion failure prints one of ${marker_words% }. Every file read as no red: ${unread_reds%, }."
+    die 80 "tests-freeze: these --red files hold none of the assertion markers the test-execution recipe declares, and no line its suite row's failure_line names: ${unread_reds%, }. A run that did not fail an assertion is not a red. An assertion failure prints one of ${marker_words% }; read the file, and run the test again until it fails for the reason it names."
+  fi
+  # The signal each red was accepted on rides with its --red row into the record (redSignal).
+  reds_json="$(jq -c --rawfile sig "$signals_tmp" --argjson reds "$reds_json" -n '
+      ($sig | split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: .[1]}) | from_entries) as $by
+      | $reds | map(. + {signal: ($by[.name] // "")})')"
+  rm -f "$signals_tmp"
+  if [ "$red_count" -gt 0 ] && [ -z "$assertion_markers" ] && [ -z "$failure_lines" ]; then
+    echo "TESTS-FREEZE: red files unchecked, the test-execution recipe declares no assertion marker and no suite failure_line to read them against: $(printf '%s' "$test_recipes" | cut -f2- | grep -v '^$' | tr '\n' ' ')"
+  fi
 
   # --- 33: every declared test needs a --red, or a --locks-in naming the existing code it locks in --
   local missing_red

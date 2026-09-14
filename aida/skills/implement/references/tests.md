@@ -195,12 +195,13 @@ mismatched row would let one stand in for the other silently.
 
 ## Freeze what came back
 
-Run, with one flag per test, per failure output, per pattern, and per row:
+Run, with one flag per test, per failure output, per framework, per pattern, and per row:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-freeze "<task_folder>" <order id> \
   --test <path>::<test name>=<criterion id> \
   --test <path>::<test name>=<order id> \
   --red <test name>=<path to a file holding what the run printed> \
+  --test-recipe <framework>=<path to the test-execution recipe> \
   --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
@@ -210,6 +211,10 @@ Run, with one flag per test, per failure output, per pattern, and per row:
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
 the order's done-when, and its name ends with the order id.
+
+`--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
+at `frameworks[].recipePath`, the same way the build step reads it. The script reads the recipe's
+`failure_signal` block itself. Do not read the body here.
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
@@ -227,10 +232,21 @@ list). A test that names neither a criterion this order serves or owns nor this 
 (exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold
 no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
-place. A test with neither refuses (exit 33). That check is a bound, not a proof: it
-confirms the file is not empty, and nothing in it confirms the framework's own failure signal
-appears there. A file holding "0 tests ran" passes the same way a real assertion failure does. A
-`--locks-in` reason is recorded beside the test, and the review brief says where it is.
+place. A test with neither refuses (exit 33). It reads each `--red` file against the markers the
+test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
+A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a
+setup gap, and the freeze refuses it (exit 80) saying so. The harness never reached the
+behaviour, so nothing in that file says the behaviour is absent. For a new module that is the
+expected first run, because no test can assert before the module exists, and the step stops
+there. The author does not scaffold the module to get past it: it may write no production file.
+A file holding neither marker is a red when a line matches `failure_line`. That is how a red is
+read under a recipe whose assertion span is a shape rather than a marker. A file none of the
+three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes
+declare no assertion marker and no `failure_line`, the freeze cannot read the file at all. It
+then freezes it as before, records `redSignal: unchecked` on the test, and says so in one summary
+line. Every other red carries the reading that accepted it. A freeze with a `--red` and no
+`--test-recipe` refuses, because then no red can be read at all. A `--locks-in` reason is
+recorded beside the test, and the review brief says where it is.
 
 **Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
 confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the
