@@ -4,11 +4,13 @@ The [README](../README.md) is the shop window. This is the how: what the skill d
 
 ## What it does
 
-It is a routing and caching layer over a published catalog of guides, so an AI session works from current best practice instead of a training-time guess. Three modes, over three separate catalogs, and the caller (typically an orchestrator like `ai-dev-assistant`, or you directly) decides which to try first:
+It is a routing and caching layer over a published catalog of guides, so an AI session works from current best practice instead of a training-time guess. Five modes, over separate catalogs, and the caller (typically an orchestrator like `ai-dev-assistant`, or you directly) decides which to try first:
 
 - **Guide search** (`llms.txt`), the original flow: match the task to a topic, fetch that topic's routing table (`index.md`), disambiguate near-duplicate topics using `guide-meta` (`concepts`/`not`/`requires`/`complements` fields), fetch the specific guide, and apply its patterns to the task rather than summarizing them at you.
 - **Recipe search** (`agentic-recipes.txt`): for a whole capability rather than one mechanic. A recipe names the guides and plays it needs (it never duplicates them) and carries a verifier, the drift check that confirms the capability was actually delivered. A capability with no matching recipe falls back to guide search; recipe search never fabricates a recipe.
 - **Process-recipe lookup** (`process-recipes.txt`): resolved by `(phase, framework)`, called only by `ai-dev-assistant` at a lifecycle phase boundary, never during free task routing. It returns a store path to the body, not the body itself, so the caller reads the file rather than the body streaming into the conversation.
+- **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`): reports what covers a topic and opens nothing, for a caller that must name what exists without paying to read it.
+- **Playbook lookup** (`llms.txt`, then a topic's `plays.json`): resolved by playbook set id, called only by `ai-dev-assistant`, at research and when a project subscribes to a set. Like process-recipe lookup, it returns a store path and a report, never the body.
 
 Every fetch goes through a deterministic cache kernel and uses `curl`, never `WebFetch` (the frontmatter hard-blocks it): WebFetch summarizes content through AI, which destroys the structured markdown the routing logic depends on. Guide bodies, task-recipe bodies, and process-recipe bodies are content-addressed in a shared blob store (keyed by sha256 or sha8, whichever the catalog publishes), so the same body is fetched once per content version and reused after that, even across projects. A per-project lockfile records what that project actually touched.
 

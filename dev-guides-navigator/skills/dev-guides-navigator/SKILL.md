@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.13.0
+version: 0.14.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 disallowed-tools: WebFetch
 user-invocable: true
@@ -11,16 +11,17 @@ user-invocable: true
 
 Route to the correct online guide and enforce guide application.
 
-## Four modes
+## Five modes
 
-The navigator exposes **four independent routing modes** over the published catalogs:
+The navigator exposes **five independent routing modes** over the published catalogs:
 
 - **Guide search** (`llms.txt`) — atomic, mechanics-level decision guides. The original flow. See **Core Workflow** below.
 - **Recipe search** (`agentic-recipes.txt`) — goal-oriented, prescriptive capability deliveries that sequence existing guides/plays end-to-end and carry a verifier. See **Recipe Search** below.
 - **Process-recipe lookup** (`process-recipes.txt`) — resolved by `ai-dev-assistant` at lifecycle phase boundaries, keyed by `(phase, framework)`. See **Process-Recipe Lookup** below. Never matched during free task routing.
 - **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`) — report what covers a topic, and open nothing. See **Identify** below.
+- **Playbook lookup** (`llms.txt`, then `<topic>/plays.json`): resolved by `ai-dev-assistant` at research, keyed by a playbook set id. See **Playbook Lookup** below. Never matched during free task routing.
 
-**The four are two pairs.** Guide search and recipe search resolve a body and apply it in place, because applying a guide means reading it. Process-recipe lookup and identify return a structured report and never stream a body. A caller that must name what exists without paying to read it wants the second pair.
+**The five are two groups.** Guide search and recipe search resolve a body and apply it in place, because applying a guide means reading it. Process-recipe lookup, identify and playbook lookup return a structured report and never stream a body. A caller that must name what exists without paying to read it wants the second group.
 
 The navigator does **not** hardcode an order. The **caller** owns ordering — typically recipe-search first (is there a prescriptive end-to-end recipe for this capability?), then guide-search (fall back to raw mechanics). Recipe search never fabricates a recipe: a miss cleanly defers to guide search. Process-recipe lookup is invoked only by `ai-dev-assistant`, not during free task routing.
 
@@ -498,6 +499,93 @@ Each index is revalidated by its own `.hash` the same way every other mode does 
 `searched` and `unavailable` are both required, and every requested catalog appears in exactly one of them. An empty `matches` with a full `searched` list means the search ran and found nothing, which is a real answer. An empty `matches` with anything in `unavailable` means the search was incomplete, and the caller must not record it as a negative result.
 
 Nothing else is emitted. No prose, no recommendation, no body.
+
+## Playbook Lookup
+
+**Invocation context:** `ai-dev-assistant` calls this mode at research and when a project subscribes to a set, as `playbook <set-id>`,
+for each playbook set the project subscribes to. A set id is a topic path of the form
+`<framework>/best-practices/<author>`. The mode revalidates and caches the set's `plays.json`
+the way process-recipe lookup caches a body. It returns one availability report that carries
+the body's store path. The navigator surfaces availability; it does not present UX.
+
+### Catalog contract
+
+- **Set index:** `llms.txt`, revalidated as in core workflow step 1. The set's line is the
+  one whose site URL is `https://camoa.github.io/dev-guides/<set-id>/`.
+- **Body:** `https://camoa.github.io/dev-guides/<set-id>/plays.json`, beside
+  `guide-index.json`, fetched from the site host the way step 6 fetches the manifest. The
+  site builds it only for a topic whose `index.md` says `playbook: true`. It is a JSON array,
+  one entry per guide: `{id, title, what, rationale, when, guide, sha256}`.
+- **Freshness:** no `.hash` sidecar is published for `plays.json`, so the mode fetches it on
+  every call. The blob store dedups by the body's own sha256.
+
+### Flow
+
+**Step 1. Find the set's line in `llms.txt`:**
+
+Run core workflow step 1 (`revalidate llms`, then `index-content llms`). On `status=error`,
+emit `{"set":"<set-id>","available":false,"reason":"listing-unreachable"}` and STOP.
+
+```bash
+# A set id is a topic path. Refuse anything that could leave the site prefix.
+case "$SET_ID" in
+  "" | /* | */ | *..* | *[!a-z0-9./-]*)
+    printf '{"set":"%s","available":false,"reason":"no-topic"}\n' "$SET_ID"
+    exit 0 ;;
+esac
+SITE_URL="https://camoa.github.io/dev-guides/${SET_ID}/"
+MATCH_LINE=$(printf '%s\n' "$INDEX_TEXT" | grep -F "](${SITE_URL})" | head -n 1)
+```
+
+No line: emit `{"set":"<set-id>","available":false,"reason":"no-topic"}` and STOP.
+
+```bash
+TITLE=$(printf '%s' "$MATCH_LINE" | sed 's/^- \[\([^]]*\)\].*/\1/')
+```
+
+**Step 2. Fetch `plays.json`:**
+
+```bash
+TMP=$(mktemp)
+HTTP=$(curl -fsSL -o "$TMP" -w '%{http_code}' "${SITE_URL}plays.json" 2>/dev/null)
+```
+
+`HTTP` is `404`: the topic is not a playbook. Emit
+`{"set":"<set-id>","available":false,"reason":"not-a-playbook"}`, remove `$TMP`, and STOP.
+Any other non-zero curl exit, or a body `jq` cannot parse as an array: emit the same report
+with `reason` `fetch-failed`, remove `$TMP`, and STOP.
+
+**Step 3. Store the body, record the footprint, report:**
+
+```bash
+SHA256=$( (sha256sum "$TMP" 2>/dev/null || shasum -a 256 "$TMP") | awk '{print $1}')
+"$STORE_SH" blob-put "$SHA256" "$TMP" >/dev/null
+rm -f "$TMP"
+STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
+BODY_PATH="${STORE_ROOT}/blobs/${SHA256}"
+DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
+MEM_DIR="$HOME/.claude/projects/${DASHED}/memory"
+mkdir -p "$MEM_DIR"
+"$STORE_SH" lock-set "$MEM_DIR" playbooks "$SET_ID" "\"${SHA256}\"" >/dev/null
+
+jq -n -c --arg s "$SET_ID" --arg t "$TITLE" --arg p "$BODY_PATH" \
+  --arg h "$(printf '%s' "$SHA256" | cut -c1-8)" --argjson n "$(jq 'length' "$BODY_PATH")" \
+  '{set:$s, title:$t, available:true, body_path:$p, sha:$h, plays:$n}'
+```
+
+### Output contract
+
+- `set`: the set id as given
+- `title`: the link text of the set's `llms.txt` line
+- `available`: `true` when the body blob is materialized; `false` otherwise
+- `reason`: on `available:false` only: `no-topic`, `listing-unreachable`, `not-a-playbook`
+  or `fetch-failed`
+- `body_path`: absolute path to the blob, `~/.claude/dev-guides-store/blobs/<sha256>`
+- `sha`: the first eight characters of the body's sha256
+- `plays`: the number of entries in the array
+
+Only the JSON report is emitted. The body is never streamed into the conversation; the caller
+reads the file at `body_path`.
 
 ## Create-on-Miss (maintainer mode only)
 

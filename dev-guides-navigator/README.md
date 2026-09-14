@@ -24,7 +24,7 @@ Fetch guide   → form-validation.md (served from cache, sha256 unchanged since 
 Apply         → validation pattern applied to your form class, not just described
 ```
 
-That is the guide-search mode, the original flow. Two more exist for different situations: recipe search, for a whole capability rather than one mechanic (see [docs/usage.md](docs/usage.md#what-it-does)), and process-recipe lookup, called by `ai-dev-assistant` at phase boundaries, not something you invoke directly.
+That is the guide-search mode, the original flow. Four more exist for different situations: recipe search, for a whole capability rather than one mechanic (see [docs/usage.md](docs/usage.md#what-it-does)); identify, which names what covers a topic and opens nothing; and process-recipe lookup and playbook lookup, called by `ai-dev-assistant` at phase boundaries and never invoked directly.
 
 You do not have to wait for the proactive trigger. Naming the skill directly, for example "check the navigator for Drupal SOLID principles" or "look up the guide for SDC components," runs the same routing on demand.
 
@@ -44,7 +44,7 @@ No plugin dependencies: it talks directly to the published catalog over `curl`, 
 
 ## How it works
 
-Three independent routing modes, over three separate published catalogs. The caller decides the order, typically recipe search first (is there an end-to-end recipe for this capability?), then guide search (fall back to raw mechanics):
+Five independent routing modes over the published catalogs. The caller decides the order, typically recipe search first (is there an end-to-end recipe for this capability?), then guide search (fall back to raw mechanics):
 
 | Mode | Catalog | What it resolves |
 |------|---------|-------------------|

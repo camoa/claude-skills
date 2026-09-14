@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.14.0 (2026-09-13)
+
+### Added
+- **A fifth mode, `Playbook Lookup`.** Invoked as `playbook <set-id>`, it revalidates `llms.txt`,
+  fetches the set's `plays.json` from the site, stores it in the blob store under its own sha256,
+  records a `playbooks` footprint in the lockfile, and prints one report: `set`, `title`,
+  `available`, `body_path`, `sha` and `plays`. An unavailable set carries one of four reasons:
+  `no-topic`, `listing-unreachable`, `not-a-playbook` or `fetch-failed`.
+
+  The caller it exists for is AIDA version 6's playbook loader, which read a topic's routing
+  table and parsed markdown to get one play per row. The catalog now builds `plays.json` for
+  every topic marked `playbook: true`, so the loader reads one cached file instead.
+
+### Notes
+- No `.hash` sidecar is published for `plays.json`, so the mode fetches it on every call and
+  the blob store dedups. The `lock-set` class list gains `playbooks`; nothing else in the kernel
+  changed.
+
 ## 0.13.0 (2026-09-08)
 
 ### Added
