@@ -47,7 +47,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
-#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed]
+#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed] \
+#                        [--path <path> --interface <text>]
 #
 # --run-mode is accepted on every action and `close` and `dispose` require it. A close record says who was
 # present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
@@ -216,7 +217,8 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
-                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed]
+                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed] \
+                                         [--path <path> --interface <text>]
 EOF
 }
 
@@ -988,6 +990,12 @@ do_close() {
 # caller gives the candidate, its closeness, the cost dimensions compared, the verdict and why. The
 # table decides what stands, and the outcome lands in `reasoning`, the write `update` makes.
 #
+# `--path` and `--interface`, given together, add one entry to the order's `reuses`: where the
+# reused thing lives and the shape it exposes. The tests brief carries that list, because the test
+# author may not open production source and a reused module belongs to no work order (live-run
+# row 69). A second dispose naming the same path replaces its entry, the way every call replaces
+# `reasoning`. Neither flag, and the order's `reuses` is left as it was.
+#
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
 # because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
 # stands and the thin reasoning is recorded for a person to see (version 5's rule).
@@ -1004,10 +1012,12 @@ do_close() {
 
 do_dispose() {
   [ -n "$RUN_MODE" ] || die3 "dispose: --run-mode is required. The table reads it, and it is never assumed"
-  local id="" candidate="" distance="" cost="" verdict="" why="" confirmed=false
+  local id="" candidate="" distance="" cost="" verdict="" why="" confirmed=false reuse_path="" reuse_interface=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)        need_value "dispose" "--id" "$#" "${2:-}";        id="$2"; shift 2 ;;
+      --path)      need_value "dispose" "--path" "$#" "${2:-}";      reuse_path="$2"; shift 2 ;;
+      --interface) need_value "dispose" "--interface" "$#" "${2:-}"; reuse_interface="$2"; shift 2 ;;
       --candidate) need_value "dispose" "--candidate" "$#" "${2:-}"; candidate="$2"; shift 2 ;;
       --distance)  need_value "dispose" "--distance" "$#" "${2:-}";  distance="$2"; shift 2 ;;
       --cost)      need_value "dispose" "--cost" "$#" "${2:-}";      cost="$2"; shift 2 ;;
@@ -1021,6 +1031,10 @@ do_dispose() {
   is_blank "$candidate" && die3 "dispose: --candidate is required and must not be blank"
   is_blank "$why" && die3 "dispose: --why is required and must not be blank"
   is_blank "$cost" && die3 "dispose: --cost is required and must not be blank"
+  if ! is_blank "$reuse_path" || ! is_blank "$reuse_interface"; then
+    is_blank "$reuse_path" && die3 "dispose: --interface was given without --path. The brief needs both: where the reused thing lives and what it exposes"
+    is_blank "$reuse_interface" && die3 "dispose: --path was given without --interface. The brief needs both: where the reused thing lives and what it exposes"
+  fi
   case "$distance" in
     same-name|same-directory|same-layer) ;;
     *) die3 "dispose: --distance must be same-name, same-directory or same-layer, got '${distance:-<nothing>}'" ;;
@@ -1064,10 +1078,15 @@ do_dispose() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "dispose: $file exists but is not valid JSON"
   doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing $cost. Disposition: $outcome ($rule). $why" '.reasoning = $v' "$file")"
+  if [ -n "$reuse_path" ]; then
+    doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
+      '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"
+  fi
   write_atomic "$file" "$doc"
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
+  echo "reuses: $(printf '%s' "$doc" | jq -r '(.reuses // []) | length')"
   wo_summary "$doc"
   render_wo "$id"
   exit 0

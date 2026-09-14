@@ -129,9 +129,37 @@
       "enum": ["tests", "gate"],
       "default": "tests",
       "description": "What proves this order built what it says. `tests`, the default and what an order written before this field existed reads as: the tests it declares, frozen before the code is written. `gate`, for a unit whose deliverable is exported configuration: it declares no test (check-design.sh refuses one), no test author is dispatched, and its build runs the `## Configuration gate` lines of the framework's implement recipe as its own check, every line exit 0. Its owned machine criteria are judged by that check at close. Such a unit is sized around the operation and owns every file the operation rewrites; the behavioural proof lives with the order that consumes what it configures (live-run rows 65 and 66, audit/14-live-run-gaps.md). TDD is about code, not configuration: a test that reads YAML back restates the file and cannot fail for the right reason."
+    },
+    "reuses": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/reuse"
+      },
+      "description": "The existing things this order's build and tests call, one entry per reuse disposition, written by design-actions.sh's `dispose` beside the outcome it puts in `reasoning`. Optional: an order disposed before this field has none, and an order that reuses nothing has none. The tests brief carries this list whole. The test author may not open production source, and a reused module belongs to no work order (live-run row 69)."
     }
   },
   "$defs": {
+    "reuse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "interface"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the reused thing lives, relative to the code repository: a file, or a configuration path when the candidate is not code."
+        },
+        "interface": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the reused thing exposes, in design's own words read from the code. The class or service id, and the shape a test builds against: the method, its arguments, and the keys of what it returns."
+        }
+      }
+    },
     "test": {
       "type": "object",
       "additionalProperties": false,

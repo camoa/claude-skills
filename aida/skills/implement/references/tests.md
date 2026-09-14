@@ -49,13 +49,16 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and never the live files. It writes exactly five things to
+It reads the frozen copy and never the live files. It writes exactly six things to
 `implementation/brief-<order id>-tests.json`:
 
 - this order's own record, with the criteria it owns named in `criteriaOwned`;
 - the criteria it serves and owns, with their verification and who verifies each;
 - the boundaries it names;
 - the declared interface of every order it depends on;
+- `reuses`, the path and the interface of every existing thing design's dispose recorded on
+  this order. A reused module is production source of no work order, so this is the only place
+  the test author gets its shape. An order disposed with no path carries none;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path and counts, never the brief.

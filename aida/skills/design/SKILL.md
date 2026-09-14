@@ -152,8 +152,17 @@ research stated it, the cost dimensions compared, the verdict, and why:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   dispose "<task_folder>" --id <woId> --candidate "<what research found>" \
   --distance <same-name|same-directory|same-layer> --cost <build|carry|agent|risk[,...]> \
-  --verdict <reuse|extend|supersede> --why "<why this verdict>" [--confirmed]
+  --verdict <reuse|extend|supersede> --why "<why this verdict>" [--confirmed] \
+  [--path "<where it lives>" --interface "<what it exposes>"]
 ```
+Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
+`--path` is where the reused thing lives, relative to the code repository: a file, or a
+configuration path when the candidate is not code. `--interface` is what it exposes, in your own
+words, read from the code. Name the class or service id, the method the tests call, its arguments,
+and the keys of what it returns. Read the code for this; design may. The test author may not, and
+the tests brief carries this text in place of the source. A dispose that omits both records no
+reuse.
+
 The script applies a fixed table and writes the outcome into the order's `reasoning`. It prints
 `disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
 only a layer, comes back as `extend`. Autonomous, a supersede comes back as `extend`, with the

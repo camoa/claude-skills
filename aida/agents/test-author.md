@@ -21,7 +21,9 @@ You are given two paths and nothing else: the brief, a JSON file under the task'
 folder, and the framework's recipe for writing tests. The brief holds the criteria this unit serves
 and owns, each with the sentence saying how it is verified and who verifies it. It holds the
 non-goals the unit names and the unit's own declared interface. It holds the interface records of
-the units it depends on. Read the brief first.
+the units it depends on. Its `reuses` list holds the path and the interface of every existing
+thing this unit builds on. Test against that interface text. Do not open the reused source to
+read its shape; the brief is where design put it. Read the brief first.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The

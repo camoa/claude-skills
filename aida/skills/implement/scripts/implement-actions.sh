@@ -2786,7 +2786,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: exactly these five keys, and nothing else ------------------------------
+  # --- assemble the brief: exactly these six keys, and nothing else -------------------------------
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -2798,6 +2798,14 @@ do_tests_brief() {
     '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), criteriaOwned: (.criteriaOwned // []),
       interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
 
+  # `reuses` is the existing code design's dispose recorded on this order, with the interface the
+  # design stage read from it. It sits beside the dependency interfaces because it answers the same
+  # question for code that is no work order: the test author may not open production source, and a
+  # brief that carried only work orders left it reading a reused module (live-run row 69). An order
+  # disposed before the field existed has none, and the brief says so.
+  local reuses_out
+  reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -2805,9 +2813,10 @@ do_tests_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
+        --argjson reuses "$reuses_out" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
-      playbooksPath: $playbooksPath}')"
+      reuses: $reuses, playbooksPath: $playbooksPath}')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -2817,6 +2826,7 @@ do_tests_brief() {
      nonGoals: (.nonGoals | length),
      declaredTests: (.unit.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
+     reuses: (.reuses | if length == 0 then null else length end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}')"
   exit 0
 }
@@ -6783,7 +6793,11 @@ do_dispatch_open() {
     # base classes, traits and fixtures under the same test tree (live-run row 67). So an owned
     # file under a directory the glob names literally, such as `tests` in `**/tests/**/*Test.php`,
     # is a test-tree file too. A glob with no literal directory, Go's `**/*_test.go`, adds none.
-    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[.workOrders[]?.ownedFiles[]?] | unique')"
+    # A path an order reuses is production source that no order owns, and the brief carries its
+    # interface so the author never needs the file (live-run row 69). It joins the owned files here
+    # and takes the same test-glob filter, so the hook catches an accidental read of it.
+    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
+      '[.workOrders[]?.ownedFiles[]?] + [.workOrders[]?.reuses[]?.path] | unique')"
     if [ -n "$test_glob_raw" ]; then
       while IFS= read -r f; do
         [ -n "$f" ] || continue
