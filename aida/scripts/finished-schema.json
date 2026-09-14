@@ -72,7 +72,7 @@
     "rowsJudgedByModel": {
       "type": "integer",
       "minimum": 0,
-      "description": "How many of the checkpoint's judgements a model made rather than a person, across every criterion. An unattended run's evidence is weaker than an attended one's, and this number is what a person returning reads first to decide which rows to judge again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
+      "description": "How many of the checkpoint's judgements a model made rather than a person, across every criterion and every order's doneWhen row. A model's row is weaker evidence than a person's reading, in either mode since live-run row 70, and this number is what a person returning reads first to decide which rows to judge again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
     }
   },
   "$defs": {
@@ -135,10 +135,11 @@
             "type": "string",
             "enum": [
               "person",
-              "model"
+              "model",
+              "gate"
             ]
           },
-          "description": "Who judged this criterion's rows, each value once. Two orders serving one criterion can be judged by a person and by a model, and both are named rather than folded into one answer."
+          "description": "Who judged this criterion's rows, each value once. Two orders serving one criterion can be judged by a person and by a model, and both are named rather than folded into one answer. `gate` is the configuration check of an order whose proof is gate: machine-judged, never counted in rowsJudgedByModel."
         }
       }
     },

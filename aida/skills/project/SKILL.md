@@ -161,6 +161,14 @@ Autonomously, do not ask and do not record anything. The rule writes into a repo
 owns, so nobody's silence stands for a yes, and an unrecorded question is offered again next time
 while a recorded no is not. Say that the offer is waiting, and continue.
 
+**7. Offer a playbook source, once.** Playbooks are the rules every role that writes or judges
+code follows, and a new project has none. For each framework known at step 3, find the catalog
+sets the way `subscribe-playbook` below finds them when no set id is given. Offer, in one
+question: the sets found, by id; a local folder through `add-source <name> playbooks <folder>`;
+or neither. A yes runs the matching section below. The offer is made once, because `create` runs
+once, and nothing is recorded. Autonomously, do not search and do not ask. Say that the
+playbook offer is waiting, and continue, the same as step 6.
+
 ## `switch <name-or-path>`
 
 Run:
@@ -175,7 +183,11 @@ only and is not remembered, because a code-path match always wins over a remembe
 (ideal/project.md, "Picking up work", case 3). No note: the choice is now remembered for this
 directory, and a later plain `report` from here finds this project again on its own. Either way
 it then prints a `project:` line, the project file's path, and the check's report. Show the
-report; read the project file only when a field is needed.
+report; read the project file only when a field is needed. Two fields are needed here:
+`playbookSubscriptions` and `sources`. A project with no subscription and no source of kind
+`playbooks` subscribes to no catalog set and declares no playbooks source. Then name
+`subscribe-playbook` and `add-source <name-or-path> playbooks <folder>` as its two answers, in
+one sentence, and do not ask.
 
 `switch <path>` on a version 5 folder, one holding `project_state.md` and no `project.json`,
 registers it, writes a bare project file, and runs the check. Only the `**Path:**` and
@@ -293,11 +305,32 @@ declares no source, so a stage that needs a kind and finds none declared asks fo
 It writes one entry, ranked first for that kind. A second call for the same folder adds the kind
 to that entry rather than writing a second one. It commits the change and runs the check. Nothing
 is fetched; a stage reads the folder the first time it needs something. Show the whole output.
+For `playbooks`, a catalog set is the other answer to the same question, and `subscribe-playbook`
+below declares one.
 
 ## `subscribe-playbook <name-or-path> <framework> <set-id>`
 
 Subscribes the project to one catalog playbook set for one framework it declares. The set id is
-`<framework>/best-practices/<author>`. Before writing, invoke the `dev-guides-navigator` skill
+`<framework>/best-practices/<author>`. A local folder of plays is the other answer to the same
+question, and `add-source <name-or-path> playbooks <folder>` above declares one.
+
+Framework not given: run `list`, take the `project:` line whose name or code path is the
+target, and read `frameworks` from `<path>/project.json`. One framework: take it and say so.
+Several: ask which, one question. Autonomous with several: **halt** rather than guess, as
+create's steps 1 to 3 do. None: name `set-frameworks` and stop.
+
+Set id not given: invoke the `dev-guides-navigator` skill through the Skill tool, in its
+identify mode. Search the words `<framework> best practices`, with the framework as the filter.
+Its report is `{query, framework, matches: [{kind, name, description, url, sha}], searched,
+unavailable}`. Keep the matches whose `url` path is `<framework>/best-practices/<author>/`, and
+offer them by set id, one question. No match, with `unavailable` empty: say the catalog lists no
+playbook set for that framework, and stop. Name `add-source <name-or-path> playbooks <folder>`
+as the other answer. No match, with a catalog in `unavailable`: the search was incomplete, so
+say the catalog could not be reached and stop. Autonomous with no set id: **halt.** A
+playbook is "a set of rules a person wants followed" (ideal/playbooks.md), and nobody present
+chose one.
+
+Before writing, invoke the `dev-guides-navigator` skill
 through the Skill tool, in its `playbook <set-id>` mode. `not-a-playbook` or `no-topic` refuses:
 name the topic, say a playbook topic carries `playbook: true` in the catalog, and stop.
 `listing-unreachable` or `fetch-failed` does not refuse. Say the catalog could not be reached,

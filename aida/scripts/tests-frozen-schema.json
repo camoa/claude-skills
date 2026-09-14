@@ -25,7 +25,7 @@
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit `tests-freeze` ran at, read fresh from the code repository rather than from the ledger's own startedFrom: unlike a baseline, which is pinned to the commit the whole build began from, a unit's own tests may be frozen after other units have already advanced the branch. A second run for this unit at a different commit refuses rather than overwrite this field."
+      "description": "The commit the test files in `rows` are in: the one `tests-freeze` made from them, on the task branch, or HEAD when they were already committed. Read fresh from the code repository rather than from the ledger's own startedFrom: unlike a baseline, which is pinned to the commit the whole build began from, a unit's own tests may be frozen after other units have already advanced the branch. A second run for this unit at a different commit refuses rather than overwrite this field."
     },
     "testGlobs": {
       "type": "array",
@@ -37,7 +37,13 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/row" },
-      "description": "One entry per criterion the unit serves or owns, the same set `tests-brief` exposed in its own `criteria`. A criterion the unit neither serves nor owns never gets a row, whatever a `--test` might have claimed for it: that claim is refused before this file is ever written."
+      "description": "One entry per machine-verified criterion a `--test` named, one per person-verified criterion the unit serves or owns, and one for the unit's own doneWhen when a `--test` proves it. A machine-verified criterion the unit only serves and no test names gets no row: its proof lives with the order that owns it (live-run row 59). A criterion the unit neither serves nor owns never gets a row, whatever a `--test` might have claimed for it: that claim is refused before this file is ever written. Never empty when `proof` is tests: a record with no row is refused (exit 74). When `proof` is gate the unit takes no `--test`, so this holds only the checklist rows of its person-verified criteria, and may be empty."
+    },
+    "proof": {
+      "type": "string",
+      "enum": ["tests", "gate"],
+      "default": "tests",
+      "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). Absent on a record written before this field existed, which reads as tests."
     }
   },
   "$defs": {
@@ -47,9 +53,14 @@
       "required": ["criterion", "kind"],
       "properties": {
         "criterion": {
-          "type": "string",
+          "type": ["string", "null"],
           "pattern": "^c[1-9][0-9]*$",
-          "description": "The criterion id, minted by scope in alignment.json and copied into the frozen snapshot. Joined on, never renamed."
+          "description": "The criterion id, minted by scope in alignment.json and copied into the frozen snapshot. Joined on, never renamed. Null on the one row that proves the unit's own doneWhen rather than a criterion, which `provesDoneWhen` marks."
+        },
+        "provesDoneWhen": {
+          "type": "boolean",
+          "const": true,
+          "description": "Present, and true, only on the row whose tests prove the unit's own doneWhen: the tests a `--test` flag named with the unit's id in place of a criterion id. A supporting order serves criteria it cannot observe, because the thing they observe is built by their owner later, so its tests are frozen against what the order itself said it would make true (ideal/design.md, 'An order that owns nothing is a supporting order'). At most one such row per record; `kind` stays `machine` so every reader that selects machine rows for their tests runs and hashes these the same as a criterion's. Judged at the checkpoint against the doneWhen text, and that judgement sits on the order's own ledger entry as `doneWhenJudgement`."
         },
         "kind": {
           "type": "string",
@@ -59,7 +70,7 @@
         "tests": {
           "type": "array",
           "items": { "$ref": "#/$defs/test" },
-          "description": "Present only when `kind` is `machine`. Every `--test` this run was given that named this criterion, however many; a test naming several criteria appears once in each criterion's own row. Never empty when present, because a machine-verified criterion with no test is refused before this file is written (exit 29)."
+          "description": "Present only when `kind` is `machine`. Every `--test` this run was given that named this criterion, however many; a test naming several criteria appears once in each criterion's own row. On the doneWhen row, every `--test` that named the unit's id. Never empty when present, because a machine row is written only for a criterion or a doneWhen at least one test named."
         },
         "checklist": {
           "type": "string",
@@ -81,7 +92,7 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "The test's own name, as the `--test` flag named it. Checked to carry, at its own end, the criterion id (or ids, chained from the right) it claims, so a person or a later step can tell what a test is meant to prove without opening the file."
+          "description": "The test's own name, as the `--test` flag named it. Checked to carry, at its own end, the criterion id (or ids, chained from the right) it claims, or the unit's own id on the doneWhen row, so a person or a later step can tell what a test is meant to prove without opening the file."
         },
         "sha256": {
           "type": "string",
@@ -90,7 +101,12 @@
         },
         "red": {
           "type": "string",
-          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Never empty and never synthesised: a test with neither a red run nor a `locksIn` reason is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either. Absent only when `locksIn` is present."
+          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Checked to hold one of the assertion markers the test-execution recipe declares under `failure_signal`, or a line its suite row's `failure_line` names (exit 80); `redSignal` says which. A run that never reached a test, a harness error included, is refused before this file is written, except for the order that creates the unit, whose first run can only stop there (`redSignal: harness-new-unit`). Never empty and never synthesised: a test with neither a red run nor a `locksIn` reason is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either. Absent only when `locksIn` is present."
+        },
+        "redSignal": {
+          "type": "string",
+          "enum": ["assertion", "failure-line", "harness-new-unit", "unchecked"],
+          "description": "Present whenever `red` is. How `tests-freeze` read the red file as a failed test: `assertion`, it holds a marker the recipe's `failure_signal.assertion` declares; `failure-line`, a line matches the suite row's `failure_line` selector, which also covers a test that errored in its own body while another failed, because PHPUnit then prints ERRORS! and no FAILURES!; `harness-new-unit`, it holds the `failure_signal.harness` marker and no assertion marker, and the freeze accepted it because this order creates the unit: an owned file matches a glob under the implement recipe's `## Unit declaration`. A person re-reading the freeze should know this red proved the harness stopped before the unit existed, though a test that ran may also have failed in it; `unchecked`, the recipes handed over declare neither a usable marker nor a selector, so only the non-empty check ran, and the freeze said so in one summary line."
         },
         "locksIn": {
           "type": "string",

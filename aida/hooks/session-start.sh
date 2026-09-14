@@ -135,7 +135,7 @@ if [ -n "$MATCH" ]; then
   SUBS="$(jq -r '(.playbookSubscriptions // {}) | to_entries | map(.key + ": " + (.value | join(", "))) | join("; ")' \
     "$PROJECT_PATH/project.json" 2>/dev/null)"
   if [ -f "$PROJECT_PATH/playbook.md" ]; then HAS_PLAYBOOK="yes"; else HAS_PLAYBOOK="no"; fi
-  echo "Playbooks: ${SUBS:-none}; project file: ${HAS_PLAYBOOK}"
+  echo "Playbooks: ${SUBS:-none}; playbook file: ${HAS_PLAYBOOK}"
   echo ""
 
   # Per-project reminders, written by hand. Version 5 held these in an installed primer.
@@ -146,7 +146,7 @@ if [ -n "$MATCH" ]; then
     echo ""
   fi
 
-  echo "Run \`/aida:project\` to pick up where you left off."
+  echo "Run \`/aida:next\` to pick up where you left off."
   echo ""
   echo "**When new work arrives, say where it goes before you start.** Work that produces"
   echo "findings or decisions someone needs later belongs in a task. A typo or a question"

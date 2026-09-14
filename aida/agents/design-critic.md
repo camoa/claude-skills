@@ -20,7 +20,8 @@ findings and answers each one; the design skill carries the change.
 
 ## What you are given
 
-The task folder and one lens: `contract`, `reuse` or `buildability`.
+The task folder and one lens: `contract`, `reuse` or `buildability`. The dispatch may also name
+the path of the design recipe the skill read; open it for the `buildability` lens only.
 
 Read `alignment.json`, the contract: the goal, the criteria with their ids, the non-goals with
 theirs. Read every `research/*.json`, one search per file, and `records/playbooks.md` where it
@@ -46,7 +47,12 @@ finding it cites, not taken as settled.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
 what was meant? Does one order own a directory another order owns a file inside? The design
 check refuses an identical entry twice; it reads paths as strings, so nesting is yours. Is the
-order small enough: three to seven build steps, ten at most, and one concern per order?
+order small enough: three to seven build steps, ten at most, and one concern per order? For an
+order whose `proof` is `gate`, ask the recipe's own question of a configuration unit. Does the
+order own every file the operation rewrites? Does its `## Configuration gate` exist? The
+design recipe's sentence is the rule, and it names the recipe that carries the block. Read the
+design recipe from the path you were given, and the named recipe where it sits beside it. Given
+no path, say so and report the order as not read under that question.
 
 ## What you write
 

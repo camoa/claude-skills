@@ -112,6 +112,7 @@
           "type": "string",
           "enum": [
             "order-tests",
+            "configuration-gate",
             "suite-regression",
             "coding-standards",
             "static-analysis",
@@ -120,7 +121,7 @@
             "frozen-tests",
             "interface-record"
           ],
-          "description": "Which of the eight checks this is. The ids are in the same order docs/implementation.md names the checks in: order-tests and suite-regression are 'Every test of this order passes' and 'No test outside the baseline fails'; coding-standards, static-analysis and security are the three tool checks; owned-files and frozen-tests are 'The realized diff touches only files this order owns' and 'Every frozen test file is unchanged'; interface-record is 'The interface record matches what the order declared'."
+          "description": "Which of the eight checks this is. The ids are in the same order docs/implementation.md names the checks in: order-tests and suite-regression are 'Every test of this order passes' and 'No test outside the baseline fails'; configuration-gate takes the order-tests slot on an order whose proof is gate: the `## Configuration gate` lines of the implement recipe, run in the worktree, met when every line exits 0, unmet naming the first line that did not, unknown when the task records no environment, no implement recipe was passed, or the recipe carries no such block (live-run row 65). It is the floor for such an order the way order-tests is for every other; coding-standards, static-analysis and security are the three tool checks; owned-files and frozen-tests are 'The realized diff touches only files this order owns' and 'Every frozen test file is unchanged'; interface-record is 'The interface record matches what the order declared'."
         },
         "verdict": {
           "type": "string",
@@ -130,7 +131,7 @@
             "unknown",
             "undeclared"
           ],
-          "description": "The same four words every verdict in this stage uses. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or a tool row's own extensions list matched no file this order owns, so the row did not apply here; undeclared is never satisfied and never a pass. order-tests carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the suite or a tool failed while the baseline already recorded that same framework or tool unmet, unknown or undeclared, which this check cannot tell apart from that old finding plus a new one this order introduced; or the command holds {paths} while this order declares no ownedFiles; or, for interface-record, the declaration names no element in backticks. Neither reads as met. unknown on interface-record is the one unknown that does not spend the attempt: it is a question for the reviewer, not a fault in the code. Every other unmet or unknown does."
+          "description": "The same four words every verdict in this stage uses. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or a tool row's own extensions list matched no file this order owns, so the row did not apply here; undeclared is never satisfied and never a pass. order-tests carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the suite or a tool failed while the baseline already recorded that same framework or tool unknown or undeclared, or unmet with no output kept to subtract, so nothing here can tell that old finding from a new one this order introduced; or the command holds {paths} while this order declares no ownedFiles; or, for interface-record, the declaration names no element in backticks. Neither reads as met. unknown on interface-record is the one unknown that does not spend the attempt: it is a question for the reviewer, not a fault in the code. Every other unmet or unknown does."
         },
         "absent": {
           "type": "boolean",
@@ -171,6 +172,11 @@
                   "undeclared"
                 ],
                 "description": "What this framework alone answered, before the verdicts were folded into the one above."
+              },
+              "failureLine": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Present only on suite-regression, and only when this framework's test-execution recipe declared failure_line on its suite row: the regular expression, as read from the recipe with its quotes stripped. The suite subtraction compared only the lines matching it, on both sides, so a reader can see which lines the verdict rests on."
               }
             }
           },
@@ -196,9 +202,40 @@
           },
           "description": "Present only on a tool check whose recipe row declares it. The file extensions this tool reads; {paths} expanded to only the order's own owned files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply to this order."
         },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Present only on a tool check whose command held {paths} or {file}: the paths that token expanded to, relative to codePath, whether or not the command then ran. This order's owned files, a directory entry expanded to the files the repository tracks under it, minus its own frozen test files, minus any file the row's extensions exclude. The frozen tests come out because the implementer may not write them, a hook refuses it, so a finding in one is not this order's to fix; a reader compares this against the order's ownedFiles to see exactly what the tool judged."
+        },
+        "frozenTestsLeftOut": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Present only on a tool check whose command held {paths} or {file}, and only when at least one of this order's owned files is one of its own frozen tests: those paths, relative to codePath, which the tool was not handed. They are judged once, by the tests step before the freeze, and never here."
+        },
         "output": {
           "type": "string",
           "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode. Kept whole and unmodified so a person or a later step can see exactly what the --nothing-ran marker check itself saw. A tool row carrying the signal empty-stdout has the two streams read apart and then joined, standard output first, so their interleaving is not preserved for that row."
+        },
+        "newLines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "string"
+          },
+          "description": "Present only on suite-regression, coding-standards, static-analysis and security, and only when the baseline recorded that framework or tool unmet and the run now printed lines the baseline's own output did not hold: the first 20 of them, in the command's own words. Two lines are compared with every run of digits removed, runs of dots and whitespace squeezed and the ends trimmed, so a shifted line number, a count or a duration does not read as new. That is enough for a tool, whose output is one line per finding. It is not enough for a suite whose harness prints a progress line or a summary line that changes whenever a test is added or fixed, PHPUnit and pytest among them: on the whole output those read as new. A suite row that declares failure_line narrows the comparison to the lines that name a failed test, and runs[].failureLine records the selector used. These lines are what made the verdict unmet; a person reads them to see what this order introduced."
+        },
+        "newLineCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many lines were new in all, present with newLines. newLines is capped at 20 and this is not."
         }
       }
     }

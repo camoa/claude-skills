@@ -61,6 +61,8 @@ A guide-search miss on a near-duplicate topic is the case the metadata exists to
 | inline blocks | `drupal/layout-builder` | `drupal/blocks` |
 | SOLID (Drupal) | `drupal/solid-principles` | `development/solid-principles` |
 
+Each mode runs as one call to `scripts/dev-guides-lookup.sh`, a plain command with arguments. A session isolated in a git worktree refuses an inline compound shell block and accepts that call.
+
 Full mechanics (the cache kernel, blob-addressed guide bodies, recipe search, process-recipe lookup, and create-on-miss for dev-guides maintainers) are in [docs/usage.md](docs/usage.md#what-it-does).
 
 ## What it covers

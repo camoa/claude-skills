@@ -65,14 +65,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # target, so a write that fails partway never leaves a half-written alignment.json or task.json
 # behind.
 #
-# This script commits nothing to git of its own. task-actions.sh commits on create, start,
-# complete and split because each is a discrete stage-boundary event. `init` here is the task's
-# first write, so it calls that start through mark_task_in_progress. Scope's own set-goal, add,
+# This script commits once, at the stage boundary (foundations.md, History: "AIDA commits at
+# stage boundaries, and the commit message is the record"). `init` is the task's first write, so
+# it calls task-actions.sh start through mark_task_in_progress, and that commits. set-goal, add,
 # add-non-goal, update, remove, set-mechanism and record-decision are mid-conversation edits
-# inside one still-open contract, closer to a document being drafted than to a stage finishing.
-# Where the whole contract is frozen, ready to be committed as a stage boundary (foundations.md,
-# History: "AIDA commits at stage boundaries"), is not decided here; that decision, and which
-# caller makes the commit, is left to the skill body, not built by this script.
+# inside one still-open contract, closer to a document being drafted than to a stage finishing,
+# so they commit nothing. `distill` is the one action both approval branches run last, after the
+# contract is frozen, so it commits the task folder through commit_stage_close before it reads
+# the sidecar; the goal is the commit's reason.
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet.
@@ -105,6 +105,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # same way task-actions.sh checks a task id's own shape.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 if [ -n "${ZSH_VERSION:-}" ]; then
   setopt KSH_ARRAYS 2>/dev/null
@@ -671,9 +672,18 @@ do_record_decision() {
   exit 0
 }
 
-# Reads the sidecar the distiller wrote after the approval; the read is distill_read in task-helpers.sh.
+# Commits the approved contract, then reads the sidecar the distiller wrote after the approval;
+# the read is distill_read in task-helpers.sh. The commit comes first because the contract is
+# final by then whatever the distiller wrote, and a missing or malformed sidecar exits 2 or 4
+# without blocking the stage. A second distill after a re-dispatch finds nothing to commit.
 do_distill() {
   [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
+  # The goal is the reason. init writes it as "", and a commit with an empty reason is refused
+  # by the shape check, so a contract closed without one says that instead.
+  local why
+  why="$(jq -r '.goal // empty' "$ALIGNMENT_FILE" 2>/dev/null)"
+  [ -n "$why" ] || why="closed with no goal recorded"
+  commit_stage_close "$TASK_PATH" scope "Close scope for $(jq -r '.id' "$TASK_FILE")" "$why"
   distill_read "$TASK_PATH" scope
   exit 0
 }

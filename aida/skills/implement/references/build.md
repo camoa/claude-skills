@@ -5,9 +5,11 @@ reference now. Nothing below may change one.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `implement`
-point and each framework the project declares. Name the role, and pass the lookup's answer in its
-own word: SKILL.md holds both rules.
+Dispatch `catalog-identifier` for the `implement` point and each framework, but only when no
+earlier step of this build has resolved it, the tests step included. Name the role, and pass the
+lookup's answer in its own word: SKILL.md holds both rules. Once resolved, reuse the path per
+framework for every order in this build. No record holds these paths. They live in the
+conversation, so a fresh window resolves them again.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.
@@ -15,11 +17,15 @@ the path. Do not read the body here.
 Do not give the test-authoring recipe to the implementer. It chooses a level and names a test, and
 this reader may do neither. Pass its path to `dispatch-open` as `--deny-read`.
 
-Dispatch `catalog-identifier` twice more, for the `test-execution` point and the `review` point,
-each for this order's framework. These are two more recipes, neither the `implement` one above.
-Pass both paths straight through to `build-record` below. The script reads their command blocks
-itself, per SKILL.md, and these are the same two files preconditions already resolved for the
-baseline.
+Read the `test-execution` and `review` recipe paths from the records preconditions already wrote,
+instead of asking the navigator again. `implementation/preconditions.json` holds the
+test-execution recipe at `frameworks[].recipePath`, for each framework whose lookup resolved.
+`implementation/baseline.json` holds the review recipe at `checkRecipes[].path`, for each
+framework that had one. A framework absent from a list had no recipe at the baseline; pass no
+flag for it, the way the baseline ran without one. Pass the paths straight through to
+`build-record` below. The script reads their
+command blocks itself, per SKILL.md. The check recipe must equal the one the baseline used, so
+reading it from that record costs nothing extra.
 
 ## Assemble what the implementer may see
 
@@ -32,7 +38,8 @@ It reads the frozen copy and the frozen tests. It writes seven things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
-- the frozen tests for it, with the criterion each carries;
+- the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
+  the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
 - this attempt's report path;
 - how many attempts this order has used of the count it is allowed;
@@ -100,9 +107,13 @@ Run:
   --started-at <the commit the attempt began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
+  [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
+`--implement-recipe` is the path resolved above, the one the implementer was given. Pass it for
+an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
+runs them as the order's own check. Every other order ignores it.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
@@ -119,7 +130,9 @@ commands` and `## Check commands` itself: the suite command, the command that ru
 own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
 `signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
 command. A `{paths}` token expands to this order's own owned files, relative to codePath, and never
-reaches a shell.
+reaches a shell. For the three tool rows, the order's own frozen test files come out of that
+expansion first. The implementer may not write them, so the tools judge only what it may write.
+The record names the paths the token expanded to and the frozen tests left out.
 
 **Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit
 72) applies here: a project whose two frameworks each carry a coding-standards row, say, gives
@@ -138,7 +151,12 @@ that marker and this flag is not read.
 
 This step runs all eight deciding checks. The record holds every one.
 
-- **order-tests.** Do this order's own frozen tests pass.
+- **order-tests.** Do this order's own frozen tests pass. On an order whose proof is `gate` this
+  slot is `configuration-gate` instead. Does every `## Configuration gate` line of the
+  implement recipe exit 0, run in the worktree. The first line that does not is named, with its
+  output. It reads unknown when the task records no environment, when no `--implement-recipe`
+  was passed, or when that recipe carries no such block. The detail says which. A line 2 that
+  printed `There are no changes to import` is a finding for the reviewer, not for this check.
 - **suite-regression.** Does anything that passed at the baseline now fail.
 - **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
   have.
@@ -148,6 +166,24 @@ This step runs all eight deciding checks. The record holds every one.
 - **frozen-tests.** Does every frozen test file still hash to what the freeze recorded.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks.
+
+A suite or a tool the baseline recorded red does not fail these checks by itself. The check
+subtracts the baseline's own output from the run now, line by line. Numbers and dots are set
+aside first, so a shifted line number, a count or a duration does not read as new. No new line
+is met. A new line is unmet, and the record lists the first twenty under `newLines` with the
+count. The check reads unknown only when the baseline kept no output or the run printed nothing.
+
+That is enough for a tool, which prints one line per finding. It is not enough for every suite.
+PHPUnit and pytest print a progress line and a summary line that change whenever a test is added
+or fixed. On the whole output, a red baseline on those still reads unmet. A test-execution
+recipe's suite row may declare `failure_line`, a regular expression matching the lines that name
+a failed test. Then only those lines are compared, on both sides, and the record names the
+selector. With the selector, a failure that matches no line reads unknown, because it is not one
+the selector names.
+
+The subtraction holds no parser, so it cannot see four things. A finding whose text changed
+reads as new. A finding fixed and reintroduced reads as old. A new finding worded like an old
+one in another file reads as old. A second copy of an old finding on another line reads as old.
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
 attempts as its own allowed count says, two unless a person has granted more. The summary prints
@@ -159,7 +195,8 @@ An unknown on interface-record does not spend the attempt. The declaration named
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
 other unmet or unknown does.
 
-**order-tests is the floor.** Every other check may answer undeclared and still let the order go on
+**order-tests is the floor,** or `configuration-gate` on a `gate` order. Every other check may
+answer undeclared and still let the order go on
 to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
 may not. It is the one check that says this order's own code does what its tests ask. Undeclared or
 unknown there means nothing here ran, so the order stays at `code-written`, whatever the other

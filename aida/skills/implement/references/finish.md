@@ -20,7 +20,8 @@ dirty code repository as well, because the commit range it records is a claim ab
 repository holds.
 
 On success it writes `implementation/finished.json`: the commit range this stage produced, and each
-order's own range and rounds used. It also records each criterion's row state and who judged it.
+order's own range and rounds used. The record is committed when the stage closes: `finish` commits
+the task folder, in the project folder and never in the code repository. It also records each criterion's row state and who judged it.
 The checklists for the criteria a person verifies are copied in too, from the frozen test records.
 The review stage reads this one file rather than one per order. It records the findings ruled
 deferred with their reasons, and how many rows a model judged rather than a person. It prints
@@ -68,23 +69,27 @@ order's attempts by one; say so.
 
 ## Offer the restart, when a halt reads "design drift"
 
-A halt beginning `design drift` means `start` found the live design changed after this order's
-snapshot was taken. That can be direct, or through an order it depends on. There is no mid-build
-path that redoes one order alone; the whole implementation folder starts over, or nothing does.
+A halt beginning `design drift` means `start` found the live design changed after this order
+started. That can be direct, or through a started order it depends on. The halted orders start
+over; every other order keeps what it has.
 
-Put that to the person. If they want to rebuild against the new design, run:
+Put that to the person. If they want to rebuild the halted orders against the new design, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh restart "<task_folder>" \
-  --reason <what changed and why the build starts over>
+  --reason <what changed and why these orders start over>
 ```
 It refuses when no order is halted for design drift, or when the code repository's tree is not
 clean. It refuses on an autonomous run too: a restart is a person's judgement. The reason may not
-hold `; earlier: `, the same refusal the grant's own reason takes, for the same cause. On success
-it moves
-`implementation/` to `implementation-<date>-<commit>/`, writes the reason and the drifted orders
-into that archive as `restarted.json`, and prints the archive path.
+hold `; earlier: `, the same refusal the grant's own reason takes, for the same cause. Design has
+to close again on the live files first. The restart takes the halted orders' live copies into the
+snapshot, and refuses with exit 13 until `design-closed.json` records a close over them.
 
-Design has to close again before the next `start` can take a fresh snapshot: `start` refuses
-without a current `design-closed.json`, drift or no drift. **Selective redo of one order is not
-built.** A restart always starts the whole implementation stage over; say so when the person asks
-for less.
+On success it moves only the halted orders' records to `implementation-<date>-<commit>/`. A
+record is the order's when its file name carries the order id, the way every record the script
+writes does. It writes the reason and the halted orders there as `restarted.json`, and prints
+that path. It keeps every other order's records, and the snapshot and the ledger, in place. In
+the ledger the halted orders go back to not started, and their judgements are dropped. The
+criteria they serve go back to not judged. A finished order is never redone for a change it never
+depended on. A halted order the live design no longer holds refuses. Removing an order from a
+running build is not built, and the message names the by-hand path. The next `start` is a
+resumed run.

@@ -15,10 +15,10 @@ SKILL.md holds both rules.
 **The `test-authoring` point.** This answers where a test file goes, which levels exist and when
 each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
 
-**The `implement` point, for one thing only.** Take the file patterns from its `## Oracle files`
+**The `implement` point, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
-naming test files, so this is not a guess at what the block is for. Pass those globs to the freeze
-below. This is the one recipe this step reads itself, because it needs the patterns as data rather
+naming test files, so this is not a guess at what the block is for. Pass those globs and the path
+to the freeze below. This is the one recipe this step reads itself, because it needs the patterns as data rather
 than as instruction.
 
 Do not give this recipe to the test author. It carries the standards and the steps that write
@@ -32,6 +32,16 @@ frozen test reads the record and never the catalog, because a lookup in a write 
 that can fail open, and a pattern that changed during a build would change what is protected
 halfway through it.
 
+## An order whose proof is `gate` has no test author
+
+Read the order's `proof` from the frozen snapshot first. `gate` means its deliverable is
+exported configuration, and a test that reads the YAML back cannot fail for the right reason.
+Skip `tests-brief`, dispatch nobody, and put no row to anyone. Go straight to the freeze below
+with no `--test`, and a `--checklist` for each criterion a person verifies. The build runs the
+implement recipe's `## Configuration gate` lines as the order's own check, and `close` judges
+its owned machine criterion from that check. The behavioural proof lives with the tests of the
+order that consumes what it configures. Every other order takes the steps below.
+
 ## Assemble what the test author may see
 
 Run:
@@ -39,13 +49,16 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and never the live files. It writes exactly five things to
+It reads the frozen copy and never the live files. It writes exactly six things to
 `implementation/brief-<order id>-tests.json`:
 
-- this order's own record;
+- this order's own record, with the criteria it owns named in `criteriaOwned`;
 - the criteria it serves and owns, with their verification and who verifies each;
 - the boundaries it names;
 - the declared interface of every order it depends on;
+- `reuses`, the path and the interface of every existing thing design's dispose recorded on
+  this order. A reused module is production source of no work order, so this is the only place
+  the test author gets its shape. An order disposed with no path carries none;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path and counts, never the brief.
@@ -67,12 +80,18 @@ Open it first:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" test-author <order id> \
   --deny-read <path of the recipe that carries the coding standards> \
-  --allow-write <path the tests go in>
+  --allow-write <path the tests go in> \
+  --test-glob <pattern from the implement recipe>
 ```
-The script refuses a role name that matches no agent this plugin ships, and for this role it adds
-the production source to the denied reads itself, taken from the owned files every work order in
-the frozen snapshot declares. Never type those paths here. It prints what it denied; read that
-list, because it is the whole of what separates the tests from the code they judge.
+One `--test-glob` per pattern, the same ones the freeze below takes. The script refuses a role
+name that matches no agent this plugin ships, and for this role it adds the production source to
+the denied reads itself, taken from the owned files every work order in the frozen snapshot
+declares. An owned file that matches a test glob is a test, and it stays readable, so the author
+can read back what it writes. So is an owned file under a directory the glob names literally,
+`tests` in `**/tests/**/*Test.php`, because the author also writes base classes and fixtures
+there. The globs decide, not the write path, because a framework may keep its tests beside the
+source; a glob that names no directory adds nothing. Never type the denied paths here. It prints what it denied; read
+that list, because it is the whole of what separates the tests from the code they judge.
 
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
 next dispatch refuse, and it names the role and order still holding it.
@@ -89,9 +108,9 @@ step earlier. A hook refuses the read while the dispatch record is open.
 
 **It may not write production code.** It writes the test, watches it fail, and stops.
 
-**Set the tier on the dispatch.** A mid tier where a person will read the rows before anything is
-frozen. The top tier where the run is unattended, because then nobody reads them and the whole
-build is measured against work nothing checked first.
+**Set the tier on the dispatch.** A mid tier, in both modes. The checker reads every row at the
+top tier before anything is frozen, and a person reads the rows it rejected. So the author's work
+is checked before the build is measured against it, whether or not a person is present.
 
 Give it the **path** to the test-authoring recipe for its framework, the **path** of the brief
 `tests-brief` wrote, and nothing else. It opens both itself. Do not read either body here and paste
@@ -99,11 +118,18 @@ it in. The recipe runs to well over a hundred lines per framework, and reading i
 conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
 reading it is the role's.
 
-Ask it to return, for each test, the path, the name, and the criterion the name carries. For each
-test, it writes what the run printed when the test failed to its own file, under the task folder's
-`implementation/` folder, one file per test, and returns that file's path in its report. `--red`
-below reads that path. Ask it to return a checklist line for each criterion a person verifies,
-copying the verification sentence whole.
+Ask it to return, for each test, the path, the name, and the criterion the name carries. A test of
+the order's own done-when returns the order id in place of a criterion. For each test, it writes
+what the run printed when the test failed to its own file, under the task folder's `implementation/`
+folder, one file per test, and returns that file's path in its report. `--red` below reads that
+path. Ask it to return a checklist line for each criterion a person verifies, copying the
+verification sentence whole.
+
+**A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
+criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
+later order builds, so its tests are written against its own done-when. Such a test ends its name
+with the order id, `Wo1`, and no criterion id. The author writes a test for every machine-verified
+criterion the order owns, and for its done-when where nothing it owns covers that.
 
 **A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
 Still green, and the author can name the existing code that satisfies it: it locks that behaviour
@@ -116,24 +142,26 @@ frameworks exit zero when a filter selects nothing. Only an assertion that ran a
 a red run. A harness that never reached the behaviour is a setup gap, and a run that selected
 nothing looks like success and is the dangerous one.
 
-## Put the rows to the person, before anything is frozen
+**When the author returns, run the coding-standards row over the new test files.** Take the
+command from the check recipe `references/preconditions.md` resolved, with `{paths}` as the test
+paths the author returned, and run it here. Send any finding back to the author before the
+freeze. No script action runs one recipe row on its own, so this conversation runs the command.
+This is the one place the tests' own standards are judged. The build step leaves the frozen tests
+out of its tool rows, because the implementer may not write them.
 
-Show one row per criterion: the criterion, its verification sentence, and the names of the tests
-that prove it. Show the rows and not the test code. The question is whether the tests named
-exercise the sentence beside them, and test code invites a review of the code instead.
+## Put the rows to the checker, before anything is frozen
 
-**Interactive, ask row by row.** Each answer becomes one
-`--row <criterion id>=confirmed::person::<the person's words>` or
-`--row <criterion id>=rejected::person::<the person's words>` for the freeze below. A row the
-person rejects goes back to the test author before any freeze runs. Never run the freeze with a
-rejected row still standing. `tests-freeze` refuses it and writes nothing. Send that row back
-first, and freeze once every row for this order reads confirmed. A note may not hold the text
-`; earlier: `, the text this stage joins one halt reason to another with; a note carrying it would
-forge a halt nobody wrote, so `tests-freeze` refuses the flag rather than write it.
+Build one row per criterion the tests name: the criterion, its verification sentence, and the names
+of the tests that prove it. Build one more row when a test proves the order's done-when: the order
+id, its done-when text, and those tests. The rows carry names and not test code. The question is
+whether the tests named exercise the sentence beside them.
 
-**Unattended, there is nobody to ask.** Dispatch `row-checker`. This reading stands in for the one
-place a person is the only check on whether a test asserts deeply enough. Pay the top tier for what
-is left. Open the dispatch record first, the same way every other role gets one:
+**Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
+recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a
+case the recipe asks for that no test covers, and a test that measures something easier than the
+sentence. Asking the person every row added a turn and no judgement the checker had not given
+(live-run row 70). Pay the top tier. Open the dispatch record first, the same way every other role
+gets one:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id>
 ```
@@ -142,60 +170,122 @@ owned files. So `row-checker` cannot open the production source behind a hook. W
 open, the hook denies nothing. The checker's own instructions to stay off the implementation are
 then just words, with nothing enforcing them.
 
-**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's rows
-and the path its verdict file goes to, under the task folder, and nothing else. It reads the verify
-clause and each named test, never the implementation, and answers confirmed or rejected with a note
-for each row. Close the dispatch record as soon as it returns, per SKILL.md.
+**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's
+rows, the **path** to the test-authoring recipe resolved above, and the path of its verdict file
+under the task folder. Nothing else. A done-when row carries the order id and the done-when
+text where a criterion row carries the id and the verify clause. It reads that text, the recipe and
+each named test, never the implementation, and answers confirmed or rejected with a note for each
+row. Close the dispatch record as soon as it returns, per SKILL.md.
 
-Turn its answers into `--row <criterion id>=<verdict>::model::<its note>` for the freeze. A row it
-rejects is not sent back to the test author the way a person's rejection is. Nobody is present to
-judge the correction, so `tests-freeze` writes the halt onto the order, with the checker's own note
-as the reason. Then it refuses. Report the halt, and take the next ready order instead.
+**A confirmed row is the checker's, in both modes.** It becomes
+`--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
+by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
+confirmed row to the person. The record says a model judged it, so a person can list those rows
+later and read any of them again.
 
-**The judge has to match the run mode.** A row judged `person` on an autonomous run, or judged
-`model` on an interactive one, refuses. The freeze exists to record who actually looked, and a
-mismatched row would let one stand in for the other silently.
+**Interactive, a rejected row goes to the person, one question per row.** Show the row, the
+checker's note, and the answer the note recommends. The person's answer becomes
+`--row <criterion id>=confirmed::person::<the person's words>` or
+`--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
+the test author before any freeze runs. Never run the freeze with a rejected row still standing.
+`tests-freeze` refuses it and writes nothing. Send that row back first. A repaired test goes
+through the checker again. Freeze once every row for this order reads confirmed. A note may not
+hold the text `; earlier: `. This stage joins one halt reason to another with that text, so a note
+carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
+
+**Unattended, there is nobody to ask.** A rejected row becomes
+`--row <criterion id>=rejected::model::<its note>`, and it is not sent back to the test author the
+way a person's rejection is. Nobody is present to judge the correction, so `tests-freeze` writes
+the halt onto the order, with the checker's own note as the reason. Then it refuses. Report the
+halt, and take the next ready order instead.
+
+**A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
+nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs
+on both. The freeze exists to record who actually looked.
 
 ## Freeze what came back
 
-Run, with one flag per test, per failure output, per pattern, and per row:
+Run, with one flag per test, per failure output, per framework, per pattern, and per row:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-freeze "<task_folder>" <order id> \
   --test <path>::<test name>=<criterion id> \
+  --test <path>::<test name>=<order id> \
   --red <test name>=<path to a file holding what the run printed> \
+  --test-recipe <framework>=<path to the test-execution recipe> \
+  --implement-recipe <framework>=<path to the implement recipe> \
   --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
-  --row <criterion id>=<confirmed|rejected>::<person|model>::<note>
+  --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
+  --row <order id>=<confirmed|rejected>::<person|model>::<note>
 ```
+
+A `--test` names its criteria or the order's own id, never both. The second form marks a test of
+the order's done-when, and its name ends with the order id.
+
+`--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
+at `frameworks[].recipePath`, the same way the build step reads it. The script reads the recipe's
+`failure_signal` block itself. Do not read the body here. `--implement-recipe` is the path
+resolved above, one per framework, the same path the build step passes to `build-record`. The
+script reads its `## Unit declaration` block itself, for the one exception below.
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
-step. It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
+step. A `gate` order is the one order that freezes with no test row, and it refuses a `--test`.
+It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
 from here, not back.
 
 The script checks the file exists, sits inside the code repository, matches the framework's own
-declared pattern, and carries at the end of its name the criterion it claims. It checks every
-criterion a machine verifies has a test and every criterion a person verifies has a checklist line.
+declared pattern, and carries at the end of its name the criterion it claims. A done-when test
+carries the order id there instead. It checks every machine-verified criterion this order owns has
+a test (a `gate` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
+serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
+list). A test that names neither a criterion this order serves or owns nor this order's id refuses
+(exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold
+no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
-place. A test with neither refuses (exit 33). That check is a bound, not a proof: it
-confirms the file is not empty, and nothing in it confirms the framework's own failure signal
-appears there. A file holding "0 tests ran" passes the same way a real assertion failure does. A
-`--locks-in` reason is recorded beside the test, and the review brief says where it is.
+place. A test with neither refuses (exit 33). It reads each `--red` file against the markers the
+test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
+A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a
+setup gap, and the freeze refuses it (exit 80) saying so. The harness never reached the
+behaviour, so nothing in that file says the behaviour is absent. One order is the exception: the
+order that creates the unit. The implement recipe's `## Unit declaration` names the file whose
+presence makes a unit exist. When an owned file of this order matches one of its globs, the
+freeze accepts the harness-only file as its red, recorded `redSignal: harness-new-unit`. No
+test can assert before the module exists, so that is the only red the order
+can have. The author does not scaffold the module to get a better one: it may write no production
+file. With no `--implement-recipe`, no block, or no matching owned file, the refusal stands.
+A file holding neither marker is a red when a line matches `failure_line`. That is how a red is
+read under a recipe whose assertion span is a shape rather than a marker. A file none of the
+three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes
+declare no assertion marker and no `failure_line`, the freeze cannot read the file at all. It
+then freezes it as before, records `redSignal: unchecked` on the test, and says so in one summary
+line. Every other red carries the reading that accepted it. A freeze with a `--red` and no
+`--test-recipe` refuses, because then no red can be read at all. A `--locks-in` reason is
+recorded beside the test, and the review brief says where it is.
 
-**Every machine-verified criterion this order serves or owns needs exactly one row**, naming
-whether it was confirmed or rejected and who judged it. A criterion a person verifies carries a
+**Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
+confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the
+order id. Rows follow the tests. A criterion this order only serves and names on no test needs no
+row from it; the row for it belongs to its owner. A criterion a person verifies carries a
 checklist instead, never a row: it has no judgement, and completion is what confirms it. A row for
-a criterion this order does not serve or own refuses the freeze, the same way a missing row does.
-So does a row for a criterion a person verifies. Every accepted row is appended to that criterion's
-own record in the ledger. `close` is what decides the criterion from it, once every order serving
-it has closed.
+anything no test of this order claims refuses the freeze, the same way a missing row does. So does
+a row for a criterion a person verifies. Every accepted criterion row is appended to that
+criterion's own record in the ledger, and the done-when row to this order's own entry. `close` is
+what decides a criterion from its rows, once every order serving it has closed and its owner has
+judged it.
 
 Then it records a hash for each test file. That hash is the freeze. From here a hook refuses a
 write to one of those files from every dispatched role except the test author of the order that
 froze it.
+
+Then it commits the test files it hashed, on the task branch, and only those paths. The
+implementer starts from a tree that already holds the tests, and the record's commit is the one
+they are in. Work beside them stays uncommitted, and the freeze says so in one line. A commit that
+fails, for want of a git identity or any other reason, refuses before the record is written,
+with git's own message.
 
 A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is
 noticed, and the hash is what notices one. The hook allows the write and says which file changed and
@@ -206,5 +296,6 @@ stops the step rather than recording it, which is the right outcome: a test nobo
 not a reference. This is a bound, not a rule the script enforces on its own: nothing here notices a
 green-on-arrival test the caller does not flag, so the flag is on you.
 
-A record is taken once per commit. A second run at the same commit leaves it alone. One taken at a
-different commit refuses and names both.
+A record is taken once. A second run with the same tests leaves it alone, whatever commit the
+tree is at now, because every freeze moves the tree. Different tests at a different commit
+refuse and name both commits.

@@ -58,6 +58,13 @@
         "$ref": "#/$defs/criterionEntry"
       },
       "description": "One entry per criterion in the snapshot's contract, opened by the first step as not judged. This holds whether the tests claiming to prove a criterion were confirmed to do so, never the criterion itself, which lives in the snapshot."
+    },
+    "resnapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resnapshot"
+      },
+      "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and `restart` for each order it resets, both after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
     }
   },
   "$defs": {
@@ -125,6 +132,17 @@
             "$ref": "#/$defs/grant"
           },
           "description": "One entry per attempt a person has granted on this order, in the order they were granted. Present only when at least one was. A grant with no record of who asked for what is a cap nobody can audit afterwards."
+        },
+        "doneWhenJudgement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "judgedBy", "note"],
+          "properties": {
+            "verdict": { "$ref": "#/$defs/judgement/properties/verdict" },
+            "judgedBy": { "$ref": "#/$defs/judgement/properties/judgedBy" },
+            "note": { "$ref": "#/$defs/judgement/properties/note" }
+          },
+          "description": "The checkpoint's verdict on the tests that prove this order's own doneWhen rather than a criterion: the `--row` keyed by the order's id, written by `tests-freeze` and replaced on every freeze of this order. Present only when the order froze such a test. A supporting order serves criteria it cannot observe, so its tests are judged against its doneWhen text instead of a verify clause (live-run row 59). Counted with the criterion judgements in every rowsJudgedByModel, so a model's reading here is listed for a person to judge again like any other."
         }
       }
     },
@@ -155,7 +173,34 @@
           "items": {
             "$ref": "#/$defs/judgement"
           },
-          "description": "One entry per order serving this criterion, appended by `tests-freeze` when that order's rows are frozen. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
+          "description": "One entry per order whose frozen tests name this criterion, appended by `tests-freeze` when that order's rows are frozen; a serving order whose tests name only its own done-when appends none, and its judgement sits on its ledger entry as doneWhenJudgement. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
+        }
+      }
+    },
+    "resnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The order whose live copy the snapshot took."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The snapshot's hash before the copy was taken."
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The snapshot's hash after, which snapshotHash also became."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date the copy was taken, YYYY-MM-DD. Set by the script, never typed."
         }
       }
     },
@@ -212,9 +257,10 @@
           "type": "string",
           "enum": [
             "person",
-            "model"
+            "model",
+            "gate"
           ],
-          "description": "Who answered. `model` marks a row an unattended run judged with a context that did not write the tests, which is weaker evidence than a person reading it. The record says so rather than marking the row passed, so a person returning can list exactly those rows and judge them again (ideal/implementation.md, 'This departs from the tenth invariant, and says so')."
+          "description": "Who answered. `model` marks a row the row-checker judged, a context that did not write the tests, and that no person re-read. The checker judges every row in both modes against the test-authoring recipe. On an attended run a person answers only a row it rejected, and that answer is `person` (live-run row 70). `person` is refused on an autonomous run. A model's row is weaker evidence than a person's reading, and the record says so rather than marking the row passed. A person returning can then list exactly those rows and judge them again (ideal/implementation.md, 'This departs from the tenth invariant, and says so'). `gate` marks a criterion owned by an order whose proof is gate, written by `close` when the order's configuration-gate check was met on its closing attempt: the recipe's own lines decided it, deterministically. A third value rather than `model`, because a model's row is weaker evidence queued for a person to judge again and this one is not; rather than `person`, because nobody read anything. rowsJudgedByModel never counts it (live-run row 65)."
         },
         "note": {
           "type": "string",

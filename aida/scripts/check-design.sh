@@ -17,7 +17,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - every criterion in the contract is served by at least one work order;
 #   - every criterion is owned by exactly one work order, never zero and never two;
 #   - every work order serves at least one criterion;
-#   - a work order that owns a criterion whose verifiedBy is machine declares at least one test;
+#   - a work order that owns a criterion whose verifiedBy is machine declares at least one test,
+#     unless its proof is gate: such an order is proved by the recipe's `## Configuration gate`
+#     lines and declares no test at all, and one that declares a test is refused (live-run row 65);
 #   - every criterion's verifiedBy is machine or person, and never a third value: a criterion whose
 #     verifiedBy is neither needs no test, no checklist and no checkpoint row, so implementation
 #     would freeze it with nothing at all behind it. scripts/check-alignment.sh already refuses the
@@ -88,8 +90,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      cross-order checks named above, fails: a criterion/non-goal/work-order id that is not a
 #      valid shape, a tests entry that is not well-formed, a criterion with no serving order, a
 #      criterion owned by zero or by more than one order, an order serving no criterion, an order
-#      that owns a machine-verified criterion and declares no test, an order that owns nothing and
-#      reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
+#      that owns a machine-verified criterion and declares no test, an order whose proof is gate
+#      and that declares a test, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
 #      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
@@ -133,6 +135,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 criteriaWithUnusableVerifiedBy: [ {id, text, verifiedBy} ],
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
+#                 gateOrdersDeclaringTests: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
 #     graph: { checked, note,
@@ -381,6 +384,7 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             nonGoals: [ (.nonGoals // [])[] | select(type == "string" and test("^n[1-9][0-9]*$")) ],
             dependsOn: [ (.dependsOn // [])[] | select(type == "string" and test("^wo[1-9][0-9]*$")) ],
             ownedFiles: [ (.ownedFiles // [])[] | select(type == "string" and (length > 0)) ],
+            proof: (.proof // "tests"),
             # A test counts on its description alone. The level is optional and design does not set
             # one: choosing a tier belongs to the stage that writes the test.
             testsCount: ( [ (.tests // [])[]? | select(type == "object")
@@ -435,6 +439,7 @@ CRITERIA_WITH_NO_OWNER_JSON='[]'
 CRITERIA_WITH_MULTIPLE_OWNERS_JSON='[]'
 ORDERS_SERVING_NOTHING_JSON='[]'
 ORDERS_MISSING_REQUIRED_TESTS_JSON='[]'
+GATE_ORDERS_DECLARING_TESTS_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
@@ -471,11 +476,17 @@ else
     [ $orders[] | select((.criteriaServed // []) | length == 0) | {id: .id, path: .path} ]
   ')"
 
+  # An order whose proof is gate owes no test: the recipe's `## Configuration gate` lines are its
+  # check, and an owned machine criterion is judged by them at close. One that declares a test
+  # anyway is the opposite defect, a test for a thing TDD is not about, and is named on its own list.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
-    | [ $orders[] | . as $o | select($o.testsCount == 0)
+    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.proof != "gate")
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
         | {id: $o.id, path: $o.path, criterionId: $cid} ]
+  ')"
+  GATE_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
+    [ $orders[] | select(.proof == "gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
   ')"
 
   # A fact about the contract alone, so it needs no work order and is never withheld when one
@@ -508,6 +519,7 @@ else
   UNUSABLE_VERIFIED_BY_COUNT="$(printf '%s' "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" | jq 'length')"
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
+  GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -530,7 +542,7 @@ else
     COVERAGE_WITHHELD="false"
   fi
 
-  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
+  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
   if [ "$DESIGN_STARTED" = "true" ] && [ "$COVERAGE_WITHHELD" = "true" ]; then
     COVERAGE_NOTE="ran in part: $FILE_COUNT file(s), $COUNTED_ORDERS work order(s) counted, $EXCLUDED_COUNT excluded as unreadable, against $(printf '%s' "$CRITERION_IDS_JSON" | jq 'length') criterion/criteria. Every finding that reports something absent is withheld, because an excluded work order and a missing one look the same from here. Repair the files listed above and run this again."
   elif [ "$DESIGN_STARTED" = "true" ]; then
@@ -690,6 +702,7 @@ jq -n \
   --argjson criteriaWithUnusableVerifiedBy "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" \
   --argjson ordersServingNothing "$ORDERS_SERVING_NOTHING_JSON" \
   --argjson ordersMissingRequiredTests "$ORDERS_MISSING_REQUIRED_TESTS_JSON" \
+  --argjson gateOrdersDeclaringTests "$GATE_ORDERS_DECLARING_TESTS_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
   --argjson graphChecked "$([ "$DESIGN_STARTED" = "true" ] && echo true || echo false)" \
@@ -720,6 +733,7 @@ jq -n \
       criteriaWithUnusableVerifiedBy: $criteriaWithUnusableVerifiedBy,
       ordersServingNothing: $ordersServingNothing,
       ordersMissingRequiredTests: $ordersMissingRequiredTests,
+      gateOrdersDeclaringTests: $gateOrdersDeclaringTests,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds
     },

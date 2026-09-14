@@ -68,8 +68,9 @@ repair the message gives and stop.
 from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
 so scoping in this same window is not refused. The tool asks for approval, because the path is
 outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
-tool refuses on first entry. Then print the path and `cd <path> && claude`, which opens a window
-in the tree. Say that the site offer comes at `start`, and stop.
+tool refuses on first entry. On that refusal, print the path and `cd <path> && claude`, which
+opens a window in the tree. Say that the site offer comes at `start`, and stop. On a successful
+entry, go on to step 5.
 
 **5. Offer the site.** Runs here when this window entered the tree, and at `start` otherwise. A
 worktree has the branch's files and no site, so a review or a baseline taken there would capture
@@ -98,14 +99,18 @@ and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the 
 ```
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
 the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
-It prints the paths of the `## Files` blocks, the files `up` writes.
+It prints the paths of the `## Files` blocks, the files `up` writes, and one `precondition:`
+line per `## Preconditions` command `up` runs.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
 says what `up` would do.
 
 `up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with the
 output in `records/environment-up.txt`, in this order. First it writes each `## Files` block
-absent from the worktree and commits those files alone, so other changed or staged work is
-never taken in. A file present with other content refuses at 3. Then
+absent from the worktree. A file present with other content refuses at 3. Then it runs each
+`## Preconditions` line, after the files because the check is a script the recipe ships. A
+failing line stops at 3, prints its output, removes the files this run wrote, and commits
+nothing. Then it commits the written files alone, so other changed or staged work is never
+taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then the bring-up lines before the
 `## Address` heading. Then the address command, whose output is `key: value` lines. `address:`

@@ -116,7 +116,9 @@ recipes revalidate on use exactly like guides and task recipes.
 `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-store.sh` is the **only writer** of the
 shared store and the lockfile. No skill, agent, or hook writes directly to
 `~/.claude/dev-guides-store/` or edits `dev-guides.lock.json` — all mutations go
-through the kernel's subcommands (`revalidate`, `blob-put`, `lock-set`).
+through the kernel's subcommands (`revalidate`, `blob-put`, `lock-set`). The five lookup
+modes run as one call each to `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh`, which
+calls the kernel for every store operation and writes nothing itself.
 
 ---
 

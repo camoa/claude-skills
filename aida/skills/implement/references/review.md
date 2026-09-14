@@ -133,12 +133,14 @@ Run:
   --started-at <the commit the round began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
+  [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>] \
   [--scope-insufficient <finding id>=<reason>]...
 ```
 `--test-recipe` and `--check-recipe` are the two paths resolved above, one pair per framework. The
-script parses both itself, the same way `build-record` does. It refuses (exit 72) when two
+script parses both itself, the same way `build-record` does. `--implement-recipe` is the path
+build.md names, and an order whose proof is `gate` needs it here for the same reason. It refuses (exit 72) when two
 frameworks command one tool. It refuses (exit 73) when the check recipe it resolves is not the one
 the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
@@ -153,8 +155,9 @@ not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
 work before it returns. A dirty tree means that commit did not happen. This round is not recorded.
 Interactive puts that to the person. Unattended halts the order with that reason.
 
-This re-runs seven of the eight checks, with the same order-tests floor build.md names: undeclared
-or unknown there still spends the round, even when every other check is undeclared. Not
+This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
+`gate` order the floor is `configuration-gate`. Undeclared or unknown there still spends the
+round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
 spends the round and leaves every finding open. At the round cap, the script halts the order
 itself, naming the check that stopped it. `review-brief` is never run again for this order.

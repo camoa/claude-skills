@@ -74,6 +74,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # flag. Sorting uses LC_ALL=C so byte order, not the caller's locale, decides "most recent."
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
@@ -243,7 +244,7 @@ gather_new_tasks() {
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
       --arg legacy "$legacy" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
-        children:(.children // []), runMode:(.runMode // null), review:$review, notes:$notes,
+        children:(.children // []), runMode:(.runMode // "interactive"), review:$review, notes:$notes,
         worktree:(.worktree.path // "none"), stage:$stage, path:$p}
        | if $legacy != "" then . + {legacyStages:($legacy | split(" "))} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }

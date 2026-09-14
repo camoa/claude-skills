@@ -31,7 +31,9 @@
 #   tc_parse_recipe <recipe> <out>            one JSON object per `## Test commands` row
 #   cc_parse_recipe <recipe> <heading> <key> <out>      the same for a check or surface block
 #   cc_markers_in_text <text>                 the literal markers in one silent-pass text
+#   cc_failure_signal_markers <recipe> <key>  the same, from one key of a test recipe's failure_signal
 #   cc_silent_pass_markers <recipe>           the same, from the file-level key of a test recipe
+#   cc_unit_declaration_globs <recipe>        the globs under ## Unit declaration of an implement recipe
 #   cr_recipe_pair <action> <flag> <value>    parses <framework>=<path> into CR_PAIR
 #   cr_resolve                                resolves the recipes into CR_DOC
 #   cr_lookup <tab list> <name>               the value that name was given, as whole text
@@ -42,6 +44,10 @@
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>]   runs one resolved command
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
+#   pc_unquote <text>                         the text with one layer of matching outer quotes removed
+#   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
+#   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
+#   br_subtract_baseline <base> <now> <label> <how> [<selector>]  met, unmet or unknown into BR_SUB_*
 #   br_require_clean_tree <action> <repo> [<unit> <run mode> <ledger file> <ledger doc>]  exit 61
 #   br_worst_verdict <verdicts>               the verdict that wins across several frameworks
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
@@ -62,7 +68,7 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file
-#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files; sets RF_WRITTEN, RF_KEPT
+#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files; sets RF_WRITTEN, RF_KEPT, RF_WRITTEN_PATHS
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
 #
 # What this library takes from its caller, and never defines itself:
@@ -233,7 +239,7 @@ recipe_block_into() {
 }
 
 # The entry being read, held between lines, the same reason PC_* is held between lines above.
-TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
 
 # Appends one JSON object to $1 for the held row and clears it, so a second call with nothing held
 # writes nothing. `argv` and `nearest` are read as JSON, through jq, never split by hand; a value
@@ -241,6 +247,9 @@ TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
 # `unreadable`, because a malformed row in a recipe is a defect worth reporting, not a reason to
 # report fewer rows than the recipe wrote. `absent` is a boolean fact, true whenever the row
 # carried an `absent:` key at all; its own folded prose is never read here, only its presence.
+# `failure_line` is a regular expression a suite row may declare, one per row: the lines of the
+# suite's output that name a failed test. It lands as `failureLine`, as written, quotes and all;
+# the caller that runs the row strips them, the way it strips a precondition's expected string.
 tc_flush_entry() {
   local out="$1"
   [ -n "$TC_ID" ] || return 0
@@ -263,15 +272,17 @@ tc_flush_entry() {
   fi
   jq -n --arg id "$TC_ID" --argjson argv "$argv_json" --arg cost "$cost" \
         --argjson absent "$([ "$TC_ABSENT" = "1" ] && printf true || printf false)" \
-        --argjson nearest "$nearest_json" --argjson unreadable "$unreadable" '
+        --argjson nearest "$nearest_json" --argjson unreadable "$unreadable" \
+        --arg failureLine "$TC_FAILURE_LINE" '
     {id: $id}
     + (if $argv       == null  then {} else {argv: $argv} end)
     + (if $cost       == ""    then {} else {cost: $cost} end)
     + (if $absent     == false then {} else {absent: true} end)
     + (if $nearest    == null  then {} else {nearest: $nearest} end)
+    + (if $failureLine == ""   then {} else {failureLine: $failureLine} end)
     + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
   ' >>"$out" || die 3 "preconditions: could not record the test-command row $TC_ID"
-  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
 }
 
 # Reads the `## Test commands` section of the recipe at $1, appending one JSON object per row to
@@ -282,26 +293,30 @@ tc_flush_entry() {
 # this function only reads what the recipe wrote.
 tc_parse_recipe() {
   local recipe_file="$1" out="$2"
-  local block_file line trimmed indent skip_indent
+  local block_file line trimmed indent skip_indent skip_key
 
   block_file="$out.tcblock"
   RECIPE_STATE="$(recipe_block_into "$recipe_file" "Test commands" "test_commands" "$block_file")"
   [ "$RECIPE_STATE" = "ok" ] || return 0
 
-  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
-  skip_indent=-1
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
+  skip_indent=-1; skip_key=""
   while IFS= read -r line; do
     trimmed="$(pc_trim "$line")"
     # A folded scalar (`trap:`, `id_form:`, or `absent:`'s own text) continues on every following
     # line indented further than the key that opened it. Those lines are prose for a person and a
     # model reading the recipe itself; they are skipped here, never parsed as a new field or a new
     # row. A blank line inside or around the block stays in skip mode rather than ending it, since
-    # a folded scalar may carry a paragraph break.
+    # a folded scalar may carry a paragraph break. `failure_line:` is the one fold kept, the way
+    # cc_parse_recipe keeps `silent_pass:`, because its text is a value something runs.
     if [ "$skip_indent" -ge 0 ]; then
       [ -n "$trimmed" ] || continue
       indent="$(tc_indent "$line")"
-      if [ "$indent" -gt "$skip_indent" ]; then continue; fi
-      skip_indent=-1
+      if [ "$indent" -gt "$skip_indent" ]; then
+        [ "$skip_key" != "failure_line" ] || TC_FAILURE_LINE="${TC_FAILURE_LINE:+$TC_FAILURE_LINE }$trimmed"
+        continue
+      fi
+      skip_indent=-1; skip_key=""
     fi
     [ -n "$trimmed" ] || continue
     case "$trimmed" in
@@ -312,6 +327,11 @@ tc_parse_recipe() {
       'argv:'*)   TC_ARGV_RAW="$(pc_trim "${trimmed#argv:}")" ;;
       'cost:'*)   TC_COST="$(pc_trim "${trimmed#cost:}")" ;;
       'nearest:'*) TC_NEAREST_RAW="$(pc_trim "${trimmed#nearest:}")" ;;
+      'failure_line:'*)
+        TC_FAILURE_LINE="$(pc_trim "${trimmed#failure_line:}")"
+        case "$TC_FAILURE_LINE" in '>-'|'>'|'|-'|'|') TC_FAILURE_LINE="" ;; esac
+        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")"; skip_key="failure_line" ;; esac
+        ;;
       'absent:'*)
         TC_ABSENT=1
         case "$trimmed" in *'>-') skip_indent="$(tc_indent "$line")" ;; esac
@@ -468,22 +488,51 @@ cc_markers_in_text() {
   return 0
 }
 
-# Prints, one per line, the literal markers the recipe at $1 declares for a run that passed while
-# nothing was selected (`failure_signal:`, `silent_pass:`), through cc_markers_in_text. Prints
-# nothing when the recipe declares no silent-pass text, which is when the caller's own
-# `--nothing-ran` flag still applies. This reads the file-level key under `failure_signal:` in a
-# test-execution recipe; a surface row's own key is read per row by cc_parse_recipe.
-cc_silent_pass_markers() {
-  local recipe_file="$1" block
+# Prints, one per line, the literal markers under one key ($2: `silent_pass`, `assertion` or
+# `harness`) of the file-level `failure_signal:` block in the test-execution recipe at $1, through
+# cc_markers_in_text. Prints nothing when the recipe declares no text under that key. A surface
+# row's own `silent_pass:` is read per row by cc_parse_recipe, never here.
+cc_failure_signal_markers() {
+  local recipe_file="$1" key="$2" block
   # Bounded twice, because one bound is not enough. The range ends at the closing fence, and
   # inside it the first line that opens another key ends the scalar. Without the second bound the
   # range ran to the next key at column 0, which is past the fence, and the Drupal recipe then
   # returned twelve markers harvested from its own prose, one of them ", ": every passing test run
   # held it, so every green read unknown.
-  block="$(sed -n '/^[[:space:]]*silent_pass:/,/^```/p' "$recipe_file" 2>/dev/null \
+  block="$(sed -n "/^[[:space:]]*$key:/,/^\`\`\`/p" "$recipe_file" 2>/dev/null \
     | sed -n '1p; 1!{ /^```/q; /^[[:space:]]*[a-z_][a-z_]*:/q; p; }')"
   [ -n "$block" ] || return 0
-  cc_markers_in_text "$(printf '%s' "$block" | sed '1s/^[[:space:]]*silent_pass://; 1s/^[[:space:]]*[>|][+-]*//')"
+  cc_markers_in_text "$(printf '%s' "$block" | sed "1s/^[[:space:]]*$key://; 1s/^[[:space:]]*[>|][+-]*//")"
+}
+
+# The markers for a run that passed while nothing was selected. Prints nothing when the recipe
+# declares no silent-pass text, which is when the caller's own `--nothing-ran` flag still applies.
+cc_silent_pass_markers() {
+  cc_failure_signal_markers "$1" "silent_pass"
+}
+
+# Prints, one per line, the globs under `unit_declaration: globs:` in the `## Unit declaration`
+# block of the implement recipe at $1: the patterns of the file whose presence makes a unit exist,
+# `**/*.info.yml` for Drupal. Prints nothing when the recipe carries no block, and that means no
+# file declares a unit in this framework. Cut by recipe_block_into, the same reader the command
+# blocks use; the list ends at the closing fence or at the next key. Each glob is printed as
+# written, quotes and all, the way `failure_line` is; the caller strips them.
+cc_unit_declaration_globs() {
+  local recipe_file="$1" block_file line trimmed in_globs=0
+  block_file="$(mktemp)" || return 0
+  if [ "$(recipe_block_into "$recipe_file" "Unit declaration" "unit_declaration" "$block_file")" = "ok" ]; then
+    while IFS= read -r line; do
+      trimmed="$(pc_trim "$line")"
+      case "$trimmed" in
+        '```'*|'##'*) break ;;
+        'globs:'*) in_globs=1 ;;
+        '- '*) [ "$in_globs" = "1" ] && printf '%s\n' "$(pc_trim "${trimmed#- }")" ;;
+        *:*) in_globs=0 ;;
+      esac
+    done <"$block_file"
+  fi
+  rm -f "$block_file"
+  return 0
 }
 
 # Parses one `<framework>=<path>` flag value and sets CR_PAIR to the tab-separated line the caller
@@ -697,7 +746,8 @@ CR_LOOKUP
 
 # The command one test-command row declares, as the object cr_resolve records. $1 the parsed rows,
 # $2 the row id to read, $3 a word for the message. Prints one of three shapes: a command, an
-# absent row with its own reason, or missing with why.
+# absent row with its own reason, or missing with why. A command carries the row's `failureLine`
+# when the row declared one.
 cr_row_command() {
   local rows="$1" row_id="$2" label="$3" row argv
   row="$(printf '%s' "$rows" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
@@ -718,7 +768,9 @@ cr_row_command() {
     jq -nc --arg r "$row_id" '{missing: ("the " + $r + " row declares no argv to run")}'
     return 0
   fi
-  jq -nc --argjson argv "$argv" --arg r "$row_id" '{row: $r, argv: $argv}'
+  jq -nc --argjson argv "$argv" --arg r "$row_id" \
+    --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" '
+    {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)'
 }
 
 
@@ -891,10 +943,10 @@ br_run_resolved() {
     return 0
   fi
   if [ -n "$errfile" ]; then
-    ( cd "$dir" || exit 127; exec "$@" ) >"$outfile" 2>"$errfile"
+    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
     rc=$?
   else
-    ( cd "$dir" || exit 127; exec "$@" ) >"$outfile" 2>&1
+    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1
     rc=$?
   fi
   printf 'RAN\t%s' "$rc"
@@ -908,6 +960,111 @@ br_filter_extensions() {
   jq -cn --argjson paths "$1" --argjson exts "$2" '
     [ $paths[] as $f | select([ $exts[] as $e | select($f | endswith($e)) ] | length > 0) | $f ]
   '
+}
+
+# Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the
+# value can carry quotes of its own, and the outer pair belongs to the document rather than to the
+# string being looked for.
+pc_unquote() {
+  case "$1" in
+    "'"*"'") printf '%s' "$1" | sed "s/^'//; s/'$//" ;;
+    '"'*'"') printf '%s' "$1" | sed 's/^"//; s/"$//' ;;
+    *)       printf '%s' "$1" ;;
+  esac
+}
+
+# One line of tool or suite output as a key for comparing two runs: every run of digits removed,
+# every run of dots one dot, every run of whitespace one space, the ends trimmed. One rule for
+# every tool and every framework, in place of a parser per tool: it covers `path:12`,
+# ` 12 | ERROR |`, a counts line, a duration, a percentage, and the progress line that grows with
+# every test an order adds. Two lines that differ only in a number read as one; that is the price.
+br_line_keys() {
+  sed 's/[0-9][0-9]*//g; s/\.\.*/./g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' "$1"
+}
+
+# The lines of the run at $2 whose key is absent from the run at $1: the first 20, in their own
+# words and order, written to $3, and the count of all of them in BR_NEW_COUNT. A line whose key
+# comes out empty is never new. A global for the count and a file for the lines, never a printed
+# value, for the reason br_seven_checks states: a refusal inside a `$(...)` exits that subshell
+# alone. Moved from implement-actions.sh; $CR_WHO names the caller, the way cr_resolve does.
+BR_NEW_COUNT=0
+br_lines_not_in() {
+  local base="$1" now="$2" out="$3" base_keys now_keys nums picks
+  base_keys="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+  now_keys="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+  br_line_keys "$base" | sort -u >"$base_keys"
+  br_line_keys "$now" >"$now_keys"
+  # -a: a byte that is not UTF-8 in a line would otherwise make grep print "binary file matches"
+  # and no line number, and the check would read met over a line it never compared.
+  nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  BR_NEW_COUNT="$(printf '%s\n' "$nums" | grep -c '^[0-9]')"
+  picks="$(printf '%s\n' "$nums" | grep '^[0-9]' | head -20 | sed 's/$/p/' | paste -s -d ';' -)"
+  : >"$out"
+  [ -z "$picks" ] || sed -n "$picks" "$now" >"$out"
+  rm -f "$base_keys" "$now_keys"
+}
+
+# Subtracts the baseline run at $1 from the run now at $2, for a check whose baseline row was
+# unmet. $3 a word for the message, $4 how the command failed, $5 an optional selector: a regular
+# expression the recipe's suite row declared as `failure_line`, and only the lines matching it,
+# on both sides, are compared. Sets BR_SUB_VERDICT and BR_SUB_DETAIL, and BR_SUB_NEW, a JSON
+# array of the first 20 new lines, with BR_SUB_COUNT the count of all of them. met when no line
+# is new: what failed now already failed at the commit the build started from. unmet when one is,
+# naming the count. unknown only when there is nothing to subtract from or with: a baseline row
+# that kept no output, a run that printed none, a selector that matches no line of the run now
+# (the failure is not one the selector names), or a selector grep cannot compile. It cannot see a
+# finding whose text changed, which reads as new, or one fixed and reintroduced, which reads as
+# old, or a new finding worded like an old one in another file, which reads as old too.
+BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+# shellcheck disable=SC2034 # read by the sourcing script
+br_subtract_baseline() {
+  local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" new_file base_sel now_sel with are they
+  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  if [ -z "$base" ] || [ ! -s "$base" ]; then
+    BR_SUB_VERDICT="unknown"
+    BR_SUB_DETAIL="the $label command $how, and the baseline recorded it unmet at the commit the build started from but kept no output to subtract (a baseline taken before outputs were kept, or its file removed), so this cannot tell an old finding from a new one."
+    return 0
+  fi
+  if [ ! -s "$now" ]; then
+    BR_SUB_VERDICT="unknown"
+    BR_SUB_DETAIL="the $label command $how and printed nothing, so there is nothing to compare with the baseline's output."
+    return 0
+  fi
+  with="with numbers set aside"
+  if [ -n "$selector" ]; then
+    grep -a -E -e "$selector" /dev/null 2>/dev/null
+    if [ "$?" -eq 2 ]; then
+      BR_SUB_VERDICT="unknown"
+      BR_SUB_DETAIL="the $label command $how, and the recipe's failure_line selector ($selector) is not a regular expression grep can compile, so no line was compared."
+      return 0
+    fi
+    base_sel="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+    now_sel="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+    grep -a -E -e "$selector" "$base" >"$base_sel" 2>/dev/null
+    grep -a -E -e "$selector" "$now" >"$now_sel" 2>/dev/null
+    if [ ! -s "$now_sel" ]; then
+      rm -f "$base_sel" "$now_sel"
+      BR_SUB_VERDICT="unknown"
+      BR_SUB_DETAIL="the $label command $how, and no line of its output matches the recipe's failure_line selector ($selector), so the failure is not one the selector names; read the output."
+      return 0
+    fi
+    base="$base_sel"; now="$now_sel"
+    with="on the lines matching failure_line ($selector), with numbers set aside"
+  fi
+  new_file="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+  br_lines_not_in "$base" "$now" "$new_file"
+  if [ "$BR_NEW_COUNT" -eq 0 ]; then
+    BR_SUB_VERDICT="met"
+    BR_SUB_DETAIL="the $label command $how, and every line it printed is in the baseline's output $with, so nothing here is new; the baseline recorded it unmet at the commit the build started from."
+  else
+    BR_SUB_COUNT="$BR_NEW_COUNT"
+    BR_SUB_NEW="$(jq -Rsc 'split("\n") | map(select(length > 0))' "$new_file")"
+    BR_SUB_VERDICT="unmet"
+    if [ "$BR_SUB_COUNT" -eq 1 ]; then are="is"; they="it is"; else are="are"; they="they are"; fi
+    BR_SUB_DETAIL="the $label command $how, and $BR_SUB_COUNT of its lines $are absent from the baseline's output $with, so $they new since the commit the build started from. newLines holds the first 20."
+  fi
+  rm -f "$new_file"
+  [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
 
@@ -1131,7 +1288,7 @@ run_recipe_line() {
     set -- $line "$@"
     set +f
     [ "$#" -gt 0 ] || exit 0
-    exec "$@"
+    exec "$@" </dev/null
   ) >>"$outfile" 2>&1
 }
 
@@ -1188,15 +1345,18 @@ RF_FILES
 
 # Writes each file of the list $2 that is absent from $3, from the folder $4, printing `file:` per
 # write, and counts into RF_WRITTEN and RF_KEPT. $1 the action. A file that exists is kept as it is.
+# RF_WRITTEN_PATHS holds the written paths relative to $3, one per line, so a caller that refuses
+# after the write can remove those and no other.
 recipe_files_write() {
   local who="$1" list="$2" tree="$3" files_dir="$4" n rel target tab; tab="$(printf '\t')"
-  RF_WRITTEN=0; RF_KEPT=0
+  RF_WRITTEN=0; RF_KEPT=0; RF_WRITTEN_PATHS=""
   while IFS="$tab" read -r n rel; do
     [ -n "$n" ] || continue
     target="$tree/$rel"
     if [ -f "$target" ]; then RF_KEPT=$((RF_KEPT + 1)); continue; fi
     mkdir -p "$(dirname -- "$target")" && cp "$files_dir/$n" "$target" || die 3 "$who: could not write $target"
-    RF_WRITTEN=$((RF_WRITTEN + 1)); printf 'file: %s\n' "$target"
+    RF_WRITTEN=$((RF_WRITTEN + 1)); RF_WRITTEN_PATHS="$RF_WRITTEN_PATHS$rel
+"; printf 'file: %s\n' "$target"
   done <<RF_FILES
 $list
 RF_FILES

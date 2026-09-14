@@ -4,6 +4,105 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.10] - 2026-09-14
+
+Live-run rows 43 to 72, and the defects found picking a version 5 project up on another machine.
+
+### Added
+- Every stage's closing action commits the task folder, with the stage's own result as the
+  reason: scope's `distill`, research's coverage `check`, design `close`, implement `finish`,
+  review `close`. Mid-stage writes stay uncommitted until then, and each skill says so.
+- `task environment up` runs the recipe's `## Preconditions` line after it writes the
+  `## Files` and before it commits anything. A non-zero exit removes what that run wrote,
+  commits nothing, and exits 3 with the script's message. `show` lists the line it will run.
+- `project create` asks once where playbooks come from, per framework: a catalog set or a
+  local folder. `subscribe-playbook` proposes the framework from the project's declared ones
+  and the set id from the catalog when either is not given.
+- The surfaces skill commits `project.json` after `install` and `decline`.
+- A work order carries `proof: tests` or `proof: gate`. A configuration unit is proved by the
+  implement recipe's `## Configuration gate` lines, run by the build step as `configuration-gate`
+  in the order-tests slot. It freezes with no test, and `close` records its criteria as judged
+  by the gate, a third value beside person and model. The design skill says a configuration
+  unit owns every file the Drupal operation rewrites.
+- `tests-freeze --test-recipe <framework>=<path>` reads each red run against the recipe's
+  failure signal: an assertion marker is a red, a harness marker is a setup gap refused with
+  exit 80, and the suite row's `failure_line` selector is read when the recipe names neither.
+  A red with no recipe is refused; a recipe with nothing to read freezes the red as unchecked.
+- `tests-freeze --implement-recipe <framework>=<path>` reads the implement recipe's
+  `## Unit declaration` globs. A red that holds only a harness marker is accepted as
+  `harness-new-unit` for an order whose owned files match one, because nothing can fail an
+  assertion before the unit exists; every other order is refused as before.
+- A serving order freezes tests against its own done-when, judged with `--row <order id>=...`
+  and recorded on its ledger entry. Rows follow what the tests claim.
+- `tests-freeze` commits the frozen paths alone, before it writes the record, and the record
+  names that commit. A failed commit refuses with git's message and writes nothing.
+- `preconditions` keeps each baseline run's whole output under `implementation/baseline-output/`.
+  A check whose baseline was red subtracts that output line by line, so only a new line reads
+  unmet. The suite subtracts on the lines the recipe's `failure_line` selects. The review
+  stage's four checks subtract the same way, through one copy of the helpers in the library,
+  and the review record carries the same fields.
+- `dispose --path <file> --interface <text>` records a reused path and its interface on the
+  order; `tests-brief` carries them, and the test author is denied the reused paths.
+- `dispatch-open test-author --test-glob` leaves owned files that match the recipe's test
+  patterns out of the author's denial.
+
+### Changed
+- Scope drafts the whole contract from what is on the table, renders it once and asks what is
+  wrong or missing; corrections become single writes in the person's words. Single questions
+  remain for a gap the draft cannot fill, the non-goal probes and the surfaces offer. Version 6
+  had made version 5's opt-in interrogation the ordinary behaviour; the owner found it painful.
+- The session-start line says `playbook file:` and the pick-up line names `/aida:next`.
+- The report reads an absent `runMode` as `interactive`, the value every other reader prints.
+- The catalog identifier tests a store path before answering with it, and answers
+  `fetch-failed` when the file is absent.
+- The row-checker judges every row in both modes, given the test-authoring recipe's path. A
+  person on an attended run answers only a row the checker rejected, with the checker's note.
+  A model's row is recorded as the model's in either mode, and `rowsJudgedByModel` lists the
+  rows no person read. Version 6 had asked a person about every row; the owner found the
+  question added a turn and no judgement.
+- The coding-standards, static-analysis and security rows run over the order's owned files
+  minus its frozen tests, directories expanded, and the record names the paths and the frozen
+  tests left out. The tests step runs the coding-standards row over the new test files before
+  the freeze, so the tests' own standards are judged once, there.
+- Research closes by showing what it found, per search, from the rendered files: the guides
+  and recipes identified, each prior art candidate with its closeness, each assumption shown
+  false. A presentation, not a question.
+- The design check's remedy states its direction: an order that owns nothing is reached when
+  an owning order depends on it, and a feature's entry point belongs in the feature's order.
+- The build step reads the test-execution recipe path from `preconditions.json` and the check
+  recipe paths from `baseline.json`, and resolves the implement recipe once per build.
+- `start` re-snapshots an unstarted order the live design changed and halts nothing for it;
+  `restart` moves only the halted orders' records aside and keeps every finished order.
+- The catalog identifier names its five callers, and for a process-recipe point such as
+  `worktree-environment` it runs the navigator's process-recipe lookup and answers with the
+  body's store path, a file `environment` can read, never a URL.
+- The scope, research and design close steps resend the same distiller once when its sidecar
+  is missing, rather than dispatching a fresh one.
+
+### Fixed
+- Every action script ignores SIGPIPE, so a caller that pipes an action through `head` cannot
+  lose the writes that follow the lines it keeps. Found through `record`, whose render came
+  after its summary; a sweep found sixteen more actions in that shape, and the trap covers all.
+- A never-saved task blocks compaction only once it holds a version 6 record, so a repaired
+  version 5 task with no version 6 run compacts freely.
+- `task create` step 4 stops only on the refused worktree entry.
+- A recipe step that reads standard input no longer swallows the steps after it. The step loop
+  fed its lines through the loop's own stdin, and a command such as `ddev composer require`
+  read them, so the install ended early with no error. Every step now runs with stdin closed,
+  and so does every `## Tokens` command and check row. Reported by the catalog side while
+  consuming the setup recipes.
+- A version 5 project header is read in either case (`**Code Path:**` as well as
+  `**Code path:**`), so a version 5 pickup no longer refuses and offers a second project.
+- The field-list comparison runs on jq 1.6: its parameter was named `$def`, a jq keyword that
+  1.6 rejects, so every check exited 3 on Ubuntu 22.04.
+- Every project-folder commit takes `project.json` alone, so a `task-rule` write no longer
+  sweeps another task's uncommitted files into its commit.
+- `alignment-render.sh` adds a full stop only when the clause has none.
+- Research's `record` renders before it prints, so a caller that keeps its first line cannot
+  lose the render.
+- The drift walk halted every order with a dependency whoever drifted, because of a jq
+  binding; the reached order is bound first now.
+
 ## [6.0.0-beta.9] - 2026-09-14
 
 Rows 33 to 42 of the live run, the seven items the owner reopened on 2026-09-13, and the

@@ -63,7 +63,7 @@ person, because an install changes the project and nobody is there to approve it
 `install` runs every command in order and writes each file only when absent. It writes the
 surface file when absent, and turns the kind on in the project record. It runs again safely.
 It refuses a dirty tree at 61 before writing anything. It commits what it wrote, with the
-reason in the message, the way `baseline` does.
+reason in the message, the way `baseline` does. It commits the project record too.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
@@ -117,6 +117,7 @@ Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirty.
 Records that the person declined that kind's setup. Every stage's offer, at scope, design and
 review, reads it and does not ask again for that kind. It is a person's answer, so it refuses
 unattended at 70. No kind, or an unknown one, refuses at 3, naming `e2e` and `visual-regression`.
+It commits the project record too.
 
 ## What this skill never does
 

@@ -18,8 +18,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # "Unsaved" is the one test a hook can make on disk: a file under the task folder written after
 # the last save. `task save` stamps savedAt in task.json on every call, even with nothing to say.
 # A task with no savedAt is compared against its newest note under notes/, the file a save with
-# text appends to. A task never saved counts as unsaved from its first file. The marker itself
-# does not count.
+# text appends to. A task never saved is unsaved only once it holds a version 6 record: task.json,
+# task.md, compacted.json and the .v5 files a version 5 repair keeps
+# (skills/task/scripts/task-actions.sh, keep_v5_files) do not count on their own.
 #
 # Exit 2 refuses, and stderr is shown to the person on a manual compaction (the platform's hooks
 # reference, PreCompact). Nothing is printed on stdout in any case.
@@ -55,7 +56,11 @@ if [ -n "$SAVED_AT" ]; then
 elif [ -n "$NOTE" ]; then
   NEWER="$(find "$TASK_PATH" -type f -newer "$NOTE" ! -path '*/notes/*' ! -name compacted.json 2>/dev/null | head -1)"
 else
-  NEWER="$TASK_PATH/task.json"
+  # A never-saved task holds only task.json, task.md and whatever a version 5 repair kept under
+  # a .v5 name (skills/task/scripts/task-actions.sh, keep_v5_files). None of those is a version 6
+  # stage record, so this task is unsaved only once a version 6 stage writes something else.
+  NEWER="$(find "$TASK_PATH" -type f ! -name task.json ! -name task.md ! -name compacted.json \
+    ! -name '*.v5.md' ! -name '*.v5' ! -path '*/notes/*' ! -path '*.v5/*' 2>/dev/null | head -1)"
 fi
 UNSAVED="false"
 [ -z "$NEWER" ] || UNSAVED="true"

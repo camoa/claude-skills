@@ -19,12 +19,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # never resolves which project is active on its own (ideal/task.md, "What a task is").
 #
 # Depends on, both shipped by other builders of this same part and never edited here:
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (commit_project, reached through
+#                                                            commit_task_change in task-helpers.sh)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape that check runs)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/task-schema.json         (read by check-task.sh, a later part;
 #                                                            not read by this script)
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for task_worktree: create and
-#                                                            split make each task's own worktree
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for commit_task_change and
+#                                                            for task_worktree: create and split
+#                                                            make each task's own worktree
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh           sourced, for the codePath readers
 #                                                            task_worktree needs
 #
@@ -67,6 +69,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # heading read return empty on Debian and Ubuntu in version 5).
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
+trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
 
 # Under zsh, array indices start at 1 by default; bash always starts at 0. do_split below indexes
 # its child_ids/child_goals/child_criteria_json arrays the bash way throughout (a plain `i=0`
@@ -94,7 +97,7 @@ die3() {
 # The two libraries take these from their caller, so a refusal still says which script refused.
 die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
-for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh" "${PLUGIN_ROOT}/scripts/lib/project-commit.sh"; do
+for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
   [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die3 "the library failed to load: $lib_name"
@@ -171,10 +174,6 @@ task_summary() {
     "runMode: " + (.runMode // "interactive"),
     "worktree: " + (.worktree.path // "none")' "$1"
 }
-
-# One call to the shared commit, restricted to tasks/: a task change never sweeps up a project
-# file edit that was left uncommitted beside it.
-commit_task_change() { commit_project "$1" "$2" "$3" "$4" "$5" "$6" "$7" tasks; }
 
 # ------------------------------------------------------------------------------------------------
 # create: makes the task and nothing else. No contract, no interview, no stage.
@@ -872,9 +871,10 @@ do_save() {
 # (dev-guides/proposals/worktree-environment-ask.md and -tokens-ask.md): a worktree has the
 # branch's files and no site, so a review or a baseline taken there would capture the served
 # checkout. `## Tokens`, `## Bring up`, `## Address` and `## Tear down` are sh blocks run as
-# arguments in the worktree, the way surfaces runs `## Install`; `## Preconditions` and
-# `## Build in place` are prose. `{codePath}` is the one token this script fills on its own.
-# Each `## Tokens` block, its fence's second word the token's name, runs first and its first
+# arguments in the worktree, the way surfaces runs `## Install`; `## Build in place` is prose,
+# and `## Preconditions` is prose plus sh lines that run after the `## Files` are written and
+# before they are committed. `{codePath}` is the one token this script fills on its own.
+# Each `## Tokens` block, its fence's second word the token's name, runs next and its first
 # stdout line is the value. Then the bring-up blocks before the `## Address` heading, the address
 # command, whose stdout is `key: value` lines, then the blocks after it. `address:` is required;
 # every other key is a token for the later blocks and for `## Tear down`, kept in the record. A
@@ -1010,7 +1010,8 @@ do_environment() {
   # shellcheck disable=SC2034
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
-  local bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
+  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
+  preconditions="$(sh_blocks_under "$RECIPE" Preconditions)"
   bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
   address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
   tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
@@ -1026,7 +1027,9 @@ do_environment() {
   [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
   [ -n "$address" ] || die3 "environment: $RECIPE has no block tagged sh under Address, so up would record no address"
   if [ "$sub" = "show" ]; then
-    printf 'PRECONDITIONS:\n'; recipe_prose_under "$RECIPE" Preconditions
+    # The prose without its fenced lines, so the precondition line appears once, filled.
+    printf 'PRECONDITIONS:\n'; recipe_prose_under "$RECIPE" Preconditions | awk '/^  ```/ { inFence = !inFence; next } !inFence'
+    [ -z "$preconditions" ] || { fill_tokens "$preconditions" | sed 's/^/  precondition: /'; printf '\n'; }
     printf 'TOKENS:\n'; while IFS="$tab" read -r n name; do [ -n "$n" ] && printf '  %s: %s\n' "$name" "$(fill_tokens "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")")"; done <<TA_TOKEN_LIST
 $token_list
 TA_TOKEN_LIST
@@ -1045,6 +1048,21 @@ TA_TOKEN_LIST
   : >"$outfile"
   recipe_files_write environment "$file_list" "$wt" "$files_dir"; rm -rf "$files_dir"
   printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+  # The preconditions run after the files are written, because the check is a script the recipe
+  # ships, and before the commit, so a refused site leaves no commit. The loop runs in a command
+  # substitution: its `status:` summary and its exit 4 stay inside, and the refusal here is 3
+  # with the output on stderr, the written files removed, and the output file gone.
+  if [ -n "$preconditions" ]; then
+    result="$(run_recipe_lines up "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || {
+      cat "$outfile" >&2
+      printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
+        [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
+      done
+      rm -f "$outfile"; rm -rf "$tokens_dir"
+      exit 3
+    }
+    printf '%s\n' "$result"
+  fi
   # Only the written files are staged and committed. A person's uncommitted or staged work beside
   # them is never taken into this commit and never refuses it.
   [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \

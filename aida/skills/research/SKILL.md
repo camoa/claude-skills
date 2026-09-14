@@ -317,15 +317,27 @@ zero it adds one `open:` line with the uncovered ids and the counts. The report 
 A task whose `research` folder does not exist yet is not an error: it is reported as research not
 started, with every criterion uncovered, the same as an empty `research` folder that does exist.
 
-Exit 0: nothing to do. Dispatch the `distiller` role once, with the task folder, the stage
-`research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
+Exit 0: nothing to do. The record is committed when the stage closes: a clean check commits the
+task folder, and `record` commits nothing. Dispatch the `distiller` role once, with the task
+folder, the stage `research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
 of this conversation. It writes `records/research-distill.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
-`gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written;
-dispatch again. Exit 4 means the sidecar is malformed; say so. Then report research complete.
+`gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written.
+Send the same agent one message: write the file and read it back. An agent has reported a write
+it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar is
+malformed; say so.
+
+Then show what research found, before anything else. This is a presentation, not a question.
+Research asks nothing here, and the person speaks up only when something looks missing. Read
+each rendered `research/<search>.md`. Show, per search, one line per finding with its source.
+Then pull three things out of those findings and name them on their own. The guides and recipes
+the catalog identified, by name. Each prior art candidate, with how close it is, as recorded;
+design decides reuse, extend or supersede, not research. Each assumption from scope that a
+finding showed false, in one sentence. A count and a next command are not a presentation. The
+findings are what design acts on, so the person sees them here or not at all.
 
 Exit 4: a research file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix that file with another `record` call, or by hand, and check again.
@@ -360,7 +372,8 @@ else. It writes `records/research-split.json`. Then run:
 It prints `recommendation:`, `children:`, one `child:` line per child with its criterion count,
 and `reason:` with the first sentence. Show those lines.
 
-Exit 2: the advisor wrote no sidecar. Dispatch once more. Run `split-read` again. Still exit 2:
+Exit 2: the advisor wrote no sidecar. Send it one message to write and read back, then run
+`split-read` again. Still exit 2:
 say the advisor wrote no sidecar. Go on flat. Exit 4: say the sidecar is malformed, with the
 script's stderr line. Go on flat.
 
