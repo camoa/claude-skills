@@ -328,7 +328,7 @@ do_read() {
   printf 'surfaces-field: %s\n' "$(jq -r 'if .surfaces == null then "none" else "e2e=\(if .surfaces.e2e.enabled then "on" elif .surfaces.e2e.declined then "declined" else "off" end) visual-regression=\(if .surfaces.visualRegression.enabled then "on" elif .surfaces.visualRegression.declined then "declined" else "off" end)" end' "$PROJECT_FILE")"
   sf_load_surfaces "$SURFACE_FILE"
   printf 'surface-file: %s (%s)\n' "$SURFACE_FILE" "$SF_STATE"
-  [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) url=\(.url) masks=\(.masks | length)"'
+  [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) url=\(.url) masks=\(.masks | length) paths=\(.paths | length) critical=\(.critical)"'
   # A version 5 project holds a YAML registry beside the file. It is named, left in place, and its
   # ids and URLs are candidates for discovery.
   [ ! -f "$TREE/.visual-review/registry.yml" ] || printf 'registry-v5: %s\n' "$TREE/.visual-review/registry.yml"

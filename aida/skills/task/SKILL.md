@@ -37,10 +37,11 @@ Makes the task and nothing else: no contract, no interview, no stage. It takes a
 Run it only when the person asked for this task in this conversation, by name or by a yes to an
 offer. Another skill's hand-off carries that yes. Nothing here invents one.
 
-**1. Name.** Ask what to call it, unless already said. Check it against
-`^[A-Za-z0-9_][A-Za-z0-9._-]*$`: it must start with a letter, digit or underscore, and hold only
-letters, digits, underscores, dots and hyphens after that. No path separator, no space. On a
-mismatch, say so and ask again; the script refuses it too, so this check only saves a round trip.
+**1. Name.** Ask what to call it, unless already said. Check it against `^[a-z0-9][a-z0-9-]*$`:
+lowercase letters, digits and hyphens, starting with a letter or digit. The worktree folder takes
+this name and becomes a hostname label, and DDEV lowercases and rewrites the rest. Existing
+tasks keep their ids. On a mismatch, say so and ask again; the script refuses it too, so this
+check only saves a round trip.
 Autonomous with no name given: **halt.** A task cannot be filed without one.
 
 **2. Goal.** Ask what this task is for, in the spirit of a user story: what someone wants to
@@ -54,49 +55,67 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
   create --project "<projectPath>" --name "<name>" -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
-It then makes the task's own git worktree at `<codePath>/.claude/worktrees/<name>` on the branch
-`feature/<name>`, records both in `task.json`, and commits. Show the whole output. Exit code 3
-means one of three things: the name collided with an existing task, it failed the name rule
+It then makes the task's own git worktree beside the code path, at
+`<parent of codePath>/<basename of codePath>-<name>`, on the branch `feature/<name>`, records
+both in `task.json`, and commits. The tree is a sibling for one reason. A nested worktree is
+invisible to a tool that registers projects by folder, and DDEV hands it to the parent project.
+Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
 the script also enforces, or the worktree could not be made. In the last case the folder is
 removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
 from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
-so scoping in this same window is not refused. From a window outside the code repository the
-tool refuses on first entry. Then print the path and `claude --worktree <name>`, which opens the
-same tree from the code path, and stop.
+so scoping in this same window is not refused. The tool asks for approval, because the path is
+outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
+tool refuses on first entry. Then print the path and `cd <path> && claude`, which opens a window
+in the tree. Say that the site offer comes at `start`, and stop.
 
-**5. Offer the site.** A worktree has the branch's files and no site, so a review or a baseline
-taken there would capture the served checkout instead. Dispatch `catalog-identifier` once for the
-`worktree-environment` point, naming every framework the project records, the same words the
-surfaces skill uses for its points. Pass the answer as `--recipe <framework>=<path>` or
-`--lookup-failed <framework>=<word>`, one flag per framework, and run `environment <name> show`.
+**5. Offer the site.** Runs here when this window entered the tree, and at `start` otherwise. A
+worktree has the branch's files and no site, so a review or a baseline taken there would capture
+the served checkout instead. Dispatch `catalog-identifier` once for the `worktree-environment`
+point, naming every framework the project records, the same words the surfaces skill uses for
+its points. When the project record has `surfaces.e2e.enabled` or
+`surfaces.visualRegression.enabled`, name `e2e-setup` or `visual-regression` in the same
+dispatch, so `up` can install that harness in the tree. Pass the answer as
+`--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one flag per framework,
+and each setup recipe as `--setup-recipe <kind>=<path>`, where the kind is `e2e` or
+`visual-regression`, then run `environment <name> show`.
 The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script refuses any other.
 `not-applicable` ends the step: say once that this worktree has files and no site. Otherwise,
 interactive: show the commands and the prose, and ask once whether to bring the site up now. A
-yes runs `environment <name> up`. A no records nothing; say `up` with the same flags does it
-later. Autonomous: never bring it up, and say so once.
+yes runs `environment <name> up` with the same flags. A no records nothing; say `up` with the
+same flags does it later. Autonomous: never bring it up, and say so once.
 
 ## `environment <task-id> <show|up|down>`
 
 The worktree's own running site, from the framework's `worktree-environment` recipe. The recipe
-holds the commands; this plugin holds none. `show` and `up` take the recipe flags step 5 names.
-`down` takes none: it reads the recipe path the record holds.
+holds the commands; this plugin holds none. `show` and `up` take the recipe flags step 5 names,
+and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the record holds.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   environment --project "<projectPath>" "<task-id>" <show|up|down> <recipe flags>
 ```
-`show` prints the recipe path, the preconditions prose, the bring-up, address and tear-down
-commands, and the build-in-place prose, with `{codePath}` filled, and runs nothing. A recipe with
-no bring-up block, or no address block, exits 3 from `show` too, so its exit code says what `up`
-would do.
+`show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
+the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
+A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
+says what `up` would do.
 
-`up` is a person's yes, so it refuses unattended at 70. It runs every bring-up line in the task's
-worktree, output to `records/environment-up.txt`, and stops at the first failure with exit 4 and
-a `first:` line. Show that line; do not bring the site up by hand. Then it runs the address command
-and records `environment` in `task.json`: the address, the recipe and when. It prints `address:`.
-Running it twice is safe: the recipe promises every step runs again cleanly.
+`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with the
+output in `records/environment-up.txt`, in this order. First each `## Tokens` command, whose
+first output line is the token's value. A token command that prints nothing or fails refuses at
+4 by the token's name. Then the bring-up lines before the `## Address` heading. Then the address
+command, whose output is `key: value` lines. `address:` is required, and every other key is a
+token for the later lines and for the tear-down. A `root:` line that is not the worktree stops
+at 3 before the later lines: the environment resolved to another tree. Then the bring-up lines
+after the heading. Then, for each surfaces kind the project has on, the `## Install` lines of
+the setup recipe given as `--setup-recipe`. With no path for a kind it says so and goes on, and
+the harness is the person's next step. A line still holding an unfilled `{token}` stops at 3 and
+names it. A
+failing line stops at 4 with a `first:` line. Show that line; do not bring the site up by hand.
+It records `environment` in `task.json`: the address, the recipe, when, and the other address
+keys. It prints `address:`. Running it twice is safe: the recipe promises every step runs again
+cleanly.
 
 `down` runs the tear-down lines, output to `records/environment-down.txt`, and removes
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
@@ -172,6 +191,9 @@ Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `com
 since a completed task is not reopened here. Otherwise it writes the new state, commits, and runs
 the task check. Show the whole output. The check reports and never repairs, so a finding here is
 the one thing to repair now, before the stage writes anything.
+
+When a person runs this by hand and the record has no `environment`, run `create`'s step 5 here.
+The window that made the task may not have entered the tree. A `not-applicable` ends it silently.
 
 ## `complete <task-id>`
 

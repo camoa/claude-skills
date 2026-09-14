@@ -10,8 +10,9 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actio
 
 Set up the surfaces review runs: end to end and visual regression. The framework decides how, and
 that answer lives in a recipe outside this plugin. Setup takes no task folder, the way the tool
-skill does. With no task active, it runs at the code path. Run from inside a task's worktree, it
-runs there instead, so the setup ships with the task's branch. The review skill runs the surfaces;
+skill does. With no task active, it runs at the code path. Run from inside a task's worktree, a
+sibling of the code path, it runs there instead, so the setup ships with the task's branch. The
+review skill runs the surfaces;
 this skill only sets them up. The guards live in the script: `--enable` and `decline` refuse
 unattended. This skill waits for a plain yes before `install`. So a stage's offer may invoke it.
 

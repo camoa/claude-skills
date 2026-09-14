@@ -497,6 +497,9 @@ cr_recipe_pair() {
   [ -n "$fw" ] || die 3 "$who: $flag was given no framework name: $value"
   [ -n "$rp" ] || die 3 "$who: $flag was given no path for framework $fw."
   [ -f "$rp" ] || die 3 "$who: the recipe handed over for $fw is not a file: $rp"
+  # Absolute, because a caller may change directory before it reads the file, and a recorded
+  # path is read again later from another directory.
+  rp="$(cd "$(dirname -- "$rp")" && pwd -P)/$(basename -- "$rp")"
   CR_PAIR="$(printf '%s\t%s' "$fw" "$rp")"
 }
 

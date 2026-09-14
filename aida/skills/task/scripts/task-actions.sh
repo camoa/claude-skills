@@ -45,6 +45,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    -- <text...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
 #                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
+#                    [--setup-recipe <kind>=<path>]...
 #   task-actions.sh [--run-mode <interactive|autonomous>] prune --project <path> [--all] [<task-id>]...
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
@@ -110,6 +111,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
        task-actions.sh save     --project <path> <task-id> -- <text...>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
+                                 [--setup-recipe <kind>=<path>]...
        task-actions.sh prune    --project <path> [--all] [<task-id>]...
 EOF
 }
@@ -131,22 +133,18 @@ canon_existing_dir() {
   printf '%s' "$p"
 }
 
-# The task-schema.json id pattern, enforced the same way project-actions.sh enforces its own name
-# pattern: two `case` globs, never `[[ =~ ]]`, so this runs the same under an old bash and under
-# zsh. Ported from version 5's task-name refusal (commands/scope.md:47-49): no path separator, and
-# the pattern's own first-character class already makes "." and ".." impossible to match, so
-# there is nothing left to check for those two by hand.
+# A new id is `^[a-z0-9][a-z0-9-]*$`, narrower than the task-schema.json pattern, which still
+# admits the ids made before this rule so they are not renamed. The worktree folder is named
+# after the id and becomes a hostname label, and DDEV lowercases and rewrites the rest: a `_`
+# turns into `-`, a dot stays and splits the label. Two `case` globs, never `[[ =~ ]]`, so this
+# runs the same under an old bash and under zsh; the tr comparison holds the lowercase rule where
+# a locale reads `[a-z]` as wider than ASCII.
 validate_task_id() {
-  local id="$1" who="$2"
+  local id="$1" who="$2" ok=yes
   [ -n "$id" ] || die3 "$who: a task id is required"
-  case "$id" in
-    [A-Za-z0-9_]*) : ;;
-    *) die3 "$who: task id '$id' must start with a letter, digit or underscore" ;;
-  esac
-  case "$id" in
-    *[!A-Za-z0-9._-]*)
-      die3 "$who: task id '$id' must contain only letters, digits, underscores, dots and hyphens; no path separator and no space" ;;
-  esac
+  case "$id" in *[!a-z0-9-]*|-*) ok=no ;; esac
+  [ "$id" = "$(printf '%s' "$id" | tr 'A-Z' 'a-z')" ] || ok=no
+  [ "$ok" = yes ] || die3 "$who: task id '$id' must be lowercase letters, digits and hyphens, starting with a letter or digit. The folder name becomes a hostname label, and a tool lowercases and rewrites the rest"
 }
 
 # A project folder for this script is exactly what check-project.sh already calls one: the folder
@@ -870,34 +868,66 @@ do_save() {
 
 # ------------------------------------------------------------------------------------------------
 # environment: the worktree's own running site, from the framework's `worktree-environment` recipe
-# (dev-guides/proposals/worktree-environment-ask.md): a worktree has the branch's files and no
-# site, so a review or a baseline taken there would capture the served checkout. `## Bring up`,
-# `## Address` and `## Tear down` are sh blocks run as arguments in the worktree, the way surfaces
-# runs `## Install`; `## Preconditions` and `## Build in place` are prose. `{codePath}` is the one
-# token filled. `up` records `environment: {address, recipe, upAt}` in task.json; `down` reads the
-# recipe path from that record, so it takes no recipe flags, and removes it.
+# (dev-guides/proposals/worktree-environment-ask.md and -tokens-ask.md): a worktree has the
+# branch's files and no site, so a review or a baseline taken there would capture the served
+# checkout. `## Tokens`, `## Bring up`, `## Address` and `## Tear down` are sh blocks run as
+# arguments in the worktree, the way surfaces runs `## Install`; `## Preconditions` and
+# `## Build in place` are prose. `{codePath}` is the one token this script fills on its own.
+# Each `## Tokens` block, its fence's second word the token's name, runs first and its first
+# stdout line is the value. Then the bring-up blocks before the `## Address` heading, the address
+# command, whose stdout is `key: value` lines, then the blocks after it. `address:` is required;
+# every other key is a token for the later blocks and for `## Tear down`, kept in the record. A
+# `root:` that is not the worktree stops before the later blocks: the environment resolved to
+# another tree. After the last block, `up` runs the `## Install` blocks of each enabled surfaces
+# kind's setup recipe, given as `--setup-recipe <kind>=<path>`, because a worktree has no
+# node_modules. `up` records `environment: {address, recipe, upAt, <keys>}` in task.json; `down`
+# reads the recipe path and the keys from that record, so it takes no recipe flag.
 # ------------------------------------------------------------------------------------------------
 
-# Fills every `{codePath}` in $1 with $CODE_PATH. A shell loop rather than sed, so the path may
-# hold any character.
-fill_code_path() {
-  local line="$1"
-  while [ "${line#*"{codePath}"}" != "$line" ]; do line="${line%%"{codePath}"*}$CODE_PATH${line#*"{codePath}"}"; done
+# The tab-separated `<name><TAB><value>` list every `{name}` is filled from, the shape cr_lookup
+# reads. `codePath` heads it; the tokens and the address keys follow.
+TOKENS=""
+
+# Fills every `{name}` in $1 from TOKENS. A shell loop rather than sed, so a value may hold any
+# character.
+fill_tokens() {
+  local line="$1" entry name value
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    name="{${entry%%	*}}"; value="${entry#*	}"
+    while [ "${line#*"$name"}" != "$line" ]; do line="${line%%"$name"*}$value${line#*"$name"}"; done
+  done <<TA_TOKENS
+$TOKENS
+TA_TOKENS
   printf '%s' "$line"
 }
 
 # The prose under the H2 $2 of the recipe $1, indented, the way surfaces prints `## Discovery`.
 recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/d; s/^/  /'; }
 
-# Runs every line of $1 in $2 with output appended to $3, `{codePath}` filled, and exits 4 at the
-# first failure with the `first:` line, the way surfaces install does. $4 the label for stderr.
+# The `## Bring up` lines of the recipe $1 before ($2 `before`) or after ($2 `after`) its
+# `## Address` heading. The recipe places the address between two bring-up headings, and only the
+# position says which block runs on which side of it.
+bring_up_half() {
+  local half
+  half="$(mktemp)" || die3 "environment: could not create a temporary file"
+  awk -v want="$2" '/^## Address$/ { seen = 1 } (want == "before") != (seen == 1)' "$1" >"$half"
+  sh_blocks_under "$half" "Bring up"; rm -f "$half"
+}
+
+# Runs every line of $1 in $2 with output appended to $3, every `{name}` filled, and exits 4 at
+# the first failure with the `first:` line, the way surfaces install does. $4 the label for
+# stderr, $5 the recipe the lines came from, $RECIPE when absent. A line still holding a `{name}`
+# after the fill exits 3 naming it: a token nothing filled would otherwise run literally.
 run_recipe_lines() {
-  local steps="$1" dir="$2" outfile="$3" who="$4" line before
+  local steps="$1" dir="$2" outfile="$3" who="$4" recipe="${5:-$RECIPE}" line before rest
   cd "$dir" || die3 "environment: could not enter $dir"
   while IFS= read -r line; do
     [ -n "${line// /}" ] || continue
+    line="$(fill_tokens "$line")"
+    case "$line" in *'{'*'}'*) rest="${line#*\{}"; die3 "environment: $who line holds a token nothing fills: {${rest%%\}*}}. The tokens are {codePath}, the ## Tokens names and the address keys" ;; esac
     before="$(wc -l <"$outfile" | tr -d '[:space:]')"
-    run_recipe_line "$who" "$RECIPE" "$(fill_code_path "$line")" "$outfile" && continue
+    run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
     printf 'environment: %s step failed: %s\n' "$who" "$line" >&2
     recipe_output_summary 4 "$outfile" "$((before + 1))"; exit 4
   done <<TA_STEPS
@@ -905,8 +935,24 @@ $steps
 TA_STEPS
 }
 
+# Runs the one line $1 in $2 and writes its standard output to $4, which a token and the address
+# are read from. Both streams are appended to $3, standard error after standard output, so the
+# record holds them and the caller reads a clean value. Returns the command's exit status. A line
+# refused by refuse_if_unsafe, holding no command, or still holding a `{name}` exits 3.
+run_recipe_capture() {
+  local line="$1" dir="$2" outfile="$3" capture="$4" err_file result tab; tab="$(printf '\t')"
+  line="$(fill_tokens "$line")"
+  refuse_if_unsafe environment "$RECIPE" "$line" || exit 3
+  err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
+  printf '+ %s\n' "$line"
+  result="$(br_run_resolved "$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')" "$dir" "$capture" '[]' "" "$err_file")"
+  cat "$capture" "$err_file" >>"$outfile"; rm -f "$err_file"
+  case "$result" in RAN*) return "${result#*"$tab"}" ;; esac
+  die3 "environment: the line holds no command, or a token nothing fills: ${result#*"$tab"}. The tokens are {codePath}, the ## Tokens names and the address keys"
+}
+
 do_environment() {
-  local project_path="" id="" sub=""
+  local project_path="" id="" sub="" setup_recipes="" n tab; tab="$(printf '\t')"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
@@ -919,6 +965,20 @@ do_environment() {
         ;;
     esac
   done
+  # The setup recipes are this action's own flag, so they are taken out before the recipe flags
+  # reach cr_resolve_recipe, which refuses a flag it does not know. The rest keep their order.
+  n=$#
+  while [ "$n" -gt 0 ]; do
+    if [ "$1" = "--setup-recipe" ]; then
+      [ "$n" -ge 2 ] || die3 "environment: --setup-recipe needs a value"
+      cr_recipe_pair environment --setup-recipe "$2"
+      case "${CR_PAIR%%"$tab"*}" in e2e|visual-regression) ;; *) die3 "environment: the setup kind is e2e or visual-regression, got: ${CR_PAIR%%"$tab"*}" ;; esac
+      setup_recipes="$setup_recipes$CR_PAIR
+"; shift 2; n=$((n - 2))
+    else
+      set -- "$@" "$1"; shift; n=$((n - 1))
+    fi
+  done
   [ -n "$project_path" ] || die3 "environment: --project is required"
   local _resolved_project
   _resolved_project="$(canon_existing_dir "$project_path")" || die3 "environment: not a folder: $project_path"
@@ -927,18 +987,22 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down) ;; *) die3 "environment: the action is show, up or down, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile
+  local task_dir task_json wt outfile tab; tab="$(printf '\t')"
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
   CODE_PATH="$(project_code_path_value "$project_path")"
   [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die3 "environment: the project's codePath is not on disk: ${CODE_PATH:-none recorded}"
+  TOKENS="codePath$tab$CODE_PATH
+"
 
   if [ "$sub" = "down" ]; then
     [ "$#" -eq 0 ] || die3 "environment: down reads the recipe the record names and takes no flag, got: $1"
     RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")"
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
+    # The address keys the record kept, so `{worktreeProject}` reaches the tear-down.
+    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt") | "\(.key)\t\(.value)"' "$task_json")"
     wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
     run_recipe_lines "$(sh_blocks_under "$RECIPE" "Tear down")" "$wt" "$outfile" down
@@ -953,40 +1017,71 @@ do_environment() {
   ACTION="environment"; KIND="worktree-environment"
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
-  local bring_up address tear_down err_file addr_file result address_value tab; tab="$(printf '\t')"
+  local bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup
   bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
   address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
   tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
+  # The token blocks carry the token's name as the fence's second word, the shape `## Files`
+  # already reads: one file per block, named by its order, and a `<n><TAB><name>` line each.
+  tokens_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  token_list="$(recipe_files_into "$RECIPE" Tokens "$tokens_dir")"
   printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
   [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
   [ -n "$address" ] || die3 "environment: $RECIPE has no block tagged sh under Address, so up would record no address"
   if [ "$sub" = "show" ]; then
     printf 'PRECONDITIONS:\n'; recipe_prose_under "$RECIPE" Preconditions
-    printf 'BRING UP:\n'; fill_code_path "$bring_up" | sed 's/^/  /'; printf '\n'
-    printf 'ADDRESS:\n  %s\n' "$(fill_code_path "$address")"
-    printf 'TEAR DOWN:\n'; fill_code_path "$tear_down" | sed 's/^/  /'; printf '\n'
+    printf 'TOKENS:\n'; while IFS="$tab" read -r n name; do [ -n "$n" ] && printf '  %s: %s\n' "$name" "$(fill_tokens "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")")"; done <<TA_TOKEN_LIST
+$token_list
+TA_TOKEN_LIST
+    printf 'BRING UP:\n'; fill_tokens "$bring_up" | sed 's/^/  /'; printf '\n'
+    printf 'ADDRESS:\n  %s\n' "$(fill_tokens "$address")"
+    printf 'TEAR DOWN:\n'; fill_tokens "$tear_down" | sed 's/^/  /'; printf '\n'
     printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
-    return 0
+    rm -rf "$tokens_dir"; return 0
   fi
   cr_require_person up "a person approved the site coming up"
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
-  run_recipe_lines "$bring_up" "$wt" "$outfile" up
-  # The address is the command's first line of standard output, so its standard error is kept
-  # apart and appended to the record afterwards.
-  address="$(fill_code_path "$address")"
-  refuse_if_unsafe environment "$RECIPE" "$address" || exit 3
-  addr_file="$(mktemp)" && err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
-  printf '+ %s\n' "$address"
-  result="$(br_run_resolved "$(printf '%s' "$address" | jq -Rc 'split(" ") | map(select(. != ""))')" "$wt" "$addr_file" '[]' "" "$err_file")"
-  cat "$addr_file" "$err_file" >>"$outfile"; address_value="$(head -n 1 "$addr_file")"; rm -f "$addr_file" "$err_file"
-  case "$result" in RAN*) ;; *) die3 "environment: the address line holds no command, or a token nothing fills: ${result#*"$tab"}. {codePath} is the only token filled" ;; esac
-  [ "${result#*"$tab"}" = "0" ] && [ -n "$address_value" ] || { printf 'environment: the address command failed or printed nothing\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
-  write_atomic "$task_json" "$(jq --arg a "$address_value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '.environment = {address: $a, recipe: $r, upAt: $t}' "$task_json")"
+  # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
+  # refuses by the token's name at 4, before any bring-up line runs.
+  capture="$(mktemp)" || die3 "environment: could not create a temporary file"
+  while IFS="$tab" read -r n name; do
+    [ -n "$n" ] || continue
+    run_recipe_capture "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")" "$wt" "$outfile" "$capture"; result=$?
+    value="$(head -n 1 "$capture")"
+    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+    TOKENS="$TOKENS$name$tab$value
+"
+  done <<TA_TOKEN_LIST
+$token_list
+TA_TOKEN_LIST
+  rm -rf "$tokens_dir"
+  run_recipe_lines "$(bring_up_half "$RECIPE" before)" "$wt" "$outfile" up
+  run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
+  value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
+  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+  keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"
+  TOKENS="$TOKENS$keys
+"
+  root="$(cr_lookup "$keys" root)"
+  [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
+    || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
+  run_recipe_lines "$(bring_up_half "$RECIPE" after)" "$wt" "$outfile" up
+  # The harness in the worktree: a setup recipe's `## Install` is declared safe to run twice, and
+  # it is where npm lives. Without its path the site is still up, and the install is the person's
+  # next step.
+  for kind in e2e visual-regression; do
+    [ "$(jq -r --arg k "$kind" '.surfaces[if $k == "e2e" then "e2e" else "visualRegression" end].enabled // false' "$project_path/project.json")" = "true" ] || continue
+    setup="$(cr_lookup "$setup_recipes" "$kind")"
+    [ -n "$setup" ] || { printf 'environment: %s is on for this project and no --setup-recipe %s=<path> was given, so its harness is not installed in the worktree\n' "$kind" "$kind" >&2; continue; }
+    run_recipe_lines "$(sh_blocks_under "$setup" Install)" "$wt" "$outfile" "install $kind" "$setup"
+  done
+  write_atomic "$task_json" "$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
+    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
   commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
-  printf 'address: %s\n' "$address_value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
+  printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
 }
 
 # ------------------------------------------------------------------------------------------------

@@ -73,18 +73,18 @@
         "path": { "type": "string", "minLength": 1 },
         "branch": { "type": "string", "minLength": 1 }
       },
-      "description": "The git worktree this task builds in, and the branch checked out there: `<codePath>/.claude/worktrees/<id>` on `feature/<id>`, the path in its resolved form. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
+      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<basename of codePath>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
     },
     "environment": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": { "type": "string", "minLength": 1 },
       "required": ["address", "recipe", "upAt"],
       "properties": {
         "address": { "type": "string", "minLength": 1 },
         "recipe": { "type": "string", "minLength": 1 },
         "upAt": { "type": "string", "minLength": 1 }
       },
-      "description": "The worktree's own running site, present only while one is up: the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one."
+      "description": "The worktree's own running site, present only while one is up: the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Every other `key: value` line the address command printed is kept here as a string field, so `down` can fill it into the tear-down as `{key}`. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one."
     },
     "savedAt": {
       "type": "string",
