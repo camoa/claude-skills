@@ -1,0 +1,44 @@
+# The controlled vocabulary: <word> | <the thing it names> | <banned synonyms, comma separated>.
+# A word is here because the docs say it must mean one thing (foundations.md, "One name per
+# thing, enforced"). tests/vocabulary-spec.sh flags every banned synonym, as a whole word,
+# case-insensitive, in shipped prose outside fenced blocks and code spans. A synonym goes in the
+# third column only when it has no other sense in the plugin's prose. The check cannot read
+# meaning, so a word with a second legitimate use is left off and named here instead.
+#
+# The stages, named as their skills are.
+scope | the first stage: the contract a task is judged against |
+research | the second stage: what design needs, found in the code, outside it, and in the recipes |
+design | the third stage: the work orders |
+implement | the fourth stage: the build, per work order. Its folder and its prose name are implementation |
+review | the fifth stage: sixteen checks over the whole task, one verdict |
+completion | the sixth stage: closing a finished task. Not complete, which is the task action and the state value |
+#
+# The check verdicts, scripts/review-schema.json and scripts/preconditions-schema.json.
+met | a check that looked and the answer is yes | satisfied
+unmet | a check that looked and the answer is no | unsatisfied
+unknown | a check that could not look | undecidable
+undeclared | a check the recipe never declared |
+# A criterion answers in the contract's three words, scripts/alignment-schema.json.
+unanswered | a criterion nobody answered | unresolved
+# The other closed sets scripts/review-record-schema.json enumerates.
+severity | high, medium, low, on a finding | major, minor, blocker
+status | open, addressed, ruled, on a finding |
+ruling | wrong, deferred, load-bearing, on a ruled finding |
+#
+# The unit of work, and the words version 5 used for it. story and ticket are off the list: in this
+# plugin they only ever describe a goal ("a user story, not a ticket"). component names the code
+# artefact an order is sized around, not the order.
+work order | the unit of work: one build, one review, one commit | epic, epics, slice, slices, batch, batches
+#
+# A check is one blocking validation, and version 5 had five words for it.
+check | one blocking validation a stage runs | gate, gates, validate, validates, validated, validating, validation
+# verify is not banned: a criterion's verify clause and the reviewer's verify mode are its own senses.
+# audit is not banned: it is the review action that lists how each verdict came about.
+#
+# The other nouns foundations.md holds to one sense. No synonym is banned for them today.
+record | a file a stage writes as proof it ran, read by the next stage |
+recipe | a catalog document a stage resolves for the project's framework |
+source | where a play or a finding came from: a person's file, the project, a catalog set |
+#
+# The controlled vocabulary itself. Version 5's glossary explained the confusion; this list removes it.
+vocabulary | this list | glossary

@@ -77,7 +77,7 @@ acted on.
 
 **A check answers unknown only when nothing it reads could be read.** A check with two inputs that
 got one answers from that one, and names what it did not get. Otherwise one network failure stops
-every review, which is how version 5 trained the habit of skipping a gate.
+every review, which is how version 5 trained the habit of skipping a check.
 
 **Check 16 has a floor the `findings` step applies before its lens.** The `practices` lens reads
 the plays research loaded into `records/playbooks.json`. The check reads unknown, with the detail

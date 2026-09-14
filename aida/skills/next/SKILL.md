@@ -79,7 +79,7 @@ enter the tree, below. A
 the report again. Read the task as `kind: new`. Never delete it: the move keeps it.
 
 **More than one line.** List them in the order printed, each numbered, showing the id, its
-state and its review word (or, for a legacy entry, its epic and that it predates the tasks folder). Ask which one.
+state and its review word (or, for a legacy entry, its `epic` and that it predates the tasks folder). Ask which one.
 Wait for a plain answer, a number or the task's own id. A chosen legacy entry goes to the move,
 below, and then to "A task named directly", below. Any other choice goes to "A task named
 directly" as it is.

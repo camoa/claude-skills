@@ -38,7 +38,7 @@ A row ends in one of six words: `met`, `unmet`, `not run`, `not applicable`, `un
   never `met`, because nothing ran.
 - An `absent` row is `undeclared`. Its text is what a person reads when they ask why.
 - A row with no placeholder runs whole, over whatever scope its own tool takes.
-- The `mutation` row is a report, not a gate. Every catalog tool exits 0 with survivors, so read the
+- The `mutation` row is a report, and never blocks. Every catalog tool exits 0 with survivors, so read the
   score and the survivors from the output text, as the row's `trap:` says.
 - `unknown` means nothing ran or nothing was decided: a command not found, or a placeholder
   with no value. A non-zero mutation exit is `unknown` too, a run fault and never a survivor count.

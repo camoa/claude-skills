@@ -109,7 +109,7 @@ facts creation cannot guess.
 
 **2. Name.** Always asked, whether or not one was already mentioned, because deriving it from the
 code folder saves one question and buys a collision problem the moment two projects share a
-folder name (ideal/project.md, "Considered and rejected"). Validate against
+folder name (ideal/project.md, "Considered and rejected"). Check against
 `^[a-z][a-z0-9_]*$`; on a mismatch, say so and ask again. Autonomous with no name given: **halt**,
 report that the name is missing, stop.
 

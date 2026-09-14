@@ -91,7 +91,7 @@ pieces are already built around treating the task as one.
 Accepting a split hands three things down to the new child tasks, each its own task in the sense
 above:
 
-- **The goal.** Each child gets the slice of the original goal that is its own to finish.
+- **The goal.** Each child gets the part of the original goal that is its own to finish.
 - **The criteria.** Every criterion from the contract goes to exactly one child, the one that
   will satisfy it. A criterion no child claims, and a child whose criteria nothing researched,
   both come back as findings rather than passing quietly.

@@ -43,7 +43,7 @@ row without a `{surfaces}` token cannot be narrowed, so the whole set runs and t
 so.
 
 **Zero tests ran is never a pass.** A run that selected nothing reads unknown. A registry surface
-with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform.
+with no result reads unmet, because a check that cannot notice its subject going absent cannot inform.
 
 **Every command waits for the recipe.** Until the surface block lands in the `review` recipe, the
 script records checks 13 to 15 as undeclared and says why. **Visual parity gets no more than that**:
