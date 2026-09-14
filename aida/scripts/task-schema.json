@@ -85,6 +85,11 @@
         "upAt": { "type": "string", "minLength": 1 }
       },
       "description": "The worktree's own running site, present only while one is up: the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one."
+    },
+    "savedAt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "When `task save` last ran for this task, as a UTC timestamp, stamped on every call whether or not a note was written. hooks/pre-compact.sh treats a file under the task folder newer than this as unsaved work. Absent until the first save; the hook then falls back to the newest note."
     }
   },
   "$defs": {

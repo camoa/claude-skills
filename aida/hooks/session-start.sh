@@ -76,6 +76,21 @@ else
   fi
 fi
 
+# An automatic compaction leaves this marker in the task folder ($1) (hooks/pre-compact.sh). It is
+# named once, so the window that follows re-reads the records instead of trusting the summary,
+# and then removed.
+name_compaction_marker() {
+  local compacted="$1/records/compacted.json" work
+  [ -f "$compacted" ] || return 0
+  if [ "$(jq -r '.unsaved' "$compacted" 2>/dev/null)" = "true" ]; then
+    work="with unsaved work"
+  else
+    work="with nothing unsaved"
+  fi
+  echo "This session was compacted automatically at $(jq -r '.at' "$compacted" 2>/dev/null), ${work}. Read $1/task.md and the newest stage record under $1 before going on."
+  rm -f "$compacted"
+}
+
 if [ -n "$MATCH" ]; then
   PROJECT_NAME="$(printf '%s' "$MATCH" | jq -r '.name')"
   PROJECT_PATH="$(printf '%s' "$MATCH" | jq -r '.path')"
@@ -89,8 +104,8 @@ if [ -n "$MATCH" ]; then
   # that rule, and the next skill's script prints its answer as the stage field of each OPEN:
   # line. Task discovery, the review verdict and the stage are all read off that line. So there
   # is no second walk of the tasks folder. Version 5 kept this in a per-prompt hook and a session
-  # file. Version 6 keeps one copy of the state, in the records, so this block reads and never
-  # writes.
+  # file. Version 6 keeps one copy of the state, in the records, so this block reads them and
+  # writes nothing but the marker's removal.
   OPEN_TASKS="$("$NEXT_SCRIPT" report 2>/dev/null | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' \
     | grep '^{' | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
   IN_PROGRESS="$(printf '%s\n' "$OPEN_TASKS" | grep -c '^{')"
@@ -105,9 +120,12 @@ if [ -n "$MATCH" ]; then
     # The newest saved note, read off the same task line. The window reads it before its first
     # turn; a note older than the record it overlaps was overtaken by that record's producer.
     [ "$TASK_NOTES" = "none" ] || echo "Notes: ${TASK_NOTES}, ${TASK_PATH}/notes/${TASK_NOTES}.md"
+    name_compaction_marker "$TASK_PATH"
     [ "$TASK_RUN_MODE" != "autonomous" ] || echo "Run mode: autonomous"
     echo ""
   elif [ "$IN_PROGRESS" -gt 1 ]; then
+    # The hook marks the task whose worktree holds cwd, so each line is checked for a marker.
+    printf '%s\n' "$OPEN_TASKS" | jq -r '.path' | while IFS= read -r p; do name_compaction_marker "$p"; done
     echo "${IN_PROGRESS} tasks are in progress; \`/aida:next\` lists them."
     echo ""
   fi
