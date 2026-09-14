@@ -1,6 +1,6 @@
 ---
 name: catalog-identifier
-description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, design and implement skills. Identifies only, and never opens a guide body.
+description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, design, implement, surfaces and task skills. Identifies only, and never opens a guide body.
 tools: Skill, Read, Bash, Glob, Grep
 disallowedTools: Agent
 model: sonnet
@@ -53,3 +53,11 @@ flag. Choose the word this way:
 
 Return the word and the navigator's own reason text together. The word is what the script reads.
 The reason is what a person reads.
+
+When `available` is true, the answer is the store path, and a store path is an answer only when
+the file is on disk. The navigator's step 3 fetches the body when its cache misses; run that step,
+do not skip it because an earlier lookup in this session already fetched another recipe. Before
+you answer, run `test -f "<path>"`. A path that does not exist is not an answer: run step 3 again,
+and if the file is still absent answer `fetch-failed` with what the fetch printed. The script
+that reads your answer refuses a path that is not a file, so a path returned unchecked stops the
+skill that dispatched you.
