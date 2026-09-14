@@ -83,6 +83,7 @@ CHECK_TASK_SCRIPT="${PLUGIN_ROOT}/scripts/check-task.sh"
 RUN_MODE="interactive"
 if [ "${1:-}" = "--run-mode" ]; then
   [ $# -ge 2 ] || { printf 'task-actions: --run-mode needs a value\n' >&2; exit 3; }
+  # shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
   RUN_MODE="$2"; shift 2
 fi
 
@@ -1002,7 +1003,11 @@ do_environment() {
   fi
 
   # show and up resolve the recipe the same way, so show's exit code says what up would do.
-  ACTION="environment"; KIND="worktree-environment"
+  # shellcheck disable=SC2034 # the three are read by cr_resolve_recipe in scripts/lib/recipes.sh
+  ACTION="environment"
+  # shellcheck disable=SC2034
+  KIND="worktree-environment"
+  # shellcheck disable=SC2034
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
   local bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
@@ -1144,6 +1149,7 @@ do_prune() {
     [ -n "$listed" ] && printf '%s\n' "$listed" || printf 'prune: none, no complete task records a worktree\n'
     return 0
   fi
+  # shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
   ACTION="prune"
   cr_require_person "a task id or --all" "a person chose which trees to remove"
   [ "$all" = no ] || ids="$(printf '%s\n' "$listed" | awk '{print $2}')"

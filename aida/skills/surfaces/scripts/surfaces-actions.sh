@@ -73,6 +73,7 @@ PROJECT_FILE="$PROJECT_DIR/project.json"
 CODE_PATH="$(project_code_path_value "$PROJECT_DIR")"
 [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die 3 "$PROJECT_FILE records no codePath on disk"
 TREE="$(active_tree_for "$CODE_PATH" "$(pwd -P)")"
+# shellcheck disable=SC2034 # read by cr_resolve_recipe in scripts/lib/recipes.sh
 FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$PROJECT_FILE")"
 SURFACE_REL=".visual-review/surfaces.json"
 SURFACE_FILE="$TREE/$SURFACE_REL"
