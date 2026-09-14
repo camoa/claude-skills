@@ -3469,6 +3469,36 @@ TF_EOF
   [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
+  # --- the test files go into a commit before anything is measured against them --------------------
+  # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
+  # slice's implementer starts"). Without this, the implementer is the role that commits the tests
+  # it is measured against, and the record names a commit the tests are not in (live-run row 62).
+  # Only the frozen paths are taken, through a pathspec, so work beside them stays where it is, and
+  # the line at the end says what was left. The helper dies before the record is written when the
+  # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
+  # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
+  local frozen_rel_paths tree_left
+  frozen_rel_paths="$(printf '%s' "$tests_json" | jq -r '[.[].relPath] | unique | .[]')"
+  if [ -n "$frozen_rel_paths" ]; then
+    set --
+    while IFS= read -r p; do
+      [ -n "$p" ] && set -- "$@" "$p"
+    done <<TF_EOF
+$frozen_rel_paths
+TF_EOF
+    if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
+      recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
+        "Freeze the tests of $unit_id through the implement skill: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
+        "$frozen_rel_paths"
+      current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
+      [ -n "$current_commit" ] \
+        || die 3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
+    fi
+  fi
+  tree_left="$(git -C "$codepath" status --porcelain)"
+  [ -z "$tree_left" ] \
+    || printf 'tests-freeze: the tests are committed or unchanged, and other uncommitted changes remain in %s: %s\n' "$codepath" "$(printf '%s' "$tree_left" | tr '\n' ' ')" >&2
+
   # --- the checkpoint's verdict goes into the ledger, one judgement per order per criterion --------
   # Written before the record below, and on both paths through it, because a second freeze at the
   # same commit with the same tests writes no record and must still carry the judgement a person or

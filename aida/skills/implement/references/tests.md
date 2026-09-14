@@ -225,6 +225,12 @@ Then it records a hash for each test file. That hash is the freeze. From here a 
 write to one of those files from every dispatched role except the test author of the order that
 froze it.
 
+Then it commits the test files it hashed, on the task branch, and only those paths. The
+implementer starts from a tree that already holds the tests, and the record's commit is the one
+they are in. Work beside them stays uncommitted, and the freeze says so in one line. A commit that
+fails, for want of a git identity or any other reason, refuses before the record is written,
+with git's own message.
+
 A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is
 noticed, and the hash is what notices one. The hook allows the write and says which file changed and
 which order froze it.

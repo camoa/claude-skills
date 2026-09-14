@@ -25,7 +25,7 @@
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit `tests-freeze` ran at, read fresh from the code repository rather than from the ledger's own startedFrom: unlike a baseline, which is pinned to the commit the whole build began from, a unit's own tests may be frozen after other units have already advanced the branch. A second run for this unit at a different commit refuses rather than overwrite this field."
+      "description": "The commit the test files in `rows` are in: the one `tests-freeze` made from them, on the task branch, or HEAD when they were already committed. Read fresh from the code repository rather than from the ledger's own startedFrom: unlike a baseline, which is pinned to the commit the whole build began from, a unit's own tests may be frozen after other units have already advanced the branch. A second run for this unit at a different commit refuses rather than overwrite this field."
     },
     "testGlobs": {
       "type": "array",
