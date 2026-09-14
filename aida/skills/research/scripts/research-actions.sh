@@ -426,17 +426,20 @@ do_record() {
 
   write_atomic "$file" "$doc"
 
-  echo "RECORDED: $file"
-  echo "search: $search"
-  echo "criteriaServed: $(printf '%s' "$ids_json" | jq -r 'join(",")')"
-  echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
-
+  # Render before printing anything. A caller that pipes this through `head -1` closes the pipe
+  # after the first line, the next echo takes SIGPIPE, and nothing after it runs; on the live run
+  # that left every search without its .md. Every write comes first, the summary last.
   [ -f "$RESEARCH_RENDER_SCRIPT" ] \
     || die3 "record: cannot find research-render.sh at $RESEARCH_RENDER_SCRIPT"
   bash "$RESEARCH_RENDER_SCRIPT" "$TASK_PATH" "$search" >/dev/null
   local render_rc=$?
   [ "$render_rc" -eq 0 ] \
     || die3 "record: research-render.sh could not render $search.md (exit $render_rc)"
+
+  echo "RECORDED: $file"
+  echo "search: $search"
+  echo "criteriaServed: $(printf '%s' "$ids_json" | jq -r 'join(",")')"
+  echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
   echo "rendered: $RESEARCH_DIR/$search.md"
 
   exit 0
