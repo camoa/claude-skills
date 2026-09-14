@@ -4,6 +4,14 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- A recipe step that reads standard input no longer swallows the steps after it. The step loop
+  fed its lines through the loop's own stdin, and a command such as `ddev composer require`
+  read them, so the install ended early with no error. Every step now runs with stdin closed.
+  Reported by the catalog side while consuming the setup recipes.
+
 ## [6.0.0-beta.9] - 2026-09-14
 
 Rows 33 to 42 of the live run, the seven items the owner reopened on 2026-09-13, and the

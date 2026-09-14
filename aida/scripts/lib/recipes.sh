@@ -1131,7 +1131,7 @@ run_recipe_line() {
     set -- $line "$@"
     set +f
     [ "$#" -gt 0 ] || exit 0
-    exec "$@"
+    exec "$@" </dev/null
   ) >>"$outfile" 2>&1
 }
 
