@@ -228,7 +228,8 @@ at `frameworks[].recipePath`, the same way the build step reads it. The script r
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
-step. A `gate` order is the one order that freezes with no test row, and it refuses a `--test`. It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
+step. A `gate` order is the one order that freezes with no test row, and it refuses a `--test`.
+It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
 from here, not back.
@@ -236,7 +237,7 @@ from here, not back.
 The script checks the file exists, sits inside the code repository, matches the framework's own
 declared pattern, and carries at the end of its name the criterion it claims. A done-when test
 carries the order id there instead. It checks every machine-verified criterion this order owns has
-a test, and every criterion a person verifies has a checklist line. A criterion this order only
+a test (a `gate` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
 serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
 list). A test that names neither a criterion this order serves or owns nor this order's id refuses
 (exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold

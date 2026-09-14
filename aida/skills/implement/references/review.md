@@ -155,9 +155,9 @@ not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
 work before it returns. A dirty tree means that commit did not happen. This round is not recorded.
 Interactive puts that to the person. Unattended halts the order with that reason.
 
-This re-runs seven of the eight checks, with the same order-tests floor build.md names, or the
-`configuration-gate` floor on a `gate` order: undeclared
-or unknown there still spends the round, even when every other check is undeclared. Not
+This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
+`gate` order the floor is `configuration-gate`. Undeclared or unknown there still spends the
+round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
 spends the round and leaves every finding open. At the round cap, the script halts the order
 itself, naming the check that stopped it. `review-brief` is never run again for this order.

@@ -42,7 +42,7 @@ You are dispatched in both run modes. Your verdict is recorded as a model's judg
 person's. On an attended run a person reads only the rows you rejected. A person who returns later
 can find exactly your rows and re-judge them. You stand in for that reading. You do not replace it.
 
-**Your only write is the verdict file the brief names, under the task folder.** Write nothing else,
+**Your only write is the verdict file the dispatch names, under the task folder.** Write nothing else,
 anywhere. Write it in this shape:
 
 ```json

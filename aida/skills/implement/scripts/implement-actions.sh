@@ -3238,9 +3238,8 @@ do_tests_freeze() {
   has_done_when_tests="$(printf '%s' "$tests_json" | jq 'any(.[]; .provesDoneWhen == true)')"
 
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
-  local project_folder codepath
+  local codepath
   rv_load_codepath "tests-freeze"
-  project_folder="$RV_PROJECT_FOLDER"
   codepath="$RV_CODEPATH"
   local current_commit
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
