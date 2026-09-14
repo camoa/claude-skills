@@ -156,6 +156,24 @@ This step runs all eight deciding checks. The record holds every one.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks.
 
+A suite or a tool the baseline recorded red does not fail these checks by itself. The check
+subtracts the baseline's own output from the run now, line by line. Numbers and dots are set
+aside first, so a shifted line number, a count or a duration does not read as new. No new line
+is met. A new line is unmet, and the record lists the first twenty under `newLines` with the
+count. The check reads unknown only when the baseline kept no output or the run printed nothing.
+
+That is enough for a tool, which prints one line per finding. It is not enough for every suite.
+PHPUnit and pytest print a progress line and a summary line that change whenever a test is added
+or fixed. On the whole output, a red baseline on those still reads unmet. A test-execution
+recipe's suite row may declare `failure_line`, a regular expression matching the lines that name
+a failed test. Then only those lines are compared, on both sides, and the record names the
+selector. With the selector, a failure that matches no line reads unknown, because it is not one
+the selector names.
+
+The subtraction holds no parser, so it cannot see four things. A finding whose text changed
+reads as new. A finding fixed and reintroduced reads as old. A new finding worded like an old
+one in another file reads as old. A second copy of an old finding on another line reads as old.
+
 A failed check is not a failed order. It is this attempt's result, and the order has as many
 attempts as its own allowed count says, two unless a person has granted more. The summary prints
 one line per check with its verdict and a one-line reason. Say which check failed, name the record

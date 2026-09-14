@@ -101,5 +101,11 @@ with no `--check-recipe` records each tool undeclared instead. A suite that is a
 recorded, never refused. Knowing it is the point: a builder chasing a failure it did not cause
 spends every attempt it has.
 
+What each run printed is kept whole, one file per run under `implementation/baseline-output/`,
+and the baseline names each file. The build step subtracts those lines from a later run, so a
+red suite or a red tool does not block every order. The subtraction compares lines with numbers
+set aside, and it holds no parser. It cannot see a finding whose text changed, which reads as
+new, or a finding fixed and reintroduced, which reads as old.
+
 The baseline is taken once, at that commit. A second run at the same commit leaves it alone. One
 recorded at a different commit refuses rather than overwrites, and names both commits.

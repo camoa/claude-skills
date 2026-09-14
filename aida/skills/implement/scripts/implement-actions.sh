@@ -1913,6 +1913,10 @@ tc_run_smoke() {
 # end of `preconditions`, only when that run's own verdict permits the build to continue.
 # ------------------------------------------------------------------------------------------------
 
+# The folder beside baseline.json that keeps what each baseline command printed, whole, one file
+# per run. baseline.json names each file in `outputFile`, relative to its own folder.
+BL_OUTPUT_DIR="baseline-output"
+
 # The ledger and the snapshot of a task whose build has started, from $IMPL_DIR. Sets
 # STARTED_LEDGER_FILE, STARTED_LEDGER_DOC and SNAPSHOT_DOC. $1 the action, for the message.
 #
@@ -1977,7 +1981,7 @@ bl_commit_of() {
 bl_run_suite() {
   local record_json="$1" codepath="$2" values="$3" out="$4"
   local count i fw_obj fw tc_state row_json argv_json
-  local out_file result kind payload verdict reason exit_code_json output truncated raw_len
+  local out_file output_file kept_file result kind payload verdict reason exit_code_json output truncated raw_len
   count="$(printf '%s' "$record_json" | jq '.frameworks | length' 2>/dev/null)"
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
   i=0
@@ -1985,7 +1989,7 @@ bl_run_suite() {
     fw_obj="$(printf '%s' "$record_json" | jq -c --argjson i "$i" '.frameworks[$i]' 2>/dev/null)"
     fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
     tc_state="$(printf '%s' "$fw_obj" | jq -r '.testCommands.state')"
-    verdict=""; reason=""; exit_code_json="null"; output=""; truncated=false
+    verdict=""; reason=""; exit_code_json="null"; output=""; truncated=false; kept_file=""
     if [ "$tc_state" != "ok" ]; then
       verdict="unknown"
       reason="this framework's own test-commands section could not be read (state: $tc_state), so there is no suite row to run"
@@ -1999,7 +2003,11 @@ bl_run_suite() {
         reason="$(printf '%s' "$row_json" | jq -r '.absent // .missing')"
       else
         argv_json="$(printf '%s' "$row_json" | jq -c '.argv')"
-        out_file="$(dirname -- "$out")/.baseline-suite-run.$$"
+        # The whole capture is kept beside the record, because build-record subtracts it line by
+        # line later and the 4000-character tail in `output` is not enough to subtract from.
+        output_file="$BL_OUTPUT_DIR/suite-$fw.txt"
+        out_file="$(dirname -- "$out")/$output_file"
+        mkdir -p "$(dirname -- "$out_file")" || die 3 "preconditions: could not create $(dirname -- "$out_file")"
         result="$(tc_run_smoke "$argv_json" "$codepath" "$out_file" "$values")"
         kind="$(printf '%s' "$result" | cut -f1)"
         payload="$(printf '%s' "$result" | cut -f2-)"
@@ -2011,6 +2019,7 @@ bl_run_suite() {
           reason="the suite row's argv holds no token at all, so there was nothing to run"
         else
           exit_code_json="$payload"
+          kept_file="$output_file"
           case "$payload" in
             0)   verdict="met" ;;
             127) verdict="unknown"; reason="the suite command could not be found (exit 127)" ;;
@@ -2027,16 +2036,18 @@ bl_run_suite() {
             fi
           fi
         fi
-        rm -f "$out_file"
+        [ -n "$kept_file" ] || rm -f "$out_file"
       fi
     fi
     jq -n --arg framework "$fw" --arg verdict "$verdict" --arg reason "$reason" \
-          --arg output "$output" --argjson truncated "$truncated" --argjson exitCode "$exit_code_json" '
+          --arg output "$output" --argjson truncated "$truncated" --argjson exitCode "$exit_code_json" \
+          --arg outputFile "$kept_file" '
       {framework: $framework, verdict: $verdict}
       + (if $reason   == ""   then {} else {reason: $reason} end)
       + (if $exitCode == null then {} else {exitCode: $exitCode} end)
       + (if $output   == ""   then {} else {output: $output} end)
       + (if $truncated == true then {truncated: true} else {} end)
+      + (if $outputFile == "" then {} else {outputFile: $outputFile} end)
     ' >>"$out" || die 3 "preconditions: could not record the baseline suite result for framework $fw"
     i=$((i + 1))
   done
@@ -2044,20 +2055,22 @@ bl_run_suite() {
 
 # Runs one baseline tool command over the baseline scope and prints the field object baseline.json
 # holds for it. $1 the check id, $2 a word for the message, $3 the code repository, $4 the scope as
-# a JSON array of paths, $5 a file to capture output in. The command, its signal and its extensions
-# come from the resolved recipe in CR_DOC, never from a flag a caller typed.
+# a JSON array of paths, $5 the folder baseline.json lives in. The command, its signal and its
+# extensions come from the resolved recipe in CR_DOC, never from a flag a caller typed.
 #
 # The baseline has nothing earlier to compare itself against, so the rule is the suite own: met on
 # exit 0, unknown when the command could not be run at all with a reason saying so, unmet on any
 # other exit it actually returned. A row the recipe declares absent stays undeclared and carries
 # the recipe own reason. The exit code and the output are kept met or not, because a baseline is a
-# record of the whole state and not only of what pointed at a defect.
+# record of the whole state and not only of what pointed at a defect. The whole capture stays on
+# disk at $5/$BL_OUTPUT_DIR/<check id>.txt whenever the command ran, named in `outputFile`, because
+# build-record subtracts it line by line and the 4000-character tail is not enough to subtract from.
 bl_tool_result() {
-  local check_id="$1" label="$2" codepath="$3" paths_json="$4" outfile="$5"
+  local check_id="$1" label="$2" codepath="$3" paths_json="$4" outfile="$5/$BL_OUTPUT_DIR/$1.txt"
   local row argv_json signal exts_json absent_declared missing_why
-  local verdict reason exit_json output truncated rc raw_len
+  local verdict reason exit_json output truncated rc raw_len kept_file
   local has_paths scoped_json scoped_count errfile stdout_len result kind payload
-  verdict=""; reason=""; exit_json="null"; output=""; truncated=false
+  verdict=""; reason=""; exit_json="null"; output=""; truncated=false; kept_file=""
 
   row="$(printf '%s' "$CR_DOC" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
   absent_declared=""; missing_why=""
@@ -2100,6 +2113,7 @@ bl_tool_result() {
   else
     stdout_len=0
     errfile=""
+    mkdir -p "$(dirname -- "$outfile")" || die 3 "preconditions: could not create $(dirname -- "$outfile")"
     if [ -n "$signal" ]; then
       errfile="$outfile.err"
       result="$(br_run_resolved "$argv_json" "$codepath" "$outfile" "$scoped_json" "$PC_VALUES" "$errfile")"
@@ -2116,6 +2130,7 @@ bl_tool_result() {
       reason="the $label command came out with no token at all, so nothing ran and nothing was decided"
     else
       rc="$payload"
+      kept_file="$BL_OUTPUT_DIR/$check_id.txt"
       if [ -n "$signal" ]; then
         stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
         case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
@@ -2145,16 +2160,17 @@ bl_tool_result() {
         fi
       fi
     fi
-    rm -f "$outfile"
+    [ -n "$kept_file" ] || rm -f "$outfile"
   fi
   jq -n --arg verdict "$verdict" --arg reason "$reason" --arg output "$output" \
         --argjson truncated "$truncated" --argjson exitCode "$exit_json" \
-        --arg signal "$signal" --arg exts "${exts_json:-}" '
+        --arg signal "$signal" --arg exts "${exts_json:-}" --arg outputFile "$kept_file" '
     {verdict: $verdict}
     + (if $reason   == ""   then {} else {reason: $reason} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode} end)
     + (if $output   == ""   then {} else {output: $output} end)
     + (if $truncated == true then {truncated: true} else {} end)
+    + (if $outputFile == "" then {} else {outputFile: $outputFile} end)
     + (if $signal == "" then {} else {signal: $signal} end)
     + (if $exts   == "" then {} else {extensions: ($exts | fromjson)} end)
   '
@@ -2165,7 +2181,7 @@ bl_tool_result() {
 do_preconditions() {
   local task_folder="" project_folder codepath
   local recipes="" failures="" values="" check_recipes="" fw
-  local tool_out_file cs_json sa_json sec_json
+  local cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
   local tc_state tc_rows_json
@@ -2448,11 +2464,9 @@ EOF
           # The three tools run over the baseline scope, the same union of every order's ownedFiles
           # recorded above. A caller that passed no flag for one of them leaves it undeclared, with
           # the reason this record has always carried.
-          tool_out_file="$task_folder/implementation/.baseline-tool.$$"
-          cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$tool_out_file")"
-          sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$tool_out_file")"
-          sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$tool_out_file")"
-          rm -f "$tool_out_file"
+          cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$task_folder/implementation")"
+          sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$task_folder/implementation")"
+          sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")"
 
           baseline_json="$(jq -n \
             --arg takenAt "$today" --arg commit "$ledger_started_from" \
@@ -3798,6 +3812,98 @@ BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 
+# One line of tool or suite output as a key for comparing two runs: every run of digits removed,
+# every run of dots one dot, every run of whitespace one space, the ends trimmed. One rule for
+# every tool and every framework, in place of a parser per tool: it covers `path:12`,
+# ` 12 | ERROR |`, a counts line, a duration, a percentage, and the progress line that grows with
+# every test an order adds. Two lines that differ only in a number read as one; that is the price.
+br_line_keys() {
+  sed 's/[0-9][0-9]*//g; s/\.\.*/./g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' "$1"
+}
+
+# The lines of the run at $2 whose key is absent from the run at $1: the first 20, in their own
+# words and order, written to $3, and the count of all of them in BR_NEW_COUNT. A line whose key
+# comes out empty is never new. A global for the count and a file for the lines, never a printed
+# value, for the reason br_seven_checks states: a refusal inside a `$(...)` exits that subshell
+# alone.
+BR_NEW_COUNT=0
+br_lines_not_in() {
+  local base="$1" now="$2" out="$3" base_keys now_keys nums picks
+  base_keys="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  now_keys="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  br_line_keys "$base" | sort -u >"$base_keys"
+  br_line_keys "$now" >"$now_keys"
+  # -a: a byte that is not UTF-8 in a line would otherwise make grep print "binary file matches"
+  # and no line number, and the check would read met over a line it never compared.
+  nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  BR_NEW_COUNT="$(printf '%s\n' "$nums" | grep -c '^[0-9]')"
+  picks="$(printf '%s\n' "$nums" | grep '^[0-9]' | head -20 | sed 's/$/p/' | paste -s -d ';' -)"
+  : >"$out"
+  [ -z "$picks" ] || sed -n "$picks" "$now" >"$out"
+  rm -f "$base_keys" "$now_keys"
+}
+
+# Subtracts the baseline run at $1 from the run now at $2, for a check whose baseline row was
+# unmet. $3 a word for the message, $4 how the command failed, $5 an optional selector: a regular
+# expression the recipe's suite row declared as `failure_line`, and only the lines matching it,
+# on both sides, are compared. Sets BR_SUB_VERDICT and BR_SUB_DETAIL, and BR_SUB_NEW, a JSON
+# array of the first 20 new lines, with BR_SUB_COUNT the count of all of them. met when no line
+# is new: what failed now already failed at the commit the build started from. unmet when one is,
+# naming the count. unknown only when there is nothing to subtract from or with: a baseline row
+# that kept no output, a run that printed none, a selector that matches no line of the run now
+# (the failure is not one the selector names), or a selector grep cannot compile. It cannot see a
+# finding whose text changed, which reads as new, or one fixed and reintroduced, which reads as
+# old, or a new finding worded like an old one in another file, which reads as old too.
+BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+br_subtract_baseline() {
+  local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" new_file base_sel now_sel with
+  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  if [ -z "$base" ] || [ ! -s "$base" ]; then
+    BR_SUB_VERDICT="unknown"
+    BR_SUB_DETAIL="the $label command $how, and the baseline recorded it unmet at the commit the build started from but kept no output to subtract (a baseline taken before outputs were kept, or its file removed), so this cannot tell an old finding from a new one."
+    return 0
+  fi
+  if [ ! -s "$now" ]; then
+    BR_SUB_VERDICT="unknown"
+    BR_SUB_DETAIL="the $label command $how and printed nothing, so there is nothing to compare with the baseline's output."
+    return 0
+  fi
+  with="with numbers set aside"
+  if [ -n "$selector" ]; then
+    grep -a -E -e "$selector" /dev/null 2>/dev/null
+    if [ "$?" -eq 2 ]; then
+      BR_SUB_VERDICT="unknown"
+      BR_SUB_DETAIL="the $label command $how, and the recipe's failure_line selector ($selector) is not a regular expression grep can compile, so no line was compared."
+      return 0
+    fi
+    base_sel="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+    now_sel="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+    grep -a -E -e "$selector" "$base" >"$base_sel" 2>/dev/null
+    grep -a -E -e "$selector" "$now" >"$now_sel" 2>/dev/null
+    if [ ! -s "$now_sel" ]; then
+      rm -f "$base_sel" "$now_sel"
+      BR_SUB_VERDICT="unknown"
+      BR_SUB_DETAIL="the $label command $how, and no line of its output matches the recipe's failure_line selector ($selector), so the failure is not one the selector names; read the output."
+      return 0
+    fi
+    base="$base_sel"; now="$now_sel"
+    with="on the lines matching failure_line ($selector), with numbers set aside"
+  fi
+  new_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  br_lines_not_in "$base" "$now" "$new_file"
+  if [ "$BR_NEW_COUNT" -eq 0 ]; then
+    BR_SUB_VERDICT="met"
+    BR_SUB_DETAIL="the $label command $how, and every line it printed is in the baseline's output $with, so nothing here is new; the baseline recorded it unmet at the commit the build started from."
+  else
+    BR_SUB_COUNT="$BR_NEW_COUNT"
+    BR_SUB_NEW="$(jq -Rsc 'split("\n") | map(select(length > 0))' "$new_file")"
+    BR_SUB_VERDICT="unmet"
+    BR_SUB_DETAIL="the $label command $how, and $BR_SUB_COUNT of its lines are absent from the baseline's output $with; this order introduced them. newLines holds the first 20."
+  fi
+  rm -f "$new_file"
+  [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
+}
+
 # One tool check: coding standards, static analysis, or the security tool. $1 the check id, $2 the
 # baseline field holding the same tool's own verdict, $3 a word for the message. The command itself
 # comes from the resolved recipe in BRC_RECIPES, never from a flag: a caller retyping a recipe row
@@ -3806,8 +3912,10 @@ BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 #
 # Exit 0 is met. Any other exit is compared against the baseline for that tool, the same rule
 # suite-regression already applies: a baseline that was met makes this unmet, because this order
-# introduced the finding; a baseline that was unmet, unknown or undeclared makes this unknown,
-# naming which, because nothing here can tell an old finding from an old one plus a new one.
+# introduced the finding; a baseline that was unmet has its own output subtracted line by line
+# (br_subtract_baseline), so a finding already there at the commit the build started from is not
+# this order's; a baseline that was unknown or undeclared makes this unknown, naming which,
+# because there is nothing to subtract from.
 #
 # Two optional keys change that (dev-guides, process-recipes, `## Check commands` is parsed).
 # `extensions` narrows what {paths} expands to; a row whose expansion comes out empty did not apply
@@ -3821,8 +3929,8 @@ br_tool_check() {
   local row argv_json signal exts_json absent_declared missing_why
   local verdict detail exit_json output outfile errfile rc has_paths
   local owned_json owned_count scoped_json scoped_count stdout_len failed how
-  local baseline_doc baseline_verdict result kind payload
-  verdict=""; detail=""; exit_json="null"; output=""
+  local baseline_doc baseline_verdict baseline_output result kind payload new_json new_count
+  verdict=""; detail=""; exit_json="null"; output=""; new_json="[]"; new_count=0
 
   row="$(printf '%s' "$BRC_RECIPES" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
   absent_declared=""
@@ -3920,11 +4028,13 @@ br_tool_check() {
             detail="the $label command exited 0 over this order's own files."
           fi
         else
-          baseline_verdict=""
+          baseline_verdict=""; baseline_output=""
           if [ -f "$BRC_BASELINE_FILE" ]; then
             baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
             if [ -n "$baseline_doc" ]; then
               baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
+              baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].outputFile // ""')"
+              [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BRC_BASELINE_FILE")/$baseline_output"
             fi
           fi
           case "$baseline_verdict" in
@@ -3932,9 +4042,16 @@ br_tool_check() {
               verdict="unmet"
               detail="the $label command $how, and the baseline recorded this tool met at the commit the build started from; this order introduced the finding."
               ;;
-            unmet|unknown|undeclared)
+            unmet)
+              # The baseline joined the two streams the same way, standard output first.
+              [ -z "$errfile" ] || cat "$errfile" >>"$outfile" 2>/dev/null
+              br_subtract_baseline "$baseline_output" "$outfile" "$label" "$how"
+              verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
+              new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
+              ;;
+            unknown|undeclared)
               verdict="unknown"
-              detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so this cannot tell an old finding from an old one plus a new one."
+              detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one."
               ;;
             *)
               verdict="unknown"
@@ -3950,10 +4067,12 @@ br_tool_check() {
   jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
         --argjson exitCode "$exit_json" --arg output "$output" \
         --arg signal "$signal" --arg exts "${exts_json:-}" \
+        --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
         --arg framework "$(printf '%s' "$row" | jq -r '.framework // ""')" '
     {id: $id, verdict: $verdict, detail: $detail}
     + (if $framework == "" then {} else {framework: $framework} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode, output: $output} end)
+    + (if $newLineCount == 0 then {} else {newLines: $newLines, newLineCount: $newLineCount} end)
     + (if $signal == "" then {} else {signal: $signal} end)
     + (if $exts   == "" then {} else {extensions: ($exts | fromjson)} end)
   '
@@ -3970,7 +4089,7 @@ br_test_check() {
   local check_id="$1" field="$2" label="$3"
   local fw_count fwi fw_obj fw cmd argv_json paths_json result kind payload
   local runs='[]' verdicts='[]' verdict detail outfile rc marker_json markers_len mi marker
-  local nothing_ran_hit run_detail baseline_doc baseline_unmet_frameworks
+  local nothing_ran_hit run_detail baseline_doc baseline_verdict baseline_output new_json new_count selector
 
   fw_count="$(printf '%s' "$BRC_RECIPES" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
@@ -3982,7 +4101,8 @@ br_test_check() {
     fw_obj="$(printf '%s' "$BRC_RECIPES" | jq -c --argjson i "$fwi" '.frameworks[$i]')"
     fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
     cmd="$(printf '%s' "$fw_obj" | jq -c --arg f "$field" '.[$f] // {}')"
-    verdict=""; detail=""; rc=""
+    verdict=""; detail=""; rc=""; new_json="[]"; new_count=0
+    selector="$(pc_unquote "$(printf '%s' "$cmd" | jq -r '.failureLine // ""')")"
     if [ "$(printf '%s' "$cmd" | jq -r 'has("absent")')" = "true" ]; then
       verdict="undeclared"
       detail="$(printf '%s' "$cmd" | jq -r '.absent')"
@@ -4052,25 +4172,43 @@ br_test_check() {
           verdict="unmet"
           detail="the order-tests command exited $rc on $fw."
         else
-          # The baseline records one verdict per framework, taken whole, not which test failed
-          # (baseline-schema.json, suite[].verdict); that is the finest grain step two's own record
-          # holds. A suite failing now, with the baseline already unmet, is not the same fact as a
-          # suite that is clean: this cannot tell an old failure from an old failure plus a new one
-          # this order introduced, so it says so rather than reading a red baseline as a pass.
-          baseline_doc=""
+          # The baseline records one verdict per framework, taken whole, and the whole output of
+          # that run (baseline-schema.json, suite[].outputFile). A suite failing now, with this
+          # framework's baseline already unmet, has that output subtracted line by line
+          # (br_subtract_baseline): a test red then and red now is not a regression, and a
+          # failure line absent then is one this order introduced. A suite row declaring
+          # `failure_line` narrows both sides to the lines that name a failed test, because a
+          # harness's progress and summary lines change whenever a test is added or fixed and
+          # would read as new on the whole output.
+          baseline_doc=""; baseline_verdict=""; baseline_output=""
           if [ -f "$BRC_BASELINE_FILE" ]; then
             baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
           fi
           if [ -n "$baseline_doc" ]; then
-            baseline_unmet_frameworks="$(printf '%s' "$baseline_doc" | jq -r \
-              '[ (.suite // [])[] | select(.verdict == "unmet") | .framework ] | join(", ")')"
-            if [ -n "$baseline_unmet_frameworks" ]; then
-              verdict="unknown"
-              detail="the suite exited $rc on $fw, and the baseline recorded $baseline_unmet_frameworks unmet at the commit the build started from. The baseline records one verdict per framework rather than which tests failed, so this cannot tell an old failure from an old failure plus a new one."
-            else
-              verdict="unmet"
-              detail="the suite exited $rc on $fw, and the baseline recorded every framework met at the commit the build started from; this order introduced the failure."
-            fi
+            baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg fw "$fw" \
+              '[ (.suite // [])[] | select(.framework == $fw) ][0].verdict // ""')"
+            baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg fw "$fw" \
+              '[ (.suite // [])[] | select(.framework == $fw) ][0].outputFile // ""')"
+            [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BRC_BASELINE_FILE")/$baseline_output"
+            case "$baseline_verdict" in
+              unmet)
+                br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw" "$selector"
+                verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
+                new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
+                ;;
+              unknown)
+                verdict="unknown"
+                detail="the suite exited $rc on $fw, and the baseline recorded $fw unknown at the commit the build started from, so there is nothing to subtract and this cannot tell an old failure from a new one."
+                ;;
+              met)
+                verdict="unmet"
+                detail="the suite exited $rc on $fw, and the baseline recorded $fw met at the commit the build started from; this order introduced the failure."
+                ;;
+              *)
+                verdict="unmet"
+                detail="the suite exited $rc on $fw, and the baseline holds no suite entry for $fw, so nothing there predates this failure; this order introduced it."
+                ;;
+            esac
           else
             verdict="unknown"
             detail="the suite exited $rc on $fw, and $BRC_BASELINE_FILE could not be read to tell whether this failure predates this order."
@@ -4078,7 +4216,11 @@ br_test_check() {
         fi
         runs="$(jq -nc --argjson runs "$runs" --arg fw "$fw" --arg v "$verdict" \
           --arg d "$detail" --argjson rc "$rc" --arg out "$run_detail" \
-          '$runs + [{framework: $fw, verdict: $v, detail: $d, exitCode: $rc, output: $out}]')"
+          --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
+          --arg failureLine "$([ "$check_id" = "suite-regression" ] && printf '%s' "$selector")" \
+          '$runs + [{framework: $fw, verdict: $v, detail: $d, exitCode: $rc, output: $out,
+                     newLines: $newLines, newLineCount: $newLineCount}
+                    + (if $failureLine == "" then {} else {failureLine: $failureLine} end)]')"
       fi
       rm -f "$outfile"
     fi
@@ -4098,12 +4240,15 @@ br_test_check() {
 
   verdict="$(br_worst_verdict "$verdicts")"
   jq -n --arg id "$check_id" --arg verdict "$verdict" --argjson runs "$runs" '
-    {id: $id, verdict: $verdict,
-     detail: ([ $runs[] | (.framework + ": " + .detail) ] | join(" ")),
-     runs: [ $runs[] | {framework, verdict} ]}
+    ([ $runs[] | .newLineCount // 0 ] | add) as $newCount
+    | {id: $id, verdict: $verdict,
+       detail: ([ $runs[] | (.framework + ": " + .detail) ] | join(" ")),
+       runs: [ $runs[] | {framework, verdict} + (if has("failureLine") then {failureLine} else {} end) ]}
     + (if ([ $runs[] | select(has("exitCode")) ] | length) == 0 then {}
        else {exitCode: ([ $runs[] | select(has("exitCode")) | (.exitCode | tonumber) ] | max),
              output:   ([ $runs[] | select(has("output")) | .output ] | join("\n"))} end)
+    + (if $newCount == 0 then {}
+       else {newLines: ([ $runs[] | (.newLines // [])[] ] | .[:20]), newLineCount: $newCount} end)
   '
 }
 

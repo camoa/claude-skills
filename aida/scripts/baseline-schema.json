@@ -51,7 +51,7 @@
     },
     "codingStandards": {
       "$ref": "#/$defs/toolResult",
-      "description": "What the coding-standards command the caller supplied with --standards found across the scope above. Undeclared when no --standards flag was given. This is the value build-record's own coding-standards check compares a later failure against: a baseline that was met makes a later failure this order's own."
+      "description": "What the coding-standards command the caller supplied with --standards found across the scope above. Undeclared when no --standards flag was given. This is the value build-record's own coding-standards check compares a later failure against: a baseline that was met makes a later failure this order's own, and a baseline that was unmet has its outputFile subtracted from the later run's output."
     },
     "staticAnalysis": {
       "$ref": "#/$defs/toolResult",
@@ -132,6 +132,11 @@
         "truncated": {
           "type": "boolean",
           "description": "True when output is the trimmed tail of a longer capture, absent entirely otherwise, the same convention preconditions.json's own smoke.truncated follows."
+        },
+        "outputFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The file holding the whole capture, untrimmed, relative to this record's own folder: baseline-output/suite-<framework>.txt. Present whenever the command actually ran. build-record's suite-regression check subtracts it line by line when this verdict is unmet, so a test red then and red now is not a regression; the trimmed `output` above is for a reader and is not enough to subtract from."
         }
       }
     },
@@ -172,6 +177,11 @@
         "truncated": {
           "type": "boolean",
           "description": "True when output is the trimmed tail of a longer capture, absent entirely otherwise."
+        },
+        "outputFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The file holding the whole capture, untrimmed, relative to this record's own folder: baseline-output/<check id>.txt. Present whenever the command actually ran. The tool check for this row subtracts it line by line when this verdict is unmet, so a finding already here is not one an order introduced; the trimmed `output` above is for a reader and is not enough to subtract from."
         },
         "signal": {
           "type": "string",

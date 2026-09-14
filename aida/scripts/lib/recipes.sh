@@ -233,7 +233,7 @@ recipe_block_into() {
 }
 
 # The entry being read, held between lines, the same reason PC_* is held between lines above.
-TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
 
 # Appends one JSON object to $1 for the held row and clears it, so a second call with nothing held
 # writes nothing. `argv` and `nearest` are read as JSON, through jq, never split by hand; a value
@@ -241,6 +241,9 @@ TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
 # `unreadable`, because a malformed row in a recipe is a defect worth reporting, not a reason to
 # report fewer rows than the recipe wrote. `absent` is a boolean fact, true whenever the row
 # carried an `absent:` key at all; its own folded prose is never read here, only its presence.
+# `failure_line` is a regular expression a suite row may declare, one per row: the lines of the
+# suite's output that name a failed test. It lands as `failureLine`, as written, quotes and all;
+# the caller that runs the row strips them, the way it strips a precondition's expected string.
 tc_flush_entry() {
   local out="$1"
   [ -n "$TC_ID" ] || return 0
@@ -263,15 +266,17 @@ tc_flush_entry() {
   fi
   jq -n --arg id "$TC_ID" --argjson argv "$argv_json" --arg cost "$cost" \
         --argjson absent "$([ "$TC_ABSENT" = "1" ] && printf true || printf false)" \
-        --argjson nearest "$nearest_json" --argjson unreadable "$unreadable" '
+        --argjson nearest "$nearest_json" --argjson unreadable "$unreadable" \
+        --arg failureLine "$TC_FAILURE_LINE" '
     {id: $id}
     + (if $argv       == null  then {} else {argv: $argv} end)
     + (if $cost       == ""    then {} else {cost: $cost} end)
     + (if $absent     == false then {} else {absent: true} end)
     + (if $nearest    == null  then {} else {nearest: $nearest} end)
+    + (if $failureLine == ""   then {} else {failureLine: $failureLine} end)
     + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
   ' >>"$out" || die 3 "preconditions: could not record the test-command row $TC_ID"
-  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
 }
 
 # Reads the `## Test commands` section of the recipe at $1, appending one JSON object per row to
@@ -282,26 +287,30 @@ tc_flush_entry() {
 # this function only reads what the recipe wrote.
 tc_parse_recipe() {
   local recipe_file="$1" out="$2"
-  local block_file line trimmed indent skip_indent
+  local block_file line trimmed indent skip_indent skip_key
 
   block_file="$out.tcblock"
   RECIPE_STATE="$(recipe_block_into "$recipe_file" "Test commands" "test_commands" "$block_file")"
   [ "$RECIPE_STATE" = "ok" ] || return 0
 
-  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""
-  skip_indent=-1
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
+  skip_indent=-1; skip_key=""
   while IFS= read -r line; do
     trimmed="$(pc_trim "$line")"
     # A folded scalar (`trap:`, `id_form:`, or `absent:`'s own text) continues on every following
     # line indented further than the key that opened it. Those lines are prose for a person and a
     # model reading the recipe itself; they are skipped here, never parsed as a new field or a new
     # row. A blank line inside or around the block stays in skip mode rather than ending it, since
-    # a folded scalar may carry a paragraph break.
+    # a folded scalar may carry a paragraph break. `failure_line:` is the one fold kept, the way
+    # cc_parse_recipe keeps `silent_pass:`, because its text is a value something runs.
     if [ "$skip_indent" -ge 0 ]; then
       [ -n "$trimmed" ] || continue
       indent="$(tc_indent "$line")"
-      if [ "$indent" -gt "$skip_indent" ]; then continue; fi
-      skip_indent=-1
+      if [ "$indent" -gt "$skip_indent" ]; then
+        [ "$skip_key" != "failure_line" ] || TC_FAILURE_LINE="${TC_FAILURE_LINE:+$TC_FAILURE_LINE }$trimmed"
+        continue
+      fi
+      skip_indent=-1; skip_key=""
     fi
     [ -n "$trimmed" ] || continue
     case "$trimmed" in
@@ -312,6 +321,11 @@ tc_parse_recipe() {
       'argv:'*)   TC_ARGV_RAW="$(pc_trim "${trimmed#argv:}")" ;;
       'cost:'*)   TC_COST="$(pc_trim "${trimmed#cost:}")" ;;
       'nearest:'*) TC_NEAREST_RAW="$(pc_trim "${trimmed#nearest:}")" ;;
+      'failure_line:'*)
+        TC_FAILURE_LINE="$(pc_trim "${trimmed#failure_line:}")"
+        case "$TC_FAILURE_LINE" in '>-'|'>'|'|-'|'|') TC_FAILURE_LINE="" ;; esac
+        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")"; skip_key="failure_line" ;; esac
+        ;;
       'absent:'*)
         TC_ABSENT=1
         case "$trimmed" in *'>-') skip_indent="$(tc_indent "$line")" ;; esac
@@ -697,7 +711,8 @@ CR_LOOKUP
 
 # The command one test-command row declares, as the object cr_resolve records. $1 the parsed rows,
 # $2 the row id to read, $3 a word for the message. Prints one of three shapes: a command, an
-# absent row with its own reason, or missing with why.
+# absent row with its own reason, or missing with why. A command carries the row's `failureLine`
+# when the row declared one.
 cr_row_command() {
   local rows="$1" row_id="$2" label="$3" row argv
   row="$(printf '%s' "$rows" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
@@ -718,7 +733,9 @@ cr_row_command() {
     jq -nc --arg r "$row_id" '{missing: ("the " + $r + " row declares no argv to run")}'
     return 0
   fi
-  jq -nc --argjson argv "$argv" --arg r "$row_id" '{row: $r, argv: $argv}'
+  jq -nc --argjson argv "$argv" --arg r "$row_id" \
+    --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" '
+    {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)'
 }
 
 
