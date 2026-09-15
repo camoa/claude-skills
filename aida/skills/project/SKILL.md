@@ -308,6 +308,14 @@ is fetched; a stage reads the folder the first time it needs something. Show the
 For `playbooks`, a catalog set is the other answer to the same question, and `subscribe-playbook`
 below declares one.
 
+For `processRecipes`, the folder holds `process-recipes/<framework>/<phase>.md`, where the phase
+is the word a stage asks for. The phases are `research`, `design`, `implement`, `test-authoring`,
+`test-execution`, `review`, `worktree-environment`, `e2e-setup` and `visual-regression`. The
+folder wins over the catalog for that kind, so a stage reads the file there and never asks the
+navigator for it. A person can copy a catalog recipe into that layout and edit it. For
+`toolingRecipes`, the folder holds `tooling-recipes/<framework>/<tool>.md`, and the tool skill
+reads it the same way.
+
 ## `subscribe-playbook <name-or-path> <framework> <set-id>`
 
 Subscribes the project to one catalog playbook set for one framework it declares. The set id is

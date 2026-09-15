@@ -21,8 +21,8 @@ URL.
 **Why you hold Bash.** The navigator's process-recipe lookup is a shell sequence. It revalidates
 the index, checks its own cache, and fetches a body with `curl` when the cache misses. The Skill
 tool loads the navigator's instructions into you. It does not run them. Without Bash you can read
-the steps and do none of them. Bash is for the navigator's lookup and for the one check on its
-answer below. Do not create, edit or delete any file with it.
+the steps and do none of them. Bash is for the folder-source resolver below, the navigator's lookup,
+and the one check on its answer. Do not create, edit or delete any file with it.
 
 Return two lists, kept apart:
 
@@ -39,9 +39,19 @@ Stop and say so when the navigator cannot be reached. That is different from the
 and finding nothing, and the two must never arrive as the same result.
 
 **When asked for one process-recipe point.** A step file may ask you for one phase and one
-framework, the same lookup implementation uses. The navigator answers with an `available` flag and,
-when false, sometimes a free-text reason. The step file's script needs one of three words, not the
-flag. Choose the word this way:
+framework, the same lookup implementation uses, and it names the project folder. The project's own
+folder source wins over the catalog, so run this first, once per phase and framework:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<project folder>" <phase> <framework>
+```
+
+One `RECIPE:` line means a recipe is on disk: answer `available` with that path, and name the
+`source=` folder as where it came from. Do not ask the navigator for that phase and framework. No
+line means no folder source holds one, and the lookup goes on to the navigator as below.
+
+The navigator answers with an `available` flag and, when false, sometimes a free-text reason. The
+step file's script needs one of three words, not the flag. Choose the word this way:
 
 - `available` is false, and no reason came back. No line matched the phase and framework. Answer
   `no-recipe`.

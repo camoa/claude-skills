@@ -42,11 +42,12 @@ A stage's offer names the kind in its invocation. Run by hand with no kind, ask 
 
 Dispatch `catalog-identifier`, naming the role, once per point. The points are `e2e-setup` for
 the `e2e` kind, `visual-regression` for the `visual-regression` kind, and `review` when a baseline
-is taken. Each dispatch names every framework the project records. A point is a point of AIDA's
-process, never a keyword search. Pass the answer in its own word, one flag per framework. A path on
-disk is `--recipe <framework>=<path>`. A failed lookup is `--lookup-failed <framework>=<word>`,
-with `no-recipe`, `listing-unreachable` or `fetch-failed`. Only the first word says anything about
-the framework. Never retype a command out of a recipe. The script reads the blocks.
+is taken. Each dispatch names every framework the project records and the project folder. A point
+is a point of AIDA's process, never a keyword search. Pass the answer in its own word, one flag per
+framework. A path on disk is `--recipe <framework>=<path>`. A failed lookup is
+`--lookup-failed <framework>=<word>`, with `no-recipe`, `listing-unreachable` or `fetch-failed`.
+Only the first word says anything about the framework. Never retype a command out of a recipe. The
+script reads the blocks.
 
 ## Show, then install
 

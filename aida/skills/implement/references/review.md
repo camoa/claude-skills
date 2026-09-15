@@ -6,7 +6,7 @@ finds, and closes the order once nothing actionable is left open.
 ## Resolve the recipe for this step
 
 Dispatch `catalog-identifier` for the `test-execution` point and the `review` point, both for this
-order's framework. Name the role, per SKILL.md. These are the same two files
+order's framework, naming the project folder. Name the role, per SKILL.md. These are the same two files
 `references/build.md` already resolved for this order, and `references/preconditions.md` resolved
 for the baseline. Pass both paths straight through to `fix-record` below, in the fix section; the
 script reads their command blocks itself, per SKILL.md.

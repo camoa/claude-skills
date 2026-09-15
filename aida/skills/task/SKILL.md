@@ -75,8 +75,8 @@ entry, go on to step 5.
 **5. Offer the site.** Runs here when this window entered the tree, and at `start` otherwise. A
 worktree has the branch's files and no site, so a review or a baseline taken there would capture
 the served checkout instead. Dispatch `catalog-identifier` once for the `worktree-environment`
-point, naming every framework the project records, the same words the surfaces skill uses for
-its points. When the project record has `surfaces.e2e.enabled` or
+point, naming every framework the project records and the project folder, the same words the
+surfaces skill uses for its points. When the project record has `surfaces.e2e.enabled` or
 `surfaces.visualRegression.enabled`, name `e2e-setup` or `visual-regression` in the same
 dispatch, so `up` can install that harness in the tree. Pass the answer as
 `--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one flag per framework,

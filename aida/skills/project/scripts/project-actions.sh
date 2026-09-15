@@ -85,6 +85,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-frameworks <name-or-codePath> <framework>...
        project-actions.sh git-init <name-or-codePath>
        project-actions.sh add-source <name-or-codePath> <kind> <folder>
+       project-actions.sh recipe-source <projectFolder> <phase> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unregister <name-or-codePath>
@@ -765,6 +766,46 @@ do_add_source() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# recipe-source: the process recipe a project's own folder source holds for one phase
+# ------------------------------------------------------------------------------------------------
+
+# Walks `sources` for the folder entries whose `provides` holds processRecipes, in that kind's
+# `precedence` order. Prints the first `<folder>/process-recipes/<framework>/<phase>.md` on disk
+# as one line, `RECIPE: <path> source=<folder>`. A caller runs this before it asks the
+# navigator, so the project's own recipe wins over the catalog per kind (project-schema.json,
+# precedence). Version 5 resolved local recipes first on every miss; version 6 recorded the source
+# and read nothing until this action. The phase is the catalog's own word, so a folder keys on
+# what a stage asks for. No sources, no folder, no file: prints nothing and exits 0, because a
+# miss is the ordinary outcome and the catalog is the fallback. Takes the project folder, not a
+# registry target, so a worktree session with no registry can run it as one plain command.
+do_recipe_source() {
+  local project_path="${1:?recipe-source: a project folder is required}"
+  local phase="${2:?recipe-source: a phase is required}"
+  local fw="${3:?recipe-source: a framework is required}"
+  case "$phase" in
+    research|design|implement|test-authoring|test-execution|review|worktree-environment|e2e-setup|visual-regression) : ;;
+    *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
+  esac
+  [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
+  local loc cand
+  while IFS= read -r loc; do
+    [ -n "$loc" ] || continue
+    cand="$loc/process-recipes/$fw/$phase.md"
+    if [ -f "$cand" ]; then
+      echo "RECIPE: $cand source=$loc"
+      return 0
+    fi
+  done <<RS_SOURCES
+$(jq -r '
+    (.sources // [])
+    | map(select(.locationType == "folder" and ((.provides // []) | index("processRecipes"))))
+    | sort_by(.precedence.processRecipes // 999)
+    | .[].location' "$project_path/project.json")
+RS_SOURCES
+  return 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # subscribe-playbook and unsubscribe-playbook: the one writer of playbookSubscriptions
 # ------------------------------------------------------------------------------------------------
 
@@ -1073,6 +1114,7 @@ case "$action" in
   set-frameworks) do_set_frameworks "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
+  recipe-source) do_recipe_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
   unregister) do_unregister "$@" ;;

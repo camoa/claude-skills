@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
 ---
 
 # Design
@@ -21,8 +21,9 @@ orders that build it.
 Design's own records go through `design-actions.sh`, named in this skill's own grant, so they run
 without asking. One write below goes elsewhere. A lookup is recorded through the research skill's
 `research-actions.sh`, because that script is the single producer of a research finding, and it is
-named in the grant too. Any other Bash command still asks for approval. Dispatching an agent needs
-no approval either; it is also named in this skill's own grant.
+named in the grant too. So is the project skill's `recipe-source` lookup. Any other Bash command
+still asks for approval. Dispatching an agent needs no approval either; it is also named in this
+skill's own grant.
 
 ## Determine the run mode
 
@@ -84,11 +85,15 @@ this project's own conventions; this is where design quality shows.
 
 ## Read the process recipe for this project's framework
 
-Ask the navigator's process-recipe lookup for this project's framework at the design stage. It
-answers whether one is available and, when it is, a path to the body on disk. Read the body from
-that path. Never fetch a catalog address yourself and never read a cached copy behind the
-navigator's back. A source this project configured itself, a folder of its own, is read the
-ordinary way.
+The project's own folder source wins over the catalog, so ask it first, once per framework:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" design <framework>
+```
+One `RECIPE:` line names the body on disk and the `source=` folder it came from; take that path
+and skip the navigator. No line means no folder source holds one. Then ask the navigator's
+process-recipe lookup for this project's framework at the design stage. It answers whether one is
+available and, when it is, a path to the body on disk. Read the body from that path. Never fetch a
+catalog address yourself and never read a cached copy behind the navigator's back.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 

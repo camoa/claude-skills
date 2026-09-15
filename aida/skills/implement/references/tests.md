@@ -9,8 +9,8 @@ that reference outside the thing it judges.
 ## Resolve the recipes for this step
 
 Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup twice, for each
-framework the project declares. Name the role, and pass the lookup's answer in its own word:
-SKILL.md holds both rules.
+framework the project declares, naming the project folder. Name the role, and pass the lookup's
+answer in its own word: SKILL.md holds both rules.
 
 **The `test-authoring` point.** This answers where a test file goes, which levels exist and when
 each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
