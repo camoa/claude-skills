@@ -16,16 +16,16 @@ turn; run `/aida:project` yourself for the full report, or to create, switch, or
 
 A project is three things:
 
-- **A folder**, holding a state file and a notes file. The state file holds every fact a
-  script reads: the code path, the name, the frameworks, the lifecycle state, and settings
-  that start empty and fill in as later stages run. The notes file is yours; nothing ever
-  parses it.
+- **A folder**, holding the project file, `project.json`, and a prose file, `project_state.md`.
+  The project file holds every fact a script reads: the code path, the name, the frameworks,
+  the lifecycle state, and settings that start empty and fill in as later stages run. The
+  prose file is yours; nothing ever parses it.
 - **An entry in AIDA's own list**, mapping the code path to that folder. This is how a
   session in a different working directory still finds the right project. The entry copies
   the name, the last-used date, and the lifecycle state, so those three questions never
   need thirty-one files opened to answer them.
-- **A git repository of its own.** Every project gets one. It tracks text: the state file,
-  the notes, and the small records each stage writes. It ignores everything else by
+- **A git repository of its own.** Every project gets one. It tracks text: the project file,
+  the prose file, and the small records each stage writes. It ignores everything else by
   default, so a new kind of file is left out, not silently let in. If something got ignored
   that should have been tracked, the check names it.
 
@@ -35,9 +35,9 @@ exists there. A project covers one code path; two plugins living in one reposito
 projects, each registered by its own path, and work done in one never turns up in the
 other.
 
-The state file is the truth about a project. The list is an index built from copies of what
-the state file says, kept only so a directory or a name can be resolved without opening
-every project's own file. When the two disagree, the state file wins, and the check says so
+The project file is the truth about a project. The list is an index built from copies of what
+the project file says, kept only so a directory or a name can be resolved without opening
+every project's own file. When the two disagree, the project file wins, and the check says so
 rather than picking one quietly.
 
 ## Creating a project
@@ -62,18 +62,22 @@ The name is always asked. Deriving it from the code folder would save one questi
 a collision problem the moment two projects share a folder name, so this is the one fact
 creation never infers.
 
-Once every fact is known, AIDA writes the project's state file with defaults for everything
+Once every fact is known, AIDA writes the project file with defaults for everything
 else, adds the project to its own list, and turns the project folder into a git repository.
 Then the check runs once. If the code already exists on disk, the check normally has
 nothing to report. If it does not exist yet, the check says so, and that is expected for a
 fresh project, not a problem.
 
 Creation then asks two more things, once each. The first is whether to add the task rule to
-your repository's `CLAUDE.md`. The second is where playbooks come from: a catalog set per
-framework, or a folder of your own. A no is not asked again. Later stages fill in the rest as
-they run: which recipe each stage adopted, which other sources answer for which kind of
-content, whether visual regression or end-to-end testing is set up, and whether a memory hook
-is installed. Each of those is filled in by the stage that first needs it.
+your repository's `CLAUDE.md`: a short block saying that work which produces findings or
+decisions belongs in a task, and a small fix does not. The second is where playbooks come from:
+a catalog set per framework, or a folder of your own. Creation offers the folder, but nothing
+loads one today; [Where content comes from](sources.md#using-your-own-folder-instead-of-the-catalog)
+says what loads. A no is not asked again. Later stages fill in the rest as they run: which
+recipe each stage adopted, which other sources answer for which kind of content, and whether
+visual regression or end-to-end testing is set up. Each of those is filled in by the stage that
+first needs it. The session-start hook ships with the plugin and needs no installer; what it
+prints is on [Carrying work across sessions](continuity.md#what-a-new-session-is-told).
 
 **Safety on the code path.** This value is the root for everything AIDA later does against
 your disk: worktrees, harness installs, the task rule, prior-art search. A path naming a
@@ -160,7 +164,7 @@ reversible: reopening is another write, in either file.
   worse than one that says this project is archived, but it stays out of your project list
   unless you ask to see archived ones too.
 
-The state file is authoritative for this value; the list carries a copy, so it can be shown
+The project file is authoritative for this value; the list carries a copy, so it can be shown
 without opening every project's own file, and the reason for a change lives in the commit
 that made it, never in the state value itself.
 
@@ -185,13 +189,13 @@ one was installed. It never touches tests, test configuration, or any tooling. A
 scaffolded, once it lands, belongs to the code the same way a linter does, and removing it
 would be deleting your tests rather than tidying up after AIDA.
 
-The memory hook has no installer yet in this build. Uninstalling reports what it would remove,
-the primer, its script copy, and the settings entries, once that installer exists; today it
-touches none of them, since none of them exist to touch.
+The session-start hook ships with the plugin, so nothing installs it into your repository and
+uninstalling leaves it alone. What it prints is on
+[Carrying work across sessions](continuity.md#what-a-new-session-is-told).
 
-Cleanup is usually plural, once a project list carries a real last-used date and a real
-state: a project whose code path is gone, a duplicate entry, and one you have registered but
-never actually opened are the three cases worth finding at once rather than one at a time.
+`/aida:project list`, with one or more states to filter by, prints every registered project,
+most recently used first, and says whether each code path still exists. A project whose code
+path is gone is named to you, never acted on alone.
 
 ## Interactive and autonomous work
 
@@ -231,8 +235,11 @@ from anywhere else, until it first needs a guide or a recipe and finds no source
 that kind. Research loads the playbooks once, at its start, and every later
 stage reads that record. Pointing a kind at your own source instead, a local folder or a site
 you trust, makes that source win over the catalog for that kind.
-You can set this per kind, per stage, and per framework: a team's own method for one stage
-can stand alongside the catalog's answer for every other stage.
+You set this per kind: `add-source` takes a kind and a folder, and a team's own recipes for
+one kind can stand alongside the catalog's answer for every other kind. A folder holds process
+recipes or tooling recipes, each in a fixed layout;
+[Where content comes from](sources.md#using-your-own-folder-instead-of-the-catalog) says what a
+folder can hold.
 
 **Which playbooks apply is its own decision, separate from where they are found.** A source
 says where playbooks can be found; subscribing to one is a standing choice, recorded per
@@ -249,7 +256,8 @@ source the project declared to answer. Research loads the playbooks once, at its
 stage ever reaches is never paid for.
 
 A source that is a folder is read as a directory listing. The hosted catalog is read through
-the guides navigator. A site or a live search can fail, or return nothing, and what either
-returns was written by nobody you configured: a body from a source you configured is used
-directly, and a body from an open search is shown to you before it is used, because that is
-the one place a model's own find enters the process as if it were an authority.
+the guides navigator. An open web search can fail, or return nothing, and what it returns was
+written by nobody you configured. A body from a source you configured is used directly. A
+finding from an open search is recorded as coming from a source this project never accepted,
+and design reads it as not binding, because that is the one place a model's own find would
+enter the process as if it were an authority.
