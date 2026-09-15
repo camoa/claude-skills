@@ -2,8 +2,8 @@
 
 A playbook is a set of rules you want followed on your projects: do it this way, not that
 way. Each rule carries the reason and where it applies. AIDA loads the rules once per task
-and puts them in front of every role that writes or judges code. Version 5 counted the rules
-and never showed one to the model; version 6 shows them, and the reviewer reports each one
+and puts them in front of every role that writes or judges code. A rule counted and never shown
+to the model is not followed, so AIDA shows them, and the reviewer reports each one
 contradicted.
 
 ## The three sources
@@ -12,10 +12,10 @@ Plays come from three places, in precedence order:
 
 1. **Your own file**, `~/.claude/aida/playbook.md`. Your preferences, on every project.
 2. **The project's file**, `<project folder>/playbook.md`. What this project decided.
-3. **Catalog sets**, one per framework the project declares, recorded in the project's
-   state file under `playbookSubscriptions`. A set is a catalog topic marked as a playbook,
-   one guide per rule, published with a `plays.json` that lifts each guide's rule, rationale
-   and scope out. The entry is the play; the guide is the detail.
+3. **Catalog sets**, one per framework the project declares, recorded in the project file,
+   `project.json`, under `playbookSubscriptions`. A set is a catalog topic marked as a
+   playbook, one guide per rule, published with a `plays.json` that lifts each guide's rule,
+   rationale and scope out. The entry is the play; the guide is the detail.
 
 The loaded record lists the plays in that order, your file first. A role reading it meets
 your own rules before the project's and the catalog's.
@@ -94,7 +94,7 @@ naming the play id and the file and line.
 Review's framework practices check has a floor. It reads `unknown`, never `met`, when the
 record is absent, or when no source loaded while a subscription or a playbook file exists.
 A missing load means the check did not run, not that there was nothing to follow. The
-repair is running `playbooks load` on the task.
+repair is running `/aida:research <task-id>` again, which loads the playbooks at its start.
 
 ## Autonomous runs
 

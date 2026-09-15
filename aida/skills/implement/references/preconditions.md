@@ -8,11 +8,11 @@ once per build, not once per work order.
 Read the project's own `frameworks`. A `project.json` recording none refuses outright (exit 77):
 no recipe can be chosen for a project the run cannot name a framework for. For each framework,
 dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `test-execution`
-point and that framework. It answers whether one is available and, when it is, a path to the body
-on disk. Name the role, and pass the lookup's answer in its own word: SKILL.md holds both rules.
-The role identifies and returns a path, and it never opens the body. Never fetch a catalog address
-yourself and never read a cached copy behind the navigator's back. A source this project configured
-itself, a folder of its own, is read the ordinary way and wins over the catalog.
+point and that framework, naming the project folder. It answers whether one is available and, when
+it is, a path to the body on disk. Name the role, and pass the lookup's answer in its own word:
+SKILL.md holds both rules. The role identifies and returns a path, and it never opens the body.
+Never fetch a catalog address yourself and never read a cached copy behind the navigator's back.
+The role reads a folder source this project configured itself first, so it wins over the catalog.
 
 Dispatch `catalog-identifier` once more, for the `review` point and each framework. This is a
 second recipe, never the same file as the `test-execution` one above. Pass its path straight

@@ -5,11 +5,11 @@ reference now. Nothing below may change one.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` for the `implement` point and each framework, but only when no
-earlier step of this build has resolved it, the tests step included. Name the role, and pass the
-lookup's answer in its own word: SKILL.md holds both rules. Once resolved, reuse the path per
-framework for every order in this build. No record holds these paths. They live in the
-conversation, so a fresh window resolves them again.
+Dispatch `catalog-identifier` for the `implement` point and each framework, naming the project
+folder. Skip it when an earlier step of this build has resolved it, the tests step included. Name
+the role, and pass the lookup's answer in its own word: SKILL.md holds both rules. Once resolved,
+reuse the path per framework for every order in this build. No record holds these paths. They
+live in the conversation, so a fresh window resolves them again.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.

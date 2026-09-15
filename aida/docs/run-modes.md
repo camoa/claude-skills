@@ -1,8 +1,213 @@
 # Run modes
 
-Covers the two ways a task runs. Interactive asks you. Autonomous decides and records what it
-decided, and stops rather than taking a step it cannot undo with nobody present. Covers how a task
-gets its mode and what changes in each stage.
+A task runs in one of two modes. Interactive means you are present and AIDA asks you.
+Autonomous means nobody is present. AIDA then takes the recommended answer where one exists,
+records that it did, and stops at any step it cannot take without you. This page covers what
+each mode is and how you set it. It covers the one rule that governs an autonomous run and
+what differs in each stage. It ends with what to read when you come back to a run that happened
+without you.
 
-**Not written yet.** It is written when the task part is built. Until then this page is a placeholder, and
-nothing in it is a promise.
+## The two modes
+
+**Interactive** is the default. Every question a stage has goes to you, with a recommended
+answer beside it, and the stage waits. At the end of each stage AIDA names the next command
+and stops. You type it when you are ready.
+
+**Autonomous** is for a task you want to run end to end without answering. Every question a
+stage would ask has an autonomous branch, and every branch is written down rather than assumed.
+At the end of each stage AIDA invokes the next one itself. Each stage refuses to start without
+the record the previous stage wrote, which is why the chain cannot run out of order. One
+command can carry the task from scope to completion. The chain ends early at implementation
+when any work order halts, because implementation cannot finish until every order is closed.
+The way past is answering the halt and running `/aida:implement <task-id>` again.
+
+The mode belongs to the task, never to the project. A project keeps no mode of its own, and two
+tasks in one project can carry different modes.
+
+## Setting the mode
+
+Set it once, on the task, before you start the run:
+
+```
+/aida:task set-run-mode <task-id> autonomous
+```
+
+That writes one field into the task's `task.json`. Nothing else ever writes it: no stage asks
+whether you would like an autonomous run, and no stage proposes one. To go back, run the same
+command with `interactive`. That removes the field, because an absent field already means
+interactive. A task that has never been given a mode is interactive, the safer of the two
+guesses when nobody said otherwise.
+
+Set it once and before the build, not per stage. Implementation copies the mode into its ledger
+when the build starts, and review reads the ledger's copy, so a mode changed mid-build reaches
+neither. Then invoke the stage the task is at, `/aida:scope <task-id>` for a new task, and let
+it run.
+
+A task can carry a ceiling on its build, in either mode. Add `budget` to the task's `task.json`
+by hand, with `dispatches` or `minutes` or both. Implementation recomputes the spend from its
+own records before every dispatch, so nothing a builder writes can reset it. Reaching either
+number halts the order that was about to be dispatched. No budget means no ceiling; the
+per-order limits on attempts still hold either way.
+
+## The one rule
+
+An autonomous run surfaces milestones and halts at an irreversible step rather than assume
+consent. Silence is never a yes.
+
+Every question a stage would put to you lands in one of three places, and the record says
+which:
+
+- **Decided for you, and recorded as such.** Where the question has a recommended answer, the
+  run takes it and writes down that it did. A criterion scope drafted stays marked as drafted by
+  the designer, never promoted to yours, because nobody approved it.
+- **Not done, and recorded as not done.** Where the question is an offer, the run makes no
+  offer and records that none was made. Nothing is switched on, installed, or written into your
+  repository on a guess.
+- **Halted.** Where the step changes something you could not easily undo, or where the answer
+  is yours alone to give, the run stops that piece of work and records why. One halt does not
+  stop the build: only the orders that depend on the halted one wait. Every other order that is
+  ready still builds, and the run ends when nothing is ready.
+
+The reason for the third kind is simple. A model ruling that a test is wrong, with nobody
+watching, is the test describing the code again. Where a person's judgement is the whole point of
+a step, a model standing in for them silently would remove the checkpoint with nobody noticing.
+So AIDA halts there. Where it does substitute a model's judgement, the record marks the result
+as the model's so you can find it later.
+
+## What differs in each stage
+
+Each stage's own page describes its process. This section names only the point where the mode
+changes what happens.
+
+### Picking up and creating a task
+
+`/aida:next` runs before any task is active, so it has no task mode to read. Nothing marks a
+session unattended before a task is active, so it asks. Its unattended branch, with several
+tasks open, lists them and stops rather than choosing one, because a guess there would bind
+every later step. With nothing open it says a task is needed and continues, rather than
+recording a refusal nobody made. Creating a task without a name or a goal halts: those are the
+two facts nothing can invent. See [a task](task.md).
+
+### Scope
+
+Scope drafts the whole contract, renders it, and would then ask what is wrong. Autonomously it
+takes the draft as it stands and takes the recommended answer on each non-goal it raises. It
+records every one of those decisions in the contract as made on your behalf. It renders the
+document for the record but promotes no criterion to approved. The offer to set up visual or
+end to end tests is not made. Scope then invokes research. See [scope](scope.md).
+
+### Research
+
+Research asks almost nothing in either mode, so little changes. A process recipe that does not
+fit the task is recorded as not fitting and used anyway, where interactively you would choose.
+A framework with no recipe gets a note in the finding, never an invented rule. When the split
+advisor recommends splitting the task, the run records the recommendation and stays flat; a
+split is yours to accept. Research then invokes design. See [research](research.md).
+
+### Design
+
+Design decides for you at several moments, and each is recorded in a stated place.
+
+A process recipe that does not fit the task is used anyway, and the close records that it did
+not fit. When no recipe exists for the framework, nothing asks whether to write one; every
+order is marked as written without framework input.
+
+A decision to replace existing code, rather than reuse or extend it, is downgraded to extend,
+with the reason written into the work order. Every reuse decision is then checked by a
+read-only confirmer that reads only the written reasoning and the files it cites, never the
+conversation. Its verdict is appended to the order.
+
+A criterion nobody wrote, or one that cannot be built as stated, is recorded in the order's
+own reasoning and the run continues. Interactively that goes to you, and to scope's update
+path when the contract has to change.
+
+Whether each criterion's owning order will really produce the outcome is a judgement. The run
+does not skip it and does not mark it passed. It states, once, in the conversation, that
+ownership was judged by shape only, and names the criteria that leaves unconfirmed. Nothing
+writes that list down; the review stage tests those criteria later.
+
+The design critique's findings are recorded, with their count and their paths, and not judged.
+The close record says nobody was present. Design then invokes implementation. See
+[design](design.md).
+
+### Implementation
+
+This is where the halts live, because the build is where a wrong guess costs the most.
+
+The tests for each work order go through a checker in both modes. It reads the criterion, the
+recipe, and the tests, never the code, and confirms or rejects each row. Interactively you are
+asked only about a row it rejected. Autonomously a rejected row halts that order, with the
+checker's note as the reason. Every confirmed row is recorded as judged by a model, and the
+finished record counts those rows so you can list them later.
+
+An order halts, and records what was left, at each of these points. A precondition is unmet or
+could not be checked. The builder stops at a test that seems wrong or an interface that does not
+fit. A review finding hits a non-goal. A finding is still open when the fix rounds run out. A
+fixer reports its scope was too small. The tree is not clean when a step expected a commit. The
+attempts or the budget run out. The design changed after the order started. Interactively each
+of those goes to you instead.
+
+Nothing grants an extra attempt, raises a budget, or restarts an order against a changed design
+without you: each refuses on an autonomous run. Whether the built interface matches its
+declaration is left to the reviewer alone, and the report says nobody ruled on it. When every
+order closes, implementation invokes review. See [implementation](implementation.md).
+
+### Review
+
+Review runs its checks the same way in both modes. What changes is everything that needs a
+person's eyes. A criterion a person verifies reads unanswered. The walk of the surfaces is
+recorded as not done, so the checks that depend on it read unknown. No new baseline is written,
+and the refusal is recorded. A finding that cites neither a criterion nor a non-goal is recorded
+and no follow-up task is offered. No surface setup is offered.
+
+A run with nobody present cannot sign off a task that carries even one person-verified
+criterion. This is intended: a check that could not run has established nothing. Review then
+invokes completion. See [review](review.md).
+
+### Completion
+
+Completion closes a task on a passed review and on nothing else. Any other verdict halts, and
+the run says a person closes this task with a reason. Every follow-up finding without a task
+gets one, because a task changes the contract least and nobody has to name it. The saved notes
+are not offered as plays, and the record says the offer was skipped. See
+[finishing a task](finishing.md).
+
+### Setting up a tool or a test surface
+
+Installing a tool or a test harness changes your repository, so it waits for a plain yes. With
+nobody there to give one, it halts. No surface is enabled and no baseline is written on an
+autonomous run. See [visual and end-to-end tests](testing.md).
+
+## Coming back to an autonomous run
+
+Read the session start line first. With exactly one task in progress it names the task, its
+stage, and `Run mode: autonomous` when that is what it is. Otherwise it points you at
+`/aida:next`. Run `/aida:next <task-id>`: it says where the task stands and names the stage
+command to run. Every stage begins by printing a summary of its own records before it does
+anything else. Implementation's summary is the one that names halted orders and the reason each
+halt holds.
+
+Then look for the decisions that were made for you. Each stage leaves them in its own record,
+marked as taken without a person:
+
+- **Scope** lists every question it answered on your behalf in the contract. Every criterion
+  it drafted is still marked as the designer's, not yours.
+- **Research** records a recipe that did not fit, and a split recommendation it did not act
+  on. Deciding the split is still open.
+- **Design** records who was present at the close. Each order's reasoning holds the reuse
+  decisions with the confirmer's verdict appended, and any criterion nobody wrote or that could
+  not be built as stated. The critique findings sit unjudged beside the close record. The
+  criteria whose ownership nobody confirmed were said once in the run and written nowhere. So
+  read the close record for who was present, and the orders' reasoning for what was decided by
+  shape.
+- **Implementation** holds each halt with its reason in its ledger, and the two recorded
+  attempts behind an exhausted one. A halted run has no finished record yet. Once every order
+  closes, `implementation/finished.json` counts the rows a model judged rather than a person.
+  Those are the rows nobody read, and you can re-judge any of them.
+- **Review** lists the criteria that read unanswered and the checks that read unknown because
+  the walk was not done. The task has no sign off until you answer them.
+- **Completion** either closed the task on a passed review, or halted naming the verdict for you
+  to give the reason.
+
+A halt is not a failure. It is the run saying that the next step was yours. The record is what
+lets you take it without re-reading a conversation you were not in.

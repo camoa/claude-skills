@@ -2,7 +2,7 @@
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -293,20 +293,33 @@ Sets the stack by hand, for a project whose code path the detector did not recog
 Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
 the list into the project file, commits the change, and runs the check. Show the whole output.
 
-## `add-source <name-or-path> <kind> <folder>`
+## `add-source <name-or-path> <kind> <folder | catalog>`
 
-Declares one folder as where this project's content of one kind comes from. The kind is one of
-`guides`, `playbooks`, `processRecipes`, `agenticRecipes` or `toolingRecipes`. A new project
-declares no source, so a stage that needs a kind and finds none declared asks for one here. Run:
+Declares one folder, or the hosted catalog, as where this project's content of one kind comes
+from. The kind is one of `guides`, `playbooks`, `processRecipes`, `agenticRecipes` or
+`toolingRecipes`. A project that declares nothing for a kind gets the catalog for it. A project
+that declares a folder for a kind has named its source. The catalog then answers for that kind
+only when it is declared too, with the word `catalog` in place of the folder. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   add-source "<target>" <kind> "<folder>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  add-source "<target>" <kind> catalog
 ```
-It writes one entry, ranked first for that kind. A second call for the same folder adds the kind
-to that entry rather than writing a second one. It commits the change and runs the check. Nothing
-is fetched; a stage reads the folder the first time it needs something. Show the whole output.
-For `playbooks`, a catalog set is the other answer to the same question, and `subscribe-playbook`
-below declares one.
+Each new source for a kind takes the next rank, so the order they are declared in is the order
+a stage asks them. A second call for the same folder adds the kind to that entry rather than
+writing a second one. It commits the change and runs the check. Nothing is fetched; a stage
+reads the folder the first time it needs something. Show the whole output. For `playbooks`, a
+catalog set is the other answer to the same question, and `subscribe-playbook` below declares one.
+
+For `processRecipes`, the folder holds `process-recipes/<framework>/<phase>.md`, where the phase
+is the word a stage asks for. The phases are `research`, `design`, `implement`, `test-authoring`,
+`test-execution`, `review`, `worktree-environment`, `e2e-setup` and `visual-regression`. A stage
+reads the file there and does not ask the navigator. A phase with no file in any declared folder
+is a phase with no recipe, and the stage takes its no-recipe path. To keep the catalog behind
+your folder, declare it too: `add-source <target> processRecipes catalog`. A person can copy a
+catalog recipe into that layout and edit it. For `toolingRecipes`, the folder holds
+`tooling-recipes/<framework>/<tool>.md`, and the tool skill reads it the same way.
 
 ## `subscribe-playbook <name-or-path> <framework> <set-id>`
 

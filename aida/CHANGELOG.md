@@ -4,6 +4,25 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.11] - 2026-09-15
+
+### Added
+- A process recipe resolves from the project's own folder source. `add-source <name>
+  processRecipes <folder>` had recorded a source nothing read. `project-actions.sh
+  recipe-source <project folder> <phase> <framework>` walks the sources providing process
+  recipes in declared order and answers the first `process-recipes/<framework>/<phase>.md` that
+  exists. A declared folder is the source for that kind, so a miss is `none`, naming the folders
+  searched, and the stage takes its no-recipe path; the catalog answers only when the project
+  declares nothing for the kind, or declares it too with `add-source <name> processRecipes
+  catalog`, in its own rank. Each new source takes the next rank. The identifier and the
+  research and design lookups run it before the navigator, and every dispatch line hands the
+  identifier the project folder. Version 5 resolved a local recipe on every miss; the rewrite
+  had kept the recording and dropped the reading.
+- The ten documentation pages that were placeholders are written: scope, research, design,
+  implementation, review, finishing, run modes, sources, testing and continuity. Each was
+  written from its skill and read against it by someone who did not write it. Where the plugin
+  lacks a path, the page says so.
+
 ## [6.0.0-beta.10] - 2026-09-14
 
 Live-run rows 43 to 72, and the defects found picking a version 5 project up on another machine.

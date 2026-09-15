@@ -3,7 +3,7 @@ name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
 ---
 
 # Research
@@ -23,9 +23,9 @@ not a finding, and the model's own recall is never the answer, only a lead worth
 one search.
 
 Every write below goes through `research-actions.sh`, or `playbook-actions.sh` for the playbook
-load. Both are named in this skill's own grant, so they run without asking. Any other Bash
-command still asks for approval. Dispatching an agent needs no approval either; it is also named
-in this skill's own grant.
+load. Both are named in this skill's own grant, so they run without asking, and so does the
+project skill's `recipe-source` lookup. Any other Bash command still asks for approval.
+Dispatching an agent needs no approval either; it is also named in this skill's own grant.
 
 ## Determine the run mode
 
@@ -229,10 +229,19 @@ Everything published in the catalog is read through the navigator: guides, tooli
 process recipes, agentic recipes. Research never fetches a catalog address itself and never reads
 a cached copy directly.
 
-**A process recipe is looked up, never searched.** Ask the navigator's process-recipe lookup for
-this project's framework at the research stage. It answers with whether one is available and, when
-it is, a path to the body on disk. Read the body from that path. The body is never streamed into
-the conversation, which is what keeps a recipe affordable.
+**A process recipe is looked up, never searched.** The project's own sources answer before the
+catalog, so ask them first, once per framework:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" research <framework>
+```
+It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
+navigator. `RECIPE: none searched=<folders>`: the project named its own folders for process
+recipes, and none holds this phase. The navigator is not asked. Take the no-recipe path below,
+and record the folders searched beside it, so a later reader can tell this miss from a catalog
+miss. `RECIPE: catalog`, or no line: ask the navigator's process-recipe lookup for this
+project's framework at the research stage. It answers with whether
+one is available and, when it is, a path to the body on disk. Read the body from that path. The
+body is never streamed into the conversation, which is what keeps a recipe affordable.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 
@@ -249,9 +258,9 @@ about the framework. Record which one happened, in those words. Treating the sec
 as "this framework has no recipe" writes a false finding that nothing later can tell from a true
 one.
 
-**A source this project configured itself is read directly.** The navigator serves the published
-catalog. A project pointing at its own folder is a different source and research reads it the
-ordinary way.
+**A source this project configured itself is read through `recipe-source`.** The navigator serves
+the published catalog. A project pointing at its own folder is a different source, and the command
+above is how research reads it.
 
 ## What a found recipe means
 

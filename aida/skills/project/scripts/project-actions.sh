@@ -84,7 +84,8 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-code-path <name-or-codePath> <newCodePath>
        project-actions.sh set-frameworks <name-or-codePath> <framework>...
        project-actions.sh git-init <name-or-codePath>
-       project-actions.sh add-source <name-or-codePath> <kind> <folder>
+       project-actions.sh add-source <name-or-codePath> <kind> <folder|catalog>
+       project-actions.sh recipe-source <projectFolder> <phase> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unregister <name-or-codePath>
@@ -726,30 +727,41 @@ do_git_init() {
 do_add_source() {
   local target="${1:?add-source: a name or a code path is required}"
   local kind="${2:?add-source: a kind is required}"
-  local folder="${3:?add-source: a folder is required}"
+  local folder="${3:?add-source: a folder, or the word catalog, is required}"
   case "$kind" in
     guides|playbooks|processRecipes|agenticRecipes|toolingRecipes) : ;;
     *) die3 "add-source: kind must be one of guides, playbooks, processRecipes, agenticRecipes or toolingRecipes, got: $kind" ;;
   esac
-  [ -d "$folder" ] || die3 "add-source: not a folder: $folder"
-  folder="$(canon_path "$folder")"
+  # The literal word `catalog` declares the hosted catalog as a source for this kind, behind the
+  # folders declared before it. A folder declared for a kind names the source for that kind
+  # (project-schema.json, sources). The catalog then answers only when declared too.
+  local loc_type="folder"
+  if [ "$folder" = "catalog" ]; then
+    loc_type="catalog"; folder="dev-guides"
+  else
+    [ -d "$folder" ] || die3 "add-source: not a folder: $folder"
+    folder="$(canon_path "$folder")"
+  fi
 
   local match project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
+  # A new source for a kind takes the next precedence number. The order sources are declared in
+  # is the order a stage asks them, and a second folder never ties with the first.
   write_project_field "$project_path" "could not update sources in $project_path/project.json" \
-    --arg loc "$folder" --arg kind "$kind" '
+    --arg loc "$folder" --arg kind "$kind" --arg type "$loc_type" '
     .sources = ((.sources // []) as $s
+      | ((([$s[] | .precedence[$kind] // empty] | max) // 0) + 1) as $next
       | if any($s[]; .location == $loc) then
           $s | map(if .location == $loc
                    then .provides = ((.provides + [$kind]) | unique)
-                        | .precedence = ((.precedence // {}) + {($kind): (.precedence[$kind] // 1)})
+                        | .precedence = ((.precedence // {}) + {($kind): (.precedence[$kind] // $next)})
                    else . end)
         else
-          $s + [{location: $loc, locationType: "folder", provides: [$kind],
-                 answersFor: {extent: "everything"}, precedence: {($kind): 1}}]
+          $s + [{location: $loc, locationType: $type, provides: [$kind],
+                 answersFor: {extent: "everything"}, precedence: {($kind): $next}}]
         end)'
 
   commit_project "$project_path" \
@@ -762,6 +774,59 @@ do_add_source() {
 
   echo "SOURCE: ${folder} provides ${kind}"
   run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
+# recipe-source: the process recipe a project's own folder source holds for one phase
+# ------------------------------------------------------------------------------------------------
+
+# Walks `sources` whose `provides` holds processRecipes, in that kind's `precedence` order, and
+# prints one line a caller reads before it asks the navigator. A folder entry is probed for
+# `<folder>/process-recipes/<framework>/<phase>.md`; the first on disk answers
+# `RECIPE: <path> source=<folder>`. A catalog entry answers `RECIPE: catalog`: ask the navigator
+# now, the sources before it held nothing. A walk that ends on folders alone answers
+# `RECIPE: none searched=<folders>`. The project named its own sources for this kind and none
+# holds this phase, so the catalog is not asked. The rule is the schema's (project-schema.json,
+# sources): a project that declares nothing gets the catalog for every kind, and one that declares
+# a folder has named its source. No source provides the kind: prints nothing, and the caller
+# asks the catalog as the default. Version 5 resolved local recipes first on every miss; version 6
+# recorded the source and read nothing until this action. The phase is the catalog's own word, so
+# a folder keys on what a stage asks for. Takes the project folder, not a registry target, so a
+# worktree session with no registry can run it as one plain command.
+do_recipe_source() {
+  local project_path="${1:?recipe-source: a project folder is required}"
+  local phase="${2:?recipe-source: a phase is required}"
+  local fw="${3:?recipe-source: a framework is required}"
+  case "$phase" in
+    research|design|implement|test-authoring|test-execution|review|worktree-environment|e2e-setup|visual-regression) : ;;
+    *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
+  esac
+  [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
+  local entry loc_type loc cand searched="" tab
+  tab="$(printf '\t')"
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    loc_type="${entry%%"$tab"*}"; loc="${entry#*"$tab"}"
+    if [ "$loc_type" = "catalog" ]; then
+      echo "RECIPE: catalog"
+      return 0
+    fi
+    [ "$loc_type" = "folder" ] || continue
+    cand="$loc/process-recipes/$fw/$phase.md"
+    if [ -f "$cand" ]; then
+      echo "RECIPE: $cand source=$loc"
+      return 0
+    fi
+    searched="$searched$loc "
+  done <<RS_SOURCES
+$(jq -r '
+    (.sources // [])
+    | map(select((.provides // []) | index("processRecipes")))
+    | sort_by(.precedence.processRecipes // 999)
+    | .[] | .locationType + "\t" + .location' "$project_path/project.json")
+RS_SOURCES
+  [ -z "$searched" ] || echo "RECIPE: none searched=${searched% }"
+  return 0
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1073,6 +1138,7 @@ case "$action" in
   set-frameworks) do_set_frameworks "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
+  recipe-source) do_recipe_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
   unregister) do_unregister "$@" ;;
