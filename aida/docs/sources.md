@@ -169,19 +169,23 @@ tool the wrong way for a framework is worse than not installing it.
 `/aida:project add-source <name-or-path> <kind> <folder>`
 
 The kind is one of `guides`, `playbooks`, `processRecipes`, `agenticRecipes` or
-`toolingRecipes`. The entry is ranked first for that kind, so your folder answers before the
-catalog for that kind alone. Your process recipes winning says nothing about your guides, so each
-kind ranks on its own. Run it again with the same folder and a second kind to add the kind to
+`toolingRecipes`. Each new source for a kind ranks after the last, so the order you declare them
+in is the order a stage asks them. Your process recipes ranking says nothing about your guides,
+so each kind ranks on its own. Run it again with the same folder and a second kind to add the kind to
 the same entry. Nothing is fetched or read when you declare a source. A stage reads the folder
 the first time it needs something from it.
 
 A folder of process recipes has a fixed layout: `<folder>/process-recipes/<framework>/<phase>.md`,
 where the phase is the point a stage asks for: `research`, `design`, `implement`,
 `test-authoring`, `test-execution`, `review`, `worktree-environment`, `e2e-setup` or
-`visual-regression`. When a stage needs a recipe it looks in your folders first, in precedence
-order, and takes the first file that exists; only then does it ask the catalog. The lookup names
-the folder it answered from. The simplest way to start is to copy the catalog's recipe for that
-phase into the file and edit it; the headings a stage reads stay the same.
+`visual-regression`. When a stage needs a recipe it looks in your folders, in the order you
+declared them, and takes the first file that exists. Declaring a folder names your source for
+that kind, so the catalog is not asked for it. A phase with no file in any of your folders is a
+phase with no recipe, and the stage takes its no-recipe path. To keep the catalog behind your
+folder, declare it too, with the word `catalog` in place of a folder. It then answers the phases
+your folder does not hold. The lookup names the folder it answered from. The simplest way to
+start is to copy the catalog's recipe for that phase into the file and edit it; the headings a
+stage reads stay the same.
 
 A folder of tooling recipes has its own layout, `<folder>/tooling-recipes/<framework>/<tool>.md`,
 and the tool skill reads folders and nothing else, so a project that wants AIDA to install a tool

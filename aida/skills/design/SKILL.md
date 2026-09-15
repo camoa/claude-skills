@@ -85,13 +85,16 @@ this project's own conventions; this is where design quality shows.
 
 ## Read the process recipe for this project's framework
 
-The project's own folder source wins over the catalog, so ask it first, once per framework:
+The project's own sources answer before the catalog, so ask them first, once per framework:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" design <framework>
 ```
-One `RECIPE:` line names the body on disk and the `source=` folder it came from; take that path
-and skip the navigator. No line means no folder source holds one. Then ask the navigator's
-process-recipe lookup for this project's framework at the design stage. It answers whether one is
+It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
+navigator. `RECIPE: none searched=<folders>`: the project named its own folders for process
+recipes, and none holds this phase. The navigator is not asked. Take the no-recipe path below,
+and record the folders searched beside it, so a later reader can tell this miss from a catalog
+miss. `RECIPE: catalog`, or no line: ask the navigator's process-recipe lookup for this
+project's framework at the design stage. It answers whether one is
 available and, when it is, a path to the body on disk. Read the body from that path. Never fetch a
 catalog address yourself and never read a cached copy behind the navigator's back.
 Verdict words and a missing heading follow

@@ -40,15 +40,20 @@ and finding nothing, and the two must never arrive as the same result.
 
 **When asked for one process-recipe point.** A step file may ask you for one phase and one
 framework, the same lookup implementation uses, and it names the project folder. The project's own
-folder source wins over the catalog, so run this first, once per phase and framework:
+sources are asked before the catalog, so run this first, once per phase and framework:
 
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<project folder>" <phase> <framework>
 ```
 
-One `RECIPE:` line means a recipe is on disk: answer `available` with that path, and name the
-`source=` folder as where it came from. Do not ask the navigator for that phase and framework. No
-line means no folder source holds one, and the lookup goes on to the navigator as below.
+It prints one line, or nothing. `RECIPE: <path> source=<folder>`: a recipe is on disk; answer
+`available` with that path, name the folder as where it came from, and do not ask the navigator.
+`RECIPE: none searched=<folders>`: the project named its own folders for process recipes, and
+none holds this phase. Answer `no-recipe` and name the folders searched. Do not ask the
+navigator: the project chose its folders over the catalog for this kind. `RECIPE: catalog`: the
+catalog is the next source in the project's own order; ask the navigator as below. No line: the
+project declares no source for process recipes, and the catalog is its default; ask the
+navigator as below.
 
 The navigator answers with an `available` flag and, when false, sometimes a free-text reason. The
 step file's script needs one of three words, not the flag. Choose the word this way:
