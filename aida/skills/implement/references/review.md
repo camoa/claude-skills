@@ -24,7 +24,9 @@ It writes `implementation/brief-<order id>-review.json`:
 
 - the criteria this order serves and owns, and the non-goals;
 - the order record;
-- the diff as a path, the frozen tests, and the builder's report path;
+- the diff as a path, the frozen tests, and the builder's report path; on an order whose proof
+  is `record` the diff is the task folder's, from the project folder, and `deliverables` names
+  each owned file by path. The reviewer reads the document whole rather than a patch;
 - the eight check results;
 - both interface texts;
 - the path the reviewer's findings go to;
@@ -58,9 +60,10 @@ against it, the same way the freeze protects it against everyone else.
 
 **Dispatch `reviewer`.** Name the role, per SKILL.md. Set the model to opus. Give it the brief's
 path and nothing else, and tell it plainly that this is review mode. Its read is wide by design, one named
-file outside the diff for one named risk. Close the dispatch record as soon as it returns, per
-SKILL.md. Its write is refused by the script, not by a hook, when the code moved or the tree is
-dirty.
+file outside the diff for one named risk. On a `record` order, say that the brief's
+`deliverables` are what it reviews, against the order's done-when rows. Close the dispatch record
+as soon as it returns, per SKILL.md. Its write is refused by the script, not by a hook, when the
+code moved or the tree is dirty.
 Leaving a probe file behind is a refusal, not a finding.
 
 Run:
@@ -158,7 +161,8 @@ work before it returns. A dirty tree means that commit did not happen. This roun
 Interactive puts that to the person. Unattended halts the order with that reason.
 
 This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
-`gate` order the floor is `configuration-gate`. Undeclared or unknown there still spends the
+`gate` order the floor is `configuration-gate`, and on a `record` order `done-when`. A `record`
+order's range, tree and diff read from the project folder, as build.md says. Undeclared or unknown there still spends the
 round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
 spends the round and leaves every finding open. At the round cap, the script halts the order
@@ -240,7 +244,9 @@ Run:
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
 the last record left it. On success it writes `lastStep = "closed"` and the commit range the order
-produced.
+produced. On a `record` order the tree, HEAD and the range are the project folder's. The
+machine criteria it owns are written as judged by whoever judged its done-when row, person or
+model, never `gate`.
 
 **Close also decides the criteria this order serves or owns.** A machine-verified criterion reads
 confirmed once every order serving it is closed and every judgement on it reads confirmed.

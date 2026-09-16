@@ -41,7 +41,7 @@ so the change is on record the way every other design write is.
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
 | diff budget | How much change the order should take, in plain words |
-| proof | `tests`, the default, or `gate` for a configuration order |
+| proof | `tests`, the default, `gate` for a configuration order, or `record` for a document in the task folder |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
 several orders. A shared thing, such as one base class serving two criteria, is built once
@@ -132,6 +132,14 @@ A configuration order is sized around the operation and owns every file that ope
 Deleting a field owns each display that lists it. An order that owns the field's files alone and
 leaves the displays to other orders cannot import on its own, so its gate fails.
 
+An order whose deliverable is a document, a dependency review or a report, writes no test
+either. Such an order owns files under the task folder only, in a folder the project commits,
+such as `deliverables/`. Never `records/`, which the project ignores. It carries
+`proof: record`, and design sets that value itself once every owned file lies under the task
+folder, unless you set a proof by hand. Its proof is its done-when rows. The checkpoint judges them, the build reads that
+judgement in place of the tests, and the reviewer reads the document whole against them. It
+lands no commit in the code repository. Its commits are the project folder's.
+
 An order that changes a page or a screen names it from the project's surface file,
 `.visual-review/surfaces.json`. When no
 visual or browser test covers that kind of surface, design offers the setup once per task,
@@ -160,8 +168,9 @@ test's wording would be matching prose, and a phrase match proves only a phrase.
 The check stops first on a work order file with a missing or malformed field, before any content
 finding. You fix that file by hand or with an update, then check again. Past that, it finds a
 criterion no order serves or owns, or that two orders own, and an order serving no criterion. It
-finds an owner of a machine-verified criterion with no test, unless its proof is the gate, and a
-gate order declaring a test. It finds an order no owner reaches and a dependency cycle. It finds
+finds an owner of a machine-verified criterion with no test, unless its proof is the gate or the
+record. It finds a gate order declaring a test. It finds a record order declaring a test, owning a
+file outside the task folder, or missing a done-when row. It finds an order no owner reaches and a dependency cycle. It finds
 two orders declaring one file, a wildcard in an owned file, and an id that resolves to nothing.
 
 A clean check says design is finished, subject to your confirmation above. An open item names

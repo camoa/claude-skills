@@ -176,6 +176,21 @@ unknown when the task has no running site recorded, so bring the environment up 
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.
 
+## A document order
+
+A work order whose deliverable is a document in the task folder, a dependency review or a
+report, has `record` as its proof kind. It owns files under the task folder only, and lands no
+commit in the code repository. No test author is dispatched. Its done-when rows are its
+checkpoint. The row-checker, or you, confirms that each row names something a reader can check
+from the document alone. The freeze records that judgement. The implementer writes the
+document and commits it in the project folder, staging its owned files alone. The build reads
+the range, the tree and the diff from the project folder's history. The empty-range refusal
+and the unchanged refusal compare against that history. The suite and the three tool checks
+read undeclared, naming the proof kind. The done-when check takes the place of the tests, met
+when the row was confirmed. The reviewer is handed the document by path and the task folder's
+diff, and reads it whole against the done-when rows. When the order closes, its criteria are
+recorded as judged by whoever judged the row, a person or a model, never the gate.
+
 ## Writing the code
 
 An implementer, a mid-tier context, writes the code for one order until its frozen tests pass. It
@@ -198,7 +213,7 @@ before it returns. A dirty tree means that commit did not happen, and the attemp
 After each attempt, eight checks run. These are scripts, and no model reads anything here.
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
-   the configuration gate instead.
+   the configuration gate instead, and on a document order the done-when judgement.
 2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
    recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
    stage runs that row once.

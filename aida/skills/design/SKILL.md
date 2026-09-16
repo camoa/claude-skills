@@ -125,6 +125,13 @@ AIDA cannot know on its own:
 - What is built with configuration rather than code. A view or a content type is a work order
   with no code in it. It states no test. Its proof is the implement recipe's
   `## Configuration gate` lines, so it is created with `--proof gate`. The recipe's sizing rule decides what it owns.
+- What is a document rather than code or configuration: a dependency review, a report, a note.
+  Such an order owns files under the task folder only, in a folder the project commits, such as
+  `<task_folder>/deliverables/`. Never `records/`, which the project ignores. It states no test.
+  Its proof is its done-when rows, so it is created with `--proof record`. `add-owned-file`
+  sets that value itself once every owned file lies under the task folder, on an order created
+  with no `--proof`. Such a file must live in a folder the project commits: `add-owned-file`
+  refuses an ignored path on a record order.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -293,7 +300,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--proof <tests|gate>] [--surface <id>]...
+  [--proof <tests|gate|record>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -329,9 +336,10 @@ the field files alone and leaves the displays to other orders cannot import on i
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. The one exception is an order created
-with `--proof gate`. It declares no test, and the configuration check judges its owned machine
-criterion at build time. A criterion whose `verifiedBy` is
+here; the check below refuses an order that skips this. Two orders are the exception. One created
+with `--proof gate` declares no test, and the configuration check judges its owned machine
+criterion at build time. One whose proof is `record` declares no test either, and its done-when
+rows, judged at the checkpoint, stand in for the test. A criterion whose `verifiedBy` is
 `person` needs no test, though one is never wrong to add.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
@@ -340,7 +348,7 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate>] \
+  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record>] \
   [--surface <id>]...
 ```
 
@@ -377,6 +385,8 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every work order that owns a machine-verified criterion and declares no test, unless its proof
   is `gate`;
 - every work order whose proof is `gate` and that declares a test;
+- every work order whose proof is `record` and that declares a test, owns a file outside the
+  task folder, or has no done-when row;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -396,6 +406,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a work order missing a required test needs an `add-test` call;
   - a `gate` order declaring a test needs a `remove-test` call for it, or `--proof tests` if it
     builds code after all;
+  - a `record` order declaring a test needs a `remove-test` call for it; one owning a file
+    outside the task folder needs `--proof tests` if it builds code after all; one with no
+    done-when row needs an `add-done-when` call;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The

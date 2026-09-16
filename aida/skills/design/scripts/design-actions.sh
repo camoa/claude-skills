@@ -28,12 +28,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --title <text> [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
 #   design-actions.sh update     <task_folder> \
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
 #   design-actions.sh add-done-when  <task_folder> \
@@ -72,7 +72,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A work order file is plain JSON at <task_folder>/design/<id>.json: no fences, no markdown
 # (scripts/design-schema.json). `create` mints `id`, then writes schemaVersion, title,
 # criteriaServed, criteriaOwned, nonGoals, dependsOn, ownedFiles, interface, tests, doneWhen,
-# reasoning, diffBudget and proof in one call; ownedFiles, tests and doneWhen start empty and grow one
+# reasoning and diffBudget in one call, and proof only when --proof was passed, so an absent field
+# is an order nobody chose a proof for (every reader takes it as tests); ownedFiles, tests and doneWhen start empty and grow one
 # entry at a time through their own add- actions, the same append-one-at-a-time shape
 # research-actions.sh's own `record` uses, because a test or a done-when sentence is free text
 # that cannot safely be packed into one comma-separated argument the way an id list can.
@@ -134,9 +135,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      false with no gap.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
 #      problem: a criterion with no serving order, a criterion owned by zero or by more than one
-#      work order, an order serving no criterion, an order missing a required test, a dependency
-#      cycle, an order that reaches no owner, overlapping owned files, or an id naming nothing
-#      real (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
+#      work order, an order serving no criterion, an order missing a required test, a `record`
+#      order that declares a test, owns a file outside the task folder or has no done-when row, a
+#      dependency cycle, an order that reaches no owner, overlapping owned files, or an id naming
+#      nothing real (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
 #      files, before writing anything.
 #   6  `start` was asked to begin design on a task research has not closed: no
 #      records/research-check.json, or one whose exitCode is not 0. Research is required (the
@@ -204,13 +206,13 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
        design-actions.sh update         <task_folder> --id <woId> [--title <text>] \
                                          [--criteria-served <id[,id...]>] \
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--proof <tests|gate>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
@@ -360,6 +362,9 @@ open_summary_of() {
         ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
         ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
         ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
+        ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is proved by its record and declares a test"),
+        ((.coverage.recordOrdersOwningOutsideTaskFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " outside the task folder"),
+        ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is proved by its record and has no done-when row"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
@@ -493,18 +498,20 @@ next_wo_id() {
 # grow them one entry at a time.
 # ------------------------------------------------------------------------------------------------
 
-# --proof takes one of two words. A unit whose deliverable is exported configuration is proved by
-# the recipe's `## Configuration gate` lines and declares no test (live-run row 65).
+# --proof takes one of three words. A unit whose deliverable is exported configuration is proved by
+# the recipe's `## Configuration gate` lines and declares no test (live-run row 65). A unit whose
+# deliverable is a document in the task folder is proved by its done-when rows and lands no commit
+# in the code repository (nyc defect 17); add-owned-file below marks it `record` on its own.
 proof_word_ok() {
   case "$2" in
-    tests|gate) ;;
-    *) die3 "$1: --proof takes tests or gate, got: $2" ;;
+    tests|gate|record) ;;
+    *) die3 "$1: --proof takes tests, gate or record, got: $2" ;;
   esac
 }
 
 do_create() {
   local title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" diff_budget="" surfaces_json='[]' proof="tests"
+  local interface="" reasoning="" diff_budget="" surfaces_json='[]' proof=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --title)
@@ -566,7 +573,8 @@ do_create() {
     '{schemaVersion: 1, id: $id, title: $title,
       criteriaServed: $criteriaServed, criteriaOwned: $criteriaOwned, nonGoals: $nonGoals,
       dependsOn: $dependsOn, ownedFiles: [], surfaces: $surfaces, interface: $interface, tests: [], doneWhen: [],
-      reasoning: $reasoning, diffBudget: $diffBudget, proof: $proof}')"
+      reasoning: $reasoning, diffBudget: $diffBudget}
+     + (if $proof == "" then {} else {proof: $proof} end)')"
 
   write_atomic "$file" "$doc"
 
@@ -731,6 +739,29 @@ do_add_owned_file() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-owned-file: $file exists but is not valid JSON"
   doc="$(jq --arg p "$path_val" '.ownedFiles = (((.ownedFiles // []) + [$p]) | unique)' "$file")"
+  # An order whose every owned file lies under the task folder delivers a document, not code, so
+  # its proof is `record` (nyc defect 17): no test, no commit in the code repository, its done-when
+  # rows judged instead. Marked here, where the files arrive, and only on an order with no proof
+  # field: `create` writes one only when --proof was passed, so a proof design set by hand stays,
+  # `tests` included. A code file added later leaves `record` in place, and the design check
+  # names it; `update --proof tests` is the repair.
+  local inferred
+  inferred="$(printf '%s' "$doc" | jq -r --arg t "$TASK_PATH/" \
+    'if (has("proof") | not) and ((.ownedFiles // []) | all(startswith($t))) then "record" else "" end')"
+  if [ "$inferred" = "record" ]; then
+    doc="$(printf '%s' "$doc" | jq '.proof = "record"')"
+    echo "proof-set: record, because every owned file of $id lies under the task folder"
+  fi
+  # A record order's range is the project folder's history, so a file the project ignores can
+  # never land in it: build-record would refuse the empty range (exit 71) on every attempt. The
+  # project ignores records/ at every depth, the folder of derived check output. git finds the
+  # repository upward from the task folder. Only a path under the task folder is asked: a path
+  # outside it is a code path, which the design check names on a record order.
+  if [ "$(printf '%s' "$doc" | jq -r '.proof // "tests"')" = "record" ] \
+     && [ "${path_val#"$TASK_PATH"/}" != "$path_val" ] \
+     && git -C "$TASK_PATH" check-ignore -q -- "$path_val" 2>/dev/null; then
+    die3 "add-owned-file: the project ignores $path_val, so a commit can never hold it and a record order owning it can never be recorded. records/ is derived check output the project keeps out of history. Put the deliverable in a folder the project commits, such as $TASK_PATH/deliverables/."
+  fi
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   wo_summary "$doc"
@@ -843,7 +874,7 @@ do_remove_test() {
       | [ ($wo[0].criteriaOwned // [])[] | select(. as $c | $machine | index($c) != null) ] | join(",")
     ' "$ALIGNMENT_FILE" 2>/dev/null)"
     [ -z "$machine_owned" ] \
-      || die3 "remove-test: that is the last test on $id, and $id owns the machine-verified criteria $machine_owned. check-design.sh refuses a tests order that owns one with no test. Add the replacement test first, or set --proof gate when the deliverable is configuration"
+      || die3 "remove-test: that is the last test on $id, and $id owns the machine-verified criteria $machine_owned. check-design.sh refuses a tests order that owns one with no test. Add the replacement test first, or set --proof gate when the deliverable is configuration, or --proof record when it is a document in the task folder"
   fi
   doc="$(jq --arg d "$description" '.tests = [(.tests // [])[] | select(.description != $d)]' "$file")"
   write_atomic "$file" "$doc"

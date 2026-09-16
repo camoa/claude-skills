@@ -43,7 +43,9 @@ It reads the frozen copy and the frozen tests. It writes seven things to
 - every order it depends on, with its declared interface;
 - this attempt's report path;
 - how many attempts this order has used of the count it is allowed;
-- `headNow`, the code repository's own commit at the moment of this call;
+- `headNow`, the commit of the repository this order lands in at the moment of this call, and
+  `commitIn`, that repository's path: the code worktree, or the project folder for an order
+  whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path, `headNow`, the attempt count and counts, never the
@@ -77,6 +79,11 @@ write.
 Give it the path to the `implement` recipe for its framework, the path of the brief `build-brief`
 wrote, and nothing else. `reportPath` in the brief is where it writes its five answers, and it
 writes that file before it edits anything under the code path.
+
+**On an order whose proof is `record`, tell it where to commit.** Its deliverable lives in the
+task folder, so it commits in the folder the brief's `commitIn` names. It stages its owned
+files and nothing else. The ledger and the briefs beside them belong to this stage, and a
+commit that sweeps them in fails the owned-files check.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
 there.
@@ -125,6 +132,13 @@ its own work before it returns. A dirty tree means that commit did not happen. T
 recorded. Interactive puts that to the person. Unattended halts the order with that reason, and
 a person clears it with `clear-halt` once the tree is committed, in `references/finish.md`.
 
+**On an order whose proof is `record`, every one of those reads the project folder instead.**
+The range, the empty-range refusal (exit 71), the unchanged refusal (exit 45) and the clean-tree
+refusal (exit 61) all read the project folder's history. That is where the deliverable
+landed, and the code repository may hold no commit at all for it. The tree read is the owned
+files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
+project folder with no history refuses (exit 87).
+
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
 `references/preconditions.md` already resolved for the baseline. The script parses `## Test
 commands` and `## Check commands` itself: the suite command, the command that runs this order's
@@ -163,14 +177,19 @@ This step runs all eight deciding checks. The record holds every one.
   output. It reads unknown when the task records no environment, when no `--implement-recipe`
   was passed, or when that recipe carries no such block. The detail says which. A line 2 that
   printed `There are no changes to import` is a finding for the reviewer, not for this check.
+  On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
+  checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
 - **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
   recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
-  that row once at the final commit. On a Drupal project the row is ten minutes per run.
+  that row once at the final commit. On a Drupal project the row is ten minutes per run. On a
+  `record` order it reads undeclared, and so do the three tool checks. A document in the task
+  folder is nothing a suite or a tool reads, and the detail names the proof kind.
 - **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
   have.
 - **static-analysis.** Does static analysis raise anything the baseline did not already have.
 - **security.** Does the security tool raise anything the baseline did not already have.
-- **owned-files.** Did the change stay inside the files this order owns.
+- **owned-files.** Did the change stay inside the files this order owns. On a `record` order the
+  change is the task folder's diff in the project folder.
 - **frozen-tests.** Does every frozen test file still hash to what the freeze recorded.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks.
@@ -203,7 +222,8 @@ An unknown on interface-record does not spend the attempt. The declaration named
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
 other unmet or unknown does.
 
-**order-tests is the floor,** or `configuration-gate` on a `gate` order. Every other check may
+**order-tests is the floor,** or `configuration-gate` on a `gate` order, or `done-when` on a
+`record` order. Every other check may
 answer undeclared, or deferred on the suite, and still let the order go on
 to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
 may not. It is the one check that says this order's own code does what its tests ask. Undeclared or

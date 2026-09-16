@@ -26,7 +26,9 @@ and the order record. It names the diff as a file, the frozen tests, and the bui
 holds the results of the eight checks that already ran, and both interface texts. On an order
 whose proof is `gate`, read the `configuration-gate` output. A line 2 that printed `There are
 no changes to import` means the export changed nothing against the seed. Refuse the order with a
-high finding, as the recipe says. Its `locksIn`
+high finding, as the recipe says. On an order whose proof is `record`, the brief's
+`deliverables` name the document by path, and the diff is the task folder's. Read the document
+whole against the order's done-when rows. No test and no tool ran on it. Its `locksIn`
 line names any test frozen green because existing code already met it. The reason sits on
 that test's row in the per-test record the line names. Read it with the diff. Write your
 findings to the path the brief gives, in this shape:

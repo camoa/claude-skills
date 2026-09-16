@@ -267,7 +267,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      owns a criterion, and that order's tests are the ones that can observe it (live-run row
 #      59). A serving order freezes its tests against its own doneWhen instead. An order whose
 #      proof is gate is exempt: it takes no --test at all, and its owned machine criterion is
-#      judged by the recipe's `## Configuration gate` lines at build time (live-run row 65).
+#      judged by the recipe's `## Configuration gate` lines at build time (live-run row 65). An
+#      order whose proof is record is exempt the same way: its done-when row, `--row <unit_id>=`,
+#      is its checkpoint, and exit 64 asks for that row (nyc defect 17).
 #  30  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is person with no
 #      --checklist row.
 #  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
@@ -303,7 +305,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      same fact: `build-brief` gets its own so a caller can tell which step never started without
 #      inspecting the message text.
 #  43  `build-record` or `fix-record` was given a --started-at that is not a commit in the code
-#      repository.
+#      repository, or, for an order whose proof is record, in the project folder: such an order's
+#      deliverable lives in the task folder, so its range, its tree and its diff are read there
+#      (nyc defect 17). Exits 45, 51, 61, 63 and 71 read the same repository for such an order.
 #  44  `build-record` found the interface record file named by --interface missing or empty while
 #      the given unit declares a non-empty interface. A file present for a unit that declares no
 #      interface is read and recorded without complaint; nothing here judges its content.
@@ -427,8 +431,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
-#      freezes a reference that proves nothing. An order whose proof is gate is exempt from the
-#      second half: its record holds no test row on purpose.
+#      freezes a reference that proves nothing. An order whose proof is gate or record is exempt
+#      from the second half: its record holds no test row on purpose.
 #  75  `dispatch-close` was given a task folder that is not the one the open record names. The
 #      record lives at the project root and two tasks in one project is a supported state, so a
 #      second task's close would clear the first task's live permission record. The message names
@@ -478,6 +482,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      second `finish` is the route. Unknown names its own cause: no baseline to subtract from, a
 #      placeholder with no --value, a runner not found, or a run that selected nothing. Nothing
 #      is recorded; the sidecar stays, because it is what a person reads next.
+#
+# The code the record proof added (nyc defect 17).
+#  87  a step reading the range of an order whose proof is record found the project folder is not
+#      a git repository. Such an order lands its deliverable in the task folder, so its commits are
+#      the project folder's, and with no history there the range cannot be read. Exit 5 stays the
+#      separate fact that the code path is not a repository.
 #
 # The code `clear-halt` added (nyc defect 20).
 #  85  `clear-halt` was asked to clear a halt another action answers: one holding an `attempts
@@ -1770,7 +1780,7 @@ do_start() {
     || st_started_from="$ledger_started_from | rewritten from $rewritten_from | retake the baseline: move baseline.json and baseline-output aside, then run preconditions"
   proof_absent="$(printf '%s' "$snapshot_workorders_json" | jq -r '[ .[] | select(has("proof") | not) | .id ] | join(", ")')"
   if [ -n "$proof_absent" ]; then
-    proof_absent="$proof_absent | no proof in the snapshot, so each is proved by tests unless design sets gate"
+    proof_absent="$proof_absent | no proof in the snapshot, so each is proved by tests unless design sets gate or record"
   else
     proof_absent="none: every order in the snapshot names its proof"
   fi
@@ -3319,11 +3329,16 @@ do_tests_freeze() {
 
   # An order whose proof is gate freezes no test: its deliverable is exported configuration, and
   # its build runs the implement recipe's `## Configuration gate` lines as its own check (live-run
-  # row 65). It still takes a --checklist for a person-verified criterion it serves or owns.
+  # row 65). It still takes a --checklist for a person-verified criterion it serves or owns. An
+  # order whose proof is record freezes no test either: its deliverable is a document in the task
+  # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17).
   local tf_proof
   tf_proof="$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')"
   if [ "$tf_proof" = "gate" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by the configuration gate and takes no --test. A test for exported configuration reads the YAML back and cannot fail for the right reason; the gate lines are its check."
+  fi
+  if [ "$tf_proof" = "record" ] && [ -n "$test_raw" ]; then
+    die 3 "tests-freeze: $unit_id is proved by its record and takes no --test. Its deliverable is a document in the task folder; its done-when row, --row $unit_id=..., is its checkpoint."
   fi
 
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
@@ -3490,7 +3505,7 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] \
+  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] \
     || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
@@ -3563,18 +3578,20 @@ TF_EOF
   # criterion never gets a row, because it carries a checklist and completion is what confirms it
   # (ideal/implementation.md, "A criterion a person inspects has no tests").
   local rows_expected_json rows_missing rows_unknown rows_person rows_twice
+  # A record order has no test, so the doneWhen row is the one row it owes: the rows are what
+  # judge the deliverable, and the freeze is where they are judged (nyc defect 17).
   rows_expected_json="$(jq -nc --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" \
-      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" '
+      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --arg proof "$tf_proof" '
       ($tests | map(.criteria) | add // []) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
-        + (if $dw then [$unit] else [] end)
+        + (if $dw or $proof == "record" then [$unit] else [] end)
     ')"
   rows_missing="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
       ($rows | map(.criterion)) as $named
       | [ $expected[] as $k | select(($named | index($k)) == null) | $k ] | join(", ")
     ')"
   [ -z "$rows_missing" ] \
-    || die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it, is judged before the tests are frozen."
+    || die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen."
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
       | [ $rows[] | .criterion as $cid | select(($people | index($cid)) != null) | $cid ]
@@ -3866,7 +3883,7 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
-  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] \
+  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -4103,7 +4120,8 @@ do_build_brief() {
   local unit_out tests_out
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
     '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
-      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // "")}')"
+      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // ""),
+      proof: (.proof // "tests")}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
   tests_out="$(printf '%s' "$tests_doc" | jq -c \
@@ -4111,10 +4129,16 @@ do_build_brief() {
        | {path, name, criterion: $c} ]')"
 
   # The caller needs the commit this attempt begins from, for --started-at when it records. It was
-  # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry.
+  # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry. An
+  # order whose proof is record commits in the project folder, so its commit is read there and
+  # the brief says so under commitIn (nyc defect 17).
   local bb_codepath bb_head
   bb_head=""
-  bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "record" ]; then
+    bb_codepath="$(resolve_project_folder "$TASK_PATH")"
+  else
+    bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  fi
   if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
     bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
   fi
@@ -4124,11 +4148,13 @@ do_build_brief() {
   local brief_file brief_json
   brief_file="$IMPL_DIR/brief-$unit_id-build.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
+        --arg commitIn "$bb_codepath" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
-    '{unit: $unit, tests: $tests, headNow: $headNow, dependencyInterfaces: $dependencyInterfaces,
+    '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
+      dependencyInterfaces: $dependencyInterfaces,
       reportPath: $reportPath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
@@ -4139,7 +4165,8 @@ do_build_brief() {
     {order: .unit.id,
      brief: $brief,
      reportPath: .reportPath,
-     headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
+     headNow: (if .headNow == "" then "none: the commit of \(.commitIn) could not be read" else .headNow end),
+     commitIn: .commitIn,
      attempts: "\(.attemptsUsed) of \(.attemptsAllowed) used",
      ownedFiles: (.unit.ownedFiles | length),
      frozenTests: (.tests | length),
@@ -4693,22 +4720,58 @@ BR_GATE_LINES
     '{id: "configuration-gate", verdict: $verdict, detail: $detail}'
 }
 
+# The done-when check, in the order-tests slot of an order whose proof is record (nyc defect 17).
+# Its deliverable is a document in the task folder, which no test and no tool can judge, so the
+# check reads the judgement the checkpoint left on the order's ledger entry: the done-when row,
+# `--row <unit_id>=...` at tests-freeze, judged by a person or the row-checker. Confirmed is met,
+# and the detail names the judge; no row is unknown. Prints the check object.
+br_record_check() {
+  local unit judgement verdict detail
+  unit="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
+  judgement="$(jq -c --arg id "$unit" '[ (.orders // [])[] | select(.id == $id) ][0].doneWhenJudgement // null' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+  if [ -z "$judgement" ] || [ "$judgement" = "null" ]; then
+    verdict="unknown"
+    detail="$unit is proved by its record, and the ledger holds no done-when judgement for it: tests-freeze records one from --row $unit=..., and none was recorded."
+  elif [ "$(printf '%s' "$judgement" | jq -r '.verdict')" = "confirmed" ]; then
+    verdict="met"
+    detail="the done-when row of $unit was confirmed at the checkpoint, judged by $(printf '%s' "$judgement" | jq -r '.judgedBy'): $(printf '%s' "$judgement" | jq -r '.note')"
+  else
+    verdict="unmet"
+    detail="the done-when row of $unit reads $(printf '%s' "$judgement" | jq -r '.verdict') at the checkpoint, judged by $(printf '%s' "$judgement" | jq -r '.judgedBy'): $(printf '%s' "$judgement" | jq -r '.note')"
+  fi
+  jq -n --arg verdict "$verdict" --arg detail "$detail" --arg judgedBy "$(printf '%s' "$judgement" | jq -r '.judgedBy // ""')" '
+    {id: "done-when", verdict: $verdict, detail: $detail}
+    + (if $judgedBy == "" then {} else {judgedBy: $judgedBy} end)'
+}
+
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
 # coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
-# is gate the first slot holds configuration-gate instead. Prints the JSON array.
+# is gate the first slot holds configuration-gate instead, and on one whose proof is record it
+# holds done-when, with the suite and the three tool rows undeclared: a document in the task
+# folder is nothing a suite or a tool reads (nyc defect 17). Prints the JSON array.
 br_seven_checks() {
-  local parts_file
+  local parts_file proof rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
-  if [ "$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.proof // "tests"')" = "gate" ]; then
+  proof="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.proof // "tests"')"
+  if [ "$proof" = "gate" ]; then
     br_gate_check >>"$parts_file"
+  elif [ "$proof" = "record" ]; then
+    br_record_check >>"$parts_file"
   else
     br_test_check "order-tests"    "orderTests" "order-tests" >>"$parts_file"
   fi
-  br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
-  br_tool_check "coding-standards" "codingStandards" "coding-standards" >>"$parts_file"
-  br_tool_check "static-analysis"  "staticAnalysis"  "static-analysis"  >>"$parts_file"
-  br_tool_check "security"         "security"        "security"         >>"$parts_file"
+  if [ "$proof" = "record" ]; then
+    for rc_id in suite-regression coding-standards static-analysis security; do
+      jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the task folder, which the $rc_id row does not read, so the row does not apply to it." \
+        '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
+    done
+  else
+    br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
+    br_tool_check "coding-standards" "codingStandards" "coding-standards" >>"$parts_file"
+    br_tool_check "static-analysis"  "staticAnalysis"  "static-analysis"  >>"$parts_file"
+    br_tool_check "security"         "security"        "security"         >>"$parts_file"
+  fi
 
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
@@ -4720,6 +4783,9 @@ br_seven_checks() {
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
+    # A record order owns absolute paths under the task folder, and its diff is the project
+    # folder's, whose names are relative to it; the two meet on the absolute form.
+    [ "$proof" != "record" ] || p="$BRC_CODEPATH/$p"
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
@@ -4798,7 +4864,8 @@ br_executed_count() {
 # Two rules, and the second is the floor. Every check must answer met, undeclared or deferred, with
 # the one exempt unknown allowed. And order-tests must have answered met: that check is the only
 # one that says this order's own code does what its tests ask, so undeclared or unknown there is an
-# order nothing executed. configuration-gate is the same floor for an order whose proof is gate.
+# order nothing executed. configuration-gate is the same floor for an order whose proof is gate,
+# and done-when for one whose proof is record.
 # Undeclared on every other check still continues, which is the rule step two already applies to
 # a precondition a recipe declared nothing for. Deferred continues the same way: the suite row
 # is `finish`'s to run, and its answer lands there (nyc defect 18).
@@ -4806,7 +4873,7 @@ br_checks_pass() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     (all(.[]; .verdict == "met" or .verdict == "undeclared" or .verdict == "deferred"
               or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
-    and (any(.[]; (.id == "order-tests" or .id == "configuration-gate") and .verdict == "met"))'
+    and (any(.[]; (.id == "order-tests" or .id == "configuration-gate" or .id == "done-when") and .verdict == "met"))'
 }
 
 # The first check that stopped the order in $1, in the recorded order, with $2 the exempt id as
@@ -4815,7 +4882,7 @@ br_first_stopper() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     [ .[] | select(.verdict == "unmet"
                    or (.verdict == "unknown" and ($exempt == "" or .id != $exempt))
-                   or ((.id == "order-tests" or .id == "configuration-gate") and .verdict != "met")) ]
+                   or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when") and .verdict != "met")) ]
     | .[0] // {id:"none",verdict:"",detail:""}
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
 }
@@ -4872,7 +4939,7 @@ br_require_check_count() {
     | ([ "order-tests", "suite-regression", "coding-standards", "static-analysis", "security",
          "owned-files", "frozen-tests" ] + (if $want == 8 then ["interface-record"] else [] end))
     | map(select(. as $id | ($have | index($id)) == null))
-    | map(if . == "order-tests" and ($have | index("configuration-gate")) != null then empty else . end)
+    | map(if . == "order-tests" and (($have | index("configuration-gate")) != null or ($have | index("done-when")) != null) then empty else . end)
     | join(", ")' "$checks_file" 2>/dev/null)"
   rm -f "$checks_file"
   die 84 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written."
@@ -4981,15 +5048,18 @@ do_build_record() {
   attempts_allowed="$(attempts_allowed_for "$order_entry")"
 
   # --- the task's own project, through the one reader every step-five action already uses ---------
+  # The range lives in the code worktree, or in the project folder for an order whose proof is
+  # record; every git read below goes to that one repository.
   local codepath
   rv_load_codepath "build-record"
-  codepath="$RV_CODEPATH"
+  rv_load_range_repo "build-record" "$UNIT_JSON"
+  codepath="$RV_RANGE_REPO"
 
   # --- exit 43: --started-at must be a real commit in this repository ------------------------------
   local started_at_full current_commit
   started_at_full="$(git -C "$codepath" rev-parse --verify --quiet "${started_at}^{commit}" 2>/dev/null)"
   [ -n "$started_at_full" ] \
-    || die 43 "build-record: --started-at ($started_at) is not a commit in the code repository at $codepath."
+    || die 43 "build-record: --started-at ($started_at) is not a commit in $RV_RANGE_NAME at $codepath."
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
@@ -5027,7 +5097,7 @@ do_build_record() {
 
   local ledger_run_mode
   ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
-  br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc"
+  br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
   # --- the eight deciding checks ---------------------------------------------------------------------
   # Seven of them are computable by the same function a fix round calls, so the two steps can never
@@ -5209,6 +5279,25 @@ rv_load_state() {
     || die 49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $halted"
 }
 
+# The repository an order's range lives in, and the paths a tree check reads there. An order whose
+# proof is record lands its deliverable in the task folder, so its commits are the project
+# folder's, and every range, HEAD, diff and tree read for it goes there; the tree check reads its
+# owned files alone, because the running stage keeps the rest of that folder dirty on purpose
+# (nyc defect 17). Every other order reads the code worktree whole. Call after rv_load_codepath.
+# $1 the action's own name, $2 the frozen work order. Sets RV_RANGE_REPO, RV_RANGE_PATHS (one
+# pathspec per line, empty for the whole tree) and RV_RANGE_NAME, the words a message uses.
+RV_RANGE_REPO=""; RV_RANGE_PATHS=""; RV_RANGE_NAME=""
+rv_load_range_repo() {
+  local who="$1" unit_json="$2"
+  RV_RANGE_REPO="$RV_CODEPATH"; RV_RANGE_PATHS=""; RV_RANGE_NAME="the code repository"
+  [ "$(printf '%s' "$unit_json" | jq -r '.proof // "tests"')" = "record" ] || return 0
+  is_git_repo "$RV_PROJECT_FOLDER" \
+    || die 87 "$who: $(printf '%s' "$unit_json" | jq -r '.id') is proved by its record, so its range lives in the project folder, and $RV_PROJECT_FOLDER is not a git repository. Run git init there and commit it."
+  RV_RANGE_REPO="$RV_PROJECT_FOLDER"
+  RV_RANGE_PATHS="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
+  RV_RANGE_NAME="the project folder"
+}
+
 # Exit 48: the order must be at one of the steps this action can follow. $1 the action's own name,
 # $2 the unit id, $3 the allowed steps, separated by spaces.
 rv_require_step() {
@@ -5363,17 +5452,27 @@ do_review_brief() {
 
   rv_load_build_record "review-brief" "$unit_id"
   rv_load_codepath "review-brief"
+  rv_load_range_repo "review-brief" "$RV_UNIT_JSON"
 
   # The diff moves as a file the reviewer opens, never pasted through the orchestrator
-  # (ideal/implementation.md, "What a review is given, and what it is refused").
-  local started_at commit diff_path
+  # (ideal/implementation.md, "What a review is given, and what it is refused"). For an order
+  # whose proof is record it is the task folder's diff in the project folder, and the brief names
+  # the deliverables by path, since a document is read whole and not as a patch (nyc defect 17).
+  local started_at commit diff_path deliverables_json
   started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
   commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   [ -n "$started_at" ] && [ -n "$commit" ] \
     || die 3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no startedAt or no commit, though build-record writes both."
   diff_path="$IMPL_DIR/diff-$unit_id.patch"
-  git -C "$RV_CODEPATH" diff "$started_at" "$commit" > "$diff_path" 2>/dev/null \
-    || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+  deliverables_json="[]"
+  if [ -n "$RV_RANGE_PATHS" ]; then
+    git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" -- "$TASK_PATH" > "$diff_path" 2>/dev/null \
+      || die 3 "review-brief: could not write the task folder's diff from $started_at to $commit into $diff_path."
+    deliverables_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  else
+    git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" > "$diff_path" 2>/dev/null \
+      || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+  fi
 
   local criteria_json nongoals_json tests_json
   criteria_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson unit "$RV_UNIT_JSON" '
@@ -5402,6 +5501,7 @@ do_review_brief() {
     --argjson nonGoals "$nongoals_json" \
     --argjson order "$RV_UNIT_JSON" \
     --arg diffPath "$diff_path" \
+    --argjson deliverables "$deliverables_json" \
     --argjson frozenTests "$tests_json" \
     --arg reportPath "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')" \
     --slurpfile build "$IMPL_DIR/build-$unit_id.json" \
@@ -5417,6 +5517,7 @@ do_review_brief() {
       nonGoals: $nonGoals,
       order: $order,
       diffPath: $diffPath,
+      deliverables: $deliverables,
       startedAt: $startedAt,
       commit: $commit,
       frozenTests: $frozenTests,
@@ -5435,6 +5536,7 @@ do_review_brief() {
     {order: .unit,
      brief: $brief,
      diff: .diffPath,
+     deliverables: (.deliverables | length),
      findingsPath: .findingsPath,
      reportPath: .reportPath,
      range: "\(.startedAt)..\(.commit)",
@@ -5492,7 +5594,8 @@ do_review_record() {
     rr_commit=""
     [ -n "$rr_doc" ] && rr_commit="$(printf '%s' "$rr_doc" | jq -r '.reviewedAt // ""')"
     rv_load_codepath "review-record"
-    rr_head="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+    rv_load_range_repo "review-record" "$RV_UNIT_JSON"
+    rr_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
     if [ "$rr_step" = "checks-passed" ] && [ -n "$rr_commit" ] && [ "$rr_commit" = "$rr_head" ]; then
       RV_REVIEW_FILE="$review_file"
       RV_REVIEW_DOC="$rr_doc"
@@ -5517,20 +5620,22 @@ do_review_record() {
 
   rv_load_build_record "review-record" "$unit_id"
   rv_load_codepath "review-record"
+  rv_load_range_repo "review-record" "$RV_UNIT_JSON"
 
   # Exit 51, decision 6. The reviewer holds Write for one reason: its findings file, at the path
   # the brief gave, under the task folder. This is the check that enforces it. A probe test left
-  # in the reviewed code is a refusal here, not a finding later.
+  # in the reviewed code is a refusal here, not a finding later. For an order whose proof is
+  # record the tree read is the deliverable itself, the owned files in the project folder.
   local recorded_commit current_commit dirty
   recorded_commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
-  current_commit="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+  current_commit="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
-    || die 3 "review-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "review-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
   [ "$recorded_commit" = "$current_commit" ] \
-    || die 51 "review-record: $RV_CODEPATH is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
-  dirty="$(git -C "$RV_CODEPATH" status --porcelain 2>/dev/null)"
+    || die 51 "review-record: $RV_RANGE_REPO is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
+  dirty="$(git_status_of "$RV_RANGE_REPO" "$RV_RANGE_PATHS")"
   [ -z "$dirty" ] \
-    || die 51 "review-record: the working tree at $RV_CODEPATH is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
+    || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
   local raw_findings alignment count i one built findings_json
   rv_read_findings_array "$findings_path" "findings" "review-record"
@@ -5643,8 +5748,9 @@ do_fix_brief() {
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
 
   rv_load_codepath "fix-brief"
+  rv_load_range_repo "fix-brief" "$RV_UNIT_JSON"
   local fb_head brief_file brief_json
-  fb_head="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+  fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   # One brief per round, because each round's open findings differ from the last round's and the
   # record of what a fixer was given is worth keeping beside its report.
   brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
@@ -5806,15 +5912,16 @@ $scope_raw
 RV_SCOPE
 
   rv_load_codepath "fix-record"
+  rv_load_range_repo "fix-record" "$RV_UNIT_JSON"
 
   local started_at_full current_commit
-  started_at_full="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "${started_at}^{commit}" 2>/dev/null)"
+  started_at_full="$(git -C "$RV_RANGE_REPO" rev-parse --verify --quiet "${started_at}^{commit}" 2>/dev/null)"
   [ -n "$started_at_full" ] \
-    || die 43 "fix-record: --started-at ($started_at) is not a commit in the code repository at $RV_CODEPATH."
-  current_commit="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+    || die 43 "fix-record: --started-at ($started_at) is not a commit in $RV_RANGE_NAME at $RV_RANGE_REPO."
+  current_commit="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
-    || die 3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
-  br_require_real_base "fix-record" "$RV_CODEPATH" "$started_at" "$started_at_full" "$current_commit"
+    || die 3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
+  br_require_real_base "fix-record" "$RV_RANGE_REPO" "$started_at" "$started_at_full" "$current_commit"
 
   # Exit 45, twice over. One round per commit: a second call at the commit a record already names
   # would spend a round on code nobody changed. The round number moves with the ledger, so the
@@ -5872,10 +5979,10 @@ RV_SCOPE
   [ -n "$tests_doc" ] \
     || die 3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
-  br_require_clean_tree "fix-record" "$RV_CODEPATH" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC"
+  br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
   BRC_WHO="fix-record"
-  BRC_CODEPATH="$RV_CODEPATH"
+  BRC_CODEPATH="$RV_RANGE_REPO"
   BRC_STARTED_AT="$started_at_full"
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
@@ -5911,7 +6018,7 @@ RV_SCOPE
 
   local diff_path
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
-  git -C "$RV_CODEPATH" diff "$started_at_full" "$current_commit" > "$diff_path" 2>/dev/null \
+  git -C "$RV_RANGE_REPO" diff "$started_at_full" "$current_commit" > "$diff_path" 2>/dev/null \
     || { rm -f "$seven_file"; die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
 
   local today record_json executed_count
@@ -6441,21 +6548,22 @@ do_close() {
 
   rv_load_build_record "close" "$unit_id"
   rv_load_codepath "close"
+  rv_load_range_repo "close" "$RV_UNIT_JSON"
 
   local started_at head_now
   started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
   [ -n "$started_at" ] \
     || die 3 "close: $IMPL_DIR/build-$unit_id.json holds no startedAt, though build-record writes it."
-  head_now="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
+  head_now="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   [ -n "$head_now" ] \
-    || die 3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
+    || die 3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
 
   # Exit 61 and exit 63. Close writes the commit range this order produced, and a range is a claim
   # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
   # last record for this order was written at: the build record when no round ran, the last fix
   # record otherwise. Without both, the range names commits that do not hold the work, which is the
   # same gap the record steps close with exit 61.
-  br_require_clean_tree "close" "$RV_CODEPATH"
+  br_require_clean_tree "close" "$RV_RANGE_REPO" "" "" "" "" "$RV_RANGE_PATHS"
   local last_record last_commit
   if [ "$rounds_used" -gt 0 ] 2>/dev/null; then
     last_record="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
@@ -6468,7 +6576,7 @@ do_close() {
   [ -n "$last_commit" ] \
     || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
   [ "$last_commit" = "$head_now" ] \
-    || die 63 "close: $RV_CODEPATH is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
+    || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
@@ -6476,27 +6584,39 @@ do_close() {
     .orders = (.orders | map(if .id == $id then (.lastStep = "closed" | .commitRange = $range) else . end))')"
   [ -n "$new_ledger" ] || die 3 "close: the ledger update for $unit_id failed."
 
-  # An order whose proof is gate froze no test and left no row at the freeze, so the judgement of
-  # every machine criterion it owns is written here, from the configuration-gate check of the
-  # record this close reads: the build record, or the last fix record. met is confirmed, judged by
-  # the gate, and the derivation below then confirms the criterion the way it does for any owner.
-  # Not met writes nothing, and the row stays not-judged. The judge is a third value because a
-  # model's row is weaker evidence queued for a person and a person's row claims a reader; the
-  # recipe's own lines are neither (live-run row 65).
-  local gate_verdict gate_detail
-  if [ "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.proof // "tests"')" = "gate" ]; then
-    gate_verdict="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].verdict // ""' "$last_record" 2>/dev/null)"
-    gate_detail="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].detail // ""' "$last_record" 2>/dev/null)"
-    if [ "$gate_verdict" = "met" ]; then
-      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg note "$gate_detail" \
+  # An order whose proof is gate or record froze no test, so the judgement of every machine
+  # criterion it owns is written here, from the check that took the order-tests slot in the record
+  # this close reads: the build record, or the last fix record. met is confirmed, and the derivation
+  # below then confirms the criterion the way it does for any owner. Not met writes nothing, and
+  # the row stays not-judged. A gate order is judged by `gate`, a third value: a model's row is
+  # weaker evidence queued for a person and a person's row claims a reader, and the recipe's own
+  # lines are neither (live-run row 65). A record order is judged by whoever judged its done-when
+  # row, person or model, which the done-when check carries as judgedBy: somebody read the row,
+  # and a model's reading stays queued for a person the way every model row is (nyc defect 17).
+  local slot_check slot_verdict slot_judge slot_detail
+  case "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.proof // "tests"')" in
+    gate) slot_check="configuration-gate" ;;
+    record) slot_check="done-when" ;;
+    *) slot_check="" ;;
+  esac
+  if [ -n "$slot_check" ]; then
+    slot_verdict="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].verdict // ""' "$last_record" 2>/dev/null)"
+    slot_detail="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].detail // ""' "$last_record" 2>/dev/null)"
+    if [ "$slot_check" = "configuration-gate" ]; then
+      slot_judge="gate"
+    else
+      slot_judge="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].judgedBy // ""' "$last_record" 2>/dev/null)"
+    fi
+    if [ "$slot_verdict" = "met" ] && [ -n "$slot_judge" ]; then
+      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg judge "$slot_judge" --arg note "$slot_detail" \
         --argjson owned "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" \
         --argjson kinds "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]')" '
         .criteria = ((.criteria // []) | map(
           if ((.id as $i | $owned | index($i)) != null) and ((.id as $i | $kinds | index($i)) != null)
           then . + {judgements: ((((.judgements // []) | map(select(.unit != $unit))))
-                                 + [{unit: $unit, verdict: "confirmed", judgedBy: "gate", note: $note}])}
+                                 + [{unit: $unit, verdict: "confirmed", judgedBy: $judge, note: $note}])}
           else . end))')"
-      [ -n "$new_ledger" ] || die 3 "close: the gate judgement for $unit_id could not be written."
+      [ -n "$new_ledger" ] || die 3 "close: the $slot_check judgement for $unit_id could not be written."
     fi
   fi
 

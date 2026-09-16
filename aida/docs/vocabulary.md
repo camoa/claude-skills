@@ -14,6 +14,7 @@ in the plugin, and `tests/vocabulary-spec.sh` flags every banned synonym in ship
 | work order | the unit of work: one build, one review, one commit | `epic`, `slice`, `batch` |
 | check | one blocking check a stage runs | `validate`, `validation`. `audit` is not banned: it is the review action that lists how each verdict came about |
 | gate | the proof kind of a configuration work order: the recipe's own lines decide it, not a test | |
+| record (proof kind) | the proof kind of a document work order: its done-when rows decide it, not a test, and it lands no commit in the code repository | |
 | record, recipe, source | a file a stage writes as proof it ran; a catalog document a stage resolves; where a play or a finding came from | |
 | vocabulary | this list | `glossary` |
 

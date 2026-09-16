@@ -35,6 +35,8 @@ work order | the unit of work: one build, one review, one commit | epic, epics, 
 # 2026-09-14 (live-run row 65): it is now the proof kind of a configuration order, its own row below.
 check | one blocking validation a stage runs | validate, validates, validated, validating, validation
 gate | the proof kind of a configuration order: the recipe's own lines decide it, not a test |
+# record as a proof kind is the same word as the record below, a file a stage writes. No synonym
+# is banned for either sense; the two are told apart by the field they sit in.
 # verify is not banned: a criterion's verify clause and the reviewer's verify mode are its own senses.
 # audit is not banned: it is the review action that lists how each verdict came about.
 #
