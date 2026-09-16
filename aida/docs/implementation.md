@@ -24,6 +24,15 @@ files against the snapshot instead: it reports drift, halts only for work-order 
 a contract change. The snapshot is taken here rather than at design
 close because a person can close design, edit an order, then start.
 
+A resumed run refuses two more things. When the branch was rewritten under the build, by a
+rebase or an amend, the commit the ledger started from is on no branch. AIDA says so, rather
+than labelling the baseline with it or computing a range git cannot resolve. You name the commit
+the branch now builds on, the ledger keeps the old value beside the new, and the baseline is
+retaken. When the baseline on disk was written by an earlier version, in a shape this one cannot
+subtract from, AIDA names the retake. No build attempt is spent on it. A resumed run also names
+the orders whose design predates the proof field. Each is proved by tests unless design sets the
+gate on it.
+
 Three more things refuse before a line is written. The project is not a git repository, the code
 checkout is on no branch, or the build would land on the repository's own trunk branch. A commit
 on a detached head belongs to no branch, which this build must never risk. When there is no

@@ -23,7 +23,7 @@
     "startedFrom": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit the build started from, captured by the first step before anything is written. Rollback is a reset to it, which is what replaces the isolated working copy version 6 decided against. Version 5 captures nothing of the kind and its own ledger needs one."
+      "description": "The commit the build started from, captured by the first step before anything is written. Rollback is a reset to it, which is what replaces the isolated working copy version 6 decided against. Version 5 captures nothing of the kind and its own ledger needs one. Rewritten by one thing only, `start --rebased-onto <commit>`, after a rebase or an amend left this commit on no branch; the value it replaced is kept under startedFromBefore."
     },
     "startedAt": {
       "type": "string",
@@ -58,6 +58,13 @@
         "$ref": "#/$defs/criterionEntry"
       },
       "description": "One entry per criterion in the snapshot's contract, opened by the first step as not judged. This holds whether the tests claiming to prove a criterion were confirmed to do so, never the criterion itself, which lives in the snapshot."
+    },
+    "startedFromBefore": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/startedFromBefore"
+      },
+      "description": "One entry per value startedFrom held before `start --rebased-onto` rewrote it, in the order it happened. Present only when at least one rewrite was. A resumed `start` refuses (exit 82) when HEAD does not descend from startedFrom, because a rebase or an amend left that commit on no branch: `preconditions` would label the baseline with it and `finish` would compute a range git cannot resolve. The rewrite keeps the old value here rather than dropping it, so a reader can tell which commit the baseline on disk was taken at, and why it must be retaken (nyc defect 19)."
     },
     "resnapshots": {
       "type": "array",
@@ -174,6 +181,23 @@
             "$ref": "#/$defs/judgement"
           },
           "description": "One entry per order whose frozen tests name this criterion, appended by `tests-freeze` when that order's rows are frozen; a serving order whose tests name only its own done-when appends none, and its judgement sits on its ledger entry as doneWhenJudgement. Present only on a criterion a machine verifies: one a person verifies carries a checklist in the frozen test record and never a judgement, and completion confirms it. `close` reads this list to decide rowState."
+        }
+      }
+    },
+    "startedFromBefore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "at"],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "The value startedFrom held before the rewrite."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date of the rewrite, YYYY-MM-DD. Set by the script, never typed."
         }
       }
     },

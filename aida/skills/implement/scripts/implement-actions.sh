@@ -23,7 +23,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Usage:
 #   implement-actions.sh read  <task_folder>
-#   implement-actions.sh start <task_folder>
+#   implement-actions.sh start <task_folder> [--rebased-onto <commit>]
 #   implement-actions.sh preconditions <task_folder> [--recipe <framework>=<path>]...
 #                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
@@ -136,6 +136,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                        the same files, because both call the
 #                                                        same function; this script never carries
 #                                                        a second copy of that formula.
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/schema-check.sh   sourced, for schema_check_compare, the
+#                                                        one field-list comparison every stage
+#                                                        reads; `start` runs it over baseline.json
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/baseline-schema.json   the shape `preconditions` writes to
+#                                                        baseline.json, which `start` compares a
+#                                                        resumed run's copy against (exit 83)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot-schema.json   the shape `start` writes to snapshot.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-schema.json     the shape `start` writes to ledger.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-schema.json   the shape `dispatch-open` writes to
@@ -146,7 +152,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # This script never runs a schema comparison against snapshot-schema.json or ledger-schema.json
 # itself. Every field it writes is built from those two schemas' own field lists by construction;
 # a stale or hand-edited file already on disk before this script's first call on it is a fact this
-# script reports (present-but-unreadable, or a hash mismatch), not one it repairs.
+# script reports (present-but-unreadable, or a hash mismatch), not one it repairs. The one record
+# it does compare is baseline.json, on a resumed `start`, because an earlier version wrote that
+# file in a shape `build-record` cannot subtract from (exit 83).
 #
 # Freezing (ideal/implementation.md, "Freezing, and what a freeze is for"). A new run re-derives
 # the design-closed hash from the live files and refuses when the two disagree. Once a snapshot
@@ -440,6 +448,22 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
 #
+# The codes a resumed `start` added (nyc defects 10 and 19).
+#  82  a resumed `start` found HEAD is not a descendant of the ledger's own startedFrom. The branch
+#      was rewritten under the build, by a rebase or an amend. Left alone, `preconditions` labels
+#      the baseline with a commit on no branch and `finish` computes a range git cannot resolve.
+#      The message names `start --rebased-onto <commit>`. That sets startedFrom to the commit the
+#      branch now builds on and keeps the old value under startedFromBefore with the date. The
+#      flag is an argument error, exit 3, in four cases. Its value is not a commit, not an
+#      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, so
+#      nothing was rewritten. The run has no ledger to rewrite.
+#  83  a resumed `start` found baseline.json outside the shape this version writes. That is a
+#      required field missing or of the wrong type against baseline-schema.json. Or it is a suite
+#      or tool entry that ran (it carries exitCode) with no outputFile. `build-record` subtracts from
+#      outputFile alone, so such a baseline reads every failing tool check unknown. An attempt is
+#      then spent on a schema change. The message names the retake. Exit 3 stays the separate fact
+#      that the file is not JSON at all.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -489,6 +513,8 @@ STEPS_DIR="${PLUGIN_ROOT}/skills/implement/references"
 RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
+BASELINE_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/baseline-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'implement-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
@@ -518,6 +544,10 @@ source "$RECORDS_HASH_LIB" || die 3 "the records-hash library failed to load: $R
 # shellcheck source=/dev/null
 source "$RECIPES_LIB" || die 3 "the recipes library failed to load: $RECIPES_LIB"
 
+[ -f "$SCHEMA_CHECK_LIB" ] || die 3 "cannot find the schema-check library at $SCHEMA_CHECK_LIB"
+# shellcheck source=/dev/null
+source "$SCHEMA_CHECK_LIB" || die 3 "the schema-check library failed to load: $SCHEMA_CHECK_LIB"
+
 # How many times `build-brief` will hand one order to a builder before refusing (exit 41). Two, not
 # version 5's three: nothing in version 5 justifies three beyond a clamp guarding a corrupted
 # counter, never the cap itself. A constant here rather than a project or task field, because
@@ -544,7 +574,7 @@ FIX_ROUNDS_ALLOWED=2
 usage() {
   cat <<'EOF' >&2
 usage: implement-actions.sh read  <task_folder>
-       implement-actions.sh start <task_folder>
+       implement-actions.sh start <task_folder> [--rebased-onto <commit>]
        implement-actions.sh preconditions <task_folder>
                             [--recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
@@ -1170,9 +1200,20 @@ do_read() {
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
-  [ "$#" -ge 1 ] || die 3 "start: a task folder is required"
-  [ "$#" -le 1 ] || die 3 "start: unrecognized extra argument: $2"
-  local task_path="$1"
+  local task_path="" rebased_onto=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --rebased-onto)
+        [ "$#" -ge 2 ] || die 3 "start: --rebased-onto needs the commit the branch now builds on"
+        [ -n "$2" ] || die 3 "start: --rebased-onto was given an empty commit."
+        rebased_onto="$2"; shift 2 ;;
+      -*) die 3 "start: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_path" ] || die 3 "start: unrecognized extra argument: $1"
+        task_path="$1"; shift ;;
+    esac
+  done
+  [ -n "$task_path" ] || die 3 "start: a task folder is required"
 
   # --- step 1: resolve the task folder and its contract -----------------------------------------
   local resolve_rc
@@ -1529,6 +1570,7 @@ do_start() {
   fi
 
   local final_orders_json final_criteria_json ledger_started_from ledger_run_mode ledger_started_at
+  local started_from_before_json='[]' rewritten_from=""
   if [ "$ledger_present" = "true" ]; then
     opened_as="reopened"
     local stored_snapshot_hash
@@ -1540,6 +1582,53 @@ do_start() {
       || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
     ledger_run_mode="$(ledger_required_string "$ledger_doc" "runMode")" \
       || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+
+    # --- exit 82: the branch was rewritten under the ledger ---------------------------------------
+    # A rebase or an amend leaves startedFrom on no branch. preconditions would label the baseline
+    # with it and finish would compute a range git cannot resolve, so HEAD must descend from it, or
+    # the person names the new base with --rebased-onto and the old value is kept beside the new.
+    started_from_before_json="$(printf '%s' "$ledger_doc" | jq -c '.startedFromBefore // []')"
+    if [ -n "$rebased_onto" ]; then
+      local rebased_full
+      rebased_full="$(git -C "$code_path" rev-parse --verify --quiet "${rebased_onto}^{commit}" 2>/dev/null)"
+      [ -n "$rebased_full" ] \
+        || die 3 "start: --rebased-onto ($rebased_onto) is not a commit in the code repository at $code_path."
+      [ "$rebased_full" != "$ledger_started_from" ] \
+        || die 3 "start: --rebased-onto ($rebased_onto) is the commit $LEDGER_FILE already holds as startedFrom. Nothing to rewrite."
+      # The flag answers exit 82 alone. On a branch that still descends from startedFrom it would
+      # move the start past the build's own commits, so a wrong rewrite is undone by hand instead.
+      if git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$started_from" >/dev/null 2>&1; then
+        die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The branch was not rewritten, so there is nothing to repair. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
+      fi
+      git -C "$code_path" merge-base --is-ancestor "$rebased_full" "$started_from" >/dev/null 2>&1 \
+        || die 3 "start: --rebased-onto ($rebased_full) is not an ancestor of HEAD ($started_from) in $code_path. The build's own commits must follow it."
+      rewritten_from="$ledger_started_from"
+      started_from_before_json="$(printf '%s' "$started_from_before_json" | jq -c --arg c "$ledger_started_from" --arg at "$(date -u +%Y-%m-%d)" '. + [{commit: $c, at: $at}]')"
+      ledger_started_from="$rebased_full"
+    elif ! git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$started_from" >/dev/null 2>&1; then
+      die 82 "start: HEAD ($started_from) in $code_path does not descend from the commit this build started from ($ledger_started_from). The branch was rewritten since the ledger was opened, by a rebase or an amend. The ledger keeps that commit: preconditions would label the baseline with it, and finish would compute a range git cannot resolve. Run start again with --rebased-onto <commit>, naming the commit the branch now builds on. That rewrites startedFrom and keeps the old value under startedFromBefore. The baseline must then be retaken: move $IMPL_DIR/baseline.json and $IMPL_DIR/baseline-output aside, then run preconditions."
+    fi
+
+    # --- exit 83: a baseline this version cannot subtract from --------------------------------------
+    # An earlier version kept each tool's output inline and named no outputFile. build-record reads
+    # only outputFile, so that baseline turns every failing tool check unknown and spends an attempt
+    # on a schema change. The schema comparison reads the top level; the one rule it states in words
+    # and cannot express, outputFile present whenever the entry ran, is read here beside it.
+    local bl_compare bl_gaps
+    if [ -f "$IMPL_DIR/baseline.json" ]; then
+      bl_compare="$(schema_check_compare "$BASELINE_SCHEMA_FILE" "$IMPL_DIR/baseline.json")" \
+        || die 3 "start: $IMPL_DIR/baseline.json exists but could not be read as JSON, or could not be compared against $BASELINE_SCHEMA_FILE. Repair or remove it by hand before running this again."
+      bl_gaps="$(jq -r --argjson r "$bl_compare" '
+          [ ($r.missing // [])[] | "no " + .field ]
+          + [ ($r.unreadable // [])[] | .field + " " + .reason ]
+          + [ ( [ (if (.suite | type) == "array" then .suite[] else empty end) | {name: ("suite " + ((.framework // "?") | tostring)), row: .} ]
+                + [ {name: "codingStandards", row: .codingStandards}, {name: "staticAnalysis", row: .staticAnalysis}, {name: "security", row: .security} ] )[]
+              | select((.row | type) == "object" and (.row | has("exitCode")) and ((.row | has("outputFile")) | not))
+              | .name + " ran but names no outputFile" ]
+          | join("; ")' "$IMPL_DIR/baseline.json" 2>/dev/null)"
+      [ -z "$bl_gaps" ] \
+        || die 83 "start: $IMPL_DIR/baseline.json is not in the shape this version writes: $bl_gaps. build-record subtracts from outputFile alone, so every failing tool check would read unknown. An attempt would be spent on that. Move $IMPL_DIR/baseline.json and $IMPL_DIR/baseline-output aside, then run preconditions to retake the baseline at commit $ledger_started_from."
+    fi
     # A ledger opened before startedAt existed is repaired here, by its one producer running again.
     ledger_started_at="$(printf '%s' "$ledger_doc" | jq -r '.startedAt // empty')"
     [ -n "$ledger_started_at" ] || ledger_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1557,6 +1646,8 @@ do_start() {
     final_criteria_json="$(printf '%s' "$ledger_doc" | jq -c '.criteria')"
   else
     opened_as="opened"
+    [ -z "$rebased_onto" ] \
+      || die 3 "start: --rebased-onto rewrites the startedFrom a ledger holds, and this task has no ledger yet. Run start without it."
     ledger_started_from="$started_from"
     ledger_run_mode="$run_mode"
     ledger_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1594,9 +1685,10 @@ do_start() {
     --arg startedFrom "$ledger_started_from" --arg runMode "$ledger_run_mode" \
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
-    --argjson resnapshots "$resnapshots_json" \
+    --argjson resnapshots "$resnapshots_json" --argjson startedFromBefore "$started_from_before_json" \
     '{schemaVersion: 1, startedFrom: $startedFrom, startedAt: $startedAt, runMode: $runMode, snapshotHash: $snapshotHash,
       orders: $orders, criteria: $criteria}
+     | if ($startedFromBefore | length) > 0 then .startedFromBefore = $startedFromBefore else . end
      | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
 
@@ -1656,6 +1748,19 @@ do_start() {
   # the orders that drifted, halted and are ready are named by id, and `next` is the same answer
   # `read` gives from the same ledger. The preconditions record cannot exist before the first
   # start, and a resumed run reads whether it is there the way `read` does.
+  # startedFrom prints what the ledger holds, never HEAD: after a rewrite the two differ on
+  # purpose. An order with no proof in its frozen copy predates the field; every step reads it as
+  # tests, and this is the one place that says so before a test author is dispatched (row 73).
+  local st_started_from proof_absent
+  st_started_from="$ledger_started_from"
+  [ -z "$rewritten_from" ] \
+    || st_started_from="$ledger_started_from | rewritten from $rewritten_from | retake the baseline: move baseline.json and baseline-output aside, then run preconditions"
+  proof_absent="$(printf '%s' "$snapshot_workorders_json" | jq -r '[ .[] | select(has("proof") | not) | .id ] | join(", ")')"
+  if [ -n "$proof_absent" ]; then
+    proof_absent="$proof_absent | no proof in the snapshot, so each is proved by tests unless design sets gate"
+  else
+    proof_absent="none: every order in the snapshot names its proof"
+  fi
   local st_precon st_finished st_ledger_now st_next
   st_precon=false
   st_finished=false
@@ -1671,7 +1776,8 @@ do_start() {
     --arg trunk "$(if [ "$trunk_derived" = "true" ]; then printf '%s | ' "$trunk_branch"; fi)$trunk_note" \
     --arg snapshot "$SNAPSHOT_FILE" \
     --arg snapshotHash "$snapshot_hash_on_disk | workOrders=$(printf '%s' "$snapshot_workorders_json" | jq 'length') | criteria=$(printf '%s' "$snapshot_criteria_json" | jq 'length')" \
-    --arg ledger "$LEDGER_FILE" --arg startedFrom "$started_from" \
+    --arg ledger "$LEDGER_FILE" --arg startedFrom "$st_started_from" \
+    --arg proofAbsent "$proof_absent" \
     --arg drift "$(if [ "$drift_checked" = "true" ]; then printf 'checked | contractChanged=%s' "$contract_changed_json"; else printf 'not checked: a first run has no earlier snapshot to compare against'; fi)" \
     --argjson drifted "$(printf '%s' "$drifted_orders_json" | jq -c '[ .[] | .id ]')" \
     --argjson haltedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
@@ -1682,7 +1788,7 @@ do_start() {
     --argjson ready "$ready_ids_json" \
     --arg state "$run_state" --arg next "$st_next" '
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
-     snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom,
+     snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
      drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted, newLiveOrders: $newLiveOrders,
      halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}')"
   exit 0
@@ -2563,7 +2669,7 @@ EOF
             baseline_status="already-recorded"
             baseline_note="a baseline already exists for commit $ledger_started_from; a baseline retaken after code is written measures nothing, so it was left alone"
           else
-            die 21 "preconditions: $BASELINE_FILE already holds a baseline taken at commit $existing_commit, but this run's own ledger started from a different commit, $ledger_started_from. A baseline is taken once, at the commit the build started from, and never retaken after that: retaking it here would measure the wrong repository state. Investigate before proceeding; remove $BASELINE_FILE by hand only if this task's baseline is meant to start over."
+            die 21 "preconditions: $BASELINE_FILE already holds a baseline taken at commit $existing_commit, but this run's own ledger started from a different commit, $ledger_started_from. A baseline is taken once, at the commit the build started from, and never retaken after that: retaking it here would measure the wrong repository state. Investigate before proceeding; remove $BASELINE_FILE and its baseline-output/ folder by hand only if this task's baseline is meant to start over."
           fi
           ;;
         unreadable)

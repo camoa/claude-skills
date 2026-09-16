@@ -47,3 +47,18 @@ The `resnapshotted:` line names those orders, and the ledger records each with t
 This needs design closed on the live files; otherwise the run refuses with exit 13 and says to
 close design again. The `haltedDependents:` line names only orders the ledger halts, each of which
 depends on a started drifted order, directly or through another order.
+
+A resumed run refuses two more things, before it writes. Exit 82: HEAD does not descend from the
+commit the ledger started from. The branch was rewritten under the build, by a rebase or an
+amend. Run `start "<task_folder>" --rebased-onto <commit>`, naming the commit the branch now
+builds on. It rewrites `startedFrom` and keeps the old value in the ledger with the date. The
+`startedFrom:` line then says the baseline must be retaken: move `baseline.json` and
+`baseline-output` aside, then run `preconditions`. Exit 83: `baseline.json` was written by an
+earlier version, in a shape this one cannot subtract from. The message names the same retake.
+Neither refusal spends an attempt. The `startedFrom:` line always prints what the ledger holds,
+never the current HEAD.
+
+The `proofAbsent:` line names the orders whose frozen copy carries no `proof`, from a design
+closed before the field existed. Each is proved by tests unless design sets `gate` on it. Read
+the line to the person before the first order is taken, because a configuration order on it
+would land on the test-author path.

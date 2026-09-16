@@ -40,7 +40,9 @@ Skip `tests-brief`, dispatch nobody, and put no row to anyone. Go straight to th
 with no `--test`, and a `--checklist` for each criterion a person verifies. The build runs the
 implement recipe's `## Configuration gate` lines as the order's own check, and `close` judges
 its owned machine criterion from that check. The behavioural proof lives with the tests of the
-order that consumes what it configures. Every other order takes the steps below.
+order that consumes what it configures. Every other order takes the steps below. An order with
+no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` line. Design's
+`update --proof gate` is the way onto the gate.
 
 ## Assemble what the test author may see
 
