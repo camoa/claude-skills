@@ -56,8 +56,9 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree beside the code path, at
-`<parent of codePath>/<basename of codePath>-<name>`, on the branch `feature/<name>`, records
-both in `task.json`, and commits. The tree is a sibling for one reason. A nested worktree is
+`<parent of codePath>/<slug of the code folder>-<name>`, on the branch `feature/<name>`, records
+both in `task.json`, and commits. The folder name is the slug of the code folder plus the task
+name, so a site name is predictable. The tree is a sibling for one reason. A nested worktree is
 invisible to a tool that registers projects by folder, and DDEV hands it to the parent project.
 Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
 the script also enforces, or the worktree could not be made. In the last case the folder is

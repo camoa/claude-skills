@@ -189,8 +189,10 @@ task_stage() {
 }
 
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
-# code path named <basename of codePath>-<id>: a tree nested under the code path is invisible to
-# a tool that registers projects by folder, and DDEV hands it to the parent project. Prints the
+# code path named <slug of the code folder>-<id>: a tree nested under the code path is invisible
+# to a tool that registers projects by folder, and DDEV hands it to the parent project. The
+# folder name becomes a hostname label, so the basename goes through pb_slug, the one slug
+# rule. A dot or an underscore in it becomes a hyphen, as the id rule demands. Prints the
 # path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
@@ -215,7 +217,10 @@ task_worktree() {
     printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
   else
     id="$(jq -r '.id' "$task_json")"
-    wt="$(dirname -- "$code")/$(basename -- "$code")-$id"
+    # shellcheck source=/dev/null
+    command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
+      || die3 "$who: the library failed to load: playbooks.sh"
+    wt="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$id"
     branch="feature/$id"
     printf 'worktree: %s\n' "$wt" >&2
   fi
