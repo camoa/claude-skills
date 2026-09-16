@@ -252,7 +252,24 @@ recorded note reaches a person; a silent change or a silent skip does not.
 
 Three to seven build steps, ten at the most. Split when the steps mix independent concerns, or
 mix phases. Merge two orders when each has fewer than three steps, they address the same
-component, and they cannot run in parallel anyway.
+component, and they cannot run in parallel anyway. The script folds one into the other:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh merge "<task_folder>" \
+  --into <woId> --from <woId>
+```
+Every list on the folded order joins the survivor's, without duplicates. The folded order's file
+is removed, and every `dependsOn` that named it now names the survivor. The two proofs must
+agree; set one order's `--proof` first when they do not. Never remove or edit an order file by
+any other means. A write outside the script prints nothing, so nothing records that it happened.
+
+A test that no longer belongs on an order leaves through the script too. The merge may have
+doubled it, or the order became a `gate`:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-test "<task_folder>" \
+  --id <woId> --description "<the test's description, exactly as declared>"
+```
+It refuses the last test of a `tests` order that owns a machine-verified criterion, the rule the
+check applies. Add the replacement first.
 
 A shared decision, like one base class serving two later orders, lives in the order that builds
 the shared thing, in its own `reasoning`. The orders that depend on it point at it through
@@ -375,7 +392,7 @@ problem. Read the report file when the line is not enough, and fix the specific 
     exactly one order claims it;
   - a work order serving nothing needs a real `--criteria-served`, or it should not exist;
   - a work order missing a required test needs an `add-test` call;
-  - a `gate` order declaring a test needs that test removed by hand, or `--proof tests` if it
+  - a `gate` order declaring a test needs a `remove-test` call for it, or `--proof tests` if it
     builds code after all;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the

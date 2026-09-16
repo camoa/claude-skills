@@ -21,6 +21,12 @@ mix independent concerns. It merges two orders that each have fewer than three s
 the same component. Too large, and there is no single thing to state a test about. Too small,
 and a feature becomes fifty orders that cost more to coordinate than to build.
 
+The merge is a script action, `merge`, not a hand edit. It folds one order into another. Every
+list joins the survivor's without duplicates, the folded file is removed, and every dependency
+that named it now names the survivor. A test that no longer belongs on an order leaves through
+`remove-test`, which refuses the last test an owned machine criterion needs. Both print what moved,
+so the change is on record the way every other design write is.
+
 ## What a work order declares
 
 | Field | What it says |

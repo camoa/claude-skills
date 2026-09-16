@@ -40,6 +40,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> --text <text>
 #   design-actions.sh add-test       <task_folder> \
 #                        --id <woId> --level <text> --description <text>
+#   design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
+#   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
@@ -77,12 +79,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # An id is minted by scanning this task's own design/ folder for the highest wo<n> already
 # present and taking the next number. There is no counter file recording a high-water mark the
-# way alignment.json's nextCriterionId does for a criterion. A work order is not expected to be
-# deleted and re-minted the way a criterion is revised mid-conversation (ideal/design.md names no
-# delete path), so this script does not build one; the gap this leaves, named plainly rather than
-# hidden, is that deleting the highest-numbered work order by hand and then minting again would
-# reuse its id. Fix that by adding a counter, kept beside nextCriterionId's own precedent, the day
-# a real task needs to delete a work order.
+# way alignment.json's nextCriterionId does for a criterion. `merge` is the one delete path: the
+# sizing rule folds one order into another, and the folded order's file goes (live-run row 74).
+# The gap this leaves, named plainly rather than hidden, is that folding the highest-numbered
+# work order and then minting again reuses its id. Fix that by adding a counter, kept beside
+# nextCriterionId's own precedent, the day a reused id is found to mislead a later record.
 #
 # `close` records what design closed on (ideal/implementation.md, "Freezing, and what a freeze is
 # for"). It runs check-design.sh against the live files first, and writes
@@ -107,14 +108,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      caller branching on 1 never confuses "not a task folder" with "a file is broken".
 #   2  the target of this action is not present: `start` was asked to begin a task with no
 #      alignment.json, or with one that will not parse or is not a contract; or `update`,
-#      `add-owned-file`, `add-done-when`, `add-test` or `render` were given an --id naming no
-#      work order file in this task's design/ folder; or `distill` found no
-#      records/design-distill.json, so the distiller has not been dispatched yet.
+#      `add-owned-file`, `add-done-when`, `add-test`, `remove-test` or `render` were given an --id
+#      naming no work order file in this task's design/ folder; or `remove-test` was given a
+#      --description no test on that order carries; or `merge` was given an --into or --from
+#      naming no work order file; or `distill` found no records/design-distill.json, so the
+#      distiller has not been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
 #      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
-#      one without --confirmed); a work order file already on disk that is not valid
+#      one without --confirmed); a `remove-test` refused because the test named is the last one
+#      on a `tests` order owning a machine-verified criterion; a `merge` refused because the two orders' proofs differ or
+#      --into and --from name the same order; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
@@ -210,6 +215,8 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
                                          --description <text>
+       design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
+       design-actions.sh merge          <task_folder> --into <woId> --from <woId>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
@@ -798,6 +805,145 @@ do_add_test() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# remove-test: drops one declared test, named by its description, the one field design writes on
+# a test. The sizing rules end with a test ceasing to exist. Until this action existed, that edit
+# ran through jq outside the one producer (live-run row 74). The last test is refused on the same
+# rule check-design.sh applies: a `tests` order that owns a machine-verified criterion needs one.
+# Add the replacement first, then remove. A person-only order may go to zero.
+# ------------------------------------------------------------------------------------------------
+
+do_remove_test() {
+  local id="" description=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)
+        need_value "remove-test" "--id" "$#" "${2:-}"
+        id="$2"; shift 2 ;;
+      --description)
+        need_value "remove-test" "--description" "$#" "${2:-}"
+        description="$2"; shift 2 ;;
+      *) die3 "remove-test: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "remove-test" "$id"
+  is_blank "$description" && die3 "remove-test: --description is required and must not be blank"
+
+  local file doc matched total proof
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "remove-test: $file exists but is not valid JSON"
+  matched="$(jq -r --arg d "$description" '[(.tests // [])[] | select(.description == $d)] | length' "$file")"
+  [ "$matched" -gt 0 ] || die2 "remove-test: $id declares no test with the description '$description'"
+  total="$(jq -r '(.tests // []) | length' "$file")"
+  proof="$(jq -r '.proof // "tests"' "$file")"
+  if [ "$proof" = "tests" ] && [ "$total" -eq "$matched" ]; then
+    # The machine-verified criteria this order owns, read the way check-design.sh reads them.
+    local machine_owned
+    machine_owned="$(jq -r --slurpfile wo "$file" '
+      [ (.criteria // [])[]? | select(type == "object") | select(.verifiedBy == "machine") | .id ] as $machine
+      | [ ($wo[0].criteriaOwned // [])[] | select(. as $c | $machine | index($c) != null) ] | join(",")
+    ' "$ALIGNMENT_FILE" 2>/dev/null)"
+    [ -z "$machine_owned" ] \
+      || die3 "remove-test: that is the last test on $id, and $id owns the machine-verified criteria $machine_owned. check-design.sh refuses a tests order that owns one with no test. Add the replacement test first, or set --proof gate when the deliverable is configuration"
+  fi
+  doc="$(jq --arg d "$description" '.tests = [(.tests // [])[] | select(.description != $d)]' "$file")"
+  write_atomic "$file" "$doc"
+  echo "UPDATED: $file"
+  echo "removed-tests: $matched"
+  wo_summary "$doc"
+  render_wo "$id"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# merge: folds one order into another (SKILL.md, "Size a work order"). Every list field is the
+# ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
+# appended, so a disposition `dispose` wrote on the folded order is not lost. `title`, `diffBudget`
+# and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
+# `tests` order would carry tests it may not declare, or the reverse. The folded order's
+# json and md are removed. Every other order's `dependsOn` naming it is rewritten to the survivor,
+# without duplicates, and the survivor never depends on itself. This is the delete path the id
+# comment above once said did not exist, and the gap named there now applies here. Commits
+# nothing, the same as every edit before `close`.
+# ------------------------------------------------------------------------------------------------
+
+do_merge() {
+  local into="" from=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --into)
+        need_value "merge" "--into" "$#" "${2:-}"
+        into="$2"; shift 2 ;;
+      --from)
+        need_value "merge" "--from" "$#" "${2:-}"
+        from="$2"; shift 2 ;;
+      *) die3 "merge: unrecognized argument: $1" ;;
+    esac
+  done
+  is_blank "$into" && die3 "merge: --into is required and must not be blank"
+  is_blank "$from" && die3 "merge: --from is required and must not be blank"
+  id_shape_ok "$into" wo || die3 "merge: --into '$into' is not a valid wo<n> id shape"
+  id_shape_ok "$from" wo || die3 "merge: --from '$from' is not a valid wo<n> id shape"
+  [ "$into" != "$from" ] || die3 "merge: --into and --from both name $into"
+  wo_exists "$into" || die2 "merge: no work order $into in $DESIGN_DIR"
+  wo_exists "$from" || die2 "merge: no work order $from in $DESIGN_DIR"
+
+  local into_file from_file into_proof from_proof
+  into_file="$(wo_file_for "$into")"
+  from_file="$(wo_file_for "$from")"
+  jq empty "$into_file" 2>/dev/null || die3 "merge: $into_file exists but is not valid JSON"
+  jq empty "$from_file" 2>/dev/null || die3 "merge: $from_file exists but is not valid JSON"
+  into_proof="$(jq -r '.proof // "tests"' "$into_file")"
+  from_proof="$(jq -r '.proof // "tests"' "$from_file")"
+  [ "$into_proof" = "$from_proof" ] \
+    || die3 "merge: $into is proved by $into_proof and $from by $from_proof. Set one order's --proof so the two agree, then merge"
+
+  # The union keeps first occurrence order, so `unique`, which sorts, is not used here.
+  local doc
+  doc="$(jq --slurpfile f "$from_file" --arg from "$from" '
+    $f[0] as $f
+    | def dedupe: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
+      def union(k): if (has(k) or ($f | has(k))) then .[k] = (((.[k] // []) + ($f[k] // [])) | dedupe) else . end;
+      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = $f[k] else .[k] = .[k] + " " + $f[k] end;
+    . as $i
+    | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
+    | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses")
+    | .dependsOn = [ (.dependsOn // [])[] | select(. != $from and . != $i.id) ]
+    | append("interface") | append("reasoning")
+  ' "$into_file")"
+
+  local k before after
+  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses; do
+    before="$(jq -r --arg k "$k" '(.[$k] // []) | length' "$into_file")"
+    after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
+    echo "$k: $before -> $after"
+  done
+  write_atomic "$into_file" "$doc"
+
+  # Every other order that depended on the folded one now depends on the survivor.
+  local f other_id other_doc
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ "$f" != "$into_file" ] && [ "$f" != "$from_file" ] || continue
+    jq -e --arg from "$from" '((.dependsOn // []) | index($from)) != null' "$f" >/dev/null 2>&1 || continue
+    other_id="$(jq -r '.id' "$f")"
+    other_doc="$(jq --arg from "$from" --arg into "$into" '
+      .dependsOn = ((.dependsOn // []) | map(if . == $from then $into else . end)
+        | reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end))' "$f")"
+    write_atomic "$f" "$other_doc"
+    echo "REWRITTEN: $f"
+    render_wo "$other_id"
+  done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
+
+  rm -f "$from_file" "$DESIGN_DIR/$from.md"
+  echo "REMOVED: $from_file"
+  echo "removed: $DESIGN_DIR/$from.md"
+  echo "UPDATED: $into_file"
+  wo_summary "$doc"
+  render_wo "$into"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # render: calls design-render.sh directly, for a caller that only wants the markdown refreshed
 # without changing anything.
 # ------------------------------------------------------------------------------------------------
@@ -1132,6 +1278,8 @@ case "$ACTION" in
   add-owned-file) do_add_owned_file "$@" ;;
   add-done-when)  do_add_done_when  "$@" ;;
   add-test)       do_add_test       "$@" ;;
+  remove-test)    do_remove_test    "$@" ;;
+  merge)          do_merge          "$@" ;;
   render)         do_render         "$@" ;;
   check)          do_check          "$@" ;;
   close)          do_close          "$@" ;;
