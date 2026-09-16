@@ -1,7 +1,7 @@
 ---
 name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
-argument-hint: "[<task-id>]"
+argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
 ---
@@ -36,6 +36,10 @@ task: act interactively, the safe default. Decide this once, at the start.
 Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
 task is already active in this conversation. Neither known: say so in one line and name the task
 skill. Stop; there is nowhere to write.
+
+An invocation line whose first word is `close` is the person's yes on the design. The task is
+the word after it, or the active one. Go straight to "Close the design" below. When no
+`records/design-critique-*.md` exists yet, run "Critique the design" first.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -424,13 +428,21 @@ then `check` again. A leave needs a reason from the person. Write it into that o
 A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
 the contract has to change.
 
+Answer each change with the lines the call printed, and end the turn. Do not show the orders
+again, and do not ask whether the design is ready to close. The close below is an action the
+person takes, never a question this skill asks. Scope learned this from a run that asked for a
+yes on the whole contract after each of five corrections.
+
 **Autonomous:** ask nothing and change nothing. The findings stay in the three files, and the
 close below records their paths and the count, so a person sees them later. Say once, at the
 end of this run, that the critique's findings were recorded and not judged.
 
 ## Close the design
 
-Once design is done, close it. Run:
+The close is the approval, and there is no second approve action. An interactive close records
+that a person was present, and that record is the yes. The person closes by running
+`/aida:design close <task-id>`, or by saying in their own words that the design is right. Map
+those words to the call below. Autonomous, nobody says so: run it once the check is clean. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"

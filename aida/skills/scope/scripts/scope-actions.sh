@@ -34,12 +34,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                      --approach <text> --status <suggested|required>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] record-decision <task_folder> \
 #                      --text <text>
+#   scope-actions.sh [--run-mode <interactive|autonomous>] approve        <task_folder>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] distill        <task_folder>
 #
 # `add` records `author` as `designer` in both run modes. Only an explicit `--author owner`, or
-# the promotion a person's yes triggers at approval, records `owner` (ideal/scope.md, "Approval").
-# A criterion nobody confirmed must never read as one the owner wrote. --run-mode is accepted on
-# every action and changes nothing here now. A non-goal carries no author (alignment-schema.json's
+# the promotion `approve` makes when a person says the contract is right, records `owner`
+# (ideal/scope.md, "Approval"). A criterion nobody confirmed must never read as one the owner
+# wrote, so `approve` refuses `--run-mode autonomous`; that is the one thing --run-mode changes
+# here. A non-goal carries no author (alignment-schema.json's
 # own nonGoal has only id and text), so no action here ever writes one for it.
 #
 # Depends on, shipped by the same part and never edited here:
@@ -70,9 +72,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # it calls task-actions.sh start through mark_task_in_progress, and that commits. set-goal, add,
 # add-non-goal, update, remove, set-mechanism and record-decision are mid-conversation edits
 # inside one still-open contract, closer to a document being drafted than to a stage finishing,
-# so they commit nothing. `distill` is the one action both approval branches run last, after the
-# contract is frozen, so it commits the task folder through commit_stage_close before it reads
-# the sidecar; the goal is the commit's reason.
+# so they commit nothing. The close is one action per branch, run last, after the contract is
+# frozen: `approve` when a person said the contract is right, `distill` in the autonomous branch
+# where nobody did. Both commit the task folder through commit_stage_close before they read the
+# sidecar; the goal is the commit's reason.
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet.
@@ -81,8 +84,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  the target of this action is not present: alignment.json does not exist yet, for an action
 #      that needs one already (every action but `read`, `init`, `set-mechanism` and `distill`);
 #      or, for `update` and `remove`, the given --id names no criterion and no non-goal in an
-#      alignment.json that does exist; or, for `distill`, records/scope-distill.json does not
-#      exist yet, so the distiller has not been dispatched.
+#      alignment.json that does exist; or, for `approve` and `distill`, records/scope-distill.json
+#      does not exist yet, so the distiller has not been dispatched. `approve` has promoted and
+#      committed by then; run it again once the sidecar exists.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; alignment.json exists but will not parse as JSON, or parses
 #      but is not a contract (missing schemaVersion, goal, expectedResult, or criteria/nonGoals
@@ -90,12 +94,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      alignment.json already exists (refused, never overwritten); a given --id that does not
 #      match either id format, or that is already present when `add` tries to mint it; a given
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
-#      or that update is asked to set to anything but owner; a missing or unusable
-#      nextCriterionId or nextNonGoalId; the plugin root could not be resolved; or a write that
-#      failed.
+#      or that update is asked to set to anything but owner; `approve` under --run-mode
+#      autonomous; a missing or unusable nextCriterionId or nextNonGoalId; the plugin root could
+#      not be resolved; or a write that failed.
 #   4  a script this action calls ran and failed. `render` calls alignment-render.sh; that
-#      script's own stderr is the answer, printed here rather than duplicated. For `distill`, the
-#      sidecar exists but fails scripts/distill-schema.json, or says standsAlone false with no gap.
+#      script's own stderr is the answer, printed here rather than duplicated. For `approve` and
+#      `distill`, the sidecar exists but fails scripts/distill-schema.json, or says standsAlone
+#      false with no gap.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -161,6 +166,7 @@ usage: scope-actions.sh read            <task_folder>
        scope-actions.sh render          <task_folder>
        scope-actions.sh set-mechanism   <task_folder> --approach <text> --status <suggested|required>
        scope-actions.sh record-decision <task_folder> --text <text>
+       scope-actions.sh approve         <task_folder>
        scope-actions.sh distill         <task_folder>
 EOF
 }
@@ -672,12 +678,11 @@ do_record_decision() {
   exit 0
 }
 
-# Commits the approved contract, then reads the sidecar the distiller wrote after the approval;
-# the read is distill_read in task-helpers.sh. The commit comes first because the contract is
-# final by then whatever the distiller wrote, and a missing or malformed sidecar exits 2 or 4
-# without blocking the stage. A second distill after a re-dispatch finds nothing to commit.
-do_distill() {
-  [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
+# The close both branches share: commits the contract, then reads the sidecar the distiller
+# wrote; the read is distill_read in task-helpers.sh. The commit comes first because the contract
+# is final by then whatever the distiller wrote, and a missing or malformed sidecar exits 2 or 4
+# without blocking the stage. A second close after a re-dispatch finds nothing to commit.
+close_scope() {
   # The goal is the reason. init writes it as "", and a commit with an empty reason is refused
   # by the shape check, so a contract closed without one says that instead.
   local why
@@ -685,6 +690,45 @@ do_distill() {
   [ -n "$why" ] || why="closed with no goal recorded"
   commit_stage_close "$TASK_PATH" scope "Close scope for $(jq -r '.id' "$TASK_FILE")" "$why"
   distill_read "$TASK_PATH" scope
+}
+
+# ------------------------------------------------------------------------------------------------
+# approve: the person's yes, as an action they take rather than a question the skill asks. The
+# skill used to render and ask "approve?" after every correction. Once it asked five times in a
+# row (sources/nyc-defects-2026-09-14.md, item 14). A question the model decides when to ask is
+# one it can repeat. This promotes every criterion still `designer` to `owner`, then closes as
+# `distill` does. Nothing left to promote is not a refusal. The contract was already approved,
+# and the call says so, still commits any later edit, and reads the sidecar again.
+# ------------------------------------------------------------------------------------------------
+
+do_approve() {
+  [ "$#" -eq 0 ] || die3 "approve: unrecognized argument: $1"
+  [ "$RUN_MODE" = "interactive" ] \
+    || die3 "approve: only a person approves. An autonomous run records the approval with record-decision, promotes nothing, and closes with distill"
+
+  require_alignment_exists "approve"
+
+  local ids count updated
+  ids="$(jq -r '[.criteria[] | select(.author == "designer") | .id] | join(" ")' "$ALIGNMENT_FILE")"
+  count="$(jq -r '[.criteria[] | select(.author == "designer")] | length' "$ALIGNMENT_FILE")"
+  if [ "$count" -gt 0 ]; then
+    updated="$(jq '.criteria |= map(if .author == "designer" then .author = "owner" else . end)' "$ALIGNMENT_FILE")" \
+      || die3 "approve: could not update $ALIGNMENT_FILE"
+    write_atomic "$ALIGNMENT_FILE" "$updated"
+    echo "APPROVED"
+  else
+    echo "ALREADY APPROVED: no criterion is still designer, nothing to promote"
+  fi
+  echo "promoted: $count"
+  [ -z "$ids" ] || echo "promoted-ids: $ids"
+  contract_summary
+  close_scope
+  exit 0
+}
+
+do_distill() {
+  [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
+  close_scope
   exit 0
 }
 
@@ -724,6 +768,7 @@ case "$ACTION" in
   render)           do_render           "$@" ;;
   set-mechanism)    do_set_mechanism    "$@" ;;
   record-decision)  do_record_decision  "$@" ;;
+  approve)          do_approve          "$@" ;;
   distill)          do_distill          "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

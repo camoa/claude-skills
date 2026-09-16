@@ -142,14 +142,16 @@ no question. On an autonomous run nothing is offered, and scope says so.
 
 ## Approval
 
-When the conversation has run its course, scope renders the whole document and shows it. Never a
-summary: you approve what you can read. It asks for a plain yes or no on that text.
+Approval is an action you take, never a question scope asks. Each correction you give is
+answered with the changed line, and the turn ends. When the contract is right, say so in your
+own words, or run `/aida:scope approve <task-id>`. Either runs the approve action: every
+criterion still recorded as the designer's becomes yours, and the close below runs. That is the
+moment the contract is approved, and there is no other. A yes on the draft alone promotes
+nothing. Ask to see the whole document again at any point, and scope renders it.
 
-No: say what still needs to change. Scope makes that change, renders again, and asks again.
-
-Yes: every criterion still recorded as the designer's becomes yours. That is the moment the
-contract is approved, and there is no other. A yes on the draft alone, before the final
-rendering, promotes nothing.
+An earlier version rendered the document and asked for a yes after every correction. On one task
+it asked five times in a row, once per correction, and the person answered "Stop". A question
+the model decides when to ask is one it can repeat, so the question is gone.
 
 Stopping part way leaves the draft on disk, marked as the designer's, and approves nothing.
 The draft itself stays uncommitted until the close below. The next stage proceeds on such a
@@ -157,10 +159,11 @@ draft, so an unfinished contract is yours to notice.
 
 ## The close
 
-Once approved, scope dispatches a reader, the distiller, over the written contract. The distiller
-was not in this conversation, on purpose: a record checked against its author's account of it is
-not checked. It reads the contract and the task's files from disk and answers one question. Does
-this record stand alone?
+When you say the contract is right, scope dispatches a reader, the distiller, over the written
+contract. Then the approve action commits the contract and reads what the distiller wrote. The
+distiller was not in this conversation, on purpose: a record checked against its author's account
+of it is not checked. It reads the contract and the task's files from disk and answers one
+question. Does this record stand alone?
 
 A record stands alone when a fresh reader could pick it up without the conversation that produced
 it. Every approach carries its reason. Every alternative rejected is named, with why. Every
@@ -171,7 +174,7 @@ what is missing and where it belongs.
 The close shows you each gap. A gap never blocks: acting on one is the relevant part of the
 conversation above, run again. The close then commits the task folder, names the next command,
 `/aida:research <task-id>`, and stops. A malformed distiller record is reported, not fixed: run
-`/aida:scope <task-id>` again, which ends at approval and runs the close afresh.
+`/aida:scope approve <task-id>` again, which runs the close afresh.
 
 ## The autonomous run
 
@@ -191,14 +194,15 @@ Silence is never read as your answer, so an approved contract and an unattended 
 ## Changing the contract later
 
 Run `/aida:scope <task-id>` again, at any point, including in the middle of research or design
-when a goal turns out to be missing. Scope finds the existing contract, shows it rendered, and
-holds the conversation for the change you named. A change typed on the invocation line is applied
-first, then scope asks what else is wrong.
+when a goal turns out to be missing. Scope finds the existing contract and holds the
+conversation for the change you named. A change typed on the invocation line is applied at
+once and answered with the changed line. When the line carries no change, scope shows the
+contract rendered and asks what is wrong.
 
 A change adds a criterion or a non-goal, rewords one, or removes one. It can also rephrase the
 goal or the expected result, and record or change the stated approach. A removed id is never
-reused. Every change ends as the first run did: the whole document rendered, and a plain yes or
-no on it, even for one small edit. Once a build has started, a change is still allowed;
+reused. Every change ends as the first run did: you say it is right, or run `/aida:scope approve
+<task-id>`, and nothing else closes it. Once a build has started, a change is still allowed;
 implementation notes at its start that the contract changed, and asks nothing.
 
 Editing the rendered document by hand changes nothing. Nothing reads it back, and the file says

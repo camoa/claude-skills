@@ -185,10 +185,11 @@ file never arrives is dispatched once more. If it fails again, the close leaves 
 You answer each finding, because a critic that can block trains the builder to write for the
 critic. Interactively, design shows the findings grouped by order, and each takes one answer:
 change the order, then check again, or leave it with a reason. Design writes the reason into
-the order's reasoning so it outlives the conversation. A finding on the contract is a scope
-question. Autonomously, design asks nothing and changes nothing. The findings stay in their
-files, and the close records the paths and the count for you to read later. The close never
-blocks on the critique, in either mode.
+the order's reasoning so it outlives the conversation. Each change is answered with the changed
+lines, and the turn ends; design never asks whether it is ready to close. A finding on the
+contract is a scope question. Autonomously, design asks nothing and changes nothing. The
+findings stay in their files, and the close records the paths and the count for you to read
+later. The close never blocks on the critique, in either mode.
 
 ## Running it unattended
 
@@ -200,6 +201,10 @@ checked. It answers agree, disagree or downgrade, with what it compared, and des
 answer to the order's reasoning. Interactively, you read the reasoning yourself.
 
 ## Closing, and what implementation builds from
+
+The close is the approval, and it is yours to run. Run `/aida:design close <task-id>`, or say in
+your own words that the design is right. Design never asks for it. There is no separate approve
+step; the close records that a person was present, and that record is the yes.
 
 The close runs the check once more and writes `design-closed.json` only when it is clean. It
 commits the task folder at that moment; the order edits before it commit nothing. The record
