@@ -4,6 +4,80 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.12] - 2026-09-16
+
+The thirteen defects the nyc project's live run found against beta.10 and beta.11 (items 9 to 21
+of the owner's report), and live-run rows 73 and 74.
+
+### Added
+- `proof: record`, the third proof kind, for a work order whose deliverable is a document in the
+  task folder. Design marks an order `record` when every owned file is under the task folder and
+  no `--proof` was given, and refuses an owned file the project ignores (`records/` holds derived
+  check output; `deliverables/` is the place). The order freezes no test; its done-when rows are
+  the checkpoint, judged by a person or the row-checker. Its range and its unchanged-tree
+  refusal read the project folder's git history, so no empty commit is needed; the suite, the
+  tool rows and the gate do not run; the reviewer is handed the owned files by path and no code
+  patch. (item 17)
+- `scope-actions.sh approve <task>`: promotes every designer criterion to the owner, runs the
+  distill check and commits. The scope skill answers a correction with the changed lines and
+  ends the turn; it never asks the whole-document question. The person closes with
+  `/aida:scope approve <task>` or in their own words. Design's critique loop takes the same
+  shape, and `close` from a fresh session runs the critique first. An eval case,
+  `evals/scope-five-corrections/`, in the shape `claude plugin eval init` scaffolds, fails when
+  the approval question appears more than once. (item 14)
+- `task set-run-mode <task> autonomous --stage <stage>` scopes the mode to named stages;
+  `runModeStages` in `task.json`. One helper, `task_run_mode <folder> <stage>`, answers every
+  reader; implement reads the task at every `start` and rewrites the ledger's copy; review reads
+  the task, not the ledger. An autonomous stage invokes the next only when the next is
+  autonomous too. (item 20)
+- `implement-actions.sh clear-halt <task> <wo-id> --because <text>` clears a halt the grant and
+  the restart do not answer (a rejected row, a non-goal hit, a fixer's scope, a load-bearing
+  finding, a dirty tree), records it under `haltsCleared`, and refuses under an autonomous
+  implement stage (exit 68) or on a halt another action answers (exit 85). The grant, the restart
+  and `clear-halt` read the task's mode, so `set-run-mode interactive` then the action is the path
+  past an autonomous halt. (item 20)
+- `design-actions.sh remove-test` and `merge`, the actions the sizing rules name. `remove-test`
+  refuses the last test only where the design check would, an order owning a machine-verified
+  criterion. `merge` folds one order into another, de-duplicates, rewrites `dependsOn`, and
+  removes the folded order's files. (live-run row 74)
+- `start --rebased-onto <commit>`: a resumed `start` whose HEAD does not descend from the
+  ledger's `startedFrom` refuses (exit 82) and names this flag, which rewrites the field and
+  keeps the old value under `startedFromBefore`. Refused when the branch was not rewritten.
+  `startedFrom:` prints the ledger's value, never HEAD. (item 19)
+- `start` prints `proofAbsent:` naming the orders whose frozen copy carries no `proof`, and that
+  tests prove them unless design sets `gate` or `record`. (live-run row 73)
+
+### Changed
+- The run record travels by file at every jq hop: the suite and tool outputs by `--rawfile`,
+  the growing checks and runs by `--slurpfile`, in the implement and review scripts (fourteen
+  hops in review). A record with fewer checks than the schema requires is refused (exit 84)
+  instead of written with a check silently absent. (items 9 and 12)
+- Owned files outside the code repository leave the tool rows and the baseline tools, the way
+  frozen tests do; a row with nothing left reads undeclared and names how many lay outside.
+  (item 11)
+- A resumed `start` checks `baseline.json` against the shape this version writes and refuses
+  (exit 83) naming the retake; no attempt is spent on an old baseline. (item 10)
+- The record steps honour the recipe's `cost`. A suite row costed `end-of-task` is not run per
+  attempt; the check reads `deferred`, which passes like `undeclared` and never satisfies the
+  order-tests floor. `finish` runs the suite once at HEAD with the baseline subtraction, writes
+  `finished.json.suite` with the output in `implementation/finished-suite.txt`, and refuses
+  unmet or unknown (exit 86). Review reuses that result at the same commit instead of running
+  the suite again. (item 18)
+- A folder source of process recipes falls through: the declared folder first, then the
+  dev-guides catalog, then research's missing-recipe path. `recipe-source` answers
+  `RECIPE: catalog searched=<folders>` on a folder miss; the `none` answer is gone. This reverses
+  the beta.11 rule. (item 16)
+- `task create` names the worktree folder with the slug of the code folder (lowercase, runs of
+  other characters to one hyphen), so a dot in the folder name no longer reaches the site name.
+  (item 15)
+
+### Catalog asks, not plugin changes
+- The Drupal test-execution recipe's `failure_line` uses `\w` inside a bracket, which POSIX ERE
+  reads literally, so GNU `grep -E` never matches it; the ask spells it POSIX. (item 13)
+- The recipe's PHPUnit rows run `ddev phpunit`, which ignores `{file}` and `--filter` when
+  `phpunit.xml` is not at the root; the ask moves every row to `ddev exec vendor/bin/phpunit -c`.
+  (item 21)
+
 ## [6.0.0-beta.11] - 2026-09-15
 
 ### Added
