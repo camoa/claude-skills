@@ -964,10 +964,30 @@ rw_tool_row_check() {
 # baseline recorded unmet has that baseline's kept output subtracted (br_subtract_baseline, the
 # build's own), on the lines the suite row's failure_line selects when it declares one, so a test
 # red then and red now is not this task's. The record names the selector under failureLine.
+#
+# When finished.json holds a `suite`, finish already ran the whole suite once at this same commit
+# (do_checks refuses any other HEAD), so this row reads that result and runs nothing (nyc defect
+# 18). Its verdict can only be met or undeclared, because finish refused unmet and unknown; the
+# sidecar is inlined the way this row inlines its own run. The loop below stays for a record with
+# no `suite` key.
 rw_check_suite() {
   local fw_count fwi fw_obj fw cmd outfile rc selector
   local verdict detail marker combined outputs_file exit_max
   local baseline_doc baseline_verdict baseline_output new_json new_count selectors
+  local finished_suite
+  finished_suite="$(printf '%s' "$RW_FINISHED_DOC" | jq -c '.suite // {}')"
+  if [ "$(printf '%s' "$finished_suite" | jq -r '.verdict // ""')" != "" ]; then
+    combined="$(printf '%s' "$finished_suite" | jq -r '.verdict')"
+    combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
+    combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
+    detail="finish ran the suite once at this commit: $(printf '%s' "$finished_suite" | jq -r '.detail') $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
+    outfile="$(printf '%s' "$finished_suite" | jq -r 'if .outputFile == null then "" else .outputFile end')"
+    [ -z "$outfile" ] || outfile="$IMPL_DIR/$outfile"
+    selectors="$(printf '%s' "$finished_suite" | jq -r '[ (.runs // [])[] | select(.failureLine != null) | .framework + ": " + .failureLine ] | join("\n")')"
+    rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" \
+      "$(printf '%s' "$finished_suite" | jq -r '.exitCode // ""')" "${outfile:-/dev/null}" "" "" "[]" 0 "$selectors"
+    return 0
+  fi
   combined=""; detail=""; exit_max=""; new_json="[]"; new_count=0; selectors=""
   # Every framework's output, joined, travels to the row by file (rw_check_row).
   outputs_file="$(mktemp)" || die 3 "a temporary file for the suite outputs could not be created"

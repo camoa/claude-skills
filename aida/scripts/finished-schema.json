@@ -9,6 +9,7 @@
     "takenAt",
     "task",
     "commitRange",
+    "suite",
     "orders",
     "criteria",
     "checklists",
@@ -36,6 +37,10 @@
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$",
       "description": "Every commit this stage produced: the ledger's own startedFrom, which is the commit the build began from, and the code repository's HEAD when `finish` ran, joined by two dots. `finish` refuses a dirty working tree, because this range is a claim about what is in the repository and uncommitted work makes it a claim about something else."
+    },
+    "suite": {
+      "$ref": "#/$defs/suiteResult",
+      "description": "The whole suite, run once at the final commit by `finish` through the same check the record steps run and the same baseline subtraction (nyc defect 18). A suite row the recipe costs end-of-task is left unrun by build-record and fix-record, recorded deferred there, and decided here. `finish` refuses with exit 86 unless the verdict is met or undeclared, so a written record never carries unmet or unknown here. The output is never inline; outputFile names the sidecar."
     },
     "orders": {
       "type": "array",
@@ -76,6 +81,68 @@
     }
   },
   "$defs": {
+    "suiteResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "detail"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "met",
+            "undeclared"
+          ],
+          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. met: every framework's suite exited 0, or failed only on lines the baseline already held. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One sentence per framework, joined, in the check's own words: what ran, what it exited with, and what was subtracted."
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "framework",
+              "verdict"
+            ],
+            "properties": {
+              "framework": {
+                "type": "string",
+                "minLength": 1
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "met",
+                  "undeclared"
+                ]
+              },
+              "failureLine": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The failure_line selector the framework's suite row declared, when it declared one, the same field the build record carries."
+              }
+            }
+          },
+          "description": "One entry per framework the task resolved a test recipe for, as preconditions.json recorded them. Absent when it recorded none, and the verdict is then undeclared."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "The worst exit across the frameworks whose suite ran. Absent when nothing ran."
+        },
+        "outputFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The sidecar holding every framework's whole suite output, relative to the implementation folder: finished-suite.txt. Present whenever a suite ran. The record never carries the output inline, because a suite prints more than an argument or a reader can carry (nyc defects 9 and 12)."
+        }
+      }
+    },
     "orderRow": {
       "type": "object",
       "additionalProperties": false,

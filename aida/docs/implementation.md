@@ -199,7 +199,9 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
    the configuration gate instead.
-2. **suite-regression.** Does anything that passed at the baseline now fail.
+2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
+   recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
+   stage runs that row once.
 3. **coding-standards**, **static-analysis** and **security.** Does the tool raise anything the
    baseline did not already have.
 4. **owned-files.** Did the change stay inside the files this order owns.
@@ -314,9 +316,14 @@ order then halts for drift and the restart takes it fresh.
 ## Finishing the stage
 
 Once every order is closed, none is halted, every machine-verified criterion reads confirmed, and
-the code tree is clean, the stage records itself done in `implementation/finished.json`. That one
-file holds the commit range the stage produced, and each order's own range and rounds. It holds each
-criterion's state and who judged it, and the checklists for the criteria a person verifies. It holds
+the code tree is clean, AIDA runs the whole suite once at the final commit. A red baseline is
+subtracted the same way the per-attempt checks subtract it. A suite that fails, or cannot be
+decided, refuses to finish. AIDA names the new failure lines and the file holding the whole
+output, and the route is a fix commit and a second finish. A recipe with no suite row passes
+and the record says so. Then the stage records itself done in `implementation/finished.json`.
+That one file holds the commit range the stage produced, the suite's verdict, and each order's
+own range and rounds. It holds each criterion's state and who judged it, and the checklists for
+the criteria a person verifies. It holds
 the findings ruled deferred with their reasons, and how many rows a model judged. The task folder is
 committed then; mid-stage writes stay uncommitted until then. Finishing ends implementation only and
 never changes the task's own state. Interactive, AIDA names the next command, `/aida:review

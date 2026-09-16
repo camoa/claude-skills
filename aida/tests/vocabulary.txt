@@ -18,6 +18,7 @@ met | a check that looked and the answer is yes | satisfied
 unmet | a check that looked and the answer is no | unsatisfied
 unknown | a check that could not look | undecidable
 undeclared | a check the recipe never declared |
+deferred | put off to a later step: a suite check a record step left to finish, or a finding ruled for a later task |
 # A criterion answers in the contract's three words, scripts/alignment-schema.json.
 unanswered | a criterion nobody answered | unresolved
 # The other closed sets scripts/review-record-schema.json enumerates.

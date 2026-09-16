@@ -747,7 +747,8 @@ CR_LOOKUP
 # The command one test-command row declares, as the object cr_resolve records. $1 the parsed rows,
 # $2 the row id to read, $3 a word for the message. Prints one of three shapes: a command, an
 # absent row with its own reason, or missing with why. A command carries the row's `failureLine`
-# when the row declared one.
+# and its `cost` when the row declared them; the cost is what lets a record step leave an
+# end-of-task row to `finish` (nyc defect 18).
 cr_row_command() {
   local rows="$1" row_id="$2" label="$3" row argv
   row="$(printf '%s' "$rows" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
@@ -769,8 +770,10 @@ cr_row_command() {
     return 0
   fi
   jq -nc --argjson argv "$argv" --arg r "$row_id" \
-    --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" '
-    {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)'
+    --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" \
+    --arg cost "$(printf '%s' "$row" | jq -r '.cost // ""')" '
+    {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)
+    + (if $cost == "" then {} else {cost: $cost} end)'
 }
 
 
@@ -1140,7 +1143,9 @@ br_require_clean_tree() {
 
 # The verdict that wins when several frameworks answer one check. Undeclared ranks lowest, so a
 # framework that declared nothing never drags down one that ran and passed; unmet ranks highest,
-# because a definite failure outranks a question. $1 the JSON array of per-framework verdicts.
+# because a definite failure outranks a question. Deferred sits above met: a suite one framework
+# left to `finish` has not answered yet, so met would claim more than ran. $1 the JSON array of
+# per-framework verdicts.
 #
 # This is deliberately not pc_rank's order, which puts met below undeclared. There the question is
 # what a whole run may report, and a recipe declaring nothing must not read as a pass. Here the
@@ -1148,7 +1153,8 @@ br_require_clean_tree() {
 # has said nothing about it. Collapsing the two would make one of the two questions answer wrongly.
 br_worst_verdict() {
   printf '%s' "$1" | jq -r '
-    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "unknown" then 2 else 3 end;
+    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "deferred" then 2
+              elif . == "unknown" then 3 else 4 end;
     (. + ["undeclared"]) | max_by(rank)'
 }
 

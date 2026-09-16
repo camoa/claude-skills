@@ -65,7 +65,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
 #   implement-actions.sh close <task_folder> <unit_id>
-#   implement-actions.sh finish <task_folder>
+#   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text>
 #   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
@@ -471,6 +471,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      outputFile alone, so such a baseline reads every failing tool check unknown. An attempt is
 #      then spent on a schema change. The message names the retake. Exit 3 stays the separate fact
 #      that the file is not JSON at all.
+#  86  `finish` ran the suite once at HEAD and it did not answer met or undeclared (nyc defect 18).
+#      The record steps leave a suite row the recipe costs `end-of-task` unrun, recorded deferred,
+#      so this run is the one that decides it. Unmet names the lines new since the baseline, the
+#      first twenty, and the sidecar holding the whole output; a fix commit on the branch and a
+#      second `finish` is the route. Unknown names its own cause: no baseline to subtract from, a
+#      placeholder with no --value, a runner not found, or a run that selected nothing. Nothing
+#      is recorded; the sidecar stays, because it is what a person reads next.
 #
 # The code `clear-halt` added (nyc defect 20).
 #  85  `clear-halt` was asked to clear a halt another action answers: one holding an `attempts
@@ -632,7 +639,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
                             [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
        implement-actions.sh close <task_folder> <unit_id>
-       implement-actions.sh finish <task_folder>
+       implement-actions.sh finish <task_folder> [--value <name>=<value>]...
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text>
        implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
@@ -4188,12 +4195,15 @@ br_require_real_base() {
 #   BRC_GATE_RECIPES    the tab-separated `--implement-recipe` list, one `<framework>\t<path>` per
 #                       line, read only for an order whose proof is gate: the recipe whose
 #                       `## Configuration gate` lines are that order's own check
+#   BRC_END_OF_TASK     true only under `finish`. A suite row the recipe costs `end-of-task` is
+#                       deferred by the two record steps and runs here once (nyc defect 18)
 # ------------------------------------------------------------------------------------------------
 BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 BRC_GATE_RECIPES=""
+BRC_END_OF_TASK=false
 
 # One tool check: coding standards, static analysis, or the security tool. $1 the check id, $2 the
 # baseline field holding the same tool's own verdict, $3 a word for the message. The command itself
@@ -4416,6 +4426,12 @@ br_tool_check() {
 #
 # suite-regression compares a failure against the baseline suite; order-tests does not, because a
 # test this order owns did not exist when the baseline was taken.
+#
+# A suite row the recipe costs `end-of-task` does not run at a record step. On a Drupal project
+# that row is ten minutes and a site boot per Functional test, and it ran seven times for one
+# order (nyc defect 18). The check is recorded deferred, which passes the way undeclared does, and
+# `finish` runs the same row once with BRC_END_OF_TASK set. order-tests already runs this order's
+# own frozen tests every attempt, so the evidence about this order's code is not lost.
 br_test_check() {
   local check_id="$1" field="$2" label="$3"
   local fw_count fwi fw_obj fw cmd argv_json paths_json result kind payload
@@ -4457,6 +4473,10 @@ br_test_check() {
         verdict="unknown"
         detail="this order froze no test file, so the selected-tests command would run over nothing."
       fi
+    elif [ "$check_id" = "suite-regression" ] && [ "$BRC_END_OF_TASK" != "true" ] \
+      && [ "$(printf '%s' "$cmd" | jq -r '.cost // ""')" = "end-of-task" ]; then
+      verdict="deferred"
+      detail="the recipe costs the suite row end-of-task, so this attempt did not run it; finish runs it once over the whole task range."
     else
       argv_json="$(printf '%s' "$cmd" | jq -c '.argv')"
       outfile="$(mktemp)" || { rm -f "$runs_file"; die 3 "$BRC_WHO: could not create a temporary file"; }
@@ -4775,14 +4795,16 @@ br_executed_count() {
 # Whether the checks in $1 let the order pass. $2 is the id whose unknown does not stop the attempt
 # (interface-record at build-record, nothing at fix-record). Prints true or false.
 #
-# Two rules, and the second is the floor. Every check must answer met or undeclared, with the one
-# exempt unknown allowed. And order-tests must have answered met: that check is the only one that
-# says this order's own code does what its tests ask, so undeclared or unknown there is an order
-# nothing executed. configuration-gate is the same floor for an order whose proof is gate. Undeclared on every other check still continues, which is the rule step two
-# already applies to a precondition a recipe declared nothing for.
+# Two rules, and the second is the floor. Every check must answer met, undeclared or deferred, with
+# the one exempt unknown allowed. And order-tests must have answered met: that check is the only
+# one that says this order's own code does what its tests ask, so undeclared or unknown there is an
+# order nothing executed. configuration-gate is the same floor for an order whose proof is gate.
+# Undeclared on every other check still continues, which is the rule step two already applies to
+# a precondition a recipe declared nothing for. Deferred continues the same way: the suite row
+# is `finish`'s to run, and its answer lands there (nyc defect 18).
 br_checks_pass() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
-    (all(.[]; .verdict == "met" or .verdict == "undeclared"
+    (all(.[]; .verdict == "met" or .verdict == "undeclared" or .verdict == "deferred"
               or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
     and (any(.[]; (.id == "order-tests" or .id == "configuration-gate") and .verdict == "met"))'
 }
@@ -6576,9 +6598,21 @@ fn_require_interactive() {
 # stage next, and finished.json is what that stage receives.
 do_finish() {
   [ "$#" -ge 1 ] || die 3 "finish: a task folder is required"
-  [ "$#" -le 1 ] || die 3 "finish: unrecognized extra argument: $2"
-  local resolve_rc
-  TASK_PATH="$(resolve_task_folder "$1" "finish")"
+  local task_arg="$1" values="" resolve_rc
+  shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --value)
+        [ "$#" -ge 2 ] || die 3 "finish: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die 3 "finish: --value takes <name>=<value>, got: $2" ;; esac
+        pc_refuse_forged_value "finish" "$2"
+        values="$values$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      *) die 3 "finish: unrecognized extra argument: $1" ;;
+    esac
+  done
+  TASK_PATH="$(resolve_task_folder "$task_arg" "finish")"
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
@@ -6635,6 +6669,70 @@ do_finish() {
   [ -n "$started_from" ] \
     || die 3 "finish: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
 
+  # --- exit 86: the suite, once, at the final commit (nyc defect 18) -------------------------------
+  # The two record steps leave a suite row the recipe costs end-of-task unrun and record it
+  # deferred. It runs here once, through the same check function and the same baseline
+  # subtraction they use, over the whole task range: the baseline was taken at startedFrom and
+  # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
+  # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
+  # more than an argument or a reader can carry.
+  local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar=""
+  pre_file="$IMPL_DIR/preconditions.json"
+  if [ -f "$pre_file" ]; then
+    while IFS= read -r recipe_line; do
+      [ -n "$recipe_line" ] || continue
+      cr_recipe_pair "finish" "frameworks[].recipePath in $pre_file" "${recipe_line%%	*}=${recipe_line#*	}"
+      test_recipes="$test_recipes$CR_PAIR
+"
+    done <<FN_RECIPES
+$(jq -r '[ (.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
+           | .framework + "\t" + .recipePath ] | join("\n")' "$pre_file" 2>/dev/null)
+FN_RECIPES
+  fi
+  # shellcheck disable=SC2034 # read by the sourced library
+  CR_WHO="finish"
+  # shellcheck disable=SC2034 # read by the sourced library
+  CR_TEST_RECIPES="$test_recipes"
+  # shellcheck disable=SC2034 # read by the sourced library
+  CR_CHECK_RECIPES=""
+  cr_resolve
+  BRC_WHO="finish"
+  BRC_CODEPATH="$RV_CODEPATH"
+  BRC_RECIPES="$CR_DOC"
+  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  BRC_VALUES="$values"
+  BRC_END_OF_TASK=true
+  suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
+  br_test_check "suite-regression" "suite" "suite" >"$suite_file"
+  [ -s "$suite_file" ] || { rm -f "$suite_file"; die 3 "finish: the suite check produced nothing."; }
+  if [ "$(jq -r 'has("output")' "$suite_file")" = "true" ]; then
+    sidecar="finished-suite.txt"
+    jq -r '.output' "$suite_file" >"$IMPL_DIR/$sidecar" \
+      || { rm -f "$suite_file"; die 3 "finish: could not write the suite output to $IMPL_DIR/$sidecar"; }
+  fi
+  suite_json="$(jq -c --arg f "$sidecar" \
+    'del(.id, .output) + (if $f == "" then {} else {outputFile: $f} end)' "$suite_file")"
+  rm -f "$suite_file"
+  [ -n "$suite_json" ] || die 3 "finish: could not assemble the suite result."
+  suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
+  case "$suite_verdict" in
+    met|undeclared) ;;
+    unmet)
+      # The new lines go to standard error as their own block, the way the clean-tree refusal
+      # lists its paths, so the message stays one line a reader can act on.
+      if [ "$(printf '%s' "$suite_json" | jq -r '.newLineCount // 0')" != "0" ]; then
+        printf 'finish: the suite lines new since the baseline (first %s of %s) are:\n%s\n' \
+          "$(printf '%s' "$suite_json" | jq -r '.newLines | length')" \
+          "$(printf '%s' "$suite_json" | jq -r '.newLineCount')" \
+          "$(printf '%s' "$suite_json" | jq -r '.newLines[]')" >&2
+      fi
+      die 86 "finish: the suite is unmet at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. A fix commit on the branch and a second finish is the route."
+      ;;
+    *)
+      die 86 "finish: the suite could not be decided at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.} Nothing was recorded. Repair what the detail names, then run finish again."
+      ;;
+  esac
+
   # --- the checklists a person still has to work through, copied from the frozen records ----------
   # They are copied rather than pointed at, because the review stage reads this one file and the
   # frozen records are per order. A criterion two orders serve carries one entry per order, the same shape
@@ -6673,13 +6771,15 @@ do_finish() {
   record_json="$(jq -n --arg takenAt "$today" --arg task "$task_id" \
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
-    --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" '
+    --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
+    --argjson suite "$suite_json" '
     ([ ($snap.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]) as $kinds
     | {
       schemaVersion: 1,
       takenAt: $takenAt,
       task: $task,
       commitRange: $range,
+      suite: $suite,
       orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)} ],
       criteria: [ ($ledger.criteria // [])[] | . as $c
                   | {id: $c.id,
@@ -6700,9 +6800,10 @@ do_finish() {
 
   # The summary. The checklists, the deferred findings and every criterion's row are in the record,
   # which the review stage reads from the path named here.
-  im_print_summary "finish" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" '
+  im_print_summary "finish" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" --arg impl "$IMPL_DIR" '
     {task: .task,
      commitRange: .commitRange,
+     suite: (.suite.verdict + (if .suite.outputFile == null then "" else ", output at " + $impl + "/" + .suite.outputFile end)),
      order: ([ .orders[] | {id, commitRange, rounds: ("rounds=" + (.roundsUsed | tostring))} ]),
      criteria: ((.criteria | group_by(.rowState) | map("\(.[0].rowState)=\(length)") | join(" ")) | if . == "" then "none" else . end),
      checklists: (.checklists | length),

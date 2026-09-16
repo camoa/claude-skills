@@ -163,7 +163,9 @@ This step runs all eight deciding checks. The record holds every one.
   output. It reads unknown when the task records no environment, when no `--implement-recipe`
   was passed, or when that recipe carries no such block. The detail says which. A line 2 that
   printed `There are no changes to import` is a finding for the reviewer, not for this check.
-- **suite-regression.** Does anything that passed at the baseline now fail.
+- **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
+  recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
+  that row once at the final commit. On a Drupal project the row is ten minutes per run.
 - **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
   have.
 - **static-analysis.** Does static analysis raise anything the baseline did not already have.
@@ -202,7 +204,7 @@ element, so nothing there was countable, and the disagreement goes to the review
 other unmet or unknown does.
 
 **order-tests is the floor,** or `configuration-gate` on a `gate` order. Every other check may
-answer undeclared and still let the order go on
+answer undeclared, or deferred on the suite, and still let the order go on
 to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
 may not. It is the one check that says this order's own code does what its tests ask. Undeclared or
 unknown there means nothing here ran, so the order stays at `code-written`, whatever the other

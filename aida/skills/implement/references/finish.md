@@ -11,7 +11,8 @@ new design. `clear-halt` answers every other halt, once the person has acted on 
 Every order closed, none halted, and no `implementation/finished.json` on disk means the
 implementation stage is done and waiting to be recorded. Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>" \
+  [--value <name>=<value>]...
 ```
 It refuses unless every order in the ledger is closed, naming whichever is not. It also refuses
 when any order carries a halt reason, closed or not, naming the order and the reason. It refuses
@@ -19,8 +20,18 @@ unless every machine-verified criterion reads confirmed too, naming whichever is
 dirty code repository as well, because the commit range it records is a claim about what that
 repository holds.
 
-On success it writes `implementation/finished.json`: the commit range this stage produced, and each
-order's own range and rounds used. The record is committed when the stage closes: `finish` commits
+Then it runs the test-execution recipe's suite row once, at the final commit, from the worktree.
+The record steps leave a row the recipe costs `end-of-task` unrun and record it `deferred`; this
+is the run that decides it. The recipe paths come from `implementation/preconditions.json`, so
+pass none. Pass `--value <name>=<value>` for a placeholder the suite row carries, the same as
+`build-record`. The baseline's own failures are subtracted the same way. A suite that is unmet
+or unknown refuses (exit 86). The message names the first twenty new lines and the sidecar,
+`implementation/finished-suite.txt`. A fix commit on the branch and a second `finish` is the
+route. A recipe with no suite row passes with `undeclared`, and the record says so.
+
+On success it writes `implementation/finished.json`: the commit range this stage produced, and
+each order's own range and rounds used. The suite's verdict is under `suite`, with its output in
+the sidecar. The record is committed when the stage closes: `finish` commits
 the task folder, in the project folder and never in the code repository. It also records each criterion's row state and who judged it.
 The checklists for the criteria a person verifies are copied in too, from the frozen test records.
 The review stage reads this one file rather than one per order. It records the findings ruled
