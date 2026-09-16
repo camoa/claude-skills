@@ -244,7 +244,8 @@ gather_new_tasks() {
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
       --arg legacy "$legacy" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
-        children:(.children // []), runMode:(.runMode // "interactive"), review:$review, notes:$notes,
+        children:(.children // []), runMode:(.runMode // "interactive"), runModeStages:(.runModeStages // []),
+        review:$review, notes:$notes,
         worktree:(.worktree.path // "none"), stage:$stage, path:$p}
        | if $legacy != "" then . + {legacyStages:($legacy | split(" "))} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
@@ -354,7 +355,8 @@ do_open() {
       "state: " + (.state // "new"),
       "parent: " + (.parent // "none"),
       "children: " + ((.children // []) | join(" ")),
-      "runMode: " + (.runMode // "interactive"),
+      "runMode: " + (.runMode // "interactive")
+        + (if ((.runModeStages // []) | length) > 0 then " (" + (.runModeStages | join(", ")) + ")" else "" end),
       "worktree: " + (.worktree.path // "none")' "$tj"
     local review
     review="$(review_verdict_of "$project_path/tasks/$target")"

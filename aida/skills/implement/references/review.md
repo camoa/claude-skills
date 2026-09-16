@@ -76,7 +76,8 @@ named by `--findings` is missing, empty, or not the shape it reads. A finding ci
 criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
 fixer.
 
-Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. Interactive,
+Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
+clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
 it is actionable like any other finding, and it goes to the person with the rest. No open
 actionable finding: the order is reviewed and clean, so go to Close.
 
@@ -145,8 +146,9 @@ frameworks command one tool. It refuses (exit 73) when the check recipe it resol
 the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person. Unattended halts the order, naming the
-finding. Its reason may not hold the text `; earlier: `, the same refusal every halt reason
-applies: that text is how one halt is joined to another, and a reason carrying it would forge one.
+finding, and `clear-halt` is the person's way past. Its reason may not hold the text
+`; earlier: `, the same refusal every halt reason applies: that text is how one halt is joined to
+another, and a reason carrying it would forge one.
 
 The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
 not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
@@ -169,7 +171,8 @@ unchanged code is a round nobody worked.
 
 **When `fix-record` halted the order this way, stop here.** Do not dispatch the reviewer in verify
 mode: `verify-record` refuses on a halted order. Report the halt instead, naming the check it
-stopped on, the same way a halt at the build step is reported.
+stopped on, the same way a halt at the build step is reported. A person clears it with
+`clear-halt` and then rules on the open findings through `verify-record`.
 
 Open a dispatch record for the reviewer again, the same way review mode did, with nothing denied
 and nothing allowed:
@@ -222,7 +225,8 @@ Run the same call again, with one `--ruling` flag added per open finding:
   --ruling <finding id>=<wrong|deferred|load-bearing>::<reason>
 ```
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
-order, the finding named as the reason. Interactive, this reaches the person as an escalation, not
+order, the finding named as the reason, and `clear-halt` is what follows once the person has
+acted on it. Interactive, this reaches the person as an escalation, not
 a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
 ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
 takes, for the same reason.

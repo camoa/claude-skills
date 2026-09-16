@@ -38,7 +38,7 @@ Run:
 ```
 This reports whether `implementation/finished.json` exists, and the commit range and the final commit
 it records. It reports how many criteria a machine verifies and how many a person does, the task's
-run mode from the ledger, and the project's frameworks. It reports whether end to end and visual
+run mode for this stage, and the project's frameworks. It reports whether end to end and visual
 regression are on, and whether a registry is recorded. It says how far an existing review record got.
 Last, it prints the checklist rows whole, because a person has to read those words to answer them.
 
@@ -103,8 +103,9 @@ Verdict words and a missing heading follow
 
 ## The run mode decides who answers
 
-The run mode comes from the ledger, which copied it from the task when the build started. A person's
-answer is accepted only when a person is present. Every question has an autonomous branch, and the
+The run mode is the task's own for the review stage, read from `task.json` by every action. The
+ledger's copy records the mode the build ran under, and nothing here reads it. A person's answer
+is accepted only when a person is present. Every question has an autonomous branch, and the
 branch is recorded rather than assumed.
 
 | Question | Interactive | Autonomous |

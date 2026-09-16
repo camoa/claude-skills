@@ -41,7 +41,14 @@
     "runMode": {
       "type": "string",
       "enum": ["autonomous"],
-      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it."
+      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it. Which stages the mode covers is `runModeStages`; every stage reads the pair through task_run_mode in scripts/lib/task-helpers.sh and never this field alone."
+    },
+    "runModeStages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["scope", "research", "design", "implement", "review", "completion"] },
+      "description": "The stages an autonomous mode covers, written by `task set-run-mode autonomous --stage <stage>...` and present only when at least one stage was named. Absent with runMode present means every stage. A stage not on the list runs interactively, and an autonomous stage ends by naming the next command rather than invoking it when the next stage is not on the list. Removed together with runMode by `set-run-mode interactive`, and never present without it. Added 2026-09-16 so a person can run the build alone unattended and keep their hand on the contract and the review (nyc defect 20)."
     },
     "budget": {
       "type": "object",

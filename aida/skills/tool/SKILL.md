@@ -22,7 +22,8 @@ Any other Bash command still asks for approval.
 
 Read the active task's run mode. A task that states none is interactive, and so is a call with no
 task active. Pass `--run-mode autonomous` on every call only when the task states it. Decide this
-once, at the start.
+once, at the start. A mode that names stages in brackets covers this call only when it names the
+stage this call runs inside.
 
 ## Run a tool
 

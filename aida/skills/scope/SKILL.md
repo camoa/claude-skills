@@ -26,7 +26,8 @@ Look for a stated run mode on the task active in this conversation. Found, and i
 every call below that writes. Anything else, including no active task: act interactively, the
 safe default, and pass `--run-mode interactive` (or nothing; that is the same default) on every
 call below that writes. Decide this once, at the start. `read` needs no run mode: it changes
-nothing.
+nothing. A mode that names stages in brackets, such as `autonomous (implement)`, covers this
+stage only when the list names `scope`; otherwise this stage is interactive.
 
 ## Find the task
 
@@ -327,8 +328,9 @@ answer) has actually given that one change.
 
 Interactive: stop here. Name the next command for the person, `/aida:research <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:research` through the Skill tool, once, with the task
-id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
-stage cannot run out of order. That is why this chain is safe.
+id, and stop if it refuses. Invoke it only when the mode covers research too; otherwise end as
+interactive does, naming the command. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## Changing the contract
 

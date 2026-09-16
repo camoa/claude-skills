@@ -36,7 +36,7 @@
         "interactive",
         "autonomous"
       ],
-      "description": "The mode this run started in, read from the task at the first step. A fact about the run, not about the task, which is why it is stored here and not read back from task.json: a task's mode can be changed between runs and the record of what a finished run actually did must not change with it."
+      "description": "The mode this build runs under: the task's own mode for the implement stage, read through task_run_mode and written by every `start`, new or resumed. The steps between two starts read it here and never from task.json, so one run applies one rule from its first dispatch to its last record. A person who changes the task's mode runs `start` again, which is where a resumed run begins anyway, and the change takes from there. Review reads the task, not this copy (nyc defect 20)."
     },
     "snapshotHash": {
       "type": "string",
@@ -65,6 +65,13 @@
         "$ref": "#/$defs/startedFromBefore"
       },
       "description": "One entry per value startedFrom held before `start --rebased-onto` rewrote it, in the order it happened. Present only when at least one rewrite was. A resumed `start` refuses (exit 82) when HEAD does not descend from startedFrom, because a rebase or an amend left that commit on no branch: `preconditions` would label the baseline with it and `finish` would compute a range git cannot resolve. The rewrite keeps the old value here rather than dropping it, so a reader can tell which commit the baseline on disk was taken at, and why it must be retaken (nyc defect 19)."
+    },
+    "haltsCleared": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/haltCleared"
+      },
+      "description": "One entry per halt a person cleared with `clear-halt`, in the order it happened. Present only when at least one was. The grant and the restart clear their own halts and record them in their own fields; every other halt names something a person does outside this script, and this is the record that they did it and why. The order's haltedBecause is removed at the same moment, so the reason lives on here and nowhere else."
     },
     "resnapshots": {
       "type": "array",
@@ -225,6 +232,33 @@
           "type": "string",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
           "description": "The UTC date the copy was taken, YYYY-MM-DD. Set by the script, never typed."
+        }
+      }
+    },
+    "haltCleared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason", "clearedAt", "because"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The order whose halt was cleared."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The haltedBecause text as it stood, every segment, copied before it was removed."
+        },
+        "clearedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date the halt was cleared, YYYY-MM-DD. Set by the script, never typed."
+        },
+        "because": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the person did about the halt, in their own words. Required, because a halt cleared with no reason reads as the stop never having meant anything."
         }
       }
     },

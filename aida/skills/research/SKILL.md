@@ -32,6 +32,8 @@ Dispatching an agent needs no approval either; it is also named in this skill's 
 Look for a stated run mode on the task active in this conversation. Found, and it says
 `autonomous`: act autonomously through this whole invocation. Anything else, including no
 active task: act interactively, the safe default. Decide this once, at the start.
+A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
+when the list names `research`; otherwise this stage is interactive.
 
 Research never blocks on this choice the way scope does. The run mode only changes what happens
 at two points below, a missing process recipe and an unaccepted guide source; everything else
@@ -403,8 +405,9 @@ recorded it at the sidecar path. Go on flat. A person decides at the next window
 
 Interactive: stop here. Name the next command for the person, `/aida:design <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:design` through the Skill tool, once, with the task
-id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
-stage cannot run out of order. That is why this chain is safe.
+id, and stop if it refuses. Invoke it only when the mode covers design too; otherwise end as
+interactive does, naming the command. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## Research never blocks
 

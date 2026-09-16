@@ -285,7 +285,7 @@ do_init() {
     || die3 "init: $ALIGNMENT_FILE already exists. This task already has a scope contract; use the other actions to change it"
 
   # The first write into this task, so the task itself moves to in_progress here.
-  mark_task_in_progress "$TASK_PATH" "scope wrote its contract"
+  mark_task_in_progress "$TASK_PATH" "scope wrote its contract" scope
 
   local empty
   empty="$(jq -n '{schemaVersion: 1, goal: "", expectedResult: "", criteria: [], nonGoals: [],

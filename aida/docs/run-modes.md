@@ -2,10 +2,10 @@
 
 A task runs in one of two modes. Interactive means you are present and AIDA asks you.
 Autonomous means nobody is present. AIDA then takes the recommended answer where one exists,
-records that it did, and stops at any step it cannot take without you. This page covers what
-each mode is and how you set it. It covers the one rule that governs an autonomous run and
-what differs in each stage. It ends with what to read when you come back to a run that happened
-without you.
+records that it did, and stops at any step it cannot take without you. The mode can cover the
+whole task or only the stages you name. This page covers what each mode is and how you set it.
+It covers the one rule that governs an autonomous run and what differs in each stage. It ends
+with what to read when you come back to a run that happened without you.
 
 ## The two modes
 
@@ -19,10 +19,17 @@ At the end of each stage AIDA invokes the next one itself. Each stage refuses to
 the record the previous stage wrote, which is why the chain cannot run out of order. One
 command can carry the task from scope to completion. The chain ends early at implementation
 when any work order halts, because implementation cannot finish until every order is closed.
-The way past is answering the halt and running `/aida:implement <task-id>` again.
+The way past: set the task interactive with `/aida:task set-run-mode <task-id> interactive`,
+answer the halt through its action, then run `/aida:implement <task-id>` again.
 
 The mode belongs to the task, never to the project. A project keeps no mode of its own, and two
 tasks in one project can carry different modes.
+
+**Autonomous for some stages** is the common middle. You write the contract and read the review
+yourself, and the build runs without you. Name the stages when you set the mode, and every other
+stage stays interactive. An autonomous stage invokes the next one only when that stage is
+autonomous too. Otherwise it ends the way an interactive stage ends, naming the command and
+stopping.
 
 ## Setting the mode
 
@@ -30,18 +37,23 @@ Set it once, on the task, before you start the run:
 
 ```
 /aida:task set-run-mode <task-id> autonomous
+/aida:task set-run-mode <task-id> autonomous --stage implement
 ```
 
-That writes one field into the task's `task.json`. Nothing else ever writes it: no stage asks
+The first writes one field into the task's `task.json` and covers every stage. The second adds
+the stages the mode covers, `--stage` once per stage, from `scope`, `research`, `design`,
+`implement`, `review` and `completion`. Nothing else ever writes either field: no stage asks
 whether you would like an autonomous run, and no stage proposes one. To go back, run the same
-command with `interactive`. That removes the field, because an absent field already means
+command with `interactive`. That removes both fields, because an absent field already means
 interactive. A task that has never been given a mode is interactive, the safer of the two
 guesses when nobody said otherwise.
 
-Set it once and before the build, not per stage. Implementation copies the mode into its ledger
-when the build starts, and review reads the ledger's copy, so a mode changed mid-build reaches
-neither. Then invoke the stage the task is at, `/aida:scope <task-id>` for a new task, and let
-it run.
+Every stage reads the mode from the task when it starts. Implementation reads it at every
+`start`, new or resumed, and writes it into its ledger. The steps of one run read that copy, so
+one run applies one rule. The grant, the restart and the clearing of a halt read the task, so a
+mode you change after a halt takes at once. Review reads the task too, never the ledger's copy,
+so a mode scoped to the build leaves review to you. Then invoke the stage the task is at,
+`/aida:scope <task-id>` for a new task, and let it run.
 
 A task can carry a ceiling on its build, in either mode. Add `budget` to the task's `task.json`
 by hand, with `dispatches` or `minutes` or both. Implementation recomputes the spend from its
@@ -147,10 +159,11 @@ fixer reports its scope was too small. The tree is not clean when a step expecte
 attempts or the budget run out. The design changed after the order started. Interactively each
 of those goes to you instead.
 
-Nothing grants an extra attempt, raises a budget, or restarts an order against a changed design
-without you: each refuses on an autonomous run. Whether the built interface matches its
-declaration is left to the reviewer alone, and the report says nobody ruled on it. When every
-order closes, implementation invokes review. See [implementation](implementation.md).
+Nothing grants an extra attempt, raises a budget, restarts an order, or clears any other halt
+without you: each refuses on an autonomous run. Whether the built interface
+matches its declaration is left to the reviewer alone, and the report says nobody ruled on it.
+When every order closes, implementation invokes review, when review is autonomous too. See
+[implementation](implementation.md).
 
 ### Review
 
@@ -181,7 +194,8 @@ autonomous run. See [visual and end-to-end tests](testing.md).
 ## Coming back to an autonomous run
 
 Read the session start line first. With exactly one task in progress it names the task, its
-stage, and `Run mode: autonomous` when that is what it is. Otherwise it points you at
+stage, and `Run mode: autonomous` when that is what it is. The stages the mode covers follow in
+brackets when it covers fewer than all. Otherwise it points you at
 `/aida:next`. Run `/aida:next <task-id>`: it says where the task stands and names the stage
 command to run. Every stage begins by printing a summary of its own records before it does
 anything else. Implementation's summary is the one that names halted orders and the reason each

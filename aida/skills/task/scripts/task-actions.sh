@@ -42,7 +42,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    --child <child-id> --goal <goal> [--criterion <text>]...
 #                    [--child <child-id> --goal <goal> [--criterion <text>]...]
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-run-mode --project <path> \
-#                    <task-id> <autonomous|interactive>
+#                    <task-id> <autonomous|interactive> [--stage <stage>]...
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
 #                    -- <text...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
@@ -113,6 +113,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
                                  --child <child-id> --goal <goal> [--criterion <text>]...
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
+                                 [--stage <scope|research|design|implement|review|completion>]...
        task-actions.sh save     --project <path> <task-id> -- <text...>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
                                  [--setup-recipe <kind>=<path>]...
@@ -171,7 +172,8 @@ task_summary() {
     "state: " + (.state // "?"),
     "parent: " + (.parent // "none"),
     "children: " + ((.children // []) | join(" ")),
-    "runMode: " + (.runMode // "interactive"),
+    "runMode: " + (.runMode // "interactive")
+      + (if ((.runModeStages // []) | length) > 0 then " (" + (.runModeStages | join(", ")) + ")" else "" end),
     "worktree: " + (.worktree.path // "none")' "$1"
 }
 
@@ -750,14 +752,25 @@ do_split() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# set-run-mode: written only when a person asks for autonomous. Nothing here asks.
+# set-run-mode: written only when a person asks for autonomous. Nothing here asks. `--stage`,
+# repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a person who
+# wants the build alone unattended keeps their hand on scope and review. No `--stage` covers
+# every stage, as before the field existed.
 # ------------------------------------------------------------------------------------------------
 
 do_set_run_mode() {
-  local project_path="" id="" value=""
+  local project_path="" id="" value="" stages_json='[]'
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --stage)
+        [ "$#" -ge 2 ] || die3 "set-run-mode: --stage needs a stage name"
+        case "$2" in
+          scope|research|design|implement|review|completion) : ;;
+          *) die3 "set-run-mode: --stage must be one of scope, research, design, implement, review or completion, got: $2" ;;
+        esac
+        stages_json="$(printf '%s' "$stages_json" | jq -c --arg s "$2" 'if index($s) == null then . + [$s] else . end')"
+        shift 2 ;;
       *)
         if [ -z "$id" ]; then id="$1"; shift
         elif [ -z "$value" ]; then value="$1"; shift
@@ -776,6 +789,8 @@ do_set_run_mode() {
     autonomous|interactive) : ;;
     *) die3 "set-run-mode: must be autonomous or interactive, got: $value" ;;
   esac
+  [ "$value" = "autonomous" ] || [ "$stages_json" = "[]" ] \
+    || die3 "set-run-mode: --stage goes with autonomous only. interactive removes the mode and the stages together."
 
   local task_dir task_json
   task_dir="$(task_dir_for "$project_path" "$id")"
@@ -785,27 +800,33 @@ do_set_run_mode() {
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
   if [ "$value" = "autonomous" ]; then
-    jq '.runMode = "autonomous"' "$task_json" > "$tmp" \
+    # An empty list is not written: absence already means every stage (task-schema.json,
+    # runModeStages), and a list from an earlier call is replaced, never merged.
+    jq --argjson stages "$stages_json" \
+      '.runMode = "autonomous" | if ($stages | length) > 0 then .runModeStages = $stages else del(.runModeStages) end' \
+      "$task_json" > "$tmp" \
       || { rm -f "$tmp"; die3 "set-run-mode: could not read $task_json"; }
   else
     # There is no "interactive" value to write: absence already means that
     # (task-schema.json, runMode).
-    jq 'del(.runMode)' "$task_json" > "$tmp" \
+    jq 'del(.runMode, .runModeStages)' "$task_json" > "$tmp" \
       || { rm -f "$tmp"; die3 "set-run-mode: could not read $task_json"; }
   fi
   # jq is tested before the move. Without that test an unreadable task.json makes jq write
   # nothing, the move succeeds on an empty file, and the task loses everything it held.
   mv "$tmp" "$task_json" || { rm -f "$tmp"; die3 "set-run-mode: could not update $task_json"; }
 
+  local stages_note=""
+  [ "$stages_json" = "[]" ] || stages_note=" ($(printf '%s' "$stages_json" | jq -r 'join(", ")'))"
   commit_task_change "$project_path" \
-    "Set run mode to ${value} for ${id}" \
+    "Set run mode to ${value}${stages_note} for ${id}" \
     "requested" \
     "" \
     "" \
     "$id" "run-mode" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
-  echo "RUN MODE: ${value}"
+  echo "RUN MODE: ${value}${stages_note}"
   task_summary "$task_json"
 }
 

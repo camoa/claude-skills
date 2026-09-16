@@ -194,7 +194,7 @@ EOF
 # ------------------------------------------------------------------------------------------------
 
 IMPL_DIR=""; REVIEW_DIR=""; RECORD_FILE=""; DIFF_FILE=""
-FINISHED_FILE=""; LEDGER_FILE=""; SNAPSHOT_FILE=""; BASELINE_FILE=""; ALIGNMENT_FILE=""
+FINISHED_FILE=""; SNAPSHOT_FILE=""; BASELINE_FILE=""; ALIGNMENT_FILE=""
 FINDINGS_TARGET=""; BRIEF_FILE=""
 
 # $1 the action's own name, $2 the task folder as given. Sets TASK_PATH and every path above.
@@ -210,13 +210,12 @@ rw_paths() {
   FINDINGS_TARGET="$REVIEW_DIR/findings.json"
   BRIEF_FILE="$REVIEW_DIR/brief.json"
   FINISHED_FILE="$IMPL_DIR/finished.json"
-  LEDGER_FILE="$IMPL_DIR/ledger.json"
   SNAPSHOT_FILE="$IMPL_DIR/snapshot.json"
   BASELINE_FILE="$IMPL_DIR/baseline.json"
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 }
 
-RW_FINISHED_DOC=""; RW_LEDGER_DOC=""; RW_SNAPSHOT_DOC=""; RW_RECORD_DOC=""
+RW_FINISHED_DOC=""; RW_SNAPSHOT_DOC=""; RW_RECORD_DOC=""
 RW_RUN_MODE="interactive"; RW_PROJECT_DOC=""; RW_TASK_ID=""
 
 # Exit 66. Implementation has not finished, so there is nothing to review.
@@ -231,17 +230,15 @@ rw_require_finished() {
   RW_FINISHED_DOC="$(jq -c '.' "$FINISHED_FILE")"
 }
 
-# The ledger, for the run mode, and the snapshot, for the frozen contract and the frozen orders.
-# Both exist whenever finished.json does, so either one absent is a tree this script reports rather
-# than repairs.
+# The run mode, from the task for this stage, and the snapshot, for the frozen contract and the
+# frozen orders. The mode is read from task.json through task_run_mode and not from the ledger's
+# copy: the ledger records the mode the build ran under, and a person who sets the task's mode
+# after the build, or scopes it to the build alone, means review to obey the task (nyc defect 20).
+# The snapshot exists whenever finished.json does, so its absence is a tree this script reports
+# rather than repairs.
 rw_require_frozen() {
   local who="$1"
-  case "$(json_file_state "$LEDGER_FILE")" in
-    missing)    die 3 "$who: $LEDGER_FILE not found, though $FINISHED_FILE exists. The run mode is read from the ledger and nothing else holds it." ;;
-    unreadable) die 3 "$who: $LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again." ;;
-  esac
-  RW_LEDGER_DOC="$(jq -c '.' "$LEDGER_FILE")"
-  RW_RUN_MODE="$(printf '%s' "$RW_LEDGER_DOC" | jq -r '.runMode // "interactive"')"
+  RW_RUN_MODE="$(task_run_mode "$TASK_PATH" review)"
   case "$(json_file_state "$SNAPSHOT_FILE")" in
     missing)    die 3 "$who: $SNAPSHOT_FILE not found, though $FINISHED_FILE exists. The frozen contract and the frozen orders are what review judges against." ;;
     unreadable) die 3 "$who: $SNAPSHOT_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again." ;;
@@ -458,11 +455,10 @@ do_read() {
   [ "$#" -le 1 ] || die 3 "read: unrecognized extra argument: $2"
   rw_paths "read" "$1"
 
-  local finished_state ledger_state record_state report
+  local finished_state record_state report
   local range final_commit machine_count person_count checklists_json
   local frameworks_json e2e_enabled vr_enabled registry_path code_state
   finished_state="$(json_file_state "$FINISHED_FILE")"
-  ledger_state="$(json_file_state "$LEDGER_FILE")"
   record_state="$(json_file_state "$RECORD_FILE")"
 
   range=""; final_commit=""; machine_count=0; person_count=0
@@ -479,8 +475,7 @@ do_read() {
     checklists_json="$(printf '%s' "$RW_FINISHED_DOC" | jq -c '.checklists // []')"
   fi
 
-  RW_RUN_MODE="interactive"
-  [ "$ledger_state" = "ok" ] && RW_RUN_MODE="$(jq -r '.runMode // "interactive"' "$LEDGER_FILE")"
+  RW_RUN_MODE="$(task_run_mode "$TASK_PATH" review)"
 
   frameworks_json='[]'; e2e_enabled="unknown"; vr_enabled="unknown"; registry_path=""
   code_state="$(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
@@ -502,7 +497,7 @@ do_read() {
   report="$(jq -n \
     --arg task "$(basename -- "$TASK_PATH")" \
     --arg finished "$finished_state" --arg range "$range" --arg final "$final_commit" \
-    --arg runMode "$RW_RUN_MODE" --arg ledger "$ledger_state" \
+    --arg runMode "$RW_RUN_MODE" \
     --argjson machine "$machine_count" --argjson person "$person_count" \
     --argjson checklistRows "$checklists_json" \
     --argjson frameworks "$frameworks_json" \
@@ -516,7 +511,7 @@ do_read() {
      reviewedRange: $range,
      finalCommit: $final,
      runMode: $runMode,
-     runModeSource: (if $ledger == "ok" then "the ledger" else "nothing read it; interactive is what absence means" end),
+     runModeSource: "task.json, for the review stage; the ledger keeps the mode the build ran under",
      criteria: {machineVerified: $machine, personVerified: $person, checklistRows: ($checklistRows | length)},
      checklists: $checklistRows,
      frameworks: $frameworks,
@@ -1196,7 +1191,7 @@ RW_FIT
     || die 3 "checks: $RV_CODEPATH is at $head_now, and the range in $FINISHED_FILE ends at $head_end. Checks 5 to 8 run over the files on disk, so a tree that is not the final commit would answer about different code than the diff describes. Check that commit out, or run the implement skill's finish step again."
   RW_RANGE="$range"; RW_HEAD="$head_now"
 
-  mark_task_in_progress "$TASK_PATH" "review started"
+  mark_task_in_progress "$TASK_PATH" "review started" review
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
   git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null \
     || die 3 "checks: could not write the diff for $range to $DIFF_FILE"

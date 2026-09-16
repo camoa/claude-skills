@@ -131,5 +131,6 @@ as the project does.
   [Visual and end-to-end tests](testing.md#the-site-the-surfaces-need).
 - `/aida:task prune` removes the worktrees of complete tasks, one yes per worktree. See
   [Finishing a task](finishing.md#the-merge-and-what-comes-after).
-- `/aida:task set-run-mode <task-id> <autonomous|interactive>` sets the task's run mode. See
+- `/aida:task set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...` sets the
+  task's run mode, for every stage or for the stages named. See
   [Run modes](run-modes.md#setting-the-mode).

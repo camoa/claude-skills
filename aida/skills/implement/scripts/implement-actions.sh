@@ -68,6 +68,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh finish <task_folder>
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text>
+#   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]... \
@@ -108,10 +109,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the three reasons stay apart: no-recipe, listing-unreachable, fetch-failed. Only the first says
 # anything about the framework.
 #
-# There is no --run-mode flag on this script, deliberately. The mode is the task's own, read from
-# <task_folder>/task.json at `start` (task-schema.json, `runMode`), not something a caller passes
-# for one invocation the way research-actions.sh and design-actions.sh accept it for their own
-# conversational choices. Nothing here has a conversational choice to make yet.
+# There is no --run-mode flag on this script, deliberately. The mode is the task's own for the
+# implement stage, read from <task_folder>/task.json through task_run_mode at every `start`
+# (task-schema.json, `runMode` and `runModeStages`), not something a caller passes for one
+# invocation the way research-actions.sh and design-actions.sh accept it for their own
+# conversational choices. `start` writes it into the ledger, new or resumed, and every step
+# between two starts reads the ledger's copy: the mode the build runs under.
 #
 # Depends on, shipped by other builders of this same project and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-design.sh       called by `start`, unmodified
@@ -125,8 +128,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                        resolver. Nothing in this file carries a
 #                                                        second copy.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh   sourced, for resolve_task_folder,
-#                                                        write_atomic and mark_task_in_progress,
-#                                                        the same ones every other stage reads.
+#                                                        write_atomic, mark_task_in_progress and
+#                                                        task_run_mode, the same ones every other
+#                                                        stage reads.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/records-hash.sh   sourced. Its records_hash_for is the only
 #                                                        place this script computes a hash over a
 #                                                        contract and its work orders, the same
@@ -184,8 +188,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      ledger.json present but unreadable, baseline.json present but unreadable, tests-<unit_id>.json
 #      or build-<unit_id>.json present but unreadable, or a design/*.json file that check-design.sh
 #      itself did not refuse on but this script still could not parse),
-#      task.json declaring a runMode value
-#      this schema never writes, a ledger.json missing a required field or holding one of the
+#      a ledger.json missing a required field or holding one of the
 #      wrong type on reopen, a write that failed, or an internal state this script's own logic
 #      should have already ruled out (a ledger existing with no snapshot beside it; a snapshot
 #      appearing between this script's own presence check and its own write, which is another
@@ -401,8 +404,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      counter. A grant answers a spent counter and answers nothing else, so the message names what
 #      it found and nothing is written. One number, because both are the same fact: this order is
 #      not waiting on another attempt.
-#  68  `grant-attempt` or `restart` was called on an autonomous run. Both are a person's judgement,
-#      and an unattended run has none to offer. The same number for both, because it is one fact.
+#  68  `grant-attempt`, `restart` or `clear-halt` was called on an autonomous run. Each is a
+#      person's judgement, and an unattended run has none to offer. One number, because it is one
+#      fact.
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
 #      restart that reset an order anyway would throw away a build that is fine.
 #  70  `tests-freeze` was given a `--row` judged by a person on an autonomous run. An autonomous run
@@ -467,6 +471,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      outputFile alone, so such a baseline reads every failing tool check unknown. An attempt is
 #      then spent on a schema change. The message names the retake. Exit 3 stays the separate fact
 #      that the file is not JSON at all.
+#
+# The code `clear-halt` added (nyc defect 20).
+#  85  `clear-halt` was asked to clear a halt another action answers: one holding an `attempts
+#      spent` or `budget spent` segment, which `grant-attempt` clears, or a `design drift` segment,
+#      which `restart` clears. The message names that action, and nothing is written. Every other
+#      halt (a row the checker rejected, a finding on a non-goal, a fixer's scope, a finding ruled
+#      load-bearing, a dirty tree, spent fix rounds) is a person's to clear, once they have acted on
+#      what it names, and this is the one action that clears it. A closed order shares exit 67 with
+#      the grant: there is nothing to resume.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -622,6 +635,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh finish <task_folder>
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text>
+       implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
@@ -945,7 +959,7 @@ im_next_step() {
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
-      elif $halted > 0 then "none: every order that is not closed is halted for a reason neither a grant nor a restart answers"
+      elif $halted > 0 then "finish: offer clear-halt, every order that is not closed is halted for a reason a person clears"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
 
@@ -1027,8 +1041,7 @@ do_read() {
   fi
 
   local run_mode
-  run_mode="$(jq -r '.runMode // "interactive"' "$TASK_PATH/task.json" 2>/dev/null)"
-  [ -n "$run_mode" ] || run_mode="interactive"
+  run_mode="$(task_run_mode "$TASK_PATH" implement)"
 
   local snap_exists snap_readable snap_summary
   snap_exists=false; snap_readable=false; snap_summary='null'
@@ -1185,7 +1198,7 @@ do_read() {
     --arg codePath "$(if [ -n "$code_path" ]; then printf '%s' "$code_path"; else printf 'none'; fi)" \
     --arg branch "$(if [ "$git_is_repo" = "true" ]; then printf '%s' "${git_branch:-detached}"; else printf 'not a git repository'; fi)" \
     --arg trunk "$(if [ "$trunk_derived" = "true" ]; then printf '%s | ' "$trunk_branch"; fi)$trunk_note" \
-    --arg runMode "$run_mode, from task.json" \
+    --arg runMode "$run_mode, from task.json for the implement stage" \
     --arg snapshot "$snap_line" --arg snapshotHash "$snap_hash" \
     --arg ledger "$ledger_line" --arg startedFrom "$started_from" \
     --arg preconditions "$precon_line" --arg finished "$finished_line" \
@@ -1334,18 +1347,10 @@ do_start() {
   fi
 
   # --- step 7: the run mode is the task's own, never a flag on this call -------------------------
-  local run_mode_raw run_mode
-  run_mode_raw="$(jq -r 'if type == "object" and has("runMode") then (.runMode | tostring) else "__aida_absent__" end' "$TASK_PATH/task.json" 2>/dev/null)"
-  case "$run_mode_raw" in
-    __aida_absent__) run_mode="interactive" ;;
-    autonomous) run_mode="autonomous" ;;
-    interactive)
-      die 3 "start: $TASK_PATH/task.json declares runMode \"interactive\". The schema allows only \"autonomous\" there; absence already means interactive. Remove the field, or set it to \"autonomous\", by hand."
-      ;;
-    *)
-      die 3 "start: $TASK_PATH/task.json has an unusable runMode ('$run_mode_raw'); expected it absent or 'autonomous'."
-      ;;
-  esac
+  # task_run_mode answers for this stage from runMode and runModeStages (task-schema.json). The
+  # field's value against the schema is check-task.sh's to refuse, not this script's.
+  local run_mode
+  run_mode="$(task_run_mode "$TASK_PATH" implement)"
 
   # --- step 8: look for an existing snapshot: absent, present-readable, or present-unreadable ----
   local snapshot_present snapshot_doc
@@ -1393,7 +1398,7 @@ do_start() {
     [ ! -e "$SNAPSHOT_FILE" ] \
       || die 3 "start: $SNAPSHOT_FILE appeared between this script's own presence check and its own write. Another start call on this task finished first and won that race; this call lost it normally. Re-run read to see what the winner produced."
 
-    mark_task_in_progress "$TASK_PATH" "implementation started"
+    mark_task_in_progress "$TASK_PATH" "implementation started" implement
     mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
 
     local taken_at snapshot_json
@@ -1584,8 +1589,10 @@ do_start() {
 
     ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
       || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
-    ledger_run_mode="$(ledger_required_string "$ledger_doc" "runMode")" \
-      || die 3 "start: $LEDGER_FILE is damaged (see stderr above). Repair or remove it by hand before running this again."
+    # The mode is read from the task at every start, so a person who set it interactive after the
+    # build halted, or scoped it to the build alone, is obeyed by the steps that follow
+    # (nyc defect 20). The ledger keeps the mode the build runs under from here on.
+    ledger_run_mode="$run_mode"
 
     # --- exit 82: the branch was rewritten under the ledger ---------------------------------------
     # A rebase or an amend leaves startedFrom on no branch. preconditions would label the baseline
@@ -1732,22 +1739,17 @@ do_start() {
   elif [ "$(printf '%s' "$in_flight_json" | jq 'length')" -gt 0 ]; then
     run_state="an order is in flight; continue it at the step the ledger records"
   elif [ "$(printf '%s' "$halted_json" | jq 'length')" -gt 0 ]; then
-    run_state="every order that is not closed is halted; read the halt reasons and use grant-attempt or restart"
+    run_state="every order that is not closed is halted; read the halt reasons and use grant-attempt, restart or clear-halt"
   elif [ "$order_total" -gt 0 ] && [ "$all_closed_count" -eq "$order_total" ]; then
     run_state="every order is closed; run finish on this task"
   else
     run_state="no order is ready, none is in flight and none is halted. Every remaining order waits on a dependency that is not closed, so nothing can start; read the order states below."
   fi
-  # The ledger is the authority on the run mode, and every later step reads it there
-  # (ledger-schema.json). A task.json edited between runs would otherwise give a resumed run a
-  # report saying interactive while every refusal, halt and row check applied the autonomous rule.
+  # The ledger's copy was just written from the task, new or resumed, and every later step reads
+  # it there (ledger-schema.json). So the report names the task, and the two agree.
   local reported_run_mode run_mode_source
   reported_run_mode="$run_mode"
-  run_mode_source="task.json"
-  if [ "$opened_as" = "reopened" ]; then
-    reported_run_mode="$ledger_run_mode"
-    run_mode_source="the ledger, which is the authority every later step reads"
-  fi
+  run_mode_source="task.json for the implement stage, written into the ledger"
   # The report, as summary lines. The snapshot and the ledger stay in their files, named by path;
   # the orders that drifted, halted and are ready are named by id, and `next` is the same answer
   # `read` gives from the same ledger. The preconditions record cannot exist before the first
@@ -6560,12 +6562,14 @@ fn_load_task_state() {
   FN_LEDGER_DOC="$STARTED_LEDGER_DOC"
 }
 
-# Exit 68. Both the grant and the restart are a person's judgement, so an autonomous run refuses.
+# Exit 68. The grant, the restart and the clearing of a halt are a person's judgement, so an
+# autonomous run refuses. The mode read is the task's own for this stage, not the ledger's copy,
+# so a person who sets the task interactive after a halt runs the action at once.
 # $1 the action's own name, $2 what the caller would have been deciding.
 fn_require_interactive() {
   local who="$1" what="$2"
-  [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.runMode // "interactive"')" = "autonomous" ] || return 0
-  die 68 "$who: this run is autonomous, and $what is a person's judgement. Nothing is written. Run this action again with a person present, or let the halt stand."
+  [ "$(task_run_mode "$TASK_PATH" implement)" = "autonomous" ] || return 0
+  die 68 "$who: this task's implement stage is autonomous, and $what is a person's judgement. Nothing is written. Run task set-run-mode interactive on this task, then this action again, or let the halt stand."
 }
 
 # finish: the implementation stage is done for this task. The task is not. It goes to the review
@@ -6601,9 +6605,9 @@ do_finish() {
   [ -z "$halted_orders" ] \
     || die 66 "finish: these orders are halted, closed or not: $halted_orders. Implementation does not finish while a reason to stop stands on an order."
   # A criterion that is not confirmed stops the stage, and three different facts land here. The
-  # refusal names which, and which action answers it, because two of the three no action in this
-  # script clears: `restart` wants a drift halt and `grant-attempt` answers a spent counter, so a
-  # reader told only "not confirmed" has nothing to do next and no way to learn what.
+  # refusal names which, and which action answers it: `restart` wants a drift halt, `grant-attempt`
+  # answers a spent counter, `clear-halt` the rest, so a reader told only "not confirmed" has
+  # nothing to do next and no way to learn what.
   unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" '
       ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]) as $machine
       | ([ ($snap.workOrders // [])[] | (.criteriaServed // [])[] , (.criteriaOwned // [])[] ]) as $served
@@ -6611,7 +6615,7 @@ do_finish() {
           | select(.rowState != "confirmed")
           | . as $c
           | if ($c.rowState == "rejected")
-              then ($c.id + " (rejected: a row checker turned this down. The row goes back to the test author, who runs tests-freeze on that order again once the test is repaired)")
+              then ($c.id + " (rejected: a row checker turned this down. The row goes back to the test author, who runs tests-freeze on that order again once the test is repaired; clear-halt first when the order halted on it)")
             elif (($served | index($c.id)) == null)
               then ($c.id + " (no work order serves or owns it, so nothing will ever judge it. Design left this criterion with no order behind it: close design again with one, then restart)")
             else ($c.id + " (" + $c.rowState + ": the orders serving it have not all closed yet, so close them)")
@@ -6814,6 +6818,98 @@ do_grant_attempt() {
        haltCleared: $cleared,
        halt: $halt,
        grants: (($o.grants // []) | length),
+       ledger: $ledger,
+       next: $next}')"
+  exit 0
+}
+
+# clear-halt: the one action for every halt the grant and the restart do not answer (nyc defect
+# 20). A rejected row, a finding on a non-goal, a fixer's scope, a finding ruled load-bearing, a
+# dirty tree and spent fix rounds each stop an order for a person to act on: repair the test,
+# rule on the finding, commit the tree. None of that is this script's to do, so the person does it
+# and then says so here, with the reason recorded beside the halt it cleared. The order resumes at
+# the step its ledger entry records; nothing here moves it. A halt the grant or the restart
+# answers refuses (exit 85), so the counter and the snapshot keep their one clearing path each.
+do_clear_halt() {
+  local task_arg="" unit_id="" because=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --because)
+        [ "$#" -ge 2 ] || die 3 "clear-halt: --because needs what the person did about the halt"
+        [ -n "$2" ] || die 3 "clear-halt: --because was given an empty reason."
+        halt_refuse_separator "clear-halt" "--because" "$2"
+        because="$2"; shift 2 ;;
+      -*) die 3 "clear-halt: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die 3 "clear-halt: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die 3 "clear-halt: a task folder is required"
+  [ -n "$unit_id" ]  || die 3 "clear-halt: a unit id is required"
+  [ -n "$because" ]  || die 3 "clear-halt: --because is required. A halt cleared with no reason is a stop nobody can audit."
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "clear-halt")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  fn_load_task_state "clear-halt"
+  fn_require_interactive "clear-halt" "clearing a halt on one order"
+
+  local unit_present order_entry
+  unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
+  [ "$unit_present" = "0" ] && die 22 "clear-halt: $unit_id is not in the frozen copy."
+  order_entry="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die 3 "clear-halt: $unit_id has no entry in $FN_LEDGER_FILE, though start opens one entry per snapshot work order."
+
+  local last_step halt
+  last_step="$(printf '%s' "$order_entry" | jq -r '.lastStep // ""')"
+  [ "$last_step" != "closed" ] \
+    || die 67 "clear-halt: $unit_id is closed, so there is nothing to resume. Nothing is written."
+  halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  [ -n "$halt" ] || die 3 "clear-halt: $unit_id is not halted. Nothing is written."
+
+  # Every segment is read, the way the grant and the restart read theirs, so a halt that holds
+  # one of their reasons anywhere in it goes to that action first.
+  local other_action
+  other_action="$(printf '%s' "$halt" | jq -Rr '
+      split("; earlier: ")
+      | if map(select(startswith("attempts spent") or startswith("budget spent"))) | length > 0 then "grant-attempt"
+        elif map(select(startswith("design drift"))) | length > 0 then "restart"
+        else "" end')"
+  [ -z "$other_action" ] \
+    || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead. Nothing is written."
+
+  local today new_ledger
+  today="$(date -u +%Y-%m-%d)"
+  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$halt" \
+    --arg today "$today" --arg because "$because" '
+    .orders = (.orders | map(if .id == $id then del(.haltedBecause) else . end))
+    | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today, because: $because}])')"
+  [ -n "$new_ledger" ] || die 3 "clear-halt: the ledger update for $unit_id failed."
+  write_atomic "$FN_LEDGER_FILE" "$new_ledger"
+
+  local ch_precon
+  ch_precon=false
+  [ -f "$IMPL_DIR/preconditions.json" ] && jq empty "$IMPL_DIR/preconditions.json" 2>/dev/null && ch_precon=true
+  im_print_summary "clear-halt" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" \
+    --arg cleared "$halt" --arg ledger "$FN_LEDGER_FILE" \
+    --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "$ch_precon" "false")" '
+    ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
+    | {order: $id,
+       haltCleared: $cleared,
+       resumesAt: ($o.lastStep // "not started"),
+       haltsCleared: ((.haltsCleared // []) | length),
        ledger: $ledger,
        next: $next}')"
   exit 0
@@ -7292,6 +7388,7 @@ case "$ACTION" in
   finish)         do_finish         "$@" ;;
   grant-attempt)  do_grant_attempt  "$@" ;;
   restart)        do_restart        "$@" ;;
+  clear-halt)     do_clear_halt     "$@" ;;
   dispatch-open)  do_dispatch_open  "$@" ;;
   dispatch-close) do_dispatch_close "$@" ;;
   step)           do_step           "$@" ;;

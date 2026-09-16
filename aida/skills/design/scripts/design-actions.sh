@@ -442,7 +442,7 @@ do_start() {
 
   records_hash__resolve_sha256_cmd || die3 "start: neither sha256sum nor 'shasum -a 256' was found on PATH"
 
-  mark_task_in_progress "$TASK_PATH" "design started"
+  mark_task_in_progress "$TASK_PATH" "design started" design
   mkdir -p "$DESIGN_DIR" || die3 "start: could not create $DESIGN_DIR"
 
   echo "STARTED: $DESIGN_DIR"

@@ -199,7 +199,8 @@ carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rat
 `--row <criterion id>=rejected::model::<its note>`, and it is not sent back to the test author the
 way a person's rejection is. Nobody is present to judge the correction, so `tests-freeze` writes
 the halt onto the order, with the checker's own note as the reason. Then it refuses. Report the
-halt, and take the next ready order instead.
+halt, and take the next ready order instead. A person clears it with `clear-halt` once the test
+is repaired, in `references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
 nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs

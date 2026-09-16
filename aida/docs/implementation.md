@@ -279,7 +279,7 @@ moves to the next ready order.
 
 One order halting does not stop the run. Only the orders that depend on it wait; everything else
 that is ready still builds, and the run stops only when nothing is ready. Then AIDA reports what
-halted, the reason the ledger holds, and what is waiting on it. Two halts have their own action.
+halted, the reason the ledger holds, and what is waiting on it. Every halt has a clearing action.
 
 **Attempts spent.** You read the two recorded attempts and decide which of three things is true.
 The test is wrong, and no action repairs it in place: the order restarts, below. The order is
@@ -301,12 +301,15 @@ and keeps every finished order. A finished order is never redone for a change it
 Design has to close again on the live files first. A restart is a person's judgement, so an
 autonomous run cannot take it.
 
-**Every other halt has no clearing action**, and AIDA says so. Unattended, that is a row the
-checker rejected or a finding on a non-goal, with nobody to rule. In either mode it is a fixer's
-scope too small, a finding ruled load-bearing, or a tree a role left dirty. A grant refuses them
-and the restart does not see them. The way past is a change to that order through design: edit
-it, close design again, and run the build again. The order then halts for drift as well, and the
-restart takes it fresh. The same path is how a wrong frozen test is repaired.
+**Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
+finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
+finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt
+the same way. A grant refuses them and the restart does not see them. You do what the reason
+names: repair the test, rule on the finding, commit the tree. Then you clear the halt with a
+reason, and AIDA records both in the ledger and says which step the order resumes at. Clearing a
+halt is a person's judgement, so an autonomous run cannot take it. A wrong frozen test can also
+be repaired through design. Edit the order, close design again, and run the build again; the
+order then halts for drift and the restart takes it fresh.
 
 ## Finishing the stage
 

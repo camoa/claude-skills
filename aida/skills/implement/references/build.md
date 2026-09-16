@@ -122,7 +122,8 @@ either makes the range this attempt claims false.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not
-recorded. Interactive puts that to the person. Unattended halts the order with that reason.
+recorded. Interactive puts that to the person. Unattended halts the order with that reason, and
+a person clears it with `clear-halt` once the tree is committed, in `references/finish.md`.
 
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
 `references/preconditions.md` already resolved for the baseline. The script parses `## Test

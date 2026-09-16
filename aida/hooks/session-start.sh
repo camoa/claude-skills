@@ -113,6 +113,7 @@ if [ -n "$MATCH" ]; then
     TASK_ID="$(printf '%s' "$OPEN_TASKS" | jq -r '.id')"
     TASK_PATH="$(printf '%s' "$OPEN_TASKS" | jq -r '.path')"
     TASK_RUN_MODE="$(printf '%s' "$OPEN_TASKS" | jq -r '.runMode // empty')"
+    TASK_RUN_STAGES="$(printf '%s' "$OPEN_TASKS" | jq -r '(.runModeStages // []) | if length > 0 then " (" + join(", ") + ")" else "" end')"
     TASK_NOTES="$(printf '%s' "$OPEN_TASKS" | jq -r '.notes // "none"')"
     STAGE="$(printf '%s' "$OPEN_TASKS" | jq -r '.stage')"
     echo "Task in progress: ${TASK_ID}"
@@ -121,7 +122,7 @@ if [ -n "$MATCH" ]; then
     # turn; a note older than the record it overlaps was overtaken by that record's producer.
     [ "$TASK_NOTES" = "none" ] || echo "Notes: ${TASK_NOTES}, ${TASK_PATH}/notes/${TASK_NOTES}.md"
     name_compaction_marker "$TASK_PATH"
-    [ "$TASK_RUN_MODE" != "autonomous" ] || echo "Run mode: autonomous"
+    [ "$TASK_RUN_MODE" != "autonomous" ] || echo "Run mode: autonomous${TASK_RUN_STAGES}"
     echo ""
   elif [ "$IN_PROGRESS" -gt 1 ]; then
     # The hook marks the task whose worktree holds cwd, so each line is checked for a marker.
