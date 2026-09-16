@@ -72,7 +72,7 @@ Creation then asks two more things, once each. The first is whether to add the t
 your repository's `CLAUDE.md`: a short block saying that work which produces findings or
 decisions belongs in a task, and a small fix does not. The second is where playbooks come from:
 a catalog set per framework, or a folder of your own. Creation offers the folder, but nothing
-loads one today; [Where content comes from](sources.md#using-your-own-folder-instead-of-the-catalog)
+loads one today; [Where content comes from](sources.md#using-your-own-folder-before-the-catalog)
 says what loads. A no is not asked again. Later stages fill in the rest as they run: which
 recipe each stage adopted, which other sources answer for which kind of content, and whether
 visual regression or end-to-end testing is set up. Each of those is filled in by the stage that
@@ -231,14 +231,14 @@ recipes from the hosted catalog, and your guides from a site your team trusts, a
 
 A new project declares no sources at all: the list starts empty, for every kind of content.
 Declaring is cheap and fetching is lazy. No stage fetches anything from the hosted catalog, or
-from anywhere else, until it first needs a guide or a recipe and finds no source declared for
-that kind. Research loads the playbooks once, at its start, and every later
-stage reads that record. Pointing a kind at your own source instead, a local folder or a site
-you trust, makes that source win over the catalog for that kind.
+from anywhere else, until it first needs a guide or a recipe. Research loads the playbooks once,
+at its start, and every later stage reads that record. A process recipe is looked up in three
+places, in order: your declared folders, then the catalog, then research writes one with you.
+A folder that holds nothing is not an answer, so the walk goes on to the catalog.
 You set this per kind: `add-source` takes a kind and a folder, and a team's own recipes for
 one kind can stand alongside the catalog's answer for every other kind. A folder holds process
 recipes or tooling recipes, each in a fixed layout;
-[Where content comes from](sources.md#using-your-own-folder-instead-of-the-catalog) says what a
+[Where content comes from](sources.md#using-your-own-folder-before-the-catalog) says what a
 folder can hold.
 
 **Which playbooks apply is its own decision, separate from where they are found.** A source

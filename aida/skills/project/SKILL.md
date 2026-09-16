@@ -298,8 +298,9 @@ the list into the project file, commits the change, and runs the check. Show the
 Declares one folder, or the hosted catalog, as where this project's content of one kind comes
 from. The kind is one of `guides`, `playbooks`, `processRecipes`, `agenticRecipes` or
 `toolingRecipes`. A project that declares nothing for a kind gets the catalog for it. A project
-that declares a folder for a kind has named its source. The catalog then answers for that kind
-only when it is declared too, with the word `catalog` in place of the folder. Run:
+that declares a folder for a kind is asked that folder first, and the catalog answers what the
+folder does not hold. The word `catalog` in place of the folder ranks the catalog among your
+folders. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   add-source "<target>" <kind> "<folder>"
@@ -316,8 +317,9 @@ For `processRecipes`, the folder holds `process-recipes/<framework>/<phase>.md`,
 is the word a stage asks for. The phases are `research`, `design`, `implement`, `test-authoring`,
 `test-execution`, `review`, `worktree-environment`, `e2e-setup` and `visual-regression`. A stage
 reads the file there and does not ask the navigator. A phase with no file in any declared folder
-is a phase with no recipe, and the stage takes its no-recipe path. To keep the catalog behind
-your folder, declare it too: `add-source <target> processRecipes catalog`. A person can copy a
+falls through to the catalog. The stage takes its no-recipe path only when the catalog holds
+none either. To rank the catalog between two folders, declare it in that place:
+`add-source <target> processRecipes catalog`. A person can copy a
 catalog recipe into that layout and edit it. For `toolingRecipes`, the folder holds
 `tooling-recipes/<framework>/<tool>.md`, and the tool skill reads it the same way.
 

@@ -235,11 +235,12 @@ catalog, so ask them first, once per framework:
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" research <framework>
 ```
 It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: none searched=<folders>`: the project named its own folders for process
-recipes, and none holds this phase. The navigator is not asked. Take the no-recipe path below,
-and record the folders searched beside it, so a later reader can tell this miss from a catalog
-miss. `RECIPE: catalog`, or no line: ask the navigator's process-recipe lookup for this
-project's framework at the research stage. It answers with whether
+navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
+navigator's process-recipe lookup for this project's framework at the research stage. A folder
+that holds nothing is not an answer, so a folder miss never skips the navigator. When
+`searched=` is present, record those folders beside the navigator's answer. A later reader then
+tells a folder miss from a project with no folder. The no-recipe path below is reached only
+after the navigator answers that none exists. The navigator answers with whether
 one is available and, when it is, a path to the body on disk. Read the body from that path. The
 body is never streamed into the conversation, which is what keeps a recipe affordable.
 Verdict words and a missing heading follow

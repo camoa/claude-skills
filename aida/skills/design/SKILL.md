@@ -90,11 +90,12 @@ The project's own sources answer before the catalog, so ask them first, once per
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" design <framework>
 ```
 It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: none searched=<folders>`: the project named its own folders for process
-recipes, and none holds this phase. The navigator is not asked. Take the no-recipe path below,
-and record the folders searched beside it, so a later reader can tell this miss from a catalog
-miss. `RECIPE: catalog`, or no line: ask the navigator's process-recipe lookup for this
-project's framework at the design stage. It answers whether one is
+navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
+navigator's process-recipe lookup for this project's framework at the design stage. A folder
+that holds nothing is not an answer, so a folder miss never skips the navigator. When
+`searched=` is present, record those folders beside the navigator's answer. A later reader then
+tells a folder miss from a project with no folder. The no-recipe path below is reached only
+after the navigator answers that none exists. The navigator answers whether one is
 available and, when it is, a path to the body on disk. Read the body from that path. Never fetch a
 catalog address yourself and never read a cached copy behind the navigator's back.
 Verdict words and a missing heading follow

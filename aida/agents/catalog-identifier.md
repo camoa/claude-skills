@@ -48,11 +48,11 @@ sources are asked before the catalog, so run this first, once per phase and fram
 
 It prints one line, or nothing. `RECIPE: <path> source=<folder>`: a recipe is on disk; answer
 `available` with that path, name the folder as where it came from, and do not ask the navigator.
-`RECIPE: none searched=<folders>`: the project named its own folders for process recipes, and
-none holds this phase. Answer `no-recipe` and name the folders searched. Do not ask the
-navigator: the project chose its folders over the catalog for this kind. `RECIPE: catalog`: the
-catalog is the next source in the project's own order; ask the navigator as below. No line: the
-project declares no source for process recipes, and the catalog is its default; ask the
+`RECIPE: catalog`, with or without `searched=<folders>`: no folder before the catalog holds
+this phase; ask the navigator as below. A folder that holds nothing is not an answer, so a
+folder miss never ends the lookup. When `searched=` is present, name those folders beside the
+navigator's answer. A reader then tells a folder miss from a project with no folder. No line:
+the project declares no source for process recipes, and the catalog is its default; ask the
 navigator as below.
 
 The navigator answers with an `available` flag and, when false, sometimes a free-text reason. The

@@ -164,7 +164,7 @@ A tool with no recipe stops the same way. `/aida:tool` names the tool, the frame
 and any source it did not search. It does not improvise an install from memory. Installing a
 tool the wrong way for a framework is worse than not installing it.
 
-## Using your own folder instead of the catalog
+## Using your own folder before the catalog
 
 `/aida:project add-source <name-or-path> <kind> <folder>`
 
@@ -179,11 +179,11 @@ A folder of process recipes has a fixed layout: `<folder>/process-recipes/<frame
 where the phase is the point a stage asks for: `research`, `design`, `implement`,
 `test-authoring`, `test-execution`, `review`, `worktree-environment`, `e2e-setup` or
 `visual-regression`. When a stage needs a recipe it looks in your folders, in the order you
-declared them, and takes the first file that exists. Declaring a folder names your source for
-that kind, so the catalog is not asked for it. A phase with no file in any of your folders is a
-phase with no recipe, and the stage takes its no-recipe path. To keep the catalog behind your
-folder, declare it too, with the word `catalog` in place of a folder. It then answers the phases
-your folder does not hold. The lookup names the folder it answered from. The simplest way to
+declared them, and takes the first file that exists. A phase with no file in any of your folders
+falls through to the catalog. A folder that holds nothing is not an answer. The stage
+takes its no-recipe path only when the catalog holds none either. It records which folders
+it looked in first. To rank the catalog between two folders, declare it in that place, with the
+word `catalog` in place of a folder. The lookup names the folder it answered from. The simplest way to
 start is to copy the catalog's recipe for that phase into the file and edit it; the headings a
 stage reads stay the same.
 
