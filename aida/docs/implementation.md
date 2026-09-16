@@ -208,11 +208,14 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
    interface names in backticks.
 
 The three tool checks run over the order's owned files minus its frozen tests. The implementer
-may not write the tests, so the tools judge only what it may write. The first check is the floor.
+may not write the tests, so the tools judge only what it may write. An owned file outside the
+code repository is left out too, because a tool run in the repository cannot see it. The detail
+says how many were left out. The first check is the floor.
 Every other check may answer undeclared and the order still goes on. Order-tests must answer
 met, because it is the one check that says this code does what its tests ask. AIDA also tells
 you how many of the eight actually ran a command, a diff or a hash. Eight answers do not by
-themselves say the code was tested. The interface check is the one script that cannot decide
+themselves say the code was tested. A record that would hold fewer than eight is refused rather
+than written, naming the absent check. The interface check is the one script that cannot decide
 alone, because both sides are prose. It counts what it can, that every backticked element is
 present, and the disagreement goes to the reviewer as a finding. A declaration naming nothing in
 backticks reads unknown and does not spend the attempt.

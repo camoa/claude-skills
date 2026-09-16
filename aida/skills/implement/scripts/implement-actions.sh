@@ -447,6 +447,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and the file is then accepted as `harness-new-unit`. The same exit when no
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
+#  84  the assembled checks do not count what the record schema requires: eight at `build-record`
+#      (build-record-schema.json) and seven at `fix-record` (fix-record-schema.json). A record
+#      that lost one would read complete while it is not. The message names the absent check.
+#      Nothing is written and no attempt or round is spent.
 #
 # The codes a resumed `start` added (nyc defects 10 and 19).
 #  82  a resumed `start` found HEAD is not a descendant of the ledger's own startedFrom. The branch
@@ -2229,6 +2233,29 @@ bl_run_suite() {
   done
 }
 
+# Keeps the entries of $1, a JSON array of owned paths, that lie in the code repository at $2:
+# every relative path, and every absolute one under it. An order may own a record in the task
+# folder, an absolute path outside the repository, and a tool run in the repository fails on a
+# file it cannot see, which spent two attempts on the nyc task (nyc defect 11). Sets
+# BR_INSIDE_JSON to what is kept and BR_OUTSIDE_COUNT to how many were dropped. Both the build's
+# tool rows and the baseline's read it, so the two answer over the same files.
+BR_INSIDE_JSON="[]"; BR_OUTSIDE_COUNT=0
+br_scope_to_repository() {
+  BR_INSIDE_JSON="$(jq -cn --argjson paths "$1" --arg cp "$2/" \
+    '[ $paths[] | select((startswith("/") | not) or startswith($cp)) ]')"
+  BR_OUTSIDE_COUNT="$(jq -n --argjson paths "$1" --arg cp "$2/" \
+    '[ $paths[] | select(startswith("/") and (startswith($cp) | not)) ] | length')"
+}
+
+# One sentence for a tool row's detail when br_scope_to_repository dropped something, or nothing.
+br_outside_note() {
+  case "$BR_OUTSIDE_COUNT" in
+    0) printf '' ;;
+    1) printf ' 1 owned file lies outside the code repository and was left out.' ;;
+    *) printf ' %s owned files lie outside the code repository and were left out.' "$BR_OUTSIDE_COUNT" ;;
+  esac
+}
+
 # Runs one baseline tool command over the baseline scope and prints the field object baseline.json
 # holds for it. $1 the check id, $2 a word for the message, $3 the code repository, $4 the scope as
 # a JSON array of paths, $5 the folder baseline.json lives in. The command, its signal and its
@@ -2275,6 +2302,8 @@ bl_tool_result() {
   if [ -n "$exts_json" ]; then
     scoped_json="$(br_filter_extensions "$paths_json" "$exts_json")"
   fi
+  br_scope_to_repository "$scoped_json" "$codepath"
+  scoped_json="$BR_INSIDE_JSON"
   scoped_count="$(printf '%s' "$scoped_json" | jq 'length')"
 
   if [ "$has_paths" = "true" ] && [ "$(printf '%s' "$paths_json" | jq 'length')" -eq 0 ]; then
@@ -2283,9 +2312,13 @@ bl_tool_result() {
     # not a missing one.
     verdict="unknown"
     reason="the $label command holds a path placeholder, and no work order declares an owned file, so the command would run over no path at all"
-  elif [ "$has_paths" = "true" ] && [ -n "$exts_json" ] && [ "$scoped_count" -eq 0 ]; then
+  elif [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
     verdict="undeclared"
-    reason="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and the scope holds no file with one of those extensions, so the row does not apply"
+    if [ "$BR_OUTSIDE_COUNT" -gt 0 ]; then
+      reason="the $label command would read no file of the scope inside the code repository ($BR_OUTSIDE_COUNT owned outside it), so the row does not apply"
+    else
+      reason="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and the scope holds no file with one of those extensions, so the row does not apply"
+    fi
   else
     stdout_len=0
     errfile=""
@@ -4183,11 +4216,11 @@ BRC_GATE_RECIPES=""
 br_tool_check() {
   local check_id="$1" field="$2" label="$3"
   local row argv_json signal exts_json absent_declared missing_why
-  local verdict detail exit_json output outfile errfile rc has_paths
+  local verdict detail exit_json out_src outfile errfile rc has_paths
   local owned_json owned_count scoped_json scoped_count stdout_len failed how
   local baseline_doc baseline_verdict baseline_output result kind payload new_json new_count
   local left_out_json paths_json expanded_json oi entry
-  verdict=""; detail=""; exit_json="null"; output=""; new_json="[]"; new_count=0
+  verdict=""; detail=""; exit_json="null"; out_src="/dev/null"; outfile=""; new_json="[]"; new_count=0
   left_out_json="[]"; paths_json="null"
 
   row="$(printf '%s' "$BRC_RECIPES" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
@@ -4251,6 +4284,8 @@ br_tool_check() {
   if [ -n "$exts_json" ]; then
     scoped_json="$(br_filter_extensions "$scoped_json" "$exts_json")"
   fi
+  br_scope_to_repository "$scoped_json" "$BRC_CODEPATH"
+  scoped_json="$BR_INSIDE_JSON"
   scoped_count="$(printf '%s' "$scoped_json" | jq 'length')"
 
   if [ "$has_paths" = "true" ] && [ "$owned_count" -eq 0 ]; then
@@ -4260,9 +4295,12 @@ br_tool_check() {
     detail="the $label command holds a path placeholder, and this order declares no ownedFiles, so the command would run over no path at all."
   elif [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
     # The order owns files, and none of them is a file this tool judges: every one is a frozen test,
-    # or none carries an extension the tool reads. The row did not apply here.
+    # or none carries an extension the tool reads, or every one lies outside the repository. The
+    # row did not apply here.
     verdict="undeclared"
-    if [ -n "$exts_json" ]; then
+    if [ "$BR_OUTSIDE_COUNT" -gt 0 ]; then
+      detail="the $label command would read no file this order owns inside the code repository ($BR_OUTSIDE_COUNT owned outside it), so the row does not apply to it."
+    elif [ -n "$exts_json" ]; then
       detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions outside its frozen tests, so the row does not apply to it."
     else
       detail="every file this order owns is a frozen test, which the implementer may not write, so the row does not apply to it."
@@ -4291,10 +4329,10 @@ br_tool_check() {
       if [ -n "$signal" ]; then
         stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
         case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
-        output="$(cat "$outfile" "$errfile" 2>/dev/null)"
-      else
-        output="$(cat "$outfile" 2>/dev/null)"
+        # The baseline joined the two streams the same way, standard output first.
+        cat "$errfile" >>"$outfile" 2>/dev/null
       fi
+      out_src="$outfile"
       exit_json="$rc"
       failed=false; how=""
       if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
@@ -4331,8 +4369,6 @@ br_tool_check() {
               detail="the $label command $how, and the baseline recorded this tool met at the commit the build started from; this order introduced the finding."
               ;;
             unmet)
-              # The baseline joined the two streams the same way, standard output first.
-              [ -z "$errfile" ] || cat "$errfile" >>"$outfile" 2>/dev/null
               br_subtract_baseline "$baseline_output" "$outfile" "$label" "$how"
               verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
               new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
@@ -4349,11 +4385,12 @@ br_tool_check() {
         fi
       fi
     fi
-    rm -f "$outfile"
     [ -z "$errfile" ] || rm -f "$errfile"
+    [ "$has_paths" = "false" ] || detail="$detail$(br_outside_note)"
   fi
+  # The output is read from its file, never passed as an argument (nyc defect 9).
   jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
-        --argjson exitCode "$exit_json" --arg output "$output" \
+        --argjson exitCode "$exit_json" --rawfile output "$out_src" \
         --arg signal "$signal" --arg exts "${exts_json:-}" \
         --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
         --argjson paths "$paths_json" --argjson leftOut "$left_out_json" \
@@ -4367,6 +4404,7 @@ br_tool_check() {
     + (if $paths == null then {} else {paths: $paths} end)
     + (if ($leftOut | length) == 0 then {} else {frozenTestsLeftOut: $leftOut} end)
   '
+  [ -z "$outfile" ] || rm -f "$outfile"
 }
 
 # One commanded test check: order-tests or suite-regression. $1 the check id, $2 the field of each
@@ -4380,12 +4418,17 @@ br_test_check() {
   local check_id="$1" field="$2" label="$3"
   local fw_count fwi fw_obj fw cmd argv_json paths_json result kind payload
   local runs='[]' verdicts='[]' verdict detail outfile rc marker_json markers_len mi marker
-  local nothing_ran_hit run_detail baseline_doc baseline_verdict baseline_output new_json new_count selector
+  local nothing_ran_hit baseline_doc baseline_verdict baseline_output new_json new_count selector
+  local runs_file
 
   fw_count="$(printf '%s' "$BRC_RECIPES" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
   paths_json='[]'
   [ "$field" = "orderTests" ] && paths_json="$BRC_SELECTED_JSON"
+  # The suite's whole output goes into the record, and a command-line argument caps at 128KB on
+  # Linux, so a long run made jq refuse to start and the check went missing from the record (nyc
+  # defects 9 and 12). Every hop that carries the output reads it from a file instead.
+  runs_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
   fwi=0
   while [ "$fwi" -lt "$fw_count" ]; do
@@ -4414,7 +4457,7 @@ br_test_check() {
       fi
     else
       argv_json="$(printf '%s' "$cmd" | jq -c '.argv')"
-      outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+      outfile="$(mktemp)" || { rm -f "$runs_file"; die 3 "$BRC_WHO: could not create a temporary file"; }
       result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$paths_json" "$BRC_VALUES")"
       kind="$(printf '%s' "$result" | cut -f1)"
       payload="$(printf '%s' "$result" | cut -f2-)"
@@ -4426,7 +4469,6 @@ br_test_check() {
         detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
       else
         rc="$payload"
-        run_detail="$(cat "$outfile" 2>/dev/null)"
         # A green run that selected nothing is not a pass. The framework's own recipe names the
         # marker, under failure_signal's silent_pass; the caller's --nothing-ran is read only where
         # the recipe names none.
@@ -4505,33 +4547,39 @@ br_test_check() {
             detail="the suite exited $rc on $fw, and $BRC_BASELINE_FILE could not be read to tell whether this failure predates this order."
           fi
         fi
-        runs="$(jq -nc --argjson runs "$runs" --arg fw "$fw" --arg v "$verdict" \
-          --arg d "$detail" --argjson rc "$rc" --arg out "$run_detail" \
+        printf '%s' "$runs" >"$runs_file"
+        runs="$(jq -nc --slurpfile r "$runs_file" --arg fw "$fw" --arg v "$verdict" \
+          --arg d "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
           --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
           --arg failureLine "$([ "$check_id" = "suite-regression" ] && printf '%s' "$selector")" \
-          '$runs + [{framework: $fw, verdict: $v, detail: $d, exitCode: $rc, output: $out,
-                     newLines: $newLines, newLineCount: $newLineCount}
-                    + (if $failureLine == "" then {} else {failureLine: $failureLine} end)]')"
+          '$r[0] as $runs
+           | $runs + [{framework: $fw, verdict: $v, detail: $d, exitCode: $rc, output: $out,
+                       newLines: $newLines, newLineCount: $newLineCount}
+                      + (if $failureLine == "" then {} else {failureLine: $failureLine} end)]')"
       fi
       rm -f "$outfile"
     fi
     if [ -z "$rc" ]; then
-      runs="$(jq -nc --argjson runs "$runs" --arg fw "$fw" --arg v "$verdict" --arg d "$detail" \
-        '$runs + [{framework: $fw, verdict: $v, detail: $d}]')"
+      printf '%s' "$runs" >"$runs_file"
+      runs="$(jq -nc --slurpfile r "$runs_file" --arg fw "$fw" --arg v "$verdict" --arg d "$detail" \
+        '$r[0] as $runs | $runs + [{framework: $fw, verdict: $v, detail: $d}]')"
     fi
     verdicts="$(jq -nc --argjson v "$verdicts" --arg x "$verdict" '$v + [$x]')"
     fwi=$((fwi + 1))
   done
 
   if [ "$fw_count" -eq 0 ]; then
+    rm -f "$runs_file"
     jq -n --arg id "$check_id" --arg detail "no framework recipe was resolved for this task, so $label was not checked." \
       '{id: $id, verdict: "undeclared", detail: $detail}'
     return 0
   fi
 
   verdict="$(br_worst_verdict "$verdicts")"
-  jq -n --arg id "$check_id" --arg verdict "$verdict" --argjson runs "$runs" '
-    ([ $runs[] | .newLineCount // 0 ] | add) as $newCount
+  printf '%s' "$runs" >"$runs_file"
+  jq -n --arg id "$check_id" --arg verdict "$verdict" --slurpfile r "$runs_file" '
+    $r[0] as $runs
+    | ([ $runs[] | .newLineCount // 0 ] | add) as $newCount
     | {id: $id, verdict: $verdict,
        detail: ([ $runs[] | (.framework + ": " + .detail) ] | join(" ")),
        runs: [ $runs[] | {framework, verdict} + (if has("failureLine") then {failureLine} else {} end) ]}
@@ -4541,6 +4589,7 @@ br_test_check() {
     + (if $newCount == 0 then {}
        else {newLines: ([ $runs[] | (.newLines // [])[] ] | .[:20]), newLineCount: $newCount} end)
   '
+  rm -f "$runs_file"
 }
 
 # The configuration check, in the order-tests slot of an order whose proof is gate (live-run row
@@ -4610,7 +4659,7 @@ BR_GATE_LINES
         detail="every ## Configuration gate line ($n of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output."
       fi
       if [ -n "$rc" ]; then
-        jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --arg out "$(cat "$outfile")" \
+        jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
           '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
         rm -f "$outfile" "$run_out"
         return 0
@@ -4783,6 +4832,26 @@ br_interface_check() {
   fi
   jq -n --arg verdict "$verdict" --arg detail "$detail" \
     '{id: "interface-record", verdict: $verdict, detail: $detail}'
+}
+
+# Exit 84. The record schema requires exactly eight checks at build-record and seven at fix-record
+# (build-record-schema.json and fix-record-schema.json, `checks`), and a check that went missing on
+# the way is a record that reads complete while it is not. $1 the action, $2 the file holding the
+# assembled checks array, $3 the count the schema requires. Names the check that is absent, and
+# removes the file first, so the refusal leaves nothing behind.
+br_require_check_count() {
+  local who="$1" checks_file="$2" want="$3" have absent
+  have="$(jq 'length' "$checks_file" 2>/dev/null)"
+  [ "$have" != "$want" ] || return 0
+  absent="$(jq -r --argjson want "$want" '
+    [ .[] | .id ] as $have
+    | ([ "order-tests", "suite-regression", "coding-standards", "static-analysis", "security",
+         "owned-files", "frozen-tests" ] + (if $want == 8 then ["interface-record"] else [] end))
+    | map(select(. as $id | ($have | index($id)) == null))
+    | map(if . == "order-tests" and ($have | index("configuration-gate")) != null then empty else . end)
+    | join(", ")' "$checks_file" 2>/dev/null)"
+  rm -f "$checks_file"
+  die 84 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written."
 }
 
 do_build_record() {
@@ -4965,29 +5034,33 @@ do_build_record() {
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
 
-  local seven_file seven_json interface_check_json checks_json
-  seven_file="$(mktemp)" || die 3 "build-record: could not create a temporary file"
-  br_seven_checks >"$seven_file"
-  seven_json="$(cat "$seven_file" 2>/dev/null)"
-  rm -f "$seven_file"
-  [ -n "$seven_json" ] || die 3 "build-record: the seven computable checks produced nothing for $unit_id."
-
+  # The checks carry whole tool outputs, so they travel by file from here to the record: a
+  # command-line argument caps at 128KB and a record that lost a check to that cap printed
+  # `executed: 5 of 8` over seven checks (nyc defects 9 and 12).
+  local seven_file checks_file interface_check_json checks_json
   interface_check_json="$(br_interface_check "$unit_interface_declared" "$interface_text")"
   [ -n "$interface_check_json" ] \
     || die 3 "build-record: the interface-record check produced nothing for $unit_id."
 
-  checks_json="$(jq -n --argjson seven "$seven_json" --argjson eighth "$interface_check_json" \
-    '$seven + [$eighth]')"
+  seven_file="$(mktemp)" || die 3 "build-record: could not create a temporary file"
+  br_seven_checks >"$seven_file"
+  [ -s "$seven_file" ] \
+    || { rm -f "$seven_file"; die 3 "build-record: the seven computable checks produced nothing for $unit_id."; }
+  checks_file="$(mktemp)" || { rm -f "$seven_file"; die 3 "build-record: could not create a temporary file"; }
+  jq -c --argjson eighth "$interface_check_json" '. + [$eighth]' "$seven_file" >"$checks_file"
+  rm -f "$seven_file"
+  br_require_check_count "build-record" "$checks_file" 8
+  checks_json="$(cat "$checks_file" 2>/dev/null)"
 
   local today record_json executed_count
   executed_count="$(br_executed_count "$checks_json")"
   case "$executed_count" in ''|*[!0-9]*) executed_count=0 ;; esac
   today="$(date -u +%Y-%m-%d)"
-  record_json="$(jq -n \
+  record_json="$(jq -c \
     --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
-    --argjson checks "$checks_json" --argjson executed "$executed_count" \
+    --argjson executed "$executed_count" \
     '{
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -4997,10 +5070,12 @@ do_build_record() {
       attempt: $attempt,
       interfaceRecord: $interfaceRecord,
       reportPath: $reportPath,
-      checks: $checks,
+      checks: .,
       executed: $executed,
-      decidingChecks: { total: 8, ranHere: [ $checks[] | .id ] }
-    }')"
+      decidingChecks: { total: 8, ranHere: [ .[] | .id ] }
+    }' "$checks_file")"
+  rm -f "$checks_file"
+  [ -n "$record_json" ] || die 3 "build-record: could not assemble the record for $unit_id."
 
   write_atomic "$record_file" "$record_json"
 
@@ -5276,14 +5351,13 @@ do_review_brief() {
   git -C "$RV_CODEPATH" diff "$started_at" "$commit" > "$diff_path" 2>/dev/null \
     || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
 
-  local criteria_json nongoals_json checks_json tests_json
+  local criteria_json nongoals_json tests_json
   criteria_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson unit "$RV_UNIT_JSON" '
     ((($unit.criteriaServed // []) + ($unit.criteriaOwned // []))
       | reduce .[] as $x ([]; if index($x) then . else . + [$x] end)) as $ids
     | [ $ids[] as $id | (.alignment.criteria // [])[] | select(.id == $id)
         | {id, text, verification, verifiedBy} ]')"
   nongoals_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.nonGoals // [])[] | {id, text} ]')"
-  checks_json="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.checks // []')"
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
   # A locks-in reason is read with the diff, so the brief says where it sits, and never copies it.
   local locks_note
@@ -5306,7 +5380,7 @@ do_review_brief() {
     --arg diffPath "$diff_path" \
     --argjson frozenTests "$tests_json" \
     --arg reportPath "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')" \
-    --argjson checks "$checks_json" \
+    --slurpfile build "$IMPL_DIR/build-$unit_id.json" \
     --arg interfaceDeclared "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')" \
     --arg interfaceRecord "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" \
     --arg findingsPath "$IMPL_DIR/review-$unit_id-findings.json" \
@@ -5324,7 +5398,7 @@ do_review_brief() {
       frozenTests: $frozenTests,
       locksIn: $locksIn,
       reportPath: $reportPath,
-      checks: $checks,
+      checks: ($build[0].checks // []),
       interface: { declared: $interfaceDeclared, record: $interfaceRecord },
       findingsPath: $findingsPath,
       playbooksPath: $playbooksPath
@@ -5802,25 +5876,27 @@ RV_SCOPE
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
 
+  # The checks travel by file to the record, the same as build-record (nyc defects 9 and 12).
   local seven_file checks_json
   seven_file="$(mktemp)" || die 3 "fix-record: could not create a temporary file"
   br_seven_checks >"$seven_file"
+  [ -s "$seven_file" ] \
+    || { rm -f "$seven_file"; die 3 "fix-record: the seven computable checks produced nothing for $unit_id."; }
+  br_require_check_count "fix-record" "$seven_file" 7
   checks_json="$(cat "$seven_file" 2>/dev/null)"
-  rm -f "$seven_file"
-  [ -n "$checks_json" ] || die 3 "fix-record: the seven computable checks produced nothing for $unit_id."
 
   local diff_path
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
   git -C "$RV_CODEPATH" diff "$started_at_full" "$current_commit" > "$diff_path" 2>/dev/null \
-    || die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."
+    || { rm -f "$seven_file"; die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
 
   local today record_json executed_count
   executed_count="$(br_executed_count "$checks_json")"
   case "$executed_count" in ''|*[!0-9]*) executed_count=0 ;; esac
   today="$(date -u +%Y-%m-%d)"
-  record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
+  record_json="$(jq -c --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson round "$round_number" --arg reportPath "$report_path" \
-    --arg diffPath "$diff_path" --argjson checks "$checks_json" --argjson executed "$executed_count" '
+    --arg diffPath "$diff_path" --argjson executed "$executed_count" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -5830,10 +5906,12 @@ RV_SCOPE
       round: $round,
       reportPath: $reportPath,
       diffPath: $diffPath,
-      checks: $checks,
+      checks: .,
       executed: $executed,
-      decidingChecks: { total: 8, ranHere: [ $checks[] | .id ] }
-    }')"
+      decidingChecks: { total: 8, ranHere: [ .[] | .id ] }
+    }' "$seven_file")"
+  rm -f "$seven_file"
+  [ -n "$record_json" ] || die 3 "fix-record: could not assemble the record for $unit_id."
   write_atomic "$record_file" "$record_json"
 
   # A fixer does not widen its own scope. It reports instead, and the report is consumed here
@@ -5971,9 +6049,10 @@ do_verify_brief() {
     || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
-    --argjson fix "$fix_doc" --arg fixRecord "$fix_file" \
+    --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" \
     --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" '
-    {unit: $unit,
+    $fix[0] as $fix
+    | {unit: $unit,
      mode: "verify",
      round: $round,
      findings: $findings,

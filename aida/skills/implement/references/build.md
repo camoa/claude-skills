@@ -132,6 +132,8 @@ own frozen tests, and the three tool commands, each with its own argv, `{paths}`
 command. A `{paths}` token expands to this order's own owned files, relative to codePath, and never
 reaches a shell. For the three tool rows, the order's own frozen test files come out of that
 expansion first. The implementer may not write them, so the tools judge only what it may write.
+An owned file outside codePath comes out too, because a tool run in the repository cannot see
+it. The detail says how many were left out, and a row with nothing left reads undeclared.
 The record names the paths the token expanded to and the frozen tests left out.
 
 **Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit
@@ -141,6 +143,9 @@ nothing here two answers to choose between.
 **The check recipe must be the one the baseline used.** A check recipe that resolves to a
 different file than the baseline read refuses (exit 73), naming both: a tool's own result is
 compared against the baseline it ran against, and a changed recipe makes that comparison false.
+
+**The record holds exactly eight checks.** Fewer refuses (exit 84), naming the absent check, and
+no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
 `references/preconditions.md` does. Pass `--nothing-ran <literal substring>` only when the
