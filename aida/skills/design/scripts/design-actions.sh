@@ -41,6 +41,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh add-test       <task_folder> \
 #                        --id <woId> --level <text> --description <text>
 #   design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
+#   design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
+#   design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
 #   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh render     <task_folder> --id <woId>
@@ -121,18 +123,20 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      caller branching on 1 never confuses "not a task folder" with "a file is broken".
 #   2  the target of this action is not present: `start` was asked to begin a task with no
 #      alignment.json, or with one that will not parse or is not a contract; or `update`,
-#      `add-owned-file`, `add-done-when`, `add-test`, `remove-test` or `render` were given an --id
-#      naming no work order file in this task's design/ folder; or `remove-test` was given a
-#      --description no test on that order carries; or `merge` was given an --into or --from
-#      naming no work order file; or `read-guide` was given a --path naming no file on disk; or
-#      `distill` found no records/design-distill.json, so the distiller has not been dispatched
-#      yet.
+#      `add-owned-file`, `add-done-when`, `add-test`, `remove-test`, `remove-done-when`,
+#      `remove-owned-file` or `render` were given an --id naming no work order file in this
+#      task's design/ folder; or `remove-test` was given a --description no test on that order
+#      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
+#      order does not own; or `merge` was given an --into or --from naming no work order file;
+#      or `read-guide` was given a --path naming no file on disk; or `distill` found no
+#      records/design-distill.json, so the distiller has not been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
 #      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
 #      one without --confirmed), or a decline given --path; a `remove-test` refused because the test named is the last one
-#      on a `tests` order owning a machine-verified criterion; a `merge` refused because the two orders' proofs differ or
+#      on a `tests` order owning a machine-verified criterion; a `remove-owned-file` refused because
+#      the path named is the only file the order owns; a `merge` refused because the two orders' proofs differ or
 #      --into and --from name the same order; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
@@ -233,6 +237,8 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
                                          --description <text>
        design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
+       design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
+       design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh merge          <task_folder> --into <woId> --from <woId>
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh render         <task_folder> --id <woId>
@@ -942,9 +948,93 @@ do_remove_test() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# remove-done-when and remove-owned-file: the reverse of add-done-when and add-owned-file, the
+# same move remove-test makes one field over (live-run row 76). A row is named by its exact text,
+# the way add-done-when wrote it and remove-test names a test. No report numbers a done-when row,
+# so an index would be a number counted from a rendered list. Every row carrying that text goes,
+# and the count is printed. A path is named as it was added. The last owned file is refused on the
+# schema's own rule: an order that names no file hands the builder no boundary. On a `record`
+# order, the inference add-owned-file makes runs again in reverse. An order left with no owned
+# file under the task folder loses `proof`. It does not stay `record` on the strength of files
+# it no longer owns.
+# ------------------------------------------------------------------------------------------------
+
+do_remove_done_when() {
+  local id="" text=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)
+        need_value "remove-done-when" "--id" "$#" "${2:-}"
+        id="$2"; shift 2 ;;
+      --text)
+        need_value "remove-done-when" "--text" "$#" "${2:-}"
+        text="$2"; shift 2 ;;
+      *) die3 "remove-done-when: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "remove-done-when" "$id"
+  is_blank "$text" && die3 "remove-done-when: --text is required and must not be blank"
+
+  local file doc matched
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "remove-done-when: $file exists but is not valid JSON"
+  matched="$(jq -r --arg t "$text" '[(.doneWhen // [])[] | select(. == $t)] | length' "$file")"
+  [ "$matched" -gt 0 ] || die2 "remove-done-when: $id carries no done-when row with the text '$text'"
+  doc="$(jq --arg t "$text" '.doneWhen = [(.doneWhen // [])[] | select(. != $t)]' "$file")"
+  write_atomic "$file" "$doc"
+  echo "UPDATED: $file"
+  echo "removed-done-when: $matched"
+  wo_summary "$doc"
+  render_wo "$id"
+  exit 0
+}
+
+do_remove_owned_file() {
+  local id="" path_val=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)
+        need_value "remove-owned-file" "--id" "$#" "${2:-}"
+        id="$2"; shift 2 ;;
+      --path)
+        need_value "remove-owned-file" "--path" "$#" "${2:-}"
+        path_val="$2"; shift 2 ;;
+      *) die3 "remove-owned-file: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "remove-owned-file" "$id"
+  is_blank "$path_val" && die3 "remove-owned-file: --path is required and must not be blank"
+
+  local file doc
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "remove-owned-file: $file exists but is not valid JSON"
+  jq -e --arg p "$path_val" '((.ownedFiles // []) | index($p)) != null' "$file" >/dev/null 2>&1 \
+    || die2 "remove-owned-file: $id does not own $path_val"
+  [ "$(jq -r '(.ownedFiles // []) | length' "$file")" -gt 1 ] \
+    || die3 "remove-owned-file: $path_val is the only file $id owns, and an order that names no file hands the builder no boundary (design-schema.json, ownedFiles). Add the replacement first, or fold the order into another with merge"
+  doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]' "$file")"
+  local unset_proof
+  unset_proof="$(printf '%s' "$doc" | jq -r --arg t "$TASK_PATH/" \
+    'if (.proof // "") == "record" and ((.ownedFiles // []) | any(startswith($t)) | not) then "yes" else "" end')"
+  if [ "$unset_proof" = "yes" ]; then
+    doc="$(printf '%s' "$doc" | jq 'del(.proof)')"
+    echo "proof-unset: record, because no owned file of $id lies under the task folder now; every reader takes the order as tests until --proof says otherwise"
+  fi
+  write_atomic "$file" "$doc"
+  echo "UPDATED: $file"
+  echo "removed-owned-file: $path_val"
+  wo_summary "$doc"
+  render_wo "$id"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # merge: folds one order into another (SKILL.md, "Size a work order"). Every list field is the
 # ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
-# appended, so a disposition `dispose` wrote on the folded order is not lost. `title`, `diffBudget`
+# appended under a line naming the folded order. A disposition `dispose` wrote on it is not
+# lost, and a reader can tell which order stated what. The summary says which scalars were carried
+# and which were dropped. A live run that saw only list counts read the append as a drop and
+# rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
 # and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
 # `tests` order would carry tests it may not declare, or the reverse. The folded order's
 # json and md are removed. Every other order's `dependsOn` naming it is rewritten to the survivor,
@@ -990,7 +1080,7 @@ do_merge() {
     $f[0] as $f
     | def dedupe: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
       def union(k): if (has(k) or ($f | has(k))) then .[k] = (((.[k] // []) + ($f[k] // [])) | dedupe) else . end;
-      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = $f[k] else .[k] = .[k] + " " + $f[k] end;
+      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n" + $f[k] end;
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
     | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses")
@@ -1004,6 +1094,12 @@ do_merge() {
     after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
     echo "$k: $before -> $after"
   done
+  local carried
+  carried="$(jq -r '[ (if (.interface // "") != "" then "interface" else empty end),
+                     (if (.reasoning // "") != "" then "reasoning" else empty end) ] | join(", ")' "$from_file")"
+  echo "carried: ${carried:-none}"
+  echo "dropped: title, diffBudget; the survivor's stand"
+  echo "title: $(jq -r '.title' "$into_file"), the survivor's"
   write_atomic "$into_file" "$doc"
 
   # Every other order that depended on the folded one now depends on the survivor.
@@ -1429,6 +1525,8 @@ case "$ACTION" in
   add-done-when)  do_add_done_when  "$@" ;;
   add-test)       do_add_test       "$@" ;;
   remove-test)    do_remove_test    "$@" ;;
+  remove-done-when)  do_remove_done_when  "$@" ;;
+  remove-owned-file) do_remove_owned_file "$@" ;;
   merge)          do_merge          "$@" ;;
   read-guide)     do_read_guide     "$@" ;;
   render)         do_render         "$@" ;;

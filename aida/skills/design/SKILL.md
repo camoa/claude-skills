@@ -297,10 +297,14 @@ component, and they cannot run in parallel anyway. The script folds one into the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh merge "<task_folder>" \
   --into <woId> --from <woId>
 ```
-Every list on the folded order joins the survivor's, without duplicates. The folded order's file
-is removed, and every `dependsOn` that named it now names the survivor. The two proofs must
-agree; set one order's `--proof` first when they do not. Never remove or edit an order file by
-any other means. A write outside the script prints nothing, so nothing records that it happened.
+Every list on the folded order joins the survivor's, without duplicates. The folded order's
+`interface` and `reasoning` are appended to the survivor's, each under a line `From <woId>:`.
+The title and the diff budget stay the survivor's; the output says `carried:` and `dropped:` so
+nothing goes unseen. Retitle with `update` when the survivor's title no longer covers what it
+owns. The folded order's file is removed, and every `dependsOn` that named it now names the
+survivor. The two proofs must agree; set one order's `--proof` first when they do not. Never
+remove or edit an order file by any other means. A write outside the script prints nothing, so
+nothing records that it happened.
 
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:
@@ -310,6 +314,20 @@ doubled it, or the order became a `gate`:
 ```
 It refuses the last test of a `tests` order that owns a machine-verified criterion, the rule the
 check applies. Add the replacement first.
+
+A done-when row or an owned file leaves the same way. Moving a file to the order the sizing rule
+names leaves its rows on the old order. The checkpoint would then judge that order on a file it
+may not write:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-done-when "<task_folder>" \
+  --id <woId> --text "<the row's text, exactly as declared>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-owned-file "<task_folder>" \
+  --id <woId> --path "<the path, exactly as declared>"
+```
+Each prints what it removed. The last owned file is refused, because an order that names no
+file gives the builder no boundary. Add the replacement first, or fold the order with `merge`. A
+`record` order left with no file under the task folder loses its proof, and the output says so.
+Set `--proof` again if that was wrong.
 
 A shared decision, like one base class serving two later orders, lives in the order that builds
 the shared thing, in its own `reasoning`. The orders that depend on it point at it through
