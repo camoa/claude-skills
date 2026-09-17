@@ -4,6 +4,25 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.13] - 2026-09-17
+
+### Added
+- `research-actions.sh serve <task> --search <slug> --index <n> --criteria-served <ids>` and
+  `drop <task> --search <slug> --index <n>` repair one recorded finding: reattach it to the
+  criteria it serves, or remove it (and its file when none is left). `record` appends and had
+  no repair path, so the skill's "record it again" and "can stand as recorded" sentences could
+  not be followed: the check counts every orphan finding (exit 5) and design refuses to start
+  on it. The skill now closes research at exit 0 only, repairs one entry per check run since
+  `drop` moves later indexes down, and stops on an unreadable file for a person to decide.
+
+### Changed
+- A record order's diffs (owned-files, the review patch, the fix patch) read the task folder
+  alone, through one helper, and set aside the files AIDA's own scripts write there
+  (`task.json`, the stage records and their renderings, `implementation/` and its restart
+  archives, `records/`). A task note saved or another task closed between the brief and the
+  record no longer reads as files the order did not own. A person's places are `inputs/` and
+  `deliverables/`; a file placed under a stage folder is set aside even when a person wrote it.
+
 ## [6.0.0-beta.12] - 2026-09-16
 
 The thirteen defects the nyc project's live run found against beta.10 and beta.11 (items 9 to 21
