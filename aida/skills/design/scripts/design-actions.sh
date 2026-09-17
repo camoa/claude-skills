@@ -49,12 +49,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
-#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed] \
+#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
 #                        [--path <path> --interface <text>]
 #
 # --run-mode is accepted on every action and `close` and `dispose` require it. A close record says who was
 # present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
-# record a person nobody saw. Every other action ignores it.
+# record a person nobody saw. Every other action ignores it. `dispose` needs --cost unless the
+# verdict is decline, which compares nothing.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/design-render.sh      called by `create`, `update` and `render`
@@ -118,7 +119,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
 #      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
-#      one without --confirmed); a `remove-test` refused because the test named is the last one
+#      one without --confirmed), or a decline given --path; a `remove-test` refused because the test named is the last one
 #      on a `tests` order owning a machine-verified criterion; a `merge` refused because the two orders' proofs differ or
 #      --into and --from name the same order; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
@@ -226,7 +227,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
-                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed] \
+                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
                                          [--path <path> --interface <text>]
 EOF
 }
@@ -1170,13 +1171,17 @@ do_close() {
 # `--path` and `--interface`, given together, add one entry to the order's `reuses`: where the
 # reused thing lives and the shape it exposes. The tests brief carries that list, because the test
 # author may not open production source and a reused module belongs to no work order (live-run
-# row 69). A second dispose naming the same path replaces its entry, the way every call replaces
-# `reasoning`. Neither flag, and the order's `reuses` is left as it was.
+# row 69). A second dispose naming the same path replaces its entry, and `reasoning` gains one
+# paragraph per call, so every candidate's verdict survives. Neither flag, and the order's
+# `reuses` is left as it was.
 #
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
 # because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
-# stands and the thin reasoning is recorded for a person to see (version 5's rule).
+# stands and the thin reasoning is recorded for a person to see (version 5's rule). A decline
+# compares nothing: the candidate was weighed and set aside, and the reason says what was weighed.
+# It is a recorded decision, not a downgrade, so it stands in both modes (live-run row 79).
 #   distance    cost cited       verdict       mode        outcome
+#   any         any              decline       any         stands: nothing compared; the reason names what was weighed
 #   any         none recognised  reuse|extend  any         stands: nothing to downgrade to; the reasoning says no cost was cited
 #   any         none recognised  supersede     attended    refused: a supersede naming no cost compared nothing; ask the person
 #   any         none recognised  supersede     unattended  extend: nobody to ask
@@ -1207,18 +1212,19 @@ do_dispose() {
   require_wo_id_arg "dispose" "$id"
   is_blank "$candidate" && die3 "dispose: --candidate is required and must not be blank"
   is_blank "$why" && die3 "dispose: --why is required and must not be blank"
-  is_blank "$cost" && die3 "dispose: --cost is required and must not be blank"
+  case "$verdict" in
+    reuse|extend|supersede|decline) ;;
+    *) die3 "dispose: --verdict must be reuse, extend, supersede or decline, got '${verdict:-<nothing>}'" ;;
+  esac
+  [ "$verdict" = "decline" ] || { is_blank "$cost" && die3 "dispose: --cost is required and must not be blank"; }
   if ! is_blank "$reuse_path" || ! is_blank "$reuse_interface"; then
+    [ "$verdict" = "decline" ] && die3 "dispose: a decline reuses nothing, so --path and --interface do not apply"
     is_blank "$reuse_path" && die3 "dispose: --interface was given without --path. The brief needs both: where the reused thing lives and what it exposes"
     is_blank "$reuse_interface" && die3 "dispose: --path was given without --interface. The brief needs both: where the reused thing lives and what it exposes"
   fi
   case "$distance" in
     same-name|same-directory|same-layer) ;;
     *) die3 "dispose: --distance must be same-name, same-directory or same-layer, got '${distance:-<nothing>}'" ;;
-  esac
-  case "$verdict" in
-    reuse|extend|supersede) ;;
-    *) die3 "dispose: --verdict must be reuse, extend or supersede, got '${verdict:-<nothing>}'" ;;
   esac
 
   # Which cost classes were cited. An unknown class never counts, so "vibes" clears no bar.
@@ -1231,7 +1237,9 @@ do_dispose() {
   done < <(printf '%s\n' "$cost" | tr ',' '\n')
 
   local outcome="$verdict" rule="stands"
-  if [ "$known" != "true" ] && [ "$verdict" != "supersede" ]; then
+  if [ "$verdict" = "decline" ]; then
+    rule="stands: nothing compared; the candidate is set aside and the reason names what was weighed"
+  elif [ "$known" != "true" ] && [ "$verdict" != "supersede" ]; then
     rule="stands: no recognised cost dimension cited; a $verdict has nothing to downgrade to"
   elif [ "$known" != "true" ]; then
     [ "$RUN_MODE" = "interactive" ] \
@@ -1254,7 +1262,7 @@ do_dispose() {
   local file doc
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "dispose: $file exists but is not valid JSON"
-  doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing $cost. Disposition: $outcome ($rule). $why" '.reasoning = $v' "$file")"
+  doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing ${cost:-nothing}. Disposition: $outcome ($rule). $why" '.reasoning = (if (.reasoning // "") == "" then $v else .reasoning + "\n\n" + $v end)' "$file")"
   if [ -n "$reuse_path" ]; then
     doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
       '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"

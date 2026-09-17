@@ -78,7 +78,7 @@ without saying so. This search runs on every task that changes code.
 Where the project's own code lives, as against framework and vendor code, is a framework
 convention, so it comes from the process recipe below. The searcher hands candidates over
 ranked by how close each is, same name, same directory, same layer. Closeness is a fact; fit is
-judgment, and design answers reuse, extend, or supersede, in that order.
+judgment, and design answers reuse, extend, supersede, or decline, in that order.
 
 **Outside the project.** A library, a module, a package that already does this; what reputable
 sources recommend; or one assumption that might have changed. One subject per search, and a

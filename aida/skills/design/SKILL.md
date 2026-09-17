@@ -165,7 +165,10 @@ longer covers it. Judge it as ungrounded, and send it back to research when it m
 ## The reuse decision
 
 For every prior-art candidate research handed over, ranked by closeness, give it an answer:
-reuse, extend, or supersede, in that order. An unanswered candidate is a proposal nobody acted on.
+reuse, extend, supersede, or decline, in that order. An unanswered candidate is a proposal nobody
+acted on. A candidate you find yourself gets an answer too, not only research's list: an exported
+configuration entity of the same kind as the unit, say. Decline is the answer for a candidate you
+weighed and set aside; recorded, it is told apart later from one nobody weighed.
 
 Decide fit by the candidate's own distance (same name, same directory, same layer) and by version
 5's own cost model: build cost is paid once, carry, agent and risk cost are paid forever. A
@@ -179,7 +182,7 @@ research stated it, the cost dimensions compared, the verdict, and why:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   dispose "<task_folder>" --id <woId> --candidate "<what research found>" \
   --distance <same-name|same-directory|same-layer> --cost <build|carry|agent|risk[,...]> \
-  --verdict <reuse|extend|supersede> --why "<why this verdict>" [--confirmed] \
+  --verdict <reuse|extend|supersede|decline> --why "<why this verdict>" [--confirmed] \
   [--path "<where it lives>" --interface "<what it exposes>"]
 ```
 Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
@@ -190,8 +193,13 @@ and the keys of what it returns. Read the code for this; design may. The test au
 the tests brief carries this text in place of the source. A dispose that omits both records no
 reuse.
 
-The script applies a fixed table and writes the outcome into the order's `reasoning`. It prints
-`disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
+A decline takes no `--cost` and no `--path`: nothing is compared, and nothing is reused. Its
+`--why` names what was weighed. It stands in both modes, because a decline with a reason is a
+recorded decision, not a downgrade.
+
+The script applies a fixed table and appends the outcome to the order's `reasoning`, one
+paragraph per candidate. Re-disposing a candidate adds a paragraph; the last one stands. It
+prints `disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
 only a layer, comes back as `extend`. Autonomous, a supersede comes back as `extend`, with the
 reason in the `reasoning`. A reuse or extend citing no cost dimension stands, with the thin
 reasoning recorded, because there is nothing to downgrade it to.
@@ -207,7 +215,7 @@ A rejection that lives only in the conversation is not a rejection anyone can ch
 the role; a dispatch that names none runs as the general agent with write tools and this session's
 model, and this one has to be read-only to mean anything.
 
-Give it the written reasoning and the files it cites, and nothing else. Never this conversation's
+Give it the paragraph `dispose` wrote last, and the files it cites, and nothing else. Never this conversation's
 own account: being denied that is the entire reason the role exists, and handing it over turns the
 check into the decision reading itself. It answers agree, disagree, or downgrade, with what it
 compared. Record what it found with `update --reasoning`, appended to the text `dispose` wrote.

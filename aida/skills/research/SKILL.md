@@ -287,7 +287,7 @@ it:
 
 For a candidate found inside this project, record it as ordered evidence, never as a verdict.
 State how close it is (same name, same directory, same layer) in `--text`, and let design answer
-reuse, extend, or supersede, in that order. Research does not choose between candidates that all
+reuse, extend, supersede, or decline, in that order. Research does not choose between candidates that all
 pass; it hands them over ranked by closeness and lets design decide fit.
 
 ## A missing process recipe
@@ -353,7 +353,7 @@ Research asks nothing here, and the person speaks up only when something looks m
 each rendered `research/<search>.md`. Show, per search, one line per finding with its source.
 Then pull three things out of those findings and name them on their own. The guides and recipes
 the catalog identified, by name. Each prior art candidate, with how close it is, as recorded;
-design decides reuse, extend or supersede, not research. Each assumption from scope that a
+design decides reuse, extend, supersede or decline, not research. Each assumption from scope that a
 finding showed false, in one sentence. A count and a next command are not a presentation. The
 findings are what design acts on, so the person sees them here or not at all.
 
