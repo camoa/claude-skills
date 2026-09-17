@@ -6,7 +6,7 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.14] - 2026-09-17
 
-Live-run rows 75 to 80, from the design stage on beta.12; row 81 corrected row 78 and asked nothing.
+Live-run rows 75 to 82 (the design stage on beta.12, and a resumed build after a merge); row 81 corrected row 78 and asked nothing.
 
 ### Added
 - `design-actions.sh remove-done-when --text` and `remove-owned-file --path`, the removals the
@@ -29,6 +29,12 @@ Live-run rows 75 to 80, from the design stage on beta.12; row 81 corrected row 7
   was wrong. The four skill passages give exit 4 the recovery exit 2 has: dispatch a fresh agent
   with the rule it broke quoted, run the call again, and stop for the person on a second exit 4.
   The distiller's own file names the refusal beside its rule. (row 80)
+- A resumed implement `start` drops a frozen order the live design no longer holds when it
+  never started, prints `removed: <ids>`, and re-derives the snapshot hash; a started one halts
+  with a drift reason saying the design removed it, which `restart` answers by moving its
+  records aside and dropping it. The step router names that restart before the survivor's
+  tests, because the removed order's frozen-test record still guards the files the survivor
+  absorbed. (row 82)
 - Every stage skill names the worktree refusal: exit 79 means the task builds in its worktree
   and this window is elsewhere; enter the tree with `EnterWorktree`, then run the call again.
   The tool is granted in each stage skill. (row 75)
