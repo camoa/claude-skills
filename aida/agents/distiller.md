@@ -54,9 +54,11 @@ One file, `<task folder>/records/<stage>-distill.json`, in the shape of `scripts
 }
 ```
 
-`standsAlone` is false exactly when `gaps` is not empty. A record that stands alone is the common
-case; say so plainly with an empty `gaps`. Valid JSON only, no newline inside a string, and no
-prose in your reply: the skill reads the file, never your words.
+`standsAlone` is false exactly when `gaps` is not empty. The caller refuses a sidecar with
+`standsAlone: true` beside a non-empty `gaps` and sets it aside, so read this rule before you write.
+A record that stands alone is the common case; say so plainly with an empty `gaps`. Valid JSON
+only, no newline inside a string, and no prose in your reply: the skill reads the file, never
+your words.
 
 ## What you never do
 

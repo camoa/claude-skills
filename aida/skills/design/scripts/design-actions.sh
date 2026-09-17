@@ -151,7 +151,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exit 1, "not a task folder"). `close` refuses for the same reason, on the live files, before
 #      writing anything.
 #      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says standsAlone
-#      false with no gap.
+#      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
+#      and stdout names it in a `setAside:` line.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
 #      problem: a criterion with no serving order, a criterion owned by zero or by more than one
 #      work order, an order serving no criterion, an order missing a required test, a `record`

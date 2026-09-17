@@ -101,6 +101,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      standsAlone false with no gap.
 #      Or `split-read` found a sidecar that is not in the split-advisor's shape, or whose
 #      children do not claim every contract criterion exactly once (the id is on stderr).
+#      Either malformed sidecar is moved aside first, to <name>.malformed-<date>.json, and
+#      stdout names it in a `setAside:` line.
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
 #      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
 #      criterion in the contract (check-research.sh's own exit 4).
@@ -672,7 +674,8 @@ do_split_read() {
   [ "$#" -eq 0 ] || die3 "split-read: unrecognized argument: $1"
   local sidecar="$TASK_PATH/records/research-split.json" fault
   [ -f "$sidecar" ] || die2 "split-read: no sidecar at $sidecar. Dispatch the split-advisor first"
-  jq empty "$sidecar" 2>/dev/null || die4 "split-read: $sidecar could not be read as JSON"
+  jq empty "$sidecar" 2>/dev/null \
+    || { sidecar_set_aside "$sidecar"; die4 "split-read: $sidecar could not be read as JSON"; }
   # One jq program prints the first fault, or nothing when the sidecar holds. The child id pattern
   # is the one scripts/task-schema.json declares; a criterion is a fault when no child claims it
   # or two do, since the split hands each one down exactly once.
@@ -699,7 +702,7 @@ do_split_read() {
         elif $unknown then "criterion \($unknown) is not in the contract"
         else empty end
     end' "$sidecar")"
-  [ -z "$fault" ] || die4 "split-read: $sidecar: $fault"
+  [ -z "$fault" ] || { sidecar_set_aside "$sidecar"; die4 "split-read: $sidecar: $fault"; }
   echo "recommendation: $(jq -r '.recommendation' "$sidecar")"
   echo "children: $(jq -r '.children | length' "$sidecar")"
   jq -r '.children[] | "child: " + .id + " " + (.criteria | length | tostring) + " criteria"' "$sidecar"

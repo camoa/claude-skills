@@ -173,8 +173,9 @@ what is missing and where it belongs.
 
 The close shows you each gap. A gap never blocks: acting on one is the relevant part of the
 conversation above, run again. The close then commits the task folder, names the next command,
-`/aida:research <task-id>`, and stops. A malformed distiller record is reported, not fixed: run
-`/aida:scope approve <task-id>` again, which runs the close afresh.
+`/aida:research <task-id>`, and stops. A malformed distiller record is renamed beside its
+original path, dated, and a fresh distiller runs with the rule it broke. A second malformed
+record stops for you.
 
 ## The autonomous run
 

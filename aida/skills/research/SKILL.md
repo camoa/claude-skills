@@ -345,8 +345,10 @@ of this conversation. It writes `records/research-distill.json`. Then run:
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is another `record` call. Exit 2 means the sidecar was not written.
 Send the same agent one message: write the file and read it back. An agent has reported a write
-it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar is
-malformed; say so.
+it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar was
+malformed. The script set it aside at the `setAside:` path it printed. Dispatch a fresh
+distiller, with the rule it broke quoted from `agents/distiller.md`. Then run the same call
+again. A second exit 4 stops for the person: show the stderr line and the path set aside.
 
 Then show what research found, before anything else. This is a presentation, not a question.
 Research asks nothing here, and the person speaks up only when something looks missing. Read
@@ -413,8 +415,10 @@ and `reason:` with the first sentence. Show those lines.
 
 Exit 2: the advisor wrote no sidecar. Send it one message to write and read back, then run
 `split-read` again. Still exit 2:
-say the advisor wrote no sidecar. Go on flat. Exit 4: say the sidecar is malformed, with the
-script's stderr line. Go on flat.
+say the advisor wrote no sidecar. Go on flat. Exit 4 means the sidecar was malformed. The script
+set it aside at the `setAside:` path it printed. Dispatch a fresh split-advisor, with the rule
+it broke quoted from `agents/split-advisor.md`. Then run the same call again. A second exit 4
+stops for the person: show the stderr line and the path set aside.
 
 `recommendation: flat`: say so in one line. Go on.
 

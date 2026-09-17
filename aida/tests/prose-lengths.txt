@@ -3,7 +3,7 @@ agents/architecture-reviewer.md 130
 agents/catalog-identifier.md 78
 agents/design-critic.md 91
 agents/disposition-confirmer.md 41
-agents/distiller.md 67
+agents/distiller.md 69
 agents/split-advisor.md 61
 agents/fixer.md 65
 agents/implementer.md 63
@@ -15,7 +15,7 @@ agents/row-checker.md 62
 agents/test-author.md 80
 skills/completion/SKILL.md 103
 skills/completion/references/close.md 94
-skills/design/SKILL.md 586
+skills/design/SKILL.md 588
 skills/implement/SKILL.md 179
 skills/implement/references/build.md 261
 skills/implement/references/finish.md 127
@@ -26,13 +26,13 @@ skills/implement/references/tests.md 313
 skills/next/SKILL.md 164
 skills/playbooks/SKILL.md 87
 skills/project/SKILL.md 445
-skills/research/SKILL.md 459
+skills/research/SKILL.md 463
 skills/review/SKILL.md 208
 skills/review/references/checks.md 105
 skills/review/references/close.md 68
 skills/review/references/reviewer.md 106
 skills/review/references/surfaces.md 77
-skills/scope/SKILL.md 390
+skills/scope/SKILL.md 393
 skills/surfaces/SKILL.md 126
 skills/surfaces/references/discover.md 57
 skills/task/SKILL.md 300

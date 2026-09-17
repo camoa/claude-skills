@@ -249,7 +249,9 @@ again, and the new hash replaces the old.
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its
 reason, and is each rejected alternative named? It never blocks. Design shows each gap it
-names; acting on one is an edit and a second close.
+names; acting on one is an edit and a second close. A malformed distiller record is renamed
+beside its original path, dated, and a fresh distiller runs with the rule it broke. A second
+malformed record stops for you.
 
 Interactively, design stops here and names the next command, `/aida:implement <task-id>`.
 Autonomously, it starts implementation itself. Each stage refuses to start without the previous
