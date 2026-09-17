@@ -262,9 +262,9 @@ report too, as claims and never as proof, so a reason in it never lowers a findi
 writes its findings and nothing else; a probe file left in the code is a refusal.
 
 When the interface check read unknown, you are asked before the reviewer runs whether the declared
-interface and the builder's own record agree. AIDA names the file that holds both texts rather
-than pasting them. If you say they disagree, the reviewer is told where. Autonomous, the reviewer
-decides alone from both texts, and the report says nobody ruled on it.
+interface and the builder's own record agree. AIDA shows you both texts first, because you cannot
+judge two texts you have not read. If you say they disagree, the reviewer is told where. Autonomous,
+the reviewer decides alone from both texts, and the report says nobody ruled on it.
 
 Every finding cites one criterion or one non-goal. A finding citing neither is recorded and never
 reaches a fixer; the review stage decides what becomes of it. That rule removes the cheap false
