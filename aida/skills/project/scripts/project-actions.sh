@@ -732,9 +732,9 @@ do_add_source() {
     guides|playbooks|processRecipes|agenticRecipes|toolingRecipes) : ;;
     *) die3 "add-source: kind must be one of guides, playbooks, processRecipes, agenticRecipes or toolingRecipes, got: $kind" ;;
   esac
-  # The literal word `catalog` declares the hosted catalog as a source for this kind, behind the
-  # folders declared before it. A folder declared for a kind names the source for that kind
-  # (project-schema.json, sources). The catalog then answers only when declared too.
+  # The literal word `catalog` ranks the hosted catalog among the folders for this kind, behind
+  # the ones declared before it. Undeclared, the catalog still answers what no folder holds
+  # (project-schema.json, sources); declaring it only fixes its place in the order.
   local loc_type="folder"
   if [ "$folder" = "catalog" ]; then
     loc_type="catalog"; folder="dev-guides"
@@ -783,16 +783,17 @@ do_add_source() {
 # Walks `sources` whose `provides` holds processRecipes, in that kind's `precedence` order, and
 # prints one line a caller reads before it asks the navigator. A folder entry is probed for
 # `<folder>/process-recipes/<framework>/<phase>.md`; the first on disk answers
-# `RECIPE: <path> source=<folder>`. A catalog entry answers `RECIPE: catalog`: ask the navigator
-# now, the sources before it held nothing. A walk that ends on folders alone answers
-# `RECIPE: none searched=<folders>`. The project named its own sources for this kind and none
-# holds this phase, so the catalog is not asked. The rule is the schema's (project-schema.json,
-# sources): a project that declares nothing gets the catalog for every kind, and one that declares
-# a folder has named its source. No source provides the kind: prints nothing, and the caller
-# asks the catalog as the default. Version 5 resolved local recipes first on every miss; version 6
-# recorded the source and read nothing until this action. The phase is the catalog's own word, so
-# a folder keys on what a stage asks for. Takes the project folder, not a registry target, so a
-# worktree session with no registry can run it as one plain command.
+# `RECIPE: <path> source=<folder>`. A catalog entry ends the walk: the sources before it held
+# nothing, so ask the navigator now. A walk that ends on folders alone also falls through to the
+# catalog. Both answer `RECIPE: catalog searched=<folders>`, naming every folder probed, and a
+# catalog entry that ranks first answers `RECIPE: catalog` alone. Precedence orders the sources
+# and never silences the ones below. A folder that holds nothing is not an answer (the owner's
+# rule of 2026-09-16). The rule of 2026-09-15, that a declared folder was the only
+# source, is gone with its `none` answer. No source provides the kind: prints
+# nothing, and the caller asks the catalog as the default. Version 5 resolved local recipes first
+# on every miss; version 6 recorded the source and read nothing until this action. The phase is
+# the catalog's own word, so a folder keys on what a stage asks for. Takes the project folder,
+# not a registry target, so a worktree session with no registry can run it as one plain command.
 do_recipe_source() {
   local project_path="${1:?recipe-source: a project folder is required}"
   local phase="${2:?recipe-source: a phase is required}"
@@ -802,14 +803,14 @@ do_recipe_source() {
     *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
   esac
   [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
-  local entry loc_type loc cand searched="" tab
+  local entry loc_type loc cand searched="" tab catalog=""
   tab="$(printf '\t')"
   while IFS= read -r entry; do
     [ -n "$entry" ] || continue
     loc_type="${entry%%"$tab"*}"; loc="${entry#*"$tab"}"
     if [ "$loc_type" = "catalog" ]; then
-      echo "RECIPE: catalog"
-      return 0
+      catalog=yes
+      break
     fi
     [ "$loc_type" = "folder" ] || continue
     cand="$loc/process-recipes/$fw/$phase.md"
@@ -825,7 +826,8 @@ $(jq -r '
     | sort_by(.precedence.processRecipes // 999)
     | .[] | .locationType + "\t" + .location' "$project_path/project.json")
 RS_SOURCES
-  [ -z "$searched" ] || echo "RECIPE: none searched=${searched% }"
+  [ -n "$searched$catalog" ] || return 0
+  echo "RECIPE: catalog${searched:+ searched=${searched% }}"
   return 0
 }
 

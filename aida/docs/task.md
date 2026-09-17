@@ -35,8 +35,10 @@ the work will be checked; that conversation belongs to scope, the first stage, a
 own after the task exists. Creating a task only needs two things from you: a short name, and a
 sentence or two on what it is for. That writes the folder, the task file with a fresh id and its
 state set to new, and the goal file carrying what you said. It also makes the task's own git
-worktree beside the code checkout, named after the checkout and the task, on the task's branch,
-`feature/<task-id>`.
+worktree beside the code checkout, named `<slug of the checkout folder>-<task-id>`, on the
+task's branch, `feature/<task-id>`. The slug is the folder name lowercased, with every run of
+other characters made one hyphen and the end hyphens trimmed. So `sfup.newyorkcares` gives
+`sfup-newyorkcares-<task-id>`, and the site name is predictable.
 
 Interactively, AIDA asks for whichever of the two you did not already give. A name and a goal are
 the two facts nothing can guess. Autonomously, a run missing either halts and reports which one,
@@ -129,5 +131,6 @@ as the project does.
   [Visual and end-to-end tests](testing.md#the-site-the-surfaces-need).
 - `/aida:task prune` removes the worktrees of complete tasks, one yes per worktree. See
   [Finishing a task](finishing.md#the-merge-and-what-comes-after).
-- `/aida:task set-run-mode <task-id> <autonomous|interactive>` sets the task's run mode. See
+- `/aida:task set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...` sets the
+  task's run mode, for every stage or for the stages named. See
   [Run modes](run-modes.md#setting-the-mode).

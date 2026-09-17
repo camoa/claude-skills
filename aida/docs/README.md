@@ -17,7 +17,7 @@ not the internals of any one command: read a command's own description for that.
 | [Review](review.md) | The stage's blocking checks, and how they become one verdict. |
 | [Finishing a task](finishing.md) | The pull request, closing on a failed review, follow-ups, the merge and pruning. |
 | [Run modes](run-modes.md) | Interactive and autonomous, and what changes in each stage. |
-| [Where content comes from](sources.md) | Guides, playbooks, and recipes, and using your own instead of the catalog. |
+| [Where content comes from](sources.md) | Guides, playbooks, and recipes, and using your own before the catalog. |
 | [Playbooks](playbooks.md) | The rules you want followed: three sources, one file format, capture at completion, and where the plays reach the roles. |
 | [Visual and end-to-end tests](testing.md) | The two optional test harnesses, and what review does with each. |
 | [Carrying work across sessions](continuity.md) | Picking up work in a new window, or after context is compacted. |

@@ -1,7 +1,7 @@
 ---
 name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
-argument-hint: "[<task-id>]"
+argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
 ---
@@ -30,12 +30,18 @@ skill's own grant.
 Look for a stated run mode on the task active in this conversation. Found, and it says
 `autonomous`: act autonomously through this whole invocation. Anything else, including no active
 task: act interactively, the safe default. Decide this once, at the start.
+A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
+when the list names `design`; otherwise this stage is interactive.
 
 ## Find the task
 
 Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
 task is already active in this conversation. Neither known: say so in one line and name the task
 skill. Stop; there is nowhere to write.
+
+An invocation line whose first word is `close` is the person's yes on the design. The task is
+the word after it, or the active one. Go straight to "Close the design" below. When no
+`records/design-critique-*.md` exists yet, run "Critique the design" first.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -90,11 +96,12 @@ The project's own sources answer before the catalog, so ask them first, once per
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" design <framework>
 ```
 It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: none searched=<folders>`: the project named its own folders for process
-recipes, and none holds this phase. The navigator is not asked. Take the no-recipe path below,
-and record the folders searched beside it, so a later reader can tell this miss from a catalog
-miss. `RECIPE: catalog`, or no line: ask the navigator's process-recipe lookup for this
-project's framework at the design stage. It answers whether one is
+navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
+navigator's process-recipe lookup for this project's framework at the design stage. A folder
+that holds nothing is not an answer, so a folder miss never skips the navigator. When
+`searched=` is present, record those folders beside the navigator's answer. A later reader then
+tells a folder miss from a project with no folder. The no-recipe path below is reached only
+after the navigator answers that none exists. The navigator answers whether one is
 available and, when it is, a path to the body on disk. Read the body from that path. Never fetch a
 catalog address yourself and never read a cached copy behind the navigator's back.
 Verdict words and a missing heading follow
@@ -118,6 +125,13 @@ AIDA cannot know on its own:
 - What is built with configuration rather than code. A view or a content type is a work order
   with no code in it. It states no test. Its proof is the implement recipe's
   `## Configuration gate` lines, so it is created with `--proof gate`. The recipe's sizing rule decides what it owns.
+- What is a document rather than code or configuration: a dependency review, a report, a note.
+  Such an order owns files under the task folder only, in a folder the project commits, such as
+  `<task_folder>/deliverables/`. Never `records/`, which the project ignores. It states no test.
+  Its proof is its done-when rows, so it is created with `--proof record`. `add-owned-file`
+  sets that value itself once every owned file lies under the task folder, on an order created
+  with no `--proof`. Such a file must live in a folder the project commits: `add-owned-file`
+  refuses an ignored path on a record order.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -247,7 +261,24 @@ recorded note reaches a person; a silent change or a silent skip does not.
 
 Three to seven build steps, ten at the most. Split when the steps mix independent concerns, or
 mix phases. Merge two orders when each has fewer than three steps, they address the same
-component, and they cannot run in parallel anyway.
+component, and they cannot run in parallel anyway. The script folds one into the other:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh merge "<task_folder>" \
+  --into <woId> --from <woId>
+```
+Every list on the folded order joins the survivor's, without duplicates. The folded order's file
+is removed, and every `dependsOn` that named it now names the survivor. The two proofs must
+agree; set one order's `--proof` first when they do not. Never remove or edit an order file by
+any other means. A write outside the script prints nothing, so nothing records that it happened.
+
+A test that no longer belongs on an order leaves through the script too. The merge may have
+doubled it, or the order became a `gate`:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-test "<task_folder>" \
+  --id <woId> --description "<the test's description, exactly as declared>"
+```
+It refuses the last test of a `tests` order that owns a machine-verified criterion, the rule the
+check applies. Add the replacement first.
 
 A shared decision, like one base class serving two later orders, lives in the order that builds
 the shared thing, in its own `reasoning`. The orders that depend on it point at it through
@@ -269,7 +300,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--proof <tests|gate>] [--surface <id>]...
+  [--proof <tests|gate|record>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -305,9 +336,10 @@ the field files alone and leaves the displays to other orders cannot import on i
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. The one exception is an order created
-with `--proof gate`. It declares no test, and the configuration check judges its owned machine
-criterion at build time. A criterion whose `verifiedBy` is
+here; the check below refuses an order that skips this. Two orders are the exception. One created
+with `--proof gate` declares no test, and the configuration check judges its owned machine
+criterion at build time. One whose proof is `record` declares no test either, and its done-when
+rows, judged at the checkpoint, stand in for the test. A criterion whose `verifiedBy` is
 `person` needs no test, though one is never wrong to add.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
@@ -316,7 +348,7 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate>] \
+  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record>] \
   [--surface <id>]...
 ```
 
@@ -353,6 +385,8 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every work order that owns a machine-verified criterion and declares no test, unless its proof
   is `gate`;
 - every work order whose proof is `gate` and that declares a test;
+- every work order whose proof is `record` and that declares a test, owns a file outside the
+  task folder, or has no done-when row;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -370,8 +404,11 @@ problem. Read the report file when the line is not enough, and fix the specific 
     exactly one order claims it;
   - a work order serving nothing needs a real `--criteria-served`, or it should not exist;
   - a work order missing a required test needs an `add-test` call;
-  - a `gate` order declaring a test needs that test removed by hand, or `--proof tests` if it
+  - a `gate` order declaring a test needs a `remove-test` call for it, or `--proof tests` if it
     builds code after all;
+  - a `record` order declaring a test needs a `remove-test` call for it; one owning a file
+    outside the task folder needs `--proof tests` if it builds code after all; one with no
+    done-when row needs an `add-done-when` call;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The
@@ -423,13 +460,21 @@ then `check` again. A leave needs a reason from the person. Write it into that o
 A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
 the contract has to change.
 
+Answer each change with the lines the call printed, and end the turn. Do not show the orders
+again, and do not ask whether the design is ready to close. The close below is an action the
+person takes, never a question this skill asks. Scope learned this from a run that asked for a
+yes on the whole contract after each of five corrections.
+
 **Autonomous:** ask nothing and change nothing. The findings stay in the three files, and the
 close below records their paths and the count, so a person sees them later. Say once, at the
 end of this run, that the critique's findings were recorded and not judged.
 
 ## Close the design
 
-Once design is done, close it. Run:
+The close is the approval, and there is no second approve action. An interactive close records
+that a person was present, and that record is the yes. The person closes by running
+`/aida:design close <task-id>`, or by saying in their own words that the design is right. Map
+those words to the call below. Autonomous, nobody says so: run it once the check is clean. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"
@@ -470,8 +515,9 @@ malformed; say so.
 
 Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
 never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with
-the task id, and stop if it refuses. Each stage refuses to start without the previous stage's
-record, so a stage cannot run out of order. That is why this chain is safe.
+the task id, and stop if it refuses. Invoke it only when the mode covers implement too; otherwise
+end as interactive does, naming the command. Each stage refuses to start without the previous
+stage's record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## What this skill never does
 

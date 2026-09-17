@@ -15,7 +15,10 @@
 #   looks_like_flag <value>               true when the value is another option, not data
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   write_atomic <target> <content>       writes through a temporary file beside the target
-#   mark_task_in_progress <folder> <why>  moves the task to in_progress once, before a first write
+#   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
+#                                         covers the stage, else interactive
+#   mark_task_in_progress <folder> <why> <stage>
+#                                         moves the task to in_progress once, before a first write
 #   commit_task_change <project> <subject> <why> <principle> <ruled out> <task> <stage>
 #                                         commits tasks/ in the project folder, five-field shape
 #   commit_stage_close <folder> <stage> <subject> <why>
@@ -84,20 +87,36 @@ write_atomic() {
   mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
 }
 
+# The run mode of one stage, from task.json (task-schema.json, runMode and runModeStages). The
+# mode is autonomous for a stage when the task's runMode is autonomous and runModeStages is absent
+# or names that stage; every other case is interactive, the safe assumption (foundations.md, Run
+# mode). This is the one reader of those two fields: a stage that read runMode alone would run a
+# stage the person kept for themselves without asking. An unreadable file answers interactive.
+# $1 the canonical task folder, $2 the stage name as the skills spell it.
+task_run_mode() {
+  local answer
+  answer="$(jq -r --arg stage "$2" '
+      if (.runMode // "") != "autonomous" then "interactive"
+      elif ((.runModeStages // []) | length) == 0 then "autonomous"
+      elif (.runModeStages | index($stage)) != null then "autonomous"
+      else "interactive" end' "$1/task.json" 2>/dev/null)"
+  if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
+}
+
 # Moves the task to in_progress the first time a stage writes into it (skills/task/SKILL.md,
 # `start`: a task becomes in progress the moment a stage first writes an artifact into it). It
 # reads the state first, so a task already in progress costs no process and prints nothing. Any
 # other state goes through task-actions.sh start, which refuses a completed task, commits, and
-# runs the task check. The run mode passed is the task's own field, absent meaning interactive,
-# the one source every stage reads it from. The task script's own output is shown only when it
-# refuses: the check it runs writes its report to records/check-task.json either way.
-# $1 the canonical task folder, $2 why, in a few words. Dies through die3 on a refusal, so a
-# stage never writes into a task that is not in progress.
+# runs the task check. The run mode passed is the task's own, for the calling stage, through
+# task_run_mode, the one source every stage reads it from. The task script's own output is shown
+# only when it refuses: the check it runs writes its report to records/check-task.json either way.
+# $1 the canonical task folder, $2 why, in a few words, $3 the calling stage. Dies through die3
+# on a refusal, so a stage never writes into a task that is not in progress.
 mark_task_in_progress() {
-  local task_folder="$1" why="$2" state run_mode said
+  local task_folder="$1" why="$2" stage="$3" state run_mode said
   state="$(jq -r '.state // ""' "$task_folder/task.json" 2>/dev/null)"
   [ "$state" != "in_progress" ] || return 0
-  run_mode="$(jq -r '.runMode // "interactive"' "$task_folder/task.json" 2>/dev/null)"
+  run_mode="$(task_run_mode "$task_folder" "$stage")"
   said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "${PLUGIN_ROOT}/skills/task/scripts/task-actions.sh" \
       --run-mode "$run_mode" start --project "$(dirname -- "$(dirname -- "$task_folder")")" \
       "$(basename -- "$task_folder")" -- "$why" 2>&1)" \
@@ -189,8 +208,10 @@ task_stage() {
 }
 
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
-# code path named <basename of codePath>-<id>: a tree nested under the code path is invisible to
-# a tool that registers projects by folder, and DDEV hands it to the parent project. Prints the
+# code path named <slug of the code folder>-<id>: a tree nested under the code path is invisible
+# to a tool that registers projects by folder, and DDEV hands it to the parent project. The
+# folder name becomes a hostname label, so the basename goes through pb_slug, the one slug
+# rule. A dot or an underscore in it becomes a hyphen, as the id rule demands. Prints the
 # path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
@@ -215,7 +236,10 @@ task_worktree() {
     printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
   else
     id="$(jq -r '.id' "$task_json")"
-    wt="$(dirname -- "$code")/$(basename -- "$code")-$id"
+    # shellcheck source=/dev/null
+    command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
+      || die3 "$who: the library failed to load: playbooks.sh"
+    wt="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$id"
     branch="feature/$id"
     printf 'worktree: %s\n' "$wt" >&2
   fi

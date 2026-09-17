@@ -54,7 +54,7 @@
     "runMode": {
       "type": "string",
       "enum": ["interactive", "autonomous"],
-      "description": "Copied from the ledger, which copied it from the task when the build started. It decides who may answer: a person's answer is accepted only when a person is present, so `surfaces` refuses --accept-baseline and `close` refuses --row on an autonomous run (exit 70, the number tests-freeze already gives that refusal)."
+      "description": "The task's own mode for the review stage when `checks` ran, read from task.json through task_run_mode and never from the ledger's copy, which records the mode the build ran under. It decides who may answer: a person's answer is accepted only when a person is present, so `surfaces` refuses --accept-baseline and `close` refuses --row on an autonomous run (exit 70, the number tests-freeze already gives that refusal)."
     },
     "recipes": {
       "type": "array",

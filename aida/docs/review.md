@@ -100,6 +100,10 @@ runs of dots are set aside first, so a shifted line number does not read as new.
 reads met. A new line reads unmet, and the record lists the first twenty with the full count. The
 suite subtracts the same way, on the lines the recipe says carry a failure.
 
+When finishing the build ran the suite, review does not run it again. It reads that result, at
+the same commit, and its suite row reads the output finishing kept. That row can then never read
+unmet or unknown, because finishing refused those before it wrote its record.
+
 A finding that predates the build is not this task's, and blocking on it would block every task
 forever. The baseline covers only the files the orders own, so a finding in a file no order owns
 counts as this task's. The contract check already reports that file as work nobody asked for.

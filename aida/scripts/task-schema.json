@@ -41,7 +41,14 @@
     "runMode": {
       "type": "string",
       "enum": ["autonomous"],
-      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it."
+      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it. Which stages the mode covers is `runModeStages`; every stage reads the pair through task_run_mode in scripts/lib/task-helpers.sh and never this field alone."
+    },
+    "runModeStages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["scope", "research", "design", "implement", "review", "completion"] },
+      "description": "The stages an autonomous mode covers, written by `task set-run-mode autonomous --stage <stage>...` and present only when at least one stage was named. Absent with runMode present means every stage. A stage not on the list runs interactively, and an autonomous stage ends by naming the next command rather than invoking it when the next stage is not on the list. Removed together with runMode by `set-run-mode interactive`, and never present without it. Added 2026-09-16 so a person can run the build alone unattended and keep their hand on the contract and the review (nyc defect 20)."
     },
     "budget": {
       "type": "object",
@@ -73,7 +80,7 @@
         "path": { "type": "string", "minLength": 1 },
         "branch": { "type": "string", "minLength": 1 }
       },
-      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<basename of codePath>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
+      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<slug of the code folder>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
     },
     "environment": {
       "type": "object",

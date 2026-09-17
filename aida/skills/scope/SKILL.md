@@ -1,7 +1,7 @@
 ---
 name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
-argument-hint: "[<task-id>]"
+argument-hint: "[approve] [<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
 ---
@@ -26,7 +26,8 @@ Look for a stated run mode on the task active in this conversation. Found, and i
 every call below that writes. Anything else, including no active task: act interactively, the
 safe default, and pass `--run-mode interactive` (or nothing; that is the same default) on every
 call below that writes. Decide this once, at the start. `read` needs no run mode: it changes
-nothing.
+nothing. A mode that names stages in brackets, such as `autonomous (implement)`, covers this
+stage only when the list names `scope`; otherwise this stage is interactive.
 
 ## Find the task
 
@@ -38,6 +39,9 @@ the code folder). Resolve that first, with the project skill, before using anyth
 is `<taskId>` when given, or whichever task is already active in this conversation. Neither known,
 or the resolved `<projectPath>/tasks/<task-id>` holds no `task.json`: say so in one line and name
 the task skill. Stop; there is nowhere to write.
+
+An invocation line whose first word is `approve` is the person's yes on the contract. The task is
+the word after it, or the active one. Go straight to "Approval" below and run the call there.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder, never the project's own folder and never `task.json` itself.
@@ -110,8 +114,12 @@ ordinary mode drafted whole fields and asked what was missing; its one-question 
 Each correction the person gives becomes one write, in the person's words. The goal or the
 expected result they rephrase is `set-goal`; a criterion or non-goal they rephrase is `update`; a
 criterion they add is `add`; one they drop is `remove`; a non-goal they name is `add-non-goal`. A
-criterion the person rephrases or adds is `--author owner` at once, on that same call. Keep going
-until they say it is right, then go to "Approval" below.
+criterion the person rephrases or adds is `--author owner` at once, on that same call.
+
+Answer a correction with the changed lines: the `UPDATED:`, `ADDED:` or `REMOVED:` line and the
+summary the call printed. Then the turn ends. Do not render, and do not ask whether the contract
+is now right. The person says when it is, in their own words or with `/aida:scope approve
+<task-id>`; that is "Approval" below. Render only when they ask to see the whole document again.
 
 A question is one at a time, with a recommended answer. A draft is not a question: show the whole
 draft, and ask what is wrong. The draft carries everything that can be drafted, and what is left
@@ -180,7 +188,7 @@ For each one, in order, in the draft:
    observable outcome is a gap: ask, one question, with a recommended answer, rather than write
    the restatement. See "Tests and checks" below for what changes when the project has end to
    end testing or visual regression on.
-3. Record who asked. `designer` for every line the draft wrote, until the whole-document yes at
+3. Record who asked. `designer` for every line the draft wrote, until `approve` promotes it at
    "Approval". `owner` when a person wrote or corrected this criterion, in this conversation.
    There is no third value, and a missing answer is never `owner`.
 4. Write it:
@@ -238,9 +246,8 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
   must pass. One that does not becomes a criterion too, that creating its baseline is this task's
   own work. Either way this is a criterion scope is proposing, not one the person asked for
   outright: draft it, show it with a recommended answer, and write it with `add --author
-  designer`, whatever the person says to the draft. It stays `designer` until it is promoted at
-  "Approval" below, once the whole rendered document is approved; a yes on the draft alone does
-  not promote it.
+  designer`, whatever the person says to the draft. It stays `designer` until `approve` promotes
+  it at "Approval" below; a yes on the draft alone does not promote it.
 - **A kind is off and not declined, or `surfaces` is null.** The decline is that kind's
   `declined` field in `project.json`. Interactive only. Look at the goal once, at this same point.
   When it names something a person opens in a browser, a page, a form, a screen, a journey, say so
@@ -259,28 +266,38 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
 ## Approval
 
-Once the conversation above has run its course, render the whole document and show it, never a
-summary:
+Approval is an action the person takes, never a question this skill asks. The person approves by
+running `/aida:scope approve <task-id>`, or by saying the contract is right in their own words.
+Map those words to the call below. No reply from this skill asks for them.
+
+When the person says so, dispatch the `distiller` role once, as "The distill check" below says.
+The contract is final by then. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
+  approve "<task_folder>"
+```
+It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
+Then it commits the task folder and prints `standsAlone:` and one `gap:` line per gap. Show each
+`gap:` line. Acting on one is the relevant step above run again; the person then says it is
+right again, and the same call runs again. A second `approve` with nothing left to promote says
+so and is not a fault: it commits any later edit and reads the sidecar again.
+
+An earlier version of this skill rendered the whole document after every correction and asked
+for a yes on it, even for one small change. On one task it asked five times in a
+row, once per correction, until the person answered "Stop". A question the model decides when to
+ask is one it can repeat, so the question is gone and the action replaced it.
+
+The render is for showing, not for approving. Run it once when the draft is first shown, and
+again only when the person asks to see the whole document:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   render "<task_folder>"
 ```
-This prints `rendered:` with the file's path. Show the whole rendered file. Ask for a plain yes
-or no on that text, not on a recap of it.
+This prints `rendered:` with the file's path. Show the whole rendered file, never a summary.
 
-No: say what still needs to change, go back to the relevant step above, then render and ask again.
-
-Yes: every drafted criterion is `designer` until a person says yes, so promote each one still
-`designer` now:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
-  update "<task_folder>" --id <id> --author owner
-```
-Then run the distill check below, and the conversation is done.
-
-**Autonomous:** still render the whole document, for the record, but do not wait for an answer and
-do not promote anything: a criterion `designer` because scope proposed it stays `designer`, since
-nobody approved it. Run:
+**Autonomous:** still render the whole document, for the record, but promote nothing and never
+run `approve`: a criterion `designer` because scope proposed it stays `designer`, since nobody
+approved it. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
   record-decision "<task_folder>" --text "approved the rendered contract on the person's behalf"
@@ -289,18 +306,19 @@ to report it as approved on the person's behalf, then run the distill check belo
 
 ## The distill check
 
-The contract is now written. The record is committed when the stage closes: the `distill` call
-below commits the task folder, and the mid-stage edits above commit nothing. Dispatch the
-`distiller` role once, with the task folder, the stage `scope`, and the path of `alignment.json`. Never a summary of this conversation: it exists to be
-denied that account. It writes `records/scope-distill.json`. Then run:
+The contract is committed when the stage closes. `approve` above, or `distill` below in the
+autonomous branch, commits the task folder; the mid-stage edits above commit nothing. Before
+either call, dispatch the `distiller` role once, with the task folder, the stage `scope`, and the
+path of `alignment.json`. Never a summary of this conversation: it exists to be denied that
+account. It writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh distill "<task_folder>"
 ```
-It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
-`gap:` line. Acting on one is the relevant step above run again; the check never blocks. Exit 2
-means the sidecar was not written. Send the same agent one message: write the file and read it
-back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2
-repeats. Exit 4 means the sidecar is malformed; say so.
+Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show
+each `gap:` line. Acting on one is the relevant step above run again; the check never blocks.
+Exit 2 means the sidecar was not written. Send the same agent one message: write the file and
+read it back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2
+repeats. Then run the same call again. Exit 4 means the sidecar is malformed; say so.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove` or `set-mechanism` again. A drafted line is `designer`, and
@@ -310,8 +328,9 @@ answer) has actually given that one change.
 
 Interactive: stop here. Name the next command for the person, `/aida:research <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:research` through the Skill tool, once, with the task
-id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
-stage cannot run out of order. That is why this chain is safe.
+id, and stop if it refuses. Invoke it only when the mode covers research too; otherwise end as
+interactive does, naming the command. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## Changing the contract
 
@@ -319,8 +338,8 @@ Scope has an update path, not only an authoring path, reachable at any point, in
 middle of research or design when a goal turns out to be missing. Invoke this skill again on the
 same task. `read` above finds the existing `alignment.json`, and the posture is ordinarily "reflect
 and refine": state what changed and hold the relevant part of the conversation above for just that
-change. When the invocation line already carries the change, apply it, then render and ask what
-else is wrong.
+change. When the invocation line already carries the change, apply it, answer with the changed
+lines, and end the turn.
 
 To edit an existing criterion or non-goal rather than add or remove one:
 ```
@@ -329,9 +348,8 @@ To edit an existing criterion or non-goal rather than add or remove one:
   [--verified-by <machine|person>]
 ```
 A non-goal's id only accepts `--text`; the others are a criterion's own fields. `--author owner`
-is the one exception, covered at "Approval" above: it only ever promotes a criterion from
-`designer` to `owner`, once a person approves the rendered document, and it is refused the other
-way round.
+is for a criterion the person corrected in this conversation; `approve` promotes the rest. Both
+only ever move a criterion from `designer` to `owner`, and the other way round is refused.
 
 To drop one:
 ```
@@ -341,8 +359,9 @@ To drop one:
 An id is never reused after this. The next criterion or non-goal still takes the next number in
 its own space, `c` or `n`, whichever this was.
 
-It is the same producer as authoring, so this still ends at "Approval" above: render the whole
-document and get a plain yes or no on it, every time, even for one small change.
+It is the same producer as authoring, so this still ends at "Approval" above. The person runs
+`approve`, or says the change is right and that runs it. The yes is theirs to give, never this
+skill's to ask for.
 
 Editing `alignment.md` by hand changes nothing: nothing reads it back. That file says so on
 itself. The only way to change the contract is this skill.

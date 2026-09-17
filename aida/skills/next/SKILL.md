@@ -55,7 +55,8 @@ rather than letting it pass unremarked.
 Each `OPEN:` line is one of two shapes:
 
 - `"kind":"new"`: a task with its own `task.json`. Carries `id`, `state` (`new` or
-  `in_progress`), `parent`, `children`, `runMode`, and `review`: what `review/review.json` says,
+  `in_progress`), `parent`, `children`, `runMode`, `runModeStages` (the stages the mode covers,
+  empty meaning all), and `review`: what `review/review.json` says,
   `passed` or `failed` from its verdict, `unfinished` for a record with no verdict, `none` with no
   record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
   `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
@@ -146,7 +147,8 @@ Run:
 Read the first line.
 
 - **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
-  `children:`, `runMode:`, `worktree:`, `review:` and `stage:`, with `legacyStages:` when
+  `children:`, `runMode:` (with the stages the mode covers in brackets when it covers fewer
+  than all), `worktree:`, `review:` and `stage:`, with `legacyStages:` when
   it applies. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
   `/aida:<stage>` as the skill to run next. Treat it as active. Read
   the file at `task-file:` only when another field is needed. With `legacyStages:`, go to

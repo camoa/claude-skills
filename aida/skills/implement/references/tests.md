@@ -32,7 +32,7 @@ frozen test reads the record and never the catalog, because a lookup in a write 
 that can fail open, and a pattern that changed during a build would change what is protected
 halfway through it.
 
-## An order whose proof is `gate` has no test author
+## An order whose proof is `gate` or `record` has no test author
 
 Read the order's `proof` from the frozen snapshot first. `gate` means its deliverable is
 exported configuration, and a test that reads the YAML back cannot fail for the right reason.
@@ -40,7 +40,17 @@ Skip `tests-brief`, dispatch nobody, and put no row to anyone. Go straight to th
 with no `--test`, and a `--checklist` for each criterion a person verifies. The build runs the
 implement recipe's `## Configuration gate` lines as the order's own check, and `close` judges
 its owned machine criterion from that check. The behavioural proof lives with the tests of the
-order that consumes what it configures. Every other order takes the steps below.
+order that consumes what it configures. Every other order takes the steps below. An order with
+no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` line. Design's
+`update --proof gate` is the way onto the gate.
+
+`record` means its deliverable is a document in the task folder, and nothing runs a document.
+Skip `tests-brief` and dispatch no test author. Its done-when rows are its checkpoint. Put them
+to the `row-checker`, or to the person, the way the checkpoint below puts a test's rows. The
+question is whether each row names something a reader can confirm from the deliverable alone.
+Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
+for each criterion a person verifies. The build reads that row as the order's own check,
+`done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
 
 ## Assemble what the test author may see
 
@@ -197,7 +207,8 @@ carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rat
 `--row <criterion id>=rejected::model::<its note>`, and it is not sent back to the test author the
 way a person's rejection is. Nobody is present to judge the correction, so `tests-freeze` writes
 the halt onto the order, with the checker's own note as the reason. Then it refuses. Report the
-halt, and take the next ready order instead.
+halt, and take the next ready order instead. A person clears it with `clear-halt` once the test
+is repaired, in `references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
 nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs
@@ -231,7 +242,8 @@ script reads its `## Unit declaration` block itself, for the one exception below
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
-step. A `gate` order is the one order that freezes with no test row, and it refuses a `--test`.
+step. A `gate` or `record` order freezes with no test row, and each refuses a `--test`. A
+`record` order owes its done-when row, `--row <order id>=...`, and refuses without it (exit 64).
 It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
@@ -240,7 +252,7 @@ from here, not back.
 The script checks the file exists, sits inside the code repository, matches the framework's own
 declared pattern, and carries at the end of its name the criterion it claims. A done-when test
 carries the order id there instead. It checks every machine-verified criterion this order owns has
-a test (a `gate` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
+a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
 serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
 list). A test that names neither a criterion this order serves or owns nor this order's id refuses
 (exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold

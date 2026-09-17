@@ -32,6 +32,8 @@ Dispatching an agent needs no approval either; it is also named in this skill's 
 Look for a stated run mode on the task active in this conversation. Found, and it says
 `autonomous`: act autonomously through this whole invocation. Anything else, including no
 active task: act interactively, the safe default. Decide this once, at the start.
+A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
+when the list names `research`; otherwise this stage is interactive.
 
 Research never blocks on this choice the way scope does. The run mode only changes what happens
 at two points below, a missing process recipe and an unaccepted guide source; everything else
@@ -235,11 +237,12 @@ catalog, so ask them first, once per framework:
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" research <framework>
 ```
 It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: none searched=<folders>`: the project named its own folders for process
-recipes, and none holds this phase. The navigator is not asked. Take the no-recipe path below,
-and record the folders searched beside it, so a later reader can tell this miss from a catalog
-miss. `RECIPE: catalog`, or no line: ask the navigator's process-recipe lookup for this
-project's framework at the research stage. It answers with whether
+navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
+navigator's process-recipe lookup for this project's framework at the research stage. A folder
+that holds nothing is not an answer, so a folder miss never skips the navigator. When
+`searched=` is present, record those folders beside the navigator's answer. A later reader then
+tells a folder miss from a project with no folder. The no-recipe path below is reached only
+after the navigator answers that none exists. The navigator answers with whether
 one is available and, when it is, a path to the body on disk. Read the body from that path. The
 body is never streamed into the conversation, which is what keeps a recipe affordable.
 Verdict words and a missing heading follow
@@ -402,8 +405,9 @@ recorded it at the sidecar path. Go on flat. A person decides at the next window
 
 Interactive: stop here. Name the next command for the person, `/aida:design <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:design` through the Skill tool, once, with the task
-id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
-stage cannot run out of order. That is why this chain is safe.
+id, and stop if it refuses. Invoke it only when the mode covers design too; otherwise end as
+interactive does, naming the command. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## Research never blocks
 

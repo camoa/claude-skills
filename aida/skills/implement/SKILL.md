@@ -35,7 +35,7 @@ This prints summary lines, one `key: value` each:
 
 - the contract's state, and whether design has started and how many work order files it left;
 - the task's project, its code repository, the current branch, and the trunk branch when derivable;
-- the task's own run mode;
+- the task's own run mode for this stage, from `task.json`;
 - the snapshot's path and hash, the ledger's path, and whether a preconditions record and a
   finished record exist;
 - one `order(...)` line per work order: its last step, its halt reason, its counters and its review
@@ -65,6 +65,7 @@ derivation, kept here so a person can check the line against the state the other
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
 | An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
+| An `order(...)` line whose halt holds none of those three segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
 
 An order in flight comes before a new one, and a halted order is named only when nothing else can
 move. A resumed run starts at `start` regardless, because that is where drift since the snapshot is
@@ -85,8 +86,9 @@ with nobody watching, is the test describing the code again.
 
 A halt beginning `attempts spent`, `budget spent` or `design drift` has its own next step in
 `references/finish.md`. The first takes the grant of one more attempt. The second takes the same
-grant, after the run's budget is raised. The third takes the restart after a design change. Offer
-any of them only when a person is present to decide it.
+grant, after the run's budget is raised. The third takes the restart after a design change. Every
+other halt takes `clear-halt`, after the person has done what the reason names. Offer any of them
+only when a person is present to decide it.
 
 A run has a ceiling when the task sets `budget` in its own record, in dispatches or in minutes.
 `dispatch-open` recomputes what was spent from the ledger before every dispatch and halts the
@@ -133,7 +135,7 @@ green with nothing to name: reported, and the step stops. Failed: frozen with it
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
 the action that takes it. `## Test commands` and `## Check commands` are parsed by the script, one
 entry per tool, each with its own argv, its `{paths}` placeholder, and its `signal` and `extensions`
-keys where present. `## Configuration gate` is parsed the same way for an order whose proof is `gate`. It refuses (exit 72) when two frameworks each command one tool.
+keys where present. `## Configuration gate` is parsed the same way for an order whose proof is `gate`. An order whose proof is `record` runs no block at all: its done-when row is its check, and its range lives in the project folder. It refuses (exit 72) when two frameworks each command one tool.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 

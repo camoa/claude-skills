@@ -21,6 +21,12 @@ mix independent concerns. It merges two orders that each have fewer than three s
 the same component. Too large, and there is no single thing to state a test about. Too small,
 and a feature becomes fifty orders that cost more to coordinate than to build.
 
+The merge is a script action, `merge`, not a hand edit. It folds one order into another. Every
+list joins the survivor's without duplicates, the folded file is removed, and every dependency
+that named it now names the survivor. A test that no longer belongs on an order leaves through
+`remove-test`, which refuses the last test an owned machine criterion needs. Both print what moved,
+so the change is on record the way every other design write is.
+
 ## What a work order declares
 
 | Field | What it says |
@@ -35,7 +41,7 @@ and a feature becomes fifty orders that cost more to coordinate than to build.
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
 | diff budget | How much change the order should take, in plain words |
-| proof | `tests`, the default, or `gate` for a configuration order |
+| proof | `tests`, the default, `gate` for a configuration order, or `record` for a document in the task folder |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
 several orders. A shared thing, such as one base class serving two criteria, is built once
@@ -126,6 +132,14 @@ A configuration order is sized around the operation and owns every file that ope
 Deleting a field owns each display that lists it. An order that owns the field's files alone and
 leaves the displays to other orders cannot import on its own, so its gate fails.
 
+An order whose deliverable is a document, a dependency review or a report, writes no test
+either. Such an order owns files under the task folder only, in a folder the project commits,
+such as `deliverables/`. Never `records/`, which the project ignores. It carries
+`proof: record`, and design sets that value itself once every owned file lies under the task
+folder, unless you set a proof by hand. Its proof is its done-when rows. The checkpoint judges them, the build reads that
+judgement in place of the tests, and the reviewer reads the document whole against them. It
+lands no commit in the code repository. Its commits are the project folder's.
+
 An order that changes a page or a screen names it from the project's surface file,
 `.visual-review/surfaces.json`. When no
 visual or browser test covers that kind of surface, design offers the setup once per task,
@@ -154,8 +168,9 @@ test's wording would be matching prose, and a phrase match proves only a phrase.
 The check stops first on a work order file with a missing or malformed field, before any content
 finding. You fix that file by hand or with an update, then check again. Past that, it finds a
 criterion no order serves or owns, or that two orders own, and an order serving no criterion. It
-finds an owner of a machine-verified criterion with no test, unless its proof is the gate, and a
-gate order declaring a test. It finds an order no owner reaches and a dependency cycle. It finds
+finds an owner of a machine-verified criterion with no test, unless its proof is the gate or the
+record. It finds a gate order declaring a test. It finds a record order declaring a test, owning a
+file outside the task folder, or missing a done-when row. It finds an order no owner reaches and a dependency cycle. It finds
 two orders declaring one file, a wildcard in an owned file, and an id that resolves to nothing.
 
 A clean check says design is finished, subject to your confirmation above. An open item names
@@ -185,10 +200,11 @@ file never arrives is dispatched once more. If it fails again, the close leaves 
 You answer each finding, because a critic that can block trains the builder to write for the
 critic. Interactively, design shows the findings grouped by order, and each takes one answer:
 change the order, then check again, or leave it with a reason. Design writes the reason into
-the order's reasoning so it outlives the conversation. A finding on the contract is a scope
-question. Autonomously, design asks nothing and changes nothing. The findings stay in their
-files, and the close records the paths and the count for you to read later. The close never
-blocks on the critique, in either mode.
+the order's reasoning so it outlives the conversation. Each change is answered with the changed
+lines, and the turn ends; design never asks whether it is ready to close. A finding on the
+contract is a scope question. Autonomously, design asks nothing and changes nothing. The
+findings stay in their files, and the close records the paths and the count for you to read
+later. The close never blocks on the critique, in either mode.
 
 ## Running it unattended
 
@@ -200,6 +216,10 @@ checked. It answers agree, disagree or downgrade, with what it compared, and des
 answer to the order's reasoning. Interactively, you read the reasoning yourself.
 
 ## Closing, and what implementation builds from
+
+The close is the approval, and it is yours to run. Run `/aida:design close <task-id>`, or say in
+your own words that the design is right. Design never asks for it. There is no separate approve
+step; the close records that a person was present, and that record is the yes.
 
 The close runs the check once more and writes `design-closed.json` only when it is clean. It
 commits the task folder at that moment; the order edits before it commit nothing. The record

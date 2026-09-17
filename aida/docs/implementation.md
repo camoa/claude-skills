@@ -24,6 +24,15 @@ files against the snapshot instead: it reports drift, halts only for work-order 
 a contract change. The snapshot is taken here rather than at design
 close because a person can close design, edit an order, then start.
 
+A resumed run refuses two more things. When the branch was rewritten under the build, by a
+rebase or an amend, the commit the ledger started from is on no branch. AIDA says so, rather
+than labelling the baseline with it or computing a range git cannot resolve. You name the commit
+the branch now builds on, the ledger keeps the old value beside the new, and the baseline is
+retaken. When the baseline on disk was written by an earlier version, in a shape this one cannot
+subtract from, AIDA names the retake. No build attempt is spent on it. A resumed run also names
+the orders whose design predates the proof field. Each is proved by tests unless design sets the
+gate on it.
+
 Three more things refuse before a line is written. The project is not a git repository, the code
 checkout is on no branch, or the build would land on the repository's own trunk branch. A commit
 on a detached head belongs to no branch, which this build must never risk. When there is no
@@ -167,6 +176,21 @@ unknown when the task has no running site recorded, so bring the environment up 
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.
 
+## A document order
+
+A work order whose deliverable is a document in the task folder, a dependency review or a
+report, has `record` as its proof kind. It owns files under the task folder only, and lands no
+commit in the code repository. No test author is dispatched. Its done-when rows are its
+checkpoint. The row-checker, or you, confirms that each row names something a reader can check
+from the document alone. The freeze records that judgement. The implementer writes the
+document and commits it in the project folder, staging its owned files alone. The build reads
+the range, the tree and the diff from the project folder's history. The empty-range refusal
+and the unchanged refusal compare against that history. The suite and the three tool checks
+read undeclared, naming the proof kind. The done-when check takes the place of the tests, met
+when the row was confirmed. The reviewer is handed the document by path and the task folder's
+diff, and reads it whole against the done-when rows. When the order closes, its criteria are
+recorded as judged by whoever judged the row, a person or a model, never the gate.
+
 ## Writing the code
 
 An implementer, a mid-tier context, writes the code for one order until its frozen tests pass. It
@@ -189,8 +213,10 @@ before it returns. A dirty tree means that commit did not happen, and the attemp
 After each attempt, eight checks run. These are scripts, and no model reads anything here.
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
-   the configuration gate instead.
-2. **suite-regression.** Does anything that passed at the baseline now fail.
+   the configuration gate instead, and on a document order the done-when judgement.
+2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
+   recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
+   stage runs that row once.
 3. **coding-standards**, **static-analysis** and **security.** Does the tool raise anything the
    baseline did not already have.
 4. **owned-files.** Did the change stay inside the files this order owns.
@@ -199,11 +225,14 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
    interface names in backticks.
 
 The three tool checks run over the order's owned files minus its frozen tests. The implementer
-may not write the tests, so the tools judge only what it may write. The first check is the floor.
+may not write the tests, so the tools judge only what it may write. An owned file outside the
+code repository is left out too, because a tool run in the repository cannot see it. The detail
+says how many were left out. The first check is the floor.
 Every other check may answer undeclared and the order still goes on. Order-tests must answer
 met, because it is the one check that says this code does what its tests ask. AIDA also tells
 you how many of the eight actually ran a command, a diff or a hash. Eight answers do not by
-themselves say the code was tested. The interface check is the one script that cannot decide
+themselves say the code was tested. A record that would hold fewer than eight is refused rather
+than written, naming the absent check. The interface check is the one script that cannot decide
 alone, because both sides are prose. It counts what it can, that every backticked element is
 present, and the disagreement goes to the reviewer as a finding. A declaration naming nothing in
 backticks reads unknown and does not spend the attempt.
@@ -267,7 +296,7 @@ moves to the next ready order.
 
 One order halting does not stop the run. Only the orders that depend on it wait; everything else
 that is ready still builds, and the run stops only when nothing is ready. Then AIDA reports what
-halted, the reason the ledger holds, and what is waiting on it. Two halts have their own action.
+halted, the reason the ledger holds, and what is waiting on it. Every halt has a clearing action.
 
 **Attempts spent.** You read the two recorded attempts and decide which of three things is true.
 The test is wrong, and no action repairs it in place: the order restarts, below. The order is
@@ -289,19 +318,27 @@ and keeps every finished order. A finished order is never redone for a change it
 Design has to close again on the live files first. A restart is a person's judgement, so an
 autonomous run cannot take it.
 
-**Every other halt has no clearing action**, and AIDA says so. Unattended, that is a row the
-checker rejected or a finding on a non-goal, with nobody to rule. In either mode it is a fixer's
-scope too small, a finding ruled load-bearing, or a tree a role left dirty. A grant refuses them
-and the restart does not see them. The way past is a change to that order through design: edit
-it, close design again, and run the build again. The order then halts for drift as well, and the
-restart takes it fresh. The same path is how a wrong frozen test is repaired.
+**Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
+finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
+finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt
+the same way. A grant refuses them and the restart does not see them. You do what the reason
+names: repair the test, rule on the finding, commit the tree. Then you clear the halt with a
+reason, and AIDA records both in the ledger and says which step the order resumes at. Clearing a
+halt is a person's judgement, so an autonomous run cannot take it. A wrong frozen test can also
+be repaired through design. Edit the order, close design again, and run the build again; the
+order then halts for drift and the restart takes it fresh.
 
 ## Finishing the stage
 
 Once every order is closed, none is halted, every machine-verified criterion reads confirmed, and
-the code tree is clean, the stage records itself done in `implementation/finished.json`. That one
-file holds the commit range the stage produced, and each order's own range and rounds. It holds each
-criterion's state and who judged it, and the checklists for the criteria a person verifies. It holds
+the code tree is clean, AIDA runs the whole suite once at the final commit. A red baseline is
+subtracted the same way the per-attempt checks subtract it. A suite that fails, or cannot be
+decided, refuses to finish. AIDA names the new failure lines and the file holding the whole
+output, and the route is a fix commit and a second finish. A recipe with no suite row passes
+and the record says so. Then the stage records itself done in `implementation/finished.json`.
+That one file holds the commit range the stage produced, the suite's verdict, and each order's
+own range and rounds. It holds each criterion's state and who judged it, and the checklists for
+the criteria a person verifies. It holds
 the findings ruled deferred with their reasons, and how many rows a model judged. The task folder is
 committed then; mid-stage writes stay uncommitted until then. Finishing ends implementation only and
 never changes the task's own state. Interactive, AIDA names the next command, `/aida:review

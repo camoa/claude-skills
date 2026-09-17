@@ -1,17 +1,18 @@
-# Finish the task, grant an attempt, or restart the build
+# Finish the task, grant an attempt, restart the build, or clear a halt
 
-This step covers three actions that act on the task rather than on one order. `finish` runs once
+This step covers four actions that act on the task rather than on one order. `finish` runs once
 every order is closed. `grant-attempt` answers a spent attempt counter, when a person wants to
 grant one more, and a spent run budget, once the person has raised it. `restart` follows a
 mid-build design change: it halted one or more orders, and a person wants a fresh build against the
-new design.
+new design. `clear-halt` answers every other halt, once the person has acted on what it names.
 
 ## Finish
 
 Every order closed, none halted, and no `implementation/finished.json` on disk means the
 implementation stage is done and waiting to be recorded. Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>" \
+  [--value <name>=<value>]...
 ```
 It refuses unless every order in the ledger is closed, naming whichever is not. It also refuses
 when any order carries a halt reason, closed or not, naming the order and the reason. It refuses
@@ -19,8 +20,18 @@ unless every machine-verified criterion reads confirmed too, naming whichever is
 dirty code repository as well, because the commit range it records is a claim about what that
 repository holds.
 
-On success it writes `implementation/finished.json`: the commit range this stage produced, and each
-order's own range and rounds used. The record is committed when the stage closes: `finish` commits
+Then it runs the test-execution recipe's suite row once, at the final commit, from the worktree.
+The record steps leave a row the recipe costs `end-of-task` unrun and record it `deferred`; this
+is the run that decides it. The recipe paths come from `implementation/preconditions.json`, so
+pass none. Pass `--value <name>=<value>` for a placeholder the suite row carries, the same as
+`build-record`. The baseline's own failures are subtracted the same way. A suite that is unmet
+or unknown refuses (exit 86). The message names the first twenty new lines and the sidecar,
+`implementation/finished-suite.txt`. A fix commit on the branch and a second `finish` is the
+route. A recipe with no suite row passes with `undeclared`, and the record says so.
+
+On success it writes `implementation/finished.json`: the commit range this stage produced, and
+each order's own range and rounds used. The suite's verdict is under `suite`, with its output in
+the sidecar. The record is committed when the stage closes: `finish` commits
 the task folder, in the project folder and never in the code repository. It also records each criterion's row state and who judged it.
 The checklists for the criteria a person verifies are copied in too, from the frozen test records.
 The review stage reads this one file rather than one per order. It records the findings ruled
@@ -35,8 +46,9 @@ person verifies by checklist.
 
 Interactive: stop here. Name the next command for the person, `/aida:review <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:review` through the Skill tool, once, with the task
-id, and stop if it refuses. Each stage refuses to start without the previous stage's record, so a
-stage cannot run out of order. That is why this chain is safe.
+id, and stop if it refuses. Invoke it only when the mode covers review too; otherwise end as
+interactive does, naming the command. Each stage refuses to start without the previous stage's
+record, so a stage cannot run out of order. That is why this chain is safe.
 
 ## Offer the grant, when a halt reads "attempts spent"
 
@@ -51,9 +63,9 @@ the order needs one more attempt, run:
 It raises the order's own allowed count by one, and records the reason and the date. It clears the
 halt only when the halt began with `attempts spent`; any other halt refuses, naming it. It never
 touches the attempts already used, so the counter still never goes down. It refuses outright on an
-autonomous run: the grant is a person's judgement, and nobody is present to make it. The reason may
-not hold the text `; earlier: `, the text this stage joins one halt reason to another with; a
-reason carrying it would forge a segment nobody wrote.
+autonomous implement stage: the grant is a person's judgement, and the person sets the task
+interactive first. The reason may not hold the text `; earlier: `, the text this stage joins one
+halt reason to another with; a reason carrying it would forge a segment nobody wrote.
 
 The grant is the person's to offer and the person's to take. Do not run it on their own behalf
 because an order is halted; put the halt and its recorded attempts to them first.
@@ -79,10 +91,11 @@ Put that to the person. If they want to rebuild the halted orders against the ne
   --reason <what changed and why these orders start over>
 ```
 It refuses when no order is halted for design drift, or when the code repository's tree is not
-clean. It refuses on an autonomous run too: a restart is a person's judgement. The reason may not
-hold `; earlier: `, the same refusal the grant's own reason takes, for the same cause. Design has
-to close again on the live files first. The restart takes the halted orders' live copies into the
-snapshot, and refuses with exit 13 until `design-closed.json` records a close over them.
+clean. It refuses on an autonomous implement stage too: a restart is a person's judgement. The
+reason may not hold `; earlier: `, the same refusal the grant's own reason takes, for the same
+cause. Design has to close again on the live files first. The restart takes the halted orders'
+live copies into the snapshot, and refuses with exit 13 until `design-closed.json` records a
+close over them.
 
 On success it moves only the halted orders' records to `implementation-<date>-<commit>/`. A
 record is the order's when its file name carries the order id, the way every record the script
@@ -93,3 +106,22 @@ criteria they serve go back to not judged. A finished order is never redone for 
 depended on. A halted order the live design no longer holds refuses. Removing an order from a
 running build is not built, and the message names the by-hand path. The next `start` is a
 resumed run.
+
+## Clear any other halt, once the person has acted on it
+
+A halt that reads none of `attempts spent`, `budget spent` or `design drift` names something a
+person does outside this script. That is a rejected row, a finding on a non-goal, a fixer's
+scope, a finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings
+open halt the same way. Put the halt and its reason to the person. When they have
+repaired the test, ruled on the finding, or committed the tree, run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh clear-halt "<task_folder>" <order id> \
+  --because <what the person did about it>
+```
+It removes the halt from the order and records the reason and the date under `haltsCleared` in
+the ledger. It prints the step the order resumes at; nothing moves the order. It refuses a halt
+the grant or the restart answers (exit 85), naming that action, and a closed order (exit 67). It
+refuses when the task's implement stage is autonomous (exit 68), because clearing a halt is a
+person's judgement. The person sets the task interactive first. The reason may not hold
+`; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
+line.

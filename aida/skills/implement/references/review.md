@@ -24,7 +24,9 @@ It writes `implementation/brief-<order id>-review.json`:
 
 - the criteria this order serves and owns, and the non-goals;
 - the order record;
-- the diff as a path, the frozen tests, and the builder's report path;
+- the diff as a path, the frozen tests, and the builder's report path; on an order whose proof
+  is `record` the diff is the task folder's, from the project folder, and `deliverables` names
+  each owned file by path. The reviewer reads the document whole rather than a patch;
 - the eight check results;
 - both interface texts;
 - the path the reviewer's findings go to;
@@ -58,9 +60,10 @@ against it, the same way the freeze protects it against everyone else.
 
 **Dispatch `reviewer`.** Name the role, per SKILL.md. Set the model to opus. Give it the brief's
 path and nothing else, and tell it plainly that this is review mode. Its read is wide by design, one named
-file outside the diff for one named risk. Close the dispatch record as soon as it returns, per
-SKILL.md. Its write is refused by the script, not by a hook, when the code moved or the tree is
-dirty.
+file outside the diff for one named risk. On a `record` order, say that the brief's
+`deliverables` are what it reviews, against the order's done-when rows. Close the dispatch record
+as soon as it returns, per SKILL.md. Its write is refused by the script, not by a hook, when the
+code moved or the tree is dirty.
 Leaving a probe file behind is a refusal, not a finding.
 
 Run:
@@ -76,7 +79,8 @@ named by `--findings` is missing, empty, or not the shape it reads. A finding ci
 criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
 fixer.
 
-Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. Interactive,
+Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
+clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
 it is actionable like any other finding, and it goes to the person with the rest. No open
 actionable finding: the order is reviewed and clean, so go to Close.
 
@@ -145,8 +149,9 @@ frameworks command one tool. It refuses (exit 73) when the check recipe it resol
 the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person. Unattended halts the order, naming the
-finding. Its reason may not hold the text `; earlier: `, the same refusal every halt reason
-applies: that text is how one halt is joined to another, and a reason carrying it would forge one.
+finding, and `clear-halt` is the person's way past. Its reason may not hold the text
+`; earlier: `, the same refusal every halt reason applies: that text is how one halt is joined to
+another, and a reason carrying it would forge one.
 
 The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
 not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
@@ -156,7 +161,8 @@ work before it returns. A dirty tree means that commit did not happen. This roun
 Interactive puts that to the person. Unattended halts the order with that reason.
 
 This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
-`gate` order the floor is `configuration-gate`. Undeclared or unknown there still spends the
+`gate` order the floor is `configuration-gate`, and on a `record` order `done-when`. A `record`
+order's range, tree and diff read from the project folder, as build.md says. Undeclared or unknown there still spends the
 round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
 spends the round and leaves every finding open. At the round cap, the script halts the order
@@ -169,7 +175,8 @@ unchanged code is a round nobody worked.
 
 **When `fix-record` halted the order this way, stop here.** Do not dispatch the reviewer in verify
 mode: `verify-record` refuses on a halted order. Report the halt instead, naming the check it
-stopped on, the same way a halt at the build step is reported.
+stopped on, the same way a halt at the build step is reported. A person clears it with
+`clear-halt` and then rules on the open findings through `verify-record`.
 
 Open a dispatch record for the reviewer again, the same way review mode did, with nothing denied
 and nothing allowed:
@@ -222,7 +229,8 @@ Run the same call again, with one `--ruling` flag added per open finding:
   --ruling <finding id>=<wrong|deferred|load-bearing>::<reason>
 ```
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
-order, the finding named as the reason. Interactive, this reaches the person as an escalation, not
+order, the finding named as the reason, and `clear-halt` is what follows once the person has
+acted on it. Interactive, this reaches the person as an escalation, not
 a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
 ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
 takes, for the same reason.
@@ -236,7 +244,9 @@ Run:
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
 the last record left it. On success it writes `lastStep = "closed"` and the commit range the order
-produced.
+produced. On a `record` order the tree, HEAD and the range are the project folder's. The
+machine criteria it owns are written as judged by whoever judged its done-when row, person or
+model, never `gate`.
 
 **Close also decides the criteria this order serves or owns.** A machine-verified criterion reads
 confirmed once every order serving it is closed and every judgement on it reads confirmed.

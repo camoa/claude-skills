@@ -1,7 +1,7 @@
 ---
 name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> | save <task-id> | environment <task-id> <show|up|down> | prune [<task-id>]...]"
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | save <task-id> | environment <task-id> <show|up|down> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -23,12 +23,14 @@ Look for a stated run mode on the task active in this conversation, when one is 
 Found, and it says `autonomous`: act autonomously through this whole invocation, passing
 `--run-mode autonomous` on every call to the script below. Anything else, including no active
 task, such as the moment `create` itself runs: act interactively, the safe default. Decide this
-once, at the start.
+once, at the start. A mode that names stages in brackets covers this call only when it names the
+stage this call runs inside.
 
 `task-actions.sh` never asks a question on its own. Every fact below that this skill would
 otherwise ask for must be decided before the script runs; the script only writes what it is given
 and reports what happened. Every action prints summary lines: `task-file:` with the path, `id:`,
-`state:`, `parent:`, `children:` and `runMode:`. It never prints the record. Read the file at the
+`state:`, `parent:`, `children:` and `runMode:`, with the stages the mode covers in brackets when
+it covers fewer than all. It never prints the record. Read the file at the
 printed path when another field is needed.
 
 ## `create <name>`
@@ -56,8 +58,9 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree beside the code path, at
-`<parent of codePath>/<basename of codePath>-<name>`, on the branch `feature/<name>`, records
-both in `task.json`, and commits. The tree is a sibling for one reason. A nested worktree is
+`<parent of codePath>/<slug of the code folder>-<name>`, on the branch `feature/<name>`, records
+both in `task.json`, and commits. The folder name is the slug of the code folder plus the task
+name, so a site name is predictable. The tree is a sibling for one reason. A nested worktree is
 invisible to a tool that registers projects by folder, and DDEV hands it to the parent project.
 Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
 the script also enforces, or the worktree could not be made. In the last case the folder is
@@ -250,17 +253,20 @@ goal and any handed-down criteria into its `task.md`, makes each child's own wor
 stopped before writing anything: `NOT FOUND` says the named task does not exist, `REFUSED` says
 the two-level limit stopped it. Say which and stop. Show the whole output otherwise.
 
-## `set-run-mode <task-id> <autonomous|interactive>`
+## `set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...`
 
 Run mode is written only when a person explicitly asks for an autonomous run on this task.
 Nothing above asks about it on its own, and nothing here proposes it either. Only call this when
 asked. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  set-run-mode --project "<projectPath>" "<task-id>" <autonomous|interactive>
+  set-run-mode --project "<projectPath>" "<task-id>" <autonomous|interactive> [--stage <stage>]...
 ```
-`autonomous` writes the field. `interactive` removes it: there is no `"interactive"` value to
-write, since the field's absence already means that. Show the whole output.
+`autonomous` writes the field. `--stage`, repeatable, limits it to the stages named, one of
+`scope`, `research`, `design`, `implement`, `review`, `completion`. A person who asks for the build
+alone unattended passes `--stage implement`. No `--stage` covers every stage. `interactive`
+removes the field and the stages: there is no `"interactive"` value to write, since the field's
+absence already means that. Show the whole output.
 
 ## `save <task-id>`
 

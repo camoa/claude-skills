@@ -32,8 +32,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # `state: complete`. That call stages everything under tasks/, so its commit carries the record and
 # the body, and this script commits nothing itself.
 #
-# The run mode is `runMode` in task.json, absent meaning interactive. A version 5 task has no
-# ledger to read it from, and the task file is what every stage copies it from.
+# The run mode is the task's own for this stage, through task_run_mode in task-helpers.sh: runMode
+# in task.json, absent meaning interactive, scoped by runModeStages when that names stages.
 #
 # Exit codes, each one and only one meaning, and none is new to this plugin:
 #   0  did what was asked.
@@ -228,7 +228,7 @@ cp_load() {
   CP_TASK_ID="$(printf '%s' "$CP_TASK_DOC" | jq -r '.id // ""')"
   [ -n "$CP_TASK_ID" ] || die 3 "$who: $TASK_PATH/task.json has no usable id field."
   CP_STATE="$(printf '%s' "$CP_TASK_DOC" | jq -r '.state // ""')"
-  CP_RUN_MODE="$(printf '%s' "$CP_TASK_DOC" | jq -r '.runMode // "interactive"')"
+  CP_RUN_MODE="$(task_run_mode "$TASK_PATH" completion)"
   CP_ALIGNMENT_STATE="$(json_file_state "$ALIGNMENT_FILE")"
   CP_FINISHED_STATE="$(json_file_state "$FINISHED_FILE")"
   CP_REVIEW_STATE="$(json_file_state "$REVIEW_FILE")"

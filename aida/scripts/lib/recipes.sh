@@ -747,7 +747,8 @@ CR_LOOKUP
 # The command one test-command row declares, as the object cr_resolve records. $1 the parsed rows,
 # $2 the row id to read, $3 a word for the message. Prints one of three shapes: a command, an
 # absent row with its own reason, or missing with why. A command carries the row's `failureLine`
-# when the row declared one.
+# and its `cost` when the row declared them; the cost is what lets a record step leave an
+# end-of-task row to `finish` (nyc defect 18).
 cr_row_command() {
   local rows="$1" row_id="$2" label="$3" row argv
   row="$(printf '%s' "$rows" | jq -c --arg id "$row_id" '[ .[] | select(.id == $id) ][0] // null')"
@@ -769,8 +770,10 @@ cr_row_command() {
     return 0
   fi
   jq -nc --argjson argv "$argv" --arg r "$row_id" \
-    --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" '
-    {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)'
+    --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" \
+    --arg cost "$(printf '%s' "$row" | jq -r '.cost // ""')" '
+    {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)
+    + (if $cost == "" then {} else {cost: $cost} end)'
 }
 
 
@@ -1093,6 +1096,24 @@ cr_require_baseline_recipes() {
   done
 }
 
+# The porcelain status of the repository $1, over the whole tree when $2 is empty, else over the
+# pathspecs $2 holds, one per line. The list is rebuilt as arguments through `set --`, the way
+# tests-freeze stages its frozen paths, because `git status` takes no pathspec file.
+git_status_of() {
+  local repo="$1" pathspecs="${2:-}" p
+  if [ -z "$pathspecs" ]; then
+    git -C "$repo" status --porcelain 2>/dev/null
+    return 0
+  fi
+  set --
+  while IFS= read -r p; do
+    [ -n "$p" ] && set -- "$@" "$p"
+  done <<GS_PATHS
+$pathspecs
+GS_PATHS
+  git -C "$repo" status --porcelain -- "$@" 2>/dev/null
+}
+
 # Exit 61. Every check but one reads the working tree: the tools run over the files on disk, the
 # tests run on disk, and frozen-tests hashes the file on disk. The owned-files check is the one
 # that compares two commits, so a write nobody committed is invisible to it alone and reads as met.
@@ -1109,13 +1130,17 @@ cr_require_baseline_recipes() {
 # flight with no reason on it, which is the halt nobody sees until they ask. So an autonomous run
 # writes haltedBecause first and then refuses. `close` passes none of the four and only refuses,
 # because an order reaching close has already been recorded and judged.
+# $7, optional: pathspecs, one per line. Then only those paths are read. A `record` order lands
+# its deliverable in the project folder, whose tree the running stage keeps dirty on purpose
+# (the ledger and every brief sit uncommitted there until finish), so for such an order the
+# check reads the owned files alone (nyc defect 17).
 br_require_clean_tree() {
   local who="$1" repo="$2" unit_id="${3:-}" run_mode="${4:-}" ledger_file="${5:-}" ledger_doc="${6:-}"
   local dirty why halted_doc
   # Not --ignored. A gitignored file an implementer wrote can change a test outcome while leaving
   # a clean tree, and that is a real gap, but --ignored lists node_modules and every other build
   # product a repository ignores on purpose, so every record step refused. The gap stands.
-  dirty="$(git -C "$repo" status --porcelain 2>/dev/null)"
+  dirty="$(git_status_of "$repo" "${7:-}")"
   [ -z "$dirty" ] && return 0
   # The reason never carries the filenames. A path holding the text this stage joins halt reasons
   # with would forge a segment, and the reason is read back by split. The count is the fact a halt
@@ -1123,7 +1148,7 @@ br_require_clean_tree() {
   local dirty_count
   dirty_count="$(printf '%s' "$dirty" | grep -c '.' 2>/dev/null)"
   case "$dirty_count" in ''|*[!0-9]*) dirty_count=0 ;; esac
-  why="uncommitted changes in the code repository ($dirty_count paths, listed on stderr)"
+  why="uncommitted changes in the repository ($dirty_count paths, listed on stderr)"
   printf '%s: the uncommitted paths in %s are:\n%s\n' "$who" "$repo" "$dirty" >&2
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
     halted_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$why")"
@@ -1140,7 +1165,9 @@ br_require_clean_tree() {
 
 # The verdict that wins when several frameworks answer one check. Undeclared ranks lowest, so a
 # framework that declared nothing never drags down one that ran and passed; unmet ranks highest,
-# because a definite failure outranks a question. $1 the JSON array of per-framework verdicts.
+# because a definite failure outranks a question. Deferred sits above met: a suite one framework
+# left to `finish` has not answered yet, so met would claim more than ran. $1 the JSON array of
+# per-framework verdicts.
 #
 # This is deliberately not pc_rank's order, which puts met below undeclared. There the question is
 # what a whole run may report, and a recipe declaring nothing must not read as a pass. Here the
@@ -1148,7 +1175,8 @@ br_require_clean_tree() {
 # has said nothing about it. Collapsing the two would make one of the two questions answer wrongly.
 br_worst_verdict() {
   printf '%s' "$1" | jq -r '
-    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "unknown" then 2 else 3 end;
+    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "deferred" then 2
+              elif . == "unknown" then 3 else 4 end;
     (. + ["undeclared"]) | max_by(rank)'
 }
 

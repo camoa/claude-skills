@@ -109,7 +109,8 @@ exists. Design writes the real code fresh.
 Some things change by framework: where custom code lives, and how to read whether a candidate is
 safe to depend on. A Drupal beta usually means a module wants more sites running it; a beta
 elsewhere can mean the interface is still moving. Those readings live in a process recipe for
-your framework, looked up from the catalog once, before the first search.
+your framework, looked up once, before the first search. A folder you declared answers first,
+and the catalog answers when no folder holds it.
 
 Research reads the recipe body and judges once whether it describes the work the criteria name.
 When it does not, research says so and asks whether to continue with it, without it, or stop.
