@@ -218,7 +218,8 @@ speaks to none: an empty list is allowed, and it is itself checked below, not si
 
 A search that found nothing is still recorded, once. `--text` says so plainly, for example
 "looked and found nothing: no maintained package covers this without pulling in a whole
-framework", and `--searched-for` holds the words it used. Silence and a negative result look
+framework", and `--searched-for` holds the words it used. It serves the criterion its search was
+dispatched for, so `--criteria-served` names that id. Silence and a negative result look
 identical from outside; only the recorded negative tells design it is safe to decide without
 searching again.
 
@@ -351,8 +352,10 @@ design decides reuse, extend or supersede, not research. Each assumption from sc
 finding showed false, in one sentence. A count and a next command are not a presentation. The
 findings are what design acts on, so the person sees them here or not at all.
 
-Exit 4: a research file itself is broken: not valid JSON, not an object, or a missing or
-malformed required field. Fix that file with another `record` call, or by hand, and check again.
+Exit 4: a research file itself is broken: not valid JSON, not an object, or a top-level field
+such as `searchedFor` missing or malformed. No action wrote such a file and none repairs it,
+`drop` included. Say which file and what is wrong with it, and stop; a person decides what it
+was. A broken finding inside a readable file is exit 5, below.
 
 Exit 3: the script could not run the check at all. Read its stderr and fix the named problem,
 then check again.
@@ -360,15 +363,34 @@ then check again.
 Exit 6: the coverage is clean but the spike folder named on the `spike:` line still exists.
 Delete that folder, then check again. Nothing else is missing.
 
-Exit 5: the schema is fine but the coverage is not. For each id the `open:` line names under
-criteria with no finding, dispatch another search for that criterion specifically. For each entry
-in the report's `findingsWithNoCriterion`, decide by hand: a genuine "looked and found nothing" that never tied
-to one criterion can stand as recorded; a positive finding attached to nothing is work nobody
-asked for, so either attach it to the criterion it actually serves or leave it out. Then check
-again.
+Exit 5: the file reads, but a finding or the coverage is wrong. For each id the `open:` line
+names under criteria with no finding, dispatch another search for that criterion specifically.
+Every finding names the criterion it serves, so repair each entry in the report's
+`findingsWithNoCriterion`.
+The report gives each one as a file path and an `index`, the finding's position in that file. A
+"looked and found nothing" finding serves the criterion its search was dispatched for, so serve
+it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh serve "<task_folder>" \
+  --search <slug> --index <n> --criteria-served <id[,id...]>
+```
+A positive finding attached to nothing is work nobody asked for: serve it with the criterion it
+serves, or drop it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh drop "<task_folder>" \
+  --search <slug> --index <n>
+```
+`serve` rewrites that one finding's `criteriaServed`; `drop` removes that one finding, and
+removes the file when no finding is left. A `drop` moves every later finding in that file down
+by one, so the report's other indexes for that file are stale. Repair one entry, run `check`
+again, then the next. A finding citing an id the contract does not hold is listed in the
+report's `unknownCriteriaIds` the same way. Serve it with the ids it does serve. A finding with
+a missing or malformed field is listed by path and `index` too. Drop it with `drop`, then
+`record` it again with every field. Calling `record` alone, with the same `--search`, appends a
+second finding and leaves the first one as it was, so it repairs nothing.
 
-Research is done when this check reaches exit 0, or when every remaining gap has been looked at
-and deliberately left, with the reason recorded in the finding's own text.
+Research is done only when this check reaches exit 0. Nothing is left deliberately open, because
+design refuses to start until the report holds exit 0.
 
 ## Offer a split
 
@@ -427,5 +449,6 @@ hands the ranking to design.
 It never writes a finding with no source. A claim from memory is a lead for one search, never
 the answer research records.
 
-It never treats an empty `criteriaServed` as an error to avoid. It is allowed, and it is exactly
-what the coverage check looks for on the other side.
+It never treats an empty `criteriaServed` as an error to avoid. `record` accepts it, and it is
+exactly what the coverage check looks for on the other side. The check names every empty one,
+and research closes only once each one names a criterion.

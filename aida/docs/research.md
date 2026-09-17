@@ -130,7 +130,7 @@ one afterwards.
 ## What a finding looks like
 
 Each search writes one record, and `research/<search>.md` in the task folder is rendered from
-it for you and design to read. Nothing reads the rendered page back, so editing it by hand
+it for you and design to read. Nothing reads the rendered page back, so an edit to that page
 records nothing; the check, the advisor and the distiller read the record. At the top of the
 page sit the words the search searched for, because those words bound every finding below. A
 search that found nothing proves nothing outside them. Design reads the words to know what it
@@ -161,19 +161,23 @@ way, is the report, so nothing is authored twice.
 
 The check refuses on five things:
 
-- A search file with a missing or broken required field. Repair it by recording the finding
-  again.
-- A finding citing a criterion id the contract does not hold. Repaired the same way.
+- A finding with a missing or broken field. Research drops it and records it again. A file that
+  is not JSON, or broken above its findings, is one no AIDA action wrote. Research names it and
+  stops, and you decide what it was.
+- A finding citing a criterion id the contract does not hold. Research serves it with the ids it
+  does serve.
 - A criterion no finding cites. Research dispatches another search for that criterion.
-- A finding tied to no criterion. A genuine "looked and found nothing" is recorded again against
-  the criterion it looked for. A positive finding attached to nothing is work nobody asked for,
-  so it is attached to the criterion it serves or left out.
+- A finding tied to no criterion. A genuine "looked and found nothing" serves the criterion it
+  looked for, so research serves it with that id. A positive finding attached to nothing is work
+  nobody asked for, so research serves it with the criterion it serves or drops it. Serving and
+  dropping are their own actions on one finding, because recording again adds a finding and
+  removes none.
 - The spike folder still on disk. Delete it, then check again; nothing else is missing.
 
-Research is done only when the check passes. Every gap is closed one of two ways: recording
-again, or changing the contract through scope. Nothing is left deliberately open, because
-design refuses to start until this check has passed. A clean check commits the task folder;
-nothing before it is committed.
+Research is done only when the check passes. Every gap is closed one of three ways: recording
+again, serving or dropping a finding, or changing the contract through scope. Nothing is left
+deliberately open, because design refuses to start until this check has passed. A clean check
+commits the task folder; nothing before it is committed.
 
 After the check, research dispatches a reader, the distiller, over the findings on disk, never
 the conversation, and it says whether they stand alone. Each gap it names is one advisory
