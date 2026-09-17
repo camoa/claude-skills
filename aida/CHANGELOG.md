@@ -4,6 +4,19 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.15] - 2026-09-17
+
+Live-run rows 83 and 84, the implement stage's review reference on beta.14.
+
+### Changed
+- The review step reads the `test-execution` and `review` recipe paths from the records
+  `preconditions` wrote (`frameworks[].recipePath`, `checkRecipes[].path`), the way the build
+  step does, instead of dispatching the identifier again; a fresh lookup could only agree with
+  the record or be refused at `fix-record` (exit 73). (row 83)
+- The interface question, asked only when the interface check read unknown, shows the declared
+  interface and the builder's record before asking whether they agree; a person cannot judge
+  two texts they may not read. (row 84)
+
 ## [6.0.0-beta.14] - 2026-09-17
 
 Live-run rows 75 to 82 (the design stage on beta.12, and a resumed build after a merge); row 81 corrected row 78 and asked nothing.
