@@ -6,7 +6,7 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.14] - 2026-09-17
 
-Live-run rows 75 to 79, from the design stage on beta.12.
+Live-run rows 75 to 80, from the design stage on beta.12; row 81 corrected row 78 and asked nothing.
 
 ### Added
 - `design-actions.sh remove-done-when --text` and `remove-owned-file --path`, the removals the
@@ -24,6 +24,11 @@ Live-run rows 75 to 79, from the design stage on beta.12.
   is a catalog ask. (row 79)
 
 ### Changed
+- A malformed distiller sidecar (`distill` exit 4, and the split advisor's read) is set aside
+  beside itself with a UTC timestamp, so the next dispatch writes fresh and a reader can see what
+  was wrong. The four skill passages give exit 4 the recovery exit 2 has: dispatch a fresh agent
+  with the rule it broke quoted, run the call again, and stop for the person on a second exit 4.
+  The distiller's own file names the refusal beside its rule. (row 80)
 - Every stage skill names the worktree refusal: exit 79 means the task builds in its worktree
   and this window is elsewhere; enter the tree with `EnterWorktree`, then run the call again.
   The tool is granted in each stage skill. (row 75)
