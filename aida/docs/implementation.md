@@ -31,7 +31,8 @@ the branch now builds on, the ledger keeps the old value beside the new, and the
 retaken. When the baseline on disk was written by an earlier version, in a shape this one cannot
 subtract from, AIDA names the retake. No build attempt is spent on it. A resumed run also names
 the orders whose design predates the proof field. Each is proved by tests unless design sets the
-gate on it.
+gate on it. An order the live design no longer holds is dropped from the snapshot when it has not
+started, and named. When it has started it halts, and the restart drops it.
 
 Three more things refuse before a line is written. The project is not a git repository, the code
 checkout is on no branch, or the build would land on the repository's own trunk branch. A commit

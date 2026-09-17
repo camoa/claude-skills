@@ -103,8 +103,8 @@ writes does. It writes the reason and the halted orders there as `restarted.json
 that path. It keeps every other order's records, and the snapshot and the ledger, in place. In
 the ledger the halted orders go back to not started, and their judgements are dropped. The
 criteria they serve go back to not judged. A finished order is never redone for a change it never
-depended on. A halted order the live design no longer holds refuses. Removing an order from a
-running build is not built, and the message names the by-hand path. The next `start` is a
+depended on. A halted order the live design no longer holds is dropped from the snapshot and the
+ledger. Its records move aside with the rest, and the summary names it. The next `start` is a
 resumed run.
 
 ## Clear any other halt, once the person has acted on it
