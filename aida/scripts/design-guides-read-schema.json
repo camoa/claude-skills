@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA design guides-read record",
+  "description": "Which guide bodies design opened, at <task folder>/design-guides-read.json, beside design-closed.json and never inside design/ (ideal/design.md, 'What design reads'). Research names guides without opening them, so design is the first read, and nothing else records what it read. A second design run in a new session compares each entry's sha256 to the body on disk and reads only what changed and what is not recorded (live-run row 77). It sits at the task's own root because every design/*.json is read as a work order, by the check and by the closed hash, and a re-read must not move that hash. Written by design-actions.sh read-guide, one entry per path, a second read of the same path replacing its entry. check-design.sh reads it only to refuse a malformed one. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "guides"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "The shape this file was written in, the same field design-closed.json and every design/*.json carry. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
+    },
+    "guides": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/guide"
+      },
+      "description": "One entry per guide body design opened, keyed by path. Empty is a real state: design started and opened nothing yet."
+    }
+  },
+  "$defs": {
+    "guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "readAt"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The body on disk, as an absolute path: what the navigator's lookup returned, or a project's own source file. The key a second read-guide replaces on."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "sha256 over the body's bytes at the moment it was read, computed by the script and never typed by hand. A resumed `start` re-derives it and prints `changed` when the two differ, or `missing` when no readable file is at the path."
+        },
+        "readAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date the body was read, YYYY-MM-DD, set by the script."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The name research gave this guide in its own finding, when read-guide was passed --name. A later read-guide on the same path without --name keeps it. Absent otherwise. It joins the body read here to the finding that named it."
+        }
+      }
+    }
+  }
+}

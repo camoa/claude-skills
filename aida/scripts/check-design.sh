@@ -54,7 +54,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <task_folder>/design/*.json
 #   <task_folder>/alignment.json (for the criteria and non-goal lists; a missing or unreadable
 #     contract does not stop this script, it stops only the checks that need it, named below)
+#   <task_folder>/design-guides-read.json, when present: the guide bodies design opened, read
+#     only to refuse a malformed one (design-guides-read-schema.json; step 5b below)
 #   <plugin root>/scripts/design-schema.json: the file's field list, as data
+#   <plugin root>/scripts/design-guides-read-schema.json: the guides-read record's field list
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
@@ -80,7 +83,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      missing or malformed list field also stops that field's own per-item check (see exit 4)
 #      from running, and stops that work order from taking part in the cross-order checks; the
 #      report says so under that file's own "checked" key instead of guessing, and that alone
-#      never raises the exit code past what this paragraph already sets.
+#      never raises the exit code past what this paragraph already sets. The same code when
+#      <task_folder>/design-guides-read.json exists and cannot be read as its own format: not
+#      valid JSON, not an object, a top-level field missing, wrong or undeclared, or an entry
+#      without a path, a sha256 or a date. Named under "guidesRead" on stdout.
 #   3  this script could not do its job: no task folder was given, the given path is not a
 #      folder, the schema file is missing or fails to parse, or the comparison itself failed to
 #      run. Reported to stderr; nothing is printed on stdout, so this is never confused with a
@@ -132,6 +138,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     files: [ { path, schema: {missingFields, unreadableFields, unknownFields, issueCount},
 #                content: {checked, note, issues} } ],
 #     duplicateWorkOrderIds: [ {id, paths} ],
+#     guidesRead: { path, present, note, issues: [ {problem} ], issueCount },
 #     coverage: { checked, note,
 #                 criteriaWithNoServingOrder: [ {id, text} ],
 #                 criteriaWithNoOwner: [ {id, text} ],
@@ -423,6 +430,69 @@ if [ "$DESIGN_STARTED" = "true" ]; then
 fi
 
 FILE_COUNT="$(printf '%s' "$FILES_JSON" | jq 'length')"
+
+# ---------------------------------------------------------------------------
+# 5b. The guides-read record, <task_folder>/design-guides-read.json, when present: the guide
+#     bodies design opened (design-guides-read-schema.json, live-run row 77). Read only to refuse
+#     a malformed one: not valid JSON, not an object, a top-level field missing, wrong or
+#     undeclared, or an entry without a path, a sha256 or a date. Absent is a real state, design
+#     opened nothing yet, and is not a finding. A malformed record counts as a file issue, so
+#     `close` refuses on it the same way it refuses a broken work order file. Whether each body
+#     still matches its sha is not this check's question; design's own `start` answers it.
+# ---------------------------------------------------------------------------
+
+GUIDES_FILE="$TASK_PATH/design-guides-read.json"
+GUIDES_SCHEMA_FILE="$PLUGIN_ROOT/scripts/design-guides-read-schema.json"
+GUIDES_PRESENT=false
+GUIDES_ISSUES_JSON='[]'
+GUIDES_NOTE="not checked: $GUIDES_FILE not found; design has recorded no guide body yet"
+if [ -f "$GUIDES_FILE" ]; then
+  GUIDES_PRESENT=true
+  [ -f "$GUIDES_SCHEMA_FILE" ] || die3 "cannot read the guides-read field list: $GUIDES_SCHEMA_FILE not found"
+  jq empty "$GUIDES_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the guides-read field list: $GUIDES_SCHEMA_FILE is not valid JSON"
+  if ! jq empty "$GUIDES_FILE" 2>/dev/null; then
+    GUIDES_ISSUES_JSON='[{"problem": "not valid JSON"}]'
+  elif [ "$(jq -r 'type' "$GUIDES_FILE")" != "object" ]; then
+    GUIDES_ISSUES_JSON="$(jq -n --arg t "$(jq -r 'type' "$GUIDES_FILE")" '[{problem: ("valid JSON but a " + $t + ", not an object")}]')"
+  else
+    GUIDES_COMPARE_JSON="$(schema_check_compare "$GUIDES_SCHEMA_FILE" "$GUIDES_FILE")" \
+      || die3 "the guides-read field-list comparison itself failed to run on $GUIDES_FILE. Check $GUIDES_SCHEMA_FILE for a malformed entry"
+    GUIDES_ALLOWED_JSON="$(jq -c '.properties | keys_unsorted' "$GUIDES_SCHEMA_FILE")"
+    GUIDES_ENTRY_ALLOWED_JSON="$(jq -c '.["$defs"].guide.properties | keys_unsorted' "$GUIDES_SCHEMA_FILE")"
+    # The entries' own fields, which the shared comparison does not reach (its header: a
+    # constraint inside `items` is not checked), the same per-item pass the work order walk makes.
+    GUIDES_ISSUES_JSON="$(jq -c --argjson cmp "$GUIDES_COMPARE_JSON" --argjson allowed "$GUIDES_ALLOWED_JSON" \
+      --argjson entryAllowed "$GUIDES_ENTRY_ALLOWED_JSON" '
+      def str_present($v): ($v != null) and (($v | type) == "string") and (($v | length) > 0);
+      [ ( $cmp.missing[] | {problem: ("missing field " + .field)} ),
+        ( $cmp.unreadable[] | {problem: ("field " + .field + ": " + .reason)} ),
+        ( keys_unsorted[] as $k | select(($allowed | index($k)) == null)
+          | {problem: ("unknown field " + $k + ". Not declared by design-guides-read-schema.json")} ),
+        ( if (.guides | type) == "array" then
+            ( .guides | to_entries[] | . as $e | ("guides entry " + ($e.key | tostring)) as $who
+              | if ($e.value | type) != "object" then {problem: ($who + " is not an object, is a " + ($e.value | type))}
+                else
+                  ( ($e.value | keys_unsorted[]) as $k | select(($entryAllowed | index($k)) == null)
+                    | {problem: ($who + ": unknown field " + $k + ". Not declared by design-guides-read-schema.json")} ),
+                  ( if str_present($e.value.path?) then empty else {problem: ($who + ": path missing, empty, or not a string")} end ),
+                  ( if str_present($e.value.sha256?) and ($e.value.sha256 | test("^[0-9a-f]{64}$")) then empty
+                    else {problem: ($who + ": sha256 missing or not 64 lowercase hex characters")} end ),
+                  ( if str_present($e.value.readAt?) and ($e.value.readAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")) then empty
+                    else {problem: ($who + ": readAt missing or not YYYY-MM-DD")} end ),
+                  ( if ($e.value | has("name")) and (str_present($e.value.name?) | not)
+                    then {problem: ($who + ": name is present but empty or not a string. Omit it rather than leaving it blank")} else empty end )
+                end )
+          else empty end )
+      ]' "$GUIDES_FILE")"
+  fi
+  GUIDES_ISSUE_COUNT="$(printf '%s' "$GUIDES_ISSUES_JSON" | jq 'length')"
+  FILE_ISSUE_COUNT=$((FILE_ISSUE_COUNT + GUIDES_ISSUE_COUNT))
+  if [ "$GUIDES_ISSUE_COUNT" -eq 0 ]; then
+    GUIDES_NOTE="ran: $(jq -r '.guides | length' "$GUIDES_FILE") guide body/bodies recorded as read"
+  else
+    GUIDES_NOTE="ran: $GUIDES_FILE does not match design-guides-read-schema.json"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # 6. Duplicate declared ids across files, on the raw id (even a malformed one), since two files
@@ -719,6 +789,8 @@ jq -n \
   --argjson exitCode "$EXIT_CODE" \
   --argjson files "$FILES_JSON" \
   --argjson duplicateWorkOrderIds "$DUPLICATE_WO_IDS_JSON" \
+  --argjson guidesRead "$(jq -nc --arg path "$GUIDES_FILE" --argjson present "$GUIDES_PRESENT" --arg note "$GUIDES_NOTE" --argjson issues "$GUIDES_ISSUES_JSON" \
+      '{path: $path, present: $present, note: $note, issues: $issues, issueCount: ($issues | length)}')" \
   --argjson coverageChecked "$([ "$CONTRACT_READABLE" = "true" ] && echo true || echo false)" \
   --arg coverageNote "$COVERAGE_NOTE" \
   --argjson criteriaWithNoServingOrder "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" \
@@ -752,6 +824,7 @@ jq -n \
     exitCode: $exitCode,
     files: $files,
     duplicateWorkOrderIds: $duplicateWorkOrderIds,
+    guidesRead: $guidesRead,
     coverage: {
       checked: $coverageChecked,
       note: $coverageNote,

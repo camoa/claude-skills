@@ -42,6 +42,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> --level <text> --description <text>
 #   design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
 #   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
+#   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
@@ -99,6 +100,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # here; closing again after a further change, which this action always allows, is the supported
 # way to make the two agree again.
 #
+# `read-guide` records that design opened a guide body (live-run row 77): research names guides
+# without opening them, so design is the first read, and a second run in a new session could not
+# tell what the first read. <task_folder>/design-guides-read.json holds one entry per path, with
+# the body's sha256, the UTC date, and the name research gave it when --name was passed
+# (scripts/design-guides-read-schema.json). A second read of the same path replaces its entry. It
+# sits at the task root beside design-closed.json, never inside design/, where every file is read
+# as a work order and hashed into the close. `read` and `start` print `guidesRead:`, and on a
+# resumed run one `guide:` line per entry saying `changed`, `unchanged` or `missing` against the
+# body on disk, so the resumed run reads only what changed. Commits nothing; the close commits it.
+#
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
 #      and that no work orders exist yet. For `check`, this is check-design.sh's own exit 0. For
@@ -113,8 +124,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `add-owned-file`, `add-done-when`, `add-test`, `remove-test` or `render` were given an --id
 #      naming no work order file in this task's design/ folder; or `remove-test` was given a
 #      --description no test on that order carries; or `merge` was given an --into or --from
-#      naming no work order file; or `distill` found no records/design-distill.json, so the
-#      distiller has not been dispatched yet.
+#      naming no work order file; or `read-guide` was given a --path naming no file on disk; or
+#      `distill` found no records/design-distill.json, so the distiller has not been dispatched
+#      yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
@@ -127,11 +139,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
 #      (check-design.sh's own exit 3, meaning it could not do its job either); the records-hash
 #      library could not be sourced; or `close`'s own call to records_hash_for failing, once
-#      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe.
-#   4  `check` ran and found a work order file that cannot be read as this format: not valid
-#      JSON, not an object, or a missing, malformed or unknown top-level field (check-design.sh's
-#      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
-#      folder"). `close` refuses for the same reason, on the live files, before writing anything.
+#      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
+#      or `read-guide` found design-guides-read.json already on disk and not valid JSON.
+#   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
+#      its format: not valid JSON, not an object, or a missing, malformed or unknown field
+#      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
+#      exit 1, "not a task folder"). `close` refuses for the same reason, on the live files, before
+#      writing anything.
 #      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says standsAlone
 #      false with no gap.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
@@ -220,6 +234,7 @@ usage: design-actions.sh read           <task_folder>
                                          --description <text>
        design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
        design-actions.sh merge          <task_folder> --into <woId> --from <woId>
+       design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
@@ -369,9 +384,44 @@ open_summary_of() {
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-        ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape")
+        ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
+        (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", ")))
       ] | join("; ")
     ' 2>/dev/null
+}
+
+# The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
+# command first, through records_hash__resolve_sha256_cmd.
+file_sha256() {
+  [ -f "$1" ] && [ -r "$1" ] || return 1
+  "${RECORDS_HASH_SHA256_CMD[@]}" <"$1" | cut -d' ' -f1
+}
+
+# The guides-read record's summary lines, for `read` and `start`: `guidesRead: <n>`, and when $1
+# is above zero (a resumed run, work orders already on disk) one `guide: <path>` line per entry
+# ending `changed`, `unchanged` or `missing`. `changed` means the body's sha256 differs from the
+# recorded one; `missing` means no readable file is at the path any more, so the resumed run
+# resolves it again through the navigator. A record that is not valid JSON counts as zero here;
+# `check` is what refuses it.
+guides_read_lines() {
+  local resumed="$1" n=0 path recorded live tab
+  if [ -f "$GUIDES_FILE" ] && jq empty "$GUIDES_FILE" 2>/dev/null; then
+    n="$(jq -r '(.guides // []) | if type == "array" then length else 0 end' "$GUIDES_FILE")"
+  fi
+  echo "guidesRead: $n"
+  [ "$resumed" -gt 0 ] && [ "$n" -gt 0 ] || return 0
+  records_hash__resolve_sha256_cmd || die3 "neither sha256sum nor 'shasum -a 256' was found on PATH"
+  tab="$(printf '\t')"
+  while IFS="$tab" read -r path recorded; do
+    [ -n "$path" ] || continue
+    if ! live="$(file_sha256 "$path")"; then
+      echo "guide: $path missing"
+    elif [ "$live" = "$recorded" ]; then
+      echo "guide: $path unchanged"
+    else
+      echo "guide: $path changed"
+    fi
+  done < <(jq -r '(.guides // [])[] | select(type == "object") | [(.path // ""), (.sha256 // "")] | @tsv' "$GUIDES_FILE")
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -411,6 +461,7 @@ do_read() {
   echo "design: $design_state"
   echo "design-dir: $DESIGN_DIR"
   echo "work-orders: $wo_count"
+  guides_read_lines "$wo_count"
   exit 0
 }
 
@@ -454,6 +505,10 @@ do_start() {
   echo "STARTED: $DESIGN_DIR"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
+  # A resumed run has work order files on disk already, and reads only the guides that changed.
+  local resumed=0
+  [ -z "$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | head -n 1)" ] || resumed=1
+  guides_read_lines "$resumed"
 
   local recorded live
   recorded="$(jq -c '.mechanismHashes // []' "$RESEARCH_CHECK_FILE" 2>/dev/null)"
@@ -976,6 +1031,61 @@ do_merge() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# read-guide: records that design opened a guide body, by path, with the body's sha256 and the
+# UTC date (live-run row 77). --name carries the name research gave the guide, so the entry joins
+# the finding that named it. One entry per path; a second read of the same path replaces its
+# entry, the way `dispose` replaces a `reuses` entry, and keeps the name when --name is not passed
+# again. The path is stored absolute, because a resumed run compares by it. Commits nothing, the
+# same as every edit before `close`.
+# ------------------------------------------------------------------------------------------------
+
+do_read_guide() {
+  local path_val="" name=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --path) need_value "read-guide" "--path" "$#" "${2:-}"; path_val="$2"; shift 2 ;;
+      --name) need_value "read-guide" "--name" "$#" "${2:-}"; name="$2"; shift 2 ;;
+      *) die3 "read-guide: unrecognized argument: $1" ;;
+    esac
+  done
+  is_blank "$path_val" && die3 "read-guide: --path is required and must not be blank"
+  [ -f "$path_val" ] || die2 "read-guide: no file at $path_val. Give the path the navigator's lookup returned, or the project's own source file"
+  [ -r "$path_val" ] || die3 "read-guide: $path_val exists but is not readable"
+  records_hash__resolve_sha256_cmd || die3 "read-guide: neither sha256sum nor 'shasum -a 256' was found on PATH"
+
+  local abs sha
+  abs="$(cd -- "$(dirname -- "$path_val")" 2>/dev/null && pwd -P)/$(basename -- "$path_val")"
+  sha="$(file_sha256 "$abs")"
+  [ -n "$sha" ] || die3 "read-guide: could not hash $abs"
+
+  local doc existed entry
+  if [ -f "$GUIDES_FILE" ]; then
+    jq empty "$GUIDES_FILE" 2>/dev/null || die3 "read-guide: $GUIDES_FILE exists but is not valid JSON"
+    doc="$(cat "$GUIDES_FILE")"
+  else
+    doc='{"schemaVersion": 1, "guides": []}'
+  fi
+  existed="$(printf '%s' "$doc" | jq -r --arg p "$abs" '[(.guides // [])[]? | select(type == "object" and .path == $p)] | length' 2>/dev/null)"
+  # Without --name, the name the earlier entry recorded stays: the join to research's finding
+  # must survive the re-read a resumed run makes.
+  if is_blank "$name"; then
+    name="$(printf '%s' "$doc" | jq -r --arg p "$abs" '[(.guides // [])[]? | select(type == "object" and .path == $p) | .name? // ""] | first // ""' 2>/dev/null)"
+  fi
+  entry="$(jq -nc --arg p "$abs" --arg s "$sha" --arg d "$(date -u +%Y-%m-%d)" --arg n "$name" \
+    '{path: $p, sha256: $s, readAt: $d} + (if $n == "" then {} else {name: $n} end)')"
+  doc="$(printf '%s' "$doc" | jq --argjson e "$entry" \
+    '.guides = ([(.guides // [])[]? | select(type == "object" and .path != $e.path)]) + [$e]' 2>/dev/null)"
+  [ -n "$doc" ] || die3 "read-guide: $GUIDES_FILE is valid JSON but not this record's shape; check-design.sh names what is wrong"
+  write_atomic "$GUIDES_FILE" "$doc"
+  echo "RECORDED: $GUIDES_FILE"
+  echo "guide: $abs"
+  echo "sha256: $sha"
+  if [ "${existed:-0}" -gt 0 ]; then echo "entry: updated"; else echo "entry: new"; fi
+  echo "guidesRead: $(printf '%s' "$doc" | jq -r '.guides | length')"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # render: calls design-render.sh directly, for a caller that only wants the markdown refreshed
 # without changing anything.
 # ------------------------------------------------------------------------------------------------
@@ -1100,7 +1210,7 @@ do_close() {
       open_summary="$(open_summary_of "$check_report_json")"
       [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
       if [ "$check_rc" -eq 1 ]; then
-        die4 "close: a work order file does not match the design shape. Fix it and close again. Open: $open_summary"
+        die4 "close: a work order file, or the guides-read record, does not match its shape. Fix it and close again. Open: $open_summary"
       else
         die5 "close: design has not closed cleanly. Finish design first. Open: $open_summary"
       fi
@@ -1306,6 +1416,7 @@ RESOLVE_RC=$?
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
 CLOSED_FILE="$TASK_PATH/design-closed.json"
+GUIDES_FILE="$TASK_PATH/design-guides-read.json"
 CHECK_FILE="$TASK_PATH/records/design-check.json"
 RESEARCH_CHECK_FILE="$TASK_PATH/records/research-check.json"
 
@@ -1319,6 +1430,7 @@ case "$ACTION" in
   add-test)       do_add_test       "$@" ;;
   remove-test)    do_remove_test    "$@" ;;
   merge)          do_merge          "$@" ;;
+  read-guide)     do_read_guide     "$@" ;;
   render)         do_render         "$@" ;;
   check)          do_check          "$@" ;;
   close)          do_close          "$@" ;;

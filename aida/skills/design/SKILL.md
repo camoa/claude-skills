@@ -94,6 +94,24 @@ covering the work means the decision is already made: follow it. Two: read both,
 that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
 
+Record each body as it is read, once the navigator has given its path on disk:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh read-guide "<task_folder>" \
+  --path "<the body's path on disk>" [--name "<the name research gave it>"]
+```
+It writes one entry per path, with the body's sha256 and the date, to
+`<task_folder>/design-guides-read.json`. Give `--name` when research named the guide, so the
+entry joins its finding. A second read of the same path replaces the entry and keeps the name
+when none is passed. A path naming no file is refused: record only what was read. Nothing else
+records which bodies design opened, and a later session cannot ask this one.
+
+`read` and `start` print `guidesRead:`, the count. On a resumed run, when `work-orders:` was
+above zero, they also print one `guide:` line per entry: `changed`, `unchanged` or `missing`.
+Read the `changed` ones, and the ones research named that no entry records. A `missing` body is
+gone from its recorded path; resolve it through the navigator again and read it. Skip the
+`unchanged` ones; a body the first run read, and that has not moved since, is not read again. No
+entry at all means the first run recorded nothing, and every body is read.
+
 ## Read the process recipe for this project's framework
 
 The project's own sources answer before the catalog, so ask them first, once per framework:

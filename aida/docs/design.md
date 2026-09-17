@@ -64,6 +64,12 @@ was found is still an answer. Design then opens the guides and recipes research 
 reading. One recipe covering the work means the decision is made and design follows it. Two, and
 design reads both and picks the fit.
 
+Design records each guide body as it opens it: the path, a hash of the body, the date, and the
+name research gave it. The record is `design-guides-read.json` in the task folder, one entry per
+body. A design run resumed in a new session compares each entry to the body on disk. It reads
+only what changed, and what research named that no entry records. Without the record, a second
+run either read every body again or trusted a conversation it never had.
+
 Design also reads the process recipe for your framework at this stage. It holds what AIDA cannot
 know on its own. What kinds of thing can an order be about here? What is built with configuration
 rather than code? What has to exist beside a class for it to work, where does business logic
