@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
 ---
 
 # Design
@@ -57,6 +57,11 @@ file. `criteria:` and `non-goals:` list ids only. `work-orders:` is a count, and
 line names each file already on disk. Read the criteria's text from the contract file when
 drafting.
 
+`read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
+the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
+the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
+again.
+
 `contract: absent`: say so in one line and name the scope skill. Stop; a work order with nothing
 to serve is nothing this stage can check.
 
@@ -88,6 +93,24 @@ directly. One agentic recipe
 covering the work means the decision is already made: follow it. Two: read both, pick the one
 that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
+
+Record each body as it is read, once the navigator has given its path on disk:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh read-guide "<task_folder>" \
+  --path "<the body's path on disk>" [--name "<the name research gave it>"]
+```
+It writes one entry per path, with the body's sha256 and the date, to
+`<task_folder>/design-guides-read.json`. Give `--name` when research named the guide, so the
+entry joins its finding. A second read of the same path replaces the entry and keeps the name
+when none is passed. A path naming no file is refused: record only what was read. Nothing else
+records which bodies design opened, and a later session cannot ask this one.
+
+`read` and `start` print `guidesRead:`, the count. On a resumed run, when `work-orders:` was
+above zero, they also print one `guide:` line per entry: `changed`, `unchanged` or `missing`.
+Read the `changed` ones, and the ones research named that no entry records. A `missing` body is
+gone from its recorded path; resolve it through the navigator again and read it. Skip the
+`unchanged` ones; a body the first run read, and that has not moved since, is not read again. No
+entry at all means the first run recorded nothing, and every body is read.
 
 ## Read the process recipe for this project's framework
 
@@ -160,7 +183,10 @@ longer covers it. Judge it as ungrounded, and send it back to research when it m
 ## The reuse decision
 
 For every prior-art candidate research handed over, ranked by closeness, give it an answer:
-reuse, extend, or supersede, in that order. An unanswered candidate is a proposal nobody acted on.
+reuse, extend, supersede, or decline, in that order. An unanswered candidate is a proposal nobody
+acted on. A candidate you find yourself gets an answer too, not only research's list: an exported
+configuration entity of the same kind as the unit, say. Decline is the answer for a candidate you
+weighed and set aside; recorded, it is told apart later from one nobody weighed.
 
 Decide fit by the candidate's own distance (same name, same directory, same layer) and by version
 5's own cost model: build cost is paid once, carry, agent and risk cost are paid forever. A
@@ -174,7 +200,7 @@ research stated it, the cost dimensions compared, the verdict, and why:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   dispose "<task_folder>" --id <woId> --candidate "<what research found>" \
   --distance <same-name|same-directory|same-layer> --cost <build|carry|agent|risk[,...]> \
-  --verdict <reuse|extend|supersede> --why "<why this verdict>" [--confirmed] \
+  --verdict <reuse|extend|supersede|decline> --why "<why this verdict>" [--confirmed] \
   [--path "<where it lives>" --interface "<what it exposes>"]
 ```
 Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
@@ -185,8 +211,13 @@ and the keys of what it returns. Read the code for this; design may. The test au
 the tests brief carries this text in place of the source. A dispose that omits both records no
 reuse.
 
-The script applies a fixed table and writes the outcome into the order's `reasoning`. It prints
-`disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
+A decline takes no `--cost` and no `--path`: nothing is compared, and nothing is reused. Its
+`--why` names what was weighed. It stands in both modes, because a decline with a reason is a
+recorded decision, not a downgrade.
+
+The script applies a fixed table and appends the outcome to the order's `reasoning`, one
+paragraph per candidate. Re-disposing a candidate adds a paragraph; the last one stands. It
+prints `disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
 only a layer, comes back as `extend`. Autonomous, a supersede comes back as `extend`, with the
 reason in the `reasoning`. A reuse or extend citing no cost dimension stands, with the thin
 reasoning recorded, because there is nothing to downgrade it to.
@@ -202,7 +233,7 @@ A rejection that lives only in the conversation is not a rejection anyone can ch
 the role; a dispatch that names none runs as the general agent with write tools and this session's
 model, and this one has to be read-only to mean anything.
 
-Give it the written reasoning and the files it cites, and nothing else. Never this conversation's
+Give it the paragraph `dispose` wrote last, and the files it cites, and nothing else. Never this conversation's
 own account: being denied that is the entire reason the role exists, and handing it over turns the
 check into the decision reading itself. It answers agree, disagree, or downgrade, with what it
 compared. Record what it found with `update --reasoning`, appended to the text `dispose` wrote.
@@ -266,10 +297,14 @@ component, and they cannot run in parallel anyway. The script folds one into the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh merge "<task_folder>" \
   --into <woId> --from <woId>
 ```
-Every list on the folded order joins the survivor's, without duplicates. The folded order's file
-is removed, and every `dependsOn` that named it now names the survivor. The two proofs must
-agree; set one order's `--proof` first when they do not. Never remove or edit an order file by
-any other means. A write outside the script prints nothing, so nothing records that it happened.
+Every list on the folded order joins the survivor's, without duplicates. The folded order's
+`interface` and `reasoning` are appended to the survivor's, each under a line `From <woId>:`.
+The title and the diff budget stay the survivor's; the output says `carried:` and `dropped:` so
+nothing goes unseen. Retitle with `update` when the survivor's title no longer covers what it
+owns. The folded order's file is removed, and every `dependsOn` that named it now names the
+survivor. The two proofs must agree; set one order's `--proof` first when they do not. Never
+remove or edit an order file by any other means. A write outside the script prints nothing, so
+nothing records that it happened.
 
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:
@@ -279,6 +314,20 @@ doubled it, or the order became a `gate`:
 ```
 It refuses the last test of a `tests` order that owns a machine-verified criterion, the rule the
 check applies. Add the replacement first.
+
+A done-when row or an owned file leaves the same way. Moving a file to the order the sizing rule
+names leaves its rows on the old order. The checkpoint would then judge that order on a file it
+may not write:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-done-when "<task_folder>" \
+  --id <woId> --text "<the row's text, exactly as declared>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-owned-file "<task_folder>" \
+  --id <woId> --path "<the path, exactly as declared>"
+```
+Each prints what it removed. The last owned file is refused, because an order that names no
+file gives the builder no boundary. Add the replacement first, or fold the order with `merge`. A
+`record` order left with no file under the task folder loses its proof, and the output says so.
+Set `--proof` again if that was wrong.
 
 A shared decision, like one base class serving two later orders, lives in the order that builds
 the shared thing, in its own `reasoning`. The orders that depend on it point at it through
@@ -510,8 +559,10 @@ this conversation. It writes `records/design-distill.json`. Then run:
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
 written. Send the same agent one message: write the file and read it back. An agent has reported
-a write it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar is
-malformed; say so.
+a write it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar
+was malformed. The script set it aside at the `setAside:` path it printed. Dispatch a fresh
+distiller, with the rule it broke quoted from `agents/distiller.md`. Then run the same call
+again. A second exit 4 stops for the person: show the stderr line and the path set aside.
 
 Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
 never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with

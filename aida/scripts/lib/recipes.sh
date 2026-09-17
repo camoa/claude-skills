@@ -48,6 +48,8 @@
 #   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
 #   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
 #   br_subtract_baseline <base> <now> <label> <how> [<selector>]  met, unmet or unknown into BR_SUB_*
+#   git_status_of <repo> [<pathspecs>]        the porcelain status, whole tree or the pathspecs alone
+#   git_diff_of <repo> <from> <to> [<scope>] [<options>]...  the diff, whole tree or under one path
 #   br_require_clean_tree <action> <repo> [<unit> <run mode> <ledger file> <ledger doc>]  exit 61
 #   br_worst_verdict <verdicts>               the verdict that wins across several frameworks
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
@@ -1112,6 +1114,20 @@ git_status_of() {
 $pathspecs
 GS_PATHS
   git -C "$repo" status --porcelain -- "$@" 2>/dev/null
+}
+
+# The diff from $2 to $3 in the repository $1. Empty $4 reads the whole tree; a path reads it
+# alone. Anything after $4 is passed to git diff as its own options. A `record` order's range
+# lives in the project folder. AIDA's own actions commit that folder between a brief and its
+# record: a task note, another task's stage close. So its diff is scoped to the task folder.
+git_diff_of() {
+  local repo="$1" from="$2" to="$3" scope="${4:-}"
+  shift 4
+  if [ -z "$scope" ]; then
+    git -C "$repo" diff "$@" "$from" "$to" 2>/dev/null
+    return
+  fi
+  git -C "$repo" diff "$@" "$from" "$to" -- "$scope" 2>/dev/null
 }
 
 # Exit 61. Every check but one reads the working tree: the tools run over the files on disk, the

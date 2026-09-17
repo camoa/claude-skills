@@ -4,6 +4,66 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.14] - 2026-09-17
+
+Live-run rows 75 to 82 (the design stage on beta.12, and a resumed build after a merge); row 81 corrected row 78 and asked nothing.
+
+### Added
+- `design-actions.sh remove-done-when --text` and `remove-owned-file --path`, the removals the
+  sizing rules need beside `remove-test`. Removing a task-folder file from a `record` order
+  re-runs the proof inference; the last owned file is refused, since the schema requires one.
+  (row 76)
+- `design-actions.sh read-guide <task> --path <path> [--name <name>]` records each guide body
+  design opens (path, sha256, date, research's name) in `design-guides-read.json`, one entry
+  per path. `read` and `start` print the count, and a resumed run lists each entry as
+  `changed`, `unchanged` or `missing`, so it reads only what changed and what research named
+  that no entry records. The design check refuses a malformed record. (row 77)
+- `dispose --verdict decline --why <text>`: a candidate design weighed and set aside gets a
+  recorded verdict, in both run modes, with no cost dimension. The confirmer reads it. The
+  other half of row 79, a disposition for every exported entity of the same kind as a unit,
+  is a catalog ask. (row 79)
+
+### Changed
+- A malformed distiller sidecar (`distill` exit 4, and the split advisor's read) is set aside
+  beside itself with a UTC timestamp, so the next dispatch writes fresh and a reader can see what
+  was wrong. The four skill passages give exit 4 the recovery exit 2 has: dispatch a fresh agent
+  with the rule it broke quoted, run the call again, and stop for the person on a second exit 4.
+  The distiller's own file names the refusal beside its rule. (row 80)
+- A resumed implement `start` drops a frozen order the live design no longer holds when it
+  never started, prints `removed: <ids>`, and re-derives the snapshot hash; a started one halts
+  with a drift reason saying the design removed it, which `restart` answers by moving its
+  records aside and dropping it. The step router names that restart before the survivor's
+  tests, because the removed order's frozen-test record still guards the files the survivor
+  absorbed. (row 82)
+- Every stage skill names the worktree refusal: exit 79 means the task builds in its worktree
+  and this window is elsewhere; enter the tree with `EnterWorktree`, then run the call again.
+  The tool is granted in each stage skill. (row 75)
+- `merge` appends the folded order's `interface` and `reasoning` to the survivor's under a
+  `From <id>:` line and prints what it carried; the survivor's title is kept and said. It had
+  appended them space-joined and silently. (row 78)
+- `dispose` appends one paragraph per call to the order's `reasoning` instead of replacing
+  it, so several candidates on one unit keep every verdict, and the text `create` or `merge`
+  wrote survives. (row 79)
+
+## [6.0.0-beta.13] - 2026-09-17
+
+### Added
+- `research-actions.sh serve <task> --search <slug> --index <n> --criteria-served <ids>` and
+  `drop <task> --search <slug> --index <n>` repair one recorded finding: reattach it to the
+  criteria it serves, or remove it (and its file when none is left). `record` appends and had
+  no repair path, so the skill's "record it again" and "can stand as recorded" sentences could
+  not be followed: the check counts every orphan finding (exit 5) and design refuses to start
+  on it. The skill now closes research at exit 0 only, repairs one entry per check run since
+  `drop` moves later indexes down, and stops on an unreadable file for a person to decide.
+
+### Changed
+- A record order's diffs (owned-files, the review patch, the fix patch) read the task folder
+  alone, through one helper, and set aside the files AIDA's own scripts write there
+  (`task.json`, the stage records and their renderings, `implementation/` and its restart
+  archives, `records/`). A task note saved or another task closed between the brief and the
+  record no longer reads as files the order did not own. A person's places are `inputs/` and
+  `deliverables/`; a file placed under a stage folder is set aside even when a person wrote it.
+
 ## [6.0.0-beta.12] - 2026-09-16
 
 The thirteen defects the nyc project's live run found against beta.10 and beta.11 (items 9 to 21

@@ -100,7 +100,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   4  a script this action calls ran and failed. `render` calls alignment-render.sh; that
 #      script's own stderr is the answer, printed here rather than duplicated. For `approve` and
 #      `distill`, the sidecar exists but fails scripts/distill-schema.json, or says standsAlone
-#      false with no gap.
+#      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
+#      and stdout names it in a `setAside:` line.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular

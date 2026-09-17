@@ -25,6 +25,7 @@
 #                                         the stage-boundary commit of one task folder; says so
 #                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
+#   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
@@ -150,6 +151,17 @@ commit_stage_close() {
     || printf 'the %s record was written but not committed. Commit %s/tasks by hand.\n' "$stage" "$project" >&2
 }
 
+# A malformed sidecar is moved aside to <name>.malformed-<date>.json beside it before the exit 4
+# that names the fault (live-run row 80). Never deleted: a reader can still see what the agent
+# wrote. The next dispatch writes a fresh file at the original path instead of finding the
+# broken one. Prints `setAside:` with the new path. $1 the sidecar path.
+sidecar_set_aside() {
+  local sidecar="$1" aside
+  aside="${sidecar%.json}.malformed-$(date -u +%Y-%m-%dT%H%M%SZ).json"
+  mv -- "$sidecar" "$aside"
+  echo "setAside: $aside"
+}
+
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
 # blocks, so both values exit 0. schema-check.sh is sourced here because no stage script sources
@@ -161,10 +173,12 @@ distill_read() {
   [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/schema-check.sh" || die3 "distill: the schema-check library failed to load"
-  result="$(schema_check_compare "$schema" "$sidecar")" || die4 "distill: $sidecar could not be read as JSON"
+  result="$(schema_check_compare "$schema" "$sidecar")" \
+    || { sidecar_set_aside "$sidecar"; die4 "distill: $sidecar could not be read as JSON"; }
   faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
-  [ -z "$faults" ] || die4 "distill: $sidecar does not match $schema: $faults"
+  [ -z "$faults" ] || { sidecar_set_aside "$sidecar"; die4 "distill: $sidecar does not match $schema: $faults"; }
   if [ "$(jq -r '(.standsAlone == false) != ((.gaps | length) > 0)' "$sidecar")" = "true" ]; then
+    sidecar_set_aside "$sidecar"
     die4 "distill: $sidecar has standsAlone and gaps that disagree. False needs a gap, and a gap needs false"
   fi
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"

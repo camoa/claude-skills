@@ -25,12 +25,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                          --search <slug> --searched-for <text> --text <text> \
 #                          --source <text> [--criteria-served <id[,id...]>] \
 #                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
+#   research-actions.sh serve  <task_folder> --search <slug> --index <n> --criteria-served <id[,id...]>
+#   research-actions.sh drop   <task_folder> --search <slug> --index <n>
 #   research-actions.sh check  <task_folder>
 #   research-actions.sh distill <task_folder>
 #   research-actions.sh split-read <task_folder>
 #
 # Depends on, shipped by the same part and never edited here:
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, unmodified
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, `serve` and `drop`, unmodified
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-research.sh    called by `check`, unmodified
 #
 # This script never runs the schema comparison itself. Every field it writes is validated before
@@ -45,7 +47,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # holds text, source, lookedAt and criteriaServed. `record` writes that JSON, then renders
 # <search>.md from it by calling research-render.sh, the same way scope-actions.sh writes
 # alignment.json and then calls alignment-render.sh. Nothing reads <search>.md back: it is for
-# the design stage to read, and it says so on itself.
+# the design stage to read, and it says so on itself. `record` only appends, so `serve` and
+# `drop` are the producers for a finding already on disk: `serve` rewrites one finding's
+# criteriaServed, `drop` removes one finding, and both take the finding's 0-based position in the
+# file, the `index` check-research.sh reports on an orphan. They write through the same path.
 #
 # `criteriaServed` holds ids scope minted in alignment.json, not criterion text (ideal/scope.md,
 # 'Why the id exists'; ideal/research.md, 'What a finding holds'). This script checks only that
@@ -83,10 +88,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      file already on disk whose searchedFor is absent, empty, not a string, or a different set
 #      of words from the one this call gives (one search records one set of words, and this
 #      script never rewrites the field on a file that already exists); a --recipe-fit outside its
-#      three words, without its two companions, or differing from the recipeFit on disk; the plugin
-#      root could not be resolved; a write that failed; `record`'s own call to research-render.sh
-#      failing to produce <search>.md; or `check`'s own call to check-research.sh failing to run
-#      at all (check-research.sh's own exit 3, meaning it could not do its job either).
+#      three words, without its two companions, or differing from the recipeFit on disk; a `serve`
+#      or `drop` naming a search with no file, or an --index that is not a whole number or names
+#      no finding in that file; a `serve` with no --criteria-served; the plugin root could not be
+#      resolved; a write that failed; a call to research-render.sh failing to produce
+#      <search>.md; or `check`'s own call to check-research.sh failing to run at all
+#      (check-research.sh's own exit 3, meaning it could not do its job either).
 #   4  `check` ran and found a research file that cannot be read as this format: not valid JSON,
 #      not an object, or a missing, malformed or unknown top-level field (check-research.sh's own
 #      exit 1, remapped here so it never collides with this script's own exit 1, "not a task
@@ -94,6 +101,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      standsAlone false with no gap.
 #      Or `split-read` found a sidecar that is not in the split-advisor's shape, or whose
 #      children do not claim every contract criterion exactly once (the id is on stderr).
+#      Either malformed sidecar is moved aside first, to <name>.malformed-<date>.json, and
+#      stdout names it in a `setAside:` line.
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
 #      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
 #      criterion in the contract (check-research.sh's own exit 4).
@@ -153,6 +162,8 @@ usage: research-actions.sh read   <task_folder>
                                    --text <text> --source <text> \
                                    [--criteria-served <id[,id...]>] \
                                    [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
+       research-actions.sh serve  <task_folder> --search <slug> --index <n> --criteria-served <id[,id...]>
+       research-actions.sh drop   <task_folder> --search <slug> --index <n>
        research-actions.sh check  <task_folder>
        research-actions.sh distill <task_folder>
        research-actions.sh split-read <task_folder>
@@ -309,6 +320,86 @@ do_start() {
   exit 0
 }
 
+# Prints a --criteria-served list as a JSON array of ids, or dies (exit 3) on a blank id or one
+# that is not a criterion id shape. $1 is the action name for the message, $2 the list. The list
+# is split with tr and read line by line. An unquoted `for id in $list` under a comma IFS splits
+# in bash and not in zsh. zsh was handed the whole list as one id.
+criteria_ids_json() {
+  local action="$1" list="$2" ids_json='[]' id
+  if [ -n "$list" ]; then
+    while IFS= read -r id; do
+      is_blank "$id" && die3 "$action: --criteria-served has a blank id in '$list'"
+      is_criterion_id "$id" \
+        || die3 "$action: --criteria-served id '$id' is not a valid criterion id shape (c<n>, no leading zero)"
+      ids_json="$(printf '%s' "$ids_json" | jq --arg id "$id" '. + [$id]')"
+    done < <(printf '%s\n' "$list" | tr ',' '\n')
+  fi
+  printf '%s' "$ids_json"
+}
+
+# Writes research/<search>.json from $3 and renders <search>.md from it. The one write path every
+# action that changes a search file takes. $1 is the action name for the message, $2 the search.
+write_search_file() {
+  local action="$1" search="$2" doc="$3"
+  write_atomic "$RESEARCH_DIR/$search.json" "$doc"
+
+  # Render before printing anything. A caller that pipes this through `head -1` closes the pipe
+  # after the first line, the next echo takes SIGPIPE, and nothing after it runs; on the live run
+  # that left every search without its .md. Every write comes first, the summary last.
+  [ -f "$RESEARCH_RENDER_SCRIPT" ] \
+    || die3 "$action: cannot find research-render.sh at $RESEARCH_RENDER_SCRIPT"
+  bash "$RESEARCH_RENDER_SCRIPT" "$TASK_PATH" "$search" >/dev/null
+  local render_rc=$?
+  [ "$render_rc" -eq 0 ] \
+    || die3 "$action: research-render.sh could not render $search.md (exit $render_rc)"
+}
+
+# Parses the --search and --index pair `serve` and `drop` take, then checks that the search file
+# exists, is a JSON object with a findings array, and holds a finding at that index. Sets
+# FINDING_SEARCH, FINDING_INDEX and FINDING_FILE for the caller; any extra argument is an error.
+# $1 is the action name, the rest are the arguments. The index is the finding's position in the
+# file's findings array, 0 based, the same number check-research.sh reports on an orphan.
+resolve_finding() {
+  local action="$1"; shift
+  local search="" index=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --search)
+        [ $# -ge 2 ] || die3 "$action: --search needs a value"
+        looks_like_flag "$2" && die3 "$action: --search needs a value, got the option $2 instead"
+        search="$2"; shift 2 ;;
+      --index)
+        [ $# -ge 2 ] || die3 "$action: --index needs a value"
+        looks_like_flag "$2" && die3 "$action: --index needs a value, got the option $2 instead"
+        index="$2"; shift 2 ;;
+      --criteria-served)
+        [ "$action" = "serve" ] || die3 "$action: unrecognized argument: $1"
+        [ $# -ge 2 ] || die3 "$action: --criteria-served needs a value"
+        looks_like_flag "$2" && die3 "$action: --criteria-served needs a value, got the option $2 instead"
+        SERVE_CRITERIA="$2"; shift 2 ;;
+      *) die3 "$action: unrecognized argument: $1" ;;
+    esac
+  done
+  is_blank "$search" && die3 "$action: --search is required and must not be blank"
+  case "$search" in
+    *[!a-z0-9-]*|-*|*-)
+      die3 "$action: --search must be lowercase letters, digits and single hyphens, got '$search'" ;;
+  esac
+  is_blank "$index" && die3 "$action: --index is required: the finding's position in the file, 0 based, as check reports it"
+  case "$index" in
+    *[!0-9]*) die3 "$action: --index must be a whole number, got '$index'" ;;
+  esac
+  local file="$RESEARCH_DIR/$search.json"
+  [ -f "$file" ] || die3 "$action: no search named '$search': $file does not exist"
+  jq empty "$file" 2>/dev/null || die3 "$action: $file is not valid JSON"
+  local count
+  count="$(jq -r 'if type == "object" and ((.findings | type) == "array") then (.findings | length) else "none" end' "$file")"
+  [ "$count" != "none" ] || die3 "$action: $file is not an object with a findings array"
+  [ "$index" -lt "$count" ] \
+    || die3 "$action: $file holds $count finding(s), so there is no finding at index $index"
+  FINDING_SEARCH="$search"; FINDING_INDEX="$index"; FINDING_FILE="$file"
+}
+
 # ------------------------------------------------------------------------------------------------
 # record: appends one finding to <task_folder>/research/<search>.json, creating the file when it
 # does not already exist, then renders <search>.md from it by calling research-render.sh.
@@ -356,18 +447,8 @@ do_record() {
   is_blank "$text" && die3 "record: --text is required and must not be blank"
   is_blank "$source_val" && die3 "record: --source is required and must not be blank. Every finding names where it came from"
 
-  # The list is split with tr and read line by line. An unquoted `for id in $list` under a comma
-  # IFS splits in bash and not in zsh. zsh was handed the whole list as one id.
-  local ids_json='[]'
-  local id
-  if [ -n "$criteria_served" ]; then
-    while IFS= read -r id; do
-      is_blank "$id" && die3 "record: --criteria-served has a blank id in '$criteria_served'"
-      is_criterion_id "$id" \
-        || die3 "record: --criteria-served id '$id' is not a valid criterion id shape (c<n>, no leading zero)"
-      ids_json="$(printf '%s' "$ids_json" | jq --arg id "$id" '. + [$id]')"
-    done < <(printf '%s\n' "$criteria_served" | tr ',' '\n')
-  fi
+  local ids_json
+  ids_json="$(criteria_ids_json record "$criteria_served")" || exit 3
 
   local fit_json=""
   if [ -n "$fit$fit_path$fit_reason" ]; then
@@ -428,17 +509,7 @@ do_record() {
   fi
   [ -z "$fit_json" ] || doc="$(printf '%s' "$doc" | jq --argjson rf "$fit_json" '.recipeFit = $rf')"
 
-  write_atomic "$file" "$doc"
-
-  # Render before printing anything. A caller that pipes this through `head -1` closes the pipe
-  # after the first line, the next echo takes SIGPIPE, and nothing after it runs; on the live run
-  # that left every search without its .md. Every write comes first, the summary last.
-  [ -f "$RESEARCH_RENDER_SCRIPT" ] \
-    || die3 "record: cannot find research-render.sh at $RESEARCH_RENDER_SCRIPT"
-  bash "$RESEARCH_RENDER_SCRIPT" "$TASK_PATH" "$search" >/dev/null
-  local render_rc=$?
-  [ "$render_rc" -eq 0 ] \
-    || die3 "record: research-render.sh could not render $search.md (exit $render_rc)"
+  write_search_file record "$search" "$doc"
 
   echo "RECORDED: $file"
   echo "search: $search"
@@ -446,6 +517,68 @@ do_record() {
   echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
   echo "rendered: $RESEARCH_DIR/$search.md"
 
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# serve: rewrites one finding's criteriaServed in place. `record` only appends, so a finding
+# recorded against no criterion, which `check` reports as an orphan, needs this to name the
+# criterion it serves. The finding's text, source and lookedAt stay as they were.
+# ------------------------------------------------------------------------------------------------
+
+do_serve() {
+  SERVE_CRITERIA=""
+  resolve_finding serve "$@"
+  is_blank "$SERVE_CRITERIA" && die3 "serve: --criteria-served is required and must name at least one criterion id"
+  local ids_json
+  ids_json="$(criteria_ids_json serve "$SERVE_CRITERIA")" || exit 3
+
+  local doc
+  doc="$(jq --argjson i "$FINDING_INDEX" --argjson ids "$ids_json" '.findings[$i].criteriaServed = $ids' "$FINDING_FILE")" \
+    || die3 "serve: could not rewrite finding $FINDING_INDEX in $FINDING_FILE"
+  write_search_file serve "$FINDING_SEARCH" "$doc"
+
+  echo "SERVED: $FINDING_FILE"
+  echo "search: $FINDING_SEARCH"
+  echo "index: $FINDING_INDEX"
+  echo "criteriaServed: $(printf '%s' "$ids_json" | jq -r 'join(",")')"
+  echo "rendered: $RESEARCH_DIR/$FINDING_SEARCH.md"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# drop: removes one finding from its search file. A file left with no findings is removed with
+# its rendered markdown: a search that found nothing holds one finding saying so
+# (research-schema.json, findings), so a file holding none is a search that never reported.
+# Removing a finding moves every later one in that file down by one, so the indexes a report
+# gave for them are stale; `check` must run again before the next `drop`, and the summary says so.
+# ------------------------------------------------------------------------------------------------
+
+do_drop() {
+  resolve_finding drop "$@"
+  local doc remaining
+  doc="$(jq --argjson i "$FINDING_INDEX" 'del(.findings[$i])' "$FINDING_FILE")" \
+    || die3 "drop: could not remove finding $FINDING_INDEX from $FINDING_FILE"
+  remaining="$(printf '%s' "$doc" | jq -r '.findings | length')"
+
+  if [ "$remaining" -eq 0 ]; then
+    rm -f "$FINDING_FILE" "$RESEARCH_DIR/$FINDING_SEARCH.md" \
+      || die3 "drop: could not remove $FINDING_FILE"
+    echo "DROPPED: $FINDING_FILE"
+    echo "search: $FINDING_SEARCH"
+    echo "index: $FINDING_INDEX"
+    echo "findings: 0"
+    echo "removed: $FINDING_FILE"
+    exit 0
+  fi
+
+  write_search_file drop "$FINDING_SEARCH" "$doc"
+  echo "DROPPED: $FINDING_FILE"
+  echo "search: $FINDING_SEARCH"
+  echo "index: $FINDING_INDEX"
+  echo "findings: $remaining"
+  echo "rendered: $RESEARCH_DIR/$FINDING_SEARCH.md"
+  echo "moved: every finding after index $FINDING_INDEX is now one lower; run check before the next drop"
   exit 0
 }
 
@@ -541,7 +674,8 @@ do_split_read() {
   [ "$#" -eq 0 ] || die3 "split-read: unrecognized argument: $1"
   local sidecar="$TASK_PATH/records/research-split.json" fault
   [ -f "$sidecar" ] || die2 "split-read: no sidecar at $sidecar. Dispatch the split-advisor first"
-  jq empty "$sidecar" 2>/dev/null || die4 "split-read: $sidecar could not be read as JSON"
+  jq empty "$sidecar" 2>/dev/null \
+    || { sidecar_set_aside "$sidecar"; die4 "split-read: $sidecar could not be read as JSON"; }
   # One jq program prints the first fault, or nothing when the sidecar holds. The child id pattern
   # is the one scripts/task-schema.json declares; a criterion is a fault when no child claims it
   # or two do, since the split hands each one down exactly once.
@@ -568,7 +702,7 @@ do_split_read() {
         elif $unknown then "criterion \($unknown) is not in the contract"
         else empty end
     end' "$sidecar")"
-  [ -z "$fault" ] || die4 "split-read: $sidecar: $fault"
+  [ -z "$fault" ] || { sidecar_set_aside "$sidecar"; die4 "split-read: $sidecar: $fault"; }
   echo "recommendation: $(jq -r '.recommendation' "$sidecar")"
   echo "children: $(jq -r '.children | length' "$sidecar")"
   jq -r '.children[] | "child: " + .id + " " + (.criteria | length | tostring) + " criteria"' "$sidecar"
@@ -604,6 +738,8 @@ case "$ACTION" in
   read)    do_read    "$@" ;;
   start)   do_start   "$@" ;;
   record)  do_record  "$@" ;;
+  serve)   do_serve   "$@" ;;
+  drop)    do_drop    "$@" ;;
   check)   do_check   "$@" ;;
   distill) do_distill "$@" ;;
   split-read) do_split_read "$@" ;;

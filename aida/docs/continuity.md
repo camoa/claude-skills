@@ -70,7 +70,9 @@ Several is a question. None is an offer.
 Once a task is active, `/aida:next` enters its git worktree. Every stage action of a task runs
 inside that worktree and refuses from anywhere else, so two sessions on one project never share
 files. The refusal applies only while the recorded worktree is on disk and the window is outside
-it. The tree is a sibling of the code checkout, named after the checkout and the task.
+it. Every stage command names this refusal, exit 79, and tells the session to enter the tree and
+run the call again. The tree is a sibling of the code checkout, named after the checkout and the
+task.
 Entering it asks for your approval. From a session outside the code repository the entry is
 refused. `/aida:next` then prints the path and `cd <path> && claude`, which opens a session in
 the tree.

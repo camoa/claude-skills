@@ -3,7 +3,7 @@ name: completion
 description: This skill should be used when a reviewed task is ready to close, for example "close this task", "finish the task", "mark the task done", "write the pull request body", or "complete the task". It reads the review verdict and offers one follow up task per open finding. It writes a pull request body from the records, records the grounds for closing, and calls the task skill last.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh capture *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh capture *), EnterWorktree
 ---
 
 # Completion
@@ -39,6 +39,11 @@ verdict or on a person's reason. It writes nothing.
 
 `nextStep: done` means the task is already complete. Say so in one line, name the record path
 under `<task_folder>/completion/`, and stop. `nextStep: close` sends you to the one step file.
+
+`read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
+the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
+the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
+again.
 
 ## The step, and where its instructions are
 
@@ -93,5 +98,6 @@ One number never means two things, and none is new to this plugin.
 | 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. |
 | 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
+| 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |
 
 Read a refusal and act on it. Do not repeat the same call unchanged.

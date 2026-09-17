@@ -41,7 +41,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh add-test       <task_folder> \
 #                        --id <woId> --level <text> --description <text>
 #   design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
+#   design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
+#   design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
 #   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
+#   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
@@ -49,12 +52,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
-#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed] \
+#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
 #                        [--path <path> --interface <text>]
 #
 # --run-mode is accepted on every action and `close` and `dispose` require it. A close record says who was
 # present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
-# record a person nobody saw. Every other action ignores it.
+# record a person nobody saw. Every other action ignores it. `dispose` needs --cost unless the
+# verdict is decline, which compares nothing.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/design-render.sh      called by `create`, `update` and `render`
@@ -98,6 +102,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # here; closing again after a further change, which this action always allows, is the supported
 # way to make the two agree again.
 #
+# `read-guide` records that design opened a guide body (live-run row 77): research names guides
+# without opening them, so design is the first read, and a second run in a new session could not
+# tell what the first read. <task_folder>/design-guides-read.json holds one entry per path, with
+# the body's sha256, the UTC date, and the name research gave it when --name was passed
+# (scripts/design-guides-read-schema.json). A second read of the same path replaces its entry. It
+# sits at the task root beside design-closed.json, never inside design/, where every file is read
+# as a work order and hashed into the close. `read` and `start` print `guidesRead:`, and on a
+# resumed run one `guide:` line per entry saying `changed`, `unchanged` or `missing` against the
+# body on disk, so the resumed run reads only what changed. Commits nothing; the close commits it.
+#
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
 #      and that no work orders exist yet. For `check`, this is check-design.sh's own exit 0. For
@@ -109,30 +123,36 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      caller branching on 1 never confuses "not a task folder" with "a file is broken".
 #   2  the target of this action is not present: `start` was asked to begin a task with no
 #      alignment.json, or with one that will not parse or is not a contract; or `update`,
-#      `add-owned-file`, `add-done-when`, `add-test`, `remove-test` or `render` were given an --id
-#      naming no work order file in this task's design/ folder; or `remove-test` was given a
-#      --description no test on that order carries; or `merge` was given an --into or --from
-#      naming no work order file; or `distill` found no records/design-distill.json, so the
-#      distiller has not been dispatched yet.
+#      `add-owned-file`, `add-done-when`, `add-test`, `remove-test`, `remove-done-when`,
+#      `remove-owned-file` or `render` were given an --id naming no work order file in this
+#      task's design/ folder; or `remove-test` was given a --description no test on that order
+#      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
+#      order does not own; or `merge` was given an --into or --from naming no work order file;
+#      or `read-guide` was given a --path naming no file on disk; or `distill` found no
+#      records/design-distill.json, so the distiller has not been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
 #      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
-#      one without --confirmed); a `remove-test` refused because the test named is the last one
-#      on a `tests` order owning a machine-verified criterion; a `merge` refused because the two orders' proofs differ or
+#      one without --confirmed), or a decline given --path; a `remove-test` refused because the test named is the last one
+#      on a `tests` order owning a machine-verified criterion; a `remove-owned-file` refused because
+#      the path named is the only file the order owns; a `merge` refused because the two orders' proofs differ or
 #      --into and --from name the same order; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
 #      (check-design.sh's own exit 3, meaning it could not do its job either); the records-hash
 #      library could not be sourced; or `close`'s own call to records_hash_for failing, once
-#      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe.
-#   4  `check` ran and found a work order file that cannot be read as this format: not valid
-#      JSON, not an object, or a missing, malformed or unknown top-level field (check-design.sh's
-#      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
-#      folder"). `close` refuses for the same reason, on the live files, before writing anything.
+#      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
+#      or `read-guide` found design-guides-read.json already on disk and not valid JSON.
+#   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
+#      its format: not valid JSON, not an object, or a missing, malformed or unknown field
+#      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
+#      exit 1, "not a task folder"). `close` refuses for the same reason, on the live files, before
+#      writing anything.
 #      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says standsAlone
-#      false with no gap.
+#      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
+#      and stdout names it in a `setAside:` line.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
 #      problem: a criterion with no serving order, a criterion owned by zero or by more than one
 #      work order, an order serving no criterion, an order missing a required test, a `record`
@@ -218,7 +238,10 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
                                          --description <text>
        design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
+       design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
+       design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh merge          <task_folder> --into <woId> --from <woId>
+       design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
@@ -226,7 +249,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
-                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede> --why <text> [--confirmed] \
+                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
                                          [--path <path> --interface <text>]
 EOF
 }
@@ -368,9 +391,44 @@ open_summary_of() {
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-        ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape")
+        ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
+        (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", ")))
       ] | join("; ")
     ' 2>/dev/null
+}
+
+# The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
+# command first, through records_hash__resolve_sha256_cmd.
+file_sha256() {
+  [ -f "$1" ] && [ -r "$1" ] || return 1
+  "${RECORDS_HASH_SHA256_CMD[@]}" <"$1" | cut -d' ' -f1
+}
+
+# The guides-read record's summary lines, for `read` and `start`: `guidesRead: <n>`, and when $1
+# is above zero (a resumed run, work orders already on disk) one `guide: <path>` line per entry
+# ending `changed`, `unchanged` or `missing`. `changed` means the body's sha256 differs from the
+# recorded one; `missing` means no readable file is at the path any more, so the resumed run
+# resolves it again through the navigator. A record that is not valid JSON counts as zero here;
+# `check` is what refuses it.
+guides_read_lines() {
+  local resumed="$1" n=0 path recorded live tab
+  if [ -f "$GUIDES_FILE" ] && jq empty "$GUIDES_FILE" 2>/dev/null; then
+    n="$(jq -r '(.guides // []) | if type == "array" then length else 0 end' "$GUIDES_FILE")"
+  fi
+  echo "guidesRead: $n"
+  [ "$resumed" -gt 0 ] && [ "$n" -gt 0 ] || return 0
+  records_hash__resolve_sha256_cmd || die3 "neither sha256sum nor 'shasum -a 256' was found on PATH"
+  tab="$(printf '\t')"
+  while IFS="$tab" read -r path recorded; do
+    [ -n "$path" ] || continue
+    if ! live="$(file_sha256 "$path")"; then
+      echo "guide: $path missing"
+    elif [ "$live" = "$recorded" ]; then
+      echo "guide: $path unchanged"
+    else
+      echo "guide: $path changed"
+    fi
+  done < <(jq -r '(.guides // [])[] | select(type == "object") | [(.path // ""), (.sha256 // "")] | @tsv' "$GUIDES_FILE")
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -410,6 +468,7 @@ do_read() {
   echo "design: $design_state"
   echo "design-dir: $DESIGN_DIR"
   echo "work-orders: $wo_count"
+  guides_read_lines "$wo_count"
   exit 0
 }
 
@@ -453,6 +512,10 @@ do_start() {
   echo "STARTED: $DESIGN_DIR"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
+  # A resumed run has work order files on disk already, and reads only the guides that changed.
+  local resumed=0
+  [ -z "$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | head -n 1)" ] || resumed=1
+  guides_read_lines "$resumed"
 
   local recorded live
   recorded="$(jq -c '.mechanismHashes // []' "$RESEARCH_CHECK_FILE" 2>/dev/null)"
@@ -886,9 +949,93 @@ do_remove_test() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# remove-done-when and remove-owned-file: the reverse of add-done-when and add-owned-file, the
+# same move remove-test makes one field over (live-run row 76). A row is named by its exact text,
+# the way add-done-when wrote it and remove-test names a test. No report numbers a done-when row,
+# so an index would be a number counted from a rendered list. Every row carrying that text goes,
+# and the count is printed. A path is named as it was added. The last owned file is refused on the
+# schema's own rule: an order that names no file hands the builder no boundary. On a `record`
+# order, the inference add-owned-file makes runs again in reverse. An order left with no owned
+# file under the task folder loses `proof`. It does not stay `record` on the strength of files
+# it no longer owns.
+# ------------------------------------------------------------------------------------------------
+
+do_remove_done_when() {
+  local id="" text=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)
+        need_value "remove-done-when" "--id" "$#" "${2:-}"
+        id="$2"; shift 2 ;;
+      --text)
+        need_value "remove-done-when" "--text" "$#" "${2:-}"
+        text="$2"; shift 2 ;;
+      *) die3 "remove-done-when: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "remove-done-when" "$id"
+  is_blank "$text" && die3 "remove-done-when: --text is required and must not be blank"
+
+  local file doc matched
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "remove-done-when: $file exists but is not valid JSON"
+  matched="$(jq -r --arg t "$text" '[(.doneWhen // [])[] | select(. == $t)] | length' "$file")"
+  [ "$matched" -gt 0 ] || die2 "remove-done-when: $id carries no done-when row with the text '$text'"
+  doc="$(jq --arg t "$text" '.doneWhen = [(.doneWhen // [])[] | select(. != $t)]' "$file")"
+  write_atomic "$file" "$doc"
+  echo "UPDATED: $file"
+  echo "removed-done-when: $matched"
+  wo_summary "$doc"
+  render_wo "$id"
+  exit 0
+}
+
+do_remove_owned_file() {
+  local id="" path_val=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)
+        need_value "remove-owned-file" "--id" "$#" "${2:-}"
+        id="$2"; shift 2 ;;
+      --path)
+        need_value "remove-owned-file" "--path" "$#" "${2:-}"
+        path_val="$2"; shift 2 ;;
+      *) die3 "remove-owned-file: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "remove-owned-file" "$id"
+  is_blank "$path_val" && die3 "remove-owned-file: --path is required and must not be blank"
+
+  local file doc
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "remove-owned-file: $file exists but is not valid JSON"
+  jq -e --arg p "$path_val" '((.ownedFiles // []) | index($p)) != null' "$file" >/dev/null 2>&1 \
+    || die2 "remove-owned-file: $id does not own $path_val"
+  [ "$(jq -r '(.ownedFiles // []) | length' "$file")" -gt 1 ] \
+    || die3 "remove-owned-file: $path_val is the only file $id owns, and an order that names no file hands the builder no boundary (design-schema.json, ownedFiles). Add the replacement first, or fold the order into another with merge"
+  doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]' "$file")"
+  local unset_proof
+  unset_proof="$(printf '%s' "$doc" | jq -r --arg t "$TASK_PATH/" \
+    'if (.proof // "") == "record" and ((.ownedFiles // []) | any(startswith($t)) | not) then "yes" else "" end')"
+  if [ "$unset_proof" = "yes" ]; then
+    doc="$(printf '%s' "$doc" | jq 'del(.proof)')"
+    echo "proof-unset: record, because no owned file of $id lies under the task folder now; every reader takes the order as tests until --proof says otherwise"
+  fi
+  write_atomic "$file" "$doc"
+  echo "UPDATED: $file"
+  echo "removed-owned-file: $path_val"
+  wo_summary "$doc"
+  render_wo "$id"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # merge: folds one order into another (SKILL.md, "Size a work order"). Every list field is the
 # ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
-# appended, so a disposition `dispose` wrote on the folded order is not lost. `title`, `diffBudget`
+# appended under a line naming the folded order. A disposition `dispose` wrote on it is not
+# lost, and a reader can tell which order stated what. The summary says which scalars were carried
+# and which were dropped. A live run that saw only list counts read the append as a drop and
+# rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
 # and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
 # `tests` order would carry tests it may not declare, or the reverse. The folded order's
 # json and md are removed. Every other order's `dependsOn` naming it is rewritten to the survivor,
@@ -934,7 +1081,7 @@ do_merge() {
     $f[0] as $f
     | def dedupe: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
       def union(k): if (has(k) or ($f | has(k))) then .[k] = (((.[k] // []) + ($f[k] // [])) | dedupe) else . end;
-      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = $f[k] else .[k] = .[k] + " " + $f[k] end;
+      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n" + $f[k] end;
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
     | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses")
@@ -948,6 +1095,12 @@ do_merge() {
     after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
     echo "$k: $before -> $after"
   done
+  local carried
+  carried="$(jq -r '[ (if (.interface // "") != "" then "interface" else empty end),
+                     (if (.reasoning // "") != "" then "reasoning" else empty end) ] | join(", ")' "$from_file")"
+  echo "carried: ${carried:-none}"
+  echo "dropped: title, diffBudget; the survivor's stand"
+  echo "title: $(jq -r '.title' "$into_file"), the survivor's"
   write_atomic "$into_file" "$doc"
 
   # Every other order that depended on the folded one now depends on the survivor.
@@ -971,6 +1124,61 @@ do_merge() {
   echo "UPDATED: $into_file"
   wo_summary "$doc"
   render_wo "$into"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# read-guide: records that design opened a guide body, by path, with the body's sha256 and the
+# UTC date (live-run row 77). --name carries the name research gave the guide, so the entry joins
+# the finding that named it. One entry per path; a second read of the same path replaces its
+# entry, the way `dispose` replaces a `reuses` entry, and keeps the name when --name is not passed
+# again. The path is stored absolute, because a resumed run compares by it. Commits nothing, the
+# same as every edit before `close`.
+# ------------------------------------------------------------------------------------------------
+
+do_read_guide() {
+  local path_val="" name=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --path) need_value "read-guide" "--path" "$#" "${2:-}"; path_val="$2"; shift 2 ;;
+      --name) need_value "read-guide" "--name" "$#" "${2:-}"; name="$2"; shift 2 ;;
+      *) die3 "read-guide: unrecognized argument: $1" ;;
+    esac
+  done
+  is_blank "$path_val" && die3 "read-guide: --path is required and must not be blank"
+  [ -f "$path_val" ] || die2 "read-guide: no file at $path_val. Give the path the navigator's lookup returned, or the project's own source file"
+  [ -r "$path_val" ] || die3 "read-guide: $path_val exists but is not readable"
+  records_hash__resolve_sha256_cmd || die3 "read-guide: neither sha256sum nor 'shasum -a 256' was found on PATH"
+
+  local abs sha
+  abs="$(cd -- "$(dirname -- "$path_val")" 2>/dev/null && pwd -P)/$(basename -- "$path_val")"
+  sha="$(file_sha256 "$abs")"
+  [ -n "$sha" ] || die3 "read-guide: could not hash $abs"
+
+  local doc existed entry
+  if [ -f "$GUIDES_FILE" ]; then
+    jq empty "$GUIDES_FILE" 2>/dev/null || die3 "read-guide: $GUIDES_FILE exists but is not valid JSON"
+    doc="$(cat "$GUIDES_FILE")"
+  else
+    doc='{"schemaVersion": 1, "guides": []}'
+  fi
+  existed="$(printf '%s' "$doc" | jq -r --arg p "$abs" '[(.guides // [])[]? | select(type == "object" and .path == $p)] | length' 2>/dev/null)"
+  # Without --name, the name the earlier entry recorded stays: the join to research's finding
+  # must survive the re-read a resumed run makes.
+  if is_blank "$name"; then
+    name="$(printf '%s' "$doc" | jq -r --arg p "$abs" '[(.guides // [])[]? | select(type == "object" and .path == $p) | .name? // ""] | first // ""' 2>/dev/null)"
+  fi
+  entry="$(jq -nc --arg p "$abs" --arg s "$sha" --arg d "$(date -u +%Y-%m-%d)" --arg n "$name" \
+    '{path: $p, sha256: $s, readAt: $d} + (if $n == "" then {} else {name: $n} end)')"
+  doc="$(printf '%s' "$doc" | jq --argjson e "$entry" \
+    '.guides = ([(.guides // [])[]? | select(type == "object" and .path != $e.path)]) + [$e]' 2>/dev/null)"
+  [ -n "$doc" ] || die3 "read-guide: $GUIDES_FILE is valid JSON but not this record's shape; check-design.sh names what is wrong"
+  write_atomic "$GUIDES_FILE" "$doc"
+  echo "RECORDED: $GUIDES_FILE"
+  echo "guide: $abs"
+  echo "sha256: $sha"
+  if [ "${existed:-0}" -gt 0 ]; then echo "entry: updated"; else echo "entry: new"; fi
+  echo "guidesRead: $(printf '%s' "$doc" | jq -r '.guides | length')"
   exit 0
 }
 
@@ -1099,7 +1307,7 @@ do_close() {
       open_summary="$(open_summary_of "$check_report_json")"
       [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
       if [ "$check_rc" -eq 1 ]; then
-        die4 "close: a work order file does not match the design shape. Fix it and close again. Open: $open_summary"
+        die4 "close: a work order file, or the guides-read record, does not match its shape. Fix it and close again. Open: $open_summary"
       else
         die5 "close: design has not closed cleanly. Finish design first. Open: $open_summary"
       fi
@@ -1170,13 +1378,17 @@ do_close() {
 # `--path` and `--interface`, given together, add one entry to the order's `reuses`: where the
 # reused thing lives and the shape it exposes. The tests brief carries that list, because the test
 # author may not open production source and a reused module belongs to no work order (live-run
-# row 69). A second dispose naming the same path replaces its entry, the way every call replaces
-# `reasoning`. Neither flag, and the order's `reuses` is left as it was.
+# row 69). A second dispose naming the same path replaces its entry, and `reasoning` gains one
+# paragraph per call, so every candidate's verdict survives. Neither flag, and the order's
+# `reuses` is left as it was.
 #
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
 # because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
-# stands and the thin reasoning is recorded for a person to see (version 5's rule).
+# stands and the thin reasoning is recorded for a person to see (version 5's rule). A decline
+# compares nothing: the candidate was weighed and set aside, and the reason says what was weighed.
+# It is a recorded decision, not a downgrade, so it stands in both modes (live-run row 79).
 #   distance    cost cited       verdict       mode        outcome
+#   any         any              decline       any         stands: nothing compared; the reason names what was weighed
 #   any         none recognised  reuse|extend  any         stands: nothing to downgrade to; the reasoning says no cost was cited
 #   any         none recognised  supersede     attended    refused: a supersede naming no cost compared nothing; ask the person
 #   any         none recognised  supersede     unattended  extend: nobody to ask
@@ -1207,18 +1419,19 @@ do_dispose() {
   require_wo_id_arg "dispose" "$id"
   is_blank "$candidate" && die3 "dispose: --candidate is required and must not be blank"
   is_blank "$why" && die3 "dispose: --why is required and must not be blank"
-  is_blank "$cost" && die3 "dispose: --cost is required and must not be blank"
+  case "$verdict" in
+    reuse|extend|supersede|decline) ;;
+    *) die3 "dispose: --verdict must be reuse, extend, supersede or decline, got '${verdict:-<nothing>}'" ;;
+  esac
+  [ "$verdict" = "decline" ] || { is_blank "$cost" && die3 "dispose: --cost is required and must not be blank"; }
   if ! is_blank "$reuse_path" || ! is_blank "$reuse_interface"; then
+    [ "$verdict" = "decline" ] && die3 "dispose: a decline reuses nothing, so --path and --interface do not apply"
     is_blank "$reuse_path" && die3 "dispose: --interface was given without --path. The brief needs both: where the reused thing lives and what it exposes"
     is_blank "$reuse_interface" && die3 "dispose: --path was given without --interface. The brief needs both: where the reused thing lives and what it exposes"
   fi
   case "$distance" in
     same-name|same-directory|same-layer) ;;
     *) die3 "dispose: --distance must be same-name, same-directory or same-layer, got '${distance:-<nothing>}'" ;;
-  esac
-  case "$verdict" in
-    reuse|extend|supersede) ;;
-    *) die3 "dispose: --verdict must be reuse, extend or supersede, got '${verdict:-<nothing>}'" ;;
   esac
 
   # Which cost classes were cited. An unknown class never counts, so "vibes" clears no bar.
@@ -1231,7 +1444,9 @@ do_dispose() {
   done < <(printf '%s\n' "$cost" | tr ',' '\n')
 
   local outcome="$verdict" rule="stands"
-  if [ "$known" != "true" ] && [ "$verdict" != "supersede" ]; then
+  if [ "$verdict" = "decline" ]; then
+    rule="stands: nothing compared; the candidate is set aside and the reason names what was weighed"
+  elif [ "$known" != "true" ] && [ "$verdict" != "supersede" ]; then
     rule="stands: no recognised cost dimension cited; a $verdict has nothing to downgrade to"
   elif [ "$known" != "true" ]; then
     [ "$RUN_MODE" = "interactive" ] \
@@ -1254,7 +1469,7 @@ do_dispose() {
   local file doc
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "dispose: $file exists but is not valid JSON"
-  doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing $cost. Disposition: $outcome ($rule). $why" '.reasoning = $v' "$file")"
+  doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing ${cost:-nothing}. Disposition: $outcome ($rule). $why" '.reasoning = (if (.reasoning // "") == "" then $v else .reasoning + "\n\n" + $v end)' "$file")"
   if [ -n "$reuse_path" ]; then
     doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
       '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"
@@ -1298,6 +1513,7 @@ RESOLVE_RC=$?
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
 CLOSED_FILE="$TASK_PATH/design-closed.json"
+GUIDES_FILE="$TASK_PATH/design-guides-read.json"
 CHECK_FILE="$TASK_PATH/records/design-check.json"
 RESEARCH_CHECK_FILE="$TASK_PATH/records/research-check.json"
 
@@ -1310,7 +1526,10 @@ case "$ACTION" in
   add-done-when)  do_add_done_when  "$@" ;;
   add-test)       do_add_test       "$@" ;;
   remove-test)    do_remove_test    "$@" ;;
+  remove-done-when)  do_remove_done_when  "$@" ;;
+  remove-owned-file) do_remove_owned_file "$@" ;;
   merge)          do_merge          "$@" ;;
+  read-guide)     do_read_guide     "$@" ;;
   render)         do_render         "$@" ;;
   check)          do_check          "$@" ;;
   close)          do_close          "$@" ;;

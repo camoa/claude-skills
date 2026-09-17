@@ -23,9 +23,13 @@ and a feature becomes fifty orders that cost more to coordinate than to build.
 
 The merge is a script action, `merge`, not a hand edit. It folds one order into another. Every
 list joins the survivor's without duplicates, the folded file is removed, and every dependency
-that named it now names the survivor. A test that no longer belongs on an order leaves through
-`remove-test`, which refuses the last test an owned machine criterion needs. Both print what moved,
-so the change is on record the way every other design write is.
+that named it now names the survivor. The folded order's interface and reasoning are appended
+to the survivor's, under a line naming the folded order. The title stays the survivor's, and the
+output says what was carried and what was not. A test that no longer belongs on an order leaves
+through `remove-test`, which refuses the last test an owned machine criterion needs. A done-when
+row leaves through `remove-done-when` and an owned file through `remove-owned-file`. A file
+moved to another order then leaves no rows behind. All print what moved, so the change is
+on record the way every other design write is.
 
 ## What a work order declares
 
@@ -64,6 +68,12 @@ was found is still an answer. Design then opens the guides and recipes research 
 reading. One recipe covering the work means the decision is made and design follows it. Two, and
 design reads both and picks the fit.
 
+Design records each guide body as it opens it: the path, a hash of the body, the date, and the
+name research gave it. The record is `design-guides-read.json` in the task folder, one entry per
+body. A design run resumed in a new session compares each entry to the body on disk. It reads
+only what changed, and what research named that no entry records. Without the record, a second
+run either read every body again or trusted a conversation it never had.
+
 Design also reads the process recipe for your framework at this stage. It holds what AIDA cannot
 know on its own. What kinds of thing can an order be about here? What is built with configuration
 rather than code? What has to exist beside a class for it to work, where does business logic
@@ -90,19 +100,24 @@ of its own, so the same lookup never runs again during the build.
 
 ## The reuse decision
 
-Every prior-art candidate research handed over gets an answer: reuse it as it is, extend it, or
-supersede it. An unanswered candidate is a proposal nobody acted on, and that is how a project
-ends up with a second chat class beside the first. A candidate is not always code; an existing
-view or content type is one too, and extending it may produce no code at all.
+Every prior-art candidate research handed over gets an answer: reuse it as it is, extend it,
+supersede it, or decline it. An unanswered candidate is a proposal nobody acted on, and that is
+how a project ends up with a second chat class beside the first. A candidate design finds itself,
+an exported configuration entity of the same kind as the unit, say, gets an answer too. A decline
+records that the candidate was weighed and set aside, with the reason, so it is told apart later
+from one nobody weighed. A candidate is not always code; an existing view or content type is one
+too, and extending it may produce no code at all.
 
 Design decides by the candidate's distance, same name, same directory, or same layer, and by one
 cost model. Build cost is paid once; carry, agent and risk cost are paid forever. Design
 records the disposition on the order it lands on: the candidate, the distance, the costs
-compared, the verdict and the reason. A fixed table applies. A supersede that cites only build
+compared, the verdict and the reason. Each disposition is appended, so an order with several
+candidates keeps every verdict, and re-disposing one adds a paragraph. A fixed table applies. A supersede that cites only build
 cost, or a candidate sharing only a layer, comes back as extend. Interactively, a supersede
 stands only after you are asked, because it widens the task and owes a migration. A supersede
 naming no cost dimension is refused until you say what it compared. Autonomously, a supersede
-comes back as extend, with a reason in the order asking you to revisit it on an attended run.
+comes back as extend, with a reason in the order asking you to revisit it on an attended run. A
+decline cites no cost, because nothing is compared, and stands in both modes.
 
 When the order's build or tests will call the candidate, design records where it lives and what
 it exposes. That is the class or service, the method the tests call, its arguments, and what it
@@ -234,7 +249,9 @@ again, and the new hash replaces the old.
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its
 reason, and is each rejected alternative named? It never blocks. Design shows each gap it
-names; acting on one is an edit and a second close.
+names; acting on one is an edit and a second close. A malformed distiller record is renamed
+beside its original path, dated, and a fresh distiller runs with the rule it broke. A second
+malformed record stops for you.
 
 Interactively, design stops here and names the next command, `/aida:implement <task-id>`.
 Autonomously, it starts implementation itself. Each stage refuses to start without the previous

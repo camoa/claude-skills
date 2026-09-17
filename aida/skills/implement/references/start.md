@@ -44,9 +44,16 @@ Only a started order halts for drift: one with a step reached, a frozen test rec
 record. A drifted order that has not started is taken fresh from the live design instead, and
 nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
 The `resnapshotted:` line names those orders, and the ledger records each with the two hashes.
-This needs design closed on the live files; otherwise the run refuses with exit 13 and says to
-close design again. The `haltedDependents:` line names only orders the ledger halts, each of which
-depends on a started drifted order, directly or through another order.
+An order the live design no longer holds, because design merged or removed it, has no live copy
+to take. When it has not started, it is dropped from the snapshot and the ledger, and the
+`removed:` line names it. That line prints only when an order was dropped. When it has started,
+it halts with a reason that says the design removed it. The restart then drops it instead of
+taking it fresh. Its owned files take no part in the build order, so the survivor that absorbed
+them is ready. Run `restart` before the survivor's tests are written, because the removed
+order's frozen record still guards its test files. The `next:` line names the restart first for
+that reason. Both need design closed on the live files; otherwise the run refuses with exit
+13 and says to close design again. The `haltedDependents:` line names only orders the ledger
+halts, each of which depends on a started drifted order, directly or through another order.
 
 A resumed run refuses two more things, before it writes. Exit 82: HEAD does not descend from the
 commit the ledger started from. The branch was rewritten under the build, by a rebase or an

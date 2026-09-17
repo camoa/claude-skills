@@ -21,6 +21,10 @@ undeclared | a check the recipe never declared |
 deferred | put off to a later step: a suite check a record step left to finish, or a finding ruled for a later task |
 # A criterion answers in the contract's three words, scripts/alignment-schema.json.
 unanswered | a criterion nobody answered | unresolved
+# The dispose verdicts, skills/design/scripts/design-actions.sh. reuse, extend and supersede are
+# off the list: each is an ordinary verb elsewhere in the prose. decline is one thing wherever it
+# appears: a weighed no, recorded so nobody asks again. reject has other senses, so no synonym.
+decline | a dispose verdict: a candidate weighed and set aside, with the reason. Also a person's no to an offer |
 # The other closed sets scripts/review-record-schema.json enumerates.
 severity | high, medium, low, on a finding | major, minor, blocker
 status | open, addressed, ruled, on a finding |
