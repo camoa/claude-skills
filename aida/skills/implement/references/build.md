@@ -82,8 +82,9 @@ writes that file before it edits anything under the code path.
 
 **On an order whose proof is `record`, tell it where to commit.** Its deliverable lives in the
 task folder, so it commits in the folder the brief's `commitIn` names. It stages its owned
-files and nothing else. The ledger and the briefs beside them belong to this stage, and a
-commit that sweeps them in fails the owned-files check.
+files and nothing else. The ledger and the briefs beside them belong to this stage, which
+commits them when it finishes. The owned-files check sets them aside and counts them in its
+detail, so a sweep is visible there, not a failure.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
 there.
@@ -139,6 +140,18 @@ landed, and the code repository may hold no commit at all for it. The tree read 
 files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
 project folder with no history refuses (exit 87).
 
+**A `record` order's diff is the task folder's alone.** AIDA commits the project folder between
+a build brief and its record. A task note commits `tasks/` whole, and another task's stage
+close commits its folder. None of that is the implementer's. So the owned-files check, the
+review diff and the fix patch read `git diff <range> -- <task folder>`. Inside the task
+folder, the files AIDA's own scripts write are set aside before the owned list is compared.
+Those are `task.json`, `alignment.json`, their renderings, `design-closed.json`, and the
+`research/`, `design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`,
+`completion/`, `notes/` and `records/` folders. The check's detail says how many were set
+aside. A person's places are `inputs/` and `deliverables/`, and a file under a stage folder is
+set aside even when a person wrote it. A file under `deliverables/` is never set aside, so a
+second document there that the order does not own still reads unmet.
+
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
 `references/preconditions.md` already resolved for the baseline. The script parses `## Test
 commands` and `## Check commands` itself: the suite command, the command that runs this order's
@@ -189,7 +202,8 @@ This step runs all eight deciding checks. The record holds every one.
 - **static-analysis.** Does static analysis raise anything the baseline did not already have.
 - **security.** Does the security tool raise anything the baseline did not already have.
 - **owned-files.** Did the change stay inside the files this order owns. On a `record` order the
-  change is the task folder's diff in the project folder.
+  change is the task folder's diff in the project folder, with the files AIDA's own scripts
+  write there set aside and counted in the detail.
 - **frozen-tests.** Does every frozen test file still hash to what the freeze recorded.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks.

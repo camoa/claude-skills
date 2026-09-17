@@ -4206,6 +4206,8 @@ br_require_real_base() {
 #   BRC_CODEPATH        the code repository every command runs from inside
 #   BRC_STARTED_AT      the commit this attempt or round began from, full form
 #   BRC_CURRENT         the code repository's HEAD now
+#   BRC_SCOPE           the one path the owned-files diff is scoped to, RV_RANGE_SCOPE: the task
+#                       folder for an order whose proof is record, empty for the whole tree
 #   BRC_UNIT_JSON       the frozen work order
 #   BRC_TESTS_DOC       the frozen test record for this order
 #   BRC_BASELINE_FILE   where step two wrote the baseline
@@ -4225,7 +4227,7 @@ br_require_real_base() {
 #   BRC_END_OF_TASK     true only under `finish`. A suite row the recipe costs `end-of-task` is
 #                       deferred by the two record steps and runs here once (nyc defect 18)
 # ------------------------------------------------------------------------------------------------
-BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""
+BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""; BRC_SCOPE=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
@@ -4744,6 +4746,20 @@ br_record_check() {
     + (if $judgedBy == "" then {} else {judgedBy: $judgedBy} end)'
 }
 
+# True when $1, a path relative to its task folder, is one AIDA's own scripts write there. Those
+# are the task record and the contract, each with its rendering, and the design close. Also the
+# stage folders, the archive `restart` leaves, the notes a save appends, and records/. The
+# owned-files check on a record order sets these aside. A task note or a stage close commits
+# them inside the order's range, and no implementer wrote them. A deliverable a person writes is
+# never here: inputs/ and deliverables/ are theirs. The one list of what a script writes under a task.
+br_aida_writes_in_task() {
+  case "$1" in
+    task.json|task.md|alignment.json|alignment.md|design-closed.json) return 0 ;;
+    research/*|design/*|implementation/*|implementation-*/*|review/*|completion/*|notes/*|records/*) return 0 ;;
+  esac
+  return 1
+}
+
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
 # coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
 # is gate the first slot holds configuration-gate instead, and on one whose proof is record it
@@ -4775,17 +4791,24 @@ br_seven_checks() {
 
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
-  local diff_output owned_files_json owned_count unmatched="" p matched gi g
+  local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
-  diff_output="$(git -C "$BRC_CODEPATH" diff --no-renames --name-only "$BRC_STARTED_AT" "$BRC_CURRENT" 2>/dev/null)"
+  diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
   owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     # A record order owns absolute paths under the task folder, and its diff is the project
-    # folder's, whose names are relative to it; the two meet on the absolute form.
-    [ "$proof" != "record" ] || p="$BRC_CODEPATH/$p"
+    # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
+    # own scripts write there is counted and set aside: nobody dispatched wrote it.
+    if [ "$proof" = "record" ]; then
+      p="$BRC_CODEPATH/$p"
+      if br_aida_writes_in_task "${p#"$TASK_PATH"/}"; then
+        set_aside=$((set_aside + 1))
+        continue
+      fi
+    fi
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
@@ -4804,6 +4827,11 @@ BR_DIFF
   else
     ofc_verdict="met"
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
+  fi
+  if [ "$proof" = "record" ]; then
+    aside_noun="files"
+    [ "$set_aside" -ne 1 ] || aside_noun="file"
+    ofc_detail="$ofc_detail The diff is the task folder's alone, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger) set aside."
   fi
   jq -n --arg verdict "$ofc_verdict" --arg detail "$ofc_detail" \
     '{id: "owned-files", verdict: $verdict, detail: $detail}' >>"$parts_file"
@@ -5105,6 +5133,7 @@ do_build_record() {
   # round does not rewrite that record, so it is never re-run there.
   BRC_WHO="build-record"
   BRC_CODEPATH="$codepath"
+  BRC_SCOPE="$RV_RANGE_SCOPE"
   BRC_STARTED_AT="$started_at_full"
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$UNIT_JSON"
@@ -5283,18 +5312,23 @@ rv_load_state() {
 # proof is record lands its deliverable in the task folder, so its commits are the project
 # folder's, and every range, HEAD, diff and tree read for it goes there; the tree check reads its
 # owned files alone, because the running stage keeps the rest of that folder dirty on purpose
-# (nyc defect 17). Every other order reads the code worktree whole. Call after rv_load_codepath.
+# (nyc defect 17). Its diffs read the task folder alone. AIDA's own actions commit the rest of
+# the project folder in the same range. A task note commits tasks/ whole; another task's stage
+# close commits its folder. None of that is the implementer's. Every other order reads the
+# code worktree whole. Call after rv_load_codepath.
 # $1 the action's own name, $2 the frozen work order. Sets RV_RANGE_REPO, RV_RANGE_PATHS (one
 # pathspec per line, empty for the whole tree) and RV_RANGE_NAME, the words a message uses.
-RV_RANGE_REPO=""; RV_RANGE_PATHS=""; RV_RANGE_NAME=""
+# Also RV_RANGE_SCOPE, the one path every diff is scoped to, empty for the whole tree.
+RV_RANGE_REPO=""; RV_RANGE_PATHS=""; RV_RANGE_SCOPE=""; RV_RANGE_NAME=""
 rv_load_range_repo() {
   local who="$1" unit_json="$2"
-  RV_RANGE_REPO="$RV_CODEPATH"; RV_RANGE_PATHS=""; RV_RANGE_NAME="the code repository"
+  RV_RANGE_REPO="$RV_CODEPATH"; RV_RANGE_PATHS=""; RV_RANGE_SCOPE=""; RV_RANGE_NAME="the code repository"
   [ "$(printf '%s' "$unit_json" | jq -r '.proof // "tests"')" = "record" ] || return 0
   is_git_repo "$RV_PROJECT_FOLDER" \
     || die 87 "$who: $(printf '%s' "$unit_json" | jq -r '.id') is proved by its record, so its range lives in the project folder, and $RV_PROJECT_FOLDER is not a git repository. Run git init there and commit it."
   RV_RANGE_REPO="$RV_PROJECT_FOLDER"
   RV_RANGE_PATHS="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
+  RV_RANGE_SCOPE="$TASK_PATH"
   RV_RANGE_NAME="the project folder"
 }
 
@@ -5465,14 +5499,9 @@ do_review_brief() {
     || die 3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no startedAt or no commit, though build-record writes both."
   diff_path="$IMPL_DIR/diff-$unit_id.patch"
   deliverables_json="[]"
-  if [ -n "$RV_RANGE_PATHS" ]; then
-    git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" -- "$TASK_PATH" > "$diff_path" 2>/dev/null \
-      || die 3 "review-brief: could not write the task folder's diff from $started_at to $commit into $diff_path."
-    deliverables_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
-  else
-    git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" > "$diff_path" 2>/dev/null \
-      || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
-  fi
+  git_diff_of "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_RANGE_SCOPE" > "$diff_path" \
+    || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+  [ -z "$RV_RANGE_PATHS" ] || deliverables_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
 
   local criteria_json nongoals_json tests_json
   criteria_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson unit "$RV_UNIT_JSON" '
@@ -5983,6 +6012,7 @@ RV_SCOPE
 
   BRC_WHO="fix-record"
   BRC_CODEPATH="$RV_RANGE_REPO"
+  BRC_SCOPE="$RV_RANGE_SCOPE"
   BRC_STARTED_AT="$started_at_full"
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
@@ -6018,7 +6048,7 @@ RV_SCOPE
 
   local diff_path
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
-  git -C "$RV_RANGE_REPO" diff "$started_at_full" "$current_commit" > "$diff_path" 2>/dev/null \
+  git_diff_of "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$RV_RANGE_SCOPE" > "$diff_path" \
     || { rm -f "$seven_file"; die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
 
   local today record_json executed_count

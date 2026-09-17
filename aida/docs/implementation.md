@@ -191,6 +191,14 @@ when the row was confirmed. The reviewer is handed the document by path and the 
 diff, and reads it whole against the done-when rows. When the order closes, its criteria are
 recorded as judged by whoever judged the row, a person or a model, never the gate.
 
+Every diff for such an order is the task folder's alone: the owned-files check, the review diff
+and the fix patch. AIDA commits the project folder between a build brief and its record, when a
+note is saved or another task closes a stage. None of that is the implementer's. Inside the task
+folder, the files AIDA's own scripts write are set aside before the owned list is compared.
+Those are the task record, the contract, the stage folders and the notes. The check's detail
+says how many. A file a person writes is never set aside, so a second document the order does
+not own still fails the check.
+
 ## Writing the code
 
 An implementer, a mid-tier context, writes the code for one order until its frozen tests pass. It
