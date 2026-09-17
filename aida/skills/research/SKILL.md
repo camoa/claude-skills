@@ -3,7 +3,7 @@ name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
 ---
 
 # Research
@@ -61,6 +61,11 @@ approved. `worktree:` names the task's own git worktree, where the code is read 
 runs. `none` means the code path, as for a task made before every task had one. One `search:`
 line names each research file already on disk with its finding count.
 Read the criteria's text from the contract file.
+
+`read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
+the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
+the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
+again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop.
 

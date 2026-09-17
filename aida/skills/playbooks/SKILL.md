@@ -3,7 +3,7 @@ name: playbooks
 description: This skill should be used when the user asks "which playbooks apply", "list the plays", "add a play", "capture this as a rule", "add this to the playbook", "show my playbook", or when completion offers a note as a play and the person says yes. It lists the plays from the person's file, the project's file and the last loaded catalog sets, and appends a play to the project's file by hand.
 argument-hint: "<list | capture> [<projectPath>]"
 arguments: [action, subject]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), EnterWorktree
 ---
 
 # Playbooks
@@ -81,3 +81,7 @@ three sources. Research runs it at its start, after the loader agent has written
 record, and its stage report names the count per source. A person never needs to run it. It
 fetches nothing: a subscribed set the catalog cannot reach is recorded `unreachable`, never as
 zero plays.
+
+`load` refuses at exit 79 when the task builds in its worktree and this window is elsewhere. The
+refusal names the tree. Call the `EnterWorktree` tool with that path, the way `/aida:next` does.
+Then run the same call again.

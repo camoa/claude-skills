@@ -3,7 +3,7 @@ name: review
 description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent, EnterWorktree
 ---
 
 # Review
@@ -44,6 +44,11 @@ Last, it prints the checklist rows whole, because a person has to read those wor
 
 No `finished.json`: say so in one line, name the implementation skill's finish step, and stop. Exit
 66 says the same thing when a later action is run first.
+
+`read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
+the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
+the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
+again.
 
 ## Which step, and where its instructions are
 
@@ -194,8 +199,9 @@ One number never means two things, and these keep the meanings implementation ga
 | 72 | two frameworks each command one tool |
 | 73 | the check recipe resolved now is not the one the baseline was taken with, so take the baseline again first |
 | 77 | the project records no framework |
+| 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |
 
-Eight of these are review's own. The other seven arrive with the library both stages source, and each
+Eight of these are review's own. The other eight arrive with the libraries both stages source, and each
 keeps the meaning implementation gave it. Code 70 is the one an autonomous run meets in ordinary use,
 the first time a `--walked` or a `--row` is passed.
 

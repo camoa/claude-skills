@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
 ---
 
 # Design
@@ -56,6 +56,11 @@ This prints summary lines. `contract:` says present or absent and `contract-file
 file. `criteria:` and `non-goals:` list ids only. `work-orders:` is a count, and one `work-order:`
 line names each file already on disk. Read the criteria's text from the contract file when
 drafting.
+
+`read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
+the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
+the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
+again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop; a work order with nothing
 to serve is nothing this stage can check.

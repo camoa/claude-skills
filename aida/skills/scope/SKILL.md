@@ -3,7 +3,7 @@ name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
 argument-hint: "[approve] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent, EnterWorktree
 ---
 
 # Scope
@@ -59,6 +59,11 @@ re-asking for it. Absent means a first run: nothing is drafted yet.
 
 Every write below prints the same summary lines and never the contract's text. Read the file when
 a criterion's own words are needed.
+
+`read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
+the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
+the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
+again.
 
 On a first run only, also read `task.md` directly. A task split by the task skill carries its
 handed-down criteria there, as plain prose with no id, no verify clause and no author. That prose
