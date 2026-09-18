@@ -5,11 +5,15 @@ finds, and closes the order once nothing actionable is left open.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` for the `test-execution` point and the `review` point, both for this
-order's framework, naming the project folder. Name the role, per SKILL.md. These are the same two files
-`references/build.md` already resolved for this order, and `references/preconditions.md` resolved
-for the baseline. Pass both paths straight through to `fix-record` below, in the fix section; the
-script reads their command blocks itself, per SKILL.md.
+Read the `test-execution` and `review` recipe paths from the records preconditions already wrote,
+instead of asking the navigator again. `implementation/preconditions.json` holds the
+test-execution recipe at `frameworks[].recipePath`, and `implementation/baseline.json` holds the
+review recipe at `checkRecipes[].path`, one per framework. A framework absent from a list had no
+recipe at the baseline; pass no flag for it. These are the same paths `references/build.md` read
+for this order. Pass them straight through to `fix-record` below, in the fix section; the script
+reads their command blocks itself, per SKILL.md. The check recipe must equal the one the baseline
+used, and `fix-record` refuses any other (exit 73). A fresh lookup could only agree with the
+record or fail.
 
 ## Review
 
@@ -36,12 +40,14 @@ It prints the brief's path, the diff path, the findings path and the report path
 line per check with its verdict, and counts. Never the brief.
 
 Check the interface-record verdict among the eight lines. Unknown means the declaration names
-nothing in backticks, so the script could count nothing there. Interactive: before dispatching the
-reviewer, name the brief's path and say its `interface` field holds both texts. Those are the
-declared interface and the builder's own record. Ask the person whether the two agree. Do not paste
-the texts here. If they say the two disagree, tell the reviewer where, when it is dispatched, so its
-own finding can cite the criterion. Unattended: skip the ask. The reviewer has both texts in the
-brief and decides alone; say in the report that nobody ruled on it.
+nothing in backticks, so the script could count nothing there. Interactive, when the check read
+unknown: before dispatching the reviewer, show the two texts the brief's `interface` field holds,
+and nothing else from the brief.
+Those are the declared interface and the builder's own record, and a person must read them to
+answer, which is the exception SKILL.md names. Then ask the person whether the two agree. If they
+say the two disagree, tell the reviewer where, when it is dispatched, so its own finding can cite
+the criterion. Unattended: skip the ask. The reviewer has both texts in the brief and decides
+alone; say in the report that nobody ruled on it.
 
 A met verdict only means every backticked element is present verbatim. It does not rule out a
 deeper disagreement between the two texts. Catching that is the reviewer's job, from both texts
