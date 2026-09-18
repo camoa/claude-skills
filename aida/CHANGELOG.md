@@ -4,6 +4,19 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.16] - 2026-09-18
+
+### Changed
+- An owned file the order deleted leaves the `{paths}` expansion of the tool rows, the way
+  frozen tests and files outside the repository do; the check's detail counts it, and an order
+  with nothing left reads undeclared instead of spending an attempt on a tool refusing a
+  missing path. (live-run row 85)
+
+### Fixed
+- Two `local` declarations inside loop bodies, in design's id minting and implement's dispatch,
+  printed under zsh and polluted a captured id and an action summary; `design create` under zsh
+  minted a wrong id. Moved above the loops; a fixture scan refuses the pattern.
+
 ## [6.0.0-beta.15] - 2026-09-17
 
 Live-run rows 83 and 84, the implement stage's review reference on beta.14.
