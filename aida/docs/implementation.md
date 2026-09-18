@@ -235,8 +235,9 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 
 The three tool checks run over the order's owned files minus its frozen tests. The implementer
 may not write the tests, so the tools judge only what it may write. An owned file outside the
-code repository is left out too, because a tool run in the repository cannot see it. The detail
-says how many were left out. The first check is the floor.
+code repository is left out too, because a tool run in the repository cannot see it. So is an
+owned file the order deleted, because the tools refuse a missing path. The detail says how many
+were left out. The first check is the floor.
 Every other check may answer undeclared and the order still goes on. Order-tests must answer
 met, because it is the one check that says this code does what its tests ask. AIDA also tells
 you how many of the eight actually ran a command, a diff or a hash. Eight answers do not by
