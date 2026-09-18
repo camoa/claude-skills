@@ -7483,7 +7483,7 @@ do_dispatch_open() {
   # failure the checkpoint exists to catch (ideal/implementation.md, "The trace matrix and its
   # checkpoint").
   if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "row-checker" ]; then
-    local owned_json owned_count kept="" f g
+    local owned_json owned_count kept="" f g is_test seg
     # An owned file that matches a test-file glob is a test, not production source: design lists
     # an order's tests under ownedFiles so the overlap check sees them, and denying them here
     # denied the test author the one file it was dispatched to write (live-run row 58). The globs
@@ -7501,7 +7501,7 @@ do_dispatch_open() {
     if [ -n "$test_glob_raw" ]; then
       while IFS= read -r f; do
         [ -n "$f" ] || continue
-        local is_test=false seg
+        is_test=false
         while IFS= read -r g; do
           [ -n "$g" ] || continue
           tf_path_matches_catalog_glob "$f" "$g" && is_test=true

@@ -533,13 +533,12 @@ do_start() {
 # ------------------------------------------------------------------------------------------------
 
 next_wo_id() {
-  local max
+  local max this_id this_num
   max=0
   if [ -d "$DESIGN_DIR" ]; then
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       jq empty "$f" 2>/dev/null || continue
-      local this_id this_num
       this_id="$(jq -r '.id? // empty' "$f" 2>/dev/null)"
       case "$this_id" in
         wo[1-9]*)
