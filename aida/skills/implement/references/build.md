@@ -161,7 +161,8 @@ command. A `{paths}` token expands to this order's own owned files, relative to 
 reaches a shell. For the three tool rows, the order's own frozen test files come out of that
 expansion first. The implementer may not write them, so the tools judge only what it may write.
 An owned file outside codePath comes out too, because a tool run in the repository cannot see
-it. The detail says how many were left out, and a row with nothing left reads undeclared.
+it. An owned file the order deleted comes out as well, because the tools refuse a missing path.
+The detail says how many were left out, and a row with nothing left reads undeclared.
 The record names the paths the token expanded to and the frozen tests left out.
 
 **Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit

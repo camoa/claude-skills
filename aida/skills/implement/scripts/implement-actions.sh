@@ -2286,15 +2286,34 @@ bl_run_suite() {
 # Keeps the entries of $1, a JSON array of owned paths, that lie in the code repository at $2:
 # every relative path, and every absolute one under it. An order may own a record in the task
 # folder, an absolute path outside the repository, and a tool run in the repository fails on a
-# file it cannot see, which spent two attempts on the nyc task (nyc defect 11). Sets
-# BR_INSIDE_JSON to what is kept and BR_OUTSIDE_COUNT to how many were dropped. Both the build's
-# tool rows and the baseline's read it, so the two answer over the same files.
-BR_INSIDE_JSON="[]"; BR_OUTSIDE_COUNT=0
+# file it cannot see, which spent two attempts on the nyc task (nyc defect 11). Then drops every
+# path that does not exist in the tree at $2. An order whose operation deletes a file owns it
+# (design's sizing rule), and phpcs and phpstan refuse a missing path, so every configuration
+# order that deleted a file failed the tool rows by construction (live-run row 85). Sets
+# BR_INSIDE_JSON to what is kept, BR_OUTSIDE_COUNT to how many lay outside and BR_DELETED_COUNT
+# to how many were absent. Both the build's tool rows and the baseline's read it, so the two
+# answer over the same files; at the baseline's commit a file the order later deletes still
+# exists, so the second filter only matters there for a file already absent.
+BR_INSIDE_JSON="[]"; BR_OUTSIDE_COUNT=0; BR_DELETED_COUNT=0
 br_scope_to_repository() {
-  BR_INSIDE_JSON="$(jq -cn --argjson paths "$1" --arg cp "$2/" \
+  local inside_json inside_count pi entry full
+  inside_json="$(jq -cn --argjson paths "$1" --arg cp "$2/" \
     '[ $paths[] | select((startswith("/") | not) or startswith($cp)) ]')"
   BR_OUTSIDE_COUNT="$(jq -n --argjson paths "$1" --arg cp "$2/" \
     '[ $paths[] | select(startswith("/") and (startswith($cp) | not)) ] | length')"
+  BR_INSIDE_JSON="[]"; BR_DELETED_COUNT=0
+  inside_count="$(printf '%s' "$inside_json" | jq 'length')"
+  pi=0
+  while [ "$pi" -lt "$inside_count" ]; do
+    entry="$(printf '%s' "$inside_json" | jq -r --argjson i "$pi" '.[$i]')"
+    case "$entry" in /*) full="$entry" ;; *) full="$2/$entry" ;; esac
+    if [ -e "$full" ]; then
+      BR_INSIDE_JSON="$(printf '%s' "$BR_INSIDE_JSON" | jq -c --arg e "$entry" '. + [$e]')"
+    else
+      BR_DELETED_COUNT=$((BR_DELETED_COUNT + 1))
+    fi
+    pi=$((pi + 1))
+  done
 }
 
 # One sentence for a tool row's detail when br_scope_to_repository dropped something, or nothing.
@@ -2303,6 +2322,15 @@ br_outside_note() {
     0) printf '' ;;
     1) printf ' 1 owned file lies outside the code repository and was left out.' ;;
     *) printf ' %s owned files lie outside the code repository and were left out.' "$BR_OUTSIDE_COUNT" ;;
+  esac
+}
+
+# The same, for the owned files that no longer exist in the tree the tool would run in.
+br_deleted_note() {
+  case "$BR_DELETED_COUNT" in
+    0) printf '' ;;
+    1) printf ' 1 owned file deleted by this order was not passed.' ;;
+    *) printf ' %s owned files deleted by this order were not passed.' "$BR_DELETED_COUNT" ;;
   esac
 }
 
@@ -2366,6 +2394,8 @@ bl_tool_result() {
     verdict="undeclared"
     if [ "$BR_OUTSIDE_COUNT" -gt 0 ]; then
       reason="the $label command would read no file of the scope inside the code repository ($BR_OUTSIDE_COUNT owned outside it), so the row does not apply"
+    elif [ "$BR_DELETED_COUNT" -gt 0 ]; then
+      reason="the $label command would read no file of the scope present at the baseline commit ($BR_DELETED_COUNT owned but absent from it), so the row does not apply"
     else
       reason="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and the scope holds no file with one of those extensions, so the row does not apply"
     fi
@@ -4367,11 +4397,13 @@ br_tool_check() {
     detail="the $label command holds a path placeholder, and this order declares no ownedFiles, so the command would run over no path at all."
   elif [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
     # The order owns files, and none of them is a file this tool judges: every one is a frozen test,
-    # or none carries an extension the tool reads, or every one lies outside the repository. The
-    # row did not apply here.
+    # or none carries an extension the tool reads, or every one lies outside the repository, or
+    # every one was deleted by this order. The row did not apply here.
     verdict="undeclared"
     if [ "$BR_OUTSIDE_COUNT" -gt 0 ]; then
-      detail="the $label command would read no file this order owns inside the code repository ($BR_OUTSIDE_COUNT owned outside it), so the row does not apply to it."
+      detail="the $label command would read no file this order owns inside the code repository ($BR_OUTSIDE_COUNT owned outside it), so the row does not apply to it.$(br_deleted_note)"
+    elif [ "$BR_DELETED_COUNT" -gt 0 ]; then
+      detail="the $label command would read no file this order owns that still exists at the attempt's head, so the row does not apply to it.$(br_deleted_note)"
     elif [ -n "$exts_json" ]; then
       detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions outside its frozen tests, so the row does not apply to it."
     else
@@ -4458,7 +4490,7 @@ br_tool_check() {
       fi
     fi
     [ -z "$errfile" ] || rm -f "$errfile"
-    [ "$has_paths" = "false" ] || detail="$detail$(br_outside_note)"
+    [ "$has_paths" = "false" ] || detail="$detail$(br_outside_note)$(br_deleted_note)"
   fi
   # The output is read from its file, never passed as an argument (nyc defect 9).
   jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
