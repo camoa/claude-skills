@@ -6,15 +6,24 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.18] - 2026-09-19
 
-Live-run rows 88, 89 and 90, the implement stage on beta.17, and the push gate.
+Live-run rows 88 to 92, the implement and design stages on beta.17, and the push gate.
 
 ### Added
+- A write hook holds the implementer to its owned files: `dispatch-open` records the unit's
+  `ownedFiles` on the implementer's record, and while it is open a write under the code path
+  outside them is refused, with the frozen-test rule first. `agents/implementer.md` says a stop
+  means report and end the turn, never "proceeding unless told otherwise". (row 92)
 - `tests-freeze --support <path>`, repeatable: a base class or fixture the test author wrote is
   hashed with the tests, committed in the same commit, recorded under `support`, and guarded by
   the write hook. The frozen-tests check hashes it too. A missing path, a path outside the code
   root, or one a test glob matches is refused. (row 90)
 
 ### Changed
+- A started order whose live copy differs from the snapshot only by added owned files is not
+  halted at a resumed `start`: it is re-snapshotted in place, once design has closed on the live
+  files, and its frozen tests and ledger entry are untouched. The design critic asks of every
+  order whether it owns each file its operation rewrites, read against the couplings the design
+  recipe names. (row 91)
 - Every question the implement stage puts to a person opens with one plain sentence naming the
   decision, why it is the person's call, and what each answer causes; the rule is stated once
   in `SKILL.md` and twelve ask sites follow it. (row 89)
