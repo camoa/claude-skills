@@ -165,9 +165,12 @@ the parent closes next.
 
 ## The merge, and what comes after
 
-You merge the pull request. AIDA never does, and never pushes. Once the branch is merged, the
-task's worktree and its site are the last things left, and they cost disk and a running project
-each.
+You merge the pull request. AIDA never does, and never pushes: a hook refuses `git push` in
+the session. You can open that gate on your own machine, for as long as you want, with one
+file only `sudo` can create: `sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push`.
+While it exists, the session pushes; `sudo rm /etc/claude/allow-push` closes it. A force push
+stays refused. Once the branch is merged, the task's worktree and its site are the last things
+left, and they cost disk and a running project each.
 
 Completion ran inside the worktree; pruning runs outside it. Run `/aida:task prune` from the
 main checkout, never from inside a tree it may remove. It lists every complete task that still
