@@ -88,7 +88,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # it must answer from the test and never from the implementation, and an implementer is denied every
 # order's but its own and is allowed its own. A fixer takes the implementer's derivation exactly, because a fix round
 # writes the same order's files for the same reason (decision 8 of step five). `--deny-read` adds to what was derived; it is how a path outside codePath is
-# denied, such as the recipe each role may not open.
+# denied, such as the recipe each role may not open. An implementer's record also carries its own
+# owned files under `ownedFiles`, the list hooks/deny-frozen-test-writes.sh holds it to while the
+# record is open (live-run row 92). No other role's record carries the key.
 #   implement-actions.sh dispatch-close <task_folder>
 #   implement-actions.sh step <name>
 #
@@ -8001,11 +8003,18 @@ TG_OWNED
   deny_json="$(printf '%s' "$deny_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
   allow_json="$(printf '%s' "$allow_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
 
-  local record_json
+  # The implementer's own list goes under `ownedFiles` too, and not under allowWrite: allowWrite
+  # takes hand-passed paths and no hook applies it, while this key is derived alone and the write
+  # hook refuses the implementer a write under codePath outside it (live-run row 92).
+  local record_json owned_extra='{}'
+  if [ "$role_bare" = "implementer" ]; then
+    owned_extra="$(jq -nc --argjson m "$mine_json" '{ownedFiles: $m}')"
+  fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
+    --argjson extra "$owned_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
-      denyRead: $denyRead, allowWrite: $allowWrite}')"
+      denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"

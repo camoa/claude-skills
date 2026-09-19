@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA dispatch record",
-  "description": "What is dispatched right now, at <project path>/dispatch.json. The build is serial, so a project has at most one active dispatch: `dispatch-open` refuses to overwrite one already there, and `dispatch-close` removes it. This is the one record two PreToolUse hooks read to tell a dispatched role's own guardrails apart from a person working their own repository: hooks/deny-prior-source.sh (a test author reading past its own interface record) and hooks/deny-frozen-test-writes.sh (anyone writing to a test this task already froze). Neither hook writes this file; the implement skill writes it immediately before a dispatch and clears it immediately after, through implement-actions.sh's own `dispatch-open` and `dispatch-close` actions. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What is dispatched right now, at <project path>/dispatch.json. The build is serial, so a project has at most one active dispatch: `dispatch-open` refuses to overwrite one already there, and `dispatch-close` removes it. This is the one record two PreToolUse hooks read to tell a dispatched role's own guardrails apart from a person working their own repository: hooks/deny-prior-source.sh (a test author reading past its own interface record) and hooks/deny-frozen-test-writes.sh (anyone writing to a test this task already froze, and since 2026-09-19 an implementer writing under codePath outside the files its unit owns, read from `ownedFiles`). Neither hook writes this file; the implement skill writes it immediately before a dispatch and clears it immediately after, through implement-actions.sh's own `dispatch-open` and `dispatch-close` actions. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "role", "task", "unit", "codePath", "denyRead", "allowWrite"],
@@ -42,7 +42,12 @@
       "type": "array",
       "default": [],
       "items": { "type": "string", "minLength": 1 },
-      "description": "Paths under codePath the dispatched role is meant to write, relative to codePath. Recorded for a person or a later check reading this file to see what the dispatch was for; neither hook enforces it today. deny-frozen-test-writes.sh decides a write by whether the target is a path this task already froze, not by whether it appears here."
+      "description": "Paths under codePath the dispatched role is meant to write, relative to codePath. Recorded for a person or a later check reading this file to see what the dispatch was for; neither hook enforces it today. deny-frozen-test-writes.sh decides a write by whether the target is a path this task already froze, or by `ownedFiles` below, not by whether it appears here."
+    },
+    "ownedFiles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Present on an implementer's record only, since 2026-09-19 (live-run row 92): the files its work order owns in the frozen snapshot, relative to codePath, derived by `dispatch-open` and never passed by hand. hooks/deny-frozen-test-writes.sh reads it as its second rule: while this record names the implementer, a write to a path under codePath that is not one of these files, or under one of these directories, is refused with a reason telling the role to stop and report. A path outside codePath, the task folder where the report and the interface record live, is not judged. The same list sits in allowWrite for this role; it is repeated here because allowWrite also takes hand-passed paths and is enforced by nothing, and a write bound must come from the snapshot alone."
     }
   }
 }

@@ -179,7 +179,9 @@ when the person asks what the dispatch enforces, rather than describing the deni
 `dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and the shell
 door above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
 whether a path is frozen, never by this flag. Say the same about it that you say about the other
-two: recorded, not enforced.
+two: recorded, not enforced. The implementer is the one exception. Its record carries its owned
+files under `ownedFiles`, and the frozen-test hook refuses it a write under the code path outside
+them.
 
 The five answers a builder or a fixer writes into its report are a fourth. The record steps refuse
 an empty report file, and nothing checks the file holds five answers, that they preceded the write,

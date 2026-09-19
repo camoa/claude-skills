@@ -225,8 +225,9 @@ five answers into its report. They name the most surgical fix, what stays untouc
 the lines it expects to add and delete, and the files and blocks it targets. The reviewer reads the
 diff against those answers.
 
-It writes only inside the files its order owns. It may not change a test; a hook refuses the
-write and names the order that froze the file. It may not read another order's source; what
+It writes only inside the files its order owns. A hook refuses it a write under the code path
+outside them. A file it needs and does not own is a stop, and the report names the file. It may
+not change a test; a hook refuses the write and names the order that froze the file. It may not read another order's source; what
 another unit exposes is its interface record. It is refused the recipe that writes tests, because
 that file chooses a level and names a test, and this reader may do neither. It stops rather than
 working around a test that seems wrong or an interface that does not fit. Interactive, the stop
@@ -404,6 +405,8 @@ The read denials and the frozen-test refusal are hooks the runtime applies. The 
 the Read and Grep tools and not the shell. The test author runs its own tests, so it holds a
 shell, and a `cat` of a denied file is not refused. The rule exists to stop a role opening the
 source because that is the obvious way to write a test about it. A role working around it on
-purpose has already failed in a way no hook catches. Three things are recorded and enforced by
-nothing: the paths a role may write, the fixer's fix scope, and the builder's five answers. A
-write outside the fix scope surfaces when the reviewer reads the fix diff, not as it happens.
+purpose has already failed in a way no hook catches. The implementer's owned files are enforced
+too: the write hook refuses it a write under the code path outside them. Three things are recorded
+and enforced by nothing: the paths every other role may write, the fixer's fix scope, and the
+builder's five answers. A write outside the fix scope surfaces when the reviewer reads the fix
+diff, not as it happens.
