@@ -255,6 +255,15 @@ decide whether to spend the next one. When the last allowed attempt fails, the o
 moment, with the check named. A halt nobody sees until they ask is one an unattended run never
 sees.
 
+An attempt stopped by the three tool checks alone has a second route. A tool refusing a path it
+was handed is AIDA's fault, not the implementer's, and the code needs no second build. You can
+run the eight checks again over the range that attempt recorded. No implementer is dispatched
+and no attempt is spent. AIDA offers that route beside the next build when it applies. It
+refuses when no attempt was recorded, when the code moved since the attempt, and when a test or a
+suite stopped the attempt. That failure is the implementer's work, and a re-check is not a free
+retry. The record keeps the attempt and its range, takes the new checks, and keeps the replaced
+verdicts beside them with the date.
+
 ## The review of one order
 
 An order that passed its checks gets one review, ever. A second pass is where a loop that cannot

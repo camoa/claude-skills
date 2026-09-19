@@ -49,6 +49,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--implement-recipe <framework>=<path>]... \
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>]
+#   implement-actions.sh build-recheck <task_folder> <unit_id> \
+#                            [--test-recipe <framework>=<path>]... \
+#                            [--check-recipe <framework>=<path>]... \
+#                            [--implement-recipe <framework>=<path>]... \
+#                            [--value <name>=<value>]... \
+#                            [--nothing-ran <literal substring>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
 #   implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
 #   implement-actions.sh fix-brief     <task_folder> <unit_id>
@@ -373,8 +379,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      role's work is committed before the record is written. Unattended, the two record steps write
 #      the halt onto the order before refusing, because an order left in flight with no reason is a
 #      halt nobody sees until they ask; interactive they only refuse, since a person is there to
-#      commit and run the step again. `close`, `finish` and `restart` refuse on the same fact and
-#      share this number, because a commit range is a claim about a repository and a dirty tree
+#      commit and run the step again. `build-recheck`, `close`, `finish` and `restart` refuse on
+#      the same fact and share this number, because a commit range is a claim about a repository and a dirty tree
 #      makes it a claim about something else. A restart with uncommitted work would move the record
 #      of that work aside and leave the work itself behind. `review-record` names a related fact with exit 51,
 #      and the two stay apart: 51 says the code moved after a record was already written, and 61
@@ -497,6 +503,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      load-bearing, a dirty tree, spent fix rounds) is a person's to clear, once they have acted on
 #      what it names, and this is the one action that clears it. A closed order shares exit 67 with
 #      the grant: there is nothing to resume.
+#
+# The code the re-check added (live-run row 87).
+#  88  `build-recheck` cannot run the checks again over the recorded range, for one of four facts,
+#      each named in its own message. No build record exists for the order, so there is no range.
+#      The repository's HEAD is not the record's own `commit`, so the code moved and the route is
+#      `build`. Or the record's stopping checks include one outside `coding-standards`,
+#      `static-analysis` and `security`. A test or a suite that failed is the implementer's work,
+#      so a re-check would be a free retry, and the route is `build`. Or no check stopped the
+#      attempt, so it passed and the order is past the build. A halted order refuses at exit 49
+#      like every step-five action, and `grant-attempt` is its route.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -632,6 +648,12 @@ usage: implement-actions.sh read  <task_folder>
                             --started-at <commit the attempt began from>
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
+                            [--value <name>=<value>]...
+                            [--nothing-ran <literal substring>]
+       implement-actions.sh build-recheck <task_folder> <unit_id>
+                            [--test-recipe <framework>=<path>]...
+                            [--check-recipe <framework>=<path>]...
+                            [--implement-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
        implement-actions.sh review-brief  <task_folder> <unit_id>
@@ -943,9 +965,12 @@ im_next_step() {
     return 0
   fi
   # How many actionable findings each reviewed order still has open, read once per order here so
-  # the jq below decides fix-or-close without opening a file itself.
-  local opens ids count i id file n
+  # the jq below decides fix-or-close without opening a file itself. And whether each order's
+  # build record was stopped by the three tool rows alone, read from the record's own checks, so
+  # the line can name the re-check without running git (live-run row 87).
+  local opens ids count i id file n tools_only
   opens='{}'
+  tools_only='{}'
   ids="$(printf '%s' "$ledger" | jq -c '[ (.orders // [])[] | .id ]')"
   count="$(printf '%s' "$ids" | jq 'length')"
   i=0
@@ -958,9 +983,16 @@ im_next_step() {
       case "$n" in ''|*[!0-9]*) n=0 ;; esac
     fi
     opens="$(printf '%s' "$opens" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    file="$impl/build-$id.json"
+    n=false
+    if [ -f "$file" ]; then
+      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | (stoppers | length > 0) and (outside_tools | length == 0)' "$file" 2>/dev/null)"
+      [ "$n" = "true" ] || n=false
+    fi
+    tools_only="$(printf '%s' "$tools_only" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
-  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson snap "$snapshot" \
+  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson tools_only "$tools_only" --argjson snap "$snapshot" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
     | ([ $orders[] | select(.lastStep == "closed") | .id ]) as $closed
@@ -979,7 +1011,10 @@ im_next_step() {
         (if $rv.lastStep == "checks-passed" then "review \($rv.id): review the order"
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
-      elif $bd != null then "build \($bd.id)"
+      elif $bd != null then
+        (if $bd.lastStep == "code-written" and ($tools_only[$bd.id] // false) then
+           "build \($bd.id), or build-recheck \($bd.id) when the code has not moved"
+         else "build \($bd.id)" end)
       elif $removed != null and $ts != null then "restart: the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
@@ -5017,6 +5052,19 @@ br_first_stopper() {
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
 }
 
+# The checks that stopped a build attempt, as a jq function two readers prepend to their own
+# program: the selection br_first_stopper makes, with interface-record's unknown exempt, over a
+# record's own `checks`. `stoppers` is their ids; `outside_tools` is those ids minus the three tool
+# rows. A re-check answers an attempt stopped by the tool rows alone (live-run row 87): a tool
+# refusing a path is the plugin's fault, and a test or a suite failing is the implementer's work.
+BR_STOPPERS_JQ='def stoppers:
+  [ .[] | select(.verdict == "unmet"
+                 or (.verdict == "unknown" and .id != "interface-record")
+                 or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when") and .verdict != "met"))
+    | .id ];
+def outside_tools: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security"));
+'
+
 # Check eight, the interface record, and the countable half of it only. $1 the interface this order
 # declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
 #
@@ -5073,6 +5121,50 @@ br_require_check_count() {
     | join(", ")' "$checks_file" 2>/dev/null)"
   rm -f "$checks_file"
   die 84 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written."
+}
+
+# The check half of `build-record`, shared with `build-recheck` so a re-check runs exactly what the
+# attempt ran (live-run row 87). Seven checks come from the function a fix round calls too, so the
+# steps cannot drift into checking different things. The eighth, the interface record, is the build
+# step's own: a fix round does not rewrite that record, so it is never re-run there.
+#
+# Reads the BRC_* globals the caller set, and CR_TEST_RECIPES and CR_CHECK_RECIPES. Every commanded
+# check runs a command the recipe declares, resolved here rather than retyped by the caller, and the
+# selected-tests row runs this order's own frozen test files. $1 the interface the order declares,
+# $2 the text the builder wrote.
+#
+# Sets BR_CHECKS_FILE, a temporary file holding the eight checks, which the caller reads into its
+# record and then removes. The checks carry whole tool outputs, so they travel by file: a
+# command-line argument caps at 128KB, and a record that lost a check to that cap printed
+# `executed: 5 of 8` over seven checks (nyc defects 9 and 12). Sets BR_CHECKS_JSON, the same eight,
+# and BR_EXECUTED, how many of them ran a command, a diff or a hash.
+BR_CHECKS_FILE=""; BR_CHECKS_JSON=""; BR_EXECUTED=0
+br_eight_checks() {
+  local declared="$1" record_text="$2"
+  local unit_id seven_file interface_check_json
+  unit_id="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
+  BRC_SELECTED_JSON="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
+    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  CR_WHO="$BRC_WHO"
+  cr_resolve
+  cr_require_baseline_recipes "$BRC_WHO" "$BRC_BASELINE_FILE"
+  BRC_RECIPES="$CR_DOC"
+
+  interface_check_json="$(br_interface_check "$declared" "$record_text")"
+  [ -n "$interface_check_json" ] \
+    || die 3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
+
+  seven_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  br_seven_checks >"$seven_file"
+  [ -s "$seven_file" ] \
+    || { rm -f "$seven_file"; die 3 "$BRC_WHO: the seven computable checks produced nothing for $unit_id."; }
+  BR_CHECKS_FILE="$(mktemp)" || { rm -f "$seven_file"; die 3 "$BRC_WHO: could not create a temporary file"; }
+  jq -c --argjson eighth "$interface_check_json" '. + [$eighth]' "$seven_file" >"$BR_CHECKS_FILE"
+  rm -f "$seven_file"
+  br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE" 8
+  BR_CHECKS_JSON="$(cat "$BR_CHECKS_FILE" 2>/dev/null)"
+  BR_EXECUTED="$(br_executed_count "$BR_CHECKS_JSON")"
+  case "$BR_EXECUTED" in ''|*[!0-9]*) BR_EXECUTED=0 ;; esac
 }
 
 do_build_record() {
@@ -5241,45 +5333,19 @@ do_build_record() {
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
-  # Every commanded check runs a command the recipe declares, resolved here rather than retyped by
-  # the caller. The selected-tests row runs this order's own frozen test files.
-  local selected_tests_json
-  selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
-  CR_WHO="build-record"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
-  cr_resolve
-  cr_require_baseline_recipes "build-record" "$IMPL_DIR/baseline.json"
-
-  BRC_RECIPES="$CR_DOC"
-  BRC_SELECTED_JSON="$selected_tests_json"
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
-
-  # The checks carry whole tool outputs, so they travel by file from here to the record: a
-  # command-line argument caps at 128KB and a record that lost a check to that cap printed
-  # `executed: 5 of 8` over seven checks (nyc defects 9 and 12).
-  local seven_file checks_file interface_check_json checks_json
-  interface_check_json="$(br_interface_check "$unit_interface_declared" "$interface_text")"
-  [ -n "$interface_check_json" ] \
-    || die 3 "build-record: the interface-record check produced nothing for $unit_id."
-
-  seven_file="$(mktemp)" || die 3 "build-record: could not create a temporary file"
-  br_seven_checks >"$seven_file"
-  [ -s "$seven_file" ] \
-    || { rm -f "$seven_file"; die 3 "build-record: the seven computable checks produced nothing for $unit_id."; }
-  checks_file="$(mktemp)" || { rm -f "$seven_file"; die 3 "build-record: could not create a temporary file"; }
-  jq -c --argjson eighth "$interface_check_json" '. + [$eighth]' "$seven_file" >"$checks_file"
-  rm -f "$seven_file"
-  br_require_check_count "build-record" "$checks_file" 8
-  checks_json="$(cat "$checks_file" 2>/dev/null)"
+  br_eight_checks "$unit_interface_declared" "$interface_text"
+  local checks_file checks_json
+  checks_file="$BR_CHECKS_FILE"
+  checks_json="$BR_CHECKS_JSON"
 
   local today record_json executed_count
-  executed_count="$(br_executed_count "$checks_json")"
-  case "$executed_count" in ''|*[!0-9]*) executed_count=0 ;; esac
+  executed_count="$BR_EXECUTED"
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c \
     --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
@@ -5364,6 +5430,191 @@ do_build_record() {
   if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$attempts_allowed" ]; then
     echo "BUILD-RECORD: $unit_id is halted. Attempts spent: $attempt_number of $attempts_allowed. The last was stopped by $first_stopper" >&2
   fi
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# build-recheck: the eight checks again, over the range the build record already holds, with no
+# implementer dispatched and no attempt spent (live-run row 87). An attempt whose only unmet checks
+# were the tool rows refusing had no route back: `build-brief` hands over a brief with nothing to
+# build, and `build-record` refuses an empty range (exit 71) or an unmoved head (exit 45). Both
+# refusals are right, so this action is the route. It takes the recipe flags `build-record` takes
+# and none of its record flags: the range, the interface record and the report path are the
+# record's own. It is not a free retry: an attempt a test or a suite stopped is the implementer's
+# work, and it refuses (exit 88).
+# ------------------------------------------------------------------------------------------------
+do_build_recheck() {
+  local task_arg="" unit_id=""
+  local nothing_ran="" have_nothing_ran=false
+  local test_recipes="" check_recipes="" gate_recipes="" values=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --test-recipe)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --test-recipe needs <framework>=<path>"
+        cr_recipe_pair "build-recheck" "--test-recipe" "$2"
+        test_recipes="$test_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --check-recipe)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --check-recipe needs <framework>=<path>"
+        cr_recipe_pair "build-recheck" "--check-recipe" "$2"
+        check_recipes="$check_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --implement-recipe)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --implement-recipe needs <framework>=<path>"
+        cr_recipe_pair "build-recheck" "--implement-recipe" "$2"
+        gate_recipes="$gate_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --value)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --value needs <name>=<value>"
+        case "$2" in *=*) ;; *) die 3 "build-recheck: --value takes <name>=<value>, got: $2" ;; esac
+        pc_refuse_forged_value "build-recheck" "$2"
+        values="$values$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      --nothing-ran)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --nothing-ran needs a literal substring"
+        [ -n "$2" ] || die 3 "build-recheck: --nothing-ran was given an empty substring, which every output holds."
+        have_nothing_ran=true
+        nothing_ran="$2"
+        shift 2 ;;
+      -*) die 3 "build-recheck: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die 3 "build-recheck: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die 3 "build-recheck: a task folder is required"
+  [ -n "$unit_id" ]  || die 3 "build-recheck: a unit id is required"
+
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "build-recheck")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  # The step-five state: the ledger, the frozen order, and the halt refusal (exit 49). A halted
+  # order's route is `grant-attempt` or `clear-halt`, never a re-check. No step is required here:
+  # the record's own checks say whether the attempt is one a re-check answers.
+  rv_load_state "build-recheck" "$unit_id"
+
+  # --- exit 88, one: no attempt was recorded, so there is nothing to run the checks over again ----
+  local record_file="$IMPL_DIR/build-$unit_id.json"
+  [ -f "$record_file" ] \
+    || die 88 "build-recheck: $record_file does not exist, so no attempt at $unit_id was recorded and there is no range to run the checks over. The route is build."
+  rv_load_build_record "build-recheck" "$unit_id"
+  local record_started_at record_commit record_attempt
+  record_started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
+  record_commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
+  record_attempt="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.attempt // 0')"
+  [ -n "$record_started_at" ] && [ -n "$record_commit" ] \
+    || die 3 "build-recheck: $record_file holds no startedAt or no commit, so its range cannot be read. Repair or remove it by hand before running this again."
+
+  # --- exit 88, two: the code moved since the attempt, so the next attempt is a build ------------
+  local codepath current_commit
+  rv_load_codepath "build-recheck"
+  rv_load_range_repo "build-recheck" "$RV_UNIT_JSON"
+  codepath="$RV_RANGE_REPO"
+  current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
+  [ -n "$current_commit" ] \
+    || die 3 "build-recheck: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+  [ "$current_commit" = "$record_commit" ] \
+    || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds attempt $record_attempt at $record_commit, so the code has moved since that attempt. A re-check runs over the recorded range alone; the route is build."
+
+  # --- exit 88, three: a check outside the tool rows stopped the attempt, which is the
+  # implementer's work to answer, so a re-check would be a free retry. An attempt nothing stopped
+  # is past the build, and there is nothing to run again -----------------------------------------
+  local stoppers outside
+  stoppers="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
+  [ -n "$stoppers" ] \
+    || die 88 "build-recheck: attempt $record_attempt at $unit_id passed its checks, so there is nothing to run again. The order is past the build."
+  outside="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_tools | join(", ")')"
+  [ -z "$outside" ] \
+    || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows. A re-check answers only an attempt the tool rows alone stopped; the route is build."
+
+  local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
+  [ -f "$tests_file" ] \
+    || die 3 "build-recheck: $tests_file not found, though a build record implies tests-freeze already ran for $unit_id."
+  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  [ -n "$tests_doc" ] \
+    || die 3 "build-recheck: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
+
+  # --- the eight deciding checks, the same half build-record runs, over the recorded range --------
+  BRC_WHO="build-recheck"
+  BRC_CODEPATH="$codepath"
+  BRC_SCOPE="$RV_RANGE_SCOPE"
+  BRC_STARTED_AT="$record_started_at"
+  BRC_CURRENT="$record_commit"
+  BRC_UNIT_JSON="$RV_UNIT_JSON"
+  BRC_TESTS_DOC="$tests_doc"
+  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  CR_TEST_RECIPES="$test_recipes"
+  CR_CHECK_RECIPES="$check_recipes"
+  BRC_VALUES="$values"
+  BRC_NOTHING_RAN="$nothing_ran"
+  BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
+  BRC_GATE_RECIPES="$gate_recipes"
+  br_eight_checks "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')" \
+    "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')"
+
+  # The record keeps the attempt, its range and its date, and takes the new checks. The checks it
+  # replaces stay under checksBefore, id and verdict only, so a reader can see what the re-check
+  # answered differently. Both check sets carry whole tool outputs, so both are read from a file.
+  local today record_json
+  today="$(date -u +%Y-%m-%d)"
+  record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
+    --slurpfile before "$record_file" '
+    . as $new
+    | $before[0]
+    | .checksBefore = ((.checks // []) | map({id, verdict}))
+    | .checks = $new
+    | .executed = $executed
+    | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
+    | .recheckedAt = $recheckedAt' "$BR_CHECKS_FILE")"
+  rm -f "$BR_CHECKS_FILE"
+  [ -n "$record_json" ] || die 3 "build-recheck: could not assemble the record for $unit_id."
+  write_atomic "$record_file" "$record_json"
+
+  # No attempt is spent: nobody worked. The step moves to checks-passed when the checks pass, and
+  # stays at code-written otherwise, with no halt, because the counter did not move.
+  local all_met first_stopper new_ledger_doc
+  all_met="$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")"
+  first_stopper="$(br_first_stopper "$BR_CHECKS_JSON" "interface-record")"
+  new_ledger_doc="$RV_LEDGER_DOC"
+  if [ "$all_met" = "true" ]; then
+    new_ledger_doc="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
+      '.orders = (.orders | map(if .id == $id then .lastStep = "checks-passed" else . end))')"
+    [ -n "$new_ledger_doc" ] || die 3 "build-recheck: the ledger update for $unit_id failed."
+    write_atomic "$RV_LEDGER_FILE" "$new_ledger_doc"
+  fi
+
+  local br_state br_next attempts_allowed
+  attempts_allowed="$(attempts_allowed_for "$RV_ORDER_ENTRY")"
+  if [ "$all_met" = "true" ]; then br_state="checks-passed"; else br_state="code-written, stopped by $first_stopper"; fi
+  br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
+  im_print_summary "build-recheck" "$(printf '%s' "$record_json" | jq -c \
+    --arg attempts "$record_attempt of $attempts_allowed" --arg state "$br_state" \
+    --arg record "$record_file" --arg next "$br_next" '
+    {order: .unit,
+     attempt: $attempts,
+     recheck: "attempt \(.attempt), checks replaced",
+     range: "\(.startedAt)..\(.commit)",
+     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
+     executed: "\(.executed) of 8 ran a command, a diff or a hash",
+     state: $state,
+     halt: "none",
+     record: $record,
+     next: $next}')"
   exit 0
 }
 
@@ -7744,6 +7995,7 @@ case "$ACTION" in
   tests-freeze) do_tests_freeze "$@" ;;
   build-brief)  do_build_brief  "$@" ;;
   build-record) do_build_record "$@" ;;
+  build-recheck) do_build_recheck "$@" ;;
   review-brief)   do_review_brief   "$@" ;;
   review-record)  do_review_record  "$@" ;;
   fix-brief)      do_fix_brief      "$@" ;;

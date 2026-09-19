@@ -72,6 +72,26 @@
       "minimum": 0,
       "description": "How many of the checks in `checks` actually executed: they ran a command, which is every check carrying an exitCode, or they computed a diff or a hash, which is owned-files and frozen-tests. interface-record compares two texts the caller handed over and runs nothing, so it is never counted. The field exists because a record saying every check answered, without saying how many of them ran, reads the same whether the code was tested or nothing was."
     },
+    "recheckedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Present only after `build-recheck` ran the eight checks again over this record's own range, with no implementer dispatched and no attempt spent (live-run row 87): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold the re-check's answers; `attempt`, `startedAt`, `commit` and `takenAt` stay the attempt's own."
+    },
+    "checksBefore": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "verdict"],
+        "properties": {
+          "id": { "type": "string" },
+          "verdict": { "type": "string" }
+        }
+      },
+      "description": "Present with `recheckedAt`: the checks the re-check replaced, id and verdict only, so a reader can see what the re-check answered differently. The replaced outputs are not kept; the tool that refused a path printed nothing worth reading back."
+    },
     "decidingChecks": {
       "type": "object",
       "additionalProperties": false,
