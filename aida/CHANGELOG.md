@@ -4,6 +4,25 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.17] - 2026-09-19
+
+Live-run rows 86 and 87, the implement stage on beta.16.
+
+### Added
+- `build-recheck` runs the eight deciding checks again over a recorded attempt's own range,
+  with no implementer dispatched and no attempt spent. It is the route when an attempt was
+  stopped only by the tool rows and the code has not moved; `next:` names it beside `build`.
+  It refuses (exit 88) with no record, a moved head, a stopper outside the three tool rows, or
+  a record that already passed. The record keeps its attempt and adds `recheckedAt` and
+  `checksBefore`. (row 87)
+
+### Changed
+- A resumed `start` treats a changed criterion as design drift for every order that serves or
+  owns it: started orders halt, unstarted ones are taken fresh, dependents halt, the same rules
+  a changed order file follows. The snapshot's alignment is refreshed with the live contract
+  whenever the snapshot is rewritten, so tests are written from the criterion the person
+  approved. `contractChanged` on the `drift:` line is now explained. (row 86)
+
 ## [6.0.0-beta.16] - 2026-09-18
 
 ### Changed
