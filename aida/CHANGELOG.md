@@ -6,7 +6,7 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.18] - 2026-09-19
 
-Live-run rows 88 to 92, the implement and design stages on beta.17, and the push gate.
+Live-run rows 88 to 93, the implement and design stages on beta.17, and the push gate.
 
 ### Added
 - A write hook holds the implementer to its owned files: `dispatch-open` records the unit's
@@ -24,6 +24,9 @@ Live-run rows 88 to 92, the implement and design stages on beta.17, and the push
   files, and its frozen tests and ledger entry are untouched. The design critic asks of every
   order whether it owns each file its operation rewrites, read against the couplings the design
   recipe names. (row 91)
+- A design reopened to change only owned files or done-when rows on an existing order may skip
+  the research and guide reading: the change, `check`, `close` with the last recorded recipe
+  verdict, `distill`. Any other reopen reads as a first run. (row 93)
 - Every question the implement stage puts to a person opens with one plain sentence naming the
   decision, why it is the person's call, and what each answer causes; the rule is stated once
   in `SKILL.md` and twelve ask sites follow it. (row 89)
