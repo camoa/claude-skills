@@ -6,7 +6,20 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.18] - 2026-09-19
 
+Live-run rows 88, 89 and 90, the implement stage on beta.17, and the push gate.
+
+### Added
+- `tests-freeze --support <path>`, repeatable: a base class or fixture the test author wrote is
+  hashed with the tests, committed in the same commit, recorded under `support`, and guarded by
+  the write hook. The frozen-tests check hashes it too. A missing path, a path outside the code
+  root, or one a test glob matches is refused. (row 90)
+
 ### Changed
+- Every question the implement stage puts to a person opens with one plain sentence naming the
+  decision, why it is the person's call, and what each answer causes; the rule is stated once
+  in `SKILL.md` and twelve ask sites follow it. (row 89)
+- At an unknown interface-record verdict nothing is asked: the reviewer decides from both texts
+  in its brief, in both run modes. (row 88)
 - The push refusal in `deny-destructive-commands.sh` has a gate a person opens on their own
   machine: while `/etc/claude/allow-push` exists and root owns it, the session may run
   `git push`. Only `sudo` can create it, so the model cannot open the gate from a tool call.
