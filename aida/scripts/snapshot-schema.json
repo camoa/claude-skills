@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA implementation snapshot",
-  "description": "The contract and the work orders as design left them, at <task folder>/implementation/snapshot.json (ideal/implementation.md, 'Freezing, and what a freeze is for'). Written by the implementation stage's first step: the capture refuses to overwrite, so finding this file means a run is being resumed rather than started. One order at a time is replaced by its live copy afterwards, by `start` for a drifted order that had not started and by `restart` for the orders it resets, and the ledger's resnapshots list records each replacement. Everything after it reads the criteria and the orders from here, never from the live records, because the tests are written from a work order and the order is what they can drift from. Plain JSON, no fences, no markdown. A field present in a real snapshot but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "The contract and the work orders as design left them, at <task folder>/implementation/snapshot.json (ideal/implementation.md, 'Freezing, and what a freeze is for'). Written by the implementation stage's first step: the capture refuses to overwrite, so finding this file means a run is being resumed rather than started. One order at a time is replaced by its live copy afterwards, by `start` for a drifted order that had not started and by `restart` for the orders it resets, and the ledger's resnapshots list records each replacement. Whenever the snapshot is rewritten that way, or because the contract alone changed, `alignment` is refreshed from the live alignment.json design closed on, so the frozen contract is the one the tests are written from. Everything after it reads the criteria and the orders from here, never from the live records, because the tests are written from a work order and the order is what they can drift from. Plain JSON, no fences, no markdown. A field present in a real snapshot but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "takenAt", "hash", "alignment", "workOrders"],
@@ -24,7 +24,7 @@
     },
     "alignment": {
       "type": "object",
-      "description": "The contract, copied verbatim from alignment.json at capture. Not re-validated here, because check-alignment.sh already judged it and a second judge is a second producer for one fact. Copied rather than referenced, because a reference would read the live file and there would be nothing to drift from."
+      "description": "The contract, copied verbatim from alignment.json at capture, and refreshed from it whenever the snapshot is rewritten, since design must have closed on the live files for that rewrite. Not re-validated here, because check-alignment.sh already judged it and a second judge is a second producer for one fact. Copied rather than referenced, because a reference would read the live file and there would be nothing to drift from."
     },
     "workOrders": {
       "type": "array",
