@@ -246,7 +246,9 @@ holds a hash over the contract and every order together, the run mode, and who w
 Implementation reads this record on its first run, before it freezes anything, and refuses to
 start on a contract or an order that no longer matches the hash. That is what catches an order
 edited after design closed. Changing a closed design is supported: edit the order, then close
-again, and the new hash replaces the old.
+again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
+done-when row may skip the research and guide reading. That reading shapes an order, not its file
+list.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its

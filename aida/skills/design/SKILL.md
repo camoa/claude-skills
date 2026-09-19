@@ -68,6 +68,13 @@ to serve is nothing this stage can check.
 `work-orders:` above zero: this is a resumed or repeated run. Read each named file before
 drafting anything new, rather than starting over.
 
+A reopen that changes only owned files or done-when rows on an existing order may skip the
+research and guide reading below. Those calls are `add-owned-file`, `remove-owned-file`,
+`add-done-when` and `remove-done-when`. The reading informs an order's shape, not its file
+list. The route is the change, then `check`, `close` with the verdict the last
+`design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
+an order's interface, criteria or dependencies, reads as a first run does.
+
 Then start design:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh start "<task_folder>"
