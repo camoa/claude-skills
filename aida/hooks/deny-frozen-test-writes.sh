@@ -4,7 +4,8 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # deny-frozen-test-writes.sh. A PreToolUse hook on Write, Edit, MultiEdit, NotebookEdit and Bash:
 # refuses a write to a test file this task has already frozen (scripts/tests-frozen-schema.json,
-# <task folder>/implementation/tests-<unit_id>.json).
+# <task folder>/implementation/tests-<unit_id>.json). A support file the freeze took with the
+# tests, a base class or a fixture under the record's `support` key, is guarded the same way.
 #
 # Unlike hooks/deny-prior-source.sh, this rule is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -125,14 +126,14 @@ read_words() {
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
 
-# ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test ---------------
+# ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test or support file
 FROZEN=""
 for f in "$IMPL_DIR"/tests-*.json; do
   [ -e "$f" ] || continue
   jq empty "$f" >/dev/null 2>&1 || continue
   base="$(basename -- "$f")"
   rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"
-  paths="$(jq -r '.rows[]?.tests[]?.path // empty' "$f" 2>/dev/null)"
+  paths="$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null)"
   [ -n "$paths" ] || continue
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue

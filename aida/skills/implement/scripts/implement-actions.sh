@@ -39,6 +39,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
 #                            [--locks-in <test name>=<reason>]...
+#                            [--support <path relative to codePath>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
 #                            --interface <path to the record the builder wrote> \
@@ -513,6 +514,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      so a re-check would be a free retry, and the route is `build`. Or no check stopped the
 #      attempt, so it passed and the order is past the build. A halted order refuses at exit 49
 #      like every step-five action, and `grant-attempt` is its route.
+#
+# The code the support files added (live-run row 90).
+#  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
+#      matches one of the given --test-glob patterns. A support file is a base class or a fixture
+#      the test author wrote beside the tests, hashed and committed with them; a path a test glob
+#      matches is a test, and belongs on --test. A support path outside codePath shares exit 36.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -3386,6 +3393,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
+  local support_raw=""
   local test_recipes="" unit_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3436,6 +3444,12 @@ do_tests_freeze() {
       --locks-in)
         [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>"
         locks_raw="$locks_raw$2
+"
+        shift 2 ;;
+      --support)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --support needs <path relative to codePath>"
+        [ -n "$2" ] || die 3 "tests-freeze: --support was given an empty path."
+        support_raw="$support_raw$2
 "
         shift 2 ;;
       -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
@@ -3610,6 +3624,64 @@ $unique_rel_paths
 TF_EOF
   [ -z "$unmatched_paths" ] \
     || die 27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
+
+  # --- 89: a --support path is a base class or a fixture the author wrote beside the tests -------
+  # It is resolved, checked and hashed the way a --test path is, and refused when it is missing
+  # or when a test glob matches it: such a file is a test and belongs on --test (live-run row 90).
+  # Outside codePath it shares exit 36, the same fact a --test path gets. One list, no name. A
+  # path is resolved to its real place first, so `../` cannot read as inside the root and leave a
+  # record naming a file git then refuses to commit.
+  local support_tmp support_rel support_abs support_missing="" support_tests="" support_outside="" support_sha support_real
+  support_tmp="$IMPL_DIR/.tests-freeze-support.$$"
+  : >"$support_tmp"
+  if [ -n "$support_raw" ]; then
+    records_hash__resolve_sha256_cmd \
+      || die 3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  fi
+  while IFS= read -r raw_path; do
+    [ -n "$raw_path" ] || continue
+    case "$raw_path" in /*) support_real="$raw_path" ;; *) support_real="$codepath_canon/$raw_path" ;; esac
+    support_real="$(cd "$(dirname "$support_real")" 2>/dev/null && pwd -P)/$(basename "$support_real")"
+    rel_result="$(tf_relativize_path "$support_real" "$codepath_canon")"
+    rel_kind="$(printf '%s' "$rel_result" | cut -f1)"
+    support_rel="$(printf '%s' "$rel_result" | cut -f2-)"
+    if [ "$rel_kind" = "OUTSIDE" ]; then
+      support_outside="$support_outside$raw_path, "
+      continue
+    fi
+    support_abs="$codepath_canon/$support_rel"
+    if [ ! -f "$support_abs" ]; then
+      support_missing="$support_missing$support_rel, "
+      continue
+    fi
+    matched=false
+    gi=0
+    while [ "$gi" -lt "$glob_count" ]; do
+      g="$(printf '%s' "$test_globs_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+      tf_path_matches_catalog_glob "$support_rel" "$g" && matched=true
+      [ "$matched" = "true" ] && break
+      gi=$((gi + 1))
+    done
+    if [ "$matched" = "true" ]; then
+      support_tests="$support_tests$support_rel, "
+      continue
+    fi
+    support_sha="$(tf_sha256_of "$support_abs")"
+    [ -n "$support_sha" ] || die 3 "tests-freeze: could not compute a sha256 for $support_abs"
+    jq -n --arg p "$support_rel" --arg sha "$support_sha" '{path: $p, sha256: $sha}' >>"$support_tmp" \
+      || die 3 "tests-freeze: could not record the support row for $support_rel"
+  done <<TF_EOF
+$support_raw
+TF_EOF
+  [ -z "$support_outside" ] \
+    || { rm -f "$support_tmp"; die 36 "tests-freeze: these --support paths are outside the code root $codepath_canon: ${support_outside%, }"; }
+  [ -z "$support_missing" ] \
+    || { rm -f "$support_tmp"; die 89 "tests-freeze: these --support paths do not exist on disk (relative to $codepath_canon): ${support_missing%, }"; }
+  [ -z "$support_tests" ] \
+    || { rm -f "$support_tmp"; die 89 "tests-freeze: these --support paths match a --test-glob pattern, so each is a test and belongs on --test: ${support_tests%, }"; }
+  local support_json
+  support_json="$(jq -s 'unique_by(.path)' "$support_tmp")"
+  rm -f "$support_tmp"
 
   # --- 28: a test name must carry, at its own end, the criterion id(s) it claims, or the unit's own
   # id when it proves the doneWhen. The same check either way: an order id is one more token the
@@ -4027,8 +4099,8 @@ TF_EOF
   # exists for, tests changed under a record nobody re-took.
   if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ]; then
     local existing_rows new_rows
-    existing_rows="$(jq -cS '{unit, testGlobs, rows}' "$record_file" 2>/dev/null)"
-    new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows}')"
+    existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
+    new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
     if [ "$existing_rows" = "$new_rows" ]; then
       echo "TESTS-FREEZE: unchanged (already frozen at commit $existing_commit with the same tests)"
       printf '%s\n' "$record_file"
@@ -4045,8 +4117,11 @@ TF_EOF
   # the line at the end says what was left. The helper dies before the record is written when the
   # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
   # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
+  # The support files ride in the same commit as the tests, so they are the author's in the
+  # history and never land in the implementer's range (live-run row 90).
   local frozen_rel_paths tree_left
-  frozen_rel_paths="$(printf '%s' "$tests_json" | jq -r '[.[].relPath] | unique | .[]')"
+  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
+    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
   if [ -n "$frozen_rel_paths" ]; then
     set --
     while IFS= read -r p; do
@@ -4107,8 +4182,8 @@ TF_EOF
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
-    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" \
-    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof}')"
+    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
+    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support}')"
 
   if [ -f "$record_file" ]; then
     local existing_no_date new_no_date
@@ -4973,14 +5048,18 @@ BR_DIFF
   jq -n --arg verdict "$ofc_verdict" --arg detail "$ofc_detail" \
     '{id: "owned-files", verdict: $verdict, detail: $detail}' >>"$parts_file"
 
-  # --- every frozen test file is unchanged ---------------------------------------------------------
+  # --- every frozen test file is unchanged, and every support file frozen with them ---------------
+  # A support file is a base class or a fixture the author wrote beside the tests (live-run row
+  # 90). It is hashed here the same as a test: the implementer owns it and may not rewrite it.
   records_hash__resolve_sha256_cmd \
     || die 3 "$BRC_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
   local ftc_verdict ftc_detail
-  local frozen_paths frozen_count fidx frozen_file fsha current_sha changed_tests=""
+  local frozen_paths frozen_count support_count support_noun fidx frozen_file fsha current_sha changed_tests=""
   frozen_paths="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ] | unique_by(.path)')"
+    '([ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ]
+      + [ (.support // [])[] | {path, sha256} ]) | unique_by(.path)')"
   frozen_count="$(printf '%s' "$frozen_paths" | jq 'length')"
+  support_count="$(printf '%s' "$BRC_TESTS_DOC" | jq '(.support // []) | length')"
   fidx=0
   while [ "$fidx" -lt "$frozen_count" ]; do
     frozen_file="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].path')"
@@ -4995,13 +5074,18 @@ BR_DIFF
   done
   if [ -n "$changed_tests" ]; then
     ftc_verdict="unmet"
-    ftc_detail="these frozen test files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
+    ftc_detail="these frozen test or support files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
   elif [ "$frozen_count" -eq 0 ]; then
     ftc_verdict="met"
     ftc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') froze no test file, so there is nothing to hash."
   else
     ftc_verdict="met"
     ftc_detail="every frozen test file for $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') is unchanged."
+    if [ "$support_count" -gt 0 ]; then
+      support_noun="files"
+      [ "$support_count" -ne 1 ] || support_noun="file"
+      ftc_detail="${ftc_detail%.}, and so is each of its $support_count support $support_noun."
+    fi
   fi
   jq -n --arg verdict "$ftc_verdict" --arg detail "$ftc_detail" \
     '{id: "frozen-tests", verdict: $verdict, detail: $detail}' >>"$parts_file"

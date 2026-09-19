@@ -39,6 +39,12 @@
       "items": { "$ref": "#/$defs/row" },
       "description": "One entry per machine-verified criterion a `--test` named, one per person-verified criterion the unit serves or owns, and one for the unit's own doneWhen when a `--test` proves it. A machine-verified criterion the unit only serves and no test names gets no row: its proof lives with the order that owns it (live-run row 59). A criterion the unit neither serves nor owns never gets a row, whatever a `--test` might have claimed for it: that claim is refused before this file is ever written. Never empty when `proof` is tests: a record with no row is refused (exit 74). When `proof` is gate the unit takes no `--test`, so this holds only the checklist rows of its person-verified criteria, and may be empty."
     },
+    "support": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/support" },
+      "description": "The files the test author wrote beside the tests and the tests stand on: a base class, a fixture. Each came from one `--support` flag, is hashed here and committed in the same commit as the tests, so the frozen-tests check reads it as it reads a test and hooks/deny-frozen-test-writes.sh guards it the same way. Refused before this file is written when the path is missing (exit 89) or when a `testGlobs` pattern matches it, because that file is a test and belongs on `--test` (exit 89). Empty when the freeze was given no `--support`. Absent on a record written before this field existed, which reads as empty (live-run row 90)."
+    },
     "proof": {
       "type": "string",
       "enum": ["tests", "gate", "record"],
@@ -47,6 +53,23 @@
     }
   },
   "$defs": {
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the support file lives, relative to the project's own codePath, never absolute, for the same reason a test's `path` is. Resolved and refused (exit 36) the same way when it names something outside codePath."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "sha256 over the whole file at `path`, computed at freeze, the same hash a test carries. A support file whose hash no longer matches reads frozen-tests unmet, the same as a changed test."
+        }
+      }
+    },
     "row": {
       "type": "object",
       "additionalProperties": false,

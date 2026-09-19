@@ -171,6 +171,14 @@ it. Nothing re-records the hash, though, so the order's next attempt fails its f
 check. A test that turns out wrong is not repaired in place; the way back is to restart the order,
 described under the halts below.
 
+The author often writes a base class or a fixture beside the tests, and the tests stand on it.
+The freeze takes each such file with the tests: hashed, committed in the same commit, and recorded
+as a support file. The hook guards it the same way, and a change to it fails the frozen-tests
+check the same way a changed test does. Without this the implementer, which owns the file, could
+rewrite the setup under the tests with every check still met. The author's work would also land
+in the implementer's own diff. A support file a test pattern matches is a test, and the freeze
+refuses it under that name.
+
 ## A configuration order
 
 A work order whose deliverable is exported configuration, a Drupal view or a content type, has

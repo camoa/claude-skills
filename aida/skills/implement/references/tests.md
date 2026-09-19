@@ -133,7 +133,9 @@ the order's own done-when returns the order id in place of a criterion. For each
 what the run printed when the test failed to its own file, under the task folder's `implementation/`
 folder, one file per test, and returns that file's path in its report. `--red` below reads that
 path. Ask it to return a checklist line for each criterion a person verifies, copying the
-verification sentence whole.
+verification sentence whole. Ask it to return the path of each support file it wrote or changed
+beside the tests. A support file is a base class or a fixture: the tests stand on it, and it is
+not a test.
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
@@ -231,7 +233,8 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
-  --row <order id>=<confirmed|rejected>::<person|model>::<note>
+  --row <order id>=<confirmed|rejected>::<person|model>::<note> \
+  --support <path of a support file the author returned>
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
@@ -296,11 +299,17 @@ Then it records a hash for each test file. That hash is the freeze. From here a 
 write to one of those files from every dispatched role except the test author of the order that
 froze it.
 
-Then it commits the test files it hashed, on the task branch, and only those paths. The
-implementer starts from a tree that already holds the tests, and the record's commit is the one
-they are in. Work beside them stays uncommitted, and the freeze says so in one line. A commit that
-fails, for want of a git identity or any other reason, refuses before the record is written,
-with git's own message.
+Pass each support file the author returned as `--support`. The freeze hashes it with the tests,
+records it under `support`, and the hook guards it the same way. Without this, the implementer,
+which owns the file, may rewrite the setup the tests stand on and the frozen-tests check stays
+met. The freeze refuses a support path that does not exist (exit 89). It also refuses one a test
+glob matches (exit 89), because that file is a test: pass it as `--test`.
+
+Then it commits the test files it hashed, and the support files, on the task branch, and only
+those paths. The implementer starts from a tree that already holds the tests, and the record's
+commit is the one they are in. Work beside them stays uncommitted, and the freeze says so in one
+line. A commit that fails, for want of a git identity or any other reason, refuses before the
+record is written, with git's own message.
 
 A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is
 noticed, and the hash is what notices one. The hook allows the write and says which file changed and
