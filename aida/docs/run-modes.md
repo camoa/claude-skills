@@ -161,7 +161,7 @@ of those goes to you instead.
 
 Nothing grants an extra attempt, raises a budget, restarts an order, or clears any other halt
 without you: each refuses on an autonomous run. Whether the built interface
-matches its declaration is left to the reviewer alone, and the report says nobody ruled on it.
+matches its declaration is the reviewer's to decide, from both texts, in both modes.
 When every order closes, implementation invokes review, when review is autonomous too. See
 [implementation](implementation.md).
 

@@ -193,8 +193,11 @@ by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. D
 confirmed row to the person. The record says a model judged it, so a person can list those rows
 later and read any of them again.
 
-**Interactive, a rejected row goes to the person, one question per row.** Show the row, the
-checker's note, and the answer the note recommends. The person's answer becomes
+**Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
+doubts that the new tests for one requirement prove what it asks. A model may not settle that
+alone. Confirm and the tests are kept as written. Reject and the test author rewrites them before
+anything is built." Then name the requirement in its own words, the tests, the checker's note,
+and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=confirmed::person::<the person's words>` or
 `--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
 the test author before any freeze runs. Never run the freeze with a rejected row still standing.

@@ -40,14 +40,12 @@ It prints the brief's path, the diff path, the findings path and the report path
 line per check with its verdict, and counts. Never the brief.
 
 Check the interface-record verdict among the eight lines. Unknown means the declaration names
-nothing in backticks, so the script could count nothing there. Interactive, when the check read
-unknown: before dispatching the reviewer, show the two texts the brief's `interface` field holds,
-and nothing else from the brief.
-Those are the declared interface and the builder's own record, and a person must read them to
-answer, which is the exception SKILL.md names. Then ask the person whether the two agree. If they
-say the two disagree, tell the reviewer where, when it is dispatched, so its own finding can cite
-the criterion. Unattended: skip the ask. The reviewer has both texts in the brief and decides
-alone; say in the report that nobody ruled on it.
+nothing in backticks, so the script could count nothing there. At unknown, ask nothing, in either
+mode. Say one line to the person: "No named element of the interface could be counted. The
+reviewer reads the declared interface and the builder's record. If they disagree, its finding
+cites the criterion." The brief carries both texts, unchanged, and the reviewer is told
+nothing else. A person shown the two texts would be making the comparison the reviewer is about
+to make, from the same texts (live-run row 88).
 
 A met verdict only means every backticked element is present verbatim. It does not rule out a
 deeper disagreement between the two texts. Catching that is the reviewer's job, from both texts
@@ -154,7 +152,11 @@ build.md names, and an order whose proof is `gate` needs it here for the same re
 frameworks command one tool. It refuses (exit 73) when the check recipe it resolves is not the one
 the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
-scope than it had. Interactive puts each one to the person. Unattended halts the order, naming the
+scope than it had. Interactive puts each one to the person, opening with: "The fixer says this
+review finding needs a change in files it was not allowed to edit. Only you can allow that. Make
+or allow the change, and the next round can fix it. Otherwise the finding stays open, and you
+rule on it when the fix rounds run out." Then say the finding in plain words and name the files
+it asked for. Unattended halts the order, naming the
 finding, and `clear-halt` is the person's way past. Its reason may not hold the text
 `; earlier: `, the same refusal every halt reason applies: that text is how one halt is joined to
 another, and a reason carrying it would forge one.
@@ -164,7 +166,12 @@ not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
 
 **`fix-record` refuses when the code repository's tree is not clean.** The fixer commits its own
 work before it returns. A dirty tree means that commit did not happen. This round is not recorded.
-Interactive puts that to the person. Unattended halts the order with that reason.
+Interactive puts that to the person, opening with: "The fixer left changes in the code that it
+did not commit, so this round cannot be recorded. Only you can say whether they are wanted.
+Commit them and the round is recorded and checked. Discard them and the round starts over." Then
+name the repository and the files git
+lists. Unattended
+halts the order with that reason.
 
 This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
 `gate` order the floor is `configuration-gate`, and on a `record` order `done-when`. A `record`
@@ -225,7 +232,13 @@ refusing: nothing was verified twice.
 Once the rounds are spent, `verify-record` above refuses when a finding is still open and no
 ruling names it: nothing is written yet, so this is a retry of that same call, not a new one. Each
 open finding needs a ruling, `wrong`, `deferred`, or `load-bearing`, with a reason. Put the open
-findings to the person and ask. Unattended, `verify-record` already halted the order instead.
+findings to the person and ask, opening with: "The reviewer found problems that two fix rounds did
+not repair, and there are no rounds left. You decide what each one is. Wrong: the reviewer was
+mistaken, and the work is accepted as it is. Deferred: the problem is real but put off to a
+later task, and the work is accepted. Load-bearing: the work cannot be accepted with it, so
+this unit of work stops until you act. A model may not make these calls with
+nobody watching." Then say each finding in plain words, with
+what it cites. Unattended, `verify-record` already halted the order instead.
 
 Run the same call again, with one `--ruling` flag added per open finding:
 ```

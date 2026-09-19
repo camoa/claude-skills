@@ -10,6 +10,8 @@ reviewer, and the reference is the tests.
 You type one command to begin, `/aida:implement <task-id>`, or say "start implementing this
 task". From then on the stage runs from the conversation. It tells you what it did, what each
 check answered, and where each record is. It asks a question only where a script cannot decide.
+Every question opens with one plain sentence that names the decision and what each answer causes.
+You may be returning to the terminal days later with none of the order in mind.
 
 ## What happens before anything is built
 
@@ -146,7 +148,9 @@ The checker runs in both modes, on the top tier, and reads each named test again
 test-authoring recipe and the sentence. A person shown test names cannot see what it sees. Asking
 about every row added a turn and no judgement the checker had not already given. A
 confirmed row is therefore the checker's in both modes. You are asked only about a row it
-rejected: one question per row, with the checker's note and the answer it recommends. A row you
+rejected, one question per row. The question says in plain words that the checker doubts the new
+tests prove one requirement. Confirming keeps them; rejecting sends them back. Then it names the
+requirement, the tests, the checker's note and the answer it recommends. A row you
 reject goes back to the test author, and the repaired test goes through the checker again.
 Nothing freezes while a rejected row stands.
 
@@ -273,10 +277,11 @@ frozen tests, the eight check results, and both interface texts. It is given the
 report too, as claims and never as proof, so a reason in it never lowers a finding's severity. It
 writes its findings and nothing else; a probe file left in the code is a refusal.
 
-When the interface check read unknown, you are asked before the reviewer runs whether the declared
-interface and the builder's own record agree. AIDA shows you both texts first, because you cannot
-judge two texts you have not read. If you say they disagree, the reviewer is told where. Autonomous,
-the reviewer decides alone from both texts, and the report says nobody ruled on it.
+When the interface check read unknown, nothing is asked, in either mode. AIDA says in one line
+that no named element of the interface could be counted. The reviewer reads the declared
+interface and the builder's record itself, and its finding cites the criterion if they disagree.
+Both texts are in its brief. Asking you to compare them put the reviewer's own comparison to a
+person, from the same two texts. A model ended up answering for you.
 
 Every finding cites one criterion or one non-goal. A finding citing neither is recorded and never
 reaches a fixer; the review stage decides what becomes of it. That rule removes the cheap false
