@@ -20,8 +20,10 @@ noticed rather than quietly built.
 Design must have closed on exactly these files. On its first run, AIDA re-derives design's close
 hash from the live contract and work orders and refuses when it disagrees. That means design
 closed once and something changed since, so close design again. A resumed run compares the live
-files against the snapshot instead: it reports drift, halts only for work-order drift, and notes
-a contract change. The snapshot is taken here rather than at design
+files against the snapshot instead and reports drift. A changed work order drifts. A changed
+criterion drifts every order that serves or owns it. The snapshot then takes the live contract,
+so no test is written from a sentence the person has since replaced. An order serving none of
+the changed criteria is untouched. The snapshot is taken here rather than at design
 close because a person can close design, edit an order, then start.
 
 A resumed run refuses two more things. When the branch was rewritten under the build, by a
@@ -320,7 +322,8 @@ or minutes. The spend is recomputed from the ledger before every dispatch, so no
 writes can reset it. Raise the budget in `task.json` first; a grant alone brings the halt back.
 
 **Design drift** has the restart. Running the build again after a design change compares the live
-design to the snapshot. An order that has not started is taken fresh from the live design, once
+design to the snapshot. An order drifts when its own file changed, or when a criterion it serves
+or owns changed. An order that has not started is taken fresh from the live design, once
 design has closed on it. Nothing halts for it, because nothing was built against its old shape. An
 order that has started, with frozen tests or a build record, halts, and so does every order that
 depends on it. Restarting moves only the halted orders' records aside, resets them to not started,

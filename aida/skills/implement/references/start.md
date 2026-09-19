@@ -40,6 +40,12 @@ A resumed run that halts one or more work orders for drift is not a failure. Say
 orders halted and why. A halted order stays halted until a person looks at it; nothing here
 un-halts one automatically, and nothing here decides whether the drift is acceptable.
 
+The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
+snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason
+naming the criterion, the same as a changed order file. An order serving none of the changed
+criteria is untouched. The snapshot then takes the live contract, so the tests are written from
+the criterion the person approved. That needs design closed on the live files too.
+
 Only a started order halts for drift: one with a step reached, a frozen test record or a build
 record. A drifted order that has not started is taken fresh from the live design instead, and
 nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.

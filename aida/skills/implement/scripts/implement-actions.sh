@@ -804,19 +804,22 @@ snapshot_self_hash() {
 }
 
 # The snapshot document $1 with the orders named in $2 (a JSON array of ids) replaced by their
-# live copies from $3 (the live work orders), and its hash re-derived through snapshot_self_hash.
-# Prints the new document, or nothing and returns 1 when the hash could not be derived. takenAt
-# is kept: the ledger's resnapshots entry carries the date of the replacement. An order is frozen
-# when it starts, not when the stage starts, so an order nothing was built against takes the live
-# shape design closed on (ideal/implementation.md, the 2026-09-14 paragraph under "Freezing").
+# live copies from $3 (the live work orders), its alignment replaced by $4 (the live alignment),
+# and its hash re-derived through snapshot_self_hash. Prints the new document, or nothing and
+# returns 1 when the hash could not be derived. takenAt is kept: the ledger's resnapshots entry
+# carries the date of the replacement. An order is frozen when it starts, not when the stage
+# starts, so an order nothing was built against takes the live shape design closed on
+# (ideal/implementation.md, the 2026-09-14 paragraph under "Freezing"). Both callers require
+# design closed over the live files, so the alignment taken is the one design closed on; a live
+# copy frozen beside a stale contract would hand a test author the old criterion (live-run row 86).
 snapshot_with_live_orders() {
-  local doc="$1" ids="$2" live="$3" orders alignment hash
+  local doc="$1" ids="$2" live="$3" alignment="$4" orders hash
   orders="$(printf '%s' "$doc" | jq -c --argjson ids "$ids" --argjson live "$live" '
       ($live | map({(.id): .}) | add // {}) as $lm
       | .workOrders | map(. as $o | if (($ids | index($o.id)) != null) then $lm[$o.id] else $o end)')"
-  alignment="$(printf '%s' "$doc" | jq -c '.alignment')"
   hash="$(snapshot_self_hash "$alignment" "$orders")" || return 1
-  printf '%s' "$doc" | jq -c --arg hash "$hash" --argjson orders "$orders" '.hash = $hash | .workOrders = $orders'
+  printf '%s' "$doc" | jq -c --arg hash "$hash" --argjson orders "$orders" --argjson alignment "$alignment" \
+    '.hash = $hash | .alignment = $alignment | .workOrders = $orders'
 }
 
 # Every design/*.json under $1, parsed and sorted by numeric work order id (wo1, wo2, ... wo10),
@@ -1389,7 +1392,7 @@ do_start() {
 
   local run_kind snapshot_hash_on_disk snapshot_alignment_json snapshot_workorders_json
   local drifted_orders_json='[]' contract_changed=false new_live_order_ids_json='[]'
-  local dependent_halts_json='[]' drift_halts_json='[]'
+  local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
 
@@ -1472,6 +1475,24 @@ do_start() {
                 end
             ]
         ')"
+      # A changed criterion is design drift for every order that serves or owns it, the same as
+      # a changed order file: the tests are written from the frozen criterion, so an order built
+      # after the change would assert the old sentence (live-run row 86). Changed means the
+      # snapshot's criterion object differs from the live one or is gone from it. An order that
+      # already drifted on its own file keeps that reason.
+      if [ "$contract_changed" = "true" ]; then
+        changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
+            (($b.criteria // []) | map({(.id): .}) | add // {}) as $liveMap
+            | [ ($a.criteria // [])[] | select($liveMap[.id] != .) | .id ]')"
+        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" '
+            ($drifted | map(.id)) as $have
+            | $drifted + [ $snap[] | . as $s
+                | select(($have | index($s.id)) == null)
+                | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null) ]) as $hits
+                | select(($hits | length) > 0)
+                | {id: $s.id, reason: ("design drift: criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, changed since the snapshot was taken")}
+              ]')"
+      fi
       # A drifted order that has not started is not halted: nothing was built against its old
       # shape, so it is replaced in the snapshot by the live copy instead, and its dependents are
       # untouched (live-run row 72). Started means a ledger step reached or an attempt spent, a
@@ -1496,15 +1517,27 @@ do_start() {
       removed_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
+      # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
+      # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
+      # still has to be the frozen copy the next order's tests are written from.
+      local drift_what=""
       if [ "$(printf '%s' "$resnapshot_ids_json" | jq 'length')" -gt 0 ] || [ "$(printf '%s' "$removed_ids_json" | jq 'length')" -gt 0 ]; then
+        drift_what="these work orders changed since the snapshot was taken and have not started: $(jq -nr --argjson a "$resnapshot_ids_json" --argjson b "$removed_ids_json" '$a + $b | join(", ")'). Each would be taken fresh from the live design, or dropped where the live design no longer holds it"
+      fi
+      if [ "$contract_changed" = "true" ]; then
+        [ -z "$drift_what" ] || drift_what="$drift_what; and "
+        drift_what="${drift_what}the contract changed since the snapshot was taken, and the snapshot would take the live alignment.json"
+      fi
+      if [ -n "$drift_what" ]; then
         [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
-          || die 13 "start: these work orders changed since the snapshot was taken and have not started: $(jq -nr --argjson a "$resnapshot_ids_json" --argjson b "$removed_ids_json" '$a + $b | join(", ")'). Each would be taken fresh from the live design, or dropped where the live design no longer holds it, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run start."
+          || die 13 "start: $drift_what, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run start."
         # The removed orders leave the document before the helper runs, so the one hash it
         # re-derives covers the live copies taken in and the frozen copies dropped together.
         resnapshot_doc="$(snapshot_with_live_orders "$(printf '%s' "$snapshot_doc" | jq -c --argjson ids "$removed_ids_json" \
-            '.workOrders = [ .workOrders[] | . as $o | select(($ids | index($o.id)) == null) ]')" "$resnapshot_ids_json" "$live_workorders_json")" \
+            '.workOrders = [ .workOrders[] | . as $o | select(($ids | index($o.id)) == null) ]')" "$resnapshot_ids_json" "$live_workorders_json" "$live_alignment_json")" \
           || die 3 "start: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
         resnapshot_hash="$(printf '%s' "$resnapshot_doc" | jq -r '.hash')"
+        snapshot_alignment_json="$(printf '%s' "$resnapshot_doc" | jq -c '.alignment')"
         snapshot_workorders_json="$(printf '%s' "$resnapshot_doc" | jq -c '.workOrders')"
         drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson ids "$resnapshot_ids_json" --argjson gone "$removed_ids_json" \
           '[ $drifted[] | . as $d | select(($ids + $gone | index($d.id)) == null) ]')"
@@ -1542,7 +1575,7 @@ do_start() {
               # Bound first: after the pipe `.` would be $bad, and an array always finds itself.
               | ([ $r[] | . as $d | select(($bad | index($d)) != null) ]) as $hits
               | select(($hits | length) > 0)
-              | {id: $x, reason: ("design drift: " + $x + " depends on " + ($hits | join(", ")) + ", directly or through another order, and that design file changed since the snapshot was taken")}
+              | {id: $x, reason: ("design drift: " + $x + " depends on " + ($hits | join(", ")) + ", directly or through another order, and that order drifted since the snapshot was taken")}
             ]
         ')"
       drift_halts_json="$(jq -cn --argjson a "$drifted_orders_json" --argjson b "$dependent_halts_json" '$a + $b')"
@@ -1697,7 +1730,13 @@ do_start() {
           | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
         )
       ')"
-    final_criteria_json="$(printf '%s' "$ledger_doc" | jq -c '.criteria')"
+    # The list follows the snapshot's criteria, which a contract change just refreshed: an entry
+    # the ledger holds is kept with its judgements, a new criterion opens as not judged, and one
+    # the contract dropped leaves. A changed criterion's serving orders are unstarted or halted
+    # here, so no judgement is reset; `restart` resets the halted ones' when it takes them fresh.
+    final_criteria_json="$(printf '%s' "$ledger_doc" | jq -c --argjson live "$snapshot_criteria_json" '
+        ((.criteria // []) | map({(.id): .}) | add // {}) as $have
+        | [ $live[] | .id as $id | ($have[$id] // {id: $id, rowState: "not-judged"}) ]')"
   else
     opened_as="opened"
     [ -z "$rebased_onto" ] \
@@ -7285,8 +7324,10 @@ do_restart() {
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
   DESIGN_DIR="$TASK_PATH/design"
   CLOSED_FILE="$TASK_PATH/design-closed.json"
-  local drifted_ids_json live_workorders_json live_hash removed_ids_json retaken_ids_json removed retaken
+  local drifted_ids_json live_alignment_json live_workorders_json live_hash removed_ids_json retaken_ids_json removed retaken
   drifted_ids_json="$(printf '%s' "$drifted" | jq -Rc 'split(", ")')"
+  live_alignment_json="$(jq -c '.' "$ALIGNMENT_FILE" 2>/dev/null)"
+  [ -n "$live_alignment_json" ] || die 3 "restart: $ALIGNMENT_FILE could not be read as JSON."
   live_workorders_json="$(gather_workorders_json "$DESIGN_DIR")"
   [ -z "$READ_FAILED" ] || die 3 "restart: $READ_FAILED is under design/ but could not be read as JSON."
   live_hash="$(records_hash_for "$TASK_PATH")" \
@@ -7313,7 +7354,7 @@ do_restart() {
   # The removed orders leave the document before the helper runs, so the one hash it re-derives
   # covers the live copies taken in and the frozen copies dropped together.
   new_snapshot="$(snapshot_with_live_orders "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson gone "$removed_ids_json" \
-      '.workOrders = [ .workOrders[] | . as $o | select(($gone | index($o.id)) == null) ]')" "$retaken_ids_json" "$live_workorders_json")" \
+      '.workOrders = [ .workOrders[] | . as $o | select(($gone | index($o.id)) == null) ]')" "$retaken_ids_json" "$live_workorders_json" "$live_alignment_json")" \
     || die 3 "restart: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
   new_hash="$(printf '%s' "$new_snapshot" | jq -r '.hash')"
   # A halted order's entry goes back to what start opens it as, or leaves the list when the design
