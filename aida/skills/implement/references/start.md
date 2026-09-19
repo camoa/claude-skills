@@ -50,6 +50,9 @@ Only a started order halts for drift: one with a step reached, a frozen test rec
 record. A drifted order that has not started is taken fresh from the live design instead, and
 nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
 The `resnapshotted:` line names those orders, and the ledger records each with the two hashes.
+A started order that only gained owned files is taken in place the same way, and nothing halts
+for it. Its frozen tests were written from fields that did not change. A removed owned file, or
+any other change, halts it as before.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,

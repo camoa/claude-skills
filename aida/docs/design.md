@@ -205,7 +205,9 @@ parallel, one lens each. The contract lens asks whether each order's text, not o
 serves and produces what the criteria say. It also asks whether anything built falls under a
 non-goal. The reuse lens asks whether an order rebuilds something research found. The
 buildability lens asks whether a test author and an implementer could work from the order alone.
-Of every configuration order, it asks whether the order owns every file its operation rewrites.
+Of every order, it asks whether the order owns every file its operation rewrites. It reads the
+owned list against the couplings your framework's design recipe names, such as a service and
+its definition file.
 
 Each reader writes one findings file, `records/design-critique-<lens>.md`. A finding is blocking
 when implementation would build the wrong thing or could not start, and a concern otherwise.

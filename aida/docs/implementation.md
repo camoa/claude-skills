@@ -353,6 +353,13 @@ and keeps every finished order. A finished order is never redone for a change it
 Design has to close again on the live files first. A restart is a person's judgement, so an
 autonomous run cannot take it.
 
+One change to a started order does not halt it: an owned file added and nothing else. The
+build found a file the operation rewrites that no order owned, and design added it. The frozen
+tests were written from the criteria and the order's other fields, so they still hold. Once
+design has closed again, the next run takes the wider order in place and keeps its step and
+attempts. The orders that depend on it are left alone. A removed owned file, or any other
+change, halts as above.
+
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
 finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt

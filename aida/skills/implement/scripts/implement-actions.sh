@@ -1437,6 +1437,7 @@ do_start() {
   local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
+  local widened_ids_json='[]'
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -1559,12 +1560,35 @@ do_start() {
       removed_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
+      # A started order whose live copy differs from the frozen one only by added owned files is
+      # not halted either (live-run row 91). Its frozen tests were written from the criteria and
+      # the order's other fields, and none of those changed, so the live copy is taken in place:
+      # the ledger entry keeps its step and attempts, and its dependents are untouched. Any other
+      # difference, a removed owned file, or a changed criterion it serves, halts as before.
+      widened_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
+          --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
+          ($live | map({(.id): .}) | add // {}) as $liveMap
+          | ($snap | map({(.id): .}) | add // {}) as $snapMap
+          | [ $drifted[] | .id as $d
+              | select(($started | index($d)) != null)
+              | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
+              | select($l != null)
+              | select(($l | del(.ownedFiles)) == ($s | del(.ownedFiles)))
+              | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
+              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0)
+              | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
+              | $d ]')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
       # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
       # still has to be the frozen copy the next order's tests are written from.
       local drift_what=""
       if [ "$(printf '%s' "$resnapshot_ids_json" | jq 'length')" -gt 0 ] || [ "$(printf '%s' "$removed_ids_json" | jq 'length')" -gt 0 ]; then
         drift_what="these work orders changed since the snapshot was taken and have not started: $(jq -nr --argjson a "$resnapshot_ids_json" --argjson b "$removed_ids_json" '$a + $b | join(", ")'). Each would be taken fresh from the live design, or dropped where the live design no longer holds it"
+      fi
+      if [ "$(printf '%s' "$widened_ids_json" | jq 'length')" -gt 0 ]; then
+        [ -z "$drift_what" ] || drift_what="$drift_what; and "
+        drift_what="${drift_what}these started work orders gained owned files and changed nothing else: $(printf '%s' "$widened_ids_json" | jq -r 'join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
+        resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$widened_ids_json" '$a + $b')"
       fi
       if [ "$contract_changed" = "true" ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
