@@ -361,6 +361,14 @@ design has closed again, the next run takes the wider order in place and keeps i
 attempts. The orders that depend on it are left alone. A removed owned file, or any other
 change, halts as above.
 
+A restart moves records, not commits. The halted order's frozen tests and its build attempts
+are still on the branch. A test author sent against them could write a test that passes at
+once. So the restart lists those commits, and says one of two things about the tree. When
+nothing later depends on them, it names the commit to take the branch back to. That is a hard
+reset, and you run it. When other commits sit after them, they are carried. Either way the
+next run names them while they are still there. The test author's brief then says the tree
+holds a partial build of the unit. A test green on arrival is reported, never taken as proof.
+
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
 finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt

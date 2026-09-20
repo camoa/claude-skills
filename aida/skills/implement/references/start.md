@@ -40,6 +40,11 @@ A resumed run that halts one or more work orders for drift is not a failure. Say
 orders halted and why. A halted order stays halted until a person looks at it; nothing here
 un-halts one automatically, and nothing here decides whether the drift is acceptable.
 
+After a restart, a `partialBuild(<order>):` line names each restarted order whose commits are
+still on the branch, with the commits and their kinds. It prints only while one is there. It is
+not a refusal: the person may have chosen to carry them. Tell the person the tree still holds
+that order's earlier tests and code, and that its test author will be told so.
+
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
 snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason
 naming the criterion, the same as a changed order file. An order serving none of the changed

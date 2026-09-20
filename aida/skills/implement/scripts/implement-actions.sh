@@ -1927,6 +1927,14 @@ do_start() {
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
+  # After a restart, the halted orders' commits may still be on the branch; one line per order
+  # names them while they are. Not a refusal: the person may have chosen to carry them
+  # (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  local st_partial_json='[]'
+  if [ "$run_kind" = "resumed" ]; then
+    st_partial_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$code_path" "" | jq -c '
+      group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind))})')"
+  fi
   im_print_summary "start" "$(jq -n \
     --arg task "$TASK_PATH" --arg codePath "$code_path" \
     --arg run "${run_kind}, ledger ${opened_as}" \
@@ -1943,6 +1951,7 @@ do_start() {
     --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson removed "$removed_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
+    --argjson partialBuild "$st_partial_json" \
     --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
     --argjson ready "$ready_ids_json" \
@@ -1950,8 +1959,9 @@ do_start() {
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
      drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted, removed: $removed, newLiveOrders: $newLiveOrders,
-     halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
-    | if ($removed | length) == 0 then del(.removed) else . end')"
+     partialBuild: $partialBuild, halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
+    | if ($removed | length) == 0 then del(.removed) else . end
+    | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
   exit 0
 }
 
@@ -3114,7 +3124,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: exactly these six keys, and nothing else -------------------------------
+  # --- assemble the brief: exactly these six keys, and a seventh only after a restart -------------
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -3134,6 +3144,16 @@ do_tests_brief() {
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
 
+  # A seventh thing, only after a restart left this order's commits on the branch: the tree holds
+  # a partial build of the order, so a test that passes on arrival is suspect, and the author is
+  # told rather than left to find it (live-run row 94).
+  local tree_holds_json
+  rv_load_codepath "tests-brief"
+  tree_holds_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" | jq -c '
+    if length == 0 then null
+    else {commits: map({kind, commit}),
+          note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect"} end')"
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -3141,10 +3161,11 @@ do_tests_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
-        --argjson reuses "$reuses_out" \
+        --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
-      reuses: $reuses, playbooksPath: $playbooksPath}')"
+      reuses: $reuses, playbooksPath: $playbooksPath}
+     | if $treeHolds == null then . else .treeHolds = $treeHolds end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -3155,7 +3176,9 @@ do_tests_brief() {
      declaredTests: (.unit.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
      reuses: (.reuses | if length == 0 then null else length end),
-     next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}')"
+     treeHolds: (if has("treeHolds") then ([ .treeHolds.commits[] | .commit[0:7] + " " + .kind ]) else null end),
+     next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
+    | if .treeHolds == null then del(.treeHolds) else . end')"
   exit 0
 }
 
@@ -7629,6 +7652,66 @@ do_clear_halt() {
   exit 0
 }
 
+# The commits one order's records name that HEAD still holds, as a JSON array of
+# {order, kind, commit, range}. $1 the implementation folder, $2 the code repository, $3 the order.
+# The freeze record's `commit` is HEAD at the freeze, whether or not the freeze committed: a gate
+# order commits nothing, and a test already in HEAD makes no commit either. So the commit is the
+# order's only when its subject is the one the freeze writes for this order. A build record holds
+# the last attempt's range; a fix record each round's. A record whose commits git no longer has
+# names nothing (live-run row 94).
+rs_order_commits() {
+  local impl="$1" codepath="$2" one_id="$3" out='[]' c range file kind
+  c="$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null)"
+  if [ -n "$c" ] && git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1; then
+    case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
+      "Freeze the tests of $one_id through the implement skill:"*)
+        out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '. + [{order: $id, kind: "freeze", commit: $c, range: $c}]')" ;;
+    esac
+  fi
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    range="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$file" 2>/dev/null)"
+    [ -n "$range" ] || continue
+    case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
+        if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
+    done <<RS_RANGE
+$(git -C "$codepath" rev-list --reverse "$range" 2>/dev/null)
+RS_RANGE
+  done <<RS_FILES
+$impl/build-$one_id.json
+$(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)
+RS_FILES
+  printf '%s' "$out"
+}
+
+# The commits the newest restart record names that HEAD still holds, the same shape, or [] when
+# no restart happened or nothing of it is left. $1 the task folder, $2 the code repository, $3 an
+# order id to keep alone, or empty for every order. Read by `start` after a restart and by
+# `tests-brief`, so the test author is told the tree holds a partial build of the order.
+rs_restarted_commits_in_head() {
+  local task="$1" codepath="$2" only="$3" newest="" one out='[]' c
+  while IFS= read -r one; do
+    [ -n "$one" ] || continue
+    if [ -z "$newest" ] || [ "$one" -nt "$newest" ]; then newest="$one"; fi
+  done <<RS_FOUND
+$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null)
+RS_FOUND
+  if [ -n "$newest" ]; then
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      out="$(jq -c --arg c "$c" --argjson have "$out" '$have + [ (.commits // [])[] | select(.commit == $c) ]' "$newest")"
+    done <<RS_COMMITS
+$(jq -r --arg only "$only" '(.commits // [])[] | select($only == "" or .order == $only) | .commit' "$newest" 2>/dev/null)
+RS_COMMITS
+  fi
+  printf '%s' "$out"
+}
+
 do_restart() {
   local task_arg="" reason=""
   while [ "$#" -gt 0 ]; do
@@ -7711,6 +7794,36 @@ do_restart() {
   [ ! -e "$target" ] \
     || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
 
+  # The records move aside; the commits they name stay on the branch. "Start over from the live
+  # design" is true of the records and false of the tree, so the tree is read here, before the
+  # records move, and the person is told what to do with it (live-run row 94). Every commit from
+  # the earliest of them to HEAD is a halted order's: nothing later depends on them, and the
+  # branch can go back to the parent of the earliest. Anything else in that span is carried, and
+  # `start` and `tests-brief` say so until the commits are gone. The restart changes nothing in
+  # the tree.
+  local commits_json tree_json one_id earliest parent span_count own_count
+  commits_json='[]'
+  for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
+    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$IMPL_DIR" "$RV_CODEPATH" "$one_id")" '$have + $more')"
+  done
+  tree_json='null'
+  if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then
+    earliest="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null \
+      | grep -F -x -f <(printf '%s' "$commits_json" | jq -r '.[].commit') | head -1)"
+    parent="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "${earliest}^" 2>/dev/null)"
+    if [ -n "$parent" ]; then
+      span_count="$(git -C "$RV_CODEPATH" rev-list --count "$parent..HEAD" 2>/dev/null)"
+    else
+      span_count="$(git -C "$RV_CODEPATH" rev-list --count HEAD 2>/dev/null)"
+    fi
+    own_count="$(printf '%s' "$commits_json" | jq 'length')"
+    if [ -n "$parent" ] && [ "$span_count" = "$own_count" ]; then
+      tree_json="$(jq -cn --arg c "$parent" '{resetTo: $c}')"
+    else
+      tree_json="$(jq -cn --argjson n "$((span_count - own_count))" '{carry: true, count: $n}')"
+    fi
+  fi
+
   local new_snapshot new_hash new_ledger
   # The removed orders leave the document before the helper runs, so the one hash it re-derives
   # covers the live copies taken in and the frozen copies dropped together.
@@ -7739,12 +7852,13 @@ do_restart() {
 
   mkdir -p "$target" || die 3 "restart: could not create $target"
   # The reason is written beside the records moved aside, because they are what it explains.
-  # Nothing reads this file yet; a person does.
+  # `start` and `tests-brief` read `commits` back while HEAD still holds any of them.
   local restart_json
   restart_json="$(jq -n --arg restartedAt "$today" --arg reason "$reason" --arg head "$head_short" \
     --argjson drifted "$drifted_ids_json" --argjson removed "$removed_ids_json" \
+    --argjson commits "$commits_json" --argjson tree "$tree_json" \
     '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
-      ordersHaltedForDrift: $drifted, ordersRemoved: $removed}')"
+      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, commits: $commits, tree: $tree}')"
   write_atomic "$target/restarted.json" "$restart_json"
   # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
   # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
@@ -7764,6 +7878,16 @@ do_restart() {
     || echo "RESTART: the design removed $removed; each leaves the snapshot and the ledger and is not taken fresh."
   [ -z "$retaken" ] \
     || echo "RESTART: $retaken start over from the live design."
+  if [ "$tree_json" = "null" ]; then
+    echo "commits: none"
+    echo "tree: no commit of a halted order is in the tree"
+  else
+    printf '%s' "$commits_json" | jq -r '.[] | "commits: " + .commit[0:7] + " " + .order + " " + .kind'
+    printf '%s' "$tree_json" | jq -r '
+      if has("resetTo") then "tree: reset the branch to " + .resetTo[0:7] + " (a hard reset, which a person runs; this session'"'"'s hook refuses it)"
+      elif .count == 1 then "tree: 1 later commit depends on them; carry them, and the test author is told"
+      else "tree: " + (.count | tostring) + " later commits depend on them; carry them, and the test author is told" end'
+  fi
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"
   exit 0

@@ -71,6 +71,10 @@ It reads the frozen copy and never the live files. It writes exactly six things 
   the test author gets its shape. An order disposed with no path carries none;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
+A seventh, `treeHolds`, only after a restart left this order's earlier commits on the branch.
+It holds those commits and one sentence. The tree holds a partial build of this unit, so a
+test that passes on arrival is suspect. The summary prints the commits on a `treeHolds:` line.
+
 It prints the brief's path and counts, never the brief.
 
 That list is the withheld list, decided once rather than at each dispatch. Pass the brief's path
@@ -126,7 +130,9 @@ Give it the **path** to the test-authoring recipe for its framework, the **path*
 `tests-brief` wrote, and nothing else. It opens both itself. Do not read either body here and paste
 it in. The recipe runs to well over a hundred lines per framework, and reading it into this
 conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
-reading it is the role's.
+reading it is the role's. When the summary printed a `treeHolds:` line, name it in the dispatch.
+The brief's `treeHolds` says the tree holds this unit's earlier build. So a test green on
+arrival is reported by name, as below, and never taken as proof.
 
 Ask it to return, for each test, the path, the name, and the criterion the name carries. A test of
 the order's own done-when returns the order id in place of a criterion. For each test, it writes
