@@ -205,7 +205,9 @@ parallel, one lens each. The contract lens asks whether each order's text, not o
 serves and produces what the criteria say. It also asks whether anything built falls under a
 non-goal. The reuse lens asks whether an order rebuilds something research found. The
 buildability lens asks whether a test author and an implementer could work from the order alone.
-Of every configuration order, it asks whether the order owns every file its operation rewrites.
+Of every order, it asks whether the order owns every file its operation rewrites. It reads the
+owned list against the couplings your framework's design recipe names, such as a service and
+its definition file.
 
 Each reader writes one findings file, `records/design-critique-<lens>.md`. A finding is blocking
 when implementation would build the wrong thing or could not start, and a concern otherwise.
@@ -244,7 +246,9 @@ holds a hash over the contract and every order together, the run mode, and who w
 Implementation reads this record on its first run, before it freezes anything, and refuses to
 start on a contract or an order that no longer matches the hash. That is what catches an order
 edited after design closed. Changing a closed design is supported: edit the order, then close
-again, and the new hash replaces the old.
+again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
+done-when row may skip the research and guide reading. That reading shapes an order, not its file
+list.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its

@@ -10,6 +10,8 @@ reviewer, and the reference is the tests.
 You type one command to begin, `/aida:implement <task-id>`, or say "start implementing this
 task". From then on the stage runs from the conversation. It tells you what it did, what each
 check answered, and where each record is. It asks a question only where a script cannot decide.
+Every question opens with one plain sentence that names the decision and what each answer causes.
+You may be returning to the terminal days later with none of the order in mind.
 
 ## What happens before anything is built
 
@@ -146,7 +148,9 @@ The checker runs in both modes, on the top tier, and reads each named test again
 test-authoring recipe and the sentence. A person shown test names cannot see what it sees. Asking
 about every row added a turn and no judgement the checker had not already given. A
 confirmed row is therefore the checker's in both modes. You are asked only about a row it
-rejected: one question per row, with the checker's note and the answer it recommends. A row you
+rejected, one question per row. The question says in plain words that the checker doubts the new
+tests prove one requirement. Confirming keeps them; rejecting sends them back. Then it names the
+requirement, the tests, the checker's note and the answer it recommends. A row you
 reject goes back to the test author, and the repaired test goes through the checker again.
 Nothing freezes while a rejected row stands.
 
@@ -166,6 +170,14 @@ yourself, the hook lets the write through and tells you which file changed and w
 it. Nothing re-records the hash, though, so the order's next attempt fails its frozen-tests
 check. A test that turns out wrong is not repaired in place; the way back is to restart the order,
 described under the halts below.
+
+The author often writes a base class or a fixture beside the tests, and the tests stand on it.
+The freeze takes each such file with the tests: hashed, committed in the same commit, and recorded
+as a support file. The hook guards it the same way, and a change to it fails the frozen-tests
+check the same way a changed test does. Without this the implementer, which owns the file, could
+rewrite the setup under the tests with every check still met. The author's work would also land
+in the implementer's own diff. A support file a test pattern matches is a test, and the freeze
+refuses it under that name.
 
 ## A configuration order
 
@@ -213,8 +225,9 @@ five answers into its report. They name the most surgical fix, what stays untouc
 the lines it expects to add and delete, and the files and blocks it targets. The reviewer reads the
 diff against those answers.
 
-It writes only inside the files its order owns. It may not change a test; a hook refuses the
-write and names the order that froze the file. It may not read another order's source; what
+It writes only inside the files its order owns. A hook refuses it a write under the code path
+outside them. A file it needs and does not own is a stop, and the report names the file. It may
+not change a test; a hook refuses the write and names the order that froze the file. It may not read another order's source; what
 another unit exposes is its interface record. It is refused the recipe that writes tests, because
 that file chooses a level and names a test, and this reader may do neither. It stops rather than
 working around a test that seems wrong or an interface that does not fit. Interactive, the stop
@@ -273,10 +286,11 @@ frozen tests, the eight check results, and both interface texts. It is given the
 report too, as claims and never as proof, so a reason in it never lowers a finding's severity. It
 writes its findings and nothing else; a probe file left in the code is a refusal.
 
-When the interface check read unknown, you are asked before the reviewer runs whether the declared
-interface and the builder's own record agree. AIDA shows you both texts first, because you cannot
-judge two texts you have not read. If you say they disagree, the reviewer is told where. Autonomous,
-the reviewer decides alone from both texts, and the report says nobody ruled on it.
+When the interface check read unknown, nothing is asked, in either mode. AIDA says in one line
+that no named element of the interface could be counted. The reviewer reads the declared
+interface and the builder's record itself, and its finding cites the criterion if they disagree.
+Both texts are in its brief. Asking you to compare them put the reviewer's own comparison to a
+person, from the same two texts. A model ended up answering for you.
 
 Every finding cites one criterion or one non-goal. A finding citing neither is recorded and never
 reaches a fixer; the review stage decides what becomes of it. That rule removes the cheap false
@@ -340,6 +354,21 @@ and keeps every finished order. A finished order is never redone for a change it
 Design has to close again on the live files first. A restart is a person's judgement, so an
 autonomous run cannot take it.
 
+One change to a started order does not halt it: an owned file added and nothing else. The
+build found a file the operation rewrites that no order owned, and design added it. The frozen
+tests were written from the criteria and the order's other fields, so they still hold. Once
+design has closed again, the next run takes the wider order in place and keeps its step and
+attempts. The orders that depend on it are left alone. A removed owned file, or any other
+change, halts as above.
+
+A restart moves records, not commits. The halted order's frozen tests and its build attempts
+are still on the branch. A test author sent against them could write a test that passes at
+once. So the restart lists those commits, and says one of two things about the tree. When
+nothing later depends on them, it names the commit to take the branch back to. That is a hard
+reset, and you run it. When other commits sit after them, they are carried. Either way the
+next run names them while they are still there. The test author's brief then says the tree
+holds a partial build of the unit. A test green on arrival is reported, never taken as proof.
+
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
 finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt
@@ -384,6 +413,8 @@ The read denials and the frozen-test refusal are hooks the runtime applies. The 
 the Read and Grep tools and not the shell. The test author runs its own tests, so it holds a
 shell, and a `cat` of a denied file is not refused. The rule exists to stop a role opening the
 source because that is the obvious way to write a test about it. A role working around it on
-purpose has already failed in a way no hook catches. Three things are recorded and enforced by
-nothing: the paths a role may write, the fixer's fix scope, and the builder's five answers. A
-write outside the fix scope surfaces when the reviewer reads the fix diff, not as it happens.
+purpose has already failed in a way no hook catches. The implementer's owned files are enforced
+too: the write hook refuses it a write under the code path outside them. Three things are recorded
+and enforced by nothing: the paths every other role may write, the fixer's fix scope, and the
+builder's five answers. A write outside the fix scope surfaces when the reviewer reads the fix
+diff, not as it happens.

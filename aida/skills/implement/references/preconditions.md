@@ -79,7 +79,10 @@ which one had no value.
 runs has answered, and stopping on it would mean no project on that framework ever builds. Say
 which of the two happened; never report `undeclared` as conditions that passed.
 
-`unmet` and `unknown` stop, and the person decides. In an unattended run they halt. Nothing here
+`unmet` and `unknown` stop, and the person decides. Interactive, open with: "Something this
+project needs before a test can run is missing, or could not be checked. Only you can install or
+fix it. Do that and the build starts. Leave it and nothing is built." Then name the condition,
+the framework, and the owner the recipe gave. In an unattended run they halt. Nothing here
 judges an unmet condition acceptable.
 
 Say which frameworks were answered from a recipe and which were not. A framework whose recipe could

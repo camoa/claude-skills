@@ -53,8 +53,14 @@ record, so a stage cannot run out of order. That is why this chain is safe.
 ## Offer the grant, when a halt reads "attempts spent"
 
 An order halted with a reason beginning `attempts spent` has used every attempt it was allowed and
-still failed a check. Interactive, with a person present, put the two recorded attempts to them.
-Ask which of the three things named in `references/build.md`'s halt section is true. If they decide
+still failed a check. Interactive, with a person present, open with: "The builder used every
+attempt it was allowed on this unit of work and still failed a check. You decide which of three
+things is true; a model choosing would let the test describe the code. The test is
+wrong: you correct it, and one more attempt is granted. The unit of work is wrong, too big or
+its interface does not fit. Then design changes it, and the build takes it fresh. The code is hard:
+you write it, and the same checks judge it. If you want one more attempt as it stands, say so."
+Then name the two recorded attempts by
+path. SKILL.md's "One order halting" section is where the three things are stated. If they decide
 the order needs one more attempt, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh grant-attempt "<task_folder>" <order id> \
@@ -74,7 +80,10 @@ because an order is halted; put the halt and its recorded attempts to them first
 
 An order halted with a reason beginning `budget spent` was about to be dispatched when the run
 reached its ceiling. `budget` in `task.json` sets that ceiling, and the halt names the numbers.
-Put them to the person. The spend is recomputed at every dispatch, so a grant alone brings the
+Put them to the person, opening with: "The build reached the limit you set on this task, in
+dispatches or in minutes, and stopped. Only you can raise it. Raise the limit in the task's
+record and the build can continue. Leave it and the build stays stopped." Then name the two
+numbers the halt holds. The spend is recomputed at every dispatch, so a grant alone brings the
 halt straight back. The person raises `budget.dispatches` or `budget.minutes` in `task.json`
 first. Then `grant-attempt` clears the halt as it clears `attempts spent`. It also raises that
 order's attempts by one; say so.
@@ -85,7 +94,12 @@ A halt beginning `design drift` means `start` found the live design changed afte
 started. That can be direct, or through a started order it depends on. The halted orders start
 over; every other order keeps what it has.
 
-Put that to the person. If they want to rebuild the halted orders against the new design, run:
+Put that to the person, opening with: "The design changed after this unit of work was started, so
+what was built no longer matches it. Only you can say the new design is the one to build.
+Rebuild it and its tests and code are written again; every other unit keeps what it has. A unit
+the design removed is dropped. Leave it and it stays stopped." Then name the halted
+orders and what changed in each. If they want to rebuild the halted orders against the new
+design, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh restart "<task_folder>" \
   --reason <what changed and why these orders start over>
@@ -107,13 +121,28 @@ depended on. A halted order the live design no longer holds is dropped from the 
 ledger. Its records move aside with the rest, and the summary names it. The next `start` is a
 resumed run.
 
+The records move; the commits they name stay on the branch. The restart reads each halted
+order's freeze commit and its build and fix ranges. It lists the ones still on the branch, one
+`commits:` line each, with the order and the kind. It writes them into `restarted.json` too.
+It changes nothing in the tree. The `tree:` line then says one of two things. Put it to
+the person, opening with: "The tests and code written for this unit are still on the branch.
+Its next test author would write against them, and a test that passes at once would prove
+nothing. You choose what happens to those commits." Then say the line. When it names a commit
+to reset to, nothing later depends on those commits. Say: "Take the branch back to that commit
+and they are gone. That is a hard reset, which you run; this session cannot." When it says to
+carry them, other commits sit after them. Say: "They stay. The next start names them, and the
+test author is told the tree holds a partial build." Either way the next `start` prints a
+`partialBuild` line while any of them is still on the branch.
+
 ## Clear any other halt, once the person has acted on it
 
 A halt that reads none of `attempts spent`, `budget spent` or `design drift` names something a
 person does outside this script. That is a rejected row, a finding on a non-goal, a fixer's
 scope, a finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings
-open halt the same way. Put the halt and its reason to the person. When they have
-repaired the test, ruled on the finding, or committed the tree, run:
+open halt the same way. Put the halt and its reason to the person, opening with: "This unit of
+work stopped on something only you can do. It waits until you say you have done it. Do what
+the reason names, then say so, and the build resumes where it stopped." Then say the reason in
+plain words. When they have repaired the test, ruled on the finding, or committed the tree, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh clear-halt "<task_folder>" <order id> \
   --because <what the person did about it>

@@ -47,12 +47,16 @@ finding it cites, not taken as settled.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
 what was meant? Does one order own a directory another order owns a file inside? The design
 check refuses an identical entry twice; it reads paths as strings, so nesting is yours. Is the
-order small enough: three to seven build steps, ten at most, and one concern per order? For an
-order whose `proof` is `gate`, ask the recipe's own question of a configuration unit. Does the
-order own every file the operation rewrites? Does its `## Configuration gate` exist? The
-design recipe's sentence is the rule, and it names the recipe that carries the block. Read the
-design recipe from the path you were given, and the named recipe where it sits beside it. Given
-no path, say so and report the order as not read under that question.
+order small enough: three to seven build steps, ten at most, and one concern per order? Of
+every order, ask the recipe's own question: does the order own every file the operation
+rewrites? The design recipe names the framework's couplings, such as a registered service and
+its definition file, or a route and its routing file. Read the owned list against that list.
+An order that changes a class must own every coupling file that names the class. A constructor
+change rewrites the service definition, so an order that owns the class and not the definition
+is a finding. For an order whose `proof` is `gate`, also ask: does its `## Configuration gate`
+exist? The design recipe's sentence is the rule, and it names the recipe that carries the
+block. Read the design recipe from the path you were given, and the named recipe where it sits
+beside it. Given no path, say so and report the order as not read under that question.
 
 ## What you write
 

@@ -2,11 +2,26 @@
 # The plugin root: the variable when the platform sets it (hooks), else this file's own place.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-# deny-frozen-test-writes.sh. A PreToolUse hook on Write, Edit, MultiEdit, NotebookEdit and Bash:
-# refuses a write to a test file this task has already frozen (scripts/tests-frozen-schema.json,
-# <task folder>/implementation/tests-<unit_id>.json).
+# deny-frozen-test-writes.sh. A PreToolUse hook on Write, Edit, MultiEdit, NotebookEdit and Bash,
+# applying two rules, the first always first.
 #
-# Unlike hooks/deny-prior-source.sh, this rule is not gated to one role first. A frozen test is
+# Rule one refuses a write to a test file this task has already frozen
+# (scripts/tests-frozen-schema.json, <task folder>/implementation/tests-<unit_id>.json). A support
+# file the freeze took with the tests, a base class or a fixture under the record's `support` key,
+# is guarded the same way.
+#
+# Rule two, added 2026-09-19 (live-run row 92), holds the implementer to its unit's owned files.
+# While the open dispatch record names the implementer and carries `ownedFiles`, a write to a path
+# under codePath that is not one of those files, or under one of those directories, is refused,
+# and the reason tells the role to stop and report. A path outside codePath, the task folder where
+# the report and the interface record live, is not this rule's. Any other role, or a record without
+# the key, leaves the rule off. A write the frozen rule already refuses never reaches it. A payload
+# naming no agent type is the person, allowed with a note, the same three cases as rule one. Its
+# Bash door is rule one's, with rule one's limits below, and a rule that refuses unless owned turns
+# a miss into a false stop: `cd lib && echo x > l.php` is judged as a write to l.php at the code
+# root, and a `mkdir` of a new owned file's parent is refused because the parent is not owned.
+#
+# Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
 # frozen test needs the design reopened, never a direct edit. The one exception is narrow and
 # role-specific: a test author dispatched for a unit may still write that same unit's own frozen
@@ -34,10 +49,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # registered for this working directory, or no dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
 # guard kept. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
-# this task: allow, through `systemMessage` naming why. Nothing is frozen before the third step of
-# implementation runs, and that is a real state, not a fault, the same distinction
-# dispatch-schema.json's own header draws. An agent that reports a test author type while the
-# record names another role, or names no role, still gets the exception
+# this task and rule two is off: allow, through `systemMessage` naming why. Nothing is frozen
+# before the third step of implementation runs, and that is a real state, not a fault, the same
+# distinction dispatch-schema.json's own header draws. An agent that reports a test author type
+# while the record names another role, or names no role, still gets the exception
 # described above, and that allow reports itself through `systemMessage` as well: the exception
 # belongs to the role the record names, and an agent type the record does not name is the case a
 # mistyped or unnamed dispatch lands in.
@@ -125,14 +140,14 @@ read_words() {
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
 
-# ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test ---------------
+# ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test or support file
 FROZEN=""
 for f in "$IMPL_DIR"/tests-*.json; do
   [ -e "$f" ] || continue
   jq empty "$f" >/dev/null 2>&1 || continue
   base="$(basename -- "$f")"
   rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"
-  paths="$(jq -r '.rows[]?.tests[]?.path // empty' "$f" 2>/dev/null)"
+  paths="$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null)"
   [ -n "$paths" ] || continue
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
@@ -144,7 +159,21 @@ $paths
 FROZEN_EOF
 done
 
-[ -n "$FROZEN" ] || not_enforced "no unit has frozen tests yet for this task"
+# ---- rule two's list: the implementer's owned files, one absolute path per line ----------------
+# Read only when the record names the implementer; every other role leaves OWNED empty and the
+# rule off. Resolved against codePath the way the frozen paths are, so the two compare as strings.
+OWNED=""
+if [ "${ROLE##*:}" = "implementer" ]; then
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    OWNED="$OWNED$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")
+"
+  done <<OWNED_EOF
+$(jq -r '.ownedFiles[]? // empty' "$DISPATCH_FILE" 2>/dev/null)
+OWNED_EOF
+fi
+
+[ -n "$FROZEN" ] || [ -n "$OWNED" ] || not_enforced "no unit has frozen tests yet for this task"
 
 # Prints the unit that owns frozen path $1, or nothing when $1 is not frozen.
 owner_of() {
@@ -163,11 +192,31 @@ OWNER_EOF
   return 1
 }
 
+# Rule two's own test on one resolved candidate. Keeps the first candidate that lies under codePath
+# and is neither an owned file nor under an owned directory, in STRAY. Never returns non-zero, so
+# a caller's own flow is unchanged by it. Off while OWNED is empty.
+STRAY=""
+note_stray() {
+  local cand="$1" o
+  [ -n "$OWNED" ] && [ -z "$STRAY" ] || return 0
+  is_under "$cand" "$CODE_CANON" && [ "$cand" != "$CODE_CANON" ] || return 0
+  while IFS= read -r o; do
+    [ -n "$o" ] || continue
+    is_under "$cand" "$o" && return 0
+  done <<STRAY_EOF
+$OWNED
+STRAY_EOF
+  STRAY="$cand"
+}
+
 # Resolves one write target and reports whether a frozen test owns it. The record's codePath is
 # tried first, and the payload's working directory second when it is a different directory, for the
 # reason this file's own header gives. On a match this sets OWNER_UNIT to the owning unit and
 # OWNER_ABS to the resolution that matched, and returns 0. Sets them by assignment rather than
 # printing them, because a command substitution runs in a subshell and would lose the second value.
+# A candidate no frozen test owns is handed to note_stray on the way past, so rule two reads every
+# write position rule one parses without a second parser. A frozen match still wins: the callers
+# read a hit before they read STRAY.
 OWNER_UNIT=""
 OWNER_ABS=""
 owner_of_arg() {
@@ -176,11 +225,13 @@ owner_of_arg() {
   if u="$(owner_of "$cand")"; then
     OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
   fi
+  note_stray "$cand"
   if [ "$CWD_CANON" != "$CODE_CANON" ]; then
     cand="$(normalize_abs "$(resolve_against "$arg" "$CWD_CANON")")"
     if u="$(owner_of "$cand")"; then
       OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
     fi
+    note_stray "$cand"
   fi
   return 1
 }
@@ -211,12 +262,22 @@ allow_unnamed_role() {
 frozen_reason() {
   printf 'this task froze this test for unit %s. Changing it needs the design reopened. If the test is wrong, stop and report it. Do not edit it.' "$1"
 }
+# Rule two's exit, reached only when rule one found nothing. $1 is a suffix naming the door.
+# The person is allowed with a note, the owned-files check reads the diff after the attempt.
+stray_exit() {
+  [ -n "$STRAY" ] || return 0
+  [ -n "$AGENT" ] || {
+    jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $STRAY is not a file $UNIT owns, and the implementer dispatched for $UNIT may not write it. The owned-files check reads the diff after the attempt." '{systemMessage:$m}'
+    exit 0
+  }
+  deny "$STRAY$1: not a file $UNIT owns. The implementer writes only inside the files its unit owns. Stop: name this file and why the unit needs it in your report, commit nothing, and return."
+}
 
 case "$TOOL" in
   Write|Edit|MultiEdit|NotebookEdit)
     TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
     [ -n "$TARGET" ] || { echo '{}'; exit 0; }
-    owner_of_arg "$TARGET" || { echo '{}'; exit 0; }
+    owner_of_arg "$TARGET" || { stray_exit ""; echo '{}'; exit 0; }
     TARGET_ABS="$OWNER_ABS"
     OWNER="$OWNER_UNIT"
     if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ]; then
@@ -258,8 +319,11 @@ case "$TOOL" in
       [ -n "$HIT" ] && break
       case "${w[0]}" in
         rm|touch|truncate|chmod|mkdir|rmdir|tee|unlink)
+          # chmod's first operand is its mode, never a path; rule two would refuse it as one.
+          mode_skip=false; [ "${w[0]}" = chmod ] && mode_skip=true
           for t in "${w[@]:1}"; do
             case "$t" in -*) continue ;; esac
+            if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
             if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
           done ;;
         git) case "${w[1]:-}" in rm|mv|checkout|restore|stash|apply|clean|reset)
@@ -275,9 +339,13 @@ case "$TOOL" in
           last="${w[$((${#w[@]} - 1))]}"
           if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi ;;
         cd)
+          # A cd operand is never a write target, so rule two must not see it: STRAY is put back
+          # to what it was, and rule one keeps its own check.
+          stray_before="$STRAY"
           if owner_of_arg "${w[1]:-}" && printf '%s' "$CMD" | grep -q '>'; then
             HIT="${w[1]}"; HIT_OWNER="$OWNER_UNIT"
-          fi ;;
+          fi
+          STRAY="$stray_before" ;;
       esac
     done < <(printf '%s\n' "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
     if [ -n "$HIT" ]; then
@@ -290,6 +358,7 @@ case "$TOOL" in
       [ -n "$AGENT" ] || allow_person "$HIT" "$HIT_OWNER"
       deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"
     fi
+    stray_exit " through Bash"
     ;;
 esac
 echo '{}'

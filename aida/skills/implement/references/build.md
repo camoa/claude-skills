@@ -87,7 +87,8 @@ commits them when it finishes. The owned-files check sets them aside and counts 
 detail, so a sweep is visible there, not a failure.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
-there.
+there. The dispatch record carries the list, and a hook refuses the implementer a write under the
+code path outside it while the record is open. The reason tells it to stop and report.
 
 **It may not change a test.** A test that seems wrong is a reason to stop, not to edit. A hook
 refuses the write and names which order froze the file.
@@ -96,8 +97,17 @@ refuses the write and names which order froze the file.
 hook refuses the read while the dispatch is open.
 
 **It stops rather than working around anything.** A test that seems wrong, an interface that does
-not fit, or the attempts running out are all stops. Interactive puts the stop to the person.
-Unattended halts the order and records what was left.
+not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
+A stop looks like this in the conversation: the role returns early, its report names what stopped it,
+and nothing is committed. Interactive puts the stop to the person,
+opening with: "The builder stopped instead of working around something, and only you may change
+it. It says a test is wrong, the interface does not fit, it needs a file it does not own, or its
+attempts ran out.
+Repair that and the next attempt continues. Leave it and this unit of work stays stopped." Then
+say in plain words
+what the builder's report names. The person, or design, adds a file the unit needs:
+`add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
+halt a started order. Unattended halts the order and records what was left.
 
 Ask it to return what it changed, one line on the tests, the path to the interface record it wrote,
 and any concern. Under fifteen lines. The interface record is prose about what this unit exposes,
@@ -130,7 +140,11 @@ either makes the range this attempt claims false.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not
-recorded. Interactive puts that to the person. Unattended halts the order with that reason, and
+recorded. Interactive puts that to the person, opening with: "The builder left changes in the
+code that it did not commit, so this attempt cannot be recorded. Only you can say whether they
+are wanted. Commit them and the attempt is recorded and checked. Discard them and the attempt
+starts over." Then name the repository and
+the files git lists. Unattended halts the order with that reason, and
 a person clears it with `clear-halt` once the tree is committed, in `references/finish.md`.
 
 **On an order whose proof is `record`, every one of those reads the project folder instead.**
@@ -262,9 +276,12 @@ one in another file reads as old. A second copy of an old finding on another lin
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
 attempts as its own allowed count says, two unless a person has granted more. The summary prints
-one line per check with its verdict and a one-line reason. Say which check failed, name the record
-path that holds what the tool printed, and let the person decide whether to spend the next one. Do
-not read the record here.
+one line per check with its verdict and a one-line reason. Interactive, open with: "This attempt
+at the work failed one of the checks, and another attempt is allowed. Spending it is your
+call, because each attempt costs a dispatch. Say yes and the builder tries again from this
+code. Say no and the work stays where it is until you return." Then say which check failed,
+in plain words, and name the record path that holds what the tool printed. Do not read the
+record here.
 
 An unknown on interface-record does not spend the attempt. The declaration named no backticked
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every

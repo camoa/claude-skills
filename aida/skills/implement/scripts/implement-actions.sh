@@ -39,6 +39,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
 #                            [--locks-in <test name>=<reason>]...
+#                            [--support <path relative to codePath>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
 #                            --interface <path to the record the builder wrote> \
@@ -87,7 +88,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # it must answer from the test and never from the implementation, and an implementer is denied every
 # order's but its own and is allowed its own. A fixer takes the implementer's derivation exactly, because a fix round
 # writes the same order's files for the same reason (decision 8 of step five). `--deny-read` adds to what was derived; it is how a path outside codePath is
-# denied, such as the recipe each role may not open.
+# denied, such as the recipe each role may not open. An implementer's record also carries its own
+# owned files under `ownedFiles`, the list hooks/deny-frozen-test-writes.sh holds it to while the
+# record is open (live-run row 92). No other role's record carries the key.
 #   implement-actions.sh dispatch-close <task_folder>
 #   implement-actions.sh step <name>
 #
@@ -513,6 +516,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      so a re-check would be a free retry, and the route is `build`. Or no check stopped the
 #      attempt, so it passed and the order is past the build. A halted order refuses at exit 49
 #      like every step-five action, and `grant-attempt` is its route.
+#
+# The code the support files added (live-run row 90).
+#  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
+#      matches one of the given --test-glob patterns. A support file is a base class or a fixture
+#      the test author wrote beside the tests, hashed and committed with them; a path a test glob
+#      matches is a test, and belongs on --test. A support path outside codePath shares exit 36.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -1430,6 +1439,7 @@ do_start() {
   local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
+  local widened_ids_json='[]'
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -1552,12 +1562,35 @@ do_start() {
       removed_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
+      # A started order whose live copy differs from the frozen one only by added owned files is
+      # not halted either (live-run row 91). Its frozen tests were written from the criteria and
+      # the order's other fields, and none of those changed, so the live copy is taken in place:
+      # the ledger entry keeps its step and attempts, and its dependents are untouched. Any other
+      # difference, a removed owned file, or a changed criterion it serves, halts as before.
+      widened_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
+          --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
+          ($live | map({(.id): .}) | add // {}) as $liveMap
+          | ($snap | map({(.id): .}) | add // {}) as $snapMap
+          | [ $drifted[] | .id as $d
+              | select(($started | index($d)) != null)
+              | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
+              | select($l != null)
+              | select(($l | del(.ownedFiles)) == ($s | del(.ownedFiles)))
+              | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
+              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0)
+              | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
+              | $d ]')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
       # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
       # still has to be the frozen copy the next order's tests are written from.
       local drift_what=""
       if [ "$(printf '%s' "$resnapshot_ids_json" | jq 'length')" -gt 0 ] || [ "$(printf '%s' "$removed_ids_json" | jq 'length')" -gt 0 ]; then
         drift_what="these work orders changed since the snapshot was taken and have not started: $(jq -nr --argjson a "$resnapshot_ids_json" --argjson b "$removed_ids_json" '$a + $b | join(", ")'). Each would be taken fresh from the live design, or dropped where the live design no longer holds it"
+      fi
+      if [ "$(printf '%s' "$widened_ids_json" | jq 'length')" -gt 0 ]; then
+        [ -z "$drift_what" ] || drift_what="$drift_what; and "
+        drift_what="${drift_what}these started work orders gained owned files and changed nothing else: $(printf '%s' "$widened_ids_json" | jq -r 'join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
+        resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$widened_ids_json" '$a + $b')"
       fi
       if [ "$contract_changed" = "true" ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
@@ -1894,6 +1927,14 @@ do_start() {
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
+  # After a restart, the halted orders' commits may still be on the branch; one line per order
+  # names them while they are. Not a refusal: the person may have chosen to carry them
+  # (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  local st_partial_json='[]'
+  if [ "$run_kind" = "resumed" ]; then
+    st_partial_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$code_path" "" | jq -c '
+      group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind))})')"
+  fi
   im_print_summary "start" "$(jq -n \
     --arg task "$TASK_PATH" --arg codePath "$code_path" \
     --arg run "${run_kind}, ledger ${opened_as}" \
@@ -1910,6 +1951,7 @@ do_start() {
     --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson removed "$removed_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
+    --argjson partialBuild "$st_partial_json" \
     --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
     --argjson ready "$ready_ids_json" \
@@ -1917,8 +1959,9 @@ do_start() {
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
      drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted, removed: $removed, newLiveOrders: $newLiveOrders,
-     halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
-    | if ($removed | length) == 0 then del(.removed) else . end')"
+     partialBuild: $partialBuild, halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
+    | if ($removed | length) == 0 then del(.removed) else . end
+    | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
   exit 0
 }
 
@@ -3081,7 +3124,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: exactly these six keys, and nothing else -------------------------------
+  # --- assemble the brief: exactly these six keys, and a seventh only after a restart -------------
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -3101,6 +3144,16 @@ do_tests_brief() {
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
 
+  # A seventh thing, only after a restart left this order's commits on the branch: the tree holds
+  # a partial build of the order, so a test that passes on arrival is suspect, and the author is
+  # told rather than left to find it (live-run row 94).
+  local tree_holds_json
+  rv_load_codepath "tests-brief"
+  tree_holds_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" | jq -c '
+    if length == 0 then null
+    else {commits: map({kind, commit}),
+          note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect"} end')"
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -3108,10 +3161,11 @@ do_tests_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
-        --argjson reuses "$reuses_out" \
+        --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
-      reuses: $reuses, playbooksPath: $playbooksPath}')"
+      reuses: $reuses, playbooksPath: $playbooksPath}
+     | if $treeHolds == null then . else .treeHolds = $treeHolds end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -3122,7 +3176,9 @@ do_tests_brief() {
      declaredTests: (.unit.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
      reuses: (.reuses | if length == 0 then null else length end),
-     next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}')"
+     treeHolds: (if has("treeHolds") then ([ .treeHolds.commits[] | .commit[0:7] + " " + .kind ]) else null end),
+     next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
+    | if .treeHolds == null then del(.treeHolds) else . end')"
   exit 0
 }
 
@@ -3386,6 +3442,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
+  local support_raw=""
   local test_recipes="" unit_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3436,6 +3493,12 @@ do_tests_freeze() {
       --locks-in)
         [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>"
         locks_raw="$locks_raw$2
+"
+        shift 2 ;;
+      --support)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --support needs <path relative to codePath>"
+        [ -n "$2" ] || die 3 "tests-freeze: --support was given an empty path."
+        support_raw="$support_raw$2
 "
         shift 2 ;;
       -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
@@ -3610,6 +3673,64 @@ $unique_rel_paths
 TF_EOF
   [ -z "$unmatched_paths" ] \
     || die 27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
+
+  # --- 89: a --support path is a base class or a fixture the author wrote beside the tests -------
+  # It is resolved, checked and hashed the way a --test path is, and refused when it is missing
+  # or when a test glob matches it: such a file is a test and belongs on --test (live-run row 90).
+  # Outside codePath it shares exit 36, the same fact a --test path gets. One list, no name. A
+  # path is resolved to its real place first, so `../` cannot read as inside the root and leave a
+  # record naming a file git then refuses to commit.
+  local support_tmp support_rel support_abs support_missing="" support_tests="" support_outside="" support_sha support_real
+  support_tmp="$IMPL_DIR/.tests-freeze-support.$$"
+  : >"$support_tmp"
+  if [ -n "$support_raw" ]; then
+    records_hash__resolve_sha256_cmd \
+      || die 3 "tests-freeze: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  fi
+  while IFS= read -r raw_path; do
+    [ -n "$raw_path" ] || continue
+    case "$raw_path" in /*) support_real="$raw_path" ;; *) support_real="$codepath_canon/$raw_path" ;; esac
+    support_real="$(cd "$(dirname "$support_real")" 2>/dev/null && pwd -P)/$(basename "$support_real")"
+    rel_result="$(tf_relativize_path "$support_real" "$codepath_canon")"
+    rel_kind="$(printf '%s' "$rel_result" | cut -f1)"
+    support_rel="$(printf '%s' "$rel_result" | cut -f2-)"
+    if [ "$rel_kind" = "OUTSIDE" ]; then
+      support_outside="$support_outside$raw_path, "
+      continue
+    fi
+    support_abs="$codepath_canon/$support_rel"
+    if [ ! -f "$support_abs" ]; then
+      support_missing="$support_missing$support_rel, "
+      continue
+    fi
+    matched=false
+    gi=0
+    while [ "$gi" -lt "$glob_count" ]; do
+      g="$(printf '%s' "$test_globs_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+      tf_path_matches_catalog_glob "$support_rel" "$g" && matched=true
+      [ "$matched" = "true" ] && break
+      gi=$((gi + 1))
+    done
+    if [ "$matched" = "true" ]; then
+      support_tests="$support_tests$support_rel, "
+      continue
+    fi
+    support_sha="$(tf_sha256_of "$support_abs")"
+    [ -n "$support_sha" ] || die 3 "tests-freeze: could not compute a sha256 for $support_abs"
+    jq -n --arg p "$support_rel" --arg sha "$support_sha" '{path: $p, sha256: $sha}' >>"$support_tmp" \
+      || die 3 "tests-freeze: could not record the support row for $support_rel"
+  done <<TF_EOF
+$support_raw
+TF_EOF
+  [ -z "$support_outside" ] \
+    || { rm -f "$support_tmp"; die 36 "tests-freeze: these --support paths are outside the code root $codepath_canon: ${support_outside%, }"; }
+  [ -z "$support_missing" ] \
+    || { rm -f "$support_tmp"; die 89 "tests-freeze: these --support paths do not exist on disk (relative to $codepath_canon): ${support_missing%, }"; }
+  [ -z "$support_tests" ] \
+    || { rm -f "$support_tmp"; die 89 "tests-freeze: these --support paths match a --test-glob pattern, so each is a test and belongs on --test: ${support_tests%, }"; }
+  local support_json
+  support_json="$(jq -s 'unique_by(.path)' "$support_tmp")"
+  rm -f "$support_tmp"
 
   # --- 28: a test name must carry, at its own end, the criterion id(s) it claims, or the unit's own
   # id when it proves the doneWhen. The same check either way: an order id is one more token the
@@ -4027,8 +4148,8 @@ TF_EOF
   # exists for, tests changed under a record nobody re-took.
   if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ]; then
     local existing_rows new_rows
-    existing_rows="$(jq -cS '{unit, testGlobs, rows}' "$record_file" 2>/dev/null)"
-    new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows}')"
+    existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
+    new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
     if [ "$existing_rows" = "$new_rows" ]; then
       echo "TESTS-FREEZE: unchanged (already frozen at commit $existing_commit with the same tests)"
       printf '%s\n' "$record_file"
@@ -4045,8 +4166,11 @@ TF_EOF
   # the line at the end says what was left. The helper dies before the record is written when the
   # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
   # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
+  # The support files ride in the same commit as the tests, so they are the author's in the
+  # history and never land in the implementer's range (live-run row 90).
   local frozen_rel_paths tree_left
-  frozen_rel_paths="$(printf '%s' "$tests_json" | jq -r '[.[].relPath] | unique | .[]')"
+  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
+    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
   if [ -n "$frozen_rel_paths" ]; then
     set --
     while IFS= read -r p; do
@@ -4107,8 +4231,8 @@ TF_EOF
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
-    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" \
-    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof}')"
+    --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
+    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support}')"
 
   if [ -f "$record_file" ]; then
     local existing_no_date new_no_date
@@ -4973,14 +5097,18 @@ BR_DIFF
   jq -n --arg verdict "$ofc_verdict" --arg detail "$ofc_detail" \
     '{id: "owned-files", verdict: $verdict, detail: $detail}' >>"$parts_file"
 
-  # --- every frozen test file is unchanged ---------------------------------------------------------
+  # --- every frozen test file is unchanged, and every support file frozen with them ---------------
+  # A support file is a base class or a fixture the author wrote beside the tests (live-run row
+  # 90). It is hashed here the same as a test: the implementer owns it and may not rewrite it.
   records_hash__resolve_sha256_cmd \
     || die 3 "$BRC_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
   local ftc_verdict ftc_detail
-  local frozen_paths frozen_count fidx frozen_file fsha current_sha changed_tests=""
+  local frozen_paths frozen_count support_count support_noun fidx frozen_file fsha current_sha changed_tests=""
   frozen_paths="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ] | unique_by(.path)')"
+    '([ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ]
+      + [ (.support // [])[] | {path, sha256} ]) | unique_by(.path)')"
   frozen_count="$(printf '%s' "$frozen_paths" | jq 'length')"
+  support_count="$(printf '%s' "$BRC_TESTS_DOC" | jq '(.support // []) | length')"
   fidx=0
   while [ "$fidx" -lt "$frozen_count" ]; do
     frozen_file="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].path')"
@@ -4995,13 +5123,18 @@ BR_DIFF
   done
   if [ -n "$changed_tests" ]; then
     ftc_verdict="unmet"
-    ftc_detail="these frozen test files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
+    ftc_detail="these frozen test or support files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
   elif [ "$frozen_count" -eq 0 ]; then
     ftc_verdict="met"
     ftc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') froze no test file, so there is nothing to hash."
   else
     ftc_verdict="met"
     ftc_detail="every frozen test file for $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') is unchanged."
+    if [ "$support_count" -gt 0 ]; then
+      support_noun="files"
+      [ "$support_count" -ne 1 ] || support_noun="file"
+      ftc_detail="${ftc_detail%.}, and so is each of its $support_count support $support_noun."
+    fi
   fi
   jq -n --arg verdict "$ftc_verdict" --arg detail "$ftc_detail" \
     '{id: "frozen-tests", verdict: $verdict, detail: $detail}' >>"$parts_file"
@@ -7519,6 +7652,66 @@ do_clear_halt() {
   exit 0
 }
 
+# The commits one order's records name that HEAD still holds, as a JSON array of
+# {order, kind, commit, range}. $1 the implementation folder, $2 the code repository, $3 the order.
+# The freeze record's `commit` is HEAD at the freeze, whether or not the freeze committed: a gate
+# order commits nothing, and a test already in HEAD makes no commit either. So the commit is the
+# order's only when its subject is the one the freeze writes for this order. A build record holds
+# the last attempt's range; a fix record each round's. A record whose commits git no longer has
+# names nothing (live-run row 94).
+rs_order_commits() {
+  local impl="$1" codepath="$2" one_id="$3" out='[]' c range file kind
+  c="$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null)"
+  if [ -n "$c" ] && git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1; then
+    case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
+      "Freeze the tests of $one_id through the implement skill:"*)
+        out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '. + [{order: $id, kind: "freeze", commit: $c, range: $c}]')" ;;
+    esac
+  fi
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    range="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$file" 2>/dev/null)"
+    [ -n "$range" ] || continue
+    case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
+        if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
+    done <<RS_RANGE
+$(git -C "$codepath" rev-list --reverse "$range" 2>/dev/null)
+RS_RANGE
+  done <<RS_FILES
+$impl/build-$one_id.json
+$(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)
+RS_FILES
+  printf '%s' "$out"
+}
+
+# The commits the newest restart record names that HEAD still holds, the same shape, or [] when
+# no restart happened or nothing of it is left. $1 the task folder, $2 the code repository, $3 an
+# order id to keep alone, or empty for every order. Read by `start` after a restart and by
+# `tests-brief`, so the test author is told the tree holds a partial build of the order.
+rs_restarted_commits_in_head() {
+  local task="$1" codepath="$2" only="$3" newest="" one out='[]' c
+  while IFS= read -r one; do
+    [ -n "$one" ] || continue
+    if [ -z "$newest" ] || [ "$one" -nt "$newest" ]; then newest="$one"; fi
+  done <<RS_FOUND
+$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null)
+RS_FOUND
+  if [ -n "$newest" ]; then
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      out="$(jq -c --arg c "$c" --argjson have "$out" '$have + [ (.commits // [])[] | select(.commit == $c) ]' "$newest")"
+    done <<RS_COMMITS
+$(jq -r --arg only "$only" '(.commits // [])[] | select($only == "" or .order == $only) | .commit' "$newest" 2>/dev/null)
+RS_COMMITS
+  fi
+  printf '%s' "$out"
+}
+
 do_restart() {
   local task_arg="" reason=""
   while [ "$#" -gt 0 ]; do
@@ -7601,6 +7794,36 @@ do_restart() {
   [ ! -e "$target" ] \
     || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
 
+  # The records move aside; the commits they name stay on the branch. "Start over from the live
+  # design" is true of the records and false of the tree, so the tree is read here, before the
+  # records move, and the person is told what to do with it (live-run row 94). Every commit from
+  # the earliest of them to HEAD is a halted order's: nothing later depends on them, and the
+  # branch can go back to the parent of the earliest. Anything else in that span is carried, and
+  # `start` and `tests-brief` say so until the commits are gone. The restart changes nothing in
+  # the tree.
+  local commits_json tree_json one_id earliest parent span_count own_count
+  commits_json='[]'
+  for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
+    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$IMPL_DIR" "$RV_CODEPATH" "$one_id")" '$have + $more')"
+  done
+  tree_json='null'
+  if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then
+    earliest="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null \
+      | grep -F -x -f <(printf '%s' "$commits_json" | jq -r '.[].commit') | head -1)"
+    parent="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "${earliest}^" 2>/dev/null)"
+    if [ -n "$parent" ]; then
+      span_count="$(git -C "$RV_CODEPATH" rev-list --count "$parent..HEAD" 2>/dev/null)"
+    else
+      span_count="$(git -C "$RV_CODEPATH" rev-list --count HEAD 2>/dev/null)"
+    fi
+    own_count="$(printf '%s' "$commits_json" | jq 'length')"
+    if [ -n "$parent" ] && [ "$span_count" = "$own_count" ]; then
+      tree_json="$(jq -cn --arg c "$parent" '{resetTo: $c}')"
+    else
+      tree_json="$(jq -cn --argjson n "$((span_count - own_count))" '{carry: true, count: $n}')"
+    fi
+  fi
+
   local new_snapshot new_hash new_ledger
   # The removed orders leave the document before the helper runs, so the one hash it re-derives
   # covers the live copies taken in and the frozen copies dropped together.
@@ -7629,12 +7852,13 @@ do_restart() {
 
   mkdir -p "$target" || die 3 "restart: could not create $target"
   # The reason is written beside the records moved aside, because they are what it explains.
-  # Nothing reads this file yet; a person does.
+  # `start` and `tests-brief` read `commits` back while HEAD still holds any of them.
   local restart_json
   restart_json="$(jq -n --arg restartedAt "$today" --arg reason "$reason" --arg head "$head_short" \
     --argjson drifted "$drifted_ids_json" --argjson removed "$removed_ids_json" \
+    --argjson commits "$commits_json" --argjson tree "$tree_json" \
     '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
-      ordersHaltedForDrift: $drifted, ordersRemoved: $removed}')"
+      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, commits: $commits, tree: $tree}')"
   write_atomic "$target/restarted.json" "$restart_json"
   # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
   # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
@@ -7654,6 +7878,16 @@ do_restart() {
     || echo "RESTART: the design removed $removed; each leaves the snapshot and the ledger and is not taken fresh."
   [ -z "$retaken" ] \
     || echo "RESTART: $retaken start over from the live design."
+  if [ "$tree_json" = "null" ]; then
+    echo "commits: none"
+    echo "tree: no commit of a halted order is in the tree"
+  else
+    printf '%s' "$commits_json" | jq -r '.[] | "commits: " + .commit[0:7] + " " + .order + " " + .kind'
+    printf '%s' "$tree_json" | jq -r '
+      if has("resetTo") then "tree: reset the branch to " + .resetTo[0:7] + " (a hard reset, which a person runs; this session'"'"'s hook refuses it)"
+      elif .count == 1 then "tree: 1 later commit depends on them; carry them, and the test author is told"
+      else "tree: " + (.count | tostring) + " later commits depend on them; carry them, and the test author is told" end'
+  fi
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"
   exit 0
@@ -7893,11 +8127,18 @@ TG_OWNED
   deny_json="$(printf '%s' "$deny_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
   allow_json="$(printf '%s' "$allow_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
 
-  local record_json
+  # The implementer's own list goes under `ownedFiles` too, and not under allowWrite: allowWrite
+  # takes hand-passed paths and no hook applies it, while this key is derived alone and the write
+  # hook refuses the implementer a write under codePath outside it (live-run row 92).
+  local record_json owned_extra='{}'
+  if [ "$role_bare" = "implementer" ]; then
+    owned_extra="$(jq -nc --argjson m "$mine_json" '{ownedFiles: $m}')"
+  fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
+    --argjson extra "$owned_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
-      denyRead: $denyRead, allowWrite: $allowWrite}')"
+      denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"

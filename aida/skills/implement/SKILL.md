@@ -125,6 +125,16 @@ the paths its brief names. The one exception is text a person must read to answe
 at `tests-freeze`, or a question a step asks. A body pasted here costs the build the context its own
 steps need.
 
+**Every question a step puts to a person opens with one plain sentence.** It names the decision,
+says why it is the person's call, and says what each answer causes. Text a person reads uses
+plain words. A framework term such as row, freeze, done-when or order is replaced by a plain
+word, or defined in the sentence that uses it. Keep each sentence under twenty words. The person
+may have returned to the terminal days later, holding none of the order's context (live-run row
+89). The shape: "The checker doubts that one new test proves what its criterion asks. A model
+may not settle that alone. Confirm it and the test is kept as written; reject it and the test
+author rewrites it." Then show what the
+step names. Each step file writes its own sentence out; this paragraph is the rule, stated once.
+
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
 every tool and this session's own model, and the dispatch record just opened then matches nothing:
 the hook compares the agent's own type against the role in the record, so an unnamed dispatch is an
@@ -169,7 +179,9 @@ when the person asks what the dispatch enforces, rather than describing the deni
 `dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and the shell
 door above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
 whether a path is frozen, never by this flag. Say the same about it that you say about the other
-two: recorded, not enforced.
+two: recorded, not enforced. The implementer is the one exception. Its record carries its owned
+files under `ownedFiles`, and the frozen-test hook refuses it a write under the code path outside
+them.
 
 The five answers a builder or a fixer writes into its report are a fourth. The record steps refuse
 an empty report file, and nothing checks the file holds five answers, that they preceded the write,

@@ -14,8 +14,9 @@ tests before you started, and they are frozen.
 write. The tests are the only reference outside your own judgement, and a build that edits its own
 reference proves nothing.
 
-**You may not write outside the files this unit owns.** The list is given to you. Anything else,
-including a file that obviously needs a small change, is reported and not touched.
+**You may not write outside the files this unit owns.** The list is given to you, and a hook
+refuses a write under the code path outside it. A file this unit needs and does not own is a
+stop, even for a two-line change. Your report names the file and why the unit needs it.
 
 **Write the report file with the five answers as your first action, before any edit under the code
 path.** The brief names the path. Name the most surgical fix
@@ -61,3 +62,8 @@ Stop and say so, rather than working around it, when a test seems wrong, when th
 given does not fit what the unit has to do, or when your attempts run out. A test you route around
 has been replaced by your own judgement, which is the failure this whole process exists to prevent.
 Name the test and the reason, and let a person decide.
+
+**A stop is a stop.** Write your report naming what stopped you and why, return, and end the turn
+with nothing further written. Never write "proceeding unless told otherwise". Never make a change
+while you wait for an answer. Nobody can answer inside your turn, and a change made while waiting
+is a build the rule forbade.

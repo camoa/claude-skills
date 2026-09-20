@@ -40,6 +40,11 @@ A resumed run that halts one or more work orders for drift is not a failure. Say
 orders halted and why. A halted order stays halted until a person looks at it; nothing here
 un-halts one automatically, and nothing here decides whether the drift is acceptable.
 
+After a restart, a `partialBuild(<order>):` line names each restarted order whose commits are
+still on the branch, with the commits and their kinds. It prints only while one is there. It is
+not a refusal: the person may have chosen to carry them. Tell the person the tree still holds
+that order's earlier tests and code, and that its test author will be told so.
+
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
 snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason
 naming the criterion, the same as a changed order file. An order serving none of the changed
@@ -50,6 +55,9 @@ Only a started order halts for drift: one with a step reached, a frozen test rec
 record. A drifted order that has not started is taken fresh from the live design instead, and
 nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
 The `resnapshotted:` line names those orders, and the ledger records each with the two hashes.
+A started order that only gained owned files is taken in place the same way, and nothing halts
+for it. Its frozen tests were written from fields that did not change. A removed owned file, or
+any other change, halts it as before.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,

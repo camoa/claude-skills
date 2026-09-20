@@ -4,6 +4,44 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.18] - 2026-09-19
+
+Live-run rows 88 to 94, the implement and design stages on beta.17, and the push gate.
+
+### Added
+- A write hook holds the implementer to its owned files: `dispatch-open` records the unit's
+  `ownedFiles` on the implementer's record, and while it is open a write under the code path
+  outside them is refused, with the frozen-test rule first. `agents/implementer.md` says a stop
+  means report and end the turn, never "proceeding unless told otherwise". (row 92)
+- `tests-freeze --support <path>`, repeatable: a base class or fixture the test author wrote is
+  hashed with the tests, committed in the same commit, recorded under `support`, and guarded by
+  the write hook. The frozen-tests check hashes it too. A missing path, a path outside the code
+  root, or one a test glob matches is refused. (row 90)
+
+### Changed
+- `restart` names the halted orders' commits HEAD still holds (freeze, build, fix) in its record
+  and its summary, and says which of two things to do: reset the branch to the commit before
+  the first of them when nothing later depends on them (a person runs the reset), or carry
+  them. A resumed `start` prints `partialBuild` while they remain, and the test author's brief
+  says the tree holds a partial build. (row 94)
+- A started order whose live copy differs from the snapshot only by added owned files is not
+  halted at a resumed `start`: it is re-snapshotted in place, once design has closed on the live
+  files, and its frozen tests and ledger entry are untouched. The design critic asks of every
+  order whether it owns each file its operation rewrites, read against the couplings the design
+  recipe names. (row 91)
+- A design reopened to change only owned files or done-when rows on an existing order may skip
+  the research and guide reading: the change, `check`, `close` with the last recorded recipe
+  verdict, `distill`. Any other reopen reads as a first run. (row 93)
+- Every question the implement stage puts to a person opens with one plain sentence naming the
+  decision, why it is the person's call, and what each answer causes; the rule is stated once
+  in `SKILL.md` and twelve ask sites follow it. (row 89)
+- At an unknown interface-record verdict nothing is asked: the reviewer decides from both texts
+  in its brief, in both run modes. (row 88)
+- The push refusal in `deny-destructive-commands.sh` has a gate a person opens on their own
+  machine: while `/etc/claude/allow-push` exists and root owns it, the session may run
+  `git push`. Only `sudo` can create it, so the model cannot open the gate from a tool call.
+  A force push stays refused. `docs/finishing.md` says how.
+
 ## [6.0.0-beta.17] - 2026-09-19
 
 Live-run rows 86 and 87, the implement stage on beta.16.

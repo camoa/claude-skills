@@ -71,6 +71,10 @@ It reads the frozen copy and never the live files. It writes exactly six things 
   the test author gets its shape. An order disposed with no path carries none;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
+A seventh, `treeHolds`, only after a restart left this order's earlier commits on the branch.
+It holds those commits and one sentence. The tree holds a partial build of this unit, so a
+test that passes on arrival is suspect. The summary prints the commits on a `treeHolds:` line.
+
 It prints the brief's path and counts, never the brief.
 
 That list is the withheld list, decided once rather than at each dispatch. Pass the brief's path
@@ -126,14 +130,18 @@ Give it the **path** to the test-authoring recipe for its framework, the **path*
 `tests-brief` wrote, and nothing else. It opens both itself. Do not read either body here and paste
 it in. The recipe runs to well over a hundred lines per framework, and reading it into this
 conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
-reading it is the role's.
+reading it is the role's. When the summary printed a `treeHolds:` line, name it in the dispatch.
+The brief's `treeHolds` says the tree holds this unit's earlier build. So a test green on
+arrival is reported by name, as below, and never taken as proof.
 
 Ask it to return, for each test, the path, the name, and the criterion the name carries. A test of
 the order's own done-when returns the order id in place of a criterion. For each test, it writes
 what the run printed when the test failed to its own file, under the task folder's `implementation/`
 folder, one file per test, and returns that file's path in its report. `--red` below reads that
 path. Ask it to return a checklist line for each criterion a person verifies, copying the
-verification sentence whole.
+verification sentence whole. Ask it to return the path of each support file it wrote or changed
+beside the tests. A support file is a base class or a fixture: the tests stand on it, and it is
+not a test.
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
@@ -193,8 +201,11 @@ by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. D
 confirmed row to the person. The record says a model judged it, so a person can list those rows
 later and read any of them again.
 
-**Interactive, a rejected row goes to the person, one question per row.** Show the row, the
-checker's note, and the answer the note recommends. The person's answer becomes
+**Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
+doubts that the new tests for one requirement prove what it asks. A model may not settle that
+alone. Confirm and the tests are kept as written. Reject and the test author rewrites them before
+anything is built." Then name the requirement in its own words, the tests, the checker's note,
+and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=confirmed::person::<the person's words>` or
 `--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
 the test author before any freeze runs. Never run the freeze with a rejected row still standing.
@@ -228,7 +239,8 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
-  --row <order id>=<confirmed|rejected>::<person|model>::<note>
+  --row <order id>=<confirmed|rejected>::<person|model>::<note> \
+  --support <path of a support file the author returned>
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
@@ -293,11 +305,17 @@ Then it records a hash for each test file. That hash is the freeze. From here a 
 write to one of those files from every dispatched role except the test author of the order that
 froze it.
 
-Then it commits the test files it hashed, on the task branch, and only those paths. The
-implementer starts from a tree that already holds the tests, and the record's commit is the one
-they are in. Work beside them stays uncommitted, and the freeze says so in one line. A commit that
-fails, for want of a git identity or any other reason, refuses before the record is written,
-with git's own message.
+Pass each support file the author returned as `--support`. The freeze hashes it with the tests,
+records it under `support`, and the hook guards it the same way. Without this, the implementer,
+which owns the file, may rewrite the setup the tests stand on and the frozen-tests check stays
+met. The freeze refuses a support path that does not exist (exit 89). It also refuses one a test
+glob matches (exit 89), because that file is a test: pass it as `--test`.
+
+Then it commits the test files it hashed, and the support files, on the task branch, and only
+those paths. The implementer starts from a tree that already holds the tests, and the record's
+commit is the one they are in. Work beside them stays uncommitted, and the freeze says so in one
+line. A commit that fails, for want of a git identity or any other reason, refuses before the
+record is written, with git's own message.
 
 A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is
 noticed, and the hash is what notices one. The hook allows the write and says which file changed and

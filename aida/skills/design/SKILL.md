@@ -68,6 +68,13 @@ to serve is nothing this stage can check.
 `work-orders:` above zero: this is a resumed or repeated run. Read each named file before
 drafting anything new, rather than starting over.
 
+A reopen that changes only owned files or done-when rows on an existing order may skip the
+research and guide reading below. Those calls are `add-owned-file`, `remove-owned-file`,
+`add-done-when` and `remove-done-when`. The reading informs an order's shape, not its file
+list. The route is the change, then `check`, `close` with the verdict the last
+`design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
+an order's interface, criteria or dependencies, reads as a first run does.
+
 Then start design:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh start "<task_folder>"
@@ -377,7 +384,11 @@ Then, one call per item, add what the order still needs:
 ```
 A configuration unit is sized around the operation, by the recipe's rule, and owns every file
 that operation rewrites. Deleting a field owns each display that lists it. An order that owns
-the field files alone and leaves the displays to other orders cannot import on its own.
+the field files alone and leaves the displays to other orders cannot import on its own. The
+same rule holds for code. An order that changes a class owns every file the recipe couples to
+that class. A constructor change, for one, rewrites the service definition. A file added here
+to an order the build already started is taken in place at the next `start`, once design has
+closed again on the live files. Nothing halts when nothing else on the order changed.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
@@ -489,8 +500,8 @@ conversation read the orders. The check counted ids; it read no sentence. Dispat
 `contract`, `reuse`, `buildability`. Name the role; a dispatch that names none runs as the
 general agent with write tools. Give it the task folder, the lens, and the path of the design
 recipe read above, when one was. Never give it a summary of this conversation: being denied that
-account is why the role exists. The `buildability` critic reads the recipe's own sentence on a
-configuration unit and asks it of every `gate` order.
+account is why the role exists. The `buildability` critic reads the recipe's owned-files
+sentence and its coupling list. It asks of every order whether it owns every file it rewrites.
 
 Each critic writes `<task_folder>/records/design-critique-<lens>.md`, a findings table and a
 `findings: N` last line. Wait for all three files. A file that never arrives, or arrives without

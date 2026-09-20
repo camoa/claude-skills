@@ -22,6 +22,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Override: AIDA_ALLOW_DANGEROUS=1 in the hook's own environment, which is the shell that launched
 # this session, allows everything for that session.
 #
+# The plain push alone has a gate a person opens on their own machine: one file,
+# /etc/claude/allow-push, owned by root. Only sudo can create it, so the model cannot open the
+# gate from a tool call. Open: `sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push`.
+# Close: `sudo rm /etc/claude/allow-push`. A force push stays refused with the gate open.
+#
 # Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
 # the model), on exit 0, the same as hooks/deny-frozen-test-writes.sh.
 set -uo pipefail
@@ -43,11 +48,23 @@ deny() {
 
 matches() { printf '%s' "$CMD_NORM" | grep -Eq "$1"; }
 
+# The gate is open when the flag exists and root owns it. GNU stat and BSD stat spell the owner
+# flag differently, so both are tried.
+PUSH_GATE="/etc/claude/allow-push"
+push_gate_open() {
+  local owner
+  [ -f "$PUSH_GATE" ] || return 1
+  owner="$(stat -c %u "$PUSH_GATE" 2>/dev/null || stat -f %u "$PUSH_GATE" 2>/dev/null)"
+  [ "$owner" = "0" ]
+}
+
 # A target or a flag is matched as a whole argument, so `rm -rf ./build` and `git checkout -b x`
 # pass. The force push runs first so its reason
 # names it; the plain push below would catch it anyway.
 matches 'push( [^ ;&|]+)* (-f|--force)' && deny "is a force push"
-matches 'git push( |$|;|&|\|)' && deny "is a git push, and version 6 never publishes: a person pushes"
+if ! push_gate_open; then
+  matches 'git push( |$|;|&|\|)' && deny "is a git push, and version 6 never publishes: a person pushes. To let this session push, the person opens the gate: sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push"
+fi
 matches 'reset --hard' && deny "is a hard reset"
 matches 'git clean -[a-zA-Z]*[fxX]' && deny "runs git clean, which deletes untracked files"
 matches 'git branch -D( |$|;|&|\|)' && deny "force-deletes a branch"
