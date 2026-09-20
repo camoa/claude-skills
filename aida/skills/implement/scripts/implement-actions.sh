@@ -3985,6 +3985,7 @@ $unit_recipes
 TF_RECIPES
   fi
   local red_signal marker unread_reds="" setup_gap_reds="" marker_words signals_tmp
+  local first_unread_path="" harness_words unread_line
   marker_words="$(printf '%s' "$assertion_markers" | grep -v '^$' | sort -u | sed "s/.*/'&'/" | tr '\n' ' ')"
   signals_tmp="$IMPL_DIR/.tests-freeze-signals.$$"
   : >"$signals_tmp"
@@ -4027,7 +4028,9 @@ TF_EOF
       red_signal="unchecked"
     fi
     case "$red_signal" in
-      ""|harness) unread_reds="$unread_reds$red_name ($red_path), " ;;
+      ""|harness)
+        unread_reds="$unread_reds$red_name ($red_path), "
+        [ -n "$first_unread_path" ] || first_unread_path="$red_path" ;;
     esac
     printf '%s\t%s\n' "$red_name" "$red_signal" >>"$signals_tmp"
     ri=$((ri + 1))
@@ -4036,6 +4039,19 @@ TF_EOF
     rm -f "$signals_tmp"
     [ -z "$setup_gap_reds" ] \
       || die 80 "tests-freeze: these --red files hold the recipe's harness marker and no assertion marker: ${setup_gap_reds%, }. The harness stopped in an error before any assertion held or failed, which is a setup gap and not a red: for a unit whose module does not exist yet, nothing can fail an assertion before it does. Nothing is frozen. Repair the harness or the unit's own declaration, never the test, and run that test on its own again. An order that creates the unit passes --implement-recipe <framework>=<path>, so its unit declaration can be read. An assertion failure prints one of ${marker_words% }. Every file read as no red: ${unread_reds%, }."
+    # For the order that creates the unit, "run it again until it fails for the reason it names"
+    # is wrong advice: nothing can fail an assertion before the unit exists, and the file already
+    # shows why the harness stopped. On the live run (row 98) every red was a PHP fatal the recipe
+    # names in prose and declares under no marker, so the exception above never fired. The plugin
+    # reads whatever markers the recipe declares; the recipe is the repair, and this says so.
+    if [ -n "$unit_file" ]; then
+      harness_words="$(printf '%s' "$harness_markers" | grep -v '^$' | sort -u | sed "s/.*/'&'/" | tr '\n' ' ')"
+      # The first line holding "error" is the one that says why: a PHP fatal names the missing
+      # class there and ends in "thrown in <file>". A file with no such line quotes its last one.
+      unread_line="$(grep -a -i -m 1 'error' "$first_unread_path" | cut -c1-160)"
+      [ -n "$unread_line" ] || unread_line="$(grep -a -v '^[[:space:]]*$' "$first_unread_path" | tail -n 1 | cut -c1-160)"
+      die 80 "tests-freeze: $unit_id creates the unit, so a red holding only a harness marker would be accepted. These --red files hold none of the harness markers the test-execution recipe declares: ${unread_reds%, }. The recipe's harness markers are ${harness_words% }. One line of $first_unread_path reads: $unread_line. Nothing is frozen. Repair one: the test-execution recipe declares the form the harness printed, under failure_signal harness:. Repair two: the test does not depend on a module-local class before the unit exists."
+    fi
     die 80 "tests-freeze: these --red files hold none of the assertion markers the test-execution recipe declares, and no line its suite row's failure_line names: ${unread_reds%, }. A run that did not fail an assertion is not a red. An assertion failure prints one of ${marker_words% }; read the file, and run the test again until it fails for the reason it names."
   fi
   # The signal each red was accepted on rides with its --red row into the record (redSignal).
