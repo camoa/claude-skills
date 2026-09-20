@@ -126,6 +126,8 @@ prints when it never reached the behaviour. Only the first is a red. The second 
 and the freeze refuses it, because nothing in that output says the behaviour is absent. One order
 is the exception: the one that creates the unit. No test can assert before the module exists, so
 for that order alone the harness error is the expected red, and the author writes no scaffold.
+The exception reads only declared markers, so the freeze refuses an undeclared form: the recipe
+declares it, or the test drops the module-local class.
 
 A test green on its first run has four outcomes. The test was wrong: corrected once. Still green,
 and the author can name the existing code that satisfies it: frozen, with that reason recorded
@@ -293,8 +295,13 @@ Both texts are in its brief. Asking you to compare them put the reviewer's own c
 person, from the same two texts. A model ended up answering for you.
 
 Every finding cites one criterion or one non-goal. A finding citing neither is recorded and never
-reaches a fixer; the review stage decides what becomes of it. That rule removes the cheap false
-positives before any fixer runs. A finding that hits a non-goal is a finding like any other when
+reaches a fixer, since a fix round takes open actionable findings only. That rule removes the
+cheap false positives before any fixer runs. The review stage sees such a finding only if its own
+reviewer finds it again; the stage's record carries the findings ruled deferred, not these. When
+you are present, each such finding of medium or higher severity is shown to you before the order
+closes, with two answers. Close as recorded, and it stays in the order's review record. Track it
+as a task, and a follow up task is created with the finding as its goal; then the order closes.
+A finding that hits a non-goal is a finding like any other when
 you are present. On an autonomous run it halts the order, naming the non-goal.
 
 ## Fixing what the review found
@@ -414,7 +421,8 @@ the Read and Grep tools and not the shell. The test author runs its own tests, s
 shell, and a `cat` of a denied file is not refused. The rule exists to stop a role opening the
 source because that is the obvious way to write a test about it. A role working around it on
 purpose has already failed in a way no hook catches. The implementer's owned files are enforced
-too: the write hook refuses it a write under the code path outside them. Three things are recorded
-and enforced by nothing: the paths every other role may write, the fixer's fix scope, and the
-builder's five answers. A write outside the fix scope surfaces when the reviewer reads the fix
-diff, not as it happens.
+too: the write hook refuses it a write under the code path outside them. A heredoc body is never
+read as a write, and a refusal of a shell command names the token it read as the path. Three
+things are recorded and enforced by nothing: the paths every other role may write, the fixer's
+fix scope, and the builder's five answers. A write outside the fix scope surfaces when the
+reviewer reads the fix diff, not as it happens.

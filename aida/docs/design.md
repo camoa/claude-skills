@@ -159,7 +159,11 @@ An order that changes a page or a screen names it from the project's surface fil
 `.visual-review/surfaces.json`. When no
 visual or browser test covers that kind of surface, design offers the setup once per task,
 interactively only, unless you declined it. Yes runs the setup now. Not this task records
-nothing. No is project-wide, and design never asks again.
+nothing. No is project-wide, and design never asks again. Naming a surface does not make the
+review stage's surface row a test. On a `tests` order, design refuses a test description that
+names one of the order's surfaces. Either describe what a spec observes, and the tests step
+writes it as a file. Or reopen scope so the criterion reads `person`, and the surface row
+verifies it at review.
 
 ## Confirming each owner
 

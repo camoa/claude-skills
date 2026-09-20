@@ -44,6 +44,8 @@ in its `reasoning`, is a finding. A `reasoning` that records a disposition is re
 finding it cites, not taken as settled.
 
 **buildability.** Can a test author write each declared test from `tests` and `doneWhen` alone?
+A test that names a surface, a screenshot, or review's own row is a finding: no author can
+write it as a file.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
 what was meant? Does one order own a directory another order owns a file inside? The design
 check refuses an identical entry twice; it reads paths as strings, so nesting is yours. Is the

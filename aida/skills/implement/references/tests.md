@@ -281,6 +281,10 @@ freeze accepts the harness-only file as its red, recorded `redSignal: harness-ne
 test can assert before the module exists, so that is the only red the order
 can have. The author does not scaffold the module to get a better one: it may write no production
 file. With no `--implement-recipe`, no block, or no matching owned file, the refusal stands.
+The exception reads the recipe's `harness` markers only, never the recipe's prose. When the
+harness printed an undeclared form, the freeze refuses (exit 80), naming the markers and quoting
+the file's error line. The author then asks the recipe to declare that form under
+`failure_signal` `harness:`, or writes a test with no module-local class.
 A file holding neither marker is a red when a line matches `failure_line`. That is how a red is
 read under a recipe whose assertion span is a shape rather than a marker. A file none of the
 three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes

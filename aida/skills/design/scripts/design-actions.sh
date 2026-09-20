@@ -134,7 +134,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
 #      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
-#      one without --confirmed), or a decline given --path; a `remove-test` refused because the test named is the last one
+#      one without --confirmed), or a decline given --path; an `add-test` refused because the description names one of
+#      the order's own surfaces on a `tests` order; a `remove-test` refused because the test named is the last one
 #      on a `tests` order owning a machine-verified criterion; a `remove-owned-file` refused because
 #      the path named is the only file the order owns; a `merge` refused because the two orders' proofs differ or
 #      --into and --from name the same order; a work order file already on disk that is not valid
@@ -883,6 +884,21 @@ do_add_test() {
   local file doc
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-test: $file exists but is not valid JSON"
+
+  # A test on a `tests` order is a file a test author writes, red then green. A description that
+  # names one of the order's own surfaces reads as review's surface row over that page. That row
+  # is no file and runs after every order closes (live-run row 97). The design check counts tests and
+  # reads no sentence, so the refusal sits here. The id must appear as a whole word, case as
+  # written; an order with no surfaces is never refused.
+  local proof surface_hit
+  proof="$(jq -r '.proof // "tests"' "$file")"
+  if [ "$proof" = "tests" ]; then
+    surface_hit="$(jq -r --arg d "$description" \
+      '[$d | match("[A-Za-z0-9_-]+"; "g").string] as $words
+       | [(.surfaces // [])[] | select(. as $s | any($words[]; . == $s))] | first // ""' "$file")"
+    [ -z "$surface_hit" ] \
+      || die3 "add-test: the description names the surface $surface_hit, so it reads as the review stage's surface row over that page. That row is not a test a test author writes as a file. A machine criterion is proved one of two ways. Describe here what a spec observes, and the tests step writes it as a file the test-execution recipe's own glob matches. Or reopen scope so the criterion reads verified by person, and the review stage's surface row over $surface_hit verifies it"
+  fi
   if is_blank "$level"; then
     doc="$(jq --arg d "$description" \
       '.tests = ((.tests // []) + [{description: $d}])' "$file")"
