@@ -6,7 +6,7 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.18] - 2026-09-19
 
-Live-run rows 88 to 93, the implement and design stages on beta.17, and the push gate.
+Live-run rows 88 to 94, the implement and design stages on beta.17, and the push gate.
 
 ### Added
 - A write hook holds the implementer to its owned files: `dispatch-open` records the unit's
@@ -19,6 +19,11 @@ Live-run rows 88 to 93, the implement and design stages on beta.17, and the push
   root, or one a test glob matches is refused. (row 90)
 
 ### Changed
+- `restart` names the halted orders' commits HEAD still holds (freeze, build, fix) in its record
+  and its summary, and says which of two things to do: reset the branch to the commit before
+  the first of them when nothing later depends on them (a person runs the reset), or carry
+  them. A resumed `start` prints `partialBuild` while they remain, and the test author's brief
+  says the tree holds a partial build. (row 94)
 - A started order whose live copy differs from the snapshot only by added owned files is not
   halted at a resumed `start`: it is re-snapshotted in place, once design has closed on the live
   files, and its frozen tests and ledger entry are untouched. The design critic asks of every
