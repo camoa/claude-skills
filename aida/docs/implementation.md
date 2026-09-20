@@ -295,8 +295,13 @@ Both texts are in its brief. Asking you to compare them put the reviewer's own c
 person, from the same two texts. A model ended up answering for you.
 
 Every finding cites one criterion or one non-goal. A finding citing neither is recorded and never
-reaches a fixer; the review stage decides what becomes of it. That rule removes the cheap false
-positives before any fixer runs. A finding that hits a non-goal is a finding like any other when
+reaches a fixer, since a fix round takes open actionable findings only. That rule removes the
+cheap false positives before any fixer runs. The review stage sees such a finding only if its own
+reviewer finds it again; the stage's record carries the findings ruled deferred, not these. When
+you are present, each such finding of medium or higher severity is shown to you before the order
+closes, with two answers. Close as recorded, and it stays in the order's review record. Track it
+as a task, and a follow up task is created with the finding as its goal; then the order closes.
+A finding that hits a non-goal is a finding like any other when
 you are present. On an autonomous run it halts the order, naming the non-goal.
 
 ## Fixing what the review found

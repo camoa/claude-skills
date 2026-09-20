@@ -6233,6 +6233,19 @@ do_review_record() {
      halt: $halt,
      record: $record,
      next: $next}')"
+  # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
+  # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
+  # so the person present decides. Unattended, nothing prints: the record already holds them. The
+  # evidence is cut the way the summary cuts a string, so the line stays one line.
+  local unrouted
+  if [ "$RV_RUN_MODE" != "autonomous" ]; then
+    unrouted="$(printf '%s' "$findings_json" | jq -r '
+      [ .[] | select(.actionable == false and (.severity == "medium" or .severity == "high")) ]
+      | if length == 0 then empty
+        else (.[] | "unrouted: \(.id) \(.severity) \(.evidence | gsub("\n"; " ") | .[0:240]) (\(if .file == "" then "no file named" else .file end))"),
+             "unrouted: \(length) of medium or higher severity; the record holds them, a person decides" end')"
+    [ -z "$unrouted" ] || printf '%s\n' "$unrouted"
+  fi
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
     echo "REVIEW-RECORD: $unit_id is halted. A finding hits a non-goal and this run is unattended: $nongoal_hits" >&2
   fi
