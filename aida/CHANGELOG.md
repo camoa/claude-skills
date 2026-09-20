@@ -4,6 +4,28 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.19] - 2026-09-20
+
+Live-run rows 95 to 98, the implement and design stages on beta.18.
+
+### Changed
+- The write hook's Bash door drops every heredoc body before either rule reads it, so a PHP
+  `>=` or `->` inside one is never a write target. The owned-files rule ignores a token that is
+  not path-shaped, and its refusal names the token it read and the redirect or verb it
+  followed. (row 95)
+- Interactive, `review-record` prints each not-actionable finding of medium or higher severity
+  after its summary, and the review step asks one plain question: close as recorded, or track
+  it as a follow-up task first. Unattended is unchanged. (row 96)
+- `add-test` refuses, on a `tests` order, a description that names one of the order's own
+  surfaces: review's surface row is not a test a test author writes. The message names the two
+  proofs, a spec described by what it observes or scope reopened so the criterion reads
+  `person`. The buildability critic reports a test naming a surface, a screenshot or review's
+  row. (row 97)
+- For the order that creates the unit, `tests-freeze` refusing a red that holds no declared
+  marker now says the order creates the unit, lists the recipe's harness markers, quotes the
+  file's error line, and names the two repairs: the recipe declares the form, or the test drops
+  the module-local class. (row 98)
+
 ## [6.0.0-beta.18] - 2026-09-19
 
 Live-run rows 88 to 94, the implement and design stages on beta.17, and the push gate.
