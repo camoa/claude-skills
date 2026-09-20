@@ -18,8 +18,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the key, leaves the rule off. A write the frozen rule already refuses never reaches it. A payload
 # naming no agent type is the person, allowed with a note, the same three cases as rule one. Its
 # Bash door is rule one's, with rule one's limits below, and a rule that refuses unless owned turns
-# a miss into a false stop: `cd lib && echo x > l.php` is judged as a write to l.php at the code
-# root, and a `mkdir` of a new owned file's parent is refused because the parent is not owned.
+# a miss into a false stop. Two misses are closed (2026-09-20, live-run row 95). A heredoc body is
+# dropped before either rule reads the command. A token that is not path-shaped is not rule two's.
+# Such a token is what a comparison operator leaves once `>` is read as a redirect. Its refusal
+# names the token it read as a path. The known limits stay. A path from a variable, an
+# interpreter, an editor or a symlink passes. `cd lib && echo x > l.php` is judged as a write to
+# l.php at the code root. A `mkdir` of a new owned file's parent is refused because the parent is
+# not owned.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -192,13 +197,18 @@ OWNER_EOF
   return 1
 }
 
-# Rule two's own test on one resolved candidate. Keeps the first candidate that lies under codePath
-# and is neither an owned file nor under an owned directory, in STRAY. Never returns non-zero, so
-# a caller's own flow is unchanged by it. Off while OWNED is empty.
-STRAY=""
+# Rule two's own test on one resolved candidate $1, read from the raw token $2. Keeps the first
+# candidate that lies under codePath and is neither an owned file nor under an owned directory, in
+# STRAY. The token and the redirect or verb it was read after (VIA, set by the Bash door) are kept
+# with it. Never returns non-zero, so a caller's own flow is unchanged by it. Off while OWNED is empty.
+STRAY=""; STRAY_TOKEN=""; STRAY_VIA=""; VIA=""
 note_stray() {
   local cand="$1" o
   [ -n "$OWNED" ] && [ -z "$STRAY" ] || return 0
+  # An empty token, `=`, `-`, or a token starting with `=` is what a comparison operator leaves
+  # once `>` is read as a redirect. PHP's `>=` and YAML's `>-` are the two seen. It is not
+  # path-shaped, so rule two does not judge it. Rule one still resolves it, and it matches no frozen test.
+  case "$2" in ''|'='|'-'|'='*) return 0 ;; esac
   is_under "$cand" "$CODE_CANON" && [ "$cand" != "$CODE_CANON" ] || return 0
   while IFS= read -r o; do
     [ -n "$o" ] || continue
@@ -206,7 +216,7 @@ note_stray() {
   done <<STRAY_EOF
 $OWNED
 STRAY_EOF
-  STRAY="$cand"
+  STRAY="$cand"; STRAY_TOKEN="$2"; STRAY_VIA="$VIA"
 }
 
 # Resolves one write target and reports whether a frozen test owns it. The record's codePath is
@@ -225,13 +235,13 @@ owner_of_arg() {
   if u="$(owner_of "$cand")"; then
     OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
   fi
-  note_stray "$cand"
+  note_stray "$cand" "$arg"
   if [ "$CWD_CANON" != "$CODE_CANON" ]; then
     cand="$(normalize_abs "$(resolve_against "$arg" "$CWD_CANON")")"
     if u="$(owner_of "$cand")"; then
       OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
     fi
-    note_stray "$cand"
+    note_stray "$cand" "$arg"
   fi
   return 1
 }
@@ -266,11 +276,41 @@ frozen_reason() {
 # The person is allowed with a note, the owned-files check reads the diff after the attempt.
 stray_exit() {
   [ -n "$STRAY" ] || return 0
+  local shown="$STRAY"
+  # The Bash door read the path from a token, so the refusal names that token and what it followed.
+  # That makes a false stop legible. The Write door's path is the tool's own field and needs no note.
+  [ -z "$STRAY_VIA" ] || shown="$STRAY (read from the token '$STRAY_TOKEN' after '$STRAY_VIA')"
   [ -n "$AGENT" ] || {
     jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $STRAY is not a file $UNIT owns, and the implementer dispatched for $UNIT may not write it. The owned-files check reads the diff after the attempt." '{systemMessage:$m}'
     exit 0
   }
-  deny "$STRAY$1: not a file $UNIT owns. The implementer writes only inside the files its unit owns. Stop: name this file and why the unit needs it in your report, commit nothing, and return."
+  deny "$shown$1: not a file $UNIT owns. The implementer writes only inside the files its unit owns. Stop: name this file and why the unit needs it in your report, commit nothing, and return."
+}
+
+# Drops every heredoc body from command $1 before either rule reads it. The line holding `<<WORD`,
+# `<<-WORD`, `<<'WORD'` or `<<"WORD"` is kept, with its operator and word, so a redirect on it is
+# still read. The lines after it, up to and including the line that is exactly WORD, are dropped.
+# For `<<-` the shell strips leading tabs from the closing line, so the compare does too. A heredoc
+# body is never a write position. Read as commands, it is where PHP's `>=` and YAML's `>-` became
+# a refused write (live-run row 95). A heredoc with no closing line drops to the end. A herestring,
+# `<<<`, is not a heredoc and is left alone. bash 3.2 and zsh, no mapfile.
+strip_heredocs() {
+  local line word="" dash=false close q="'\"" tab=$'\t'
+  printf '%s\n' "$1" | while IFS= read -r line; do
+    if [ -n "$word" ]; then
+      close="$line"
+      [ "$dash" = true ] && close="${line#"${line%%[!"$tab"]*}"}"
+      [ "$close" = "$word" ] && word=""
+      continue
+    fi
+    printf '%s\n' "$line"
+    case "$line" in
+      *'<<<'*) ;;
+      *'<<'*)
+        word="$(printf '%s' "$line" | sed -n "s/.*<<-\{0,1\}[[:space:]]*[$q]\{0,1\}\([^[:space:]$q;|&)<]*\).*/\1/p")"
+        dash=false; case "$line" in *'<<-'*) dash=true ;; esac ;;
+    esac
+  done
 }
 
 case "$TOOL" in
@@ -305,12 +345,14 @@ case "$TOOL" in
         case "$t" in
           '>'|'>>'|'1>'|'1>>'|'&>'|'&>>'|'>|')
             if [ "$n" -lt "${#w[@]}" ]; then
+              VIA="$t"
               if owner_of_arg "${w[$n]}"; then HIT="${w[$n]}"; HIT_OWNER="$OWNER_UNIT"; break; fi
             fi ;;
           '2>'*) ;;
           '>'*|'1>'*|'&>'*)
             x="${t#&}"; x="${x#1}"; x="${x#>>}"; x="${x#>}"; x="${x#|}"
             if [ -n "$x" ]; then
+              VIA="${t%"$x"}"
               if owner_of_arg "$x"; then HIT="$x"; HIT_OWNER="$OWNER_UNIT"; break; fi
             fi ;;
         esac
@@ -321,22 +363,26 @@ case "$TOOL" in
         rm|touch|truncate|chmod|mkdir|rmdir|tee|unlink)
           # chmod's first operand is its mode, never a path; rule two would refuse it as one.
           mode_skip=false; [ "${w[0]}" = chmod ] && mode_skip=true
+          VIA="${w[0]}"
           for t in "${w[@]:1}"; do
             case "$t" in -*) continue ;; esac
             if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
             if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
           done ;;
         git) case "${w[1]:-}" in rm|mv|checkout|restore|stash|apply|clean|reset)
+               VIA="git ${w[1]}"
                for t in "${w[@]:2}"; do
                  case "$t" in -*) continue ;; esac
                  if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
                done ;; esac ;;
         sed) case "${w[1]:-}" in -i*)
+               VIA="sed ${w[1]}"
                for t in "${w[@]:2}"; do
                  if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
                done ;; esac ;;
         cp|mv|ln|install|rsync)
           last="${w[$((${#w[@]} - 1))]}"
+          VIA="${w[0]}"
           if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi ;;
         cd)
           # A cd operand is never a write target, so rule two must not see it: STRAY is put back
@@ -347,7 +393,7 @@ case "$TOOL" in
           fi
           STRAY="$stray_before" ;;
       esac
-    done < <(printf '%s\n' "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
+    done < <(strip_heredocs "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
     if [ -n "$HIT" ]; then
       if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ]; then
         if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then

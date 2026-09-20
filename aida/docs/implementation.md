@@ -416,7 +416,8 @@ the Read and Grep tools and not the shell. The test author runs its own tests, s
 shell, and a `cat` of a denied file is not refused. The rule exists to stop a role opening the
 source because that is the obvious way to write a test about it. A role working around it on
 purpose has already failed in a way no hook catches. The implementer's owned files are enforced
-too: the write hook refuses it a write under the code path outside them. Three things are recorded
-and enforced by nothing: the paths every other role may write, the fixer's fix scope, and the
-builder's five answers. A write outside the fix scope surfaces when the reviewer reads the fix
-diff, not as it happens.
+too: the write hook refuses it a write under the code path outside them. A heredoc body is never
+read as a write, and a refusal of a shell command names the token it read as the path. Three
+things are recorded and enforced by nothing: the paths every other role may write, the fixer's
+fix scope, and the builder's five answers. A write outside the fix scope surfaces when the
+reviewer reads the fix diff, not as it happens.
