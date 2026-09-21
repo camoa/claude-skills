@@ -6,7 +6,10 @@
 #   sf_load_surfaces <file>          sets SF_STATE (absent, missing, unreadable, ok) and
 #                                    SF_SURFACES, a JSON array of {id, url, kinds, enabled, masks,
 #                                    paths, critical}, empty unless ok; paths reads [] and
-#                                    critical false when a row lacks them
+#                                    critical false when a row lacks them. Also SF_VIEWPORTS, a
+#                                    JSON array of the file's viewport names, empty unless ok;
+#                                    the observed check reads it for the rows an order owes
+#                                    (live-run row 104)
 #   sf_surface_path <registryPath> <tree>   prints the surface file's absolute path: <registryPath>
 #                                    joined to <tree> when it is relative, or <registryPath> as it
 #                                    is when a record written before row 32 of
@@ -26,10 +29,10 @@ elif [ -n "${BASH_VERSION:-}" ] && [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   exit 1
 fi
 
-SF_STATE="absent"; SF_SURFACES="[]"
+SF_STATE="absent"; SF_SURFACES="[]"; SF_VIEWPORTS="[]"
 sf_load_surfaces() {
   local surface_file="$1" rows
-  SF_STATE="absent"; SF_SURFACES='[]'
+  SF_STATE="absent"; SF_SURFACES='[]'; SF_VIEWPORTS='[]'
   [ -n "$surface_file" ] || return 0
   if [ ! -f "$surface_file" ]; then
     SF_STATE="missing"
@@ -48,6 +51,8 @@ sf_load_surfaces() {
   SF_STATE="ok"
   # shellcheck disable=SC2034 # read by the sourcing script
   SF_SURFACES="$rows"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  SF_VIEWPORTS="$(jq -c '[ (.viewports // [])[] | .name | select(type == "string") ]' "$surface_file" 2>/dev/null)"
 }
 
 # $1 the project record's `surfaces.registryPath`, may be empty. $2 the tree the caller runs in.

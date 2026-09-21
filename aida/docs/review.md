@@ -177,7 +177,8 @@ settled either. Review judges it again, because a deferral was you saying not no
 The close asks you the checklist rows for the criteria a person verifies, each row word for
 word as implementation froze it, once. You answer met or unmet per row. A machine-verified
 criterion needs no answer from you: it reads met when its row was confirmed and no failing test
-carries its id.
+carries its id. A criterion owned by an order a model observed through a browser reads met when
+every row of that order's observed record is met. It reads unmet when one row is not.
 
 The close then writes the criterion answers and the verdict into the review record,
 `review/review.json` in the task folder, and commits the task folder. The steps before it commit

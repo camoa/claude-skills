@@ -231,6 +231,20 @@ Those are the task record, the contract, the stage folders and the notes. The ch
 says how many. A file a person writes is never set aside, so a second document the order does
 not own still fails the check.
 
+## A page order
+
+A work order whose deliverable is what a page shows, a layout or a rendered block, has
+`observe` as its proof kind. No test author is dispatched and no row goes to the checker,
+because nothing can be judged before the page exists. The order freezes with no test and no
+row. After the implementer returns, AIDA opens each surface the order names, at each viewport
+the surface file declares, in a browser. It judges each done-when row against what renders and
+saves a screenshot per surface and viewport under the task folder. It writes an observed record
+with one row per sentence, surface and viewport, and the build reads that record as the order's
+own check. Every row met is met; one unmet row stops the attempt the way a failing test does.
+The judge on the record is a model. When the order closes, its criteria are recorded as judged
+by a model. The count of rows a model judged includes them. Completion puts each such criterion
+to you to accept.
+
 ## Writing the code
 
 An implementer, a mid-tier context, writes the code for one order until its frozen tests pass. It
@@ -260,7 +274,8 @@ attempt continues over the uncommitted build, so you keep that or clean it first
 After each attempt, eight checks run. These are scripts, and no model reads anything here.
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
-   the configuration gate instead, and on a document order the done-when judgement.
+   the configuration gate instead, on a document order the done-when judgement, and on a page
+   order the observed record.
 2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
    recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
    stage runs that row once.

@@ -86,6 +86,16 @@ Three cases land here:
 A parent task refuses to close while any of its children is open. Close the children first; the
 last child's close tells you the parent is ready.
 
+## What a model observed
+
+A criterion owned by an order a model judged through a browser is put to you before the close.
+AIDA asks one question per criterion. It shows each row the model judged: the sentence, the
+surface and viewport, and the verdict. It names the screenshot so you can open it. You say
+whether you accept the observation. A no closes the task only on your reason, the way a failed
+verdict does. The record keeps each answer. The pull request body says beside the criterion that
+a model judged it from a screenshot, with the path, and whether you accepted it. On an autonomous run
+nobody is asked, and the record and the body say the observations were not accepted by a person.
+
 ## The summary
 
 AIDA asks for one or two lines on what was done, unless the conversation already says it. It

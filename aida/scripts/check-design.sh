@@ -23,6 +23,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order whose proof is record declares no test either, owns no file outside the task
 #     folder, and has at least one done-when row: its deliverable is a document in the task folder,
 #     and its done-when rows are what judge it (nyc defect 17);
+#   - a work order whose proof is observe declares no test either, names at least one surface, and
+#     has at least one done-when row: a model looks at each surface through a browser after the
+#     build and judges each done-when row against what renders (live-run row 104);
 #   - every criterion's verifiedBy is machine or person, and never a third value: a criterion whose
 #     verifiedBy is neither needs no test, no checklist and no checkpoint row, so implementation
 #     would freeze it with nothing at all behind it. scripts/check-alignment.sh already refuses the
@@ -101,7 +104,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      criterion owned by zero or by more than one order, an order serving no criterion, an order
 #      that owns a machine-verified criterion and declares no test, an order whose proof is gate
 #      and that declares a test, an order whose proof is record and that declares a test, owns a
-#      file outside the task folder or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
+#      file outside the task folder or has no done-when row, an order whose proof is observe and
+#      that declares a test, names no surface or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
 #      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
@@ -147,9 +151,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
-#                 recordOrdersDeclaringTests: [ {id, path} ],
+#                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record and observe orders
 #                 recordOrdersOwningOutsideTaskFolder: [ {id, path} ],
-#                 recordOrdersWithNoDoneWhen: [ {id, path} ],
+#                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record and observe orders
+#                 observeOrdersWithNoSurface: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
 #     graph: { checked, note,
@@ -399,6 +404,7 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             dependsOn: [ (.dependsOn // [])[] | select(type == "string" and test("^wo[1-9][0-9]*$")) ],
             ownedFiles: [ (.ownedFiles // [])[] | select(type == "string" and (length > 0)) ],
             proof: (.proof // "tests"),
+            surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
             # A test counts on its description alone. The level is optional and design does not set
             # one: choosing a tier belongs to the stage that writes the test.
@@ -521,6 +527,7 @@ GATE_ORDERS_DECLARING_TESTS_JSON='[]'
 RECORD_ORDERS_DECLARING_TESTS_JSON='[]'
 RECORD_ORDERS_OWNING_OUTSIDE_JSON='[]'
 RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON='[]'
+OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
@@ -562,10 +569,13 @@ else
   # anyway is the opposite defect, a test for a thing TDD is not about, and is named on its own list.
   # An order whose proof is record owes no test either: its deliverable is a document in the task
   # folder, judged by its done-when rows (nyc defect 17). So it needs a done-when row, and a file it
-  # owns outside the task folder would be code nothing tests.
+  # owns outside the task folder would be code nothing tests. An order whose proof is observe owes
+  # no test and needs a done-when row on the same two rules: a model judges each row against what
+  # its surfaces render after the build (live-run row 104), so it needs a surface as well. The two
+  # shared rules keep the record lists, with the proof on each entry.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
-    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.proof != "gate" and $o.proof != "record")
+    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.proof != "gate" and $o.proof != "record" and $o.proof != "observe")
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
         | {id: $o.id, path: $o.path, criterionId: $cid} ]
   ')"
@@ -573,14 +583,17 @@ else
     [ $orders[] | select(.proof == "gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
   ')"
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.proof == "record") | select(.testsCount > 0) | {id: .id, path: .path} ]
+    [ $orders[] | select(.proof == "record" or .proof == "observe") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg t "$TASK_PATH/" '
     [ $orders[] | .id as $id | select(.proof == "record") | (.ownedFiles // [])[]
       | select(startswith($t) | not) | {id: $id, path: .} ]
   ')"
   RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.proof == "record") | select(.doneWhenCount == 0) | {id: .id, path: .path} ]
+    [ $orders[] | select(.proof == "record" or .proof == "observe") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
+  ')"
+  OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
+    [ $orders[] | select(.proof == "observe") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
   ')"
 
   # A fact about the contract alone, so it needs no work order and is never withheld when one
@@ -614,7 +627,7 @@ else
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
-  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" '($a | length) + ($b | length) + ($c | length)')"
+  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -803,6 +816,7 @@ jq -n \
   --argjson recordOrdersDeclaringTests "$RECORD_ORDERS_DECLARING_TESTS_JSON" \
   --argjson recordOrdersOwningOutsideTaskFolder "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" \
   --argjson recordOrdersWithNoDoneWhen "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" \
+  --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
   --argjson graphChecked "$([ "$DESIGN_STARTED" = "true" ] && echo true || echo false)" \
@@ -838,6 +852,7 @@ jq -n \
       recordOrdersDeclaringTests: $recordOrdersDeclaringTests,
       recordOrdersOwningOutsideTaskFolder: $recordOrdersOwningOutsideTaskFolder,
       recordOrdersWithNoDoneWhen: $recordOrdersWithNoDoneWhen,
+      observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds
     },

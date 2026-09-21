@@ -136,6 +136,26 @@ before the re-freeze, and says which. Then build again from "Open the dispatch r
 
 Close the dispatch record as soon as the role returns, per SKILL.md.
 
+## On an order whose proof is `observe`, look at the pages
+
+The implementer does not look. You do. Read the surface file that `surfaces.registryPath` in
+`<projectPath>/project.json` names. Review's surface step reads the same file. Take each
+surface the order names, its `url`, and the file's `viewports` list. Open each surface at each
+viewport with the browser tool, against the task's own site. Judge each of the order's done-when
+rows against what renders. Give one verdict per row per surface per viewport, `met` or `unmet`,
+with one sentence on what you saw. Save each screenshot under
+`<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`. Then write
+`<task_folder>/implementation/observed-<order id>.json`:
+```
+{ "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
+  "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
+              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
+```
+Every done-when row goes in, at every surface and viewport. The verdict is what the page
+showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
+for such an order and no row was judged before the build, so this look is its check. The judge
+on the record is a model. Completion puts each such criterion to the person.
+
 ## Record the attempt
 
 Run:
@@ -147,6 +167,7 @@ Run:
   --test-recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
+  [--observed <path to the observed record>] \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
@@ -155,6 +176,11 @@ to. Pass it only for a record a person put somewhere else. `--implement-recipe` 
 resolved above, the one the implementer was given. Pass it for
 an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
 runs them as the order's own check. Every other order ignores it.
+
+`--observed` is the record written above. An order whose proof is `observe` refuses without it
+(exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose
+screenshot is not on disk (94) and a surface the order does not name (95). It refuses a sentence
+the order does not hold (96). Nothing is recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
@@ -263,6 +289,9 @@ This step runs all eight deciding checks. The record holds every one.
   printed `There are no changes to import` is a finding for the reviewer, not for this check.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
+  On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
+  above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
+  the way a failing test does.
 - **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
   recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
   that row once at the final commit. On a Drupal project the row is ten minutes per run. On a

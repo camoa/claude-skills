@@ -46,6 +46,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            --interface <path to the record the builder wrote> \
 #                            --report <path to the builder's report> \
 #                            --started-at <commit the attempt began from> \
+#                            [--observed <path to the observed record, on an order whose proof is observe>] \
 #                            [--test-recipe <framework>=<path>]... \
 #                            [--check-recipe <framework>=<path>]... \
 #                            [--implement-recipe <framework>=<path>]... \
@@ -279,7 +280,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      proof is gate is exempt: it takes no --test at all, and its owned machine criterion is
 #      judged by the recipe's `## Configuration gate` lines at build time (live-run row 65). An
 #      order whose proof is record is exempt the same way: its done-when row, `--row <unit_id>=`,
-#      is its checkpoint, and exit 64 asks for that row (nyc defect 17).
+#      is its checkpoint, and exit 64 asks for that row (nyc defect 17). An order whose proof is
+#      observe is exempt too, and takes no --row either: nothing is judged before its build
+#      (live-run row 104).
 #  30  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is person with no
 #      --checklist row.
 #  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
@@ -442,8 +445,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
-#      freezes a reference that proves nothing. An order whose proof is gate or record is exempt
-#      from the second half: its record holds no test row on purpose.
+#      freezes a reference that proves nothing. An order whose proof is gate, record or observe is
+#      exempt from the second half: its record holds no test row on purpose.
 #  75  `dispatch-close` was given a task folder that is not the one the open record names. The
 #      record lives at the project root and two tasks in one project is a supported state, so a
 #      second task's close would clear the first task's live permission record. The message names
@@ -535,6 +538,31 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      records for that framework. The freeze reads reds against one recipe and build-record reads
 #      the record's, so two paths for one order would stand its two records on two recipes. The
 #      message names both paths and `recipe-refresh` as the route. Nothing is frozen.
+# The codes the observe proof added (live-run row 104). An order whose proof is observe is judged
+# by a model's look through a browser after the build: the orchestrator opens each of the order's
+# surfaces at each viewport, judges each done-when row against what renders, and writes
+# <task_folder>/implementation/observed-<unit_id>.json (observed-schema.json) with a screenshot
+# per row. `build-record` reads it through --observed and refuses, one number per fact:
+#  92  no --observed was passed for an order whose proof is observe. The message names the flag.
+#  93  the --observed file is missing, is not JSON, or does not match observed-schema.json: no
+#      order, observedAt, judgedBy or rows, an order that is not this unit, a judgedBy that is
+#      not model, or a row without doneWhen, surface, viewport, screenshot, verdict and note. Or
+#      it is at a path other than <task_folder>/implementation/observed-<unit_id>.json: a fix
+#      round and a re-check read that path and no other, so a record accepted from elsewhere
+#      would pass the build and stop every fix round. The message names the path.
+#  94  a row names a screenshot that is not on disk. The look is the evidence, and a row with no
+#      image is a claim.
+#  95  a row names a surface the order does not name. The order's surfaces are the pages it
+#      changes, and a look at another page proves nothing about this order.
+#  96  a row's doneWhen is not one of the order's own done-when rows. The row is the sentence a
+#      model judges, and a judgement of another sentence is not this order's proof.
+#  97  a row the order owes is missing: one per done-when row, per surface the order names, per
+#      viewport the surface file declares. A look not taken is not a met, and the check reads
+#      every row present as the whole only when the whole is there. The message names the first
+#      missing row.
+#  98  the surface file cannot be read, so the rows the order owes cannot be known: the project
+#      record names no surfaces.registryPath, the file is missing or unreadable, or it declares
+#      no viewport. The surfaces skill's install writes it.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -586,7 +614,10 @@ RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
+SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
+PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
 BASELINE_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/baseline-schema.json"
+OBSERVED_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/observed-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'implement-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
@@ -619,6 +650,15 @@ source "$RECIPES_LIB" || die 3 "the recipes library failed to load: $RECIPES_LIB
 [ -f "$SCHEMA_CHECK_LIB" ] || die 3 "cannot find the schema-check library at $SCHEMA_CHECK_LIB"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die 3 "the schema-check library failed to load: $SCHEMA_CHECK_LIB"
+
+# The surface file reader review uses, and the path join it needs: the observed check reads the
+# viewport list from the same file review's surface step reads, so there is one reader.
+[ -f "$SURFACES_LIB" ] || die 3 "cannot find the surfaces library at $SURFACES_LIB"
+# shellcheck source=/dev/null
+source "$SURFACES_LIB" || die 3 "the surfaces library failed to load: $SURFACES_LIB"
+[ -f "$PATHS_LIB" ] || die 3 "cannot find the paths library at $PATHS_LIB"
+# shellcheck source=/dev/null
+source "$PATHS_LIB" || die 3 "the paths library failed to load: $PATHS_LIB"
 
 # How many times `build-brief` will hand one order to a builder before refusing (exit 41). Two, not
 # version 5's three: nothing in version 5 justifies three beyond a clamp guarding a corrupted
@@ -1930,7 +1970,7 @@ do_start() {
     || st_started_from="$ledger_started_from | rewritten from $rewritten_from | retake the baseline: move baseline.json and baseline-output aside, then run preconditions"
   proof_absent="$(printf '%s' "$snapshot_workorders_json" | jq -r '[ .[] | select(has("proof") | not) | .id ] | join(", ")')"
   if [ -n "$proof_absent" ]; then
-    proof_absent="$proof_absent | no proof in the snapshot, so each is proved by tests unless design sets gate or record"
+    proof_absent="$proof_absent | no proof in the snapshot, so each is proved by tests unless design sets gate, record or observe"
   else
     proof_absent="none: every order in the snapshot names its proof"
   fi
@@ -3657,7 +3697,9 @@ do_tests_freeze() {
   # its build runs the implement recipe's `## Configuration gate` lines as its own check (live-run
   # row 65). It still takes a --checklist for a person-verified criterion it serves or owns. An
   # order whose proof is record freezes no test either: its deliverable is a document in the task
-  # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17).
+  # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17). An order whose
+  # proof is observe freezes no test and no row: a model judges its done-when rows against its
+  # surfaces after the build, so there is nothing to judge here (live-run row 104).
   local tf_proof
   tf_proof="$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')"
   if [ "$tf_proof" = "gate" ] && [ -n "$test_raw" ]; then
@@ -3665,6 +3707,9 @@ do_tests_freeze() {
   fi
   if [ "$tf_proof" = "record" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by its record and takes no --test. Its deliverable is a document in the task folder; its done-when row, --row $unit_id=..., is its checkpoint."
+  fi
+  if [ "$tf_proof" = "observe" ] && [ -n "$test_raw" ]; then
+    die 3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
   fi
 
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
@@ -3889,7 +3934,7 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] \
+  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] || [ "$tf_proof" = "observe" ] \
     || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
@@ -4321,7 +4366,7 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
-  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] \
+  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] || [ "$tf_proof" = "observe" ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -4692,6 +4737,10 @@ br_require_real_base() {
 #                       `## Configuration gate` lines are that order's own check
 #   BRC_END_OF_TASK     true only under `finish`. A suite row the recipe costs `end-of-task` is
 #                       deferred by the two record steps and runs here once (nyc defect 18)
+#   BRC_OBSERVED        the observed record's path, read only for an order whose proof is
+#                       observe: `build-record` takes it from --observed, checked first; a fix
+#                       round and a re-check read the path the build step names,
+#                       <task_folder>/implementation/observed-<unit_id>.json
 # ------------------------------------------------------------------------------------------------
 BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""; BRC_SCOPE=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
@@ -4699,6 +4748,7 @@ BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES="
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 BRC_GATE_RECIPES=""
 BRC_END_OF_TASK=false
+BRC_OBSERVED=""
 
 # One tool check: coding standards, static analysis, or the security tool. $1 the check id, $2 the
 # baseline field holding the same tool's own verdict, $3 a word for the message. The command itself
@@ -5214,6 +5264,38 @@ br_record_check() {
     + (if $judgedBy == "" then {} else {judgedBy: $judgedBy} end)'
 }
 
+# The observed check, in the order-tests slot of an order whose proof is observe (live-run row
+# 104). Its deliverable is what a page shows, which no test of its own proves, so the check reads
+# the record the orchestrator wrote after looking at each surface at each viewport through a
+# browser: met when every row is met, unmet naming the first row that is not, unknown when the
+# record at BRC_OBSERVED is not there to read. The judge is always a model, and the check carries
+# it as judgedBy so `close` copies it onto the criteria the order owns. `build-record` checks the
+# record's shape and its rows against the order before any check runs (exits 93 to 96), so a fix
+# round or a re-check reads a file the build step already refused or accepted. Prints the check
+# object.
+br_observed_check() {
+  local unit verdict detail unmet_row rows_count
+  unit="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
+  if [ -z "$BRC_OBSERVED" ] || ! jq empty "$BRC_OBSERVED" >/dev/null 2>&1; then
+    jq -n --arg unit "$unit" --arg observed "${BRC_OBSERVED:-none}" \
+      '{id: "observed", verdict: "unknown",
+        detail: ($unit + " is proved by a model\u0027s observation, and no observed record could be read at " + $observed + ". The build step writes it after the implementer returns and passes it as --observed.")}'
+    return 0
+  fi
+  rows_count="$(jq '(.rows // []) | length' "$BRC_OBSERVED")"
+  unmet_row="$(jq -r '[ (.rows // [])[] | select(.verdict != "met") ][0] // empty
+    | .surface + " at " + .viewport + ": " + .doneWhen + " (" + .note + ")"' "$BRC_OBSERVED")"
+  if [ -n "$unmet_row" ]; then
+    verdict="unmet"
+    detail="a model judged the done-when row unmet on $unmet_row; the observed record holds every row and the screenshots."
+  else
+    verdict="met"
+    detail="a model judged every done-when row met at every surface and viewport ($rows_count rows); the observed record holds the screenshots."
+  fi
+  jq -n --arg verdict "$verdict" --arg detail "$detail" --arg judgedBy "$(jq -r '.judgedBy' "$BRC_OBSERVED")" \
+    '{id: "observed", verdict: $verdict, detail: $detail, judgedBy: $judgedBy}'
+}
+
 # True when $1, a path relative to its task folder, is one AIDA's own scripts write there. Those
 # are the task record and the contract, each with its rendering, and the design close. Also the
 # stage folders, the archive `restart` leaves, the notes a save appends, and records/. The
@@ -5232,7 +5314,9 @@ br_aida_writes_in_task() {
 # coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
 # is gate the first slot holds configuration-gate instead, and on one whose proof is record it
 # holds done-when, with the suite and the three tool rows undeclared: a document in the task
-# folder is nothing a suite or a tool reads (nyc defect 17). Prints the JSON array.
+# folder is nothing a suite or a tool reads (nyc defect 17). On one whose proof is observe it
+# holds observed, and the rest run as they do for a code order (live-run row 104). Prints the
+# JSON array.
 br_seven_checks() {
   local parts_file proof rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
@@ -5242,6 +5326,8 @@ br_seven_checks() {
     br_gate_check >>"$parts_file"
   elif [ "$proof" = "record" ]; then
     br_record_check >>"$parts_file"
+  elif [ "$proof" = "observe" ]; then
+    br_observed_check >>"$parts_file"
   else
     br_test_check "order-tests"    "orderTests" "order-tests" >>"$parts_file"
   fi
@@ -5370,7 +5456,7 @@ br_executed_count() {
 # the one exempt unknown allowed. And order-tests must have answered met: that check is the only
 # one that says this order's own code does what its tests ask, so undeclared or unknown there is an
 # order nothing executed. configuration-gate is the same floor for an order whose proof is gate,
-# and done-when for one whose proof is record.
+# done-when for one whose proof is record, and observed for one whose proof is observe.
 # Undeclared on every other check still continues, which is the rule step two already applies to
 # a precondition a recipe declared nothing for. Deferred continues the same way: the suite row
 # is `finish`'s to run, and its answer lands there (nyc defect 18).
@@ -5378,7 +5464,7 @@ br_checks_pass() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     (all(.[]; .verdict == "met" or .verdict == "undeclared" or .verdict == "deferred"
               or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
-    and (any(.[]; (.id == "order-tests" or .id == "configuration-gate" or .id == "done-when") and .verdict == "met"))'
+    and (any(.[]; (.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict == "met"))'
 }
 
 # The first check that stopped the order in $1, in the recorded order, with $2 the exempt id as
@@ -5387,7 +5473,7 @@ br_first_stopper() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     [ .[] | select(.verdict == "unmet"
                    or (.verdict == "unknown" and ($exempt == "" or .id != $exempt))
-                   or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when") and .verdict != "met")) ]
+                   or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")) ]
     | .[0] // {id:"none",verdict:"",detail:""}
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
 }
@@ -5400,7 +5486,7 @@ br_first_stopper() {
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
-                 or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when") and .verdict != "met"))
+                 or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met"))
     | .id ];
 def outside_tools: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security"));
 '
@@ -5457,7 +5543,7 @@ br_require_check_count() {
     | ([ "order-tests", "suite-regression", "coding-standards", "static-analysis", "security",
          "owned-files", "frozen-tests" ] + (if $want == 8 then ["interface-record"] else [] end))
     | map(select(. as $id | ($have | index($id)) == null))
-    | map(if . == "order-tests" and (($have | index("configuration-gate")) != null or ($have | index("done-when")) != null) then empty else . end)
+    | map(if . == "order-tests" and (($have | index("configuration-gate")) != null or ($have | index("done-when")) != null or ($have | index("observed")) != null) then empty else . end)
     | join(", ")' "$checks_file" 2>/dev/null)"
   rm -f "$checks_file"
   die 84 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written."
@@ -5507,8 +5593,90 @@ br_eight_checks() {
   case "$BR_EXECUTED" in ''|*[!0-9]*) BR_EXECUTED=0 ;; esac
 }
 
+# The observed record for an order whose proof is observe, refused on one of five facts, each its
+# own number (live-run row 104). $1 the action, $2 the unit id, $3 the --observed path, empty when
+# none was passed. The top level is compared against observed-schema.json through the one library
+# every record check uses; the rows are read here, since that comparison stops at the top level.
+# Reads UNIT_JSON for the order's surfaces and done-when rows.
+br_require_observed() {
+  local who="$1" unit_id="$2" observed="$3" compare gaps missing_shots bad_surfaces bad_done_when
+  [ -n "$observed" ] \
+    || die 92 "$who: $unit_id is proved by a model's observation, and no --observed was passed. After the implementer returns, open each of the order's surfaces at each viewport with the browser tool, judge each done-when row against what renders, write $IMPL_DIR/observed-$unit_id.json with a screenshot per row, and pass it as --observed."
+  [ -f "$observed" ] \
+    || die 93 "$who: the observed record at $observed is not there. Write it first, then record the attempt."
+  # One path, so a fix round and a re-check read what the build read. Both sides are resolved
+  # through the directory, so a relative path or a symlinked folder compares by where it lands.
+  local canonical given_real canonical_real
+  canonical="$IMPL_DIR/observed-$unit_id.json"
+  given_real="$(cd "$(dirname -- "$observed")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$observed")")"
+  canonical_real="$(cd "$(dirname -- "$canonical")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$canonical")")"
+  [ -n "$given_real" ] && [ "$given_real" = "$canonical_real" ] \
+    || die 93 "$who: --observed names $observed, and the observed record for $unit_id lives at $canonical and nowhere else. A fix round and a re-check read that path, so a record accepted from another path would pass the build and stop every fix round. Write it there and pass that path."
+  compare="$(schema_check_compare "$OBSERVED_SCHEMA_FILE" "$observed")" \
+    || die 93 "$who: $observed could not be read as JSON, or could not be compared against $OBSERVED_SCHEMA_FILE."
+  gaps="$(jq -r --argjson r "$compare" --arg unit "$unit_id" '
+      [ ($r.missing // [])[] | "no " + .field ]
+      + [ ($r.unreadable // [])[] | .field + " " + .reason ]
+      + (if (.order // "") == $unit or ((.order // null) == null) then [] else ["order is " + (.order | tostring) + ", not " + $unit] end)
+      + (if (.rows | type) != "array" then []
+         else [ .rows | to_entries[] | select((.value | type) != "object"
+                  or ((.value.doneWhen | type) != "string") or (.value.doneWhen == "")
+                  or ((.value.surface | type) != "string") or (.value.surface == "")
+                  or ((.value.viewport | type) != "string") or (.value.viewport == "")
+                  or ((.value.screenshot | type) != "string") or (.value.screenshot == "")
+                  or ((.value.verdict != "met") and (.value.verdict != "unmet"))
+                  or ((.value.note | type) != "string"))
+                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, a met or unmet verdict, or a note" ] end)
+      | join("; ")' "$observed" 2>/dev/null)"
+  [ -z "$gaps" ] \
+    || die 93 "$who: $observed does not match $OBSERVED_SCHEMA_FILE: $gaps. Nothing is recorded."
+  # Every name the loop uses is declared above it (trap 5 in this file's own header).
+  local shot
+  missing_shots=""
+  while IFS= read -r shot; do
+    [ -n "$shot" ] || continue
+    [ -f "$shot" ] || missing_shots="$missing_shots$shot, "
+  done <<BR_SHOTS
+$(jq -r '.rows[].screenshot' "$observed")
+BR_SHOTS
+  [ -z "$missing_shots" ] \
+    || die 94 "$who: these screenshots the observed record names are not on disk: ${missing_shots%, }. The look is the evidence, and a row with no image is a claim. Save each screenshot under $IMPL_DIR/observed-$unit_id/<surface>-<viewport>.png and name it in the row."
+  bad_surfaces="$(jq -r --argjson unit "$UNIT_JSON" '
+      ($unit.surfaces // []) as $named
+      | [ .rows[].surface | select(. as $s | ($named | index($s)) == null) ] | unique | join(", ")' "$observed")"
+  [ -z "$bad_surfaces" ] \
+    || die 95 "$who: the observed record names surfaces $unit_id does not: $bad_surfaces. The order's own surfaces are $(printf '%s' "$UNIT_JSON" | jq -r '(.surfaces // []) | join(", ")'). A look at another page proves nothing about this order."
+  bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" '
+      ($unit.doneWhen // []) as $held
+      | [ .rows[].doneWhen | select(. as $d | ($held | index($d)) == null) ] | unique | join(" | ")' "$observed")"
+  [ -z "$bad_done_when" ] \
+    || die 96 "$who: the observed record judges sentences $unit_id does not hold as done-when rows: $bad_done_when. A row is one of the order's own done-when rows, verbatim."
+  # Every row the order owes: each done-when row, at each surface the order names, at each
+  # viewport the surface file declares. The file is the one review's surface step reads, at
+  # surfaces.registryPath in the project record, joined to the task's own tree.
+  local project_folder registry surface_file missing_row
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die 3 "$who: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
+  registry="$(jq -r '.surfaces.registryPath // ""' "$project_folder/project.json" 2>/dev/null)"
+  [ -n "$registry" ] \
+    || die 98 "$who: $project_folder/project.json names no surfaces.registryPath, so the viewports $unit_id owes a look at cannot be known. The surfaces skill's install writes the surface file and that field."
+  surface_file="$(sf_surface_path "$registry" "$RV_CODEPATH")"
+  sf_load_surfaces "$surface_file"
+  [ "$SF_STATE" = "ok" ] \
+    || die 98 "$who: the surface file at $surface_file is $SF_STATE, so the viewports $unit_id owes a look at cannot be known. The surfaces skill's install writes it."
+  [ "$(printf '%s' "$SF_VIEWPORTS" | jq 'length')" -gt 0 ] \
+    || die 98 "$who: the surface file at $surface_file declares no viewport, so the rows $unit_id owes cannot be known. Run the surfaces skill's install with a viewport list."
+  missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" '
+      [ .rows[] | .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
+      | [ ($unit.doneWhen // [])[] as $d | ($unit.surfaces // [])[] as $s | $viewports[] as $v
+          | select(($have | index($d + "\u001f" + $s + "\u001f" + $v)) == null)
+          | "\"" + $d + "\" at " + $s + " at " + $v ][0] // ""' "$observed")"
+  [ -z "$missing_row" ] \
+    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per done-when row, per surface it names, per viewport in $surface_file. A look not taken is not a met; take it and add the row."
+}
+
 do_build_record() {
-  local task_arg="" unit_id="" interface_path="" report_path="" started_at=""
+  local task_arg="" unit_id="" interface_path="" report_path="" started_at="" observed_path=""
   local nothing_ran="" have_nothing_ran=false
   local test_recipes="" check_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
@@ -5517,6 +5685,10 @@ do_build_record() {
         [ "$#" -ge 2 ] || die 3 "build-record: --interface needs a path to the record the builder wrote"
         [ -n "$2" ] || die 3 "build-record: --interface was given an empty path."
         interface_path="$2"; shift 2 ;;
+      --observed)
+        [ "$#" -ge 2 ] || die 3 "build-record: --observed needs a path to the observed record the orchestrator wrote"
+        [ -n "$2" ] || die 3 "build-record: --observed was given an empty path."
+        observed_path="$2"; shift 2 ;;
       --report)
         [ "$#" -ge 2 ] || die 3 "build-record: --report needs a path to the builder's report"
         [ -n "$2" ] || die 3 "build-record: --report was given an empty path."
@@ -5664,6 +5836,15 @@ do_build_record() {
   fi
   [ -f "$interface_path" ] && interface_text="$(cat "$interface_path" 2>/dev/null)"
 
+  # --- exits 92 to 96: an order whose proof is observe needs the observed record, checked here ------
+  # The record is the orchestrator's account of what a model saw at each surface and viewport
+  # (observed-schema.json, live-run row 104). Its shape and every row are checked against the
+  # frozen order before any check runs, so the observed check below reads a record that is this
+  # order's: a screenshot on disk per row, a surface the order names, a done-when the order holds.
+  if [ "$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+    br_require_observed "build-record" "$unit_id" "$observed_path"
+  fi
+
   local ledger_run_mode
   ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
@@ -5686,6 +5867,7 @@ do_build_record() {
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
+  BRC_OBSERVED="$observed_path"
   br_eight_checks "$unit_interface_declared" "$interface_text"
   local checks_file checks_json
   checks_file="$BR_CHECKS_FILE"
@@ -5911,6 +6093,8 @@ do_build_recheck() {
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
+  # The observed record the build step accepted, at the path it names (live-run row 104).
+  BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
   br_eight_checks "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')" \
     "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')"
 
@@ -6799,6 +6983,8 @@ RV_SCOPE
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
+  # The observed record the build step accepted, at the path it names (live-run row 104).
+  BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
 
   # The checks travel by file to the record, the same as build-record (nyc defects 9 and 12).
   local seven_file checks_json
@@ -7386,10 +7572,13 @@ do_close() {
   # lines are neither (live-run row 65). A record order is judged by whoever judged its done-when
   # row, person or model, which the done-when check carries as judgedBy: somebody read the row,
   # and a model's reading stays queued for a person the way every model row is (nyc defect 17).
+  # An observe order is judged by `model`, which the observed check carries the same way: a
+  # model looked at the page, and completion puts the look to a person (live-run row 104).
   local slot_check slot_verdict slot_judge slot_detail
   case "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.proof // "tests"')" in
     gate) slot_check="configuration-gate" ;;
     record) slot_check="done-when" ;;
+    observe) slot_check="observed" ;;
     *) slot_check="" ;;
   esac
   if [ -n "$slot_check" ]; then

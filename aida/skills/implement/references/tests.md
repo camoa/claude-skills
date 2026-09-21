@@ -32,7 +32,7 @@ frozen test reads the record and never the catalog, because a lookup in a write 
 that can fail open, and a pattern that changed during a build would change what is protected
 halfway through it.
 
-## An order whose proof is `gate` or `record` has no test author
+## An order whose proof is `gate`, `record` or `observe` has no test author
 
 Read the order's `proof` from the frozen snapshot first. `gate` means its deliverable is
 exported configuration, and a test that reads the YAML back cannot fail for the right reason.
@@ -51,6 +51,13 @@ question is whether each row names something a reader can confirm from the deliv
 Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
+
+`observe` means its deliverable is what a page shows, and a model judges that after the build.
+Skip `tests-brief` and dispatch no test author. Put no row to anyone: there is nothing to judge
+before the page exists. Freeze with no `--test` and no `--row`, and a `--checklist` for each
+criterion a person verifies. The build step opens the order's surfaces in a browser after the
+implementer returns, and reads that record as the order's own check, `observed`. `close`
+writes `model` on the criteria the order owns.
 
 ## Assemble what the test author may see
 
@@ -269,8 +276,9 @@ script reads its `## Unit declaration` block itself, for the one exception below
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
-step. A `gate` or `record` order freezes with no test row, and each refuses a `--test`. A
+step. A `gate`, `record` or `observe` order freezes with no test row, and each refuses a `--test`. A
 `record` order owes its done-when row, `--row <order id>=...`, and refuses without it (exit 64).
+An `observe` order owes no row: the freeze accepts it with nothing.
 It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward

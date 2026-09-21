@@ -162,6 +162,13 @@ AIDA cannot know on its own:
   sets that value itself once every owned file lies under the task folder, on an order created
   with no `--proof`. Such a file must live in a folder the project commits: `add-owned-file`
   refuses an ignored path on a record order.
+- What is proved by what a page shows rather than by a test. A layout, a rendered block, a
+  page at each viewport. Such an order is created with `--proof observe`. It names at least one
+  `--surface` and declares no test. Each done-when row is the sentence a model judges. After
+  the build, the orchestrator opens each surface at each viewport in a browser. It judges the
+  row against what renders, with a screenshot as the evidence. Write each row as one thing
+  the page must show. The judge is a model, and completion puts each such criterion to the
+  person to accept.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -356,7 +363,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--proof <tests|gate|record>] [--surface <id>]...
+  [--proof <tests|gate|record|observe>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -396,11 +403,12 @@ closed again on the live files. Nothing halts when nothing else on the order cha
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. Two orders are the exception. One created
+here; the check below refuses an order that skips this. Three orders are the exception. One created
 with `--proof gate` declares no test, and the configuration check judges its owned machine
 criterion at build time. One whose proof is `record` declares no test either, and its done-when
-rows, judged at the checkpoint, stand in for the test. A criterion whose `verifiedBy` is
-`person` needs no test, though one is never wrong to add.
+rows, judged at the checkpoint, stand in for the test. One whose proof is `observe` declares no
+test, and a model judges its done-when rows against its surfaces after the build. A criterion
+whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
 A test is what a test author writes as a file, red before the code and green after it. The
 review stage's surface row is not a test, so `add-test` refuses a description naming one of a
@@ -413,7 +421,7 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record>] \
+  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record|observe>] \
   [--surface <id>]...
 ```
 
@@ -448,10 +456,12 @@ zero it adds one `open:` line naming what is open. The report holds:
   than one work order;
 - every work order serving no criterion;
 - every work order that owns a machine-verified criterion and declares no test, unless its proof
-  is `gate`;
+  is `gate`, `record` or `observe`;
 - every work order whose proof is `gate` and that declares a test;
 - every work order whose proof is `record` and that declares a test, owns a file outside the
   task folder, or has no done-when row;
+- every work order whose proof is `observe` and that declares a test, names no surface, or has
+  no done-when row;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -474,6 +484,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a `record` order declaring a test needs a `remove-test` call for it; one owning a file
     outside the task folder needs `--proof tests` if it builds code after all; one with no
     done-when row needs an `add-done-when` call;
+  - an `observe` order declaring a test needs a `remove-test` call for it. One naming no
+    surface needs `update --surface <id>`. One with no done-when row needs an `add-done-when`
+    call;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The
