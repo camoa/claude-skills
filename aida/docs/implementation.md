@@ -94,6 +94,15 @@ every attempt. The subtraction holds no parser. A finding whose text changed rea
 one fixed and reintroduced reads as old. The baseline belongs to the commit the build started
 from; a run at a different commit refuses rather than overwrites.
 
+**A recipe the catalog republishes mid-task reaches the record by one action.** The record pins
+each recipe's path, and every later step reads that path. A republished recipe changes nothing
+until `recipe-refresh` replaces the path for the frameworks named. It records what changed and
+re-runs nothing: the verdict stands, because a recipe's conditions change more rarely than its
+markers. Only the test-execution recipe is refreshed. The review recipe is pinned by the baseline
+for the task's life. A republished one has a new body, so the build refuses it, and no action
+takes a new baseline mid-task. The freeze then reads the record's path, or refuses a path that
+disagrees with it, and its record names the recipe it read.
+
 ## Writing the tests for one order
 
 An order is ready when every order it depends on has closed. For each ready order, a test author

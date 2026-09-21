@@ -28,6 +28,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--value <name>=<value>]...
+#   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
 #   implement-actions.sh tests-freeze <task_folder> <unit_id> \
 #                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
@@ -524,6 +525,17 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the test author wrote beside the tests, hashed and committed with them; a path a test glob
 #      matches is a test, and belongs on --test. A support path outside codePath shares exit 36.
 #
+# The codes a recipe refreshed mid-task added (live-run row 99).
+#  90  `recipe-refresh` was given a framework preconditions.json holds no resolved recipe for, or a
+#      path that does not exist. Both are a lookup that answered for nothing on record: every
+#      reader of a recipe path filters on `lookup == "resolved"`, so a path written beside a failed
+#      lookup would reach nothing, and the first path is preconditions' to record. Nothing is
+#      written.
+#  91  `tests-freeze` was given a --test-recipe whose path is not the one preconditions.json
+#      records for that framework. The freeze reads reds against one recipe and build-record reads
+#      the record's, so two paths for one order would stand its two records on two recipes. The
+#      message names both paths and `recipe-refresh` as the route. Nothing is frozen.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -640,6 +652,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--check-recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
+       implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
        implement-actions.sh tests-freeze <task_folder> <unit_id>
                             [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
@@ -2969,6 +2982,85 @@ EOF
   esac
 }
 
+# A recipe the catalog republished after `preconditions` ran (live-run row 99). The step resolves
+# the recipe again through the navigator, the way references/preconditions.md says, and hands the
+# new path over. This replaces the path the record holds for the named frameworks only, and
+# appends what changed under `recipeRefreshes`. It re-runs nothing: the verdict stands, because a
+# recipe's preconditions heading changes more rarely than its markers do, and the person who
+# refreshes knows why. Only the test-execution recipe is refreshed. The review recipe is pinned by
+# baseline.json with its sha256, and exit 73 refuses every later record under another body, so
+# there is no path swap that keeps the baseline honest; references/preconditions.md records the
+# gap. Every refusal runs before the one write, so a refused call leaves the record as it was.
+do_recipe_refresh() {
+  local task_folder="" recipes="" fw rp line from kind
+  local record_file record_doc today refreshed=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --recipe)
+        [ "$#" -ge 2 ] || die 3 "recipe-refresh: --recipe needs <framework>=<path>"
+        case "$2" in *=*) ;; *) die 3 "recipe-refresh: --recipe takes <framework>=<path>, got: $2" ;; esac
+        fw="${2%%=*}"; rp="${2#*=}"
+        [ -n "$fw" ] || die 3 "recipe-refresh: --recipe was given no framework name: $2"
+        [ -f "$rp" ] || die 90 "recipe-refresh: the path handed over for $fw does not exist: $rp. Nothing was written."
+        cr_recipe_pair "recipe-refresh" "--recipe" "$2"
+        recipes="$recipes$CR_PAIR
+"
+        shift 2 ;;
+      -*) die 3 "recipe-refresh: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_folder" ] || die 3 "recipe-refresh: more than one task folder given"
+        task_folder="$1"; shift ;;
+    esac
+  done
+  [ -n "$recipes" ] || die 3 "recipe-refresh: nothing to refresh; pass --recipe <framework>=<path>"
+
+  task_folder="$(resolve_task_folder "$task_folder" "recipe-refresh")"
+  TASK_PATH="$task_folder"
+  IMPL_DIR="$task_folder/implementation"
+  require_started_build "recipe-refresh"
+
+  record_file="$IMPL_DIR/preconditions.json"
+  [ -f "$record_file" ] \
+    || die 90 "recipe-refresh: $record_file does not exist, so no framework has a recipe on record to replace. Run preconditions first."
+  record_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
+  [ -n "$record_doc" ] \
+    || die 3 "recipe-refresh: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  today="$(date -u +%Y-%m-%d)"
+
+  # A framework is refreshed only where the record already holds a resolved path: a lookup that
+  # failed recorded no recipe, and every reader of the path filters on `lookup == "resolved"`, so
+  # a path written beside a failed lookup would reach nothing. The first path is preconditions'.
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    fw="${line%%	*}"; rp="${line#*	}"
+    from="$(printf '%s' "$record_doc" | jq -r --arg f "$fw" \
+      '[ (.frameworks // [])[] | select(.framework == $f and .lookup == "resolved") ][0].recipePath // ""')"
+    [ -n "$from" ] \
+      || die 90 "recipe-refresh: $record_file records no resolved recipe for framework $fw, so there is no path of its own to replace. A first path is preconditions' to record, with --recipe $fw=<path>. Nothing was written."
+    record_doc="$(printf '%s' "$record_doc" | jq -c --arg f "$fw" --arg from "$from" --arg to "$rp" --arg at "$today" '
+      .frameworks |= map(if .framework == $f then .recipePath = $to else . end)
+      | .recipeRefreshes = ((.recipeRefreshes // []) + [{framework: $f, kind: "test-execution", from: $from, to: $to, at: $at}])')"
+    [ -n "$record_doc" ] || die 3 "recipe-refresh: the record update for $fw failed."
+    refreshed="$refreshed$fw	test-execution	$from	$rp
+"
+  done <<RR_EOF
+$recipes
+RR_EOF
+
+  write_atomic "$record_file" "$record_doc"
+  echo "action: recipe-refresh"
+  # One line per entry, the fields the record holds. No field is ever empty, so a tab-split read
+  # never shifts one.
+  while IFS='	' read -r fw kind from rp; do
+    [ -n "$fw" ] || continue
+    printf 'refreshed: %s %s %s -> %s\n' "$fw" "$kind" "$from" "$rp"
+  done <<RR_EOF
+$refreshed
+RR_EOF
+  printf 'record: %s\n' "$record_file"
+  printf 'verdict: %s (unchanged; the refresh re-runs nothing)\n' "$(printf '%s' "$record_doc" | jq -r '.verdict')"
+}
+
 # ------------------------------------------------------------------------------------------------
 # Step three: tests-brief and tests-freeze. The model that writes a test chooses the level, writes
 # the file, and runs it. This script never writes a test and never judges one. `tests-brief`
@@ -3949,6 +4041,44 @@ TF_EOF
   [ -z "$bad_red_files" ] \
     || die 32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
 
+  # --- 91: the reds are read against the recipe preconditions recorded (live-run row 99) -----------
+  # The record is the one producer of a test-execution recipe path, and build-record reads it from
+  # there for the same order. A --test-recipe is accepted only when it restates the record's path,
+  # and a freeze with none reads the record's path itself, so the two records of one order never
+  # stand on two recipes. A framework the record holds no path for is left to the flag as given:
+  # there is nothing to disagree with. A recorded path gone from disk cannot be read either way,
+  # and that message names the refresh. Read only when a red is to be read, because the recipe
+  # serves nothing else here.
+  local tf_pre_file tf_pre_line tf_pre_fw tf_pre_path tf_given_path tf_from_record="" tf_fallback=""
+  tf_pre_file="$IMPL_DIR/preconditions.json"
+  if [ "$red_count" -gt 0 ] && [ -f "$tf_pre_file" ]; then
+    tf_from_record="$(jq -r '[ (.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
+                               | .framework + "\t" + .recipePath ] | join("\n")' "$tf_pre_file" 2>/dev/null)"
+    while IFS= read -r tf_pre_line; do
+      [ -n "$tf_pre_line" ] || continue
+      tf_pre_fw="${tf_pre_line%%	*}"; tf_pre_path="${tf_pre_line#*	}"
+      if [ -z "$test_recipes" ]; then
+        [ -f "$tf_pre_path" ] \
+          || die 3 "tests-freeze: the test-execution recipe $tf_pre_file records for $tf_pre_fw is not a file: $tf_pre_path. Resolve it again and run recipe-refresh --recipe $tf_pre_fw=<path> first."
+        cr_recipe_pair "tests-freeze" "frameworks[].recipePath in $tf_pre_file" "$tf_pre_fw=$tf_pre_path"
+        tf_fallback="$tf_fallback$CR_PAIR
+"
+        continue
+      fi
+      tf_given_path="$(cr_lookup "$test_recipes" "$tf_pre_fw")"
+      [ -n "$tf_given_path" ] || continue
+      if [ -f "$tf_pre_path" ]; then
+        cr_recipe_pair "tests-freeze" "frameworks[].recipePath in $tf_pre_file" "$tf_pre_fw=$tf_pre_path"
+        tf_pre_path="${CR_PAIR#*	}"
+      fi
+      [ "$tf_given_path" = "$tf_pre_path" ] \
+        || die 91 "tests-freeze: --test-recipe names $tf_given_path for $tf_pre_fw, and $tf_pre_file records $tf_pre_path. The reds would be read against one recipe and build-record would read the other, so the two records of one order would stand on two recipes. Nothing is frozen. If the catalog republished the recipe, run recipe-refresh --recipe $tf_pre_fw=$tf_given_path first, then freeze again."
+    done <<TF_EOF
+$tf_from_record
+TF_EOF
+    [ -n "$test_recipes" ] || test_recipes="$tf_fallback"
+  fi
+
   # --- 80: a --red file must hold the failure signal the test-execution recipe declares ------------
   # A non-empty file is not a red. wo7's six kernel tests all errored in setUp() before any
   # assertion ran, and the freeze took that file as a red (live-run row 68). The recipe declares,
@@ -3968,7 +4098,7 @@ TF_EOF
   local assertion_markers="" harness_markers="" failure_lines=""
   if [ "$red_count" -gt 0 ]; then
     [ -n "$test_recipes" ] \
-      || die 80 "tests-freeze: a --red was given and no --test-recipe, so no failure marker can be read and no red can be told from a run that never asserted. Pass --test-recipe <framework>=<path> for each framework, from implementation/preconditions.json frameworks[].recipePath."
+      || die 80 "tests-freeze: a --red was given, no --test-recipe, and implementation/preconditions.json records no resolved test-execution recipe, so no failure marker can be read and no red can be told from a run that never asserted. Run preconditions with --recipe <framework>=<path> for each framework first."
     red_rows_tmp="$IMPL_DIR/.tests-freeze-recipe-rows.$$"
     while IFS= read -r red_recipe_path; do
       [ -n "$red_recipe_path" ] || continue
@@ -4280,11 +4410,20 @@ TF_EOF
     write_atomic "$ledger_file_now" "$ledger_with_judgements"
   fi
 
-  local today record_json
+  # The recipe each red was read against, per framework, so the record says what the freeze read
+  # and a later reader can compare it with what preconditions.json holds now (live-run row 99).
+  # Absent when no red was read: a recipe served nothing then.
+  local today record_json test_recipe_paths_json='null'
+  if [ "$red_count" -gt 0 ] && [ -n "$test_recipes" ]; then
+    test_recipe_paths_json="$(printf '%s' "$test_recipes" | jq -R -s '
+      split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: .[1]}) | from_entries')"
+  fi
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
     --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
-    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support}')"
+    --argjson testRecipePath "$test_recipe_paths_json" \
+    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support}
+     + (if $testRecipePath == null then {} else {testRecipePath: $testRecipePath} end)')"
 
   # A record that reaches here with different rows is retaken: the order is still at tests-frozen
   # (76 above) and HEAD was the earlier freeze commit (35 above), which is the route for a frozen
@@ -8378,6 +8517,7 @@ case "$ACTION" in
   read)  do_read  "$@" ;;
   start) do_start "$@" ;;
   preconditions) do_preconditions "$@" ;;
+  recipe-refresh) do_recipe_refresh "$@" ;;
   tests-brief)  do_tests_brief  "$@" ;;
   tests-freeze) do_tests_freeze "$@" ;;
   build-brief)  do_build_brief  "$@" ;;

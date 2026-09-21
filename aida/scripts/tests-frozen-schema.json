@@ -68,6 +68,11 @@
         }
       },
       "description": "Present only when this record replaced an earlier one for the same unit: the order was still at `tests-frozen`, HEAD was the earlier freeze commit, and the rows differed. That is the route for a frozen test whose oracle was wrong: the test author corrects the assertion, the row-checker reads the row again, and `tests-freeze` runs again, printing `retaken: <earlier commit> -> <this commit>` (live-run row 109). The freeze commits only the corrected test paths, so `commit` here and the record's own `commit` differ when the file changed and are the same commit when only a row changed. A rerun with the same rows after a retake leaves the record untouched, this field included. Absent on a record taken once."
+    },
+    "testRecipePath": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "description": "The test-execution recipe each red was read against, keyed by framework name, absolute (live-run row 99). Present only when the freeze read a `--red`. It is the path `implementation/preconditions.json` held at `frameworks[].recipePath` when the freeze ran. A `--test-recipe` naming a different path is refused before this file is written (exit 91), and a freeze given none reads the record's path itself. A reader comparing this with the record now can tell a freeze that ran before a `recipe-refresh` from one that ran after it."
     }
   },
   "$defs": {

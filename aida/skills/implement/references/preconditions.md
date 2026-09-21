@@ -112,3 +112,23 @@ new, or a finding fixed and reintroduced, which reads as old.
 
 The baseline is taken once, at that commit. A second run at the same commit leaves it alone. One
 recorded at a different commit refuses rather than overwrites, and names both commits.
+
+## A recipe changed since the record
+
+The record pins each recipe's path, and every later step reads that path. When the catalog
+republishes a recipe this task pinned, the record still names the old body. Resolve the recipe
+again the way the first section says: dispatch `catalog-identifier` for the `test-execution`
+point and that framework, never a cached copy. Then run, with one flag per framework that changed:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
+  --recipe <framework>=<path to the test-execution recipe>
+```
+It replaces the path for the named frameworks only, and records what changed under
+`recipeRefreshes`. It re-runs nothing: the verdict stands, because a recipe's preconditions
+heading changes more rarely than its markers, and the person who refreshes knows why. It refuses
+a framework with no resolved recipe on record, and a path that does not exist (exit 90). The
+freeze refuses a `--test-recipe` that is not the record's path (exit 91), so run this first.
+
+The review recipe is pinned by the baseline for the task's life. A republished one has a new body,
+so its hash differs from the baseline's, and the build refuses it (exit 73). No action takes a new
+baseline mid-task; that is a recorded gap, not a route.

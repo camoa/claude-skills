@@ -259,7 +259,10 @@ A `--test` names its criteria or the order's own id, never both. The second form
 the order's done-when, and its name ends with the order id.
 
 `--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
-at `frameworks[].recipePath`, the same way the build step reads it. The script reads the recipe's
+at `frameworks[].recipePath`, the same way the build step reads it. It must be the record's path:
+a different one refuses (exit 91), naming both. When the catalog republished the recipe, run
+`recipe-refresh` first (`references/preconditions.md`). With no flag, the freeze reads the record's
+path itself, and the record names what it read under `testRecipePath`. The script reads the recipe's
 `failure_signal` block itself. Do not read the body here. `--implement-recipe` is the path
 resolved above, one per framework, the same path the build step passes to `build-record`. The
 script reads its `## Unit declaration` block itself, for the one exception below.
@@ -302,8 +305,8 @@ read under a recipe whose assertion span is a shape rather than a marker. A file
 three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes
 declare no assertion marker and no `failure_line`, the freeze cannot read the file at all. It
 then freezes it as before, records `redSignal: unchecked` on the test, and says so in one summary
-line. Every other red carries the reading that accepted it. A freeze with a `--red` and no
-`--test-recipe` refuses, because then no red can be read at all. A `--locks-in` reason is
+line. Every other red carries the reading that accepted it. A freeze with a `--red`, no
+`--test-recipe` and no recipe on record refuses, because then no red can be read at all. A `--locks-in` reason is
 recorded beside the test, and the review brief says where it is.
 
 **Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was

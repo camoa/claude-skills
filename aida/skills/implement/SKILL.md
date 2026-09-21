@@ -73,6 +73,9 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 | An `order(...)` line whose halt holds none of those three segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
 
+A recipe the catalog republished after `preconditions` ran is not a step the table derives. Run
+`recipe-refresh` before the next freeze, as `references/preconditions.md` says.
+
 An order in flight comes before a new one, and a halted order is named only when nothing else can
 move. The one exception is the order the design removed: it comes before a new order, for the
 reason its row gives. A resumed run starts at `start` regardless, because that is where drift since the snapshot is
