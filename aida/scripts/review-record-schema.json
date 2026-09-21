@@ -138,8 +138,8 @@
         },
         "ruling": {
           "type": "string",
-          "enum": ["wrong", "deferred", "load-bearing"],
-          "description": "A person's answer at the round cap, on a finding still open after the last allowed round (ideal/implementation.md, 'The loop stops on a counter'). `load-bearing` is an escalation and halts the order with this finding as the reason. `wrong` and `deferred` let the order close with the finding recorded. An unattended run never writes this field: it has no person, so it halts instead (exit 55 and exit 56)."
+          "enum": ["wrong", "deferred", "load-bearing", "test-wrong"],
+          "description": "A person's answer at the round cap, on a finding still open after the last allowed round (ideal/implementation.md, 'The loop stops on a counter'), or before the cap on a finding a fixer reported out of its scope (live-run row 110). `load-bearing` is an escalation and halts the order with this finding as the reason. `test-wrong` says the finding is real and the fix needs a frozen test changed: it halts the order with `test wrong: <id>` as the reason, and `retake-tests` moves this record aside and sends the order back to its tests. `wrong` and `deferred` let the order close with the finding recorded. An unattended run never writes this field: it has no person, so it halts instead (exit 55 and exit 56)."
         },
         "rulingReason": {
           "type": "string",

@@ -363,10 +363,20 @@ addressed. New breakage inside the fix diff opens as a finding. Anything it noti
 fix diff is recorded and opens nothing, so a round never grows.
 
 An order has two fix rounds. At the cap, each finding still open needs a ruling from you:
-`wrong`, `deferred`, or `load-bearing`, with a reason. The first two let the order close with the
-finding recorded, and the review stage judges a deferred one again. The third halts the order
-with the finding as the reason. It reaches you as an escalation, not a question with an obvious
-answer. Autonomous, the order halts instead.
+`wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. The first two let the order
+close with the finding recorded, and the review stage judges a deferred one again. The third
+halts the order with the finding as the reason. It reaches you as an escalation, not a question
+with an obvious answer. Autonomous, the order halts instead.
+
+A finding the fixer reported out of its scope may be ruled before the cap, at that round's
+verification. The fixer's report is the evidence that no round can reach it, so no second round
+is spent to hear it again. `test-wrong` says the finding is real and the fix needs a frozen test
+changed. The order halts, and the retake sends it back to its tests. The build, review, fix
+and verify records and their briefs move aside into a `retaken` folder, nothing deleted, and
+the order returns to `tests-frozen`. The test author corrects that test, the checker reads its rows, and the freeze
+runs again and prints `retaken:`. The attempt counter stays, because the attempts were real.
+When it is already spent, the next build refuses and the grant answers it. The fix rounds go
+back to zero with the review record.
 
 Closing an order records the commit range it produced and decides the criteria it serves or owns.
 A machine-verified criterion reads confirmed once every order serving it has closed and every
@@ -422,7 +432,8 @@ holds a partial build of the unit. A test green on arrival is reported, never ta
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
 finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt
-the same way. A grant refuses them and the restart does not see them. You do what the reason
+the same way. A grant refuses them, the restart does not see them, and a test ruled wrong takes
+the retake instead. You do what the reason
 names: repair the test, rule on the finding, commit the tree. Then you clear the halt with a
 reason, and AIDA records both in the ledger and says which step the order resumes at. Clearing a
 halt is a person's judgement, so an autonomous run cannot take it. A wrong frozen test can also

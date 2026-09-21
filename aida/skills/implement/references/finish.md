@@ -136,10 +136,11 @@ test author is told the tree holds a partial build." Either way the next `start`
 
 ## Clear any other halt, once the person has acted on it
 
-A halt that reads none of `attempts spent`, `budget spent` or `design drift` names something a
-person does outside this script. That is a rejected row, a finding on a non-goal, a fixer's
-scope, a finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings
-open halt the same way. Put the halt and its reason to the person, opening with: "This unit of
+A halt that reads none of `attempts spent`, `budget spent`, `design drift` or `test wrong` names
+something a person does outside this script. That is a rejected row, a finding on a non-goal, a
+fixer's scope, a finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with
+findings open halt the same way. A `test wrong` halt is cleared by `retake-tests`, under Rulings
+in `references/review.md`, and `clear-halt` refuses it. Put the halt and its reason to the person, opening with: "This unit of
 work stopped on something only you can do. It waits until you say you have done it. Do what
 the reason names, then say so, and the build resumes where it stopped." Then say the reason in
 plain words. When they have repaired the test, ruled on the finding, or committed the tree, run:
@@ -149,7 +150,8 @@ plain words. When they have repaired the test, ruled on the finding, or committe
 ```
 It removes the halt from the order and records the reason and the date under `haltsCleared` in
 the ledger. It prints the step the order resumes at; nothing moves the order. It refuses a halt
-the grant or the restart answers (exit 85), naming that action, and a closed order (exit 67). It
+the grant, the restart or the retake answers (exit 85), naming that action, and a closed order
+(exit 67). It
 refuses when the task's implement stage is autonomous (exit 68), because clearing a halt is a
 person's judgement. The person sets the task interactive first. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`

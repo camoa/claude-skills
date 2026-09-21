@@ -157,6 +157,13 @@
             "note": { "$ref": "#/$defs/judgement/properties/note" }
           },
           "description": "The checkpoint's verdict on the tests that prove this order's own doneWhen rather than a criterion: the `--row` keyed by the order's id, written by `tests-freeze` and replaced on every freeze of this order. Present only when the order froze such a test. A supporting order serves criteria it cannot observe, so its tests are judged against its doneWhen text instead of a verify clause (live-run row 59). Counted with the criterion judgements in every rowsJudgedByModel, so a model's reading here is listed for a person to judge again like any other."
+        },
+        "retakes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/retake"
+          },
+          "description": "One entry per time `retake-tests` sent this order back to tests-frozen after a person ruled a finding `test-wrong` at `verify-record`, in the order it happened. Present only when at least one was. The build, review, fix and verify records move aside, the step goes back, and attemptsUsed stays: the attempts were real, against the old test, and a spent counter is the grant's to answer. roundsUsed goes back to 0, because the review record it counted moved with the rest (live-run row 110)."
         }
       }
     },
@@ -232,6 +239,33 @@
           "type": "string",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
           "description": "The UTC date the copy was taken, YYYY-MM-DD. Set by the script, never typed."
+        }
+      }
+    },
+    "retake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding", "at", "movedTo", "freezeCommit"],
+      "properties": {
+        "finding": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "The finding ruled test-wrong, read from the front of the halt reason `verify-record` wrote."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date of the retake, YYYY-MM-DD. Set by the script, never typed."
+        },
+        "movedTo": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The folder the records moved to, implementation/retaken-<order>-<n>/, n counting from 1. Nothing is deleted."
+        },
+        "freezeCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "The commit the frozen test record held at the retake. HEAD is past it by then, so `tests-freeze` reads this to let the one freeze after the retake through its once-per-commit refusal (exit 35) and overwrite the record with retakenFrom."
         }
       }
     },

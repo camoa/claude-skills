@@ -72,12 +72,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--scope-insufficient <finding id>=<reason>]...
 #   implement-actions.sh verify-brief  <task_folder> <unit_id>
 #   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
-#                            [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
+#                            [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text>
 #   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
+#   implement-actions.sh retake-tests <task_folder> <unit_id>
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]... \
@@ -292,7 +293,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  34  `tests-freeze` was given a --green-on-arrival. Not a defect in the script: it stops the step
 #      and says the test proves nothing, which is the escalation this stage requires.
 #  35  `tests-freeze` found <task_folder>/implementation/tests-<unit_id>.json already recorded at a
-#      commit other than the one this run is at. The message names both commits.
+#      commit other than the one this run is at. The message names both commits. The one freeze
+#      exempt is the first after `retake-tests`: HEAD holds the attempt the record was frozen
+#      before, so the ledger's last retake names the record's commit and the freeze overwrites it
+#      with `retakenFrom` instead (live-run row 110).
 #  36  `tests-freeze` was given a --test whose path, once resolved against codePath, names
 #      something outside codePath altogether. The message names the path and the code root. Every
 #      path this step records is relative to codePath (baseline.json's own `scope` field is
@@ -373,7 +377,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order is halted with them named, and the verification itself is recorded first, so a refusal
 #      never throws away the verdicts it already read.
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
-#      a ruling and a reason before the order may close.
+#      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
+#      finding a fixer reported out of its scope (`scopeInsufficientInRound`); any other is exit 3
+#      with the findings that may be ruled now named (live-run row 110).
 #  58  `verify-record`'s verdict file and this order's open findings do not correspond: a verdict is
 #      missing for an open finding, or a verdict names something that is not open on this order.
 #  59  `close` found open actionable findings on this order. An order closes with nothing open.
@@ -454,7 +460,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  76  `tests-freeze` was asked to re-freeze an order that has already left the frozen state. A
 #      re-freeze rewinds the step and leaves the spent attempt counter and the stale build record
 #      where they are, so the order would rebuild with no attempts and a record for tests that no
-#      longer exist.
+#      longer exist. `retake-tests` is the route back: it moves those records aside and sets the
+#      step, so the freeze after it does not fire this (exit 99 below).
 #  77  `preconditions` read a valid project.json that records no framework, so no recipe can be
 #      chosen for it. Exit 14 stays the separate fact that the file is not valid JSON at all.
 #  78  `dispatch-open` found the run at the ceiling task.json's `budget` sets, in dispatches or in
@@ -505,8 +512,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # The code `clear-halt` added (nyc defect 20).
 #  85  `clear-halt` was asked to clear a halt another action answers: one holding an `attempts
-#      spent` or `budget spent` segment, which `grant-attempt` clears, or a `design drift` segment,
-#      which `restart` clears. The message names that action, and nothing is written. Every other
+#      spent` or `budget spent` segment, which `grant-attempt` clears, a `design drift` segment,
+#      which `restart` clears, or a `test wrong` segment, which `retake-tests` clears. The message
+#      names that action, and nothing is written. Every other
 #      halt (a row the checker rejected, a finding on a non-goal, a fixer's scope, a finding ruled
 #      load-bearing, a dirty tree, spent fix rounds) is a person's to clear, once they have acted on
 #      what it names, and this is the one action that clears it. A closed order shares exit 67 with
@@ -563,6 +571,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  98  the surface file cannot be read, so the rows the order owes cannot be known: the project
 #      record names no surfaces.registryPath, the file is missing or unreadable, or it declares
 #      no viewport. The surfaces skill's install writes it.
+#
+# The code a wrong frozen test after the build added (live-run row 110).
+#  99  `retake-tests` was asked for an order whose halt does not begin `test wrong:`. A retake moves
+#      the build, review, fix and verify records aside and sends the order back to `tests-frozen`,
+#      which is right only after a person ruled a finding `test-wrong` at `verify-record`. The
+#      message names the halt found, or that the order is not halted, and nothing is written.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -732,12 +746,13 @@ usage: implement-actions.sh read  <task_folder>
                             [--scope-insufficient <finding id>=<reason>]...
        implement-actions.sh verify-brief  <task_folder> <unit_id>
        implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
-                            [--ruling <finding id>=<wrong|deferred|load-bearing>::<reason>]...
+                            [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text>
        implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
+       implement-actions.sh retake-tests <task_folder> <unit_id>
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
@@ -1030,10 +1045,15 @@ im_next_step() {
   # How many actionable findings each reviewed order still has open, read once per order here so
   # the jq below decides fix-or-close without opening a file itself. And whether each order's
   # build record was stopped by the three tool rows alone, read from the record's own checks, so
-  # the line can name the re-check without running git (live-run row 87).
-  local opens ids count i id file n tools_only
+  # the line can name the re-check without running git (live-run row 87). And whether each
+# order's tests are still the ones a retake sent back: the record's commit equals the last
+# retake's freezeCommit until the freeze after the retake rewrites it, the predicate the
+# freeze's own exemption reads, so the line names the author and not a build against the
+# wrong test (live-run row 110).
+  local opens ids count i id file n tools_only retake_pending
   opens='{}'
   tools_only='{}'
+  retake_pending='{}'
   ids="$(printf '%s' "$ledger" | jq -c '[ (.orders // [])[] | .id ]')"
   count="$(printf '%s' "$ids" | jq 'length')"
   i=0
@@ -1053,9 +1073,18 @@ im_next_step() {
       [ "$n" = "true" ] || n=false
     fi
     tools_only="$(printf '%s' "$tools_only" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    file="$impl/tests-$id.json"
+    n=false
+    if [ -f "$file" ]; then
+      n="$(printf '%s' "$ledger" | jq -r --arg id "$id" --arg c "$(jq -r '.commit // ""' "$file" 2>/dev/null)" \
+        '(([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // "") as $f | $f != "" and $f == $c')"
+      [ "$n" = "true" ] || n=false
+    fi
+    retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
   printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson tools_only "$tools_only" --argjson snap "$snapshot" \
+    --argjson retake_pending "$retake_pending" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
     | ([ $orders[] | select(.lastStep == "closed") | .id ]) as $closed
@@ -1068,6 +1097,7 @@ im_next_step() {
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift: the design removed ")) ] | .[0]) as $removed
     | ([ $orders[] | select((.haltedBecause // "") | (contains("attempts spent") or contains("budget spent"))) ] | .[0]) as $spent
+    | ([ $orders[] | select((.haltedBecause // "") | startswith("test wrong: ")) ] | .[0]) as $testwrong
     | ([ $orders[] | select((.haltedBecause // "") != "") ] | length) as $halted
     | if ($precon | not) and ($rv != null or $bd != null or ($ts != null and $removed == null)) then "preconditions"
       elif $rv != null then
@@ -1077,12 +1107,15 @@ im_next_step() {
       elif $bd != null then
         (if $bd.lastStep == "code-written" and ($tools_only[$bd.id] // false) then
            "build \($bd.id), or build-recheck \($bd.id) when the code has not moved"
+         elif $bd.lastStep == "tests-frozen" and ($retake_pending[$bd.id] // false) then
+           "tests \($bd.id): the tests were retaken and not frozen again yet"
          else "build \($bd.id)" end)
       elif $removed != null and $ts != null then "restart: the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
+      elif $testwrong != null then "retake-tests \($testwrong.id): a frozen test is ruled wrong, and the retake sends the order back to its tests"
       elif $halted > 0 then "finish: offer clear-halt, every order that is not closed is halted for a reason a person clears"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
@@ -3722,7 +3755,10 @@ do_tests_freeze() {
   # --- 76: a re-freeze after the order has already left the frozen state ---------------------------
   # A re-freeze rewinds lastStep and leaves attemptsUsed and the build record where they are, so the
   # order would rebuild with a spent counter and a record for tests that no longer exist.
-  local tf_prior_step tf_prior_ledger
+  # The commit the record was frozen at when `retake-tests` last sent this order back, read here
+  # with the step: the freeze after a retake finds HEAD past that commit, and 35 below lets it
+  # through on this value alone (live-run row 110).
+  local tf_prior_step tf_prior_ledger tf_retake_commit=""
   if [ -f "$IMPL_DIR/ledger.json" ]; then
     tf_prior_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
     if [ -n "$tf_prior_ledger" ]; then
@@ -3730,8 +3766,10 @@ do_tests_freeze() {
         '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')"
       case "$tf_prior_step" in
         ""|null|tests-frozen) ;;
-        *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved; otherwise this order goes forward, not back." ;;
+        *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved, retake-tests when a person ruled a frozen test wrong at verify-record; otherwise this order goes forward, not back." ;;
       esac
+      tf_retake_commit="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
+        '([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // ""')"
     fi
   fi
 
@@ -4373,7 +4411,7 @@ TF_EOF
   # The freeze commits (below), so freezing wo1, then wo2, then wo1 again finds HEAD moved by wo2's
   # commit. The same rows are the same freeze; different rows under a moved HEAD are the case 35
   # exists for, tests changed under a record nobody re-took.
-  if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ]; then
+  if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ] && [ "$existing_commit" != "$tf_retake_commit" ]; then
     local existing_rows new_rows
     existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
     new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
@@ -7199,7 +7237,7 @@ do_verify_record() {
         [ "$#" -ge 2 ] || die 3 "verify-record: --verdicts needs a path to the file the verifier wrote"
         verdicts_path="$2"; shift 2 ;;
       --ruling)
-        [ "$#" -ge 2 ] || die 3 "verify-record: --ruling needs <finding id>=<wrong|deferred|load-bearing>::<reason>"
+        [ "$#" -ge 2 ] || die 3 "verify-record: --ruling needs <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>"
         [ -n "$2" ] || die 3 "verify-record: --ruling was given an empty value."
         halt_refuse_separator "verify-record" "--ruling" "$2"
         rulings_raw="$rulings_raw$2
@@ -7357,7 +7395,7 @@ do_verify_record() {
     [ -n "$rline" ] || continue
     case "$rline" in
       *=*::*) ;;
-      *) die 3 "verify-record: --ruling takes <finding id>=<wrong|deferred|load-bearing>::<reason>; got: $rline" ;;
+      *) die 3 "verify-record: --ruling takes <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>; got: $rline" ;;
     esac
     rid="${rline%%=*}"
     rrest="${rline#*=}"
@@ -7366,8 +7404,8 @@ do_verify_record() {
     rv_is_finding_id "$rid" \
       || die 3 "verify-record: --ruling names '$rid'. A finding id is f and then digits, with no leading zero."
     case "$rverdict" in
-      wrong|deferred|load-bearing) ;;
-      *) die 3 "verify-record: the ruling for $rid is '$rverdict'. The three words are wrong, deferred and load-bearing." ;;
+      wrong|deferred|load-bearing|test-wrong) ;;
+      *) die 3 "verify-record: the ruling for $rid is '$rverdict'. The four words are wrong, deferred, load-bearing and test-wrong." ;;
     esac
     [ -n "$rreason" ] || die 3 "verify-record: the ruling for $rid carries no reason. A ruling with no reason is not a ruling."
     rulings_json="$(printf '%s' "$rulings_json" | jq -c --arg id "$rid" --arg ruling "$rverdict" \
@@ -7376,45 +7414,71 @@ do_verify_record() {
 $rulings_raw
 RV_RULINGS
 
+  # Before the cap, a ruling is taken on one kind of finding alone: one a fixer reported out of
+  # its scope, which fix-record marked scopeInsufficientInRound. The fixer's own report is the
+  # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
+  # nothing (live-run row 110). Any other finding waits for the cap, as before.
+  local rulable_now
+  rulable_now="$(printf '%s' "$updated_findings" | jq -r \
+    '[ .[] | select(.actionable == true and .status == "open" and has("scopeInsufficientInRound")) | .id ] | join(", ")')"
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
-    die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available."
+    local early_ok early_ids
+    early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
+    early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" \
+      '[ $r[].id ] as $ids | [ .[] | select(has("scopeInsufficientInRound") and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
+    if [ "$early_ok" != "true" ]; then
+      if [ -n "$rulable_now" ]; then
+        die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope: $rulable_now. The ruling named: $early_ids."
+      fi
+      die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope."
+    fi
   fi
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one
   # believes a finding is still open, and silence would let that belief stand.
   if [ -n "$rulings_raw" ] && [ "$open_now" = "0" ]; then
     die 3 "verify-record: a --ruling was given and $unit_id has no open actionable finding left to rule on."
   fi
-  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null; then
-    if [ "$RV_RUN_MODE" = "autonomous" ]; then
-      local open_list
-      open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
-      rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
-        "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
-      echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
-      die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
-    fi
-    local rcount ri unruled is_open
-    rcount="$(printf '%s' "$rulings_json" | jq 'length')"
-    ri=0
-    while [ "$ri" -lt "$rcount" ]; do
-      rid="$(printf '%s' "$rulings_json" | jq -r --argjson i "$ri" '.[$i].id')"
-      rverdict="$(printf '%s' "$rulings_json" | jq -r --argjson i "$ri" '.[$i].ruling')"
-      rreason="$(printf '%s' "$rulings_json" | jq -r --argjson i "$ri" '.[$i].reason')"
-      is_open="$(printf '%s' "$updated_findings" | jq -r --arg id "$rid" \
-        '[ .[] | select(.id == $id and .actionable == true and .status == "open") ] | length')"
-      [ "$is_open" = "1" ] \
-        || die 3 "verify-record: --ruling names $rid, which is not an open actionable finding on $unit_id."
-      updated_findings="$(printf '%s' "$updated_findings" | jq -c --arg id "$rid" \
-        --arg ruling "$rverdict" --arg reason "$rreason" '
-        map(if .id == $id then . + {status: "ruled", ruling: $ruling, rulingReason: $reason} else . end)')"
-      [ "$rverdict" = "load-bearing" ] \
-        && ruling_halt="$rid is ruled real and load-bearing: $rreason"
-      ri=$((ri + 1))
-    done
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    local open_list
+    open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
+      "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
+    echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
+    die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
+  fi
+  # Each ruling lands on its finding. `test-wrong` halts the way `load-bearing` does, and its
+  # reason begins `test wrong:` because `retake-tests` and `clear-halt` read the front of it; it
+  # takes the halt over a load-bearing ruling in the same call, since the retake moves the review
+  # record aside and the load-bearing finding is ruled again after the rebuild.
+  local rcount ri unruled is_open
+  rcount="$(printf '%s' "$rulings_json" | jq 'length')"
+  ri=0
+  while [ "$ri" -lt "$rcount" ]; do
+    rid="$(printf '%s' "$rulings_json" | jq -r --argjson i "$ri" '.[$i].id')"
+    rverdict="$(printf '%s' "$rulings_json" | jq -r --argjson i "$ri" '.[$i].ruling')"
+    rreason="$(printf '%s' "$rulings_json" | jq -r --argjson i "$ri" '.[$i].reason')"
+    is_open="$(printf '%s' "$updated_findings" | jq -r --arg id "$rid" \
+      '[ .[] | select(.id == $id and .actionable == true and .status == "open") ] | length')"
+    [ "$is_open" = "1" ] \
+      || die 3 "verify-record: --ruling names $rid, which is not an open actionable finding on $unit_id."
+    updated_findings="$(printf '%s' "$updated_findings" | jq -c --arg id "$rid" \
+      --arg ruling "$rverdict" --arg reason "$rreason" '
+      map(if .id == $id then . + {status: "ruled", ruling: $ruling, rulingReason: $reason} else . end)')"
+    case "$rverdict" in
+      test-wrong) ruling_halt="test wrong: $rid: $rreason" ;;
+      load-bearing)
+        case "$ruling_halt" in
+          "test wrong: "*) ;;
+          *) ruling_halt="$rid is ruled real and load-bearing: $rreason" ;;
+        esac ;;
+    esac
+    ri=$((ri + 1))
+  done
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
     unruled="$(printf '%s' "$updated_findings" | jq -r \
       '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
     [ -z "$unruled" ] \
-      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing>::<reason>."
+      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
   fi
 
   local halt_why=""
@@ -8089,6 +8153,7 @@ do_clear_halt() {
       split("; earlier: ")
       | if map(select(startswith("attempts spent") or startswith("budget spent"))) | length > 0 then "grant-attempt"
         elif map(select(startswith("design drift"))) | length > 0 then "restart"
+        elif map(select(startswith("test wrong"))) | length > 0 then "retake-tests"
         else "" end')"
   [ -z "$other_action" ] \
     || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead. Nothing is written."
@@ -8115,6 +8180,103 @@ do_clear_halt() {
        haltsCleared: ((.haltsCleared // []) | length),
        ledger: $ledger,
        next: $next}')"
+  exit 0
+}
+
+# retake-tests: the route for a frozen test a person ruled wrong after the build (live-run row
+# 110). The fixer may not touch the test, and `tests-freeze` refuses once the order left
+# tests-frozen (exit 76), because a re-freeze would leave a stale build record and a spent counter
+# behind. So this moves the build, review, fix and verify records aside, into
+# implementation/retaken-<order>-<n>/, and sets the step back to tests-frozen; the freeze record
+# and the tests brief stay, since the freeze after this overwrites the record with retakenFrom.
+# The attempt counter stays: the attempts were real, against the old test, and a spent one is
+# the grant's to answer at the next build-brief. The fix rounds go back to zero: they counted
+# the review record that moved, and the review after the rebuild starts its own. Allowed only
+# while the halt begins `test wrong:`, the reason `verify-record` writes for that ruling (exit 99 otherwise).
+do_retake_tests() {
+  [ "$#" -ge 2 ] || die 3 "retake-tests: a task folder and a unit id are required"
+  [ "$#" -le 2 ] || die 3 "retake-tests: unrecognized extra argument: $3"
+  local unit_id="$2" resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "retake-tests")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+
+  fn_load_task_state "retake-tests"
+
+  local unit_present order_entry
+  unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
+  [ "$unit_present" = "0" ] && die 22 "retake-tests: $unit_id is not in the frozen copy."
+  order_entry="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die 3 "retake-tests: $unit_id has no entry in $FN_LEDGER_FILE, though start opens one entry per snapshot work order."
+
+  local halt finding
+  halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  case "$halt" in
+    "test wrong: "*) ;;
+    "") die 99 "retake-tests: $unit_id is not halted. A retake follows a test-wrong ruling at verify-record, and nothing else. Nothing is written." ;;
+    *) die 99 "retake-tests: $unit_id is halted for something a retake does not answer: $halt. A retake follows a test-wrong ruling at verify-record, and nothing else. Nothing is written." ;;
+  esac
+  finding="${halt#test wrong: }"
+  finding="${finding%%:*}"
+
+  local tests_file freeze_commit
+  tests_file="$IMPL_DIR/tests-$unit_id.json"
+  [ -f "$tests_file" ] \
+    || die 3 "retake-tests: $tests_file not found, though $unit_id was built. Nothing is written."
+  freeze_commit="$(jq -r '.commit // ""' "$tests_file" 2>/dev/null)"
+  [ -n "$freeze_commit" ] \
+    || die 3 "retake-tests: $tests_file holds no commit, though tests-freeze writes one. Nothing is written."
+
+  local n target
+  n=1
+  while [ -e "$IMPL_DIR/retaken-$unit_id-$n" ]; do n=$((n + 1)); done
+  target="$IMPL_DIR/retaken-$unit_id-$n"
+
+  local today new_ledger
+  today="$(date -u +%Y-%m-%d)"
+  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$halt" \
+    --arg today "$today" --arg finding "$finding" --arg target "$target" --arg commit "$freeze_commit" '
+    .orders = (.orders | map(if .id == $id then
+        (del(.haltedBecause) | .lastStep = "tests-frozen" | .roundsUsed = 0
+         | .retakes = ((.retakes // []) + [{finding: $finding, at: $today, movedTo: $target, freezeCommit: $commit}]))
+      else . end))
+    | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today,
+        because: ("retake-tests: the records moved to " + $target + ", and the tests are retaken for " + $finding)}])')"
+  [ -n "$new_ledger" ] || die 3 "retake-tests: the ledger update for $unit_id failed."
+
+  mkdir -p "$target" || die 3 "retake-tests: could not create $target"
+  # The same names restart moves, less the two the tests step wrote: the freeze record, which
+  # the next freeze overwrites, and the tests brief, which the next tests-brief overwrites.
+  local moved moved_count
+  moved_count=0
+  while IFS= read -r moved; do
+    [ -n "$moved" ] || continue
+    case "$moved" in
+      "$tests_file"|"$IMPL_DIR/brief-$unit_id-tests.json") continue ;;
+    esac
+    mv "$moved" "$target/" || die 3 "retake-tests: could not move $moved to $target"
+    moved_count=$((moved_count + 1))
+  done < <(find "$IMPL_DIR" -mindepth 1 -maxdepth 1 -type f \( -name "*-$unit_id.*" -o -name "*-$unit_id-*" \) 2>/dev/null)
+  write_atomic "$FN_LEDGER_FILE" "$new_ledger"
+
+  im_print_summary "retake-tests" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" \
+    --arg finding "$finding" --arg cleared "$halt" --arg target "$target" --argjson moved "$moved_count" \
+    --arg ledger "$FN_LEDGER_FILE" '
+    ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
+    | {order: $id,
+       finding: $finding,
+       haltCleared: $cleared,
+       movedTo: $target,
+       moved: "\($moved) records",
+       resumesAt: ($o.lastStep // "not started"),
+       attempts: "\($o.attemptsUsed // 0) used, the counter stays",
+       rounds: "0 used, the review record moved",
+       retakes: (($o.retakes // []) | length),
+       ledger: $ledger,
+       next: "tests \($id): the author corrects the test the finding names, the checker reads the affected rows, then tests-freeze"}')"
   exit 0
 }
 
@@ -8723,6 +8885,7 @@ case "$ACTION" in
   grant-attempt)  do_grant_attempt  "$@" ;;
   restart)        do_restart        "$@" ;;
   clear-halt)     do_clear_halt     "$@" ;;
+  retake-tests)   do_retake_tests   "$@" ;;
   dispatch-open)  do_dispatch_open  "$@" ;;
   dispatch-close) do_dispatch_close "$@" ;;
   step)           do_step           "$@" ;;
