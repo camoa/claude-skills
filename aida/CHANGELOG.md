@@ -4,6 +4,20 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.22] - 2026-09-21
+
+Live-run row 111, the implement stage on beta.21.
+
+### Fixed
+- `verify-record --ruling` on a round already on the record applied nothing: the branch that
+  reports the recorded verification returned before the ruling flags were read, so two rulings a
+  person gave were dropped with exit 0 and `ruling: none`. It now applies them through the same
+  gates as the recording call (unattended refuses, before the cap only a finding the fixer
+  reported out of its scope, nothing open refuses) and writes no second round entry.
+  `--verdicts` is required only until the round is on the record; given with a ruling on a
+  verified round it is ignored and one summary line says so. The review page names the call as
+  how a person reaches a ruling, and the retake, after the verification is on record. (row 111)
+
 ## [6.0.0-beta.21] - 2026-09-21
 
 Live-run row 110, the implement stage on beta.20.
