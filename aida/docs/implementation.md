@@ -107,7 +107,9 @@ What it does see is the order's criteria with their verification sentences, the 
 order names, and the declared interface of each order it depends on. It sees the interface of
 anything design recorded as reused, since a reused module belongs to no work order. It also sees
 the framework's recipe for writing tests: where a test file goes, which levels exist, and how a
-criterion id attaches to a test. A framework with no such recipe has no path through this step,
+criterion id attaches to a test. Its brief names the test-execution recipe too, which holds
+the run command and the failure markers. The author reads a red against that recipe and never a
+guessed runner. A framework with no such recipe has no path through this step,
 and AIDA says so rather than writing tests from habit.
 
 Each test carries the id of the criterion it proves at the end of its name. A script can then
@@ -226,7 +228,8 @@ An implementer, a mid-tier context, writes the code for one order until its froz
 sees the implement recipe for its framework, which carries the coding rules, and a brief. The brief
 holds the order, its owned files, the frozen tests with the criterion each carries, and the
 interface of each order it depends on. Where a dependency has closed, that is the record its builder
-wrote about what it actually exposes, not the declaration alone. Before it edits anything, it writes
+wrote about what it actually exposes, not the declaration alone. The brief names the path the
+implementer writes its own interface record to, and the attempt is recorded from that path. Before it edits anything, it writes
 five answers into its report. They name the most surgical fix, what stays untouched, what it reuses,
 the lines it expects to add and delete, and the files and blocks it targets. The reviewer reads the
 diff against those answers.
@@ -312,6 +315,11 @@ closes, with two answers. Close as recorded, and it stays in the order's review 
 as a task, and a follow up task is created with the finding as its goal; then the order closes.
 A finding that hits a non-goal is a finding like any other when
 you are present. On an autonomous run it halts the order, naming the non-goal.
+
+Some of what the reviewer saw is information rather than a finding. A base class built against a
+schema the site does not have is one example. That goes in its own list beside the findings. The
+record keeps it, AIDA prints it one line each, and the next order's author and builder see it in
+their briefs.
 
 ## Fixing what the review found
 

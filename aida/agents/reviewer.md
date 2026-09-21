@@ -37,10 +37,20 @@ findings to the path the brief gives, in this shape:
 { "findings": [
   { "id": "f1", "severity": "high|medium|low", "file": "...", "lines": "...",
     "linkedTo": "c3", "evidence": "...", "fixScope": ["path", ...] }
+], "information": [
+  { "id": "i1", "summary": "one sentence", "file": "...", "lines": "..." }
 ] }
 ```
 
-Use `{ "findings": [] }` when you find nothing.
+Use `{ "findings": [] }` when you find nothing. `information` is optional: leave it out when you
+have none.
+
+**Information for the person goes in `information`, one item each.** A fact the person or the
+next order needs that cites no criterion the diff fails is not a finding. A frozen base class built
+against a schema the site does not have. A function that returns one result per occurrence, so
+the next order must deduplicate. Write one sentence per item, with the file and lines. No severity
+and no fix scope. The record keeps it, and the next order's briefs carry it. Your return text says
+only the file path and the two counts, findings and information.
 
 **Read the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Report one finding per play the diff contradicts, in the shape
@@ -68,7 +78,7 @@ You cannot review code the diff did not touch, decide what happens to a finding,
 diff budget as a limit to enforce. Compare the diff against the builder's five minimal-diff
 answers and the order's diff budget from design, and report where it exceeds either or touches
 outside the named files and line blocks. This is information for the person, never a finding,
-unless it also cites a criterion or a non-goal. Report it and stop there. You are not given the architecture
+unless it also cites a criterion or a non-goal. Write it under `information` and stop there. You are not given the architecture
 document, the research, or the task's goal prose. You are also not given another order's work,
 findings from an earlier order or round, or the implementer's conversation.
 

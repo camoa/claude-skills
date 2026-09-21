@@ -34,22 +34,26 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes seven things to
+It reads the frozen copy and the frozen tests. It writes nine things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
+- `dependencyInformation`, each dependency's review `information` items: the id, the order it
+  came from, the summary and the file;
 - this attempt's report path;
+- `interfacePath`, `implementation/interface-<order id>.md`, where the implementer writes its
+  interface record and where `build-record` reads it;
 - how many attempts this order has used of the count it is allowed;
 - `headNow`, the commit of the repository this order lands in at the moment of this call, and
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
-It prints the brief's path, the report path, `headNow`, the attempt count and counts, never the
-brief. The allowed count is two unless a person has granted this order one more; see
+It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
+and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
 `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
 **A dependency that has closed carries a second text beside the declared one, `interfaceRecord`:**
@@ -78,7 +82,8 @@ write.
 
 Give it the path to the `implement` recipe for its framework, the path of the brief `build-brief`
 wrote, and nothing else. `reportPath` in the brief is where it writes its five answers, and it
-writes that file before it edits anything under the code path.
+writes that file before it edits anything under the code path. `interfacePath` is where it
+writes its interface record when it is done.
 
 **On an order whose proof is `record`, tell it where to commit.** Its deliverable lives in the
 task folder, so it commits in the folder the brief's `commitIn` names. It stages its owned
@@ -136,7 +141,7 @@ Close the dispatch record as soon as the role returns, per SKILL.md.
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-record "<task_folder>" <order id> \
-  --interface <path to the record the builder wrote> \
+  [--interface <path to the record the builder wrote>] \
   --report <path to the builder's report> \
   --started-at <the commit the attempt began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
@@ -145,7 +150,9 @@ Run:
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
-`--implement-recipe` is the path resolved above, the one the implementer was given. Pass it for
+`--interface` defaults to the brief's `interfacePath`, the path the implementer was told to write
+to. Pass it only for a record a person put somewhere else. `--implement-recipe` is the path
+resolved above, the one the implementer was given. Pass it for
 an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
 runs them as the order's own check. Every other order ignores it.
 

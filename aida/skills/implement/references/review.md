@@ -83,6 +83,15 @@ named by `--findings` is missing, empty, or not the shape it reads. A finding ci
 criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
 fixer.
 
+The findings file may carry an `information` list beside `findings`. It holds what the reviewer
+saw that the person or the next order needs, and that cites no criterion the diff fails. Each
+item is an id, one sentence, a file and lines, with no severity and no fix scope. The script
+refuses a malformed item (exit 52), the way it refuses a malformed finding. It records the list
+beside the findings and prints one `information:` line per item, then a count. `tests-brief` and
+`build-brief` carry the items to every order that depends on this one, under
+`dependencyInformation`. Nothing routes an item to a fixer. Read the lines; a person may need to
+act on one outside this task.
+
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
 it is actionable like any other finding, and it goes to the person with the rest. No open

@@ -317,9 +317,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      repository, or, for an order whose proof is record, in the project folder: such an order's
 #      deliverable lives in the task folder, so its range, its tree and its diff are read there
 #      (nyc defect 17). Exits 45, 51, 61, 63 and 71 read the same repository for such an order.
-#  44  `build-record` found the interface record file named by --interface missing or empty while
-#      the given unit declares a non-empty interface. A file present for a unit that declares no
-#      interface is read and recorded without complaint; nothing here judges its content.
+#  44  `build-record` found the interface record file missing or empty while the given unit
+#      declares a non-empty interface. The file is the one --interface names, or without that flag
+#      the one the brief's `interfacePath` names (live-run row 102). A file present for a unit that
+#      declares no interface is read and recorded without complaint; nothing here judges its content.
 #  45  a record for this attempt or this round already exists, so the call would write it twice.
 #      `build-record` found build-<unit_id>.json already recorded at the same commit and the same
 #      attempt number; `fix-record` found fix-<unit_id>-<round>.json already recorded at the same
@@ -652,7 +653,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--locks-in <test name>=<reason>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
-                            --interface <path to the record the builder wrote>
+                            [--interface <path to the record the builder wrote>]
                             --report <path to the builder's report>
                             --started-at <commit the attempt began from>
                             [--test-recipe <framework>=<path>]...
@@ -3042,6 +3043,21 @@ tt_ledger_update() {
   write_atomic "$ledger_file" "$doc"
 }
 
+# Appends to list $1 the `information` items the review record of order $2 holds, each as
+# {id, from, summary, file}. Prints the list. Empty when the record is missing or holds none. Both
+# brief actions carry these to a dependent order the way they carry the interface record, so what
+# a reviewer wrote for the person reaches the next order's author and builder instead of living in
+# the conversation that dispatched the review (live-run row 103).
+im_dependency_information() {
+  local list="$1" dep_id="$2" review_file="$IMPL_DIR/review-$2.json" items='[]'
+  if [ -f "$review_file" ]; then
+    items="$(jq -c --arg from "$dep_id" \
+      '[ (.information // [])[] | {id, from: $from, summary, file} ]' "$review_file" 2>/dev/null)"
+    [ -n "$items" ] || items='[]'
+  fi
+  printf '%s' "$list" | jq -c --argjson items "$items" '. + $items'
+}
+
 tt_load_snapshot() {
   local who="$1"
   local snapshot_file="$IMPL_DIR/snapshot.json"
@@ -3078,7 +3094,7 @@ do_tests_brief() {
   # the previous round's value to standard output on every round after the first (trap 5 in this
   # file's own header).
   local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
-  local dep_record_file dep_record_text
+  local dep_record_file dep_record_text dependency_information_json='[]'
   depends_json="$(printf '%s' "$UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
@@ -3105,11 +3121,25 @@ do_tests_brief() {
         --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
         . + [ {id: $id, declaredInterface: $iface, interface: $iface}
               + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
+      # What the dependency's reviewer recorded for the person and not as a finding, carried the
+      # same way the interface record is (live-run row 103).
+      dependency_information_json="$(im_dependency_information "$dependency_information_json" "$dep_id")"
     else
       die 23 "tests-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
     fi
     i=$((i + 1))
   done
+
+  # The test-execution recipe path, from the preconditions record, for the runner and the
+  # `failure_signal` markers the author reads a red against. The author is denied the catalog, and
+  # the test-authoring recipe only points at this one (live-run row 107). The first framework whose
+  # lookup resolved; null, and the summary says so, when none did.
+  local test_recipe_path=""
+  if [ -f "$IMPL_DIR/preconditions.json" ]; then
+    test_recipe_path="$(jq -r '[ (.frameworks // [])[]
+        | select(.lookup == "resolved" and (.recipePath // "") != "") | .recipePath ] | .[0] // ""' \
+      "$IMPL_DIR/preconditions.json" 2>/dev/null)"
+  fi
 
   # --- exit 24: an owned, machine-verified criterion with no declared test at all ------------------
   local unit_tests_count owned_json owned_machine_unmet
@@ -3124,7 +3154,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: exactly these six keys, and a seventh only after a restart -------------
+  # --- assemble the brief: exactly these eight keys, and a ninth only after a restart -------------
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -3144,7 +3174,7 @@ do_tests_brief() {
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
 
-  # A seventh thing, only after a restart left this order's commits on the branch: the tree holds
+  # A ninth thing, only after a restart left this order's commits on the branch: the tree holds
   # a partial build of the order, so a test that passes on arrival is suspect, and the author is
   # told rather than left to find it (live-run row 94).
   local tree_holds_json
@@ -3161,10 +3191,14 @@ do_tests_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
+        --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
+        --arg testRecipePath "$test_recipe_path" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
-      reuses: $reuses, playbooksPath: $playbooksPath}
+      dependencyInformation: $dependencyInformation, reuses: $reuses,
+      testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
+      playbooksPath: $playbooksPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -3175,6 +3209,8 @@ do_tests_brief() {
      nonGoals: (.nonGoals | length),
      declaredTests: (.unit.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
+     dependencyInformation: (.dependencyInformation | length),
+     testRecipePath: (.testRecipePath // "none: no framework has a resolved test-execution recipe in preconditions.json, so the author has no runner to read"),
      reuses: (.reuses | if length == 0 then null else length end),
      treeHolds: (if has("treeHolds") then ([ .treeHolds.commits[] | .commit[0:7] + " " + .kind ]) else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
@@ -4354,7 +4390,7 @@ do_build_brief() {
   # dep_interface is declared here, never inside the loop, for the reason tests-brief states above
   # and this file's own header records as trap 5.
   local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
-  local dep_record_file dep_record_text
+  local dep_record_file dep_record_text dependency_information_json='[]'
   depends_json="$(printf '%s' "$BB_UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
@@ -4381,6 +4417,7 @@ do_build_brief() {
         --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
         . + [ {id: $id, declaredInterface: $iface, interface: $iface}
               + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
+      dependency_information_json="$(im_dependency_information "$dependency_information_json" "$dep_id")"
     else
       die 40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
     fi
@@ -4400,7 +4437,7 @@ do_build_brief() {
   [ "$attempts_used" -lt "$attempts_allowed" ] \
     || die 41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
-  # --- assemble the brief: exactly these five keys, and nothing else -------------------------------
+  # --- assemble the brief: exactly these keys, and nothing else ------------------------------------
   local unit_out tests_out
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
     '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
@@ -4428,18 +4465,22 @@ do_build_brief() {
   fi
   # The report has one named path per attempt, so a later attempt never writes over the answers a
   # reviewer already compared a diff against. The brief is one file per order, rewritten on each
-  # attempt: only its counters and its report path change between two attempts.
+  # attempt: only its counters and its report path change between two attempts. The interface
+  # record has one path per order, named here so the implementer writes it where build-record
+  # reads it, instead of a path each implementer chose (live-run row 102).
   local brief_file brief_json
   brief_file="$IMPL_DIR/brief-$unit_id-build.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
         --arg commitIn "$bb_codepath" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
+        --argjson dependencyInformation "$dependency_information_json" \
         --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
+        --arg interfacePath "$IMPL_DIR/interface-$unit_id.md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
-      dependencyInterfaces: $dependencyInterfaces,
-      reportPath: $reportPath, playbooksPath: $playbooksPath,
+      dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
+      reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -4449,12 +4490,14 @@ do_build_brief() {
     {order: .unit.id,
      brief: $brief,
      reportPath: .reportPath,
+     interfacePath: .interfacePath,
      headNow: (if .headNow == "" then "none: the commit of \(.commitIn) could not be read" else .headNow end),
      commitIn: .commitIn,
      attempts: "\(.attemptsUsed) of \(.attemptsAllowed) used",
      ownedFiles: (.unit.ownedFiles | length),
      frozenTests: (.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
+     dependencyInformation: (.dependencyInformation | length),
      next: "dispatch implementer with the brief path and the implement recipe path, then build-record"}')"
   exit 0
 }
@@ -5389,7 +5432,6 @@ do_build_record() {
 
   [ -n "$task_arg" ]        || die 3 "build-record: a task folder is required"
   [ -n "$unit_id" ]         || die 3 "build-record: a unit id is required"
-  [ -n "$interface_path" ]  || die 3 "build-record: --interface is required"
   [ -n "$report_path" ]     || die 3 "build-record: --report is required"
   [ -s "$report_path" ]     || die 3 "build-record: --report names no file, or an empty one: $report_path"
   [ -n "$started_at" ]      || die 3 "build-record: --started-at is required"
@@ -5467,11 +5509,19 @@ do_build_record() {
   fi
 
   # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
-  local unit_interface_declared interface_text=""
+  # Without --interface the path is the brief's own interfacePath, the one the implementer was told
+  # to write to. The flag stays for a record a person put somewhere else (live-run row 102).
+  local unit_interface_declared interface_text="" interface_from="named by --interface"
+  if [ -z "$interface_path" ]; then
+    interface_path="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$unit_id-build.json" 2>/dev/null)"
+    [ -n "$interface_path" ] \
+      || die 3 "build-record: --interface was not given, and $IMPL_DIR/brief-$unit_id-build.json names no interfacePath. Run build-brief on $unit_id again, or pass --interface."
+    interface_from="the brief's interfacePath"
+  fi
   unit_interface_declared="$(printf '%s' "$UNIT_JSON" | jq -r '.interface // ""')"
   if [ -n "$unit_interface_declared" ]; then
     [ -s "$interface_path" ] \
-      || die 44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path is missing or empty."
+      || die 44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path ($interface_from) is missing or empty."
   fi
   [ -f "$interface_path" ] && interface_text="$(cat "$interface_path" 2>/dev/null)"
 
@@ -5950,6 +6000,41 @@ rv_finding_record() {
     }'
 }
 
+# Sets RV_INFORMATION_ARRAY to the `information` list of the findings file $1, checked item by
+# item, or to [] when the file has no such key. $2 the action's own name. An item is
+# {id, summary, file, lines}: information for the person that is not a finding, so it carries no
+# severity and no fix scope (live-run row 103). Dies (exit 52, the findings shape's own code) on a
+# list that is not an array, an item that is not an object, an empty id or summary, or an id used
+# twice. Called as a plain statement, never with `$(...)`, for the reason rv_read_findings_array
+# states. The file's JSON and its duplicate keys were already checked by that reader.
+RV_INFORMATION_ARRAY="[]"
+rv_read_information_array() {
+  local file="$1" who="$2" arr count i one id summary seen_ids=""
+  arr="$(jq -c 'if has("information") then .information else [] end' "$file" 2>/dev/null)"
+  [ "$(printf '%s' "$arr" | jq -r 'type' 2>/dev/null)" = "array" ] \
+    || die 52 "$who: $file holds an information key that is not an array. The shape is { \"findings\": [ ... ], \"information\": [ { \"id\", \"summary\", \"file\", \"lines\" } ] }."
+  count="$(printf '%s' "$arr" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$arr" | jq -c --argjson i "$i" '.[$i]')"
+    [ "$(printf '%s' "$one" | jq -r 'type')" = "object" ] \
+      || die 52 "$who: entry $i of information in $file is not an object."
+    id="$(printf '%s' "$one" | jq -r '.id // "" | tostring')"
+    [ -n "$id" ] || die 52 "$who: entry $i of information in $file has no id."
+    summary="$(printf '%s' "$one" | jq -r '.summary // "" | tostring')"
+    [ -n "$summary" ] \
+      || die 52 "$who: information $id in $file has no summary. One sentence saying what the person needs to know."
+    case " $seen_ids " in
+      *" $id "*) die 52 "$who: $file names the information item $id more than once. Each item carries its own id." ;;
+    esac
+    seen_ids="$seen_ids $id"
+    i=$((i + 1))
+  done
+  RV_INFORMATION_ARRAY="$(printf '%s' "$arr" | jq -c \
+    '[ .[] | {id: (.id | tostring), summary: (.summary | tostring),
+              file: ((.file // "") | tostring), lines: ((.lines // "") | tostring)} ]')"
+}
+
 # Every non-goal the given finding list cites, as a printable list. Empty when none does.
 rv_nongoal_hits() {
   local findings="$1" alignment="$2"
@@ -6177,9 +6262,11 @@ do_review_record() {
   [ -z "$dirty" ] \
     || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
-  local raw_findings alignment count i one built findings_json
+  local raw_findings alignment count i one built findings_json information_json
   rv_read_findings_array "$findings_path" "findings" "review-record"
   raw_findings="$RV_FINDINGS_ARRAY"
+  rv_read_information_array "$findings_path" "review-record"
+  information_json="$RV_INFORMATION_ARRAY"
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   findings_json='[]'
   count="$(printf '%s' "$raw_findings" | jq 'length')"
@@ -6193,8 +6280,11 @@ do_review_record() {
 
   local today record_json
   today="$(date -u +%Y-%m-%d)"
+  # The information list is written only when the reviewer wrote one, so a record without it reads
+  # exactly as it did before the key existed.
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
-    --arg findingsPath "$findings_path" --argjson findings "$findings_json" '
+    --arg findingsPath "$findings_path" --argjson findings "$findings_json" \
+    --argjson information "$information_json" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -6203,7 +6293,8 @@ do_review_record() {
       findingsPath: $findingsPath,
       findings: $findings,
       rounds: []
-    }')"
+    }
+    + (if ($information | length) == 0 then {} else {information: $information} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal halts the order with the non-goal
@@ -6255,6 +6346,15 @@ do_review_record() {
              "unrouted: \(length) of medium or higher severity; the record holds them, a person decides" end')"
     [ -z "$unrouted" ] || printf '%s\n' "$unrouted"
   fi
+  # Live-run row 103. What the reviewer wrote for the person and not as a finding, one line each
+  # and a count, in both modes: it is in the record either way, and the summary is where a person
+  # or a log reader sees it. Nothing prints when the list is empty.
+  local information_lines
+  information_lines="$(printf '%s' "$information_json" | jq -r '
+    if length == 0 then empty
+    else (.[] | "information: \(.id) \(.summary | gsub("\n"; " ") | .[0:240])"),
+         "information: \(length) for the person, in the record and in the next order\u0027s briefs" end')"
+  [ -z "$information_lines" ] || printf '%s\n' "$information_lines"
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
     echo "REVIEW-RECORD: $unit_id is halted. A finding hits a non-goal and this run is unattended: $nongoal_hits" >&2
   fi

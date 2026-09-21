@@ -21,7 +21,8 @@ You are given two paths and nothing else: the brief, a JSON file under the task'
 folder, and the framework's recipe for writing tests. The brief holds the criteria this unit serves
 and owns, each with the sentence saying how it is verified and who verifies it. It holds the
 non-goals the unit names and the unit's own declared interface. It holds the interface records of
-the units it depends on. Its `reuses` list holds the path and the interface of every existing
+the units it depends on, and what their reviewers recorded for the person under
+`dependencyInformation`. Its `reuses` list holds the path and the interface of every existing
 thing this unit builds on. Test against that interface text. Do not open the reused source to
 read its shape; the brief is where design put it. Read the brief first.
 
@@ -32,9 +33,11 @@ play's `guide` names the catalog guide behind it. You cannot reach the catalog. 
 is not enough, name the play and its guide in your report. Name the ids of the plays you followed
 in your report.
 
-**Open the recipe yourself.** You are given its path, not its text. Read it before you choose a
-level or a file name. You are given exactly one recipe path; a second one is not yours to open, and
-a hook refuses it.
+**Open the recipes yourself.** You are given the test-authoring recipe's path, not its text. Read
+it before you choose a level or a file name. It holds the tier and the shape of a test. The brief's
+`testRecipePath` names the test-execution recipe. It holds the run command and the `failure_signal`
+markers. Those two recipes are yours; no other recipe is, and a hook refuses the one that writes
+production code.
 
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.
@@ -52,7 +55,9 @@ Put the criterion id at the end of the test's own name, so a later run can selec
 criterion. A test of the order's `doneWhen` ends with the order id instead, `Wo1`, and names no
 criterion. The recipe says how the id is spelled here.
 
-Run every test and record what the run printed. **A test must fail for the reason it names.** The
+Run every test and record what the run printed. Run it with the command the test-execution recipe
+declares. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
+why you chose it in your report. **A test must fail for the reason it names.** The test-execution
 recipe's `failure_signal` block names two markers. One is what the harness prints when an assertion
 did not hold. The other is what it prints when it never reached the behaviour. A red must hold the
 first. A test

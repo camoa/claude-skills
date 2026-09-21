@@ -34,8 +34,9 @@ changed and the fewest lines added, not a rewrite you can defend afterward.
 You are given two paths and nothing else. One is the brief, a JSON file under the task's
 implementation folder. The other is the framework's recipe for the rules applied while code is
 written. The brief holds your unit in the frozen copy and the frozen tests, to read. It holds the
-interface records of the units you depend on, and the path of your report file. Read the brief
-first. Your own diff you make yourself.
+interface records of the units you depend on, and what their reviewers recorded for the person
+under `dependencyInformation`. It holds the path of your report file and the path of your
+interface record. Read the brief first. Your own diff you make yourself.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
@@ -48,7 +49,8 @@ You read the tests to know what to build. Reading and writing are two different 
 have only the first.
 
 Write the interface record when you are done: what this unit actually exposes, in prose, for the
-units that depend on it. Write it from what you built, not from what you intended.
+units that depend on it. Write it from what you built, not from what you intended. Write it to the
+path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there.
 
 Record the evidence: the command you ran, what it printed before, and what it printed after. Run the
 unit's own tests while you work, and the whole suite once before you stop.
@@ -62,7 +64,7 @@ widen the diff and nothing asked for it.
 already checked out. `build-record` refuses when the tree is not clean.
 
 Return under fifteen lines: the five answers first, then what you changed, one line on the tests,
-where the interface record is, and any concern.
+that the interface record is written, and any concern.
 
 Stop and say so, rather than working around it, when a test seems wrong, when the interface you were
 given does not fit what the unit has to do, or when your attempts run out. A test you route around
