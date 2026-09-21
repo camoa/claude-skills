@@ -370,9 +370,11 @@ with an obvious answer. Autonomous, the order halts instead.
 
 A finding the fixer reported out of its scope may be ruled before the cap, at that round's
 verification. The fixer's report is the evidence that no round can reach it, so no second round
-is spent to hear it again. `test-wrong` says the finding is real and the fix needs a frozen test
-changed. The order halts, and the retake sends it back to its tests. The build, review, fix
-and verify records and their briefs move aside into a `retaken` folder, nothing deleted, and
+is spent to hear it again. When the round was verified first, the ruling is the same call again
+with the rulings and no verdicts file, and the round's verdicts stand. `test-wrong` says the
+finding is real and the fix needs a frozen test changed. The order halts, and the retake sends
+it back to its tests. The build, review, fix and verify records and their briefs move aside
+into a `retaken` folder, nothing deleted, and
 the order returns to `tests-frozen`. The test author corrects that test, the checker reads its rows, and the freeze
 runs again and prints `retaken:`. The attempt counter stays, because the attempts were real.
 When it is already spent, the next build refuses and the grant answers it. The fix rounds go

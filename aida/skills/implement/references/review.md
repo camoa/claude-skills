@@ -254,18 +254,21 @@ the fix diff is recorded and opens nothing. It prints the ids addressed and not 
 breakage, what is still open, the rulings, the record path and `next:`.
 
 A repeat call over a round already verified reports the verification on record rather than
-refusing: nothing was verified twice.
+refusing: nothing was verified twice. With `--ruling` flags, that repeat call rules on the round's
+open findings instead, under Rulings below.
 
 ## Rulings
 
 A ruling is a person's answer on an open finding, and there are two cases. At the cap: once the
 rounds are spent, `verify-record` above refuses when a finding is still open and no ruling names
 it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
-finding needs a ruling. Before the cap: a finding the last fixer reported under
+finding needs a ruling. Once that round is on the record, the ruling is the same call with the
+rulings and no verdicts file. Before the cap: a finding the last fixer reported under
 `--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
-the evidence that no round can reach it. Any other finding before the cap refuses (exit 3),
-and the message names the findings that may be ruled now. Unattended refuses every ruling
-(exit 55).
+the evidence that no round can reach it. When the round was verified first, the ruling is the
+same call with the rulings and no verdicts file, and the round's verdicts stand. Any other
+finding before the cap refuses (exit 3), and the message names the findings that may be ruled
+now. Unattended refuses every ruling (exit 55).
 
 The words are `wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. Put the
 findings to the person and ask, opening the same way in both cases: "The reviewer found problems
@@ -284,6 +287,14 @@ Run the same call again, with one `--ruling` flag added per finding ruled:
   --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason> \
   --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>
 ```
+When the round is already on the record, leave the verdicts file out:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-record "<task_folder>" <order id> \
+  --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>
+```
+The round's verdicts stand and no second round is recorded. A verdicts file given anyway is
+ignored, and the summary says so in its `verdicts:` line.
+
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
 order, the finding named as the reason, and `clear-halt` is what follows once the person has
 acted on it. Interactive, this reaches the person as an escalation, not
@@ -294,7 +305,9 @@ takes, for the same reason.
 `test-wrong` halts the order with `test wrong: <finding id>` as the reason, and `clear-halt`
 refuses that halt (exit 85). A `test-wrong` and a `load-bearing` ruling in one call halt on the
 test-wrong text. The load-bearing ruling moves aside with the review record, and the review
-after the rebuild raises the finding again or not. The route is the retake:
+after the rebuild raises the finding again or not. Once the round is on the record, the person
+reaches the retake with that same call, the `test-wrong` ruling and no verdicts file. The route
+is the retake:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh retake-tests "<task_folder>" <order id>
 ```

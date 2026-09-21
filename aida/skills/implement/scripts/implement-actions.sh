@@ -71,8 +71,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--nothing-ran <literal substring>] \
 #                            [--scope-insufficient <finding id>=<reason>]...
 #   implement-actions.sh verify-brief  <task_folder> <unit_id>
-#   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
+#   implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>] \
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
+#                            (--verdicts is required until the round is on the record; after that,
+#                            --ruling alone rules on the round's open findings)
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
@@ -336,6 +338,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      nothing left to hand a verifier. The message names both values, because a caller who calls
 #      this twice for one attempt or one round is not shown a stale success silently.
 #      `verify-record` on a round already verified reports the verification on record instead.
+#      With --ruling it applies the rulings to that round's open findings, and writes no second
+#      round entry (live-run row 111).
 #
 #  46  `dispatch-open` was given a role that names no agent under ${CLAUDE_PLUGIN_ROOT}/agents, or
 #      found that folder empty. A role nothing checks opens a record no agent's own `agent_type`
@@ -745,8 +749,10 @@ usage: implement-actions.sh read  <task_folder>
                             [--nothing-ran <literal substring>]
                             [--scope-insufficient <finding id>=<reason>]...
        implement-actions.sh verify-brief  <task_folder> <unit_id>
-       implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
+       implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>]
                             [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
+                            (--verdicts is required until the round is on the record; after that,
+                            --ruling alone rules on the round's open findings)
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
@@ -7253,7 +7259,8 @@ do_verify_record() {
   done
   [ -n "$task_arg" ]      || die 3 "verify-record: a task folder is required"
   [ -n "$unit_id" ]       || die 3 "verify-record: a unit id is required"
-  [ -n "$verdicts_path" ] || die 3 "verify-record: --verdicts is required"
+  [ -n "$verdicts_path" ] || [ -n "$rulings_raw" ] \
+    || die 3 "verify-record: --verdicts is required to record a round. On a round already on the record, --ruling alone rules on its open findings."
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "verify-record")"
@@ -7271,12 +7278,19 @@ do_verify_record() {
   [ "$rounds_used" -gt 0 ] 2>/dev/null \
     || die 3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
 
+  # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
+  # the flag outright rather than recording a model's own word as a person's (decision 12). Read
+  # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
+  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
+  fi
+
   # Exit 45: a round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
-  local already
+  local already ruled_doc ruled_ledger
   already="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson r "$rounds_used" \
     '[ (.rounds // [])[] | select(.round == $r) ] | length')"
-  if [ "$already" != "0" ]; then
+  if [ "$already" != "0" ] && [ -z "$rulings_raw" ]; then
     # The verification is already on the record. rv_write_verification writes the review record and
     # then the ledger, so a crash between the two leaves this state with the ledger unmoved. There
     # is nothing left to verify and nothing to write twice, so this reports the record it found.
@@ -7284,17 +7298,35 @@ do_verify_record() {
     echo "VERIFY-RECORD: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing was verified twice." >&2
     exit 0
   fi
+  if [ "$already" != "0" ]; then
+    # A ruling after the round is on the record (live-run row 111). The round's verdicts stand,
+    # and the rulings land on its open findings through the gates the first-call path uses. No
+    # second round entry is written, so roundsUsed and lastStep do not move. A --verdicts file
+    # given here is not read. The person who re-ran the whole command with the rulings added is
+    # told so below, not sent back.
+    rv_apply_rulings "$unit_id" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')" "$rounds_used" "$rulings_raw"
+    ruled_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson f "$RV_RULED_FINDINGS" '.findings = $f')"
+    [ -n "$ruled_doc" ] || die 3 "verify-record: the review record update for $unit_id failed."
+    write_atomic "$RV_REVIEW_FILE" "$ruled_doc"
+    RV_REVIEW_DOC="$ruled_doc"
+    if [ -n "$RV_RULING_HALT" ]; then
+      ruled_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$RV_RULING_HALT")"
+      [ -n "$ruled_ledger" ] || die 3 "verify-record: the halt on $unit_id could not be written."
+      write_atomic "$RV_LEDGER_FILE" "$ruled_ledger"
+      RV_LEDGER_DOC="$ruled_ledger"
+    fi
+    rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
+    [ -z "$verdicts_path" ] || echo "verdicts: ignored, round $rounds_used was already on the record and its verdicts stand"
+    [ -z "$RV_RULING_HALT" ] || echo "VERIFY-RECORD: $unit_id is halted. $RV_RULING_HALT" >&2
+    exit 0
+  fi
+  [ -n "$verdicts_path" ] \
+    || die 3 "verify-record: --verdicts is required. Round $rounds_used of $unit_id is not on the record yet, and --ruling alone rules only on a round already verified."
 
   local fix_file
   fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
   [ -f "$fix_file" ] \
     || die 3 "verify-record: $fix_file not found, though the ledger records round $rounds_used of $unit_id. Run fix-record on it again."
-
-  # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
-  # the flag outright rather than recording a model's own word as a person's (decision 12).
-  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
-  fi
 
   local verdicts_doc verdict_rows breakage_rows outofscope_json
   [ -f "$verdicts_path" ] || die 52 "verify-record: $verdicts_path not found. The file named on the command line has to exist."
@@ -7384,13 +7416,55 @@ do_verify_record() {
   local nongoal_hits
   nongoal_hits="$(rv_nongoal_hits "$(printf '%s' "$updated_findings" | jq -c --argjson ids "$breakage_ids" '[ .[] | select(.id as $i | $ids | index($i)) ]')" "$alignment")"
 
-  # Decision 12: the rulings. A ruling's own syntax is read here, before anything asks whether a
-  # ruling is allowed yet, so a malformed one is refused for what is wrong with it whatever the
-  # round. Refusing it for its timing instead sends the caller to fix the round rather than the
-  # text. What the ruling may do, and whether it may be given at all, is decided below.
+  # Decision 12: the rulings, through the helper the already-verified path shares. The syntax
+  # loop, the two gates and the per-ruling loop live there.
+  rv_apply_rulings "$unit_id" "$updated_findings" "$rounds_used" "$rulings_raw"
+  updated_findings="$RV_RULED_FINDINGS"
+  local open_now unruled
+  open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    local open_list
+    open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
+      "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
+    echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
+    die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
+  fi
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
+    unruled="$(printf '%s' "$updated_findings" | jq -r \
+      '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    [ -z "$unruled" ] \
+      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
+  fi
+
+  local halt_why=""
+  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
+    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
+  elif [ -n "$RV_RULING_HALT" ]; then
+    halt_why="$RV_RULING_HALT"
+  fi
+  rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
+
+  rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
+  [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is halted. $halt_why" >&2
+  exit 0
+}
+
+# Decision 12: the rulings, on the round's findings. Shared by verify-record's two paths: the call
+# that records the round, and the call on a round already on the record (live-run row 111). So
+# both hold the same gates in the same words. A ruling's own syntax is read first, before
+# anything asks whether a ruling is allowed yet. A malformed one is then refused for what is
+# wrong with it, whatever the round. Refusing it for its timing instead sends the caller to fix
+# the round rather than the text. Then the before-the-cap gate, the nothing-left gate, and each
+# ruling landing on its finding. The unattended refusal (exit 55) is the caller's, read before
+# the round is looked up. $1 unit, $2 the findings array, $3 the round, $4 the raw --ruling
+# values, one per line. Sets RV_RULED_FINDINGS and RV_RULING_HALT, empty when nothing halts.
+RV_RULED_FINDINGS=""; RV_RULING_HALT=""
+rv_apply_rulings() {
+  local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
   local open_now ruling_halt="" rulings_json="[]"
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
-  local rline rid rrest rverdict rreason
+  local rline rid rrest rverdict rreason rulable_now early_ok early_ids rcount ri is_open
   while IFS= read -r rline; do
     [ -n "$rline" ] || continue
     case "$rline" in
@@ -7418,11 +7492,9 @@ RV_RULINGS
   # its scope, which fix-record marked scopeInsufficientInRound. The fixer's own report is the
   # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
   # nothing (live-run row 110). Any other finding waits for the cap, as before.
-  local rulable_now
   rulable_now="$(printf '%s' "$updated_findings" | jq -r \
     '[ .[] | select(.actionable == true and .status == "open" and has("scopeInsufficientInRound")) | .id ] | join(", ")')"
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
-    local early_ok early_ids
     early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
     early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" \
       '[ $r[].id ] as $ids | [ .[] | select(has("scopeInsufficientInRound") and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
@@ -7438,19 +7510,10 @@ RV_RULINGS
   if [ -n "$rulings_raw" ] && [ "$open_now" = "0" ]; then
     die 3 "verify-record: a --ruling was given and $unit_id has no open actionable finding left to rule on."
   fi
-  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    local open_list
-    open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
-    rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
-      "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
-    echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
-    die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
-  fi
   # Each ruling lands on its finding. `test-wrong` halts the way `load-bearing` does, and its
   # reason begins `test wrong:` because `retake-tests` and `clear-halt` read the front of it; it
   # takes the halt over a load-bearing ruling in the same call, since the retake moves the review
   # record aside and the load-bearing finding is ruled again after the rebuild.
-  local rcount ri unruled is_open
   rcount="$(printf '%s' "$rulings_json" | jq 'length')"
   ri=0
   while [ "$ri" -lt "$rcount" ]; do
@@ -7474,24 +7537,8 @@ RV_RULINGS
     esac
     ri=$((ri + 1))
   done
-  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
-    unruled="$(printf '%s' "$updated_findings" | jq -r \
-      '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
-    [ -z "$unruled" ] \
-      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
-  fi
-
-  local halt_why=""
-  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
-    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
-  elif [ -n "$ruling_halt" ]; then
-    halt_why="$ruling_halt"
-  fi
-  rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
-
-  rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
-  [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is halted. $halt_why" >&2
-  exit 0
+  RV_RULED_FINDINGS="$updated_findings"
+  RV_RULING_HALT="$ruling_halt"
 }
 
 # The verify-record summary, from the review record as it now stands: one line per verdict this
