@@ -113,6 +113,21 @@ Ask it to return what it changed, one line on the tests, the path to the interfa
 and any concern. Under fifteen lines. The interface record is prose about what this unit exposes,
 and it is what the next order's tests are written against.
 
+**When the person rules that the test is wrong, the route is the tests step again, in this
+order.** The person rules it; a model never does. Open the test author's dispatch again for this
+order, per `references/tests.md`. The write hook lets that author edit the file its own order
+froze. It corrects the assertion and nothing else. Run the coding-standards row over the file it
+returned. Open the row-checker's dispatch again and put the affected rows to it. Then run
+`tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
+checker returned. That freeze is
+allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
+attempt, it refuses (exit 76), and the halt paths in `references/finish.md` apply instead. The
+retake prints `retaken:` with the earlier commit and the new one, and the record names the
+earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
+stop left the tree dirty on purpose. The freeze commits only the test paths, and the next
+attempt continues over that uncommitted build. So the person either keeps it or cleans the tree
+before the re-freeze, and says which. Then build again from "Open the dispatch record" above.
+
 Close the dispatch record as soon as the role returns, per SKILL.md.
 
 ## Record the attempt

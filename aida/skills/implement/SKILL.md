@@ -87,7 +87,9 @@ order and apply the table. Stop only when nothing is ready.
 
 Then report what halted, with the reason the ledger holds, and what is waiting on it. Interactive
 puts that to the person, who decides from the recorded attempts which of three things is true: the
-test is wrong, the order is wrong, or the code is hard and a person writes it. Unattended, the run
+test is wrong, the order is wrong, or the code is hard and a person writes it. The route for a
+wrong test is under the builder's stop in `references/build.md`, and it says how long the freeze
+can still be retaken. Unattended, the run
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
 

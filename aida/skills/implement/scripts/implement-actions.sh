@@ -4250,15 +4250,24 @@ TF_EOF
     --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
     '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support}')"
 
+  # A record that reaches here with different rows is retaken: the order is still at tests-frozen
+  # (76 above) and HEAD was the earlier freeze commit (35 above), which is the route for a frozen
+  # test whose oracle was wrong (live-run row 109). The earlier commit and date go under
+  # retakenFrom, so the retake is visible in the record and not only in the branch. The comparison
+  # sets retakenFrom aside with takenAt, so a rerun with the same rows after a retake stays unchanged.
   if [ -f "$record_file" ]; then
-    local existing_no_date new_no_date
-    existing_no_date="$(jq -cS 'del(.takenAt)' "$record_file" 2>/dev/null)"
+    local existing_no_date new_no_date existing_taken_at
+    existing_no_date="$(jq -cS 'del(.takenAt, .retakenFrom)' "$record_file" 2>/dev/null)"
     new_no_date="$(printf '%s' "$record_json" | jq -cS 'del(.takenAt)')"
     if [ "$existing_no_date" = "$new_no_date" ]; then
       echo "TESTS-FREEZE: unchanged (already frozen at commit $current_commit with the same tests)"
       printf '%s\n' "$record_file"
       exit 0
     fi
+    existing_taken_at="$(printf '%s' "$existing_doc" | jq -r '.takenAt // empty')"
+    record_json="$(printf '%s' "$record_json" | jq -c --arg c "$existing_commit" --arg t "$existing_taken_at" \
+      '. + {retakenFrom: {commit: $c, takenAt: $t}}')"
+    echo "TESTS-FREEZE: retaken: $existing_commit -> $current_commit"
   fi
 
   write_atomic "$record_file" "$record_json"
@@ -7996,6 +8005,14 @@ do_dispatch_open() {
       ;;
     *) die 3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
   esac
+  # The row-checker's whole job is reading the named tests, and design lists an order's tests under
+  # ownedFiles. Without the globs the derivation below cannot tell an owned test from owned source,
+  # so it denied the checker the very files it was dispatched to read (live-run row 106). The
+  # checkpoint runs before the freeze, so no frozen record holds the globs yet; the call carries
+  # them, the same values tests-freeze takes.
+  if [ "$role_bare" = "row-checker" ] && [ -z "$test_glob_raw" ]; then
+    die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
+  fi
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "dispatch-open")"

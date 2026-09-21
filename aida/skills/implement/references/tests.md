@@ -181,12 +181,17 @@ sentence. Asking the person every row added a turn and no judgement the checker 
 (live-run row 70). Pay the top tier. Open the dispatch record first, the same way every other role
 gets one:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id> \
+  --test-glob <pattern from the implement recipe>
 ```
-The script derives the denied reads itself, the same way it does for the test author: every order's
-owned files. So `row-checker` cannot open the production source behind a hook. Without this record
-open, the hook denies nothing. The checker's own instructions to stay off the implementation are
-then just words, with nothing enforcing them.
+One `--test-glob` per pattern, the same values the freeze below takes. The script derives the
+denied reads itself, the same way it does for the test author. It denies every order's owned
+files, less the ones a test glob matches. Design lists an order's tests under its owned files. The checker
+reads those tests, so the globs decide which owned files stay readable. Without them every owned
+test file is denied, and the script refuses the call (live-run row 106). So `row-checker` cannot
+open the production source behind a hook. Without this record open, the hook denies nothing. The
+checker's own instructions to stay off the implementation are then just words, with nothing
+enforcing them.
 
 **Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's
 rows, the **path** to the test-authoring recipe resolved above, and the path of its verdict file
@@ -332,4 +337,7 @@ green-on-arrival test the caller does not flag, so the flag is on you.
 
 A record is taken once. A second run with the same tests leaves it alone, whatever commit the
 tree is at now, because every freeze moves the tree. Different tests at a different commit
-refuse and name both commits.
+refuse and name both commits. Different tests at the same commit retake the record, while the
+order is still at `tests-frozen`. The freeze then prints `retaken:` with both commits and records
+the earlier one under `retakenFrom`. That is the route for a frozen test that is wrong, named under
+the builder's stop in `references/build.md`.

@@ -147,7 +147,9 @@ question is whether those tests exercise the sentence beside them. The failure i
 test measuring something adjacent and easier than what was asked.
 
 The checker runs in both modes, on the top tier, and reads each named test against the
-test-authoring recipe and the sentence. A person shown test names cannot see what it sees. Asking
+test-authoring recipe and the sentence. Its dispatch carries the framework's test patterns.
+So the hook that keeps it off production source still lets it open the tests, which design
+lists among an order's owned files. A person shown test names cannot see what it sees. Asking
 about every row added a turn and no judgement the checker had not already given. A
 confirmed row is therefore the checker's in both modes. You are asked only about a row it
 rejected, one question per row. The question says in plain words that the checker doubts the new
@@ -170,8 +172,10 @@ a tree that already holds the tests.
 A freeze is not a lock. You are not a role, and you are not refused. If you edit a frozen test
 yourself, the hook lets the write through and tells you which file changed and which order froze
 it. Nothing re-records the hash, though, so the order's next attempt fails its frozen-tests
-check. A test that turns out wrong is not repaired in place; the way back is to restart the order,
-described under the halts below.
+check. An edit alone does not repair a wrong test, because the record must follow. While no
+attempt is recorded, the test author corrects it and the freeze runs again, described under the
+code below. Once an attempt is recorded, the way back is to restart the order, described under
+the halts below.
 
 The author often writes a base class or a fixture beside the tests, and the tests stand on it.
 The freeze takes each such file with the tests: hashed, committed in the same commit, and recorded
@@ -235,6 +239,11 @@ that file chooses a level and names a test, and this reader may do neither. It s
 working around a test that seems wrong or an interface that does not fit. Interactive, the stop
 comes to you; autonomous, it halts the order and records what was left. It commits its own work
 before it returns. A dirty tree means that commit did not happen, and the attempt is not recorded.
+
+When you rule that the test is wrong, the test author corrects that assertion and the checker
+reads the row again. Then the freeze runs again and prints `retaken:` with both commits. That is
+allowed only while no attempt is recorded. The freeze commits the test paths alone, and the next
+attempt continues over the uncommitted build, so you keep that or clean it first.
 
 After each attempt, eight checks run. These are scripts, and no model reads anything here.
 
