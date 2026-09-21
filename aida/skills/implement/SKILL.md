@@ -145,6 +145,15 @@ every tool and this session's own model, and the dispatch record just opened the
 the hook compares the agent's own type against the role in the record, so an unnamed dispatch is an
 unenforced one.
 
+**The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
+call, and set the model where the step says. The message itself is one line per item: the run
+mode, `interactive` or `autonomous`, then each path the step hands over. Where a step names one
+word beside the paths, such as a lens, that word is a line too. Nothing else goes in. The role's
+rules and its return shape live in its agent definition, which reaches it on every dispatch.
+The data it needs lives in the brief the paths name. So the message restates neither, and two
+runs of one step hand the role the same words. Each step below names this shape and lists its
+own paths.
+
 **A recipe lookup has three answers, not one.** No recipe for this framework, a listing that could
 not be reached, and a failed network are three different things, and only the first says anything
 about the framework. Pass the one that happened, in its own word.

@@ -160,7 +160,9 @@ draft, so an unfinished contract is yours to notice.
 ## The close
 
 When you say the contract is right, scope dispatches a reader, the distiller, over the written
-contract. Then the approve action commits the contract and reads what the distiller wrote. The
+contract. The dispatch is the run mode, the task folder, the stage and the contract's path, one
+per line, and nothing else. Then the approve action commits the contract and reads what the
+distiller wrote. The
 distiller was not in this conversation, on purpose: a record checked against its author's account
 of it is not checked. It reads the contract and the task's files from disk and answers one
 question. Does this record stand alone?

@@ -17,7 +17,11 @@ set turns into thirty fetches, and that cost is why you are a separate context.
 
 ## What you are given
 
-The task folder, and one or more set ids. A set id is a topic path, `<framework>/best-practices/<author>`.
+One per line in the dispatch, and nothing else:
+
+- the run mode, `interactive` or `autonomous`
+- the task folder
+- one or more set ids; a set id is a topic path, `<framework>/best-practices/<author>`
 
 ## What you do, per set
 

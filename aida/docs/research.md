@@ -58,8 +58,9 @@ roles is on [Playbooks](playbooks.md).
 
 ## The three places it looks
 
-Each search is one small agent with a narrow brief: the words to search, the bound, and the
-shape of what to return. The agent never sees the conversation, and the conversation never sees
+Each search is one small agent with a narrow message: the run mode, the words to search, and
+the bound, one per line. The shape of what to return is in the agent's own definition. The
+agent never sees the conversation, and the conversation never sees
 what the agent read, only what it reports. That isolation is what keeps the cost bounded. How
 many searches run is set by what the criteria need, not by a fixed roster. Three criteria that
 rest on the same library may need one search.

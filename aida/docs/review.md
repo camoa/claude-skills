@@ -152,7 +152,9 @@ catalog; you decide whether a note becomes a proposal.
 
 ## Findings, and what each one becomes
 
-The reviewer reads a brief review assembled for it. It holds the criteria, the non-goals, every
+The reviewer reads a brief review assembled for it. Its dispatch is the run mode, the brief's
+path and the findings path, one per line, and nothing else. The brief holds the criteria, the
+non-goals, every
 work order, the diff, the research records, the tool results and the survivors. It is not given the
 builders' reports or any earlier conversation, because a builder's claim is not evidence. It
 reads wider than a diff on purpose, since duplication against untouched code and coupling across

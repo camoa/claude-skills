@@ -90,8 +90,8 @@ test that passes on arrival is suspect. The summary prints the commits on a `tre
 
 It prints the brief's path and counts, never the brief.
 
-That list is the withheld list, decided once rather than at each dispatch. Pass the brief's path
-and nothing else. Adding an input here is a change to the role, not a judgement made in the moment.
+That list is the withheld list, decided once rather than at each dispatch. Adding an input here
+is a change to the role, not a judgement made in the moment.
 
 An interface record is prose a builder wrote about its own code. It is not the code, and that is
 the line.
@@ -123,11 +123,12 @@ that list, because it is the whole of what separates the tests from the code the
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
 next dispatch refuse, and it names the role and order still holding it.
 
-**Then dispatch `test-author`.** Name the role, per SKILL.md. It is not the context that writes the code, and it
-is not this conversation either: a dispatch that names no role runs as the general agent, with
-every tool and this session's own model, and the record just opened matches nothing. Both hooks
-recognise a role by the agent's own type, so writing the tests here instead of dispatching leaves
-every rule below unenforced while the record on disk says otherwise.
+**Then dispatch `test-author`**, with the message SKILL.md names. Its lines are the role, the run
+mode, and two paths: the test-authoring recipe for its framework and the brief `tests-brief`
+wrote. It is not
+the context that writes the code, and it is not this conversation either. Both hooks recognise a
+role by the agent's own type, so writing the tests here instead of dispatching leaves every rule
+below unenforced while the record on disk says otherwise.
 
 **It may not read production source.** Not this order's, and not any order already built. If it
 sees the code, the tests describe the code instead of the intent, which is the same failure one
@@ -139,23 +140,11 @@ step earlier. A hook refuses the read while the dispatch record is open.
 top tier before anything is frozen, and a person reads the rows it rejected. So the author's work
 is checked before the build is measured against it, whether or not a person is present.
 
-Give it the **path** to the test-authoring recipe for its framework, the **path** of the brief
-`tests-brief` wrote, and nothing else. It opens both itself. The brief carries the test-execution
-recipe's path as `testRecipePath`, so the dispatch is still these two paths. Do not read either
-body here and paste it in. The recipe runs to well over a hundred lines per framework, and reading it into this
-conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
-reading it is the role's. When the summary printed a `treeHolds:` line, name it in the dispatch.
-The brief's `treeHolds` says the tree holds this unit's earlier build. So a test green on
-arrival is reported by name, as below, and never taken as proof.
-
-Ask it to return, for each test, the path, the name, and the criterion the name carries. A test of
-the order's own done-when returns the order id in place of a criterion. For each test, it writes
-what the run printed when the test failed to its own file, under the task folder's `implementation/`
-folder, one file per test, and returns that file's path in its report. `--red` below reads that
-path. Ask it to return a checklist line for each criterion a person verifies, copying the
-verification sentence whole. Ask it to return the path of each support file it wrote or changed
-beside the tests. A support file is a base class or a fixture: the tests stand on it, and it is
-not a test.
+Resolving which recipe is this step's job; reading it is the role's. The recipe runs to well over
+a hundred lines per framework, and reading it into this conversation is the cost the dispatch
+exists to avoid. What the author returns is in its definition, and each item has a flag in the
+freeze below. The red-run file per test goes under `--red`, and each support file under
+`--support`.
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
@@ -207,12 +196,11 @@ open the production source behind a hook. Without this record open, the hook den
 checker's own instructions to stay off the implementation are then just words, with nothing
 enforcing them.
 
-**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's
-rows, the **path** to the test-authoring recipe resolved above, and the path of its verdict file
-under the task folder. Nothing else. A done-when row carries the order id and the done-when
-text where a criterion row carries the id and the verify clause. It reads that text, the recipe and
-each named test, never the implementation, and answers confirmed or rejected with a note for each
-row. Close the dispatch record as soon as it returns, per SKILL.md.
+**Then dispatch `row-checker`**, on opus, with the message SKILL.md names. Its lines are the
+role, the run mode, the rows built above, the test-authoring recipe's path, and its verdict
+file's path under the task folder. The rows are the one input typed by hand, because no brief
+action writes them.
+Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes
 `--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed

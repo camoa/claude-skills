@@ -27,6 +27,14 @@ load. Both are named in this skill's own grant, so they run without asking, and 
 project skill's `recipe-source` lookup. Any other Bash command still asks for approval.
 Dispatching an agent needs no approval either; it is also named in this skill's own grant.
 
+**The dispatch message is the role, the run mode and the inputs.** Name the role on the Agent
+call. The message itself is one line per item: the run mode, `interactive` or `autonomous`, then
+each input the step hands over. An input is a path, the words a search is given, or one word a
+step names, a stage or a set id. Nothing else goes in. The role's rules and
+its return shape live in its agent definition, which reaches it on every dispatch. So the
+message restates neither, and two runs of one step hand the role the same words. Each dispatch
+below names this shape and lists its own inputs.
+
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
@@ -96,8 +104,9 @@ This creates the task's `research` folder and prints the criterion ids again, fo
 while planning searches. It is safe to run more than once; it never overwrites anything.
 
 `subscriptions:` names the catalog playbook sets this project subscribes to, or says `none`.
-When it names any, dispatch the `playbook-loader` role once, with the task folder and those ids
-and nothing else. It writes `records/playbooks-catalog.json`. Then, in every case, run:
+When it names any, dispatch `playbook-loader` once, with the message this file names: the role,
+the run mode, the task folder and those ids. It writes `records/playbooks-catalog.json`. Then, in
+every case, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/playbooks/scripts/playbook-actions.sh load "<task_folder>"
 ```
@@ -177,16 +186,12 @@ A dispatch that names no role runs as the general agent, with every tool and thi
 model, and nothing the roles promise holds. `internal-searcher` has no web tools at all, which is
 what makes "prior art in this project" a claim about this project rather than about the internet.
 
-For each search decided above, dispatch its role with a narrow brief: the words to search, the
-bound, and the shape of what to return, findings with a source and nothing else. The
-`internal-searcher` brief also names the code path, which is the task's worktree from the
-`worktree:` line, and the project folder. The agent never
-sees this conversation and this conversation never sees what the agent read, only what it reports
-back. That isolation is what keeps the cost bounded.
-
-Do not restate the role's own rules in the brief. That recall is not a finding, and that an
-account of how it searched is not the answer, are in the role's own definition and reach it on
-every dispatch. Repeating them here means two copies that drift.
+For each search decided above, dispatch its role with the message this file names. Its lines are
+the role, the run mode, the words to search, and the bound. The `internal-searcher` message
+carries the code path and the project folder in place of the bound. The code path is the task's
+worktree, from the `worktree:` line.
+The agent never sees this conversation and this conversation never sees what the agent read,
+only what it reports back. That isolation is what keeps the cost bounded.
 
 What is this step's job is what to do with a bad return. An agent that comes back with prose
 instead of findings with a source and a date has not done the job. Ask it again, or record what it
@@ -336,9 +341,11 @@ A task whose `research` folder does not exist yet is not an error: it is reporte
 started, with every criterion uncovered, the same as an empty `research` folder that does exist.
 
 Exit 0: nothing to do. The record is committed when the stage closes: a clean check commits the
-task folder, and `record` commits nothing. Dispatch the `distiller` role once, with the task
-folder, the stage `research`, and the paths of `research/*.json` and `records/research-check.json`. Never a summary
-of this conversation. It writes `records/research-distill.json`. Then run:
+task folder, and `record` commits nothing. Dispatch `distiller` once, with the message this file
+names. Its lines are the role, the run mode, the task folder, the stage `research`, and the
+paths of `research/*.json` and `records/research-check.json`. Never a summary of this
+conversation. It
+writes `records/research-distill.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
 ```
@@ -405,8 +412,8 @@ Research asks the split question once, here, because closed research is the firs
 of how many pieces the task holds. The recommendation is the value and a person decides; nothing
 in this section splits on its own.
 
-After `distill` reports, dispatch the `split-advisor` role once, with the task folder and nothing
-else. It writes `records/research-split.json`. Then run:
+After `distill` reports, dispatch `split-advisor` once, with the message this file names: the
+role, the run mode, and the task folder. It writes `records/research-split.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh split-read "<task_folder>"
 ```

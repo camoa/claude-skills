@@ -277,8 +277,9 @@ The current stage is the `stage` the next skill's report prints for this task, t
 close record is absent.
 That is scope without `alignment.json`, research without `records/research-check.json` at
 `exitCode` 0, design without `design-closed.json`. Read that stage's sidecar,
-`records/<stage>-distill.json`. When none exists, dispatch the `distiller` role with the task
-folder, the stage, and the stage's record paths, then read the sidecar it writes. A record path
+`records/<stage>-distill.json`. When none exists, dispatch the `distiller` role with the run
+mode, the task folder, the stage, and the stage's record paths, one per line. Then read the
+sidecar it writes. A record path
 absent mid-stage is normal; the distiller names it as a gap.
 
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own

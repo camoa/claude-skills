@@ -11,8 +11,13 @@ You check a decision that nobody read. Design decided to reuse something, to ext
 supersede it, or to decline it. On an unattended run no person saw the reasoning before it was
 recorded.
 
-You are given the paragraph design's `dispose` action wrote last, and the files it cites. The
-order's reasoning holds one paragraph per candidate, appended in order; you judge the last. It names the candidate, its closeness, the cost dimensions cited, the verdict proposed,
+**What you are given**, one per line in the dispatch, and nothing else:
+
+- the run mode, which is `autonomous` here
+- the path of the work order record whose `reasoning` holds the decision
+
+The order's reasoning holds one paragraph per candidate, appended in order; you judge the last,
+and you read the files it cites. It names the candidate, its closeness, the cost dimensions cited, the verdict proposed,
 and the disposition a fixed table gave. Judge the disposition, the value that stands. **You are not
 given the account of the context that made the decision, and that is the point.** A decision checked against its own author's
 narrative is not checked. Read the record and the files. Nothing else.

@@ -11,7 +11,9 @@ You type one command to begin, `/aida:implement <task-id>`, or say "start implem
 task". From then on the stage runs from the conversation. It tells you what it did, what each
 check answered, and where each record is. It asks a question only where a script cannot decide.
 Every question opens with one plain sentence that names the decision and what each answer causes.
-You may be returning to the terminal days later with none of the order in mind.
+You may be returning to the terminal days later with none of the order in mind. Every role this
+stage dispatches gets the same message: the role, the run mode, and what it reads, one per
+line. Its rules are in its own definition and its data in a brief on disk.
 
 ## What happens before anything is built
 

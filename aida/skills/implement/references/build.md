@@ -64,7 +64,7 @@ forward and none of them did; `build-brief` is what actually forwards it now.
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
 
-That list is the withheld list. Pass the brief's path and nothing else.
+That list is the withheld list.
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -78,18 +78,13 @@ order's owned files, and allowed its own. Never type those paths here. It prints
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
 write.
 
-**Then dispatch `implementer`.** Name the role, per SKILL.md.
+**Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
+mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.
 
-Give it the path to the `implement` recipe for its framework, the path of the brief `build-brief`
-wrote, and nothing else. `reportPath` in the brief is where it writes its five answers, and it
-writes that file before it edits anything under the code path. `interfacePath` is where it
-writes its interface record when it is done.
-
-**On an order whose proof is `record`, tell it where to commit.** Its deliverable lives in the
-task folder, so it commits in the folder the brief's `commitIn` names. It stages its owned
-files and nothing else. The ledger and the briefs beside them belong to this stage, which
-commits them when it finishes. The owned-files check sets them aside and counts them in its
-detail, so a sweep is visible there, not a failure.
+**On an order whose proof is `record`, the brief's `commitIn` is the project folder.** The
+implementer commits its owned files there and nothing else. The ledger and the briefs beside
+them belong to this stage, which commits them when it finishes. The owned-files check sets them
+aside and counts them in its detail, so a sweep is visible there, not a failure.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
 there. The dispatch record carries the list, and a hook refuses the implementer a write under the
@@ -115,9 +110,8 @@ what the builder's report names. The person, or design, adds a file the unit nee
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
 halt a started order. Unattended halts the order and records what was left.
 
-Ask it to return what it changed, one line on the tests, the path to the interface record it wrote,
-and any concern. Under fifteen lines. The interface record is prose about what this unit exposes,
-and it is what the next order's tests are written against.
+The interface record is prose about what this unit exposes, and it is what the next order's
+tests are written against.
 
 **When the person rules that the test is wrong, the route is the tests step again, in this
 order.** The person rules it; a model never does. Open the test author's dispatch again for this

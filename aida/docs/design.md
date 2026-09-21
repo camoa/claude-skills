@@ -223,7 +223,9 @@ Of every order, it asks whether the order owns every file its operation rewrites
 owned list against the couplings your framework's design recipe names, such as a service and
 its definition file.
 
-Each reader writes one findings file, `records/design-critique-<lens>.md`. A finding is blocking
+Each reader is dispatched with the run mode, the task folder, its lens and the recipe's path,
+one per line, and nothing else. Each reader writes one findings file,
+`records/design-critique-<lens>.md`. A finding is blocking
 when implementation would build the wrong thing or could not start, and a concern otherwise.
 They never repeat what the check counted, and a clean report names what it compared. A lens whose
 file never arrives is dispatched once more. If it fails again, the close leaves it out and says so.
