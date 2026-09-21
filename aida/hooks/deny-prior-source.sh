@@ -2,8 +2,8 @@
 # The plugin root: the variable when the platform sets it (hooks), else this file's own place.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-# deny-prior-source.sh: PreToolUse hook on Read and Grep. Denies a dispatched role the reads its
-# own dispatch record names.
+# deny-prior-source.sh: PreToolUse hook on Read, Grep and Bash. Denies a dispatched role the reads
+# its own dispatch record names.
 #
 # Version 5's deny-reviewer-test-writes.sh (frozen, camoa-skills/ai-dev-assistant/hooks/) allows
 # anything it cannot name: a reviewer denied by matching agent_type, everyone else silent-allow.
@@ -22,15 +22,25 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Grep is covered because grepping for a function name is what these roles do without meaning
 # anything by it, and a Grep that returns content returns the source as surely as opening the file.
-# Bash is not covered and cannot be: a test author runs its own tests, so it holds Bash, and a shell
-# assembles any path at run time where this hook sees only text. A parser was built for it on
-# 2026-09-10 and reverted the same day (stages/08-invariant-audit.md, section 9). What survives is
-# the accidental read, which is the failure this rule exists to prevent.
+# Bash is covered for the plain forms only (2026-09-20, live-run row 101). A shell assembles any
+# path at run time where this hook sees only text. So a path from a variable, an interpreter or a
+# symlink passes, as it passes the write hook. A parser was built for it on 2026-09-10 and
+# reverted the same day (stages/08-invariant-audit.md, section 9). The live implementer's first
+# move was then `cat` on two denied files, never Read, so the door is back for the reading verbs.
+# The Bash door is the mirror of the write hook's: heredoc bodies dropped, the command split at
+# `;`, `|`, `&&` and `||`. A segment whose first word is cat, head, tail, less, more, sed, awk,
+# grep, rg or nl is read. Every operand of it that does not start with `-` is resolved against
+# codePath and the payload's cwd. For sed and awk the first such operand is the script and is
+# skipped. A `cd` operand is never a target. A hit is refused with the Read door's own reason. For
+# grep and rg a search root holding a denied path is a hit too, as it is for the Grep tool. An rg
+# or a recursive grep with no path and no pipe into it starts at codePath. What survives is the
+# accidental read, which is the failure this rule exists to prevent.
 #
-# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, a tool that is
-# neither Read nor Grep, a payload with no agent_type, no project registered for this working
-# directory, or no dispatch.json: allow, silent. Those last two are every read outside an AIDA
-# task, and a message on each would be noise, the rule version 5's guard kept. dispatch.json
+# FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, or a tool that is
+# none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
+# for this working directory, or no dispatch.json: the same. Those last two are every read
+# outside an AIDA task, and a message on each would be noise, the rule version 5's guard kept.
+# dispatch.json
 # unreadable, a record naming no role, an agent whose type is not the role the record names, or a
 # dispatch whose denyRead list is empty:
 # allow, but through `systemMessage`, the one hook-output channel the model sees on exit 0, naming
@@ -50,7 +60,8 @@ INPUT="$(cat 2>/dev/null)" || { echo '{}'; exit 0; }
 TOOL="$(jq -r '.tool_name // empty' <<<"$INPUT" 2>/dev/null)"; [ -n "$TOOL" ] || { echo '{}'; exit 0; }
 # Grep is here because grepping for a function name is what a test author does without meaning
 # anything by it, and a Grep that returns content returns the source as surely as opening the file.
-case "$TOOL" in Read|Grep) ;; *) echo '{}'; exit 0 ;; esac
+# Bash is here for the plain reading verbs, the header says which.
+case "$TOOL" in Read|Grep|Bash) ;; *) echo '{}'; exit 0 ;; esac
 
 # A payload with no agent_type is a person working their own repository. It can never match a role
 # in the record, so it leaves here before the record is even looked for, and pays nothing.
@@ -75,6 +86,10 @@ PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
 # shellcheck source=/dev/null
 source "$PATHS_LIB" 2>/dev/null \
   || not_enforced "the path library at $PATHS_LIB could not be read. Nothing was checked."
+COMMAND_LIB="${PLUGIN_ROOT}/scripts/lib/command-text.sh"
+# shellcheck source=/dev/null
+source "$COMMAND_LIB" 2>/dev/null \
+  || not_enforced "the command library at $COMMAND_LIB could not be read. Nothing was checked."
 
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
@@ -112,6 +127,90 @@ DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
 [ "$DENY_COUNT" -gt 0 ] 2>/dev/null \
   || not_enforced "the dispatch open at $DISPATCH_FILE denies no path, so this read was allowed without being checked against anything"
 
+# Refuses when resolved target $1 falls under a denied path, or, for a search, when a denied path
+# falls under it. A search is the Grep tool, or a Bash segment whose verb is grep or rg (SEARCH).
+# Returns when it does not. The Read door calls it once; the Bash door once per operand.
+SEARCH=false
+deny_if_listed() {
+  local target_abs="$1" i=0 rel deny_abs reason
+  while [ "$i" -lt "$DENY_COUNT" ]; do
+    rel="$(printf '%s' "$DENY_JSON" | jq -r --argjson i "$i" '.[$i]')"
+    deny_abs="$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")"
+    # A search reads everything below where it starts, so a root holding a denied path reads that
+    # path. A Read has one file for a target and only the first test can apply to it.
+    if is_under "$target_abs" "$deny_abs" \
+       || { { [ "$TOOL" = "Grep" ] || [ "$SEARCH" = true ]; } && is_under "$deny_abs" "$target_abs"; }; then
+      # A denied path under codePath is production source, and there is somewhere else to look. A
+      # denied path outside it is not, so pointing at an interface record would be wrong advice.
+      if is_under "$target_abs" "$CODE_CANON"; then
+        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
+      else
+        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
+      fi
+      jq -nc --arg r "$reason" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+      exit 0
+    fi
+    i=$((i + 1))
+  done
+}
+
+if [ "$TOOL" = "Bash" ]; then
+  CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
+  [ -n "$CMD" ] || { echo '{}'; exit 0; }
+  # The payload's working directory in the same canonical form codePath is held in. A relative
+  # operand is resolved against both, for the reason the write hook's header gives. A dispatched
+  # agent's working directory is not guaranteed to be codePath, and a shell's own relative path
+  # really is relative to where the command runs.
+  CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
+  [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+  # zsh indexes an array from 1 by default; KSH_ARRAYS makes read_words' array agree with bash.
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    setopt KSH_ARRAYS 2>/dev/null
+  fi
+  # A segment after a pipe keeps a leading `|` as its own word, so a grep reading its stdin is
+  # told apart from one searching the tree.
+  while IFS= read -r seg; do
+    set -f; read_words "$(printf '%s' "$seg" | tr '`$"()' '     ' | tr -d "'")"; set +f
+    # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
+    [ "${#w[@]}" -gt 0 ] || continue
+    piped=false
+    if [ "${w[0]}" = '|' ]; then piped=true; w=("${w[@]:1}"); fi
+    [ "${#w[@]}" -gt 0 ] || continue
+    SEARCH=false; script_skip=false; recursive=false
+    case "${w[0]}" in
+      cat|head|tail|less|more|nl) ;;
+      grep|rg) SEARCH=true; script_skip=true ;;
+      sed|awk) script_skip=true ;;
+      *) continue ;;
+    esac
+    pathed=false
+    for t in "${w[@]:1}"; do
+      case "$t" in
+        '') continue ;;
+        --recursive|--dereference-recursive) recursive=true; continue ;;
+        --*) continue ;;
+        -*[rR]*) recursive=true; continue ;;
+        -*) continue ;;
+      esac
+      # The first operand that is not a flag is sed's and awk's script and grep's and rg's
+      # pattern, never a file.
+      if [ "$script_skip" = true ]; then script_skip=false; continue; fi
+      pathed=true
+      deny_if_listed "$(normalize_abs "$(resolve_against "$t" "$CODE_CANON")")"
+      [ "$CWD_CANON" = "$CODE_CANON" ] \
+        || deny_if_listed "$(normalize_abs "$(resolve_against "$t" "$CWD_CANON")")"
+    done
+    # An rg, or a recursive grep, with no path and no stdin searches from where it runs, the case
+    # that reads the most, the same as the Grep tool with no path.
+    if [ "$SEARCH" = true ] && [ "$pathed" = false ] && [ "$piped" = false ]; then
+      if [ "${w[0]}" = rg ] || [ "$recursive" = true ]; then deny_if_listed "$CODE_CANON"; fi
+    fi
+  done < <(strip_heredocs "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/;/\n/g; s/|/\n| /g')
+  echo '{}'
+  exit 0
+fi
+
 # Read names its target `file_path`; Grep names it `path` and leaves it out to search the whole
 # working directory, which is the case that reads the most.
 TARGET="$(jq -r '.tool_input.file_path // .tool_input.path // empty' <<<"$INPUT" 2>/dev/null)"
@@ -120,29 +219,7 @@ if [ -z "$TARGET" ]; then
   TARGET="$CODE_CANON"
 fi
 
-TARGET_ABS="$(normalize_abs "$(resolve_against "$TARGET" "$CODE_CANON")")"
-
-i=0
-while [ "$i" -lt "$DENY_COUNT" ]; do
-  rel="$(printf '%s' "$DENY_JSON" | jq -r --argjson i "$i" '.[$i]')"
-  deny_abs="$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")"
-  # A search reads everything below where it starts, so a root holding a denied path reads that
-  # path. A Read has one file for a target and only the first test can apply to it.
-  if is_under "$TARGET_ABS" "$deny_abs" \
-     || { [ "$TOOL" = "Grep" ] && is_under "$deny_abs" "$TARGET_ABS"; }; then
-    # A denied path under codePath is production source, and there is somewhere else to look. A
-    # denied path outside it is not, so pointing at an interface record would be wrong advice.
-    if is_under "$TARGET_ABS" "$CODE_CANON"; then
-      REASON="$ROLE_BARE may not read $TARGET_ABS: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
-    else
-      REASON="$ROLE_BARE may not read $TARGET_ABS: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
-    fi
-    jq -nc --arg r "$REASON" \
-      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
-    exit 0
-  fi
-  i=$((i + 1))
-done
+deny_if_listed "$(normalize_abs "$(resolve_against "$TARGET" "$CODE_CANON")")"
 
 echo '{}'
 exit 0

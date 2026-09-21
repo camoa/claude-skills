@@ -34,22 +34,26 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes seven things to
+It reads the frozen copy and the frozen tests. It writes nine things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
+- `dependencyInformation`, each dependency's review `information` items: the id, the order it
+  came from, the summary and the file;
 - this attempt's report path;
+- `interfacePath`, `implementation/interface-<order id>.md`, where the implementer writes its
+  interface record and where `build-record` reads it;
 - how many attempts this order has used of the count it is allowed;
 - `headNow`, the commit of the repository this order lands in at the moment of this call, and
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
-It prints the brief's path, the report path, `headNow`, the attempt count and counts, never the
-brief. The allowed count is two unless a person has granted this order one more; see
+It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
+and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
 `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
 **A dependency that has closed carries a second text beside the declared one, `interfaceRecord`:**
@@ -60,7 +64,7 @@ forward and none of them did; `build-brief` is what actually forwards it now.
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
 
-That list is the withheld list. Pass the brief's path and nothing else.
+That list is the withheld list.
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -74,17 +78,13 @@ order's owned files, and allowed its own. Never type those paths here. It prints
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
 write.
 
-**Then dispatch `implementer`.** Name the role, per SKILL.md.
+**Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
+mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.
 
-Give it the path to the `implement` recipe for its framework, the path of the brief `build-brief`
-wrote, and nothing else. `reportPath` in the brief is where it writes its five answers, and it
-writes that file before it edits anything under the code path.
-
-**On an order whose proof is `record`, tell it where to commit.** Its deliverable lives in the
-task folder, so it commits in the folder the brief's `commitIn` names. It stages its owned
-files and nothing else. The ledger and the briefs beside them belong to this stage, which
-commits them when it finishes. The owned-files check sets them aside and counts them in its
-detail, so a sweep is visible there, not a failure.
+**On an order whose proof is `record`, the brief's `commitIn` is the project folder.** The
+implementer commits its owned files there and nothing else. The ledger and the briefs beside
+them belong to this stage, which commits them when it finishes. The owned-files check sets them
+aside and counts them in its detail, so a sweep is visible there, not a failure.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
 there. The dispatch record carries the list, and a hook refuses the implementer a write under the
@@ -94,7 +94,8 @@ code path outside it while the record is open. The reason tells it to stop and r
 refuses the write and names which order froze the file.
 
 **It may not read another order's source.** What another unit exposes is its interface record. A
-hook refuses the read while the dispatch is open.
+hook refuses the Read, the Grep and the plain shell reads while the dispatch is open. A path a
+shell assembles at run time passes the hook and is still denied.
 
 **It stops rather than working around anything.** A test that seems wrong, an interface that does
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
@@ -109,29 +110,71 @@ what the builder's report names. The person, or design, adds a file the unit nee
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
 halt a started order. Unattended halts the order and records what was left.
 
-Ask it to return what it changed, one line on the tests, the path to the interface record it wrote,
-and any concern. Under fifteen lines. The interface record is prose about what this unit exposes,
-and it is what the next order's tests are written against.
+The interface record is prose about what this unit exposes, and it is what the next order's
+tests are written against.
+
+**When the person rules that the test is wrong, the route is the tests step again, in this
+order.** The person rules it; a model never does. Open the test author's dispatch again for this
+order, per `references/tests.md`. The write hook lets that author edit the file its own order
+froze. It corrects the assertion and nothing else. Run the coding-standards row over the file it
+returned. Open the row-checker's dispatch again and put the affected rows to it. Then run
+`tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
+checker returned. That freeze is
+allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
+attempt, it refuses (exit 76), and the halt paths in `references/finish.md` apply instead. The
+retake prints `retaken:` with the earlier commit and the new one, and the record names the
+earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
+stop left the tree dirty on purpose. The freeze commits only the test paths, and the next
+attempt continues over that uncommitted build. So the person either keeps it or cleans the tree
+before the re-freeze, and says which. Then build again from "Open the dispatch record" above.
 
 Close the dispatch record as soon as the role returns, per SKILL.md.
+
+## On an order whose proof is `observe`, look at the pages
+
+The implementer does not look. You do. Read the surface file that `surfaces.registryPath` in
+`<projectPath>/project.json` names. Review's surface step reads the same file. Take each
+surface the order names, its `url`, and the file's `viewports` list. Open each surface at each
+viewport with the browser tool, against the task's own site. Judge each of the order's done-when
+rows against what renders. Give one verdict per row per surface per viewport, `met` or `unmet`,
+with one sentence on what you saw. Save each screenshot under
+`<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`. Then write
+`<task_folder>/implementation/observed-<order id>.json`:
+```
+{ "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
+  "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
+              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
+```
+Every done-when row goes in, at every surface and viewport. The verdict is what the page
+showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
+for such an order and no row was judged before the build, so this look is its check. The judge
+on the record is a model. Completion puts each such criterion to the person.
 
 ## Record the attempt
 
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-record "<task_folder>" <order id> \
-  --interface <path to the record the builder wrote> \
+  [--interface <path to the record the builder wrote>] \
   --report <path to the builder's report> \
   --started-at <the commit the attempt began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
+  [--observed <path to the observed record>] \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
-`--implement-recipe` is the path resolved above, the one the implementer was given. Pass it for
+`--interface` defaults to the brief's `interfacePath`, the path the implementer was told to write
+to. Pass it only for a record a person put somewhere else. `--implement-recipe` is the path
+resolved above, the one the implementer was given. Pass it for
 an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
 runs them as the order's own check. Every other order ignores it.
+
+`--observed` is the record written above. An order whose proof is `observe` refuses without it
+(exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose
+screenshot is not on disk (94) and a surface the order does not name (95). It refuses a sentence
+the order does not hold (96). Nothing is recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
@@ -240,6 +283,9 @@ This step runs all eight deciding checks. The record holds every one.
   printed `There are no changes to import` is a finding for the reviewer, not for this check.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
+  On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
+  above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
+  the way a failing test does.
 - **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
   recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
   that row once at the final commit. On a Drupal project the row is ten minutes per run. On a

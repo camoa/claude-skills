@@ -313,9 +313,12 @@ to report it as approved on the person's behalf, then run the distill check belo
 
 The contract is committed when the stage closes. `approve` above, or `distill` below in the
 autonomous branch, commits the task folder; the mid-stage edits above commit nothing. Before
-either call, dispatch the `distiller` role once, with the task folder, the stage `scope`, and the
-path of `alignment.json`. Never a summary of this conversation: it exists to be denied that
-account. It writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous, run:
+either call, dispatch `distiller` once. The dispatch message is the role, the run mode and the
+paths, one per line, and nothing else. Name the role on the Agent call. Then write the run mode,
+the task folder, the stage `scope`, and the path of `alignment.json`. The role's rules and its
+return shape live in its agent definition, which reaches it on every dispatch, so the message
+restates neither. Never a summary of this conversation: it exists to be denied that account. It
+writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh distill "<task_folder>"
 ```

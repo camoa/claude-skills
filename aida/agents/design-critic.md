@@ -20,8 +20,13 @@ findings and answers each one; the design skill carries the change.
 
 ## What you are given
 
-The task folder and one lens: `contract`, `reuse` or `buildability`. The dispatch may also name
-the path of the design recipe the skill read; open it for the `buildability` lens only.
+One per line in the dispatch, and nothing else:
+
+- the run mode, `interactive` or `autonomous`
+- the task folder
+- one lens: `contract`, `reuse` or `buildability`
+- the path of the design recipe the skill read, when it read one; open it for the
+  `buildability` lens only
 
 Read `alignment.json`, the contract: the goal, the criteria with their ids, the non-goals with
 theirs. Read every `research/*.json`, one search per file, and `records/playbooks.md` where it

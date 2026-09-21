@@ -27,9 +27,46 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/frameworkResult" },
       "description": "One entry per framework in project.json, which requires at least one. A project on two frameworks gets two recipes and two sets of entries, and both must be satisfied, because the build runs in one repository that is both."
+    },
+    "recipeRefreshes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/recipeRefresh" },
+      "description": "One entry per recipe path `recipe-refresh` replaced after this record was taken, in the order it replaced them (live-run row 99). Absent until the first refresh. The catalog republishes a recipe while a task runs, and `frameworks[].recipePath` above is the path every later step reads. So the refresh rewrites that path in place and leaves the history here. It re-runs nothing: `verdict` stands. A recipe's preconditions heading changes more rarely than its markers do, and the person who refreshes knows why. Only the test-execution recipe is refreshed; the review recipe is pinned by baseline.json for the task's life."
     }
   },
   "$defs": {
+    "recipeRefresh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["framework", "kind", "from", "to", "at"],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The framework name as project.json records it. Refused (exit 90) when no `frameworks[]` entry carries it with `lookup` resolved and a `recipePath`."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["test-execution"],
+          "description": "Which recipe was replaced. One value today: `frameworks[].recipePath` here. Kept as a field so a later kind names itself rather than being inferred."
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The path the record held before the refresh. Never empty: a framework with none on record is refused (exit 90)."
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The path the refresh wrote, absolute, checked to exist (exit 90 otherwise)."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date of the refresh, YYYY-MM-DD, set by the script."
+        }
+      }
+    },
     "frameworkResult": {
       "type": "object",
       "additionalProperties": false,

@@ -25,6 +25,14 @@ named in the grant too. So is the project skill's `recipe-source` lookup. Any ot
 still asks for approval. Dispatching an agent needs no approval either; it is also named in this
 skill's own grant.
 
+**The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
+call, and set the model where the step says. The message itself is one line per item: the run
+mode, `interactive` or `autonomous`, then each path the step hands over. One word a step names,
+a lens or a stage, is a line too. Nothing else goes in. The role's rules and its return shape
+live in its agent definition, which reaches it on every dispatch. So the message restates
+neither, and two runs of one step hand the role the same words. Each dispatch below names this
+shape and lists its own paths.
+
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
@@ -162,6 +170,13 @@ AIDA cannot know on its own:
   sets that value itself once every owned file lies under the task folder, on an order created
   with no `--proof`. Such a file must live in a folder the project commits: `add-owned-file`
   refuses an ignored path on a record order.
+- What is proved by what a page shows rather than by a test. A layout, a rendered block, a
+  page at each viewport. Such an order is created with `--proof observe`. It names at least one
+  `--surface` and declares no test. Each done-when row is the sentence a model judges. After
+  the build, the orchestrator opens each surface at each viewport in a browser. It judges the
+  row against what renders, with a screenshot as the evidence. Write each row as one thing
+  the page must show. The judge is a model, and completion puts each such criterion to the
+  person to accept.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -236,14 +251,15 @@ dimension is refused the same way; ask what it compared, then call again.
 
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
-**Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it. Name
-the role; a dispatch that names none runs as the general agent with write tools and this session's
-model, and this one has to be read-only to mean anything.
+**Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it, with
+the message this file names. Its lines are the role, the run mode, and the order file's path,
+the one `dispose` printed on its `DISPOSED:` line. A dispatch that names no role runs as the
+general agent with write tools and this session's model. This one has to be read-only to mean
+anything.
 
-Give it the paragraph `dispose` wrote last, and the files it cites, and nothing else. Never this conversation's
-own account: being denied that is the entire reason the role exists, and handing it over turns the
-check into the decision reading itself. It answers agree, disagree, or downgrade, with what it
-compared. Record what it found with `update --reasoning`, appended to the text `dispose` wrote.
+Never this conversation's own account: being denied that is the entire reason the role exists,
+and handing it over turns the check into the decision reading itself. Record what it found with
+`update --reasoning`, appended to the text `dispose` wrote.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
@@ -356,7 +372,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--proof <tests|gate|record>] [--surface <id>]...
+  [--proof <tests|gate|record|observe>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -396,11 +412,12 @@ closed again on the live files. Nothing halts when nothing else on the order cha
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. Two orders are the exception. One created
+here; the check below refuses an order that skips this. Three orders are the exception. One created
 with `--proof gate` declares no test, and the configuration check judges its owned machine
 criterion at build time. One whose proof is `record` declares no test either, and its done-when
-rows, judged at the checkpoint, stand in for the test. A criterion whose `verifiedBy` is
-`person` needs no test, though one is never wrong to add.
+rows, judged at the checkpoint, stand in for the test. One whose proof is `observe` declares no
+test, and a model judges its done-when rows against its surfaces after the build. A criterion
+whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
 A test is what a test author writes as a file, red before the code and green after it. The
 review stage's surface row is not a test, so `add-test` refuses a description naming one of a
@@ -413,7 +430,7 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record>] \
+  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record|observe>] \
   [--surface <id>]...
 ```
 
@@ -448,10 +465,12 @@ zero it adds one `open:` line naming what is open. The report holds:
   than one work order;
 - every work order serving no criterion;
 - every work order that owns a machine-verified criterion and declares no test, unless its proof
-  is `gate`;
+  is `gate`, `record` or `observe`;
 - every work order whose proof is `gate` and that declares a test;
 - every work order whose proof is `record` and that declares a test, owns a file outside the
   task folder, or has no done-when row;
+- every work order whose proof is `observe` and that declares a test, names no surface, or has
+  no done-when row;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -474,6 +493,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a `record` order declaring a test needs a `remove-test` call for it; one owning a file
     outside the task folder needs `--proof tests` if it builds code after all; one with no
     done-when row needs an `add-done-when` call;
+  - an `observe` order declaring a test needs a `remove-test` call for it. One naming no
+    surface needs `update --surface <id>`. One with no done-when row needs an `add-done-when`
+    call;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The
@@ -500,13 +522,12 @@ expensive place.
 ## Critique the design
 
 Once the check comes back clean, and before closing, have three readers who were not in this
-conversation read the orders. The check counted ids; it read no sentence. Dispatch the
-`design-critic` role three times, in parallel, each with the task folder and one lens:
-`contract`, `reuse`, `buildability`. Name the role; a dispatch that names none runs as the
-general agent with write tools. Give it the task folder, the lens, and the path of the design
-recipe read above, when one was. Never give it a summary of this conversation: being denied that
-account is why the role exists. The `buildability` critic reads the recipe's owned-files
-sentence and its coupling list. It asks of every order whether it owns every file it rewrites.
+conversation read the orders. The check counted ids; it read no sentence. Dispatch
+`design-critic` three times, in parallel, with the message this file names. Its lines are the
+role, the run mode, the task folder, and one lens of `contract`, `reuse` and `buildability`.
+Add the design recipe's path when one was read. A dispatch that names no role runs as the general
+agent with write tools. Never give it a summary of this conversation: being denied that account
+is why the role exists.
 
 Each critic writes `<task_folder>/records/design-critique-<lens>.md`, a findings table and a
 `findings: N` last line. Wait for all three files. A file that never arrives, or arrives without
@@ -566,9 +587,10 @@ Did a work order change after closing? Close again. A second close is allowed an
 replaces the old hash with the new one. Closing again is the supported way to change a design that
 already closed.
 
-Once `design-closed.json` is written, dispatch the `distiller` role once, with the task folder,
-the stage `design`, and the paths of `design/*.json` and `design-closed.json`. Never a summary of
-this conversation. It writes `records/design-distill.json`. Then run:
+Once `design-closed.json` is written, dispatch `distiller` once, with the message this file
+names. Its lines are the role, the run mode, the task folder, the stage `design`, and the paths
+of `design/*.json` and `design-closed.json`. Never a summary of this conversation. It writes
+`records/design-distill.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
 ```

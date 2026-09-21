@@ -62,13 +62,11 @@ not enforced for the whole review, and a write into a frozen test is caught only
 dirty tree. The empty lists still let the hook see this dispatch and protect every frozen test
 against it, the same way the freeze protects it against everyone else.
 
-**Dispatch `reviewer`.** Name the role, per SKILL.md. Set the model to opus. Give it the brief's
-path and nothing else, and tell it plainly that this is review mode. Its read is wide by design, one named
-file outside the diff for one named risk. On a `record` order, say that the brief's
-`deliverables` are what it reviews, against the order's done-when rows. Close the dispatch record
-as soon as it returns, per SKILL.md. Its write is refused by the script, not by a hook, when the
-code moved or the tree is dirty.
-Leaving a probe file behind is a refusal, not a finding.
+**Dispatch `reviewer`**, on opus, with the message SKILL.md names: the role, the run mode, and the
+brief's path. The brief's own `mode` field says review. Its read is wide by design, one named
+file outside the diff for one named risk. Close the dispatch record as soon as it returns, per
+SKILL.md. Its write is refused by the script, not by a hook, when the code moved or the tree is
+dirty. Leaving a probe file behind is a refusal, not a finding.
 
 Run:
 ```
@@ -82,6 +80,15 @@ path moved, or its tree is dirty, since the build record. And it refuses when th
 named by `--findings` is missing, empty, or not the shape it reads. A finding citing neither a
 criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
 fixer.
+
+The findings file may carry an `information` list beside `findings`. It holds what the reviewer
+saw that the person or the next order needs, and that cites no criterion the diff fails. Each
+item is an id, one sentence, a file and lines, with no severity and no fix scope. The script
+refuses a malformed item (exit 52), the way it refuses a malformed finding. It records the list
+beside the findings and prints one `information:` line per item, then a count. `tests-brief` and
+`build-brief` carry the items to every order that depends on this one, under
+`dependencyInformation`. Nothing routes an item to a fixer. Read the lines; a person may need to
+act on one outside this task.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
@@ -144,10 +151,8 @@ files allowed, every other order's denied. Deny the test-authoring recipe by han
 build.md does for the implementer: a fixer chooses no level and names no test, so that recipe is
 not its to read.
 
-**Dispatch `fixer`.** Name the role, per SKILL.md. Round one runs on sonnet. Round two runs on
-opus, set on the Agent call. Give it the brief's path and nothing else. The brief holds the open
-findings, the fix scope union, the frozen tests, the diff budget, and its report path. It writes
-the report before it edits anything under the code path.
+**Dispatch `fixer`**, with the message SKILL.md names: the role, the run mode, and the brief's
+path. Round one runs on sonnet. Round two runs on opus, set on the Agent call.
 **It may not change a test**: a hook refuses the write. **It may not write outside the fix
 scope.** No hook enforces that bound. The owned-files check after the round only bounds it to the
 order's own files, which is wider than the scope. A write inside those files but outside the scope
@@ -233,8 +238,9 @@ a path. It names the path the verdicts go to, `implementation/verify-<order id>-
 Nothing else: not the original diff, not an earlier round's verdicts. It prints the brief's path, the three paths it
 names, and one line per finding.
 
-**Dispatch `reviewer` again, in verify mode.** Give it the brief's path and nothing else, and tell
-it plainly that this is verify mode. Close the dispatch record as soon as it returns, per SKILL.md.
+**Dispatch `reviewer` again**, on opus, with the same message: the role, the run mode, and this
+brief's path. The brief's own `mode` field says verify. Close the dispatch record as soon as it
+returns, per SKILL.md.
 
 Run:
 ```

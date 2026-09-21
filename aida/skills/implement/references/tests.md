@@ -32,7 +32,7 @@ frozen test reads the record and never the catalog, because a lookup in a write 
 that can fail open, and a pattern that changed during a build would change what is protected
 halfway through it.
 
-## An order whose proof is `gate` or `record` has no test author
+## An order whose proof is `gate`, `record` or `observe` has no test author
 
 Read the order's `proof` from the frozen snapshot first. `gate` means its deliverable is
 exported configuration, and a test that reads the YAML back cannot fail for the right reason.
@@ -52,6 +52,13 @@ Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
 
+`observe` means its deliverable is what a page shows, and a model judges that after the build.
+Skip `tests-brief` and dispatch no test author. Put no row to anyone: there is nothing to judge
+before the page exists. Freeze with no `--test` and no `--row`, and a `--checklist` for each
+criterion a person verifies. The build step opens the order's surfaces in a browser after the
+implementer returns, and reads that record as the order's own check, `observed`. `close`
+writes `model` on the criteria the order owns.
+
 ## Assemble what the test author may see
 
 Run:
@@ -59,26 +66,32 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and never the live files. It writes exactly six things to
+It reads the frozen copy and never the live files. It writes exactly eight things to
 `implementation/brief-<order id>-tests.json`:
 
 - this order's own record, with the criteria it owns named in `criteriaOwned`;
 - the criteria it serves and owns, with their verification and who verifies each;
 - the boundaries it names;
 - the declared interface of every order it depends on;
+- `dependencyInformation`, each dependency's review `information` items: the id, the order it
+  came from, the summary and the file;
 - `reuses`, the path and the interface of every existing thing design's dispose recorded on
   this order. A reused module is production source of no work order, so this is the only place
   the test author gets its shape. An order disposed with no path carries none;
+- `testRecipePath`, the test-execution recipe's path from `implementation/preconditions.json`,
+  `frameworks[].recipePath` where the lookup resolved. That recipe holds the run command and the
+  `failure_signal` markers the author reads a red against. Null when no lookup resolved, and the
+  summary says the author has no runner to read;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
-A seventh, `treeHolds`, only after a restart left this order's earlier commits on the branch.
+A ninth, `treeHolds`, only after a restart left this order's earlier commits on the branch.
 It holds those commits and one sentence. The tree holds a partial build of this unit, so a
 test that passes on arrival is suspect. The summary prints the commits on a `treeHolds:` line.
 
 It prints the brief's path and counts, never the brief.
 
-That list is the withheld list, decided once rather than at each dispatch. Pass the brief's path
-and nothing else. Adding an input here is a change to the role, not a judgement made in the moment.
+That list is the withheld list, decided once rather than at each dispatch. Adding an input here
+is a change to the role, not a judgement made in the moment.
 
 An interface record is prose a builder wrote about its own code. It is not the code, and that is
 the line.
@@ -110,11 +123,12 @@ that list, because it is the whole of what separates the tests from the code the
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
 next dispatch refuse, and it names the role and order still holding it.
 
-**Then dispatch `test-author`.** Name the role, per SKILL.md. It is not the context that writes the code, and it
-is not this conversation either: a dispatch that names no role runs as the general agent, with
-every tool and this session's own model, and the record just opened matches nothing. Both hooks
-recognise a role by the agent's own type, so writing the tests here instead of dispatching leaves
-every rule below unenforced while the record on disk says otherwise.
+**Then dispatch `test-author`**, with the message SKILL.md names. Its lines are the role, the run
+mode, and two paths: the test-authoring recipe for its framework and the brief `tests-brief`
+wrote. It is not
+the context that writes the code, and it is not this conversation either. Both hooks recognise a
+role by the agent's own type, so writing the tests here instead of dispatching leaves every rule
+below unenforced while the record on disk says otherwise.
 
 **It may not read production source.** Not this order's, and not any order already built. If it
 sees the code, the tests describe the code instead of the intent, which is the same failure one
@@ -126,22 +140,11 @@ step earlier. A hook refuses the read while the dispatch record is open.
 top tier before anything is frozen, and a person reads the rows it rejected. So the author's work
 is checked before the build is measured against it, whether or not a person is present.
 
-Give it the **path** to the test-authoring recipe for its framework, the **path** of the brief
-`tests-brief` wrote, and nothing else. It opens both itself. Do not read either body here and paste
-it in. The recipe runs to well over a hundred lines per framework, and reading it into this
-conversation is the cost the dispatch exists to avoid. Resolving which recipe is this step's job;
-reading it is the role's. When the summary printed a `treeHolds:` line, name it in the dispatch.
-The brief's `treeHolds` says the tree holds this unit's earlier build. So a test green on
-arrival is reported by name, as below, and never taken as proof.
-
-Ask it to return, for each test, the path, the name, and the criterion the name carries. A test of
-the order's own done-when returns the order id in place of a criterion. For each test, it writes
-what the run printed when the test failed to its own file, under the task folder's `implementation/`
-folder, one file per test, and returns that file's path in its report. `--red` below reads that
-path. Ask it to return a checklist line for each criterion a person verifies, copying the
-verification sentence whole. Ask it to return the path of each support file it wrote or changed
-beside the tests. A support file is a base class or a fixture: the tests stand on it, and it is
-not a test.
+Resolving which recipe is this step's job; reading it is the role's. The recipe runs to well over
+a hundred lines per framework, and reading it into this conversation is the cost the dispatch
+exists to avoid. What the author returns is in its definition, and each item has a flag in the
+freeze below. The red-run file per test goes under `--red`, and each support file under
+`--support`.
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
@@ -181,19 +184,23 @@ sentence. Asking the person every row added a turn and no judgement the checker 
 (live-run row 70). Pay the top tier. Open the dispatch record first, the same way every other role
 gets one:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id> \
+  --test-glob <pattern from the implement recipe>
 ```
-The script derives the denied reads itself, the same way it does for the test author: every order's
-owned files. So `row-checker` cannot open the production source behind a hook. Without this record
-open, the hook denies nothing. The checker's own instructions to stay off the implementation are
-then just words, with nothing enforcing them.
+One `--test-glob` per pattern, the same values the freeze below takes. The script derives the
+denied reads itself, the same way it does for the test author. It denies every order's owned
+files, less the ones a test glob matches. Design lists an order's tests under its owned files. The checker
+reads those tests, so the globs decide which owned files stay readable. Without them every owned
+test file is denied, and the script refuses the call (live-run row 106). So `row-checker` cannot
+open the production source behind a hook. Without this record open, the hook denies nothing. The
+checker's own instructions to stay off the implementation are then just words, with nothing
+enforcing them.
 
-**Then dispatch `row-checker`.** Name the role, and set the model to opus. Give it this order's
-rows, the **path** to the test-authoring recipe resolved above, and the path of its verdict file
-under the task folder. Nothing else. A done-when row carries the order id and the done-when
-text where a criterion row carries the id and the verify clause. It reads that text, the recipe and
-each named test, never the implementation, and answers confirmed or rejected with a note for each
-row. Close the dispatch record as soon as it returns, per SKILL.md.
+**Then dispatch `row-checker`**, on opus, with the message SKILL.md names. Its lines are the
+role, the run mode, the rows built above, the test-authoring recipe's path, and its verdict
+file's path under the task folder. The rows are the one input typed by hand, because no brief
+action writes them.
+Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes
 `--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
@@ -247,15 +254,19 @@ A `--test` names its criteria or the order's own id, never both. The second form
 the order's done-when, and its name ends with the order id.
 
 `--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
-at `frameworks[].recipePath`, the same way the build step reads it. The script reads the recipe's
+at `frameworks[].recipePath`, the same way the build step reads it. It must be the record's path:
+a different one refuses (exit 91), naming both. When the catalog republished the recipe, run
+`recipe-refresh` first (`references/preconditions.md`). With no flag, the freeze reads the record's
+path itself, and the record names what it read under `testRecipePath`. The script reads the recipe's
 `failure_signal` block itself. Do not read the body here. `--implement-recipe` is the path
 resolved above, one per framework, the same path the build step passes to `build-record`. The
 script reads its `## Unit declaration` block itself, for the one exception below.
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
-step. A `gate` or `record` order freezes with no test row, and each refuses a `--test`. A
+step. A `gate`, `record` or `observe` order freezes with no test row, and each refuses a `--test`. A
 `record` order owes its done-when row, `--row <order id>=...`, and refuses without it (exit 64).
+An `observe` order owes no row: the freeze accepts it with nothing.
 It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
@@ -290,8 +301,8 @@ read under a recipe whose assertion span is a shape rather than a marker. A file
 three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes
 declare no assertion marker and no `failure_line`, the freeze cannot read the file at all. It
 then freezes it as before, records `redSignal: unchecked` on the test, and says so in one summary
-line. Every other red carries the reading that accepted it. A freeze with a `--red` and no
-`--test-recipe` refuses, because then no red can be read at all. A `--locks-in` reason is
+line. Every other red carries the reading that accepted it. A freeze with a `--red`, no
+`--test-recipe` and no recipe on record refuses, because then no red can be read at all. A `--locks-in` reason is
 recorded beside the test, and the review brief says where it is.
 
 **Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
@@ -332,4 +343,7 @@ green-on-arrival test the caller does not flag, so the flag is on you.
 
 A record is taken once. A second run with the same tests leaves it alone, whatever commit the
 tree is at now, because every freeze moves the tree. Different tests at a different commit
-refuse and name both commits.
+refuse and name both commits. Different tests at the same commit retake the record, while the
+order is still at `tests-frozen`. The freeze then prints `retaken:` with both commits and records
+the earlier one under `retakenFrom`. That is the route for a frozen test that is wrong, named under
+the builder's stop in `references/build.md`.

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIDA observed record",
+  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens each surface the order names, at each viewport the surface file declares, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93), a row whose screenshot is not on disk (94), a surface the order does not name (95) and a doneWhen the order does not hold (96). The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["order", "observedAt", "judgedBy", "rows"],
+  "properties": {
+    "order": {
+      "type": "string",
+      "pattern": "^wo[1-9][0-9]*$",
+      "description": "The work order's own id. build-record refuses a record naming another order."
+    },
+    "observedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The UTC date the model looked, YYYY-MM-DD."
+    },
+    "judgedBy": {
+      "type": "string",
+      "enum": ["model"],
+      "description": "One value. A model looked, and the record says so: the live run filed this look as a person's checklist, which put the wrong actor on the record. `close` copies this judge onto the criteria the order owns, so rowsJudgedByModel counts them and a person returning can list them."
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/row" },
+      "description": "One row per done-when sentence per surface per viewport. Every done-when row of the order is judged at every surface and viewport the order reaches; a row missing here is a look nobody took, and the check is met only when every row present is met."
+    }
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doneWhen", "surface", "viewport", "screenshot", "verdict", "note"],
+      "properties": {
+        "doneWhen": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One of the order's own done-when rows, verbatim. The sentence the model judged."
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A surface id the order names, as the surface file registers it."
+        },
+        "viewport": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A viewport name from the surface file's viewports list."
+        },
+        "screenshot": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The image the judgement was made from, an absolute path under implementation/observed-<order id>/. build-record refuses a row whose image is not on disk."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet"],
+          "description": "Whether the page showed what the sentence says. The two words every check in this stage uses for a look that was taken."
+        },
+        "note": {
+          "type": "string",
+          "description": "What the model saw, in one or two sentences, so a person reading the completion question knows what was judged without opening the image."
+        }
+      }
+    }
+  }
+}

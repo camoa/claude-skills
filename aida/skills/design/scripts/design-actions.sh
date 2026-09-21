@@ -28,12 +28,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --title <text> [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
 #   design-actions.sh update     <task_folder> \
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
 #   design-actions.sh add-done-when  <task_folder> \
@@ -227,13 +227,13 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
        design-actions.sh update         <task_folder> --id <woId> [--title <text>] \
                                          [--criteria-served <id[,id...]>] \
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--proof <tests|gate|record>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
@@ -386,9 +386,10 @@ open_summary_of() {
         ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
         ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
         ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
-        ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is proved by its record and declares a test"),
+        ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a model looking through a browser" else "its record" end) + " and declares a test"),
         ((.coverage.recordOrdersOwningOutsideTaskFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " outside the task folder"),
-        ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is proved by its record and has no done-when row"),
+        ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a model looking through a browser" else "its record" end) + " and has no done-when row"),
+        ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
@@ -561,14 +562,16 @@ next_wo_id() {
 # grow them one entry at a time.
 # ------------------------------------------------------------------------------------------------
 
-# --proof takes one of three words. A unit whose deliverable is exported configuration is proved by
+# --proof takes one of four words. A unit whose deliverable is exported configuration is proved by
 # the recipe's `## Configuration gate` lines and declares no test (live-run row 65). A unit whose
 # deliverable is a document in the task folder is proved by its done-when rows and lands no commit
-# in the code repository (nyc defect 17); add-owned-file below marks it `record` on its own.
+# in the code repository (nyc defect 17); add-owned-file below marks it `record` on its own. A unit
+# whose deliverable is what a page shows is proved by a model's look through a browser at each of
+# its surfaces, judged against its done-when rows after the build (live-run row 104): `observe`.
 proof_word_ok() {
   case "$2" in
-    tests|gate|record) ;;
-    *) die3 "$1: --proof takes tests, gate or record, got: $2" ;;
+    tests|gate|record|observe) ;;
+    *) die3 "$1: --proof takes tests, gate, record or observe, got: $2" ;;
   esac
 }
 

@@ -23,11 +23,10 @@ The call prints three things: the brief's own path, the path the findings go to 
 
 ## Dispatch the architecture reviewer
 
-**Dispatch `architecture-reviewer`.** Name the role, per SKILL.md. Set the model to opus on the
-Agent call: a critic runs at the top model whatever it judges. Give it the brief's **path**, and tell
-it to read that file first. Give it the findings path as well. **The prompt carries no brief
-content.** The role opens every body itself, and pasting one here spends this conversation's context
-on what the file already holds.
+**Dispatch `architecture-reviewer`**, on opus, with the message SKILL.md names: the role, the run
+mode, the brief's path, and the findings path. A critic runs at the top model whatever it judges.
+**The prompt carries no brief content.** The role opens every body itself, and pasting one here
+spends this conversation's context on what the file already holds.
 
 **One dispatch carries all eight lenses.** Eight dispatches would read the same diff at eight times
 the cost, and a finding does not change because a different context raised it. The lens words are

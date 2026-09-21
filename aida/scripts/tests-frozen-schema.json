@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA implementation tests-frozen record",
-  "description": "What `tests-freeze` verified and froze for one unit, at <task folder>/implementation/tests-<unit_id>.json (ideal/implementation.md, 'The split between the script and the model'). The model that writes a test chooses the level, writes the file, and runs it; this record is the script's own half, verifying what came back rather than writing or judging a test itself. One record per unit. Taken once per commit: a second `tests-freeze` run for this unit at the same commit and the same inputs leaves this file untouched, and a run at a different commit refuses rather than overwrite it, naming both commits. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What `tests-freeze` verified and froze for one unit, at <task folder>/implementation/tests-<unit_id>.json (ideal/implementation.md, 'The split between the script and the model'). The model that writes a test chooses the level, writes the file, and runs it; this record is the script's own half, verifying what came back rather than writing or judging a test itself. One record per unit. Taken once per commit: a second `tests-freeze` run for this unit at the same commit and the same inputs leaves this file untouched, and a run at a different commit refuses rather than overwrite it, naming both commits; a run at the same commit with different inputs, while the unit is still at `tests-frozen`, replaces it and records the earlier commit under `retakenFrom`. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "takenAt", "unit", "commit", "testGlobs", "rows"],
@@ -47,9 +47,32 @@
     },
     "proof": {
       "type": "string",
-      "enum": ["tests", "gate", "record"],
+      "enum": ["tests", "gate", "record", "observe"],
       "default": "tests",
-      "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). `record` says the same for a unit whose deliverable is a document in the task folder: no test, `rows` empty unless a person-verified criterion adds a checklist, and the one row it owes, the done-when judgement from `--row <unit_id>=...`, sits on the ledger's order entry (nyc defect 17). Absent on a record written before this field existed, which reads as tests."
+      "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). `record` says the same for a unit whose deliverable is a document in the task folder: no test, `rows` empty unless a person-verified criterion adds a checklist, and the one row it owes, the done-when judgement from `--row <unit_id>=...`, sits on the ledger's order entry (nyc defect 17). `observe` says the unit froze no test and no row: a model judges its done-when rows against its surfaces after the build, and `rows` holds only the checklist rows of its person-verified criteria (live-run row 104). Absent on a record written before this field existed, which reads as tests."
+    },
+    "retakenFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "takenAt"],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "The `commit` field of the record this one replaced."
+        },
+        "takenAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The `takenAt` field of the record this one replaced."
+        }
+      },
+      "description": "Present only when this record replaced an earlier one for the same unit: the order was still at `tests-frozen`, HEAD was the earlier freeze commit, and the rows differed. That is the route for a frozen test whose oracle was wrong: the test author corrects the assertion, the row-checker reads the row again, and `tests-freeze` runs again, printing `retaken: <earlier commit> -> <this commit>` (live-run row 109). The freeze commits only the corrected test paths, so `commit` here and the record's own `commit` differ when the file changed and are the same commit when only a row changed. A rerun with the same rows after a retake leaves the record untouched, this field included. Absent on a record taken once."
+    },
+    "testRecipePath": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "description": "The test-execution recipe each red was read against, keyed by framework name, absolute (live-run row 99). Present only when the freeze read a `--red`. It is the path `implementation/preconditions.json` held at `frameworks[].recipePath` when the freeze ran. A `--test-recipe` naming a different path is refused before this file is written (exit 91), and a freeze given none reads the record's path itself. A reader comparing this with the record now can tell a freeze that ran before a `recipe-refresh` from one that ran after it."
     }
   },
   "$defs": {

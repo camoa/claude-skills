@@ -19,7 +19,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   completion-actions.sh read       <task_folder>
 #   completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
 #   completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
-#                                                  [--captures-offered <n>] [-- <summary...>]
+#                                                  [--captures-offered <n>]
+#                                                  [--observed-accepted <criterion>=yes|no]... [-- <summary...>]
 #   completion-actions.sh step       <name>
 #
 # Every action prints a summary of `key: value` lines and paths, and nothing else: no record body,
@@ -41,13 +42,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      which is the shared helper's own number. Or the task is already complete, or has an open
 #      child. Or a high severity follow up finding has no task and no --leave. Or the review did
 #      not pass and no --reason was given: unattended, that is the halt, naming the verdict read.
+#      Or, interactive, a criterion a model observed through a browser has no --observed-accepted
+#      answer, or was answered no with no --reason (live-run row 104).
 #   3  the script could not do its job: a missing or unrecognized argument, jq not on PATH, the
 #      plugin root or a library that could not be resolved, a project folder that could not be
 #      resolved, a record that is present but unreadable, a record that does not match
 #      scripts/completed-schema.json, or a file that could not be written. A task name collision
 #      comes back from task-actions.sh at 3 too, and its own line is relayed as printed.
-#  70  --reason or --leave was passed on a run with nobody present. The number tests-freeze and
-#      review already give a person's answer arriving on an autonomous run.
+#  70  --reason, --leave or --observed-accepted was passed on a run with nobody present. The number
+#      tests-freeze and review already give a person's answer arriving on an autonomous run.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Depends on, shipped by other builders of this same project and never edited here:
@@ -120,7 +123,8 @@ usage() {
 usage: completion-actions.sh read       <task_folder>
        completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
        completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
-                                                      [--captures-offered <n>] [-- <summary...>]
+                                                      [--captures-offered <n>]
+                                                      [--observed-accepted <criterion>=yes|no]... [-- <summary...>]
        completion-actions.sh step       <name>
 EOF
 }
@@ -130,7 +134,7 @@ EOF
 # ------------------------------------------------------------------------------------------------
 
 TASK_PATH=""; TASKS_DIR=""; PROJECT_DIR=""; COMPLETION_DIR=""
-RECORD_FILE=""; BODY_FILE=""; ALIGNMENT_FILE=""; FINISHED_FILE=""; REVIEW_FILE=""
+RECORD_FILE=""; BODY_FILE=""; ALIGNMENT_FILE=""; FINISHED_FILE=""; REVIEW_FILE=""; SNAPSHOT_FILE=""
 
 # $1 the action's own name, $2 the task folder as given. Sets every path above.
 cp_paths() {
@@ -146,6 +150,7 @@ cp_paths() {
   BODY_FILE="$COMPLETION_DIR/pr-body.md"
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
   FINISHED_FILE="$TASK_PATH/implementation/finished.json"
+  SNAPSHOT_FILE="$TASK_PATH/implementation/snapshot.json"
   REVIEW_FILE="$TASK_PATH/review/review.json"
 }
 
@@ -158,7 +163,7 @@ cp_paths() {
 CP_TASK_DOC=""; CP_TASK_ID=""; CP_STATE=""; CP_RUN_MODE="interactive"
 CP_ALIGNMENT_STATE=""; CP_FINISHED_STATE=""; CP_REVIEW_STATE=""; CP_RECORD_STATE=""
 CP_ALIGNMENT_DOC="null"; CP_FINISHED_DOC="null"; CP_REVIEW_DOC="null"
-CP_REVIEW_VERDICT="none"; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"
+CP_REVIEW_VERDICT="none"; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
 
 # Reads one record as JSON text into the named variable, or dies when it is present and
 # unreadable. Missing is a real state every action reports in words, never a refusal. $1 the
@@ -220,6 +225,34 @@ CP_FINDINGS
   rm -f "$rows_out"
 }
 
+# Every criterion owned by a frozen order whose proof is observe, with the observed record the
+# build read for that order: the rows a model judged at each surface and viewport, each with its
+# screenshot (live-run row 104). The frozen snapshot names the orders; a task with none, or with
+# no snapshot, lists nothing. A record that is not there is a state the body says in words.
+# Sets CP_OBSERVED to [{criterion, order, record, rows: [{doneWhen, surface, viewport,
+# screenshot, verdict, note}]}]. $1 the action.
+cp_load_observed() {
+  local who="$1" rows_out one cid wo observed_file observed_state observed_doc tab
+  CP_OBSERVED="[]"
+  [ "$(json_file_state "$SNAPSHOT_FILE")" = "ok" ] || return 0
+  rows_out="$(mktemp)" || die 3 "$who: could not create a temporary file"
+  tab="$(printf '\t')"
+  cid=""; wo=""; observed_file=""; observed_state=""; observed_doc=""
+  while IFS= read -r one; do
+    [ -n "$one" ] || continue
+    cid="${one%%"$tab"*}"; wo="${one#*"$tab"}"
+    observed_file="$TASK_PATH/implementation/observed-$wo.json"
+    observed_state="$(json_file_state "$observed_file")"
+    observed_doc="$(cp_record_doc "$who" "$observed_file" "observed record")"
+    jq -nc --arg cid "$cid" --arg wo "$wo" --arg state "$observed_state" --argjson doc "$observed_doc" \
+      '{criterion: $cid, order: $wo, record: $state, rows: (($doc // {}).rows // [])}' >>"$rows_out"
+  done <<CP_OBSERVE
+$(jq -r '(.workOrders // [])[] | select((.proof // "tests") == "observe") | .id as $wo | (.criteriaOwned // [])[] | . + "\t" + $wo' "$SNAPSHOT_FILE")
+CP_OBSERVE
+  CP_OBSERVED="$(jq -s '.' "$rows_out")" || { rm -f "$rows_out"; die 3 "$who: could not assemble the observed rows"; }
+  rm -f "$rows_out"
+}
+
 # Reads everything every action reads. $1 the action.
 cp_load() {
   local who="$1"
@@ -244,6 +277,7 @@ cp_load() {
   esac
   cp_load_children "$who"
   cp_load_follow_ups "$who"
+  cp_load_observed "$who"
 }
 
 # What an action prints. A summary, never a body: one `key: value` line at a time. Nothing from
@@ -254,7 +288,7 @@ cp_print_summary() {
   jq -nr --arg who "$who" --arg task "$CP_TASK_ID" --arg state "$CP_STATE" --arg runMode "$CP_RUN_MODE" \
     --arg contract "$CP_ALIGNMENT_STATE" --arg build "$CP_FINISHED_STATE" --arg review "$CP_REVIEW_STATE" \
     --arg verdict "$CP_REVIEW_VERDICT" --arg record "$CP_RECORD_STATE" \
-    --argjson children "$CP_CHILDREN" --argjson followUps "$CP_FOLLOW_UPS" --argjson extra "$extra" '
+    --argjson children "$CP_CHILDREN" --argjson followUps "$CP_FOLLOW_UPS" --argjson observed "$CP_OBSERVED" --argjson extra "$extra" '
     def line($k; $v): "\($k): \($v)";
     [ line("action"; $who),
       line("task"; $task),
@@ -268,6 +302,8 @@ cp_print_summary() {
                         else "\([ $children[] | select(.state != "complete") ] | length) open of \($children | length)" end)) ]
     + [ $followUps[] | line("followUp(\(.finding))"; "\(.severity) task=\(.task // "none")\(if (.reason // "") == "" then "" else " left=\(.reason)" end)") ]
     + [ line("followUps"; "\($followUps | length) with-task=\([ $followUps[] | select(.task != null) ] | length) without=\([ $followUps[] | select(.task == null) ] | length)") ]
+    + [ $observed[] | line("observed(\(.criterion))"; "order=\(.order) record=\(.record) rows=\(.rows | length) met=\([ .rows[] | select(.verdict == "met") ] | length)") ]
+    + [ $observed[] | .criterion as $c | .rows[] | line("observedRow(\($c))"; "\(.verdict) \(.surface)@\(.viewport) \(.screenshot) :: \(.doneWhen)") ]
     + [ line("completionRecord"; $record) ]
     + [ $extra | to_entries[] | line(.key; .value) ]
     | .[]'
@@ -402,15 +438,28 @@ CP_WANTED
 # script's `audit` printed, empty when there is no review record.
 cp_render_body() {
   jq -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
-    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" '
+    --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" \
+    --argjson observed "$CP_OBSERVED" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
+    # A criterion a model observed through a browser says so beside its verdict, with the
+    # screenshots and whether a person accepted the look (live-run row 104).
+    def observed_note($id):
+      ([ $observed[] | select(.criterion == $id) ][0]) as $o
+      | if $o == null then ""
+        elif $o.record != "ok" then "; judged by a model from a screenshot, and no observed record is on disk"
+        else "; judged by a model from a screenshot: " + ([ $o.rows[].screenshot ] | unique | join(", "))
+          + (([ $record.observedAccepted[] | select(.criterion == $id) ][0]) as $a
+             | if $a == null then "; not accepted by a person"
+               elif $a.accepted then "; accepted by the person"
+               else "; rejected by the person" end)
+        end;
     ["# " + $task, ""]
     + section("Goal";
         if $alignment == null then ["no contract; see task.md"] else [$alignment.goal // ""] end)
     + section("Success criteria";
         if $alignment == null then ["no contract"]
-        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + ")" ]; "none") end)
+        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + observed_note(.id) + ")" ]; "none") end)
     + section("Non-goals";
         if $alignment == null then ["no contract"]
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)
@@ -480,8 +529,19 @@ CP_SCHEMA_RESULT2
 
 do_close() {
   local task_arg="" reason="" leaves="" captures_offered="" captures_skipped="" fid value
+  local observed_answers="" observed_skipped="" cid
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --observed-accepted)
+        # A person's answer to one criterion a model observed through a browser (live-run row 104).
+        [ "$#" -ge 2 ] || die 3 "close: --observed-accepted needs <criterion>=yes|no"
+        case "$2" in *=*) ;; *) die 3 "close: --observed-accepted takes <criterion>=yes|no, got: $2" ;; esac
+        cid="${2%%=*}"; value="${2#*=}"
+        [ -n "$cid" ] || die 3 "close: --observed-accepted was given no criterion id: $2"
+        case "$value" in yes|no) ;; *) die 3 "close: --observed-accepted takes yes or no, not: $value" ;; esac
+        observed_answers="$observed_answers$(printf '%s\t%s' "$cid" "$value")
+"
+        shift 2 ;;
       --captures-offered)
         # How many notes the skill offered as plays; the play itself is written by playbook-actions.sh.
         [ "$#" -ge 2 ] || die 3 "close: --captures-offered needs a count"
@@ -516,8 +576,11 @@ do_close() {
   [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review"
   [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task"
   [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays"
+  [ -z "$observed_answers" ] || cp_require_person "close" "--observed-accepted" "a person accepted or rejected what a model observed"
   # Unattended, nothing is offered and the record says why; a person names a play, a script never does.
   [ "$CP_RUN_MODE" != "autonomous" ] || captures_skipped="autonomous"
+  # Unattended, nothing a model observed is put to anyone, and the record says so the same way.
+  [ "$CP_RUN_MODE" != "autonomous" ] || observed_skipped="autonomous"
 
   # A parent refuses to close while a child is open, and the person closes the parent.
   local open_children
@@ -533,6 +596,36 @@ do_close() {
       autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason." ;;
       *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it." ;;
     esac
+  fi
+
+  # Interactive, every criterion a model observed is put to the person, one --observed-accepted
+  # per criterion whose observed record is there. An answer for a criterion nobody observed is a
+  # caller answering a question nobody asked. A no is a reason the close asks for, the way a
+  # verdict that did not pass is: the person is closing on a look they did not accept.
+  local observed_rows unanswered_observed unknown_observed rejected_observed
+  observed_rows="$(jq -cn --argjson o "$CP_OBSERVED" --rawfile given /dev/stdin '
+    ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: .[1]} ] | from_entries) as $answer
+    | [ $o[] | select(.record == "ok") | {criterion: .criterion, answer: ($answer[.criterion] // "")} ]' <<CP_OBSERVED_ANSWERS
+$observed_answers
+CP_OBSERVED_ANSWERS
+)"
+  unknown_observed="$(jq -rn --argjson o "$CP_OBSERVED" --rawfile given /dev/stdin '
+    ([ $o[] | select(.record == "ok") | .criterion ]) as $asked
+    | [ ($given | split("\n"))[] | select(length > 0) | split("\t")[0] | select(. as $c | ($asked | index($c)) == null) ]
+    | unique | join(", ")' <<CP_OBSERVED_ANSWERS2
+$observed_answers
+CP_OBSERVED_ANSWERS2
+)"
+  [ -z "$unknown_observed" ] \
+    || die 3 "close: --observed-accepted named $unknown_observed, and no criterion with that id was observed by a model with a record on disk. The observed criteria are: $(printf '%s' "$CP_OBSERVED" | jq -r '[ .[] | select(.record == "ok") | .criterion ] | join(", ")')"
+  if [ "$CP_RUN_MODE" != "autonomous" ]; then
+    unanswered_observed="$(printf '%s' "$observed_rows" | jq -r '[ .[] | select(.answer == "") | .criterion ] | join(", ")')"
+    [ -z "$unanswered_observed" ] \
+      || die 1 "close: a model observed $unanswered_observed through a browser, and nobody has said whether they accept the observation. Read the observedRow lines, ask the person per criterion, and pass --observed-accepted <criterion>=yes|no for each."
+    rejected_observed="$(printf '%s' "$observed_rows" | jq -r '[ .[] | select(.answer == "no") | .criterion ] | join(", ")')"
+    if [ -n "$rejected_observed" ] && [ -z "$reason" ]; then
+      die 1 "close: the person did not accept what a model observed for $rejected_observed, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes with an observation rejected; the record keeps it."
+    fi
   fi
 
   # Every --leave names a follow up finding that has no task. A high severity finding with no
@@ -568,10 +661,13 @@ CP_LEAVES2
   esac
   record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \
     --arg closedBy "$closed_by" --arg reason "$reason" --argjson rows "$rows" \
-    --argjson offered "${captures_offered:-0}" --arg skipped "$captures_skipped" '
+    --argjson offered "${captures_offered:-0}" --arg skipped "$captures_skipped" \
+    --argjson observed "$observed_rows" --arg observedSkipped "$observed_skipped" '
     {schemaVersion: 1, takenAt: $today, task: $task, reviewVerdict: $verdict, closedBy: $closedBy, reason: $reason,
      followUps: [ $rows[] | {finding: .finding, task: .task, reason: .reason} ],
-     capturesOffered: $offered, capturesSkipped: $skipped}')"
+     capturesOffered: $offered, capturesSkipped: $skipped,
+     observedAccepted: [ $observed[] | select(.answer != "") | {criterion: .criterion, accepted: (.answer == "yes")} ],
+     observedSkipped: $observedSkipped}')"
   [ -n "$record" ] || die 3 "close: could not assemble the record for $CP_TASK_ID."
 
   local body audit_lines

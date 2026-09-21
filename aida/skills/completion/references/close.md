@@ -39,6 +39,24 @@ review, in one sentence, and pass it as `--reason`. Say the verdict you read, in
 review that failed, one that ran and did not close, or none at all. Autonomous: do not run
 `close`. Say the verdict and that a person closes this task with a reason, and stop.
 
+## Put each observed criterion to the person
+
+`read` printed one `observed(<criterion>)` line per criterion a model judged through a browser.
+It printed one `observedRow(<criterion>)` line per row. Each row carries the verdict, the surface
+and viewport, the screenshot path, and the done-when sentence the model judged. A model looked,
+not a person, so the person decides whether that look stands.
+
+Interactive: ask one plain question per criterion whose record is on disk. Name the criterion,
+show its rows verbatim from the output, and name the screenshots so the person can open them.
+Ask whether they accept the observation. Their answer becomes one flag on `close`:
+`--observed-accepted <criterion>=yes|no`. Every such criterion needs an answer; the close
+refuses at exit 1 naming the ones without. A no needs a reason, the way a verdict that did not
+pass does. Ask why the task closes with an observation rejected, in one sentence, and pass it as
+`--reason`.
+
+Autonomous: ask nothing and pass no answer. The record says the observations were not accepted
+by a person, and the pull request body says so beside each such criterion.
+
 ## Take the summary
 
 Ask for a short summary of what was done, in one or two lines. Skip the question when the
@@ -70,10 +88,12 @@ no, and pass the count to `close` as `--captures-offered <n>`.
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh close "<task_folder>" \
-  [--reason "<sentence>"] [--leave <finding id>=<reason>]... [--captures-offered <n>] [-- <summary...>]
+  [--reason "<sentence>"] [--leave <finding id>=<reason>]... [--captures-offered <n>] \
+  [--observed-accepted <criterion>=yes|no]... [-- <summary...>]
 ```
-It refuses at exit 1 in three cases. A child is open. A high severity follow up has no task and
-no `--leave`. The review did not pass and no `--reason` was given. Otherwise it writes the
+It refuses at exit 1 in four cases. A child is open. A high severity follow up has no task and
+no `--leave`. The review did not pass and no `--reason` was given. Interactive, an observed
+criterion has no answer, or was answered no with no `--reason`. Otherwise it writes the
 pull request body to `<task_folder>/completion/pr-body.md`. It writes the record to
 `<task_folder>/completion/completed.json`. Then it calls `task complete` last. That call commits
 the record and the body with the state.
@@ -85,7 +105,8 @@ run `close` again with the same arguments; that is the repair.
 
 Give the person the body path and the record path from the summary. Say the verdict the record
 holds and who closed it. Name each follow up task created and each finding left, with its reason.
-Name each play captured by its id, or say "no play captured".
+Name each play captured by its id, or say "no play captured". Name each observed criterion
+with the person's answer, or say nobody was asked.
 Say the person opens the pull request from the body file by hand, changing nothing in it first.
 End by naming `/aida:next`. When the script says every child of the parent is complete, say the
 parent closes next.

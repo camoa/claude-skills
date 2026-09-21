@@ -722,18 +722,27 @@ RW_CHANGED
 }
 
 # Check 4's script half: every criterion is covered by a frozen test naming it or by a checklist a
-# person reads. A criterion covered by neither was signed off on nothing.
+# person reads. A criterion covered by neither was signed off on nothing. A criterion owned by
+# an order whose proof is observe is covered by the observed record the build read, when it
+# holds a row: a model judged the order's done-when rows at each surface and viewport, and no
+# test names such a criterion (live-run row 104).
 rw_check_coverage_verdict() {
-  local criteria count i cid covered uncovered=""
+  local criteria count i cid covered uncovered="" observed_owner
   criteria="$(rw_alignment | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
-  i=0; cid=""; covered=""
+  i=0; cid=""; covered=""; observed_owner=""
   while [ "$i" -lt "$count" ]; do
     cid="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].id')"
     covered="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" '
       [ $rows[] | select(.criterion == $id)
         | select(((.kind == "machine") and (((.tests // []) | length) > 0))
                  or ((.kind == "person") and ((.checklist // "") != ""))) ] | length > 0')"
+    if [ "$covered" != "true" ]; then
+      observed_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" \
+        '[ (.workOrders // [])[] | select((.proof // "tests") == "observe") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
+      [ -n "$observed_owner" ] \
+        && covered="$(jq -r '((.rows // []) | length) > 0' "$IMPL_DIR/observed-$observed_owner.json" 2>/dev/null)"
+    fi
     [ "$covered" = "true" ] || uncovered="$uncovered$cid, "
     i=$((i + 1))
   done
@@ -744,7 +753,7 @@ rw_check_coverage_verdict() {
   if [ -n "$uncovered" ]; then
     printf 'unmet\tthese criteria are covered by no frozen test and no checklist row, so each was signed off on nothing: %s' "${uncovered%, }"
   else
-    printf 'met\tevery one of the %s criteria carries a frozen test naming it or a checklist row a person reads.' "$count"
+    printf 'met\tevery one of the %s criteria carries a frozen test naming it, a checklist row a person reads, or an observed record a model judged.' "$count"
   fi
 }
 
@@ -2063,6 +2072,7 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
+  local observe_owner observed_file
   alignment="$(rw_alignment)"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
@@ -2070,11 +2080,17 @@ do_close() {
   rw_load_test_rows "close"
 
   rows_out="$(mktemp)" || die 3 "close: could not create a temporary file"
-  i=0; cid=""; kind=""; state=""; verdict=""; answered=""; hit="false"
+  i=0; cid=""; kind=""; state=""; verdict=""; answered=""; hit="false"; observe_owner=""; observed_file=""
   while [ "$i" -lt "$count" ]; do
     cid="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].id')"
     kind="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].verifiedBy')"
     verdict=""; answered="nobody"
+    # A criterion owned by an order whose proof is observe has no test to join on: a model
+    # judged the order's done-when rows at each surface and viewport, and the observed record
+    # the build read holds those rows (live-run row 104). Met when every row is met, unmet when
+    # one is not, unanswered when the record is not there to read.
+    observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" \
+      '[ (.workOrders // [])[] | select((.proof // "tests") == "observe") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
     if [ "$kind" = "person" ]; then
       verdict="$(cr_lookup "$rows" "$cid")"
       if [ -n "$verdict" ]; then
@@ -2082,6 +2098,12 @@ do_close() {
       else
         verdict="unanswered"
       fi
+    elif [ -n "$observe_owner" ]; then
+      answered="script"
+      observed_file="$IMPL_DIR/observed-$observe_owner.json"
+      verdict="$(jq -r 'if ((.rows // []) | length) == 0 then "unanswered"
+                        elif all(.rows[]; .verdict == "met") then "met" else "unmet" end' "$observed_file" 2>/dev/null)"
+      [ -n "$verdict" ] || verdict="unanswered"
     else
       answered="script"
       state="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" \

@@ -45,7 +45,7 @@ on record the way every other design write is.
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
 | diff budget | How much change the order should take, in plain words |
-| proof | `tests`, the default, `gate` for a configuration order, or `record` for a document in the task folder |
+| proof | `tests`, the default. `gate` for a configuration order. `record` for a document in the task folder. `observe` for what a page shows |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
 several orders. A shared thing, such as one base class serving two criteria, is built once
@@ -155,6 +155,15 @@ folder, unless you set a proof by hand. Its proof is its done-when rows. The che
 judgement in place of the tests, and the reviewer reads the document whole against them. It
 lands no commit in the code repository. Its commits are the project folder's.
 
+An order whose deliverable is what a page shows, a layout or a rendered block at each viewport,
+writes no test either. It carries `proof: observe`, names at least one surface, and has at least
+one done-when row. Each done-when row is the sentence a model judges. After the build, AIDA opens
+each surface at each viewport in a browser and judges each row against what renders. It keeps a
+screenshot per surface and viewport as the evidence. The build reads that record as the order's
+own check. The judge on the record is a model, never a person, and completion puts each such
+criterion to you to accept. The design check refuses an `observe` order that declares a test,
+names no surface, or has no done-when row.
+
 An order that changes a page or a screen names it from the project's surface file,
 `.visual-review/surfaces.json`. When no
 visual or browser test covers that kind of surface, design offers the setup once per task,
@@ -188,8 +197,9 @@ The check stops first on a work order file with a missing or malformed field, be
 finding. You fix that file by hand or with an update, then check again. Past that, it finds a
 criterion no order serves or owns, or that two orders own, and an order serving no criterion. It
 finds an owner of a machine-verified criterion with no test, unless its proof is the gate or the
-record. It finds a gate order declaring a test. It finds a record order declaring a test, owning a
-file outside the task folder, or missing a done-when row. It finds an order no owner reaches and a dependency cycle. It finds
+record or the observation. It finds a gate order declaring a test. It finds a record order declaring a test, owning a
+file outside the task folder, or missing a done-when row. It finds an observe order declaring a
+test, naming no surface, or missing a done-when row. It finds an order no owner reaches and a dependency cycle. It finds
 two orders declaring one file, a wildcard in an owned file, and an id that resolves to nothing.
 
 A clean check says design is finished, subject to your confirmation above. An open item names
@@ -213,7 +223,9 @@ Of every order, it asks whether the order owns every file its operation rewrites
 owned list against the couplings your framework's design recipe names, such as a service and
 its definition file.
 
-Each reader writes one findings file, `records/design-critique-<lens>.md`. A finding is blocking
+Each reader is dispatched with the run mode, the task folder, its lens and the recipe's path,
+one per line, and nothing else. Each reader writes one findings file,
+`records/design-critique-<lens>.md`. A finding is blocking
 when implementation would build the wrong thing or could not start, and a concern otherwise.
 They never repeat what the check counted, and a clean report names what it compared. A lens whose
 file never arrives is dispatched once more. If it fails again, the close leaves it out and says so.

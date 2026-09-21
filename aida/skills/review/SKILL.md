@@ -93,6 +93,14 @@ the paths its brief names. A body pasted here costs the review the context its o
 every tool and this session's own model. Review opens no dispatch record, so the role's own
 frontmatter is the only thing bounding its tools, and an unnamed dispatch loses that bound too.
 
+**The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
+call, and set the model where the step says. The message itself is one line per item: the run
+mode, `interactive` or `autonomous`, then each path the step hands over. Nothing else goes in.
+The role's rules and its return shape live in its agent definition, which reaches it on every
+dispatch. The data it needs lives in the brief the paths name. So the message restates neither,
+and two runs of one step hand the role the same words. The step file names this shape and lists
+its own paths.
+
 **A recipe lookup answers four ways, and review passes the one that happened.** One answer is a path
 on disk. The other three are no recipe for this framework, a listing that could not be reached, and
 a failed fetch. Only the first of those three says anything about the framework, so pass the one that

@@ -20,8 +20,14 @@ mutation run, and their results are in your brief. Read those results rather tha
 
 ## What you are given
 
-**Your dispatch names two paths: the brief file and your findings file. Read the brief first.** It
-carries no content in the prompt, so nothing is given to you until you open it.
+One per line in the dispatch, and nothing else:
+
+- the run mode, `interactive` or `autonomous`
+- the brief file
+- your findings file
+
+**Read the brief first.** The dispatch carries no content, so nothing is given to you until you
+open it.
 
 The brief holds the criteria and the non-goals from the frozen contract. Every work order. The path
 to the diff file. The research records, and the paths they cite. The results of checks 4 to 8,

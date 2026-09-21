@@ -73,6 +73,9 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 | An `order(...)` line whose halt holds none of those three segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
 
+A recipe the catalog republished after `preconditions` ran is not a step the table derives. Run
+`recipe-refresh` before the next freeze, as `references/preconditions.md` says.
+
 An order in flight comes before a new one, and a halted order is named only when nothing else can
 move. The one exception is the order the design removed: it comes before a new order, for the
 reason its row gives. A resumed run starts at `start` regardless, because that is where drift since the snapshot is
@@ -87,7 +90,9 @@ order and apply the table. Stop only when nothing is ready.
 
 Then report what halted, with the reason the ledger holds, and what is waiting on it. Interactive
 puts that to the person, who decides from the recorded attempts which of three things is true: the
-test is wrong, the order is wrong, or the code is hard and a person writes it. Unattended, the run
+test is wrong, the order is wrong, or the code is hard and a person writes it. The route for a
+wrong test is under the builder's stop in `references/build.md`, and it says how long the freeze
+can still be retaken. Unattended, the run
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
 
@@ -140,6 +145,15 @@ every tool and this session's own model, and the dispatch record just opened the
 the hook compares the agent's own type against the role in the record, so an unnamed dispatch is an
 unenforced one.
 
+**The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
+call, and set the model where the step says. The message itself is one line per item: the run
+mode, `interactive` or `autonomous`, then each path the step hands over. Where a step names one
+word beside the paths, such as a lens, that word is a line too. Nothing else goes in. The role's
+rules and its return shape live in its agent definition, which reaches it on every dispatch.
+The data it needs lives in the brief the paths name. So the message restates neither, and two
+runs of one step hand the role the same words. Each step below names this shape and lists its
+own paths.
+
 **A recipe lookup has three answers, not one.** No recipe for this framework, a listing that could
 not be reached, and a failed network are three different things, and only the first says anything
 about the framework. Pass the one that happened, in its own word.
@@ -170,14 +184,15 @@ do it, and both report through a message when they cannot find what they need ra
 silence. Neither has run inside a live dispatch yet, so say that plainly rather than reporting them
 as proven.
 
-The read denial covers Read and Grep, and not the shell. The test author runs its own tests, so it
-holds Bash, so a `cat` of a denied file is not refused. That is deliberate: the rule exists to stop
-the role opening the source because reading the code is the obvious way to write a test about it,
-and a role working around the rule on purpose has already failed in ways no hook catches. Say that
-when the person asks what the dispatch enforces, rather than describing the denial as complete.
+The read denial covers Read, Grep and the plain shell reads: `cat`, `head`, `tail`, `less`,
+`more`, `sed`, `awk`, `grep`, `rg` and `nl`. A path a shell assembles at run time passes. That
+is a limit, not a choice. The rule exists to stop the role opening the source because reading
+the code is the obvious way to write a test about it. A role working around the rule on purpose
+has already failed in ways no hook catches. Say that when the person asks what the dispatch
+enforces, rather than describing the denial as complete.
 
-`dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and the shell
-door above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
+`dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and its shell
+limit above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
 whether a path is frozen, never by this flag. Say the same about it that you say about the other
 two: recorded, not enforced. The implementer is the one exception. Its record carries its owned
 files under `ownedFiles`, and the frozen-test hook refuses it a write under the code path outside

@@ -22,7 +22,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Read|Grep",
+        "matcher": "Read|Grep|Bash",
         "hooks": [
           {
             "type": "command",

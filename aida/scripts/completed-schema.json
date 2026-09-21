@@ -13,7 +13,9 @@
     "reason",
     "followUps",
     "capturesOffered",
-    "capturesSkipped"
+    "capturesSkipped",
+    "observedAccepted",
+    "observedSkipped"
   ],
   "properties": {
     "schemaVersion": {
@@ -61,9 +63,36 @@
       "type": "string",
       "enum": ["", "autonomous"],
       "description": "Why no note was offered: `autonomous` when nobody was present to name a play, the empty string when the offer ran. A decision saved mid-stage is only a candidate; a person names the play."
+    },
+    "observedAccepted": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/observedAnswer" },
+      "description": "One row per criterion a model observed through a browser, owned by a frozen order whose proof is observe, with the person's answer from --observed-accepted: whether they accept the observation the build recorded (live-run row 104). A no is a reason the close asks for, the way a verdict that did not pass is. Empty when the task had no such criterion, or when nobody was present to answer."
+    },
+    "observedSkipped": {
+      "type": "string",
+      "enum": ["", "autonomous"],
+      "description": "Why no observation was put to a person: `autonomous` when nobody was present, the empty string when the question ran. A model's look is queued for a person the way every model row is, and this field says the queue was not read."
     }
   },
   "$defs": {
+    "observedAnswer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["criterion", "accepted"],
+      "properties": {
+        "criterion": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion's own id, as the contract carries it."
+        },
+        "accepted": {
+          "type": "boolean",
+          "description": "True when the person accepted what the model saw, false when they did not."
+        }
+      }
+    },
     "followUp": {
       "type": "object",
       "additionalProperties": false,

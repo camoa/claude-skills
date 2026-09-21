@@ -23,8 +23,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Such a token is what a comparison operator leaves once `>` is read as a redirect. Its refusal
 # names the token it read as a path. The known limits stay. A path from a variable, an
 # interpreter, an editor or a symlink passes. `cd lib && echo x > l.php` is judged as a write to
-# l.php at the code root. A `mkdir` of a new owned file's parent is refused because the parent is
-# not owned.
+# l.php at the code root. A `mkdir`, with or without `-p`, of a directory that an owned path lies
+# under is allowed (2026-09-20, live-run row 100). Design owns files, not directories, so a new
+# unit's first directory has no other route. Any other verb on an unowned directory still refuses.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -102,6 +103,10 @@ PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
 # shellcheck source=/dev/null
 source "$PATHS_LIB" 2>/dev/null \
   || not_enforced "the path library at $PATHS_LIB could not be read. Nothing was checked."
+COMMAND_LIB="${PLUGIN_ROOT}/scripts/lib/command-text.sh"
+# shellcheck source=/dev/null
+source "$COMMAND_LIB" 2>/dev/null \
+  || not_enforced "the command library at $COMMAND_LIB could not be read. Nothing was checked."
 
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
@@ -129,16 +134,6 @@ CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
   || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
 
 IMPL_DIR="$PROJECT_PATH/tasks/$TASK_ID/implementation"
-
-# Reads whitespace-separated words from $1 into array w. bash's read takes -a for an array
-# target; zsh's own read refuses -a ("bad option") and takes -A instead.
-read_words() {
-  if [ -n "${ZSH_VERSION:-}" ]; then
-    read -r -A w <<<"$1"
-  else
-    read -r -a w <<<"$1"
-  fi
-}
 
 # The payload's working directory in the same canonical form codePath is held in, so the two
 # compare as strings. A working directory that no longer exists still normalizes textually.
@@ -213,6 +208,9 @@ note_stray() {
   while IFS= read -r o; do
     [ -n "$o" ] || continue
     is_under "$cand" "$o" && return 0
+    # A mkdir of a directory an owned path lies under is a new unit's first directory. Design owns
+    # files, not directories, so the stop it would order has no repair (live-run row 100).
+    [ "$VIA" = mkdir ] && is_under "$o" "$cand" && return 0
   done <<STRAY_EOF
 $OWNED
 STRAY_EOF
@@ -287,32 +285,6 @@ stray_exit() {
   deny "$shown$1: not a file $UNIT owns. The implementer writes only inside the files its unit owns. Stop: name this file and why the unit needs it in your report, commit nothing, and return."
 }
 
-# Drops every heredoc body from command $1 before either rule reads it. The line holding `<<WORD`,
-# `<<-WORD`, `<<'WORD'` or `<<"WORD"` is kept, with its operator and word, so a redirect on it is
-# still read. The lines after it, up to and including the line that is exactly WORD, are dropped.
-# For `<<-` the shell strips leading tabs from the closing line, so the compare does too. A heredoc
-# body is never a write position. Read as commands, it is where PHP's `>=` and YAML's `>-` became
-# a refused write (live-run row 95). A heredoc with no closing line drops to the end. A herestring,
-# `<<<`, is not a heredoc and is left alone. bash 3.2 and zsh, no mapfile.
-strip_heredocs() {
-  local line word="" dash=false close q="'\"" tab=$'\t'
-  printf '%s\n' "$1" | while IFS= read -r line; do
-    if [ -n "$word" ]; then
-      close="$line"
-      [ "$dash" = true ] && close="${line#"${line%%[!"$tab"]*}"}"
-      [ "$close" = "$word" ] && word=""
-      continue
-    fi
-    printf '%s\n' "$line"
-    case "$line" in
-      *'<<<'*) ;;
-      *'<<'*)
-        word="$(printf '%s' "$line" | sed -n "s/.*<<-\{0,1\}[[:space:]]*[$q]\{0,1\}\([^[:space:]$q;|&)<]*\).*/\1/p")"
-        dash=false; case "$line" in *'<<-'*) dash=true ;; esac ;;
-    esac
-  done
-}
-
 case "$TOOL" in
   Write|Edit|MultiEdit|NotebookEdit)
     TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
@@ -338,6 +310,7 @@ case "$TOOL" in
     while IFS= read -r seg; do
       [ -n "$HIT" ] && break
       set -f; read_words "$(printf '%s' "$seg" | tr '`$"()' '     ' | tr -d "'")"; set +f
+      # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
       [ "${#w[@]}" -gt 0 ] || continue
       i=0
       while [ "$i" -lt "${#w[@]}" ]; do

@@ -4,6 +4,46 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.20] - 2026-09-21
+
+Live-run rows 99 to 109, the implement and design stages on beta.19.
+
+### Added
+- A third proof kind, `observe`: an order whose criterion is what a page shows names its
+  surfaces and one done-when row per criterion, freezes no test, and after the build the
+  orchestrator opens each surface at each viewport in a browser, judges each row, and writes
+  `implementation/observed-<order>.json` with a screenshot per row. `build-record --observed`
+  reads it as the order's own check, one row owed per done-when row, surface and viewport;
+  `close` writes `model` as the judge; review reads it as the criterion's verdict; completion
+  asks the person to accept each observed criterion and records the answers. (row 104)
+- `recipe-refresh <task_folder> --recipe <framework>=<path>`: a test-execution recipe the
+  catalog republished mid-task replaces the path `preconditions.json` records, with a history
+  entry. `tests-freeze` records the recipe each red was read against and refuses a
+  `--test-recipe` that is not the record's. A republished review recipe still needs a new
+  baseline, and no action takes one mid-task. (row 99)
+- The reviewer's findings file takes an `information` list beside `findings`, for what a person
+  needs that no criterion covers; `review-record` stores and prints it, and a dependent order's
+  briefs carry it. (row 103)
+
+### Changed
+- The read denial reaches the shell: `deny-prior-source.sh` refuses `cat`, `head`, `tail`,
+  `sed`, `awk`, `grep`, `rg` and their kin on a denied path, and a recursive search from a root
+  that holds one; heredoc bodies are dropped by both hooks through one shared library. The
+  implementer's definition names what it may not read, closed orders included. (row 101)
+- The write hook allows `mkdir` of a directory an owned path lies under. (row 100)
+- `build-brief` writes `interfacePath`, the implementer writes the interface record there, and
+  `build-record` reads it from the brief when `--interface` is not given. (row 102)
+- `tests-brief` carries `testRecipePath`, the test-execution recipe with the runner and the
+  markers, so the test author is handed it. (row 107)
+- `dispatch-open` for a row-checker refuses without `--test-glob`, so the checker can read the
+  tests it judges; the step passes the freeze's globs. (row 106)
+- The route for a frozen test whose oracle is wrong is named under the builder's stop: the
+  author corrects it, the row is checked again, `tests-freeze` runs again while no attempt is
+  recorded and prints `retaken:`. (row 109)
+- A dispatch is the role on the Agent call, and a message of the run mode and the paths; the
+  pieces each step used to list are gone, and each agent definition ends with what it is
+  given. (row 108)
+
 ## [6.0.0-beta.19] - 2026-09-20
 
 Live-run rows 95 to 98, the implement and design stages on beta.18.

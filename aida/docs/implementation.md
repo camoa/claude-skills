@@ -11,7 +11,9 @@ You type one command to begin, `/aida:implement <task-id>`, or say "start implem
 task". From then on the stage runs from the conversation. It tells you what it did, what each
 check answered, and where each record is. It asks a question only where a script cannot decide.
 Every question opens with one plain sentence that names the decision and what each answer causes.
-You may be returning to the terminal days later with none of the order in mind.
+You may be returning to the terminal days later with none of the order in mind. Every role this
+stage dispatches gets the same message: the role, the run mode, and what it reads, one per
+line. Its rules are in its own definition and its data in a brief on disk.
 
 ## What happens before anything is built
 
@@ -94,6 +96,15 @@ every attempt. The subtraction holds no parser. A finding whose text changed rea
 one fixed and reintroduced reads as old. The baseline belongs to the commit the build started
 from; a run at a different commit refuses rather than overwrites.
 
+**A recipe the catalog republishes mid-task reaches the record by one action.** The record pins
+each recipe's path, and every later step reads that path. A republished recipe changes nothing
+until `recipe-refresh` replaces the path for the frameworks named. It records what changed and
+re-runs nothing: the verdict stands, because a recipe's conditions change more rarely than its
+markers. Only the test-execution recipe is refreshed. The review recipe is pinned by the baseline
+for the task's life. A republished one has a new body, so the build refuses it, and no action
+takes a new baseline mid-task. The freeze then reads the record's path, or refuses a path that
+disagrees with it, and its record names the recipe it read.
+
 ## Writing the tests for one order
 
 An order is ready when every order it depends on has closed. For each ready order, a test author
@@ -107,7 +118,9 @@ What it does see is the order's criteria with their verification sentences, the 
 order names, and the declared interface of each order it depends on. It sees the interface of
 anything design recorded as reused, since a reused module belongs to no work order. It also sees
 the framework's recipe for writing tests: where a test file goes, which levels exist, and how a
-criterion id attaches to a test. A framework with no such recipe has no path through this step,
+criterion id attaches to a test. Its brief names the test-execution recipe too, which holds
+the run command and the failure markers. The author reads a red against that recipe and never a
+guessed runner. A framework with no such recipe has no path through this step,
 and AIDA says so rather than writing tests from habit.
 
 Each test carries the id of the criterion it proves at the end of its name. A script can then
@@ -147,7 +160,9 @@ question is whether those tests exercise the sentence beside them. The failure i
 test measuring something adjacent and easier than what was asked.
 
 The checker runs in both modes, on the top tier, and reads each named test against the
-test-authoring recipe and the sentence. A person shown test names cannot see what it sees. Asking
+test-authoring recipe and the sentence. Its dispatch carries the framework's test patterns.
+So the hook that keeps it off production source still lets it open the tests, which design
+lists among an order's owned files. A person shown test names cannot see what it sees. Asking
 about every row added a turn and no judgement the checker had not already given. A
 confirmed row is therefore the checker's in both modes. You are asked only about a row it
 rejected, one question per row. The question says in plain words that the checker doubts the new
@@ -170,8 +185,10 @@ a tree that already holds the tests.
 A freeze is not a lock. You are not a role, and you are not refused. If you edit a frozen test
 yourself, the hook lets the write through and tells you which file changed and which order froze
 it. Nothing re-records the hash, though, so the order's next attempt fails its frozen-tests
-check. A test that turns out wrong is not repaired in place; the way back is to restart the order,
-described under the halts below.
+check. An edit alone does not repair a wrong test, because the record must follow. While no
+attempt is recorded, the test author corrects it and the freeze runs again, described under the
+code below. Once an attempt is recorded, the way back is to restart the order, described under
+the halts below.
 
 The author often writes a base class or a fixture beside the tests, and the tests stand on it.
 The freeze takes each such file with the tests: hashed, committed in the same commit, and recorded
@@ -216,13 +233,28 @@ Those are the task record, the contract, the stage folders and the notes. The ch
 says how many. A file a person writes is never set aside, so a second document the order does
 not own still fails the check.
 
+## A page order
+
+A work order whose deliverable is what a page shows, a layout or a rendered block, has
+`observe` as its proof kind. No test author is dispatched and no row goes to the checker,
+because nothing can be judged before the page exists. The order freezes with no test and no
+row. After the implementer returns, AIDA opens each surface the order names, at each viewport
+the surface file declares, in a browser. It judges each done-when row against what renders and
+saves a screenshot per surface and viewport under the task folder. It writes an observed record
+with one row per sentence, surface and viewport, and the build reads that record as the order's
+own check. Every row met is met; one unmet row stops the attempt the way a failing test does.
+The judge on the record is a model. When the order closes, its criteria are recorded as judged
+by a model. The count of rows a model judged includes them. Completion puts each such criterion
+to you to accept.
+
 ## Writing the code
 
 An implementer, a mid-tier context, writes the code for one order until its frozen tests pass. It
 sees the implement recipe for its framework, which carries the coding rules, and a brief. The brief
 holds the order, its owned files, the frozen tests with the criterion each carries, and the
 interface of each order it depends on. Where a dependency has closed, that is the record its builder
-wrote about what it actually exposes, not the declaration alone. Before it edits anything, it writes
+wrote about what it actually exposes, not the declaration alone. The brief names the path the
+implementer writes its own interface record to, and the attempt is recorded from that path. Before it edits anything, it writes
 five answers into its report. They name the most surgical fix, what stays untouched, what it reuses,
 the lines it expects to add and delete, and the files and blocks it targets. The reviewer reads the
 diff against those answers.
@@ -236,10 +268,16 @@ working around a test that seems wrong or an interface that does not fit. Intera
 comes to you; autonomous, it halts the order and records what was left. It commits its own work
 before it returns. A dirty tree means that commit did not happen, and the attempt is not recorded.
 
+When you rule that the test is wrong, the test author corrects that assertion and the checker
+reads the row again. Then the freeze runs again and prints `retaken:` with both commits. That is
+allowed only while no attempt is recorded. The freeze commits the test paths alone, and the next
+attempt continues over the uncommitted build, so you keep that or clean it first.
+
 After each attempt, eight checks run. These are scripts, and no model reads anything here.
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
-   the configuration gate instead, and on a document order the done-when judgement.
+   the configuration gate instead, on a document order the done-when judgement, and on a page
+   order the observed record.
 2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
    recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
    stage runs that row once.
@@ -303,6 +341,11 @@ closes, with two answers. Close as recorded, and it stays in the order's review 
 as a task, and a follow up task is created with the finding as its goal; then the order closes.
 A finding that hits a non-goal is a finding like any other when
 you are present. On an autonomous run it halts the order, naming the non-goal.
+
+Some of what the reviewer saw is information rather than a finding. A base class built against a
+schema the site does not have is one example. That goes in its own list beside the findings. The
+record keeps it, AIDA prints it one line each, and the next order's author and builder see it in
+their briefs.
 
 ## Fixing what the review found
 
@@ -417,12 +460,13 @@ partway through a long build. That is how grants work, not a fault in the build.
 ## What is enforced, and what is only recorded
 
 The read denials and the frozen-test refusal are hooks the runtime applies. The read denial covers
-the Read and Grep tools and not the shell. The test author runs its own tests, so it holds a
-shell, and a `cat` of a denied file is not refused. The rule exists to stop a role opening the
-source because that is the obvious way to write a test about it. A role working around it on
-purpose has already failed in a way no hook catches. The implementer's owned files are enforced
-too: the write hook refuses it a write under the code path outside them. A heredoc body is never
-read as a write, and a refusal of a shell command names the token it read as the path. Three
-things are recorded and enforced by nothing: the paths every other role may write, the fixer's
-fix scope, and the builder's five answers. A write outside the fix scope surfaces when the
-reviewer reads the fix diff, not as it happens.
+the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` and their kin. A
+path a shell assembles at run time passes. The rule exists to stop a role opening the source
+because that is the obvious way to write a test about it. A role working around it on purpose
+has already failed in a way no hook catches. The implementer's owned files are enforced too: the
+write hook refuses it a write under the code path outside them. A `mkdir` of a directory an owned
+file lies under passes, because design owns files and a new unit's first directory needs it. A
+heredoc body is never read as a write, and a refusal of a shell command names the token it read
+as the path. Three things are recorded and enforced by nothing: the paths every other role may
+write, the fixer's fix scope, and the builder's five answers. A write outside the fix scope
+surfaces when the reviewer reads the fix diff, not as it happens.

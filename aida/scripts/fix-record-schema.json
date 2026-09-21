@@ -113,6 +113,7 @@
                 "order-tests",
                 "configuration-gate",
                 "done-when",
+                "observed",
                 "suite-regression",
                 "coding-standards",
                 "static-analysis",
@@ -120,7 +121,7 @@
                 "owned-files",
                 "frozen-tests"
               ],
-              "description": "Which of the seven checks this is, configuration-gate standing in for order-tests on an order whose proof is gate, and done-when on one whose proof is record. The same ids the build record uses for the same checks, because both steps call one function and neither may drift into checking something the other does not."
+              "description": "Which of the seven checks this is, configuration-gate standing in for order-tests on an order whose proof is gate, done-when on one whose proof is record, and observed on one whose proof is observe. The same ids the build record uses for the same checks, because both steps call one function and neither may drift into checking something the other does not."
             }
           }
         }
