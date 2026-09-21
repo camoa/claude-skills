@@ -426,12 +426,13 @@ partway through a long build. That is how grants work, not a fault in the build.
 ## What is enforced, and what is only recorded
 
 The read denials and the frozen-test refusal are hooks the runtime applies. The read denial covers
-the Read and Grep tools and not the shell. The test author runs its own tests, so it holds a
-shell, and a `cat` of a denied file is not refused. The rule exists to stop a role opening the
-source because that is the obvious way to write a test about it. A role working around it on
-purpose has already failed in a way no hook catches. The implementer's owned files are enforced
-too: the write hook refuses it a write under the code path outside them. A heredoc body is never
-read as a write, and a refusal of a shell command names the token it read as the path. Three
-things are recorded and enforced by nothing: the paths every other role may write, the fixer's
-fix scope, and the builder's five answers. A write outside the fix scope surfaces when the
-reviewer reads the fix diff, not as it happens.
+the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` and their kin. A
+path a shell assembles at run time passes. The rule exists to stop a role opening the source
+because that is the obvious way to write a test about it. A role working around it on purpose
+has already failed in a way no hook catches. The implementer's owned files are enforced too: the
+write hook refuses it a write under the code path outside them. A `mkdir` of a directory an owned
+file lies under passes, because design owns files and a new unit's first directory needs it. A
+heredoc body is never read as a write, and a refusal of a shell command names the token it read
+as the path. Three things are recorded and enforced by nothing: the paths every other role may
+write, the fixer's fix scope, and the builder's five answers. A write outside the fix scope
+surfaces when the reviewer reads the fix diff, not as it happens.

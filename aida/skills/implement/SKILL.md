@@ -172,14 +172,15 @@ do it, and both report through a message when they cannot find what they need ra
 silence. Neither has run inside a live dispatch yet, so say that plainly rather than reporting them
 as proven.
 
-The read denial covers Read and Grep, and not the shell. The test author runs its own tests, so it
-holds Bash, so a `cat` of a denied file is not refused. That is deliberate: the rule exists to stop
-the role opening the source because reading the code is the obvious way to write a test about it,
-and a role working around the rule on purpose has already failed in ways no hook catches. Say that
-when the person asks what the dispatch enforces, rather than describing the denial as complete.
+The read denial covers Read, Grep and the plain shell reads: `cat`, `head`, `tail`, `less`,
+`more`, `sed`, `awk`, `grep`, `rg` and `nl`. A path a shell assembles at run time passes. That
+is a limit, not a choice. The rule exists to stop the role opening the source because reading
+the code is the obvious way to write a test about it. A role working around the rule on purpose
+has already failed in ways no hook catches. Say that when the person asks what the dispatch
+enforces, rather than describing the denial as complete.
 
-`dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and the shell
-door above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
+`dispatch-open`'s `--allow-write` is a third thing withheld, beside the read denial and its shell
+limit above. It is recorded for a reader, and no hook applies it. The frozen-test hook decides by
 whether a path is frozen, never by this flag. Say the same about it that you say about the other
 two: recorded, not enforced. The implementer is the one exception. Its record carries its owned
 files under `ownedFiles`, and the frozen-test hook refuses it a write under the code path outside

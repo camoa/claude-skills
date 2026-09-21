@@ -94,7 +94,8 @@ code path outside it while the record is open. The reason tells it to stop and r
 refuses the write and names which order froze the file.
 
 **It may not read another order's source.** What another unit exposes is its interface record. A
-hook refuses the read while the dispatch is open.
+hook refuses the Read, the Grep and the plain shell reads while the dispatch is open. A path a
+shell assembles at run time passes the hook and is still denied.
 
 **It stops rather than working around anything.** A test that seems wrong, an interface that does
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
