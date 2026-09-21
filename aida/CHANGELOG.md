@@ -4,6 +4,23 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.21] - 2026-09-21
+
+Live-run row 110, the implement stage on beta.20.
+
+### Added
+- A fourth ruling, `test-wrong`: the finding is real and its fix needs a frozen test changed.
+  The order halts, and `retake-tests` moves its build, fix, verify and review records into
+  `implementation/retaken-<order>-<n>/`, sets it back to `tests-frozen` with the attempt
+  counter kept, and hands it to the wrong-test route: the author corrects the one test, the
+  checker reads the rows again, `tests-freeze` overwrites with `retakenFrom`, build again.
+  Until that freeze, `start` and `read` route to the author, never to a build. (row 110)
+
+### Changed
+- `verify-record` accepts a `--ruling` before the fix-round cap for a finding the fixer
+  reported `--scope-insufficient`; the fixer's report is the evidence, so no second round is
+  bought to reach a sentence. A finding no fixer reported still waits for the cap. (row 110)
+
 ## [6.0.0-beta.20] - 2026-09-21
 
 Live-run rows 99 to 109, the implement and design stages on beta.19.

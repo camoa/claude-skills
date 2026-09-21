@@ -181,8 +181,9 @@ the baseline read. `--value` and `--nothing-ran` work the same way they do at th
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person, opening with: "The fixer says this
 review finding needs a change in files it was not allowed to edit. Only you can allow that. Make
-or allow the change, and the next round can fix it. Otherwise the finding stays open, and you
-rule on it when the fix rounds run out." Then say the finding in plain words and name the files
+or allow the change, and the next round can fix it. Or rule on it now, under Rulings below.
+That is for a finding no round can reach. A frozen test, a check only you can make, or a
+change the order's done-when does not allow." Then say the finding in plain words and name the files
 it asked for. Unattended halts the order, naming the
 finding, and `clear-halt` is the person's way past. Its reason may not hold the text
 `; earlier: `, the same refusal every halt reason applies: that text is how one halt is joined to
@@ -255,25 +256,33 @@ breakage, what is still open, the rulings, the record path and `next:`.
 A repeat call over a round already verified reports the verification on record rather than
 refusing: nothing was verified twice.
 
-## Rulings, at the cap only
+## Rulings
 
-Once the rounds are spent, `verify-record` above refuses when a finding is still open and no
-ruling names it: nothing is written yet, so this is a retry of that same call, not a new one. Each
-open finding needs a ruling, `wrong`, `deferred`, or `load-bearing`, with a reason. Put the open
-findings to the person and ask, opening with: "The reviewer found problems that two fix rounds did
-not repair, and there are no rounds left. You decide what each one is. Wrong: the reviewer was
-mistaken, and the work is accepted as it is. Deferred: the problem is real but put off to a
-later task, and the work is accepted. Load-bearing: the work cannot be accepted with it, so
-this unit of work stops until you act. A model may not make these calls with
-nobody watching." Then say each finding in plain words, with
-what it cites. Unattended, `verify-record` already halted the order instead.
+A ruling is a person's answer on an open finding, and there are two cases. At the cap: once the
+rounds are spent, `verify-record` above refuses when a finding is still open and no ruling names
+it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
+finding needs a ruling. Before the cap: a finding the last fixer reported under
+`--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
+the evidence that no round can reach it. Any other finding before the cap refuses (exit 3),
+and the message names the findings that may be ruled now. Unattended refuses every ruling
+(exit 55).
 
-Run the same call again, with one `--ruling` flag added per open finding:
+The words are `wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. Put the
+findings to the person and ask, opening the same way in both cases: "The reviewer found problems
+the fix rounds cannot repair. You decide what each one is. Wrong: the reviewer was mistaken,
+and the work is accepted as it is. Deferred: the problem is real but put off to a later task,
+and the work is accepted. Load-bearing: the work cannot be accepted with it, so this unit of
+work stops until you act. Test-wrong: the problem is real and the fix needs a frozen test
+changed, so the tests are retaken. A model may not make these calls with nobody watching." Then
+say each finding in plain words, with what it cites. At the cap, unattended, `verify-record`
+already halted the order instead.
+
+Run the same call again, with one `--ruling` flag added per finding ruled:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-record "<task_folder>" <order id> \
   --verdicts <path to the reviewer's verdict file> \
-  --ruling <finding id>=<wrong|deferred|load-bearing>::<reason> \
-  --ruling <finding id>=<wrong|deferred|load-bearing>::<reason>
+  --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason> \
+  --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>
 ```
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
 order, the finding named as the reason, and `clear-halt` is what follows once the person has
@@ -281,6 +290,26 @@ acted on it. Interactive, this reaches the person as an escalation, not
 a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
 ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
 takes, for the same reason.
+
+`test-wrong` halts the order with `test wrong: <finding id>` as the reason, and `clear-halt`
+refuses that halt (exit 85). A `test-wrong` and a `load-bearing` ruling in one call halt on the
+test-wrong text. The load-bearing ruling moves aside with the review record, and the review
+after the rebuild raises the finding again or not. The route is the retake:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh retake-tests "<task_folder>" <order id>
+```
+It moves the order's build, review, fix and verify records into
+`implementation/retaken-<order id>-<n>/`, nothing deleted, and sets the order back to
+`tests-frozen`. The attempt counter stays: the attempts were real, against the old test. The
+fix rounds go back to zero, because the review record they counted moved. It
+records the retake under `retakes` on the ledger entry, clears the halt with the finding as the
+reason, and prints `next: tests <order id>`. It refuses an order not halted for a test ruled
+wrong (exit 99). From there the route is the wrong-test route under the builder's stop in
+`references/build.md`. Open the author's dispatch again for this order. It corrects the test
+the finding names and nothing else. Run the coding-standards row, then the checker over the
+affected rows, then `tests-freeze` with every flag the first freeze took. That freeze prints `retaken:`; the
+order is at `tests-frozen`, so exit 76 does not fire. Then build again. When the attempts are
+already spent, `build-brief` refuses (exit 41) and the grant in `references/finish.md` answers it.
 
 ## Close
 

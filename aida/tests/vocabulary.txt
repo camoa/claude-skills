@@ -28,7 +28,7 @@ decline | a dispose verdict: a candidate weighed and set aside, with the reason.
 # The other closed sets scripts/review-record-schema.json enumerates.
 severity | high, medium, low, on a finding | major, minor, blocker
 status | open, addressed, ruled, on a finding |
-ruling | wrong, deferred, load-bearing, on a ruled finding |
+ruling | wrong, deferred, load-bearing, test-wrong, on a ruled finding |
 #
 # The unit of work, and the words version 5 used for it. story and ticket are off the list: in this
 # plugin they only ever describe a goal ("a user story, not a ticket"). component names the code
