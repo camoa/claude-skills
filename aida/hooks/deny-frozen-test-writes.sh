@@ -13,7 +13,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Rule two, added 2026-09-19 (live-run row 92), holds the implementer to its unit's owned files.
 # While the open dispatch record names the implementer and carries `ownedFiles`, a write to a path
 # under codePath that is not one of those files, or under one of those directories, is refused,
-# and the reason tells the role to stop and report. A path outside codePath, the task folder where
+# and the reason tells the role to stop and report. Since 2026-09-21 (live-run row 116) the rule
+# holds the fixer the same way. Its record's `ownedFiles` is the order's list plus the paths a
+# person allowed for the round. The reason tells it to report the finding scope-insufficient.
+# A path outside codePath, the task folder where
 # the report and the interface record live, is not this rule's. Any other role, or a record without
 # the key, leaves the rule off. A write the frozen rule already refuses never reaches it. A payload
 # naming no agent type is the person, allowed with a note, the same three cases as rule one. Its
@@ -159,11 +162,12 @@ $paths
 FROZEN_EOF
 done
 
-# ---- rule two's list: the implementer's owned files, one absolute path per line ----------------
-# Read only when the record names the implementer; every other role leaves OWNED empty and the
-# rule off. Resolved against codePath the way the frozen paths are, so the two compare as strings.
+# ---- rule two's list: the implementer's or the fixer's owned files, one absolute path per line --
+# Read only when the record names the implementer or the fixer; every other role leaves OWNED empty
+# and the rule off. Resolved against codePath the way the frozen paths are, so the two compare as
+# strings. The fixer's list already holds the paths a person allowed for the round.
 OWNED=""
-if [ "${ROLE##*:}" = "implementer" ]; then
+if [ "${ROLE##*:}" = "implementer" ] || [ "${ROLE##*:}" = "fixer" ]; then
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
     OWNED="$OWNED$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")
@@ -279,9 +283,14 @@ stray_exit() {
   # That makes a false stop legible. The Write door's path is the tool's own field and needs no note.
   [ -z "$STRAY_VIA" ] || shown="$STRAY (read from the token '$STRAY_TOKEN' after '$STRAY_VIA')"
   [ -n "$AGENT" ] || {
-    jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $STRAY is not a file $UNIT owns, and the implementer dispatched for $UNIT may not write it. The owned-files check reads the diff after the attempt." '{systemMessage:$m}'
+    jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $STRAY is not a file $UNIT owns, and the ${ROLE##*:} dispatched for $UNIT may not write it. The owned-files check reads the diff after the attempt." '{systemMessage:$m}'
     exit 0
   }
+  # The fixer's next step is its own. It reports the finding that needs the path
+  # scope-insufficient, and a person allows the path at the next fix-brief or rules on it.
+  if [ "${ROLE##*:}" = "fixer" ]; then
+    deny "$shown$1: outside the fix scope. The fixer writes only inside the files its order owns and the paths a person allowed for this round. Do not widen it: report the finding that needs this file scope-insufficient in your report, and move to the next."
+  fi
   deny "$shown$1: not a file $UNIT owns. The implementer writes only inside the files its unit owns. Stop: name this file and why the unit needs it in your report, commit nothing, and return."
 }
 

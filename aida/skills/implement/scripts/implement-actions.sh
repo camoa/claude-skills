@@ -60,7 +60,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
 #   implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
-#   implement-actions.sh fix-brief     <task_folder> <unit_id>
+#   implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
 #   implement-actions.sh fix-record    <task_folder> <unit_id> \
 #                            --report <path to the fixer's report> \
 #                            --started-at <commit the round began from> \
@@ -95,7 +95,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # writes the same order's files for the same reason (decision 8 of step five). `--deny-read` adds to what was derived; it is how a path outside codePath is
 # denied, such as the recipe each role may not open. An implementer's record also carries its own
 # owned files under `ownedFiles`, the list hooks/deny-frozen-test-writes.sh holds it to while the
-# record is open (live-run row 92). No other role's record carries the key.
+# record is open (live-run row 92). A fixer's record carries the key too: the order's list plus
+# the `allowedFiles` of the round's fix brief, which must exist (live-run row 116). No other
+# role's record carries the key.
 #   implement-actions.sh dispatch-close <task_folder>
 #   implement-actions.sh step <name>
 #
@@ -594,6 +596,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      which is right only after a person ruled a finding `test-wrong` at `verify-record`. The
 #      message names the halt found, or that the order is not halted, and nothing is written.
 #
+# The code a fix scope outside the order's files added (live-run row 116).
+# 100  `fix-brief` was given `--allow` on an unattended run. An allow is a person's grant of one
+#      path outside the order's ownedFiles to one fix round. An unattended run has nobody to
+#      grant it. Nothing is written. Three argument faults stay exit 3: a path already owned, a
+#      frozen test or support file, and a path no open finding's fixScope names.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -751,7 +759,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--nothing-ran <literal substring>]
        implement-actions.sh review-brief  <task_folder> <unit_id>
        implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
-       implement-actions.sh fix-brief     <task_folder> <unit_id>
+       implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
        implement-actions.sh fix-record    <task_folder> <unit_id>
                             --report <path to the fixer's report>
                             --started-at <commit the round began from>
@@ -4819,9 +4827,13 @@ br_require_real_base() {
 #                       observe: `build-record` takes it from --observed, checked first; a fix
 #                       round and a re-check read the path the build step names,
 #                       <task_folder>/implementation/observed-<unit_id>.json
+#   BRC_ALLOWED_JSON    the paths a person allowed for this fix round with `fix-brief --allow`,
+#                       the round's brief's `allowedFiles`. The owned-files check reads them
+#                       beside the order's ownedFiles (live-run row 116). A build attempt
+#                       leaves it `[]`
 # ------------------------------------------------------------------------------------------------
 BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""; BRC_SCOPE=""
-BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
+BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""; BRC_ALLOWED_JSON="[]"
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 BRC_GATE_RECIPES=""
@@ -5424,10 +5436,14 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
+  local own_count allowed_hit=""
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
   diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
-  owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  # The paths a person allowed for a fix round follow the order's own. So an index at or past
+  # own_count is an allowed path, and the detail names it (live-run row 116).
+  owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c --argjson a "$BRC_ALLOWED_JSON" '(.ownedFiles // []) + $a')"
+  own_count="$(printf '%s' "$BRC_UNIT_JSON" | jq '.ownedFiles // [] | length')"
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
@@ -5446,7 +5462,10 @@ br_seven_checks() {
     while [ "$gi" -lt "$owned_count" ]; do
       g="$(printf '%s' "$owned_files_json" | jq -r --argjson gi "$gi" '.[$gi]')"
       tf_path_matches_catalog_glob "$p" "$g" && matched=true
-      [ "$matched" = "true" ] && break
+      if [ "$matched" = "true" ]; then
+        [ "$gi" -lt "$own_count" ] || case ", $allowed_hit" in *", $g, "*) ;; *) allowed_hit="$allowed_hit$g, " ;; esac
+        break
+      fi
       gi=$((gi + 1))
     done
     [ "$matched" = "true" ] || unmatched="$unmatched$p, "
@@ -5456,10 +5475,12 @@ BR_DIFF
   if [ -n "$unmatched" ]; then
     ofc_verdict="unmet"
     ofc_detail="these changed files match none of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')'s own ownedFiles: ${unmatched%, }"
+    [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
   else
     ofc_verdict="met"
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   fi
+  [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
   if [ "$proof" = "record" ]; then
     aside_noun="files"
     [ "$set_aside" -ne 1 ] || aside_noun="file"
@@ -6390,6 +6411,35 @@ rv_frozen_test_paths_json() {
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
 }
 
+# Prints the paths of scope list $1, a JSON array, that lie outside owned list $2, one per line,
+# each as the reviewer wrote it. A path is resolved against codePath $3 and compared the way the
+# owned-files check compares a diff path, through tf_path_matches_catalog_glob. A path under the
+# task folder $4 is never outside: the report and the records live there (live-run row 116).
+rv_scope_outside() {
+  local scope_json="$1" owned_json="$2" codepath="$3" task_path="$4"
+  local count owned_count i gi p abs g matched
+  count="$(printf '%s' "$scope_json" | jq 'length')"
+  owned_count="$(printf '%s' "$owned_json" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    p="$(printf '%s' "$scope_json" | jq -r --argjson i "$i" '.[$i]')"
+    i=$((i + 1))
+    [ -n "$p" ] || continue
+    abs="$(normalize_abs "$(resolve_against "$p" "$codepath")")"
+    is_under "$abs" "$task_path" && continue
+    is_under "$abs" "$codepath" && abs="${abs#"$codepath"/}"
+    matched=false
+    gi=0
+    while [ "$gi" -lt "$owned_count" ]; do
+      g="$(printf '%s' "$owned_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+      tf_path_matches_catalog_glob "$abs" "$g" && matched=true
+      [ "$matched" = "true" ] && break
+      gi=$((gi + 1))
+    done
+    [ "$matched" = "true" ] || printf '%s\n' "$p"
+  done
+}
+
 # How many findings in review record $1 are open and actionable. A finding recorded with
 # actionable false is open and stays open: nothing can close it, because no fixer ever sees it
 # (ideal/implementation.md, "Every finding cites a criterion or a non-goal"). It never blocks a
@@ -6712,7 +6762,7 @@ do_review_record() {
   [ -z "$dirty" ] \
     || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
-  local raw_findings alignment count i one built findings_json information_json
+  local raw_findings alignment count i one built findings_json information_json outside outside_lines=""
   rv_read_findings_array "$findings_path" "findings" "review-record"
   raw_findings="$RV_FINDINGS_ARRAY"
   rv_read_information_array "$findings_path" "review-record"
@@ -6724,6 +6774,16 @@ do_review_record() {
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$raw_findings" | jq -c --argjson i "$i" '.[$i]')"
     built="$(rv_finding_record "$one" "$alignment" "review")"
+    # Live-run row 116. The paths of the finding's fixScope outside the order's own ownedFiles are
+    # stored on the finding, when there are any, and printed before the summary. Nothing is ruled
+    # here: fix-brief withholds them, and a person allows one there.
+    outside="$(rv_scope_outside "$(printf '%s' "$built" | jq -c '.fixScope')" \
+      "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')" "$RV_CODEPATH" "$TASK_PATH")"
+    if [ -n "$outside" ]; then
+      built="$(printf '%s' "$built" | jq -c --arg o "$outside" '.outsideOwned = ($o | split("\n"))')"
+      outside_lines="$outside_lines$(printf '%s' "$built" | jq -r '"outsideOwned: \(.id): \(.outsideOwned | join(", "))"')
+"
+    fi
     findings_json="$(printf '%s' "$findings_json" | jq -c --argjson f "$built" '. + [$f]')"
     i=$((i + 1))
   done
@@ -6767,6 +6827,7 @@ do_review_record() {
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
+  [ -z "$outside_lines" ] || printf '%s' "$outside_lines"
   # One line per finding: its severity, whether it is actionable and what it cites. Its evidence
   # stays in the record, named by path.
   im_print_summary "review-record" "$(printf '%s' "$record_json" | jq -c --arg record "$review_file" \
@@ -6818,10 +6879,27 @@ do_review_record() {
 # ------------------------------------------------------------------------------------------------
 
 do_fix_brief() {
-  [ "$#" -ge 2 ] || die 3 "fix-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die 3 "fix-brief: unrecognized extra argument: $3"
-  local unit_id="$2" resolve_rc
-  TASK_PATH="$(resolve_task_folder "$1" "fix-brief")"
+  local task_arg="" unit_id="" allow_raw=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --allow)
+        [ "$#" -ge 2 ] || die 3 "fix-brief: --allow needs a path relative to codePath"
+        [ -n "$2" ] || die 3 "fix-brief: --allow was given an empty path."
+        allow_raw="$allow_raw$2
+"
+        shift 2 ;;
+      -*) die 3 "fix-brief: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then task_arg="$1"
+        elif [ -z "$unit_id" ]; then unit_id="$1"
+        else die 3 "fix-brief: unrecognized extra argument: $1"; fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die 3 "fix-brief: a task folder is required"
+  [ -n "$unit_id" ]  || die 3 "fix-brief: a unit id is required"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "fix-brief")"
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
@@ -6842,22 +6920,83 @@ do_fix_brief() {
 
   rv_load_build_record "fix-brief" "$unit_id"
 
-  local open_json scope_json tests_json
+  local open_json scope_json tests_json owned_json
   open_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '
     [ (.findings // [])[] | select(.actionable == true and .status == "open") ]
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin})')"
-  scope_json="$(printf '%s' "$open_json" | jq -c '[ .[] | (.fixScope // [])[] ] | unique')"
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
+  owned_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
 
   rv_load_codepath "fix-brief"
   rv_load_range_repo "fix-brief" "$RV_UNIT_JSON"
+
+  # Live-run row 116. A fixScope path outside the order's ownedFiles is withheld from the fixer
+  # unless a person allows it here. An allow is a person's grant, so unattended refuses it
+  # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
+  # be granted. A path no open finding names is a grant for nothing (exit 3, each).
+  local allowed_json='[]' ap ap_abs tf fp frozen_list frozen_hit named
+  [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
+    || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files."
+  # Every frozen test and support path of the task, the list the write hook reads.
+  frozen_list=""
+  for tf in "$IMPL_DIR"/tests-*.json; do
+    [ -e "$tf" ] || continue
+    frozen_list="$frozen_list$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$tf" 2>/dev/null)
+"
+  done
+  while IFS= read -r ap; do
+    [ -n "$ap" ] || continue
+    ap_abs="$(normalize_abs "$(resolve_against "$ap" "$RV_CODEPATH")")"
+    [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] \
+      || die 3 "fix-brief: --allow names $ap, which $unit_id already owns. A grant is for a path outside the order's own files."
+    frozen_hit=""
+    while IFS= read -r fp; do
+      [ -n "$fp" ] || continue
+      [ "$(normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")")" = "$ap_abs" ] && frozen_hit="$fp"
+    done <<FB_FROZEN
+$frozen_list
+FB_FROZEN
+    [ -z "$frozen_hit" ] \
+      || die 3 "fix-brief: --allow names $ap, a frozen test or a support file. A fixer never changes a test; rule the finding test-wrong at verify-record instead."
+    named="$(printf '%s' "$open_json" | jq -r --arg p "$ap" --arg abs "$ap_abs" --arg code "$RV_CODEPATH" '
+      [ .[] | (.fixScope // [])[] | select(. == $p or . == $abs or ($code + "/" + .) == $abs) ] | length')"
+    [ "$named" != "0" ] \
+      || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
+    # Stored resolved and relative to codePath, whatever form was typed: the withhold, the
+    # owned-files check and the hook all read that one spelling.
+    allowed_json="$(printf '%s' "$allowed_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
+  done <<FB_ALLOW
+$allow_raw
+FB_ALLOW
+
+  # Per finding, the fixScope paths outside ownedFiles and the allowed list are withheld. The
+  # union the fixer gets is every other fixScope path. A finding wholly withheld is still handed
+  # over, so the fixer reports it scope-insufficient and the ruling route opens.
+  local fcount fn one withheld reach_json
+  reach_json="$(jq -nc --argjson o "$owned_json" --argjson a "$allowed_json" '$o + $a | unique')"
+  fcount="$(printf '%s' "$open_json" | jq 'length')"
+  fn=0
+  while [ "$fn" -lt "$fcount" ]; do
+    one="$(printf '%s' "$open_json" | jq -c --argjson i "$fn" '.[$i]')"
+    withheld="$(rv_scope_outside "$(printf '%s' "$one" | jq -c '.fixScope // []')" "$reach_json" "$RV_CODEPATH" "$TASK_PATH")"
+    if [ -n "$withheld" ]; then
+      one="$(printf '%s' "$one" | jq -c --arg w "$withheld" '.withheld = ($w | split("\n"))')"
+    else
+      one="$(printf '%s' "$one" | jq -c '.withheld = []')"
+    fi
+    open_json="$(printf '%s' "$open_json" | jq -c --argjson i "$fn" --argjson f "$one" '.[$i] = $f')"
+    fn=$((fn + 1))
+  done
+  scope_json="$(printf '%s' "$open_json" | jq -c '[ .[] | (.fixScope // [])[] as $p | select(.withheld | index($p) | not) | $p ] | unique')"
+
   local fb_head brief_file brief_json
   fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   # One brief per round, because each round's open findings differ from the last round's and the
   # record of what a fixer was given is worth keeping beside its report.
   brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
+    --argjson allowedFiles "$allowed_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
     --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
@@ -6870,6 +7009,7 @@ do_fix_brief() {
       roundsAllowed: $roundsAllowed,
       findings: $findings,
       fixScope: $fixScope,
+      allowedFiles: $allowedFiles,
       frozenTests: $frozenTests,
       headNow: $headNow,
       diffBudget: $diffBudget,
@@ -6887,6 +7027,8 @@ do_fix_brief() {
      headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
      finding: ([ .findings[] | {id, severity, linkedTo: ("cites " + (.linkedTo // "nothing")), file} ]),
      fixScope: .fixScope,
+     withheld: ([ .findings[] | select((.withheld | length) > 0) | {id, paths: (.withheld | join(", "))} ]),
+     allowed: .allowedFiles,
      frozenTests: (.frozenTests | length),
      diffBudget: (if .diffBudget == "" then "none" else .diffBudget end),
      next: "dispatch fixer with the brief path, then fix-record"}')"
@@ -7092,6 +7234,11 @@ RV_SCOPE
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  # The paths a person allowed for this round, from the brief fix-brief wrote for it. The
+  # owned-files check reads them beside the order's own, so an allowed change passes (live-run
+  # row 116). A round with no brief on disk allows nothing.
+  BRC_ALLOWED_JSON="$(jq -c '.allowedFiles // []' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
+  [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
   local selected_tests_json
   selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
@@ -8829,8 +8976,10 @@ TG_OWNED
   # other unit to withhold, which is different from a test author having nothing to withhold.
   # The fixer takes this same derivation (decision 8 of step five). A fix round writes the same
   # order's files for the same reason a build attempt does, and the fix scope in the brief is
-  # narrower still. A write outside the scope is caught by the owned-files check after the round,
-  # never by a hook, so nothing here is loosened to let a fixer reach further.
+  # narrower still. The hook holds the fixer to the list too (live-run row 116). The owned-files
+  # check after the round only spends the round, and the write it would have caught is already
+  # committed. The one widening is the round's `allowedFiles`, a person's grant recorded on
+  # the fix brief, read below.
   if [ "$role_bare" = "implementer" ] || [ "$role_bare" = "fixer" ]; then
     local mine_json others_json mine_count
     mine_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
@@ -8895,10 +9044,22 @@ TG_OWNED
 
   # The implementer's own list goes under `ownedFiles` too, and not under allowWrite: allowWrite
   # takes hand-passed paths and no hook applies it, while this key is derived alone and the write
-  # hook refuses the implementer a write under codePath outside it (live-run row 92).
-  local record_json owned_extra='{}'
+  # hook refuses the implementer a write under codePath outside it (live-run row 92). The fixer's
+  # record carries the same key: the order's list plus the `allowedFiles` of the round's fix
+  # brief. So the hook refuses it a write outside the scope a person allowed (live-run row 116).
+  # A fixer with no fix brief for the round has nothing to be held to, so that refuses.
+  local record_json owned_extra='{}' fx_round fx_brief fx_allowed
   if [ "$role_bare" = "implementer" ]; then
     owned_extra="$(jq -nc --argjson m "$mine_json" '{ownedFiles: $m}')"
+  elif [ "$role_bare" = "fixer" ]; then
+    fx_round="$(jq -r --arg id "$unit_id" '(.orders // [])[] | select(.id == $id) | (.roundsUsed // 0) + 1' \
+      "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+    [ -n "$fx_round" ] || fx_round=1
+    fx_brief="$IMPL_DIR/brief-$unit_id-fix-$fx_round.json"
+    fx_allowed="$(jq -c '.allowedFiles // []' "$fx_brief" 2>/dev/null)"
+    [ -n "$fx_allowed" ] \
+      || die 3 "dispatch-open: no fix brief for round $fx_round of $unit_id at $fx_brief. Run fix-brief first: the fixer's record takes the paths it allowed."
+    owned_extra="$(jq -nc --argjson m "$mine_json" --argjson a "$fx_allowed" '{ownedFiles: ($m + $a | unique)}')"
   fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \

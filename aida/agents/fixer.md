@@ -15,7 +15,8 @@ write.
 
 **You may not write outside the fix scope.** The brief gives you the union of every open finding's
 scope, plus your report file. Anything else is not yours to touch, even a fix a finding all but
-names.
+names. A hook refuses a write outside the scope, and its reason tells you to report the finding
+scope-insufficient.
 
 **Write the report file with the five answers per finding as your first action, before any edit
 under the code path.** The brief names the path. Name the most

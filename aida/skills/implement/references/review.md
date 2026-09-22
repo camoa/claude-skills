@@ -123,15 +123,19 @@ Repeat this section while an actionable finding is open and a fix round remains.
 
 Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh fix-brief "<task_folder>" <order id>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh fix-brief "<task_folder>" <order id> \
+  [--allow <path relative to codePath>]...
 ```
 It refuses when nothing is open, when the rounds are spent, when the order is halted, or when the
 last fix round has not been verified yet. A resumed run hits that last refusal most. A round
 recorded but never carried through `verify-record` still counts as open, so the next round may not
 start over it. It writes `implementation/brief-<order id>-fix-<round>.json`:
 
-- the open findings in severity order, with their evidence;
-- the union of their fix scope;
+- the open findings in severity order, with their evidence, each with `withheld`, the paths of
+  its fix scope the fixer does not get;
+- the union of their fix scope, holding only paths inside the order's owned files and the
+  paths `--allow` names;
+- `allowedFiles`, the `--allow` list;
 - the frozen tests;
 - this round's own report path, and the order's diff budget;
 - the round number;
@@ -139,7 +143,22 @@ start over it. It writes `implementation/brief-<order id>-fix-<round>.json`:
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path and `headNow`. It prints one line per finding with its
-severity and what it cites, and the scope. Never the evidence.
+severity and what it cites, and the scope. Never the evidence. Then `withheld(<id>): <paths>`
+per finding that lost a path, and `allowed:` with the `--allow` paths, or `none`.
+
+**A fix scope outside the order's files.** `review-record` printed `outsideOwned: <id>: <paths>`
+for each finding whose fix scope names a file the order does not own. It stored the list on the
+finding. `fix-brief` withholds those paths from the fixer. A person may grant one with `--allow`,
+one flag per path. The path joins the scope union and the brief records it under `allowedFiles`.
+The fixer's dispatch record carries it, and the owned-files check after the round accepts it.
+Unattended, `--allow` refuses (exit 100). A path the order already owns, a frozen test or a
+support file, or a path no open finding's fix scope names, refuses (exit 3). A finding whose
+whole fix scope is withheld is still handed over. The fixer reports it scope-insufficient in
+round one, and the ruling route below opens for it. When an `outsideOwned:` line printed, put it
+to the person before running `fix-brief`. Open with: "A review finding wants a change in a
+file this order does not own. Only you can allow that. Allow the file and the fixer may change
+it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
+name the finding and the files.
 
 Open the dispatch record before dispatching:
 ```
@@ -147,17 +166,19 @@ Open the dispatch record before dispatching:
   --deny-read <path of the recipe that writes the tests>
 ```
 The script derives the rest itself, the same way it does for the implementer: this order's owned
-files allowed, every other order's denied. Deny the test-authoring recipe by hand, the same way
+files allowed, every other order's denied. The record's `ownedFiles` holds the order's files plus
+this round's `allowedFiles`, read from the fix brief. It refuses when no fix brief exists for the
+round. Deny the test-authoring recipe by hand, the same way
 build.md does for the implementer: a fixer chooses no level and names no test, so that recipe is
 not its to read.
 
 **Dispatch `fixer`**, with the message SKILL.md names: the role, the run mode, and the brief's
 path. Round one runs on sonnet. Round two runs on opus, set on the Agent call.
 **It may not change a test**: a hook refuses the write. **It may not write outside the fix
-scope.** No hook enforces that bound. The owned-files check after the round only bounds it to the
-order's own files, which is wider than the scope. A write inside those files but outside the scope
-is not caught there. It surfaces when the reviewer's verify mode reads the fix diff and reports it
-under `outOfScope`.
+scope.** The write hook refuses it a write under the code path outside the record's `ownedFiles`.
+Its reason tells it to report the finding scope-insufficient. A write inside those files but
+outside the scope is not caught there. It surfaces when the reviewer's verify mode reads the fix
+diff and reports it under `outOfScope`.
 
 Close the dispatch record as soon as it returns, per SKILL.md.
 
@@ -180,8 +201,9 @@ frameworks command one tool. It refuses (exit 73) when the check recipe it resol
 the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person, opening with: "The fixer says this
-review finding needs a change in files it was not allowed to edit. Only you can allow that. Make
-or allow the change, and the next round can fix it. Or rule on it now, under Rulings below.
+review finding needs a change in files it was not allowed to edit. Only you can allow that. Allow
+the files with `fix-brief --allow`, and the next round can fix it. Or rule on it now, under
+Rulings below.
 That is for a finding no round can reach. A frozen test, a check only you can make, or a
 change the order's done-when does not allow." Then say the finding in plain words and name the files
 it asked for. Unattended halts the order, naming the

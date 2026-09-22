@@ -362,6 +362,15 @@ round runs on a mid tier, the second on the top tier. The fixer may not change a
 not fix a finding not on its list. A finding whose scope is too small is reported, not widened.
 You rule on it; an autonomous run halts the order with the report as the reason.
 
+A reviewer may set a finding's fix scope to a file the order does not own. The review record
+names those paths on the finding, and the fix brief withholds them from the fixer. You may allow
+one with `fix-brief --allow <path>`. The brief records it, the fixer's dispatch record carries
+it, and the owned-files check after the round accepts it. An autonomous run cannot allow. A
+finding whose whole scope is withheld is still handed over, so the fixer reports it and you rule
+on it after the round. The write hook holds the fixer to the order's files plus the allowed
+paths, the way it holds the implementer. The owned-files check after the round only spends the
+round.
+
 After each round, seven of the eight checks run again, every one but the interface record. A fix
 that breaks a passing test has not fixed anything. A check answering unmet or unknown spends
 the round and leaves every finding open. Then the reviewer returns in verify mode and gives each
@@ -484,9 +493,10 @@ the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` 
 path a shell assembles at run time passes. The rule exists to stop a role opening the source
 because that is the obvious way to write a test about it. A role working around it on purpose
 has already failed in a way no hook catches. The implementer's owned files are enforced too: the
-write hook refuses it a write under the code path outside them. A `mkdir` of a directory an owned
+write hook refuses it a write under the code path outside them. The fixer is held the same way,
+to the order's files plus the paths you allowed for the round. A `mkdir` of a directory an owned
 file lies under passes, because design owns files and a new unit's first directory needs it. A
 heredoc body is never read as a write, and a refusal of a shell command names the token it read
-as the path. Three things are recorded and enforced by nothing: the paths every other role may
-write, the fixer's fix scope, and the builder's five answers. A write outside the fix scope
-surfaces when the reviewer reads the fix diff, not as it happens.
+as the path. Two things are recorded and enforced by nothing: the paths every other role may
+write, and the builder's five answers. A write inside the order's files but outside the fix
+scope surfaces when the reviewer reads the fix diff, not as it happens.

@@ -5,7 +5,7 @@ agents/design-critic.md 104
 agents/disposition-confirmer.md 46
 agents/distiller.md 74
 agents/split-advisor.md 66
-agents/fixer.md 69
+agents/fixer.md 70
 agents/implementer.md 83
 agents/internal-searcher.md 40
 agents/outward-searcher.md 37
@@ -20,7 +20,7 @@ skills/implement/SKILL.md 209
 skills/implement/references/build.md 404
 skills/implement/references/finish.md 158
 skills/implement/references/preconditions.md 134
-skills/implement/references/review.md 352
+skills/implement/references/review.md 374
 skills/implement/references/start.md 85
 skills/implement/references/tests.md 349
 skills/next/SKILL.md 164
