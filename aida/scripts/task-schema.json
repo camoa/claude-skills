@@ -97,6 +97,13 @@
       "type": "string",
       "minLength": 1,
       "description": "When `task save` last ran for this task, as a UTC timestamp, stamped on every call whether or not a note was written. hooks/pre-compact.sh treats a file under the task folder newer than this as unsaved work. Absent until the first save; the hook then falls back to the newest note."
+    },
+    "recipesDeclined": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The frameworks a person answered `not for this framework` to the missing process recipe ask, written by `task decline-recipe`, one name per answer, each one project.json declares. Present only after the first such answer. Research and design skip their ask for a framework named here; implementation never asks, so it reads nothing. The answer is per task, because a secondary framework that needs no recipe on this task may need one on the next (live-run row 123)."
     }
   },
   "$defs": {

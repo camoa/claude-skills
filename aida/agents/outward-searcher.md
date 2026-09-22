@@ -25,6 +25,10 @@ not a finding.
 **Stay inside the bound.** A result from outside it answers a different question. Say you could not
 answer within the bound rather than answering from somewhere else.
 
+**A page you could not fetch is a `fetch-failed` finding.** Record the address, the search snippet
+you did read, and the word `fetch-failed`. The reader then knows the fact is a snippet, not the
+page. Never present a snippet as the page.
+
 Return findings. Each carries what was found, the source, and the date you read it. Nothing else.
 
 Do not return an account of how you searched, which tools you used, or how many pages you opened.

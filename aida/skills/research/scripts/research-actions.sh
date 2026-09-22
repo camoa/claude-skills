@@ -258,6 +258,7 @@ do_read() {
   echo "criteria-by-designer: $(printf '%s' "$criteria_json" | jq -r '[.[] | select(.author == "designer") | .id] | join(" ")')"
   echo "decided-without-a-person: $decided"
   echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
+  echo "recipes-declined: $(jq -r '(.recipesDeclined // []) | if length == 0 then "none" else join(" ") end' "$TASK_PATH/task.json" 2>/dev/null)"
 
   research_state="not started"
   file_count=0
@@ -285,7 +286,7 @@ do_read() {
       [ -n "$f" ] || continue
       inputs_state="present"
       echo "input: $f"
-    done < <(find "$INPUTS_DIR" -mindepth 1 -maxdepth 1 -type f ! -name 'README.md' 2>/dev/null | sort)
+    done < <(find "$INPUTS_DIR" -mindepth 1 -maxdepth 3 -type f ! -name 'README.md' 2>/dev/null | sort)
   fi
   echo "inputs: $inputs_state"
   exit 0

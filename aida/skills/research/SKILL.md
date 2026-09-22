@@ -3,7 +3,7 @@ name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh decline-recipe *), Agent, EnterWorktree
 ---
 
 # Research
@@ -23,7 +23,8 @@ not a finding, and the model's own recall is never the answer, only a lead worth
 one search.
 
 Every write below goes through `research-actions.sh`, or `playbook-actions.sh` for the playbook
-load. Both are named in this skill's own grant, so they run without asking, and so does the
+load, or the task skill's `decline-recipe` for a declined recipe. All three are named in this
+skill's own grant, so they run without asking, and so does the
 project skill's `recipe-source` lookup. Any other Bash command still asks for approval.
 Dispatching an agent needs no approval either; it is also named in this skill's own grant.
 
@@ -44,8 +45,8 @@ A mode that names stages in brackets, such as `autonomous (implement)`, covers t
 when the list names `research`; otherwise this stage is interactive.
 
 Research never blocks on this choice the way scope does. The run mode only changes what happens
-at two points below, a missing process recipe and an unaccepted guide source; everything else
-runs the same way in both modes.
+at three points below: a recipe fit of `false` or `unsure`, a missing process recipe, and an
+unaccepted guide source. Everything else runs the same way in both modes.
 
 ## Find the task
 
@@ -66,7 +67,8 @@ Run:
 This prints summary lines. `contract:` says present or absent and `contract-file:` names the
 file. `criteria:` lists the ids, and `criteria-by-designer:` lists the ids no person ever
 approved. `worktree:` names the task's own git worktree, where the code is read and the spike
-runs. `none` means the code path, as for a task made before every task had one. One `search:`
+runs. `none` means the code path, as for a task made before every task had one.
+`recipes-declined:` names each framework a person declined a recipe for, or `none`. One `search:`
 line names each research file already on disk with its finding count.
 Read the criteria's text from the contract file.
 
@@ -81,9 +83,12 @@ again.
 what is still missing, rather than starting over.
 
 `inputs:` says what the task's `inputs/` folder holds: `absent`, `empty`, or `present` with one
-`input:` line per file. That folder holds material captured before the task existed. Read every
-`input:` path before any search runs. This material is input, never a finding. It names things to
-search for. Record a claim from it only once a search confirms it with a source.
+`input:` line per file, to three levels deep. That folder holds material captured before the task
+existed. Read every `input:` path before any search runs. This material is input, never a finding.
+It names things to search for. Record a claim from it only once a search confirms it with a
+source. Two exceptions, both written by research itself on an earlier run: a page saved at
+`inputs/<slug>.md` and a tree under `inputs/prior-art/`. Each is already a recorded finding's
+source, so it needs no search to confirm it.
 
 No `search:` line, and `research.v5.md` or a `research.v5/` folder exists in the task folder.
 This is a first run on a version 5 task, and those files are its research. Read them. Record each
@@ -136,7 +141,10 @@ Typical search subjects, named by what they read, not by a fixed roster:
   docblock, so the recipe says what to read in its place. Core and contributed code are noise
   here; the outside search covers those. The project's own task records are prior art as well.
   The searcher also reads `<project>/tasks/`, so "have we built this" is asked of this project's
-  history. A hit names the task and what it changed.
+  history. A hit names the task and what it changed. Prior art that lives only on another branch
+  or an old commit is invisible to the searcher, which has no git. Extract those files with
+  `git show <ref>:<file>` into `<task_folder>/inputs/prior-art/<branch>/`, and name that folder
+  as a line in the searcher's message.
 - **Prior art outside this project.** A library, a module, a package that already does this.
   Apply the three-part test to anything found: is it maintained, is it used, is it supported. A
   process recipe for this project's own framework may refine that test; when none exists, apply
@@ -196,6 +204,13 @@ only what it reports back. That isolation is what keeps the cost bounded.
 What is this step's job is what to do with a bad return. An agent that comes back with prose
 instead of findings with a source and a date has not done the job. Ask it again, or record what it
 did find and note the rest as not searched.
+
+A `fetch-failed` finding is a search snippet, not the page. Record it as returned, with
+`fetch-failed` in `--text`, so design knows the fact is a snippet. This conversation may then
+fetch that one page itself, undispatched: one page, one question. The spike folder rules do not
+apply. Save what came back at `<task_folder>/inputs/<slug>.md`. Record a second finding with
+`--source` the address. Its `--text` holds what the page said, that this conversation fetched it,
+and where it is saved.
 
 ## Record each finding
 
@@ -262,9 +277,10 @@ Verdict words and a missing heading follow
 **Judge the fit once, after the body is read and before the first dispatch.** Does this method,
 by its `description`, Goal and Preconditions, describe the work the criteria and non-goals name?
 Record the verdict on the search inside this project, on any one `record` call, with `--recipe-fit
-<true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"`. On `false`, interactive:
-say so with the reason, then ask whether to continue with the recipe, without it (the fallback
-below), or stop. Autonomous: continue with the recipe and record `false`.
+<true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"`. On `false` or `unsure`,
+interactive: say the verdict with the reason. Then ask whether to continue with the recipe, without
+it (the fallback below), or stop. Autonomous: continue with the recipe, record the verdict as
+judged, and say so. `unsure` is recorded as `unsure`, never rounded to `true` or `false`.
 
 **Three answers, not one.** A recipe that does not exist for this framework, a listing that could
 not be reached, and a network that failed are three different things and only the first is a fact
@@ -308,10 +324,18 @@ three-part test: maintained, used, supported. For prior art inside this project,
 project root and say in the finding that the bound on custom code was not enforced. Do not guess
 the framework's directory layout.
 
-Interactive: ask whether to write one before moving on. The shape is in
+Interactive: skip the ask for a framework the `recipes-declined:` line of `read` names; a person
+already answered. Otherwise name the framework and ask whether to write one before moving on. The
+answers are three: write one now, not now, or not for this framework. The shape is in
 `${CLAUDE_PLUGIN_ROOT}/templates/process-recipe-research.md`, which carries the sections the
 catalog requires and what research asks at each one. Publishing it is the catalog's own
-create-on-miss path.
+create-on-miss path. "Not for this framework" is recorded on the task:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh decline-recipe --project "<projectPath>" <task-id> <framework>
+```
+It writes `recipesDeclined` in `task.json`, which `read` prints as `recipes-declined:`. Design
+reads the same field and skips its own ask. Implementation never asks; it records the missing
+recipe and goes on.
 
 Autonomous: record the missing recipe as a note in the finding's own text and continue. Do not
 invent a framework-specific rule in its place.
@@ -452,8 +476,8 @@ record, so a stage cannot run out of order. That is why this chain is safe.
 Research decides nothing about the problem, so there is nothing for a person to approve. It never
 asks permission to look something up, and every finding carries its source, so a wrong finding is
 checkable afterward by anyone. The one question it asks is the split, and only after its own work
-is done. Autonomous mode runs every step above the same way, taking the noted branch at a missing
-recipe or an unaccepted source instead of stopping to ask.
+is done. Autonomous mode runs every step above the same way. At a recipe that does not fit, a
+missing recipe or an unaccepted source, it takes the noted branch instead of asking.
 
 ## What this skill never does
 

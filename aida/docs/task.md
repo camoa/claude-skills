@@ -25,8 +25,9 @@ stands is a fact in the task file, not a location on disk.
 
 A task can carry material gathered before it existed, in its `inputs/` folder: notes, a pasted
 specification, whatever prompted the work. That folder has three states worth telling apart.
-Nothing is there yet. An empty folder is waiting for something. A folder holds real files. No
-stage writes into it. Scope's conversation does not read it; research and the distiller do.
+Nothing is there yet. An empty folder is waiting for something. A folder holds real files. Only
+research writes into it, a page it fetched itself or prior art it pulled from another branch.
+Scope's conversation does not read it; research and the distiller do.
 
 ## Creating a task
 

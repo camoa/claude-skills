@@ -193,7 +193,8 @@ AIDA cannot know on its own:
 framework convention.
 Interactive: ask whether to write the recipe first, before drafting anything. The shape is in
 `${CLAUDE_PLUGIN_ROOT}/templates/process-recipe-design.md`, which carries the sections the catalog
-requires and the five things design needs from a framework.
+requires and the five things design needs from a framework. Skip the ask for a framework that
+`task.json`'s `recipesDeclined` names; research recorded that answer.
 
 ## The stated approach
 

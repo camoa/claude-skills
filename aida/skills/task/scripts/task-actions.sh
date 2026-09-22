@@ -45,6 +45,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    <task-id> <autonomous|interactive> [--stage <stage>]...
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
 #                    -- <text...>
+#   task-actions.sh [--run-mode <interactive|autonomous>] decline-recipe --project <path> \
+#                    <task-id> <framework>
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
 #                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
 #                    [--setup-recipe <kind>=<path>]...
@@ -115,6 +117,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
                                  [--stage <scope|research|design|implement|review|completion>]...
        task-actions.sh save     --project <path> <task-id> -- <text...>
+       task-actions.sh decline-recipe --project <path> <task-id> <framework>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
                                  [--setup-recipe <kind>=<path>]...
        task-actions.sh prune    --project <path> [--all] [<task-id>]...
@@ -831,6 +834,59 @@ do_set_run_mode() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# decline-recipe: written only when a person answers "not for this framework" to the missing
+# process recipe ask (task-schema.json, recipesDeclined). Nothing here asks. The framework must
+# be one project.json declares, so a typo never silences the ask for a real framework. A repeat
+# is refused: the field is a set, and a second write would say the person was asked twice.
+# ------------------------------------------------------------------------------------------------
+
+do_decline_recipe() {
+  local project_path="" id="" framework=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      *)
+        if [ -z "$id" ]; then id="$1"; shift
+        elif [ -z "$framework" ]; then framework="$1"; shift
+        else die3 "decline-recipe: unrecognized argument: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [ -n "$project_path" ] || die3 "decline-recipe: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "decline-recipe: not a folder: $project_path"
+  project_path="$_resolved_project"
+  [ -n "$id" ] || die3 "decline-recipe: a task id is required"
+  [ -n "$framework" ] || die3 "decline-recipe: a framework is required, one project.json declares"
+  jq -e --arg f "$framework" '(.frameworks // []) | index($f) != null' "$project_path/project.json" >/dev/null 2>&1 \
+    || die3 "decline-recipe: $project_path/project.json does not declare the framework '$framework'"
+
+  local task_dir task_json
+  task_dir="$(task_dir_for "$project_path" "$id")"
+  task_json="$task_dir/task.json"
+  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  if jq -e --arg f "$framework" '(.recipesDeclined // []) | index($f) != null' "$task_json" >/dev/null 2>&1; then
+    die3 "decline-recipe: $task_json already declines a recipe for '$framework'"
+  fi
+
+  write_atomic "$task_json" "$(jq --arg f "$framework" '.recipesDeclined = ((.recipesDeclined // []) + [$f])' "$task_json")"
+
+  commit_task_change "$project_path" \
+    "Decline a process recipe for ${framework} on ${id}" \
+    "a person answered not for this framework" \
+    "" \
+    "" \
+    "$id" "decline-recipe" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+
+  echo "RECIPE DECLINED: ${framework}"
+  echo "recipesDeclined: $(jq -r '.recipesDeclined | join(" ")' "$task_json")"
+  task_summary "$task_json"
+}
+
+# ------------------------------------------------------------------------------------------------
 # save: appends a decision no record holds yet to <task>/notes/<date>.md under a `## <UTC time>`
 # heading (ideal/task.md, "A save before the window closes"). A note is never a stage record: each
 # record has one producer, and the note is what the next window reads until that producer runs.
@@ -1252,6 +1308,7 @@ case "$action" in
   split) do_split "$@" ;;
   set-run-mode) do_set_run_mode "$@" ;;
   save) do_save "$@" ;;
+  decline-recipe) do_decline_recipe "$@" ;;
   environment) do_environment "$@" ;;
   prune) do_prune "$@" ;;
   *) usage; exit 3 ;;
