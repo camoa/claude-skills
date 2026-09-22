@@ -58,12 +58,13 @@
     "critique": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["files", "findings"],
+      "required": ["files", "findings", "outcome"],
       "properties": {
         "files": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "description": "Every <task folder>/records/design-critique-<lens>.md present at the close, sorted, one per finished lens; a file without its count line is left out and named on stderr." },
-        "findings": { "type": "integer", "minimum": 0, "description": "The sum of those files' `findings: N` last lines, read by `close` from the files and never typed by hand." }
+        "findings": { "type": "integer", "minimum": 0, "description": "The sum of those files' `findings: N` last lines, read by `close` from the files and never typed by hand." },
+        "outcome": { "type": "string", "minLength": 1, "description": "How the findings were answered, from `close --critique-outcome`. How many changed an order and how many were left with a reason, in the person's words, one line per flag. `none` when no flag was passed, which is every unattended close (live-run row 135). A count alone said nothing about what changed." }
       },
-      "description": "What the design critique found before this close, so a person can see later what was read and how much it raised. Absent when no critic ran. The findings themselves stay in the files; the critique blocks nothing, and a count here is a pointer, never a verdict."
+      "description": "What the design critique found before this close, and how it was answered. A person can see later what was read, how much it raised and what came of it. Absent when no critic ran. The findings themselves stay in the files; the critique blocks nothing, and a count here is a pointer, never a verdict."
     }
   }
 }

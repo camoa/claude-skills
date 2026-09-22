@@ -5400,6 +5400,26 @@ br_aida_writes_in_task() {
   return 1
 }
 
+# True when $1, a path relative to the project folder, is one AIDA's own scripts write there
+# (live-run row 127). A record order's diff reads the project folder whole, since its
+# deliverable may sit beside earlier reports outside the task folder. Inside this task's own
+# folder the list above decides. Another task's folder is written by that task's stage closes
+# and notes, never by this order's implementer. project.json is the project skill's. The
+# project's records/ is ignored, so it never appears in a diff.
+br_aida_writes_in_project() {
+  local task_rel rel
+  task_rel="${TASK_PATH#"$BRC_CODEPATH"/}"
+  rel="${1#"$task_rel"/}"
+  if [ "$rel" != "$1" ]; then
+    br_aida_writes_in_task "$rel"
+    return $?
+  fi
+  case "$1" in
+    project.json|tasks/*) return 0 ;;
+  esac
+  return 1
+}
+
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
 # coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
 # is gate the first slot holds configuration-gate instead, and on one whose proof is record it
@@ -5423,7 +5443,7 @@ br_seven_checks() {
   fi
   if [ "$proof" = "record" ]; then
     for rc_id in suite-regression coding-standards static-analysis security; do
-      jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the task folder, which the $rc_id row does not read, so the row does not apply to it." \
+      jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
         '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
     done
   else
@@ -5447,15 +5467,15 @@ br_seven_checks() {
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    # A record order owns absolute paths under the task folder, and its diff is the project
+    # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
     if [ "$proof" = "record" ]; then
-      p="$BRC_CODEPATH/$p"
-      if br_aida_writes_in_task "${p#"$TASK_PATH"/}"; then
+      if br_aida_writes_in_project "$p"; then
         set_aside=$((set_aside + 1))
         continue
       fi
+      p="$BRC_CODEPATH/$p"
     fi
     matched=false
     gi=0
@@ -5484,7 +5504,7 @@ BR_DIFF
   if [ "$proof" = "record" ]; then
     aside_noun="files"
     [ "$set_aside" -ne 1 ] || aside_noun="file"
-    ofc_detail="$ofc_detail The diff is the task folder's alone, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger) set aside."
+    ofc_detail="$ofc_detail The diff is the project folder's, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger, another task's close) set aside."
   fi
   jq -n --arg verdict "$ofc_verdict" --arg detail "$ofc_detail" \
     '{id: "owned-files", verdict: $verdict, detail: $detail}' >>"$parts_file"
@@ -6341,13 +6361,14 @@ rv_load_state() {
 }
 
 # The repository an order's range lives in, and the paths a tree check reads there. An order whose
-# proof is record lands its deliverable in the task folder, so its commits are the project
+# proof is record lands its deliverable in the project folder, so its commits are the project
 # folder's, and every range, HEAD, diff and tree read for it goes there; the tree check reads its
 # owned files alone, because the running stage keeps the rest of that folder dirty on purpose
-# (nyc defect 17). Its diffs read the task folder alone. AIDA's own actions commit the rest of
-# the project folder in the same range. A task note commits tasks/ whole; another task's stage
-# close commits its folder. None of that is the implementer's. Every other order reads the
-# code worktree whole. Call after rv_load_codepath.
+# (nyc defect 17). Its diffs read the project folder whole, because the deliverable may sit
+# outside the task folder (live-run row 127). AIDA's own actions commit that folder in the same
+# range. A task note commits tasks/ whole; another task's stage close commits its folder. None of
+# that is the implementer's, and br_aida_writes_in_project sets each aside. Every other order
+# reads the code worktree whole. Call after rv_load_codepath.
 # $1 the action's own name, $2 the frozen work order. Sets RV_RANGE_REPO, RV_RANGE_PATHS (one
 # pathspec per line, empty for the whole tree) and RV_RANGE_NAME, the words a message uses.
 # Also RV_RANGE_SCOPE, the one path every diff is scoped to, empty for the whole tree.
@@ -6360,7 +6381,7 @@ rv_load_range_repo() {
     || die 87 "$who: $(printf '%s' "$unit_json" | jq -r '.id') is proved by its record, so its range lives in the project folder, and $RV_PROJECT_FOLDER is not a git repository. Run git init there and commit it."
   RV_RANGE_REPO="$RV_PROJECT_FOLDER"
   RV_RANGE_PATHS="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
-  RV_RANGE_SCOPE="$TASK_PATH"
+  RV_RANGE_SCOPE="$RV_PROJECT_FOLDER"
   RV_RANGE_NAME="the project folder"
 }
 

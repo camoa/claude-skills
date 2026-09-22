@@ -12,7 +12,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the design check. Deciding whether design is done belongs to whoever calls this, never to this
 # script.
 #
-# `close` also records the critique files under <task_folder>/records/ and their finding count.
+# `close` also records the critique files under <task_folder>/records/, their finding count, and
+# the outcome line --critique-outcome passed, `none` without one, and refused unattended.
 #
 # What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
 # summary lines and the paths it wrote, and never a record body. A caller that needs a field reads
@@ -33,6 +34,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
+#                        [--append-reasoning <text>] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
@@ -48,7 +50,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
-#                        --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe
+#                        --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe \
+#                        [--critique-outcome <text>]...
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
@@ -145,7 +148,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      (check-design.sh's own exit 3, meaning it could not do its job either); the records-hash
 #      library could not be sourced; or `close`'s own call to records_hash_for failing, once
 #      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
-#      or `read-guide` found design-guides-read.json already on disk and not valid JSON.
+#      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
+#      `update` was given --reasoning and --append-reasoning together; or `close` was given
+#      --critique-outcome with no finished critique file to record it beside, or unattended.
 #   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
@@ -155,11 +160,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
 #      and stdout names it in a `setAside:` line.
 #   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
-#      problem: a criterion with no serving order, a criterion owned by zero or by more than one
-#      work order, an order serving no criterion, an order missing a required test, a `record`
-#      order that declares a test, owns a file outside the task folder or has no done-when row, a
-#      dependency cycle, an order that reaches no owner, overlapping owned files, or an id naming
-#      nothing real (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
+#      problem. That is a criterion with no serving order, or one owned by zero or by more than
+#      one work order. Or an order serving no criterion, or one missing a required test. Or a
+#      `record` order that declares a test or has no done-when row. Or one that owns a file
+#      outside the project folder or under a path the project ignores. Or a dependency cycle, an
+#      order that reaches no owner, overlapping owned files, or an id naming nothing real
+#      (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
 #      files, before writing anything.
 #   6  `start` was asked to begin design on a task research has not closed: no
 #      records/research-check.json, or one whose exitCode is not 0. Research is required (the
@@ -233,6 +239,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
+                                         [--append-reasoning <text>] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -246,7 +253,8 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
-                                         --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe
+                                         --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe \
+                                         [--critique-outcome <text>]...
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
@@ -387,7 +395,7 @@ open_summary_of() {
         ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
         ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
         ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a model looking through a browser" else "its record" end) + " and declares a test"),
-        ((.coverage.recordOrdersOwningOutsideTaskFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " outside the task folder"),
+        ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
         ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a model looking through a browser" else "its record" end) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
@@ -397,6 +405,14 @@ open_summary_of() {
         (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", ")))
       ] | join("; ")
     ' 2>/dev/null
+}
+
+# Prints $1, a work order document, with $2 added to its `reasoning` as a new paragraph. The
+# paragraph follows a blank line, or is the whole field when it was empty. `dispose` and
+# `update --append-reasoning` both write this way, so an earlier paragraph is never lost
+# (live-run rows 79 and 131).
+reasoning_appended() {
+  printf '%s' "$1" | jq --arg v "$2" '.reasoning = (if (.reasoning // "") == "" then $v else .reasoning + "\n\n" + $v end)'
 }
 
 # The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
@@ -654,14 +670,16 @@ do_create() {
 # ------------------------------------------------------------------------------------------------
 # update: replaces the given scalar or id-list fields on an existing work order, wholesale for
 # any list passed. ownedFiles, tests and doneWhen are not settable here; use their own add-
-# actions.
+# actions. --reasoning replaces the whole field; --append-reasoning adds a paragraph after a
+# blank line and keeps what is there, the write `dispose` makes (live-run row 131). The two
+# together are refused: one call cannot both replace the text and add to it.
 # ------------------------------------------------------------------------------------------------
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" diff_budget="" surfaces_json='[]' proof=""
+  local interface="" reasoning="" append_reasoning="" diff_budget="" surfaces_json='[]' proof=""
   local set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
-  local set_interface=false set_reasoning=false set_diffbudget=false set_surfaces=false set_proof=false
+  local set_interface=false set_reasoning=false set_append=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
@@ -688,6 +706,9 @@ do_update() {
       --reasoning)
         need_value "update" "--reasoning" "$#" "${2:-}"
         reasoning="$2"; set_reasoning=true; shift 2 ;;
+      --append-reasoning)
+        need_value "update" "--append-reasoning" "$#" "${2:-}"
+        append_reasoning="$2"; set_append=true; shift 2 ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
@@ -704,6 +725,11 @@ do_update() {
 
   is_blank "$id" && die3 "update: --id is required and must not be blank"
   id_shape_ok "$id" wo || die3 "update: --id '$id' is not a valid wo<n> id shape"
+  if [ "$set_append" = "true" ]; then
+    is_blank "$append_reasoning" && die3 "update: --append-reasoning must not be blank"
+    [ "$set_reasoning" != "true" ] \
+      || die3 "update: --reasoning replaces the field and --append-reasoning adds to it. Pass one"
+  fi
   local file
   file="$(wo_file_for "$id")"
   wo_exists "$id" || die2 "update: no work order $id in $DESIGN_DIR"
@@ -737,6 +763,9 @@ do_update() {
   fi
   if [ "$set_reasoning" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$reasoning" '.reasoning = $v')"
+  fi
+  if [ "$set_append" = "true" ]; then
+    doc="$(reasoning_appended "$doc" "$append_reasoning")"
   fi
   if [ "$set_diffbudget" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$diff_budget" '.diffBudget = $v')"
@@ -818,29 +847,30 @@ do_add_owned_file() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-owned-file: $file exists but is not valid JSON"
   doc="$(jq --arg p "$path_val" '.ownedFiles = (((.ownedFiles // []) + [$p]) | unique)' "$file")"
-  # An order whose every owned file lies under the task folder delivers a document, not code, so
-  # its proof is `record` (nyc defect 17): no test, no commit in the code repository, its done-when
-  # rows judged instead. Marked here, where the files arrive, and only on an order with no proof
-  # field: `create` writes one only when --proof was passed, so a proof design set by hand stays,
-  # `tests` included. A code file added later leaves `record` in place, and the design check
-  # names it; `update --proof tests` is the repair.
+  # An order whose every owned file lies under the project folder delivers a document, not code.
+  # So its proof is `record` (nyc defect 17): no test, no commit in the code repository, its
+  # done-when rows judged instead. The task folder's deliverables/ is the usual place; a report
+  # may land beside earlier reports elsewhere in the project folder (live-run row 127). Marked
+  # here, where the files arrive, and only on an order with no proof field. `create` writes one
+  # only when --proof was passed, so a proof design set by hand stays, `tests` included. A code
+  # file added later leaves `record` in place, and the design check names it; `update --proof
+  # tests` is the repair.
   local inferred
-  inferred="$(printf '%s' "$doc" | jq -r --arg t "$TASK_PATH/" \
+  inferred="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" \
     'if (has("proof") | not) and ((.ownedFiles // []) | all(startswith($t))) then "record" else "" end')"
-  if [ "$inferred" = "record" ]; then
-    doc="$(printf '%s' "$doc" | jq '.proof = "record"')"
-    echo "proof-set: record, because every owned file of $id lies under the task folder"
-  fi
+  [ "$inferred" != "record" ] || doc="$(printf '%s' "$doc" | jq '.proof = "record"')"
   # A record order's range is the project folder's history, so a file the project ignores can
   # never land in it: build-record would refuse the empty range (exit 71) on every attempt. The
   # project ignores records/ at every depth, the folder of derived check output. git finds the
-  # repository upward from the task folder. Only a path under the task folder is asked: a path
-  # outside it is a code path, which the design check names on a record order.
+  # repository upward from the task folder. Only a path under the project folder is asked. A
+  # path outside it is a code path, which the design check names on a record order. The refusal
+  # comes before the proof-set line, so nothing reports a write that did not happen.
   if [ "$(printf '%s' "$doc" | jq -r '.proof // "tests"')" = "record" ] \
-     && [ "${path_val#"$TASK_PATH"/}" != "$path_val" ] \
+     && [ "${path_val#"$PROJECT_PATH"/}" != "$path_val" ] \
      && git -C "$TASK_PATH" check-ignore -q -- "$path_val" 2>/dev/null; then
     die3 "add-owned-file: the project ignores $path_val, so a commit can never hold it and a record order owning it can never be recorded. records/ is derived check output the project keeps out of history. Put the deliverable in a folder the project commits, such as $TASK_PATH/deliverables/."
   fi
+  [ "$inferred" != "record" ] || echo "proof-set: record, because every owned file of $id lies under the project folder"
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   wo_summary "$doc"
@@ -987,8 +1017,8 @@ do_remove_test() {
 # and the count is printed. A path is named as it was added. The last owned file is refused on the
 # schema's own rule: an order that names no file hands the builder no boundary. On a `record`
 # order, the inference add-owned-file makes runs again in reverse. An order left with no owned
-# file under the task folder loses `proof`. It does not stay `record` on the strength of files
-# it no longer owns.
+# file under the project folder loses `proof`. It does not stay `record` on the strength of
+# files it no longer owns.
 # ------------------------------------------------------------------------------------------------
 
 do_remove_done_when() {
@@ -1046,11 +1076,11 @@ do_remove_owned_file() {
     || die3 "remove-owned-file: $path_val is the only file $id owns, and an order that names no file hands the builder no boundary (design-schema.json, ownedFiles). Add the replacement first, or fold the order into another with merge"
   doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]' "$file")"
   local unset_proof
-  unset_proof="$(printf '%s' "$doc" | jq -r --arg t "$TASK_PATH/" \
+  unset_proof="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" \
     'if (.proof // "") == "record" and ((.ownedFiles // []) | any(startswith($t)) | not) then "yes" else "" end')"
   if [ "$unset_proof" = "yes" ]; then
     doc="$(printf '%s' "$doc" | jq 'del(.proof)')"
-    echo "proof-unset: record, because no owned file of $id lies under the task folder now; every reader takes the order as tests until --proof says otherwise"
+    echo "proof-unset: record, because no owned file of $id lies under the project folder now; every reader takes the order as tests until --proof says otherwise"
   fi
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
@@ -1280,13 +1310,20 @@ do_check() {
 do_close() {
   [ -n "$RUN_MODE" ] \
     || die3 "close: --run-mode is required. The close record says who was present, and that is never assumed"
-  local fit="" fit_path="" fit_reason="" no_recipe=false fit_json=""
+  local fit="" fit_path="" fit_reason="" no_recipe=false fit_json="" outcome=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --recipe-fit)    need_value "close" "--recipe-fit" "$#" "${2:-}";    fit="$2"; shift 2 ;;
       --recipe-path)   need_value "close" "--recipe-path" "$#" "${2:-}";   fit_path="$2"; shift 2 ;;
       --recipe-reason) need_value "close" "--recipe-reason" "$#" "${2:-}"; fit_reason="$2"; shift 2 ;;
       --no-recipe)     no_recipe=true; shift ;;
+      --critique-outcome)
+        need_value "close" "--critique-outcome" "$#" "${2:-}"
+        is_blank "$2" && die3 "close: --critique-outcome must not be blank"
+        [ "$RUN_MODE" != "autonomous" ] \
+          || die3 "close: --critique-outcome is a person's answer to the findings, and an autonomous close has nobody to answer them. The record says none"
+        outcome="${outcome:+$outcome
+}$2"; shift 2 ;;
       *) die3 "close: unrecognized argument: $1" ;;
     esac
   done
@@ -1371,7 +1408,10 @@ do_close() {
   # no critic ran. A file without that line was not finished by its critic, and a count read from
   # it would be invented, so that file is left out of the record and named on stderr. The critique
   # blocks nothing, which is the design: a critic that can stop a close trains a design that
-  # writes for the critic.
+  # writes for the critic. Beside the count sits `outcome`, the --critique-outcome line: how the
+  # findings were answered, in the person's words, one line per flag. A count alone said nothing
+  # about what changed (live-run row 135). `none` when no flag was passed, which is every
+  # unattended close: nobody answered the findings there, so the flag is refused above.
   local critique_files critique_total crit_file crit_n
   critique_files=""; critique_total=0
   while IFS= read -r crit_file; do
@@ -1385,8 +1425,12 @@ do_close() {
     critique_files="$critique_files$crit_file
 "
   done < <(find "$TASK_PATH/records" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
-  [ -z "$critique_files" ] || doc="$(printf '%s' "$doc" | jq --arg files "$critique_files" --argjson n "$critique_total" \
-    '.critique = {files: ($files | split("\n") | map(select(length > 0))), findings: $n}')"
+  if [ -n "$critique_files" ]; then
+    doc="$(printf '%s' "$doc" | jq --arg files "$critique_files" --argjson n "$critique_total" --arg outcome "${outcome:-none}" \
+      '.critique = {files: ($files | split("\n") | map(select(length > 0))), findings: $n, outcome: $outcome}')"
+  elif [ -n "$outcome" ]; then
+    die3 "close: --critique-outcome names how the critique's findings were answered, and no finished critique file is under $TASK_PATH/records to record it beside"
+  fi
 
   write_atomic "$CLOSED_FILE" "$doc"
   # The stage boundary: the task folder is committed, with the order count the check just
@@ -1397,6 +1441,7 @@ do_close() {
   echo "closedBy: $closed_by"
   echo "runMode: $RUN_MODE"
   echo "hash: $hash"
+  [ -z "$critique_files" ] || printf '%s\n' "${outcome:-none}" | sed 's/^/critiqueOutcome: /'
   exit 0
 }
 
@@ -1500,7 +1545,7 @@ do_dispose() {
   local file doc
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "dispose: $file exists but is not valid JSON"
-  doc="$(jq --arg v "Candidate $candidate ($distance). Proposed $verdict, citing ${cost:-nothing}. Disposition: $outcome ($rule). $why" '.reasoning = (if (.reasoning // "") == "" then $v else .reasoning + "\n\n" + $v end)' "$file")"
+  doc="$(reasoning_appended "$(cat "$file")" "Candidate $candidate ($distance). Proposed $verdict, citing ${cost:-nothing}. Disposition: $outcome ($rule). $why")"
   if [ -n "$reuse_path" ]; then
     doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
       '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"
@@ -1541,6 +1586,9 @@ shift
 TASK_PATH="$(resolve_task_folder "$TASK_FOLDER_ARG" "$ACTION")"
 RESOLVE_RC=$?
 [ "$RESOLVE_RC" -eq 0 ] || exit "$RESOLVE_RC"
+# The project folder, two levels up, where commit_stage_close sends the stage commit. A record
+# order's files lie under it (live-run row 127).
+PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
 CLOSED_FILE="$TASK_PATH/design-closed.json"

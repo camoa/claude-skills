@@ -29,7 +29,7 @@ It writes `implementation/brief-<order id>-review.json`:
 - the criteria this order serves and owns, and the non-goals;
 - the order record;
 - the diff as a path, the frozen tests, and the builder's report path; on an order whose proof
-  is `record` the diff is the task folder's, from the project folder, and `deliverables` names
+  is `record` the diff is the project folder's whole, and `deliverables` names
   each owned file by path. The reviewer reads the document whole rather than a patch;
 - the eight check results;
 - both interface texts;

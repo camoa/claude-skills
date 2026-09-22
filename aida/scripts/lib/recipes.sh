@@ -1118,8 +1118,9 @@ GS_PATHS
 
 # The diff from $2 to $3 in the repository $1. Empty $4 reads the whole tree; a path reads it
 # alone. Anything after $4 is passed to git diff as its own options. A `record` order's range
-# lives in the project folder. AIDA's own actions commit that folder between a brief and its
-# record: a task note, another task's stage close. So its diff is scoped to the task folder.
+# lives in the project folder, and its scope is that folder whole (live-run row 127). AIDA's own
+# actions commit it between a brief and its record: a task note, another task's stage close.
+# The owned-files check sets those aside by name.
 git_diff_of() {
   local repo="$1" from="$2" to="$3" scope="${4:-}"
   shift 4

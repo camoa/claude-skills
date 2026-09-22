@@ -243,17 +243,19 @@ landed, and the code repository may hold no commit at all for it. The tree read 
 files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
 project folder with no history refuses (exit 87).
 
-**A `record` order's diff is the task folder's alone.** AIDA commits the project folder between
-a build brief and its record. A task note commits `tasks/` whole, and another task's stage
-close commits its folder. None of that is the implementer's. So the owned-files check, the
-review diff and the fix patch read `git diff <range> -- <task folder>`. Inside the task
-folder, the files AIDA's own scripts write are set aside before the owned list is compared.
-Those are `task.json`, `alignment.json`, their renderings, `design-closed.json`, and the
-`research/`, `design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`,
-`completion/`, `notes/` and `records/` folders. The check's detail says how many were set
-aside. A person's places are `inputs/` and `deliverables/`, and a file under a stage folder is
-set aside even when a person wrote it. A file under `deliverables/` is never set aside, so a
-second document there that the order does not own still reads unmet.
+**A `record` order's diff is the project folder's.** Its deliverable may sit beside earlier
+reports outside the task folder. So the owned-files check, the review diff and the fix patch
+read `git diff <range>` over the project folder whole. AIDA commits that folder between a
+build brief and its record. A task note commits `tasks/` whole, and another task's stage close
+commits its folder. None of that is the implementer's, so the files AIDA's own scripts write
+are set aside before the owned list is compared. Inside this task's folder those are
+`task.json`, `alignment.json`, their renderings, `design-closed.json`, and the `research/`,
+`design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`, `completion/`,
+`notes/` and `records/` folders. Outside it, every other task's folder and `project.json`.
+The check's detail says how many were set aside. A person's places are `inputs/`,
+`deliverables/` and the project folders a report lands in. A file under a stage folder is set
+aside even when a person wrote it. A file in a person's place is never set aside, so a second
+document there that the order does not own still reads unmet.
 
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
 `references/preconditions.md` already resolved for the baseline. The script parses `## Test

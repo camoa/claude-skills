@@ -212,26 +212,26 @@ closes, its criteria are recorded as judged by the gate, a third judge beside pe
 
 ## A document order
 
-A work order whose deliverable is a document in the task folder, a dependency review or a
-report, has `record` as its proof kind. It owns files under the task folder only, and lands no
-commit in the code repository. No test author is dispatched. Its done-when rows are its
+A work order whose deliverable is a document, a dependency review or a report, has `record`
+as its proof kind. It owns files under the project folder, in a folder the project commits,
+the task folder's `deliverables/` by default. It lands no commit in the code repository. No test author is dispatched. Its done-when rows are its
 checkpoint. The row-checker, or you, confirms that each row names something a reader can check
 from the document alone. The freeze records that judgement. The implementer writes the
 document and commits it in the project folder, staging its owned files alone. The build reads
 the range, the tree and the diff from the project folder's history. The empty-range refusal
 and the unchanged refusal compare against that history. The suite and the three tool checks
 read undeclared, naming the proof kind. The done-when check takes the place of the tests, met
-when the row was confirmed. The reviewer is handed the document by path and the task folder's
-diff, and reads it whole against the done-when rows. When the order closes, its criteria are
+when the row was confirmed. The reviewer is handed the document by path and the project
+folder's diff, and reads it whole against the done-when rows. When the order closes, its criteria are
 recorded as judged by whoever judged the row, a person or a model, never the gate.
 
-Every diff for such an order is the task folder's alone: the owned-files check, the review diff
+Every diff for such an order is the project folder's: the owned-files check, the review diff
 and the fix patch. AIDA commits the project folder between a build brief and its record, when a
-note is saved or another task closes a stage. None of that is the implementer's. Inside the task
-folder, the files AIDA's own scripts write are set aside before the owned list is compared.
-Those are the task record, the contract, the stage folders and the notes. The check's detail
-says how many. A file a person writes is never set aside, so a second document the order does
-not own still fails the check.
+note is saved or another task closes a stage. None of that is the implementer's, so the files
+AIDA's own scripts write are set aside before the owned list is compared. Those are the task
+record, the contract, the stage folders and the notes of this task, every other task's folder,
+and the project record. The check's detail says how many. A file a person writes is never set
+aside, so a second document the order does not own still fails the check, wherever it lands.
 
 ## A page order
 

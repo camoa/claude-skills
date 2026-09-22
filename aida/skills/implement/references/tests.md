@@ -44,7 +44,7 @@ order that consumes what it configures. Every other order takes the steps below.
 no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` line. Design's
 `update --proof gate` is the way onto the gate.
 
-`record` means its deliverable is a document in the task folder, and nothing runs a document.
+`record` means its deliverable is a document in the project folder, and nothing runs a document.
 Skip `tests-brief` and dispatch no test author. Its done-when rows are its checkpoint. Put them
 to the `row-checker`, or to the person, the way the checkpoint below puts a test's rows. The
 question is whether each row names something a reader can confirm from the deliverable alone.

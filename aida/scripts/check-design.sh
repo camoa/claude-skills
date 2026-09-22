@@ -20,9 +20,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order that owns a criterion whose verifiedBy is machine declares at least one test,
 #     unless its proof is gate: such an order is proved by the recipe's `## Configuration gate`
 #     lines and declares no test at all, and one that declares a test is refused (live-run row 65);
-#   - a work order whose proof is record declares no test either, owns no file outside the task
-#     folder, and has at least one done-when row: its deliverable is a document in the task folder,
-#     and its done-when rows are what judge it (nyc defect 17);
+#   - a work order whose proof is record declares no test either. It owns no file outside the
+#     project folder or under a path the project ignores, and has at least one done-when row. Its
+#     deliverable is a document the project commits, and its done-when rows are what judge it
+#     (nyc defect 17, live-run row 127);
 #   - a work order whose proof is observe declares no test either, names at least one surface, and
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
@@ -104,7 +105,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      criterion owned by zero or by more than one order, an order serving no criterion, an order
 #      that owns a machine-verified criterion and declares no test, an order whose proof is gate
 #      and that declares a test, an order whose proof is record and that declares a test, owns a
-#      file outside the task folder or has no done-when row, an order whose proof is observe and
+#      file outside the project folder or under an ignored path, or has no done-when row, an
+#      order whose proof is observe and
 #      that declares a test, names no surface or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
 #      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
 #
@@ -152,7 +154,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
 #                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record and observe orders
-#                 recordOrdersOwningOutsideTaskFolder: [ {id, path} ],
+#                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record and observe orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
@@ -567,12 +569,15 @@ else
   # An order whose proof is gate owes no test: the recipe's `## Configuration gate` lines are its
   # check, and an owned machine criterion is judged by them at close. One that declares a test
   # anyway is the opposite defect, a test for a thing TDD is not about, and is named on its own list.
-  # An order whose proof is record owes no test either: its deliverable is a document in the task
-  # folder, judged by its done-when rows (nyc defect 17). So it needs a done-when row, and a file it
-  # owns outside the task folder would be code nothing tests. An order whose proof is observe owes
-  # no test and needs a done-when row on the same two rules: a model judges each row against what
-  # its surfaces render after the build (live-run row 104), so it needs a surface as well. The two
-  # shared rules keep the record lists, with the proof on each entry.
+  # An order whose proof is record owes no test either. Its deliverable is a document the project
+  # commits, judged by its done-when rows (nyc defect 17). So it needs a done-when row, and a file
+  # it owns outside the project folder would be code nothing tests. A file under a path the
+  # project ignores can never be committed, so its range would be empty (live-run row 127). git
+  # answers that per file, the way design-actions.sh asks it at add-owned-file. An order whose
+  # proof is observe owes no test and needs a done-when row on the same two rules. A model
+  # judges each row against what its surfaces render after the build (live-run row 104), so it
+  # needs a surface as well. The two shared rules keep the record lists, with the proof on each
+  # entry.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
     | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.proof != "gate" and $o.proof != "record" and $o.proof != "observe")
@@ -585,10 +590,20 @@ else
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.proof == "record" or .proof == "observe") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
-  RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg t "$TASK_PATH/" '
+  PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
+  RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
     [ $orders[] | .id as $id | select(.proof == "record") | (.ownedFiles // [])[]
-      | select(startswith($t) | not) | {id: $id, path: .} ]
+      | select(startswith($p) | not) | {id: $id, path: ., reason: "outside the project folder"} ]
   ')"
+  TAB="$(printf '\t')"
+  while IFS="$TAB" read -r REC_ID REC_PATH; do
+    [ -n "$REC_PATH" ] || continue
+    git -C "$TASK_PATH" check-ignore -q -- "$REC_PATH" 2>/dev/null || continue
+    RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(printf '%s' "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" | jq -c --arg id "$REC_ID" --arg path "$REC_PATH" \
+      '. + [{id: $id, path: $path, reason: "under a path the project ignores"}]')"
+  done < <(jq -r -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
+    $orders[] | .id as $id | select(.proof == "record") | (.ownedFiles // [])[]
+      | select(startswith($p)) | [$id, .] | @tsv')
   RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.proof == "record" or .proof == "observe") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
@@ -814,7 +829,7 @@ jq -n \
   --argjson ordersMissingRequiredTests "$ORDERS_MISSING_REQUIRED_TESTS_JSON" \
   --argjson gateOrdersDeclaringTests "$GATE_ORDERS_DECLARING_TESTS_JSON" \
   --argjson recordOrdersDeclaringTests "$RECORD_ORDERS_DECLARING_TESTS_JSON" \
-  --argjson recordOrdersOwningOutsideTaskFolder "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" \
+  --argjson recordOrdersOwningOutsideProjectFolder "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" \
   --argjson recordOrdersWithNoDoneWhen "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
@@ -850,7 +865,7 @@ jq -n \
       ordersMissingRequiredTests: $ordersMissingRequiredTests,
       gateOrdersDeclaringTests: $gateOrdersDeclaringTests,
       recordOrdersDeclaringTests: $recordOrdersDeclaringTests,
-      recordOrdersOwningOutsideTaskFolder: $recordOrdersOwningOutsideTaskFolder,
+      recordOrdersOwningOutsideProjectFolder: $recordOrdersOwningOutsideProjectFolder,
       recordOrdersWithNoDoneWhen: $recordOrdersWithNoDoneWhen,
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
       unknownCriteriaIds: $unknownCriteriaIds,
