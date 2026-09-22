@@ -6,10 +6,18 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.22] - 2026-09-22
 
-Live-run rows 111 to 115, the implement and design stages on beta.21. Rows 112 to 115 are the
+Live-run rows 111 to 116, the implement and design stages on beta.21. Rows 112 to 115 are the
 first live use of the `observe` proof kind.
 
 ### Added
+- A fix scope outside the order's files is named at birth, withheld from the fixer, allowed
+  only by a person, and refused by the hook. `review-record` stores and prints `outsideOwned`
+  for a finding whose `fixScope` leaves the order's `ownedFiles`. `fix-brief` hands the fixer
+  only the owned paths and the paths `--allow <path>` names, resolved relative to the code
+  path; the rest is withheld per finding, so the fixer reports it scope-insufficient and the
+  ruling route opens. `fix-record`'s owned-files check reads the round's allowed paths. The
+  fixer's dispatch record carries `ownedFiles`, and the write hook's rule two holds the fixer
+  as it holds the implementer. `--allow` unattended is exit 100. (row 116)
 - An observe order gets a look before the build. `build-brief` names the before folder and says
   whether the before-look is owed or taken; the look is the same surfaces at the same viewports
   at `headNow`, before the implementer runs. Each observed row carries `before` beside
