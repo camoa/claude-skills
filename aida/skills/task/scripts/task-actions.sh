@@ -50,12 +50,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
 #                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
 #                    [--setup-recipe <kind>=<path>]...
+#   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
+#                    not-applicable -- <reason...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] prune --project <path> [--all] [<task-id>]...
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
-# mode). Nothing below asks a question, so only `environment up` and `prune` read it: a site
-# coming up and a tree going are a person's yes, and both refuse unattended at 70. It is
+# mode). Nothing below asks a question, so only `environment up`, `environment not-applicable`,
+# `prune` and the `environment:` line of `start` read it. A site coming up, a tree going and a
+# task needing no site are a person's answer, so the three refuse unattended at 70. It is
 # accepted in the same place and shape project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
@@ -120,6 +123,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh decline-recipe --project <path> <task-id> <framework>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
                                  [--setup-recipe <kind>=<path>]...
+       task-actions.sh environment --project <path> <task-id> not-applicable -- <reason...>
        task-actions.sh prune    --project <path> [--all] [<task-id>]...
 EOF
 }
@@ -286,6 +290,17 @@ section_present() {
   [ "$hit" = "1" ]
 }
 
+# The heading a version 5 goal sits under: `Goal`, or `Problem` when there is no `Goal` (live
+# run, row 141: three version 5 subtask records used `## Problem`). Prints the heading found, or
+# returns 1 when the file has neither. $1 the task.md path.
+goal_heading() {
+  local file="$1" name
+  for name in Goal Problem; do
+    if section_present "$file" "$name"; then printf '%s' "$name"; return 0; fi
+  done
+  return 1
+}
+
 # Version 5 writes an epic's header as a real YAML block (python's yaml.safe_dump) at the very top
 # of task.md, present only when a task has children (fm-helpers.sh's write_epic_frontmatter).
 # Almost every task carries none at all, which is the likely case this reads first: the first
@@ -346,6 +361,81 @@ keep_v5_files() {
   done
 }
 
+# What stops a folder from being moved, before anything moves: no readable task.md, no goal
+# heading, or a destination already in place. Prints the reason, or nothing when the move may go
+# ahead. do_repair dies with the reason for the folder it was given. A child nested in an epic
+# is left behind with it instead, so the epic's repair is never refused for a child it holds.
+# $1 the old folder, $2 the new folder.
+repair_refusal() {
+  local old_task_md="$1/task.md" new_task_dir="$2"
+  [ -f "$old_task_md" ] || { printf '%s not found. Cannot verify the goal before moving anything' "$old_task_md"; return 0; }
+  [ -r "$old_task_md" ] || { printf '%s is not readable. Cannot verify the goal before moving anything' "$old_task_md"; return 0; }
+  goal_heading "$old_task_md" >/dev/null \
+    || { printf '%s has no Goal section and no Problem section. Refusing to move a task whose goal cannot be verified' "$old_task_md"; return 0; }
+  [ ! -e "$new_task_dir" ] || printf '%s already exists. This task looks already repaired' "$new_task_dir"
+}
+
+# The move, and what it reads back before it reports success (ideal/task.md, "New": version 5's
+# own migration lost a contract once and a ticket number another time, and reported success both
+# times). Renames the .v5 files, and checks the goal under the heading $5 against what was read
+# before. Writes task.json with the state $3, the parent $4 (the old header's when $4 is empty)
+# and the children the old header names, then reads every field back. Dies through die3 after
+# the move on any mismatch: a half-moved task is a fault to look at by hand. $1 the old folder,
+# $2 the new folder, $3 the state, $4 the parent as JSON or empty, $5 the goal heading.
+repair_move() {
+  local old_folder="$1" new_task_dir="$2" state="$3" parent_json="$4" heading="$5"
+  local id goal_before goal_after fm_json children_json new_task_md
+  id="$(basename -- "$new_task_dir")"
+  goal_before="$(extract_section "$old_folder/task.md" "$heading")"
+  fm_json="$(read_old_parent_and_children "$old_folder/task.md")" || die3 "repair: could not read the header in $old_folder/task.md"
+  [ -n "$parent_json" ] || parent_json="$(printf '%s' "$fm_json" | jq -c '.parent')"
+  children_json="$(printf '%s' "$fm_json" | jq -c '.children')"
+
+  mv -- "$old_folder" "$new_task_dir" || die3 "repair: could not move $old_folder to $new_task_dir"
+  keep_v5_files "$new_task_dir" rename
+
+  new_task_md="$new_task_dir/task.md"
+  [ -f "$new_task_md" ] \
+    || die3 "repair: task.md is missing from $new_task_dir after the move. Look at $new_task_dir by hand"
+  goal_after="$(extract_section "$new_task_md" "$heading")"
+  if [ "$(printf '%s' "$goal_before" | tr -d '[:space:]')" != "$(printf '%s' "$goal_after" | tr -d '[:space:]')" ]; then
+    die3 "repair: the goal read back from $new_task_md does not match what was read before the move. Look at $new_task_dir by hand"
+  fi
+
+  jq -n \
+    --arg id "$id" \
+    --arg state "$state" \
+    --argjson parent "$parent_json" \
+    --argjson children "$children_json" \
+    '{schemaVersion:1, id:$id, state:$state, parent:$parent, children:$children, mechanismHints:[], externalIds:{}}' \
+    > "$new_task_dir/task.json" || die3 "repair: could not write $new_task_dir/task.json"
+
+  local written_id written_state written_parent written_children
+  written_id="$(jq -r '.id' "$new_task_dir/task.json" 2>/dev/null)"
+  written_state="$(jq -r '.state' "$new_task_dir/task.json" 2>/dev/null)"
+  written_parent="$(jq -c '.parent' "$new_task_dir/task.json" 2>/dev/null)"
+  written_children="$(jq -c '.children' "$new_task_dir/task.json" 2>/dev/null)"
+  if [ "$written_id" != "$id" ] || [ "$written_state" != "$state" ] \
+     || [ "$written_parent" != "$parent_json" ] || [ "$written_children" != "$children_json" ]; then
+    die3 "repair: task.json at $new_task_dir does not read back what was just written. Look at it by hand"
+  fi
+}
+
+# Adds the ids in $2, one per line, to the children of the task.json at $1, and reads each one
+# back. Used for the children a parent's repair moved, and for a left child repaired later.
+add_children() {
+  local task_json="$1" ids="$2" child_id
+  write_atomic "$task_json" "$(jq --arg m "$ids" \
+    '.children = ((.children // []) + ($m | split("\n") | map(select(length > 0))) | unique)' "$task_json")"
+  while IFS= read -r child_id; do
+    [ -n "$child_id" ] || continue
+    jq -e --arg c "$child_id" '.children | index($c) != null' "$task_json" >/dev/null 2>&1 \
+      || die3 "repair: $task_json does not read back child $child_id in its children. Look at it by hand"
+  done <<TA_IDS
+$ids
+TA_IDS
+}
+
 do_repair() {
   local project_path="" old_folder=""
   while [ "$#" -gt 0 ]; do
@@ -366,12 +456,19 @@ do_repair() {
   _resolved_old="$(canon_existing_dir "$old_folder")" || die3 "repair: not a folder: $old_folder"
   old_folder="$_resolved_old"
 
-  local old_state
+  # Two origins. The version 5 folders, and a repaired parent's own in_progress/ or completed/
+  # under tasks/, where a child that parent's repair left behind sits. From the second, the
+  # child's parent is that folder, and it joins the parent's children below.
+  local old_state origin_parent=""
   case "$old_folder" in
     */implementation_process/in_progress/*) old_state="in_progress" ;;
     */implementation_process/completed/*) old_state="complete" ;;
+    */tasks/*/in_progress/*|*/tasks/*/completed/*)
+      origin_parent="$(basename -- "$(dirname -- "$(dirname -- "$old_folder")")")"
+      case "$old_folder" in */in_progress/*) old_state="in_progress" ;; *) old_state="complete" ;; esac
+      ;;
     *)
-      die3 "repair: $old_folder is not under implementation_process/in_progress or implementation_process/completed; nothing was moved"
+      die3 "repair: $old_folder is not under implementation_process/in_progress or implementation_process/completed, nor under a repaired parent's in_progress or completed; nothing was moved"
       ;;
   esac
 
@@ -379,66 +476,71 @@ do_repair() {
   id="$(basename -- "$old_folder")"
   [ -n "$id" ] || die3 "repair: cannot derive a task id from $old_folder"
 
-  local old_task_md="$old_folder/task.md"
-  [ -f "$old_task_md" ] || die3 "repair: $old_task_md not found. Cannot verify the goal before moving anything"
-  [ -r "$old_task_md" ] || die3 "repair: $old_task_md is not readable. Cannot verify the goal before moving anything"
-  section_present "$old_task_md" "Goal" \
-    || die3 "repair: $old_task_md has no Goal section. Refusing to move a task whose goal cannot be verified"
-
-  local goal_before fm_json parent_json children_json
-  goal_before="$(extract_section "$old_task_md" "Goal")"
-  fm_json="$(read_old_parent_and_children "$old_task_md")" || die3 "repair: could not read the header in $old_task_md"
-  parent_json="$(printf '%s' "$fm_json" | jq -c '.parent')"
-  children_json="$(printf '%s' "$fm_json" | jq -c '.children')"
-
-  local new_task_dir
+  local new_task_dir reason heading
   new_task_dir="$(task_dir_for "$project_path" "$id")"
-  [ ! -e "$new_task_dir" ] || die3 "repair: $new_task_dir already exists. This task looks already repaired"
+  reason="$(repair_refusal "$old_folder" "$new_task_dir")"
+  [ -z "$reason" ] || die3 "repair: $reason"
+  heading="$(goal_heading "$old_folder/task.md")"
   keep_v5_files "$old_folder" check || return 1
 
   mkdir -p "$project_path/tasks" || die3 "repair: cannot create $project_path/tasks"
-  mv -- "$old_folder" "$new_task_dir" || die3 "repair: could not move $old_folder to $new_task_dir"
-  keep_v5_files "$new_task_dir" rename
-
-  # The move reads back what it claims to have preserved before it reports success
-  # (ideal/task.md, "New": version 5's own migration lost a contract once and a ticket number
-  # another time, and reported success both times).
-  local new_task_md="$new_task_dir/task.md"
-  [ -f "$new_task_md" ] \
-    || die3 "repair: task.md is missing from $new_task_dir after the move. Look at $new_task_dir by hand"
-  local goal_after
-  goal_after="$(extract_section "$new_task_md" "Goal")"
-  if [ "$(printf '%s' "$goal_before" | tr -d '[:space:]')" != "$(printf '%s' "$goal_after" | tr -d '[:space:]')" ]; then
-    die3 "repair: the goal read back from $new_task_md does not match what was read before the move. Look at $new_task_dir by hand"
+  local parent_json="" parent_task_json=""
+  if [ -n "$origin_parent" ]; then
+    parent_json="$(jq -n --arg p "$origin_parent" '$p')"
+    parent_task_json="$(task_dir_for "$project_path" "$origin_parent")/task.json"
+  fi
+  repair_move "$old_folder" "$new_task_dir" "$old_state" "$parent_json" "$heading"
+  echo "goal-heading: $heading"
+  if [ -n "$origin_parent" ]; then
+    [ -f "$parent_task_json" ] && add_children "$parent_task_json" "$id" && echo "PARENT: $origin_parent now lists $id"
+    rmdir -- "$(dirname -- "$old_folder")" 2>/dev/null
   fi
 
-  jq -n \
-    --arg id "$id" \
-    --arg state "$old_state" \
-    --argjson parent "$parent_json" \
-    --argjson children "$children_json" \
-    '{schemaVersion:1, id:$id, state:$state, parent:$parent, children:$children, mechanismHints:[], externalIds:{}}' \
-    > "$new_task_dir/task.json" || die3 "repair: could not write $new_task_dir/task.json"
+  # A version 5 epic holds its children under in_progress/ and completed/ inside its own folder,
+  # and the move above carried them along (live run, row 140). Each child that can be moved goes
+  # to tasks/<child id> in this same call, with this task as its parent, and joins this task's
+  # children. One that cannot is left where it sits and named; it never refuses the epic's repair.
+  local sub child_state child_dir child_id child_dir_new child_reason children_here moved=""
+  for sub in in_progress completed; do
+    [ -d "$new_task_dir/$sub" ] || continue
+    if [ "$sub" = in_progress ]; then child_state=in_progress; else child_state=complete; fi
+    children_here="$(find "$new_task_dir/$sub" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)"
+    while IFS= read -r child_dir; do
+      [ -n "$child_dir" ] || continue
+      child_id="$(basename -- "$child_dir")"
+      child_dir_new="$(task_dir_for "$project_path" "$child_id")"
+      child_reason="$(repair_refusal "$child_dir" "$child_dir_new")"
+      [ -n "$child_reason" ] || keep_v5_files "$child_dir" check 2>/dev/null || child_reason="a .v5 name already exists in it"
+      if [ -n "$child_reason" ]; then echo "LEFT: $child_dir: $child_reason. Fix it there, then run repair on that path"; continue; fi
+      repair_move "$child_dir" "$child_dir_new" "$child_state" "$(jq -n --arg p "$id" '$p')" "$(goal_heading "$child_dir/task.md")"
+      echo "MOVED: $child_id to $child_dir_new, parent $id"
+      moved="$moved$child_id
+"
+    done <<TA_CHILDREN
+$children_here
+TA_CHILDREN
+    rmdir -- "$new_task_dir/$sub" 2>/dev/null
+  done
+  [ -z "$moved" ] || add_children "$new_task_dir/task.json" "$moved"
 
-  local written_id written_state written_parent written_children
-  written_id="$(jq -r '.id' "$new_task_dir/task.json" 2>/dev/null)"
-  written_state="$(jq -r '.state' "$new_task_dir/task.json" 2>/dev/null)"
-  written_parent="$(jq -c '.parent' "$new_task_dir/task.json" 2>/dev/null)"
-  written_children="$(jq -c '.children' "$new_task_dir/task.json" 2>/dev/null)"
-  if [ "$written_id" != "$id" ] || [ "$written_state" != "$old_state" ] \
-     || [ "$written_parent" != "$parent_json" ] || [ "$written_children" != "$children_json" ]; then
-    die3 "repair: task.json at $new_task_dir does not read back what was just written. Look at it by hand"
-  fi
-
-  # The move leaves a deletion behind at the old path, and staging tasks/ alone cannot see it.
+  # The move leaves a deletion behind at the old path, and staging tasks/<id> alone cannot see it.
   git -C "$project_path" add -A -- "$old_folder" >/dev/null 2>&1
 
+  # The commit stages this task's folder, each moved child's, and the parent's when this was a
+  # left child, never tasks/ whole.
+  set --
+  [ -z "$origin_parent" ] || set -- "tasks/$origin_parent"
+  while IFS= read -r child_id; do
+    [ -n "$child_id" ] && set -- "$@" "tasks/$child_id"
+  done <<TA_MOVED
+$moved
+TA_MOVED
   commit_task_change "$project_path" \
     "Repair ${id} into tasks/" \
     "this task predates the tasks/ folder; the first open moves it, one task at a time" \
     "" \
     "" \
-    "$id" "repair" \
+    "$id" "repair" "$@" \
     || printf 'task-actions: %s was moved, but the commit failed. Commit it by hand.\n' "$new_task_dir" >&2
 
   echo "REPAIRED: ${new_task_dir}"
@@ -448,6 +550,19 @@ do_repair() {
 # ------------------------------------------------------------------------------------------------
 # start / complete: state changes the state. Nothing moves on disk.
 # ------------------------------------------------------------------------------------------------
+
+# One line when the task record has no `environment`. The site offer the task skill makes at
+# start has not run, or the person's no was never recorded (live run, row 118: a `start`
+# reached through scope's init never offered). Unattended it says the offer waits, and nothing
+# is written. $1 the task.json path.
+environment_offer_line() {
+  [ "$(jq -r '.environment | type' "$1" 2>/dev/null)" != "object" ] || return 0
+  if [ "$RUN_MODE" = "autonomous" ]; then
+    echo "environment: none, the site offer waits for a person"
+  else
+    echo "environment: none. Run the task skill's site offer now, create step 5."
+  fi
+}
 
 do_start() {
   local project_path="" id=""
@@ -486,6 +601,7 @@ do_start() {
     in_progress)
       echo "UNCHANGED: ${id} is already in_progress."
       task_summary "$task_json"
+      environment_offer_line "$task_json"
       return 0
       ;;
   esac
@@ -505,6 +621,7 @@ do_start() {
 
   echo "STATE: ${old_state} -> in_progress"
   task_summary "$task_json"
+  environment_offer_line "$task_json"
 
   # A task is repaired one thing at a time, only when it is worked on and a deterministic check
   # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
@@ -683,12 +800,15 @@ do_split() {
   # is gone, because nothing here moves).
   mkdir -p "$project_path/tasks" || die3 "split: cannot create $project_path/tasks"
 
+  # The positional list, empty by now, collects each child's folder for the commit: the commit
+  # stages the parent's folder and every child's, never tasks/ whole.
   i=0
   local cgoal ccrit
   while [ "$i" -lt "$child_count" ]; do
     cid="${child_ids[$i]}"; cgoal="${child_goals[$i]}"; ccrit="${child_criteria_json[$i]}"
     cdir="$(task_dir_for "$project_path" "$cid")"
     mkdir -p "$cdir" || die3 "split: cannot create $cdir"
+    set -- "$@" "tasks/$cid"
 
     jq -n --arg id "$cid" --arg parent "$parent_id" '{
         schemaVersion: 1,
@@ -747,7 +867,7 @@ do_split() {
     "requested" \
     "" \
     "" \
-    "$parent_id" "split" \
+    "$parent_id" "split" "$@" \
     || printf 'task-actions: the split was written but not committed. Commit it by hand.\n' >&2
 
   echo "SPLIT: ${parent_id} -> ${child_ids[*]}"
@@ -893,6 +1013,25 @@ do_decline_recipe() {
 # The date in the file name is what the hook and next-actions.sh list, so neither reads the prose.
 # ------------------------------------------------------------------------------------------------
 
+# Which stage a save would have distilled, when it has nothing to distill. That is a task in
+# state new, or one whose stage has no record on disk yet (live run, row 119). The stage is
+# task_stage's; its first record is alignment.json for scope, research/*.json for research,
+# design/*.json for design. Prints one line in that case, the rule the skill's `save` states.
+# $1 the task folder.
+save_distill_line() {
+  local task_folder="$1" stage none=no
+  stage="$(task_stage "$task_folder" none)"
+  if [ "$(jq -r '.state // ""' "$task_folder/task.json" 2>/dev/null)" = "new" ]; then
+    none=yes
+  else
+    case "$stage" in
+      scope) [ -f "$task_folder/alignment.json" ] || none=yes ;;
+      research|design) [ -n "$(find "$task_folder/$stage" -maxdepth 1 -name '*.json' 2>/dev/null | head -n 1)" ] || none=yes ;;
+    esac
+  fi
+  [ "$none" = no ] || echo "distill: none, $stage has no record yet"
+}
+
 do_save() {
   local project_path="" id=""
   while [ "$#" -gt 0 ]; do
@@ -941,6 +1080,7 @@ do_save() {
 
   echo "savedAt: ${saved_at}"
   [ -z "$note" ] || echo "note: ${note}"
+  save_distill_line "$task_dir"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1050,12 +1190,27 @@ do_environment() {
   project_path="$_resolved_project"
   require_project_folder "$project_path" "environment"
   [ -n "$id" ] || die3 "environment: a task id is required"
-  case "$sub" in show|up|down) ;; *) die3 "environment: the action is show, up or down, got: ${sub:-nothing}" ;; esac
+  case "$sub" in show|up|down|not-applicable) ;; *) die3 "environment: the action is show, up, down or not-applicable, got: ${sub:-nothing}" ;; esac
 
   local task_dir task_json wt outfile
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+
+  # shellcheck disable=SC2034 # read by cr_require_person and cr_resolve_recipe in scripts/lib/recipes.sh
+  ACTION="environment"
+  # The person's no: this task needs no site, with the reason, so nothing offers again. It is a
+  # person's answer, so it refuses unattended at 70 the way up does. `up` later replaces it.
+  if [ "$sub" = "not-applicable" ]; then
+    [ "${1:-}" != "--" ] || shift
+    is_blank "$*" && die3 "environment: not-applicable needs the person's reason after --"
+    cr_require_person "not-applicable" "a person decided this task needs no site"
+    write_atomic "$task_json" "$(jq --arg r "$*" '.environment = {"not-applicable": $r}' "$task_json")"
+    commit_task_change "$project_path" "Record that ${id} needs no site" "$*" "" "" "$id" "environment" \
+      || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    printf 'environment: not-applicable\n'; task_summary "$task_json"
+    return 0
+  fi
   CODE_PATH="$(project_code_path_value "$project_path")"
   [ -n "$CODE_PATH" ] && [ -d "$CODE_PATH" ] || die3 "environment: the project's codePath is not on disk: ${CODE_PATH:-none recorded}"
   TOKENS="codePath$tab$CODE_PATH
@@ -1080,9 +1235,7 @@ do_environment() {
   fi
 
   # show and up resolve the recipe the same way, so show's exit code says what up would do.
-  # shellcheck disable=SC2034 # the three are read by cr_resolve_recipe in scripts/lib/recipes.sh
-  ACTION="environment"
-  # shellcheck disable=SC2034
+  # shellcheck disable=SC2034 # the two are read by cr_resolve_recipe in scripts/lib/recipes.sh
   KIND="worktree-environment"
   # shellcheck disable=SC2034
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
@@ -1203,7 +1356,7 @@ prune_list() {
   local project_path="$1" merged="$2" tab d row id wt branch env yes_no; tab="$(printf '\t')"
   find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r d; do
     row="$(jq -r 'select(.state == "complete" and .worktree != null)
-      | [.id, .worktree.path, .worktree.branch, (if .environment == null then "no" else "yes" end)] | @tsv' \
+      | [.id, .worktree.path, .worktree.branch, (if .environment.address == null then "no" else "yes" end)] | @tsv' \
       "$d/task.json" 2>/dev/null)"
     [ -n "$row" ] || continue
     IFS="$tab" read -r id wt branch env <<TA_ROW

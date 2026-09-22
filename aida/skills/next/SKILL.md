@@ -97,10 +97,10 @@ Every stage action of a task runs inside its own git worktree, and refuses from 
 Once a task is active, call the `EnterWorktree` tool with its `worktree` path, a sibling folder
 of the checkout. The tool asks for approval, because the path is outside `.claude/worktrees/`;
 that is expected. From inside another task's tree, call `ExitWorktree` first. From a window
-outside the code repository the tool refuses on first entry. Then print the path and
-`cd <path> && claude`, which opens the same tree, and stop. A task reading `none` has no tree
-yet; the first stage
-action that needs the code makes one and names it. A legacy line never reaches this step: the
+outside the code repository the tool refuses on first entry. Then print the path and say
+that `/cd <path>`, typed by the person, moves this session into the tree (Claude Code 2.1.169
+or later), and stop. A task reading `none` has no tree yet; the first stage action that needs
+the code makes one and names it. A legacy line never reaches this step: the
 move, below, comes first, and this skill then reads the task again as `kind: new`.
 
 ## With nothing open

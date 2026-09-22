@@ -158,7 +158,9 @@ is a gap: ask for one, with a recommended answer. Then run:
   init "<task_folder>"
 ```
 only on a first run, before anything else is written; it refuses when `alignment.json` already
-exists. Then, on a first run and on any later correction to either sentence, run:
+exists. When its output holds `environment: none`, put the task skill's site offer to the person
+now, or say it waits when it says so. Then, on a first run and on any later correction to either
+sentence, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   set-goal "<task_folder>" --goal "<goal text>" --expected-result "<expected result text>"

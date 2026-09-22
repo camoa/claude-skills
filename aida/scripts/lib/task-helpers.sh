@@ -19,8 +19,9 @@
 #                                         covers the stage, else interactive
 #   mark_task_in_progress <folder> <why> <stage>
 #                                         moves the task to in_progress once, before a first write
-#   commit_task_change <project> <subject> <why> <principle> <ruled out> <task> <stage>
-#                                         commits tasks/ in the project folder, five-field shape
+#   commit_task_change <project> <subject> <why> <principle> <ruled out> <task> <stage> [<folder>...]
+#                                         commits tasks/<task> in the project folder, and the
+#                                         folders named after it, five-field shape
 #   commit_stage_close <folder> <stage> <subject> <why>
 #                                         the stage-boundary commit of one task folder; says so
 #                                         on stderr and returns when it cannot commit
@@ -52,7 +53,7 @@ resolve_task_folder() {
   wt="$(jq -r '.worktree.path // empty' "$p/task.json" 2>/dev/null)"
   here="$(pwd -P)/"
   if [ -n "$wt" ] && [ -d "$wt" ] && [ "$who" != "read" ] && [ "${here#"$wt"/}" = "$here" ]; then
-    die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree first."
+    die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree first, or start the call with: cd $wt &&"
   fi
   printf '%s' "$p"
 }
@@ -111,6 +112,8 @@ task_run_mode() {
 # runs the task check. The run mode passed is the task's own, for the calling stage, through
 # task_run_mode, the one source every stage reads it from. The task script's own output is shown
 # only when it refuses: the check it runs writes its report to records/check-task.json either way.
+# One line passes through, `environment:`, so the stage that called this sees the site offer
+# the task skill makes at start (skills/task/SKILL.md, `start`), whoever called it.
 # $1 the canonical task folder, $2 why, in a few words, $3 the calling stage. Dies through die3
 # on a refusal, so a stage never writes into a task that is not in progress.
 mark_task_in_progress() {
@@ -123,16 +126,22 @@ mark_task_in_progress() {
       "$(basename -- "$task_folder")" -- "$why" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die3 "task start refused for $task_folder, so nothing was written. Repair the task first"; }
   echo "task-state: $state -> in_progress"
+  printf '%s\n' "$said" | grep '^environment:'
+  return 0
 }
 
-# One call to the shared commit, restricted to tasks/: a task change never sweeps up a project
-# file edit that was left uncommitted beside it. Moved here from task-actions.sh so the stage
-# closes commit the same way the task actions do. project-commit.sh is sourced here because only
-# task-actions.sh sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
+# One call to the shared commit, restricted to the task's own folder, tasks/<task>, plus any
+# folder named after the seven fields. A task change never sweeps up a project file edit, or
+# another task's uncommitted file, left beside it (live run, row 120: `tasks` whole took another
+# window's pending file). Moved here from task-actions.sh so the stage closes commit the same
+# way the task actions do. project-commit.sh is sourced here because only task-actions.sh
+# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
 commit_task_change() {
+  local project="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
+  shift 7
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/project-commit.sh" || die3 "the project-commit library failed to load"
-  commit_project "$1" "$2" "$3" "$4" "$5" "$6" "$7" tasks
+  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" "$@"
 }
 
 # The stage-boundary commit (foundations.md, History: "AIDA commits at stage boundaries, and the
@@ -143,12 +152,15 @@ commit_task_change() {
 # folder that is not a repository, or a commit that fails, leaves the record written and says so
 # once on stderr, the way playbook-actions.sh reports its capture; the close still exits 0. The
 # subshell turns a refusal inside the commit into that same line rather than ending the close.
+# The id names the folder the commit stages, so an unreadable id commits nothing rather than
+# staging tasks/ whole.
 commit_stage_close() {
   local task_folder="$1" stage="$2" subject="$3" why="$4" project id
   project="$(dirname -- "$(dirname -- "$task_folder")")"
   id="$(jq -r '.id // empty' "$task_folder/task.json" 2>/dev/null)"
+  [ -n "$id" ] || { printf 'the %s record was written but not committed: %s/task.json has no readable id. Commit %s by hand.\n' "$stage" "$task_folder" "$task_folder" >&2; return 0; }
   ( commit_task_change "$project" "$subject" "$why" "" "" "$id" "$stage" ) \
-    || printf 'the %s record was written but not committed. Commit %s/tasks by hand.\n' "$stage" "$project" >&2
+    || printf 'the %s record was written but not committed. Commit %s/tasks/%s by hand.\n' "$stage" "$project" "$id" >&2
 }
 
 # A malformed sidecar is moved aside to <name>.malformed-<date>.json beside it before the exit 4
@@ -200,13 +212,15 @@ playbooks_path_json() {
 
 # The stage a task stands at, one of scope, research, design, implementation, review, completion.
 # Derived from the records in the task folder every time, never stored: each stage writes one
-# record when it closes, and the stage is the first whose record is absent. This is the one copy
-# of that rule; the session-start hook and the next skill's report both print what it says.
-# $1 the task folder, $2 the review word next-actions.sh derives from review/review.json (passed,
-# failed, unfinished or none). Calls no die function.
+# record when it closes, and the stage is the first whose record is absent. Scope's is the
+# distill sidecar, records/scope-distill.json, which approve and distill both need before they
+# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start.
+# This is the one copy of that rule; the session-start hook and the next skill's report both
+# print what it says. $1 the task folder, $2 the review word next-actions.sh derives from
+# review/review.json (passed, failed, unfinished or none). Calls no die function.
 task_stage() {
   local task_folder="$1" review="$2"
-  if [ ! -f "$task_folder/alignment.json" ]; then
+  if [ ! -f "$task_folder/records/scope-distill.json" ]; then
     echo "scope"
   elif [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
     echo "research"

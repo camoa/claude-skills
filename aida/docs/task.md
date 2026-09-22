@@ -21,7 +21,9 @@ A task is two things, the same split a project uses:
 
 Every task lives in its own folder inside the project. There is no separate place for work in
 progress and work that is done; a task's folder never moves, in either direction. Where a task
-stands is a fact in the task file, not a location on disk.
+stands is a fact in the task file, not a location on disk. Every change a task action makes is
+committed from that one folder alone, so another task's uncommitted files are never swept into
+its commit.
 
 A task can carry material gathered before it existed, in its `inputs/` folder: notes, a pasted
 specification, whatever prompted the work. That folder has three states worth telling apart.
@@ -71,7 +73,10 @@ tasks are open and how many. A new window asks the same question and gets the sa
 
 If this project still carries tasks from before this build, AIDA lists those alongside the ones
 in the current shape, so nothing sits invisible while it waits to be touched. Opening one is what
-moves it forward; nothing sweeps them across in bulk.
+moves it forward; nothing sweeps them across in bulk. An old task headed `## Problem` instead of
+`## Goal` is read under that heading, and a task with neither is refused naming both. An old
+group task carries its nested children along. The same move puts each child in its own folder,
+with the group as its parent, and names any child it had to leave behind.
 
 ## The three states
 
@@ -81,7 +86,9 @@ A task's state is a fact in the task file, one of three: **new**, **in progress*
 A task starts new, the moment it is created. It becomes in progress the first time any stage
 writes its own artifact into the folder. That is usually scope, since scope runs first, not
 because scope is special: whichever stage acts first on a task is the one that moves it. It
-becomes complete when you mark it complete, below.
+becomes complete when you mark it complete, below. Starting a task also makes the offer of a
+site for its worktree, whichever stage started it, while the task records no answer. See
+[Visual and end-to-end tests](testing.md#the-site-the-surfaces-need).
 
 A run mode can sit beside the state, but only when you have asked for an autonomous run: nothing
 writes that field on its own, and nothing writes an explicit interactive value either. A task

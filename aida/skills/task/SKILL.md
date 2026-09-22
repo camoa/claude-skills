@@ -1,7 +1,7 @@
 ---
 name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | save <task-id> | environment <task-id> <show|up|down> | prune [<task-id>]...]"
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -71,13 +71,16 @@ repair the message gives and stop.
 from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
 so scoping in this same window is not refused. The tool asks for approval, because the path is
 outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
-tool refuses on first entry. On that refusal, print the path and `cd <path> && claude`, which
-opens a window in the tree. Say that the site offer comes at `start`, and stop. On a successful
-entry, go on to step 5.
+tool refuses on first entry. On that refusal the scripts are still reachable: start every Bash
+call with `cd <path> &&`. Every call needs it, because the shell's directory resets between
+calls. The `cd` part asks for approval, because the tree sits outside this window's directory.
+The exit 79 message names that form too. The way in is `/cd <path>`, typed by the person: it
+moves this session into the tree and keeps the conversation (Claude Code 2.1.169 or later).
+Print the path and say so. Go on to step 5 either way.
 
-**5. Offer the site.** Runs here when this window entered the tree, and at `start` otherwise. A
-worktree has the branch's files and no site, so a review or a baseline taken there would capture
-the served checkout instead. Dispatch `catalog-identifier` once for the `worktree-environment`
+**5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
+still has no `environment`, whoever called `start`. A worktree has the branch's files and no
+site, so a review or a baseline taken there would capture the served checkout instead. Dispatch `catalog-identifier` once for the `worktree-environment`
 point, naming every framework the project records and the project folder, the same words the
 surfaces skill uses for its points. When the project record has `surfaces.e2e.enabled` or
 `surfaces.visualRegression.enabled`, name `e2e-setup` or `visual-regression` in the same
@@ -86,20 +89,28 @@ dispatch, so `up` can install that harness in the tree. Pass the answer as
 and each setup recipe as `--setup-recipe <kind>=<path>`, where the kind is `e2e` or
 `visual-regression`, then run `environment <name> show`.
 The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script refuses any other.
-`not-applicable` ends the step: say once that this worktree has files and no site. Otherwise,
-interactive: show the commands and the prose, and ask once whether to bring the site up now. A
-yes runs `environment <name> up` with the same flags. A no records nothing; say `up` with the
-same flags does it later. Autonomous: never bring it up, and say so once.
+`not-applicable` from `show` means no framework has a recipe: record it with
+`environment <name> not-applicable -- <that reason>`, and say once that this worktree has files
+and no site. Otherwise, interactive: show the commands and the prose, and ask once whether to
+bring the site up now. A yes runs `environment <name> up` with the same flags. A no is recorded
+too, with the person's reason, through the same `not-applicable` call, so nothing offers again.
+Say `up` with the same flags still brings it up later. Autonomous: never bring it up, record
+nothing, and say once that the offer waits for a person.
 
-## `environment <task-id> <show|up|down>`
+## `environment <task-id> <show|up|down|not-applicable>`
 
 The worktree's own running site, from the framework's `worktree-environment` recipe. The recipe
 holds the commands; this plugin holds none. `show` and `up` take the recipe flags step 5 names,
 and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the record holds.
+`not-applicable` takes the person's reason after `--`.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   environment --project "<projectPath>" "<task-id>" <show|up|down> <recipe flags>
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  environment --project "<projectPath>" "<task-id>" not-applicable -- <reason...>
 ```
+`not-applicable` writes `environment` as the reason alone, and commits. It is a person's answer,
+so it refuses unattended at 70. `up` replaces it; `down` with it recorded says nothing was up.
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
 the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
 It prints the paths of the `## Files` blocks, the files `up` writes, and one `precondition:`
@@ -170,15 +181,25 @@ Moves an old task into the project's own `tasks/` folder, the first time it is o
 only move in the whole skill: everything else here changes a field, never a location.
 
 Given the path to a task folder still sitting under `implementation_process/in_progress/` or
-`implementation_process/completed/` inside the project folder, run:
+`implementation_process/completed/` inside the project folder, or under a repaired parent's own
+`in_progress/` or `completed/` in `tasks/`, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh repair --project "<projectPath>" "<old-task-folder>"
 ```
 No confirmation is needed: nothing here is destructive. The script refuses outright when the
-destination already exists, and it refuses to move a task whose `## Goal` section it cannot find,
-rather than moving something it cannot verify. It reads the goal, and the parent and children when
-an old header carries them, back from the new location before it reports success. Show the whole
-output either way.
+destination already exists. It reads the goal under `## Goal`, or under `## Problem` when there
+is no `## Goal`, the heading some version 5 records used. With neither it refuses, naming both,
+rather than moving something it cannot verify. It prints `goal-heading:` with the one it read.
+It reads the goal, and the parent and children when an old header carries them, back from the
+new location before it reports success. Show the whole output either way.
+
+A version 5 parent task holds its children under `in_progress/` and `completed/` inside its own
+folder. The same call moves each one to `tasks/<child id>/`, sets the child's `parent` to that
+task and adds it to the task's `children`. It prints one `MOVED:` line per child. A child it
+cannot move, because its goal heading is missing or its destination exists, stays where it sits
+with a `LEFT:` line naming why. The parent's own repair is never refused for a child. Fix the
+child there, then run this action on that path. It moves to `tasks/<child id>/`, takes the
+parent from the folder it sat in, and joins that parent's `children`.
 
 Inside the new folder it renames `alignment.md`, `research.md`, `architecture.md` and `research/`
 to `alignment.v5.md`, `research.v5.md`, `architecture.v5.md` and `research.v5/`, each when
@@ -204,8 +225,9 @@ since a completed task is not reopened here. Otherwise it writes the new state, 
 the task check. Show the whole output. The check reports and never repairs, so a finding here is
 the one thing to repair now, before the stage writes anything.
 
-When a person runs this by hand and the record has no `environment`, run `create`'s step 5 here.
-The window that made the task may not have entered the tree. A `not-applicable` ends it silently.
+When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
+person by hand, or a stage's script through scope's `init`. A stage's script passes that line
+through. Unattended, the line says the offer waits for a person, and nothing is recorded.
 
 ## `complete <task-id>`
 
@@ -221,8 +243,9 @@ one outright. By hand, the call is:
   complete --project "<projectPath>" "<task-id>" -- <summary...>
 ```
 It sets the state to `complete`, appends a dated `## Completed` section holding the summary to
-`task.md`, and commits everything under `tasks/` together. That commit carries the completion
-record and the body when completion called it. Already complete: prints `UNCHANGED`. Show the
+`task.md`, and commits this task's folder, `tasks/<id>`, alone. Every task action commits that
+way, never `tasks/` whole, so another task's uncommitted file is never taken. That commit carries
+the completion record and the body when completion called it. Already complete: prints `UNCHANGED`. Show the
 whole output.
 
 ## `split <parent-task-id>`
@@ -275,12 +298,15 @@ it down for the next window. Only a person invokes it; nothing dispatches it.
 
 The current stage is the `stage` the next skill's report prints for this task, the first whose
 close record is absent.
-That is scope without `alignment.json`, research without `records/research-check.json` at
-`exitCode` 0, design without `design-closed.json`. Read that stage's sidecar,
-`records/<stage>-distill.json`. When none exists, dispatch the `distiller` role with the run
-mode, the task folder, the stage, and the stage's record paths, one per line. Then read the
-sidecar it writes. A record path
-absent mid-stage is normal; the distiller names it as a gap.
+That is scope without `records/scope-distill.json`, research without
+`records/research-check.json` at `exitCode` 0, design without `design-closed.json`. A task in state `new`, or whose stage has no
+record on disk yet, skips the distiller: nothing exists to distill. The stage's first record is
+`alignment.json` for scope, `research/*.json` for research, `design/*.json` for design. Say which
+stage it would have been and that none exists, then go on to the list. Otherwise read that
+stage's sidecar, `records/<stage>-distill.json`. When none exists, dispatch the `distiller` role
+with the run mode, the task folder, the stage, and the stage's record paths, one per line. Then
+read the sidecar it writes. A record path absent mid-stage is normal; the distiller names it as
+a gap.
 
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
 files hold. Each is one sentence: what was decided and what it applies to. Show the list and ask
@@ -294,7 +320,8 @@ Yes: run once per sentence, or once with all of them:
 ```
 It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` heading. It
 records `savedAt` in `task.json`, commits, and prints `savedAt:` and `note:` with the path. With no text
-it writes no note and prints `savedAt:` only. Show the lines.
+it writes no note and prints `savedAt:` only. When the stage had no record, it prints `distill:
+none` naming the stage. Show the lines.
 
 A note is never a stage record: the stage action that later records the same decision makes it
 stale, and the record wins. The session-start hook names the newest note after `Stage:`, and

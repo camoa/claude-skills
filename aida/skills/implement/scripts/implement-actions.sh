@@ -5264,9 +5264,9 @@ br_test_check() {
 br_gate_check() {
   local verdict="" detail="" rc="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
   local line n=0 argv_json result kind payload owned_json run_out
-  if [ "$(jq -r '.environment | type' "$TASK_PATH/task.json" 2>/dev/null)" != "object" ]; then
+  if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
     verdict="unknown"
-    detail="task.json records no environment, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
+    detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
   elif [ -z "$BRC_GATE_RECIPES" ]; then
     verdict="unknown"
     detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."

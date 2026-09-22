@@ -74,8 +74,10 @@ it. Every stage command names this refusal, exit 79, and tells the session to en
 run the call again. The tree is a sibling of the code checkout, named after the checkout and the
 task.
 Entering it asks for your approval. From a session outside the code repository the entry is
-refused. `/aida:next` then prints the path and `cd <path> && claude`, which opens a session in
-the tree.
+refused. The way in is `/cd <path>`, which moves the session into the tree and keeps the
+conversation; it needs Claude Code 2.1.169 or later. Until then the scripts are still reachable:
+each command starts with `cd <path> &&`, and every command needs it, because the shell's
+directory resets between commands. The exit 79 message names that form.
 
 `/aida:next` writes nothing, with one exception: an old task from before the tasks folder existed
 is moved into place the first time it is opened. A task file it could not read is named as
@@ -113,9 +115,11 @@ Each item is one sentence: what was decided and what it applies to. You see the 
 yes or no. Nothing is written before a yes.
 
 A yes appends the sentences to `notes/<date>.md` in the task folder, under a heading with the
-time. It stamps the save time in the task file, `task.json`, and commits everything under the
-project's tasks folder. With nothing to say, AIDA says so in one line and the save still runs. It
-writes no note, records the time, and clears the compaction refusal.
+time. It stamps the save time in the task file, `task.json`, and commits the task's own folder,
+nothing beside it. With nothing to say, AIDA says so in one line and the save still runs. It
+writes no note, records the time, and clears the compaction refusal. A task no stage has written
+into yet has nothing to distill. The save then skips the distiller, says which stage it would have
+been, and writes the note.
 
 Only you run a save. Nothing in AIDA dispatches it, in either run mode.
 

@@ -32,9 +32,9 @@ skills/review/references/checks.md 105
 skills/review/references/close.md 68
 skills/review/references/reviewer.md 105
 skills/review/references/surfaces.md 77
-skills/scope/SKILL.md 410
+skills/scope/SKILL.md 412
 skills/surfaces/SKILL.md 126
 skills/surfaces/references/discover.md 57
-skills/task/SKILL.md 301
+skills/task/SKILL.md 328
 skills/tool/SKILL.md 119
 skills/tool/references/reading-a-recipe.md 53
