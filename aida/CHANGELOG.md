@@ -4,9 +4,31 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [6.0.0-beta.22] - 2026-09-21
+## [6.0.0-beta.22] - 2026-09-22
 
-Live-run row 111, the implement stage on beta.21.
+Live-run rows 111 to 115, the implement and design stages on beta.21. Rows 112 to 115 are the
+first live use of the `observe` proof kind.
+
+### Added
+- An observe order gets a look before the build. `build-brief` names the before folder and says
+  whether the before-look is owed or taken; the look is the same surfaces at the same viewports
+  at `headNow`, before the implementer runs. Each observed row carries `before` beside
+  `screenshot`, both checked on disk under their folders, and completion names both images to
+  the person. (row 114)
+- The look judges each owned criterion's own clause. `build-record --observed` owes one row per
+  sentence per surface per viewport, where the sentences are the done-when rows and the
+  verification clause of each machine criterion the order owns; a clause row carries
+  `criterion`. The critic's buildability lens reads each owned clause beside the rows.
+  `design update --proof` prints `stillNamesATest:` for fields whose text still names a test
+  file. (row 115)
+
+### Changed
+- The look step names viewport control as the requirement, not a window resize, and the scratch
+  route for a tool that refuses to write under the task folder. `build-record --observed`
+  refuses a screenshot outside the order's observed folder. (row 112)
+- When the implementer's report says it ran the configuration gate, or restored the seed
+  snapshot, the look waits for the site's content to be put back. The recipe change is a
+  catalog ask. (row 113)
 
 ### Fixed
 - `verify-record --ruling` on a round already on the record applied nothing: the branch that
