@@ -571,12 +571,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the folder.
 #  95  a row names a surface the order does not name. The order's surfaces are the pages it
 #      changes, and a look at another page proves nothing about this order.
-#  96  a row's doneWhen is not one of the order's own done-when rows. The row is the sentence a
-#      model judges, and a judgement of another sentence is not this order's proof.
-#  97  a row the order owes is missing: one per done-when row, per surface the order names, per
-#      viewport the surface file declares. A look not taken is not a met, and the check reads
-#      every row present as the whole only when the whole is there. The message names the first
-#      missing row.
+#  96  a row's doneWhen is not one of the order's own done-when rows, nor the verification clause
+#      of a machine criterion the order owns. The row is the sentence a model judges, and a
+#      judgement of another sentence is not this order's proof. A row whose sentence is a clause
+#      carries `criterion`. The same code refuses a clause row without it. It refuses a
+#      `criterion` the order does not own, or one whose clause is not the row's sentence
+#      (live-run row 115).
+#  97  a row the order owes is missing: one per sentence, per surface the order names, per
+#      viewport the surface file declares. The sentences are the done-when rows and each owned
+#      machine criterion's verification clause. The rows may say less than the clause, and no
+#      script can tell, so the look judges the clause too (live-run row 115). A look not taken
+#      is not a met, and the check reads every row present as the whole only when the whole is
+#      there. The message names the first missing row and whether it is a done-when row or a
+#      criterion's clause.
 #  98  the surface file cannot be read, so the rows the order owes cannot be known: the project
 #      record names no surfaces.registryPath, the file is missing or unreadable, or it declares
 #      no viewport. The surfaces skill's install writes it.
@@ -5358,10 +5365,10 @@ br_observed_check() {
     | .surface + " at " + .viewport + ": " + .doneWhen + " (" + .note + ")"' "$BRC_OBSERVED")"
   if [ -n "$unmet_row" ]; then
     verdict="unmet"
-    detail="a model judged the done-when row unmet on $unmet_row; the observed record holds every row and the screenshots."
+    detail="a model judged a row unmet on $unmet_row; the observed record holds every row and the screenshots."
   else
     verdict="met"
-    detail="a model judged every done-when row met at every surface and viewport ($rows_count rows); the observed record holds the screenshots."
+    detail="a model judged every done-when row and every owned clause met at every surface and viewport ($rows_count rows); the observed record holds the screenshots."
   fi
   jq -n --arg verdict "$verdict" --arg detail "$detail" --arg judgedBy "$(jq -r '.judgedBy' "$BRC_OBSERVED")" \
     '{id: "observed", verdict: $verdict, detail: $detail, judgedBy: $judgedBy}'
@@ -5669,9 +5676,10 @@ br_eight_checks() {
 # none was passed. The top level is compared against observed-schema.json through the one library
 # every record check uses; the rows are read here, since that comparison stops at the top level.
 # The two image fields go through the helper below it. Reads UNIT_JSON for the order's surfaces
-# and done-when rows.
+# and done-when rows. Reads CRITERIA_JSON for the verification clause of each machine criterion
+# the order owns. The look judges those clauses as rows of their own (live-run row 115).
 br_require_observed() {
-  local who="$1" unit_id="$2" observed="$3" compare gaps bad_surfaces bad_done_when
+  local who="$1" unit_id="$2" observed="$3" compare gaps bad_surfaces bad_done_when clauses_json
   [ -n "$observed" ] \
     || die 92 "$who: $unit_id is proved by a model's observation, and no --observed was passed. After the implementer returns, open each of the order's surfaces at each viewport with the browser tool, judge each done-when row against what renders, write $IMPL_DIR/observed-$unit_id.json with a screenshot per row, and pass it as --observed."
   [ -f "$observed" ] \
@@ -5698,8 +5706,10 @@ br_require_observed() {
                   or ((.value.screenshot | type) != "string") or (.value.screenshot == "")
                   or ((.value.before | type) != "string") or (.value.before == "")
                   or ((.value.verdict != "met") and (.value.verdict != "unmet"))
-                  or ((.value.note | type) != "string"))
-                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, before, a met or unmet verdict, or a note" ] end)
+                  or ((.value.note | type) != "string")
+                  or (.value.criterion != null and (if (.value.criterion | type) != "string" then true
+                                                    else (.value.criterion | test("^c[1-9][0-9]*$") | not) end)))
+                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, before, a met or unmet verdict, or a note, or its criterion is not a c<n> id" ] end)
       | join("; ")' "$observed" 2>/dev/null)"
   [ -z "$gaps" ] \
     || die 93 "$who: $observed does not match $OBSERVED_SCHEMA_FILE: $gaps. Nothing is recorded."
@@ -5712,14 +5722,30 @@ br_require_observed() {
       | [ .rows[].surface | select(. as $s | ($named | index($s)) == null) ] | unique | join(", ")' "$observed")"
   [ -z "$bad_surfaces" ] \
     || die 95 "$who: the observed record names surfaces $unit_id does not: $bad_surfaces. The order's own surfaces are $(printf '%s' "$UNIT_JSON" | jq -r '(.surfaces // []) | join(", ")'). A look at another page proves nothing about this order."
-  bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" '
+  # A row's sentence is a done-when row, or the verification clause of a machine criterion the
+  # order owns, named by `criterion`. The rows may say less than the clause and no script can
+  # tell, so the look judges the clause itself (live-run row 115).
+  clauses_json="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson owned "$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')" '
+      [ .[] | select(.verifiedBy == "machine" and ((.id as $i | $owned | index($i)) != null)) | {id, clause: .verification} ]')"
+  bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" --argjson clauses "$clauses_json" --arg unit_id "$unit_id" '
       ($unit.doneWhen // []) as $held
-      | [ .rows[].doneWhen | select(. as $d | ($held | index($d)) == null) ] | unique | join(" | ")' "$observed")"
+      | [ .rows[] | .criterion as $c | .doneWhen as $d
+          | if $c != null then
+              (([ $clauses[] | select(.id == $c) ][0]) as $k
+               | if $k == null then "\"" + $d + "\" carries criterion " + $c + ", which " + $unit_id + " does not own as a machine criterion"
+                 elif $k.clause != $d then "\"" + $d + "\" carries criterion " + $c + ", whose verification clause is \"" + $k.clause + "\""
+                 else empty end)
+            elif ($held | index($d)) != null then empty
+            else (([ $clauses[] | select(.clause == $d) ][0]) as $k
+                  | if $k == null then "\"" + $d + "\" is neither a done-when row nor an owned criterion\u0027s clause"
+                    else "\"" + $d + "\" is the verification clause of " + $k.id + " and carries no criterion" end)
+            end ] | unique | join(" | ")' "$observed")"
   [ -z "$bad_done_when" ] \
-    || die 96 "$who: the observed record judges sentences $unit_id does not hold as done-when rows: $bad_done_when. A row is one of the order's own done-when rows, verbatim."
-  # Every row the order owes: each done-when row, at each surface the order names, at each
-  # viewport the surface file declares. The file is the one review's surface step reads, at
-  # surfaces.registryPath in the project record, joined to the task's own tree.
+    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
+  # Every row the order owes: each done-when row and each owned machine criterion's clause, at
+  # each surface the order names, at each viewport the surface file declares. The file is the
+  # one review's surface step reads, at surfaces.registryPath in the project record, joined to
+  # the task's own tree.
   local project_folder registry surface_file missing_row
   project_folder="$(resolve_project_folder "$TASK_PATH")" \
     || die 3 "$who: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
@@ -5732,21 +5758,24 @@ br_require_observed() {
     || die 98 "$who: the surface file at $surface_file is $SF_STATE, so the viewports $unit_id owes a look at cannot be known. The surfaces skill's install writes it."
   [ "$(printf '%s' "$SF_VIEWPORTS" | jq 'length')" -gt 0 ] \
     || die 98 "$who: the surface file at $surface_file declares no viewport, so the rows $unit_id owes cannot be known. Run the surfaces skill's install with a viewport list."
-  missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" '
-      [ .rows[] | .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
-      | [ ($unit.doneWhen // [])[] as $d | ($unit.surfaces // [])[] as $s | $viewports[] as $v
-          | select(($have | index($d + "\u001f" + $s + "\u001f" + $v)) == null)
-          | "\"" + $d + "\" at " + $s + " at " + $v ][0] // ""' "$observed")"
+  missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" --argjson clauses "$clauses_json" '
+      [ .rows[] | (.criterion // "") + "\u001f" + .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
+      | ([ ($unit.doneWhen // [])[] | {criterion: "", sentence: ., kind: "a done-when row"} ]
+         + [ $clauses[] | {criterion: .id, sentence: .clause, kind: ("the verification clause of " + .id)} ]) as $owed
+      | [ $owed[] as $o | ($unit.surfaces // [])[] as $s | $viewports[] as $v
+          | select(($have | index($o.criterion + "\u001f" + $o.sentence + "\u001f" + $s + "\u001f" + $v)) == null)
+          | "\"" + $o.sentence + "\" at " + $s + " at " + $v + ", " + $o.kind ][0] // ""' "$observed")"
   [ -z "$missing_row" ] \
-    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per done-when row, per surface it names, per viewport in $surface_file. A look not taken is not a met; take it and add the row."
+    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
 }
 
 # One image field of the observed record, on every row. Each path is on disk and lies under its
 # folder, resolved the way the record's path is above. A file where a browser tool put it, in
 # /tmp or a scratch folder in the worktree, vanishes with that folder (live-run row 112). Dies 94
-# naming the field, each path and the folder. $1 the action, $2 the record, $3 the field,
-# `screenshot` or `before`, $4 the folder the field's images belong under. Every name the loop
-# uses is declared above it (trap 5 in this file's own header).
+# naming the field, each path once and the folder: a clause row shares its image with a done-when
+# row (live-run row 115). $1 the action, $2 the record, $3 the field, `screenshot` or `before`,
+# $4 the folder the field's images belong under. Every name the loop uses is declared above it
+# (trap 5 in this file's own header).
 br_require_observed_images() {
   local who="$1" observed="$2" field="$3" folder="$4" shot shot_dir folder_real missing_shots stray_shots
   folder_real="$(cd "$folder" 2>/dev/null && pwd -P)"
@@ -5758,7 +5787,7 @@ br_require_observed_images() {
     [ -n "$folder_real" ] && is_under "$shot_dir" "$folder_real" \
       || stray_shots="$stray_shots$shot, "
   done <<BR_SHOTS
-$(jq -r --arg f "$field" '.rows[][$f]' "$observed")
+$(jq -r --arg f "$field" '[ .rows[][$f] ] | unique[]' "$observed")
 BR_SHOTS
   [ -z "$missing_shots" ] \
     || die 94 "$who: these $field images the observed record names are not on disk: ${missing_shots%, }. The look is the evidence, and a row with no image is a claim. Save each under $folder/<surface>-<viewport>.png and name it in the row's $field."
@@ -5932,8 +5961,13 @@ do_build_record() {
   # (observed-schema.json, live-run row 104). Its shape and every row are checked against the
   # frozen order before any check runs, so the observed check below reads a record that is this
   # order's: a screenshot on disk per row, a surface the order names, a done-when the order holds.
+  # The summary names the criteria whose clause the look judged (live-run row 115). Null keeps
+  # the line off a code order's summary. It also keeps it off an observe order that owns no
+  # machine criterion.
+  local criteria_judged_json='null'
   if [ "$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
     br_require_observed "build-record" "$unit_id" "$observed_path"
+    criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
 
   local ledger_run_mode
@@ -6037,12 +6071,14 @@ do_build_record() {
   br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
   im_print_summary "build-record" "$(printf '%s' "$record_json" | jq -c \
     --arg attempts "$attempt_number of $attempts_allowed" --arg state "$br_state" \
-    --arg halt "${halt_why:-none}" --arg record "$record_file" --arg next "$br_next" '
+    --arg halt "${halt_why:-none}" --arg record "$record_file" --arg next "$br_next" \
+    --argjson criteriaJudged "$criteria_judged_json" '
     {order: .unit,
      attempt: $attempts,
      range: "\(.startedAt)..\(.commit)",
-     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-     executed: "\(.executed) of 8 ran a command, a diff or a hash",
+     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ])}
+    + (if $criteriaJudged == null then {} else {criteriaJudged: $criteriaJudged} end)
+    + {executed: "\(.executed) of 8 ran a command, a diff or a hash",
      state: $state,
      halt: $halt,
      record: $record,

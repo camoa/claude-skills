@@ -158,7 +158,8 @@ lands no commit in the code repository. Its commits are the project folder's.
 An order whose deliverable is what a page shows, a layout or a rendered block at each viewport,
 writes no test either. It carries `proof: observe`, names at least one surface, and has at least
 one done-when row. Each done-when row is the sentence a model judges. After the build, AIDA opens
-each surface at each viewport in a browser and judges each row against what renders. It keeps a
+each surface at each viewport in a browser and judges each row against what renders. It judges
+the verification clause of each machine criterion the order owns as a row of its own. It keeps a
 screenshot per surface and viewport as the evidence. The build reads that record as the order's
 own check. The judge on the record is a model, never a person, and completion puts each such
 criterion to you to accept. The design check refuses an `observe` order that declares a test,

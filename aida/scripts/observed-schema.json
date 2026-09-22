@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA observed record",
-  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens each surface the order names, at each viewport the surface file declares, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. Before the implementer was dispatched it took the same surfaces at the same viewports into implementation/observed-<order id>-before/. A row that says the page is as it was is judged against that before (live-run row 114). `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93). It refuses a row whose screenshot or before image is not on disk or lies outside its folder (94). It refuses a surface the order does not name (95) and a doneWhen the order does not hold (96). The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
+  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens each surface the order names, at each viewport the surface file declares, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. Before the implementer was dispatched it took the same surfaces at the same viewports into implementation/observed-<order id>-before/. A row that says the page is as it was is judged against that before (live-run row 114). `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93). It refuses a row whose screenshot or before image is not on disk or lies outside its folder (94). It refuses a surface the order does not name (95) and a doneWhen the order does not hold (96): a row's sentence is one of the order's done-when rows, or the verification clause of a machine criterion the order owns, named by `criterion` (live-run row 115). It refuses a row the order owes and nobody took (97), and owes one row per sentence, surface and viewport. The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
   "type": "object",
   "additionalProperties": false,
   "required": ["order", "observedAt", "judgedBy", "rows"],
@@ -25,7 +25,7 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/row" },
-      "description": "One row per done-when sentence per surface per viewport. Every done-when row of the order is judged at every surface and viewport the order reaches; a row missing here is a look nobody took, and the check is met only when every row present is met."
+      "description": "One row per sentence per surface per viewport. The sentences are the order's done-when rows and the verification clause of each machine criterion the order owns; the rows may say less than the clause, so the look judges the clause too (live-run row 115). Every sentence is judged at every surface and viewport the order reaches; a row missing here is a look nobody took, and the check is met only when every row present is met."
     }
   },
   "$defs": {
@@ -37,7 +37,12 @@
         "doneWhen": {
           "type": "string",
           "minLength": 1,
-          "description": "One of the order's own done-when rows, verbatim. The sentence the model judged."
+          "description": "The sentence the model judged, verbatim: one of the order's own done-when rows, or the verification clause of a machine criterion the order owns, in which case `criterion` names it."
+        },
+        "criterion": {
+          "type": "string",
+          "pattern": "^c[1-9][0-9]*$",
+          "description": "The criterion whose verification clause this row's doneWhen is. Required when the sentence is a clause, and absent on a done-when row. build-record refuses a clause row without it, an id the order does not own as a machine criterion, or one whose clause is not this row's sentence (exit 96). The build summary prints the ids judged as criteriaJudged."
         },
         "surface": {
           "type": "string",

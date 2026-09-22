@@ -168,8 +168,13 @@ rebuild step has run, and the look waits for that step. A note on a row judged a
 content is a lie.
 
 Judge each of the order's done-when rows against what renders. A row that says the page is as
-it was is judged against the before image of that surface and viewport. Give one verdict per
-row per surface per viewport, `met` or `unmet`, with one sentence on what you saw. Save each
+it was is judged against the before image of that surface and viewport. Also judge the
+`verification` clause of each machine criterion the order owns, as a row of its own beside the
+done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
+the clause, and no script can compare the two, so the look judges the clause itself. Such a row
+carries `criterion` with the id, and `build-record` refuses a clause row without it (exit 96).
+Give one verdict per row per surface per viewport, `met` or `unmet`, with one sentence on what
+you saw. Save each
 screenshot under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
 The screenshot must lie under that folder, and `build-record` refuses one that does not (exit
 94). A tool that refuses to write there writes into a folder inside the worktree. Move the
@@ -179,9 +184,13 @@ Then write `<task_folder>/implementation/observed-<order id>.json`:
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
               "screenshot": "<absolute path>", "before": "<absolute path of the before image>",
-              "verdict": "met|unmet", "note": "<what you saw>" } ] }
+              "verdict": "met|unmet", "note": "<what you saw>" },
+            { "doneWhen": "<the criterion's verification clause, verbatim>", "criterion": "<c-id>",
+              "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
+              "before": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
-Every done-when row goes in, at every surface and viewport. The verdict is what the page
+Every done-when row and every owned clause goes in, at every surface and viewport, and
+`build-record` refuses a record missing one (exit 97). The verdict is what the page
 showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
 for such an order and no row was judged before the build, so this look is its check. The judge
 on the record is a model. Completion puts each such criterion to the person.

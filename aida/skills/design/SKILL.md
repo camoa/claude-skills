@@ -174,7 +174,9 @@ AIDA cannot know on its own:
   page at each viewport. Such an order is created with `--proof observe`. It names at least one
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
   the build, the orchestrator opens each surface at each viewport in a browser. It judges the
-  row against what renders, with a screenshot as the evidence. Write each row as one thing
+  row against what renders, with a screenshot as the evidence. The look also judges the
+  verification clause of each machine criterion the order owns, as a row of its own. So the
+  rows describe the page, and the clause is still judged. Write each row as one thing
   the page must show. The judge is a model, and completion puts each such criterion to the
   person to accept.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
@@ -433,6 +435,8 @@ To change a scalar or an id list on an order already created, `update` takes the
   [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record|observe>] \
   [--surface <id>]...
 ```
+When `--proof` becomes `gate`, `record` or `observe`, `update` prints `stillNamesATest:` naming
+each of `interface`, `reasoning` and `diffBudget` that still names a test file.
 
 ## Serving a criterion is not completing it
 

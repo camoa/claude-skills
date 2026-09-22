@@ -752,6 +752,19 @@ do_update() {
   echo "UPDATED: $file"
   wo_summary "$doc"
 
+  # A proof that is no longer tests leaves the prose fields naming the test files the order
+  # once declared. A reviewer then holds the order to them (live-run row 115). Named, never
+  # refused. A test file is a path segment tests/ or test/, or a name ending .spec.<ext>,
+  # .test.<ext> or Test.php.
+  local still_names
+  if [ "$set_proof" = "true" ] && [ "$proof" != "tests" ]; then
+    still_names="$(printf '%s' "$doc" | jq -r '
+      [ ("interface", "reasoning", "diffBudget") as $f
+        | select((.[$f] // "") | test("(^|[^A-Za-z0-9_])tests?/|\\.(spec|test)\\.[A-Za-z0-9]+($|[^A-Za-z0-9_])|Test\\.php($|[^A-Za-z0-9_])"))
+        | $f ] | join(", ")')"
+    [ -z "$still_names" ] || echo "stillNamesATest: $still_names"
+  fi
+
   render_wo "$id"
   exit 0
 }

@@ -245,7 +245,9 @@ the surface file declares, in a browser. Each page renders at the viewport's wid
 screenshot lies under the order's observed folder, or the build refuses it. When the build ran
 a configuration gate, the look waits for the recipe's restore or rebuild step, since the gate
 rewound the site. It judges each done-when row against what renders and
-saves a screenshot per surface and viewport under the task folder. It writes an observed record
+saves a screenshot per surface and viewport under the task folder. It also judges the
+verification clause of each machine criterion the order owns as its own row, since rows may say
+less. It writes an observed record
 with one row per sentence, surface and viewport, and the build reads that record as the order's
 own check. Every row met is met; one unmet row stops the attempt the way a failing test does.
 The judge on the record is a model. When the order closes, its criteria are recorded as judged
