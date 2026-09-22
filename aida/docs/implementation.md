@@ -239,7 +239,10 @@ A work order whose deliverable is what a page shows, a layout or a rendered bloc
 `observe` as its proof kind. No test author is dispatched and no row goes to the checker,
 because nothing can be judged before the page exists. The order freezes with no test and no
 row. After the implementer returns, AIDA opens each surface the order names, at each viewport
-the surface file declares, in a browser. It judges each done-when row against what renders and
+the surface file declares, in a browser. Each page renders at the viewport's width, and each
+screenshot lies under the order's observed folder, or the build refuses it. When the build ran
+a configuration gate, the look waits for the recipe's restore or rebuild step, since the gate
+rewound the site. It judges each done-when row against what renders and
 saves a screenshot per surface and viewport under the task folder. It writes an observed record
 with one row per sentence, surface and viewport, and the build reads that record as the order's
 own check. Every row met is met; one unmet row stops the attempt the way a failing test does.

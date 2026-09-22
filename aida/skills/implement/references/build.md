@@ -138,11 +138,24 @@ Close the dispatch record as soon as the role returns, per SKILL.md.
 The implementer does not look. You do. Read the surface file that `surfaces.registryPath` in
 `<projectPath>/project.json` names. Review's surface step reads the same file. Take each
 surface the order names, its `url`, and the file's `viewports` list. Open each surface at each
-viewport with the browser tool, against the task's own site. Judge each of the order's done-when
-rows against what renders. Give one verdict per row per surface per viewport, `met` or `unmet`,
-with one sentence on what you saw. Save each screenshot under
-`<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`. Then write
-`<task_folder>/implementation/observed-<order id>.json`:
+viewport with the browser tool, against the task's own site.
+
+The viewport is the requirement: the page must render at the viewport's width. Resizing the
+browser window is not that, because the page can still render wider than the window. A tool
+that reaches a small width does so by device emulation.
+
+When the implementer's report says it ran the configuration gate, or any restore of the seed
+snapshot, the site holds only the seed's content. It stays so until the recipe's restore or
+rebuild step has run, and the look waits for that step. A note on a row judged against stale
+content is a lie.
+
+Judge each of the order's done-when rows against what renders. Give one verdict per row per
+surface per viewport, `met` or `unmet`, with one sentence on what you saw. Save each screenshot
+under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`. The
+screenshot must lie under that folder, and `build-record` refuses one that does not (exit 94).
+A tool that refuses to write there writes into a folder inside the worktree. Move the file,
+then remove that folder before you record the attempt, because the tree check reads it. Then
+write `<task_folder>/implementation/observed-<order id>.json`:
 ```
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
@@ -176,8 +189,9 @@ runs them as the order's own check. Every other order ignores it.
 
 `--observed` is the record written above. An order whose proof is `observe` refuses without it
 (exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose
-screenshot is not on disk (94) and a surface the order does not name (95). It refuses a sentence
-the order does not hold (96). Nothing is recorded on any of these.
+screenshot is not on disk or lies outside the observed folder (94). It refuses a surface the
+order does not name (95). It refuses a sentence the order does not hold (96). Nothing is
+recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
