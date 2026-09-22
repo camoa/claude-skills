@@ -8789,14 +8789,20 @@ do_retake_tests() {
 }
 
 # The commits one order's records name that HEAD still holds, as a JSON array of
-# {order, kind, commit, range}. $1 the implementation folder, $2 the code repository, $3 the order.
+# {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
+# ledger document.
 # The freeze record's `commit` is HEAD at the freeze, whether or not the freeze committed: a gate
 # order commits nothing, and a test already in HEAD makes no commit either. So the commit is the
 # order's only when its subject is the one the freeze writes for this order. A build record holds
 # the last attempt's range; a fix record each round's. A record whose commits git no longer has
 # names nothing (live-run row 94).
+# A build and fix record does not stay at the top of the implementation folder. `retake-tests`
+# moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
+# `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
+# both are read, and an order's own commits are never counted as later ones (live-run row 144).
 rs_order_commits() {
-  local impl="$1" codepath="$2" one_id="$3" out='[]' c range file kind
+  local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
+  local out='[]' c range file kind dir files
   c="$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null)"
   if [ -n "$c" ] && git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1; then
     case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
@@ -8804,6 +8810,19 @@ rs_order_commits() {
         out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '. + [{order: $id, kind: "freeze", commit: $c, range: $c}]')" ;;
     esac
   fi
+  # Each retake folder comes from the ledger entry's own `movedTo`, never from a guessed folder
+  # name. A folder or a record a person removed holds nothing, which is not fatal.
+  files="$impl/build-$one_id.json
+$(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    files="$files
+$dir/build-$one_id.json
+$(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
+  done <<RS_RETAKEN
+$(printf '%s' "$ledger" | jq -r --arg id "$one_id" \
+  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .movedTo // empty' 2>/dev/null)
+RS_RETAKEN
   while IFS= read -r file; do
     [ -f "$file" ] || continue
     range="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$file" 2>/dev/null)"
@@ -8818,9 +8837,25 @@ rs_order_commits() {
 $(git -C "$codepath" rev-list --reverse "$range" 2>/dev/null)
 RS_RANGE
   done <<RS_FILES
-$impl/build-$one_id.json
-$(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)
+$files
 RS_FILES
+  # An earlier restart left this order's commits on the branch when the person answered carry.
+  # Its own `restarted.json` names them, with the kind, so they are read from there rather than
+  # from the records it moved, which is the one place the freeze commit of that build survives.
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      out="$(jq -c --arg c "$c" --argjson have "$out" '
+        ([ (.commits // [])[] | select(.commit == $c) ] | .[0]) as $e
+        | if $e == null or ($have | any(.[]; .commit == $c)) then $have else $have + [$e] end' "$file")"
+    done <<RS_PRIOR
+$(jq -r --arg id "$one_id" '(.commits // [])[] | select(.order == $id) | .commit' "$file" 2>/dev/null)
+RS_PRIOR
+  done <<RS_ARCHIVES
+$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null | sort)
+RS_ARCHIVES
   printf '%s' "$out"
 }
 
@@ -8940,7 +8975,7 @@ do_restart() {
   local commits_json tree_json one_id earliest parent span_count own_count
   commits_json='[]'
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
-    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$IMPL_DIR" "$RV_CODEPATH" "$one_id")" '$have + $more')"
+    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" '$have + $more')"
   done
   tree_json='null'
   if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then
@@ -9023,6 +9058,9 @@ do_restart() {
       if has("resetTo") then "tree: reset the branch to " + .resetTo[0:7] + " (a hard reset, which a person runs; this session'"'"'s hook refuses it)"
       elif .count == 1 then "tree: 1 later commit depends on them; carry them, and the test author is told"
       else "tree: " + (.count | tostring) + " later commits depend on them; carry them, and the test author is told" end'
+    if [ "$(printf '%s' "$tree_json" | jq -r '.carry // false')" = "true" ]; then
+      echo "carried: each restarted order keeps its own code in the tree, so its next tests cannot go red"
+    fi
   fi
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"

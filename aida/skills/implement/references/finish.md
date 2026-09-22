@@ -134,7 +134,9 @@ ledger. Its records move aside with the rest, and the summary names it. The next
 resumed run.
 
 The records move; the commits they name stay on the branch. The restart reads each halted
-order's freeze commit and its build and fix ranges. It lists the ones still on the branch, one
+order's freeze commit and its build and fix ranges. It finds the build and fix records wherever
+a retake or an earlier restart moved them. An order's own commits are then never counted as
+later ones. It lists the ones still on the branch, one
 `commits:` line each, with the order and the kind. It writes them into `restarted.json` too.
 It changes nothing in the tree. The `tree:` line then says one of two things. Put it to
 the person, opening with: "The tests and code written for this unit are still on the branch.
@@ -142,7 +144,8 @@ Its next test author would write against them, and a test that passes at once wo
 nothing. You choose what happens to those commits." Then say the line. When it names a commit
 to reset to, nothing later depends on those commits. Say: "Take the branch back to that commit
 and they are gone. That is a hard reset, which you run; this session cannot." When it says to
-carry them, other commits sit after them. Say: "They stay. The next start names them, and the
+carry them, other commits sit after them. Say: "They stay. This unit's own code stays in the
+tree, so its next tests cannot go red. The next start names them, and the
 test author is told the tree holds a partial build." Either way the next `start` prints a
 `partialBuild` line while any of them is still on the branch.
 

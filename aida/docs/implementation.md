@@ -461,7 +461,8 @@ A restart moves records, not commits. The halted order's frozen tests and its bu
 are still on the branch. A test author sent against them could write a test that passes at
 once. So the restart lists those commits, and says one of two things about the tree. When
 nothing later depends on them, it names the commit to take the branch back to. That is a hard
-reset, and you run it. When other commits sit after them, they are carried. Either way the
+reset, and you run it. When other commits sit after them, they are carried, and the unit's own
+code stays in the tree, so its next tests cannot go red. Either way the
 next run names them while they are still there. The test author's brief then says the tree
 holds a partial build of the unit. A test green on arrival is reported, never taken as proof.
 
