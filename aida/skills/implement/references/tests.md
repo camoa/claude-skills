@@ -89,6 +89,15 @@ A ninth, `treeHolds`, only after a restart left this order's earlier commits on 
 It holds those commits and one sentence. The tree holds a partial build of this unit, so a
 test that passes on arrival is suspect. The summary prints the commits on a `treeHolds:` line.
 
+A tenth, `retake`, only while a `test-wrong` ruling is still unanswered by a freeze. It holds
+the ruled finding, the criterion it names, its evidence, its severity, and the file and lines it
+cites. It holds the ruling reason too, read from the review record the retake moved. It holds
+the rows and the test globs the order already froze, and those rows are keyed by criterion. So
+the criterion the finding names says which rows to correct.
+And it says what the author must do: correct the tests the finding names,
+and leave every other frozen row alone. A record a person removed is named under `absent`, and
+the brief carries what is left. The summary prints a `retake:` line.
+
 It prints the brief's path and counts, never the brief.
 
 That list is the withheld list, decided once rather than at each dispatch. Adding an input here

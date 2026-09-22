@@ -83,6 +83,11 @@ list. The route is the change, then `check`, `close` with the verdict the last
 `design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
 an order's interface, criteria or dependencies, reads as a first run does.
 
+A change to an order that implementation already started halts that order for design drift at
+the next `start`, whatever the call. Two routes lead back. Restore the design and `start` clears
+the halt. Or take the restart in the implement skill's `references/finish.md`, which rebuilds the
+order against the new design. The cheap reopen stays cheap for an order that has not started.
+
 Then start design:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh start "<task_folder>"

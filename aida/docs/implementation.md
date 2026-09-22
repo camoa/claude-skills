@@ -402,7 +402,9 @@ with the rulings and no verdicts file, and the round's verdicts stand. `test-wro
 finding is real and the fix needs a frozen test changed. The order halts, and the retake sends
 it back to its tests. The build, review, fix and verify records and their briefs move aside
 into a `retaken` folder, nothing deleted, and
-the order returns to `tests-frozen`. The test author corrects that test, the checker reads its rows, and the freeze
+the order returns to `tests-frozen`. Its next tests brief carries the ruled finding and the rows
+the order already froze. The author corrects that test and leaves the others alone.
+The checker reads its rows, and the freeze
 runs again and prints `retaken:`. The attempt counter stays, because the attempts were real.
 When it is already spent, the next build refuses and the grant answers it. The fix rounds go
 back to zero with the review record.
@@ -441,7 +443,12 @@ order that has started, with frozen tests or a build record, halts, and so does 
 depends on it. Restarting moves only the halted orders' records aside, resets them to not started,
 and keeps every finished order. A finished order is never redone for a change it never depended on.
 Design has to close again on the live files first. A restart is a person's judgement, so an
-autonomous run cannot take it.
+autonomous run cannot take it. Putting the design back and running the build again clears the
+halt instead. The run compares, finds no drift for that order, and removes that one reason. Two
+drift reasons still take the restart. A changed criterion is one: the run that halted the order
+took the new contract, so no later run sees the change. An order halted because another order
+drifted is the other. A reopen that changed an order's design file and a criterion it serves
+halts it for both reasons. The criterion one then holds the order when only the file goes back.
 
 One change to a started order does not halt it: an owned file added and nothing else. The
 build found a file the operation rewrites that no order owned, and design added it. The frozen

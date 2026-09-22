@@ -527,7 +527,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  85  `clear-halt` was asked to clear a halt another action answers: one holding an `attempts
 #      spent` or `budget spent` segment, which `grant-attempt` clears, a `design drift` segment,
 #      which `restart` clears, or a `test wrong` segment, which `retake-tests` clears. The message
-#      names that action, and nothing is written. Every other
+#      names that action, and for a drift halt it also names `start`, which clears a segment about
+#      the order's own design file once its comparison finds no drift. Nothing is written. Every other
 #      halt (a row the checker rejected, a finding on a non-goal, a fixer's scope, a finding ruled
 #      load-bearing, a dirty tree, spent fix rounds) is a person's to clear, once they have acted on
 #      what it names, and this is the one action that clears it. A closed order shares exit 67 with
@@ -806,14 +807,36 @@ EOF
 # split into two segments. Every reason this script writes is its own words plus a tool's output or
 # a checker's note, and none has carried it; the alternative, a list field on the order, is a shape
 # no reader outside this file asks for yet.
+# The new reason is split on the same separator too. One run that found two reasons for one order
+# writes them as two segments, and a later run that finds the same two repeats neither.
 HALT_MERGE_JQ='def halt_merge($old; $new):
-  (($old // "") | if . == "" then [] else split("; earlier: ") end) as $segments
-  | ([$new] + ($segments | map(select(. != $new)))) | join("; earlier: ");
+  (($new // "") | if . == "" then [] else split("; earlier: ") end) as $fresh
+  | (($old // "") | if . == "" then [] else split("; earlier: ") end) as $segments
+  | ($fresh + ($segments | map(select(. as $s | ($fresh | index($s)) == null)))) | join("; earlier: ");
 '
 
 # Every segment of halt reason $1, one per line. Empty prints nothing.
 halt_segments() {
   printf '%s' "$1" | jq -r 'if . == "" then empty else split("; earlier: ")[] end' 2>/dev/null
+}
+
+# The two drift reasons a later `start` can re-derive: both compare the snapshot's own copy of one
+# order against the live design file, and the snapshot keeps that copy while the order is halted.
+# A criterion reason and a reason naming another order are not here; the comment in `start` says why.
+DRIFT_OWN_COPY_PREFIXES='["design drift: the design file for ","design drift: the design removed "]'
+
+# The segments of halt reason $1 that begin with one of the prefixes in JSON array $2, joined back
+# into a halt reason. $3 is `keep` for those segments, or `drop` for every other one. Empty prints
+# nothing. One splitter for both actions that remove one halt and keep the rest: `grant-attempt`
+# answers a spent counter, and `start` answers a drift its own comparison no longer finds.
+halt_segments_matching() {
+  printf '%s' "$1" | jq -Rr --argjson prefixes "$2" --arg how "$3" '
+    if . == "" then empty
+    else (split("; earlier: ")
+          | map(. as $segment
+                | select(([ $prefixes[] | . as $prefix | select($segment | startswith($prefix)) ] | length > 0) == ($how == "keep")))
+          | join("; earlier: "))
+    end'
 }
 
 # Applies a halt to one order in ledger document $1. $2 the unit id, $3 the reason. Prints the
@@ -1050,6 +1073,23 @@ im_print_summary() {
     | .[]'
 }
 
+# True while a retake is still unanswered: `retake-tests` recorded the freeze commit the order's
+# test record held, and that record still holds it, so the freeze after the retake has not run.
+# $1 the ledger document, $2 the implementation folder, $3 the order id. Prints true or false.
+# One producer for the fact, read by the routing line below and by the tests brief.
+#
+# A test record that is gone, unreadable, or holding no commit reads as pending too: the freeze is
+# the one producer of that commit, so no freeze can have answered the retake. The brief then names
+# the missing record and carries what is left, the way it names an absent review record.
+im_retake_pending() {
+  local record="$2/tests-$3.json" answer
+  answer="$(printf '%s' "$1" | jq -r --arg id "$3" --arg c "$(jq -r '.commit // ""' "$record" 2>/dev/null)" \
+    '(([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // "") as $f
+     | $f != "" and ($c == "" or $f == $c)')"
+  [ "$answer" = "true" ] || answer=false
+  printf '%s' "$answer"
+}
+
 # The next step, derived the way SKILL.md's routing table reads the ledger, so `read`, `start` and
 # every record action print the same answer from the same facts. $1 the ledger document, or empty
 # when none is readable; $2 the snapshot document, or empty; $3 the implementation folder, for the
@@ -1106,13 +1146,7 @@ im_next_step() {
       [ "$n" = "true" ] || n=false
     fi
     tools_only="$(printf '%s' "$tools_only" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
-    file="$impl/tests-$id.json"
-    n=false
-    if [ -f "$file" ]; then
-      n="$(printf '%s' "$ledger" | jq -r --arg id "$id" --arg c "$(jq -r '.commit // ""' "$file" 2>/dev/null)" \
-        '(([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // "") as $f | $f != "" and $f == $c')"
-      [ "$n" = "true" ] || n=false
-    fi
+    n="$(im_retake_pending "$ledger" "$impl" "$id")"
     retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
@@ -1644,19 +1678,24 @@ do_start() {
       # a changed order file: the tests are written from the frozen criterion, so an order built
       # after the change would assert the old sentence (live-run row 86). Changed means the
       # snapshot's criterion object differs from the live one or is gone from it. An order that
-      # already drifted on its own file keeps that reason.
+      # already drifted on its own file carries both reasons, as two segments of one halt. The
+      # clearing below removes the segment about the design file alone. So one reopen that changed
+      # the file and the criterion keeps the order halted when only the file goes back.
       if [ "$contract_changed" = "true" ]; then
         changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
             (($b.criteria // []) | map({(.id): .}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | select($liveMap[.id] != .) | .id ]')"
-        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" '
-            ($drifted | map(.id)) as $have
-            | $drifted + [ $snap[] | . as $s
-                | select(($have | index($s.id)) == null)
-                | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null) ]) as $hits
-                | select(($hits | length) > 0)
-                | {id: $s.id, reason: ("design drift: criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, changed since the snapshot was taken")}
-              ]')"
+        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" "$HALT_MERGE_JQ"'
+            [ $snap[] | . as $s
+              | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null) ]) as $hits
+              | select(($hits | length) > 0)
+              | {id: $s.id, reason: ("design drift: criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, changed since the snapshot was taken")}
+            ] as $byCriterion
+            | ($drifted | map(.id)) as $have
+            | ($drifted | map(. as $d
+                | (([ $byCriterion[] | select(.id == $d.id) | .reason ])[0]) as $c
+                | if $c == null then $d else ($d + {reason: halt_merge($c; $d.reason)}) end))
+              + [ $byCriterion[] | . as $b | select(($have | index($b.id)) == null) ]')"
       fi
       # A drifted order that has not started is not halted: nothing was built against its old
       # shape, so it is replaced in the snapshot by the live copy instead, and its dependents are
@@ -1842,6 +1881,7 @@ do_start() {
   fi
 
   local final_orders_json final_criteria_json ledger_started_from ledger_run_mode ledger_started_at
+  local halts_cleared_json='[]' drift_cleared_ids_json='[]'
   local started_from_before_json='[]' rewritten_from=""
   if [ "$ledger_present" = "true" ]; then
     opened_as="reopened"
@@ -1918,6 +1958,46 @@ do_start() {
           | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
         )
       ')"
+    # A drift halt outlives the drift that wrote it (live-run row 143). The design goes back to
+    # what it was, this run finds no drift, and the order stays stopped with the old reason. So
+    # an order this run found no drift for loses the `design drift` segment naming its own design
+    # copy. Every other segment stays and the order stays halted with it, the way a grant keeps
+    # what it does not answer. An order left with no segment is no longer halted and resumes at
+    # its own step. Only a resumed run clears, because only a resumed run compares the live design
+    # to the snapshot; a new run has nothing to compare and writes no halt.
+    # `clear-halt` still refuses a drift halt (exit 85). `start` is the one action that computes
+    # drift, and a second computation there would be a second producer for one fact.
+    #
+    # Two drift reasons are left for `restart`, because this comparison cannot re-derive either.
+    # A criterion halt is written in the same run that replaces the snapshot's alignment with the
+    # live contract, so the next comparison finds no difference while the order's frozen tests
+    # still assert the old sentence. Clearing it would let that order build against them. And a
+    # halt that names another order stands on that order's state, not on this comparison, so it
+    # waits for the restart that takes the order it names fresh.
+    halts_cleared_json="$(printf '%s' "$ledger_doc" | jq -c '.haltsCleared // []')"
+    if [ "$drift_checked" = "true" ]; then
+      local cleared_id cleared_halt cleared_rest cleared_today
+      cleared_today="$(date -u +%Y-%m-%d)"
+      for cleared_id in $(printf '%s' "$final_orders_json" | jq -r --argjson drifted "$drift_halts_json" '
+          ($drifted | map(.id)) as $bad
+          | [ .[] | . as $o | select(($bad | index($o.id)) == null) | select($o | has("haltedBecause")) | $o.id ][]'); do
+        cleared_halt="$(printf '%s' "$final_orders_json" | jq -r --arg id "$cleared_id" \
+          '.[] | select(.id == $id) | .haltedBecause')"
+        [ -n "$(halt_segments_matching "$cleared_halt" "$DRIFT_OWN_COPY_PREFIXES" keep)" ] || continue
+        cleared_rest="$(halt_segments_matching "$cleared_halt" "$DRIFT_OWN_COPY_PREFIXES" drop)"
+        final_orders_json="$(printf '%s' "$final_orders_json" | jq -c --arg id "$cleared_id" --arg rest "$cleared_rest" '
+            map(if .id == $id then
+                  (if $rest == "" then del(.haltedBecause) else .haltedBecause = $rest end)
+                else . end)')"
+        halts_cleared_json="$(printf '%s' "$halts_cleared_json" | jq -c --arg id "$cleared_id" \
+          --arg reason "$cleared_halt" --arg today "$cleared_today" --arg rest "$cleared_rest" '
+          . + [{id: $id, reason: $reason, clearedAt: $today,
+                because: ("start: this resumed run compared the live design to the snapshot and found no drift for "
+                          + $id + ", so the design drift segment naming its own design copy cleared"
+                          + (if $rest == "" then "" else "; the order stays halted for what is left" end))}]')"
+        drift_cleared_ids_json="$(printf '%s' "$drift_cleared_ids_json" | jq -c --arg id "$cleared_id" '. + [$id]')"
+      done
+    fi
     # The list follows the snapshot's criteria, which a contract change just refreshed: an entry
     # the ledger holds is kept with its judgements, a new criterion opens as not judged, and one
     # the contract dropped leaves. A changed criterion's serving orders are unstarted or halted
@@ -1967,9 +2047,11 @@ do_start() {
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
     --argjson resnapshots "$resnapshots_json" --argjson startedFromBefore "$started_from_before_json" \
+    --argjson haltsCleared "$halts_cleared_json" \
     '{schemaVersion: 1, startedFrom: $startedFrom, startedAt: $startedAt, runMode: $runMode, snapshotHash: $snapshotHash,
       orders: $orders, criteria: $criteria}
      | if ($startedFromBefore | length) > 0 then .startedFromBefore = $startedFromBefore else . end
+     | if ($haltsCleared | length) > 0 then .haltsCleared = $haltsCleared else . end
      | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
 
@@ -2069,6 +2151,7 @@ do_start() {
     --argjson drifted "$(printf '%s' "$drifted_orders_json" | jq -c '[ .[] | .id ]')" \
     --argjson haltedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
     --argjson resnapshotted "$resnapshot_ids_json" \
+    --argjson driftCleared "$drift_cleared_ids_json" \
     --argjson removed "$removed_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
     --argjson partialBuild "$st_partial_json" \
@@ -2078,9 +2161,11 @@ do_start() {
     --arg state "$run_state" --arg next "$st_next" '
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
-     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted, removed: $removed, newLiveOrders: $newLiveOrders,
+     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted,
+     driftCleared: $driftCleared, removed: $removed, newLiveOrders: $newLiveOrders,
      partialBuild: $partialBuild, halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
     | if ($removed | length) == 0 then del(.removed) else . end
+    | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
     | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
   exit 0
 }
@@ -3427,6 +3512,54 @@ do_tests_brief() {
     else {commits: map({kind, commit}),
           note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect"} end')"
 
+  # A tenth thing, only while a retake is still unanswered: a person ruled one frozen test wrong
+  # at `verify-record`, and `retake-tests` sent the order back to this step (live-run row 142).
+  # The author is dispatched again to correct that one test, and nothing in the first-run brief
+  # says which, or that the order already has frozen tests. So the brief carries the ruled
+  # finding and the frozen rows, and the dispatch stays the role, the run mode and the paths.
+  # The review record holding the finding moved with the rest, so it is read from the retake's
+  # own `movedTo` and never from a guessed folder name. A record a person removed is absent, not
+  # fatal: the key says which one is gone and carries what is left.
+  local retake_json='null' retake_entry retake_review_file retake_finding_json retake_frozen_json
+  local retake_absent_json='[]'
+  if [ "$(im_retake_pending "$ledger_doc" "$IMPL_DIR" "$unit_id")" = "true" ]; then
+    retake_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+      '(.orders // []) | map(select(.id == $id)) | .[0].retakes | last')"
+    retake_review_file="$(printf '%s' "$retake_entry" | jq -r '.movedTo')/review-$unit_id.json"
+    retake_finding_json='null'
+    if [ -f "$retake_review_file" ]; then
+      # `linkedTo` names the criterion the finding is about, and the frozen rows below are keyed by
+      # criterion and hold each test's path and name. It is the join from the finding to the tests
+      # to correct, so the author reads which rows the ruling reaches instead of guessing.
+      retake_finding_json="$(jq -c --arg f "$(printf '%s' "$retake_entry" | jq -r '.finding')" '
+        [ (.findings // [])[] | select(.id == $f) ] | .[0] // null
+        | if . == null then null
+          else {id, linkedTo: (.linkedTo // null), severity: (.severity // null),
+                file: (.file // null), lines: (.lines // null),
+                evidence: (.evidence // null), ruling: (.ruling // null),
+                rulingReason: (.rulingReason // null)} end' "$retake_review_file" 2>/dev/null)"
+      [ -n "$retake_finding_json" ] || retake_finding_json='null'
+    fi
+    if [ "$retake_finding_json" = "null" ]; then
+      retake_absent_json="$(printf '%s' "$retake_absent_json" | jq -c --arg p "$retake_review_file" \
+        '. + ["the review record at \($p) does not hold the ruled finding, so its evidence and its ruling reason are not here"]')"
+    fi
+    retake_frozen_json="$(jq -c '{testGlobs: (.testGlobs // []), rows: (.rows // [])}' \
+      "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
+    if [ -z "$retake_frozen_json" ]; then
+      retake_frozen_json='null'
+      retake_absent_json="$(printf '%s' "$retake_absent_json" | jq -c --arg p "$IMPL_DIR/tests-$unit_id.json" \
+        '. + ["the frozen test record at \($p) is not there or could not be read, so the rows this order already has are not here"]')"
+    fi
+    retake_json="$(jq -cn --argjson entry "$retake_entry" --argjson finding "$retake_finding_json" \
+      --argjson frozenTests "$retake_frozen_json" --argjson absent "$retake_absent_json" \
+      --arg reviewRecord "$retake_review_file" '
+      {at: $entry.at, finding: $finding, reviewRecord: $reviewRecord, frozenTests: $frozenTests,
+       absent: $absent,
+       whatToDo: "This order already has frozen tests. Correct the tests the finding names, and leave every other frozen row alone. Write no new test for a criterion the frozen rows already cover."}')"
+    [ -n "$retake_json" ] || die 3 "tests-brief: could not assemble the retake key for $unit_id."
+  fi
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -3436,13 +3569,15 @@ do_tests_brief() {
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
+        --argjson retake "$retake_json" \
         --arg testRecipePath "$test_recipe_path" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
       playbooksPath: $playbooksPath}
-     | if $treeHolds == null then . else .treeHolds = $treeHolds end')"
+     | if $treeHolds == null then . else .treeHolds = $treeHolds end
+     | if $retake == null then . else .retake = $retake end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -3456,8 +3591,14 @@ do_tests_brief() {
      testRecipePath: (.testRecipePath // "none: no framework has a resolved test-execution recipe in preconditions.json, so the author has no runner to read"),
      reuses: (.reuses | if length == 0 then null else length end),
      treeHolds: (if has("treeHolds") then ([ .treeHolds.commits[] | .commit[0:7] + " " + .kind ]) else null end),
+     retake: (if has("retake") then
+                ((.retake.finding.id // "the ruled finding") + ": "
+                 + (.retake.finding.rulingReason // "the ruling reason is not on record")
+                 + " | correct the tests it names and leave the other frozen rows alone")
+              else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
-    | if .treeHolds == null then del(.treeHolds) else . end')"
+    | if .treeHolds == null then del(.treeHolds) else . end
+    | if .retake == null then del(.retake) else . end')"
   exit 0
 }
 
@@ -8399,10 +8540,8 @@ do_grant_attempt() {
   # because clearing a reason a grant does not answer would hide it behind an attempt nobody needed.
   local halt halt_spent halt_rest
   halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
-  halt_spent="$(printf '%s' "$halt" | jq -Rr '
-      if . == "" then empty else (split("; earlier: ") | map(select(startswith("attempts spent") or startswith("budget spent"))) | join("; earlier: ")) end')"
-  halt_rest="$(printf '%s' "$halt" | jq -Rr '
-      if . == "" then empty else (split("; earlier: ") | map(select((startswith("attempts spent") or startswith("budget spent")) | not)) | join("; earlier: ")) end')"
+  halt_spent="$(halt_segments_matching "$halt" '["attempts spent","budget spent"]' keep)"
+  halt_rest="$(halt_segments_matching "$halt" '["attempts spent","budget spent"]' drop)"
   if [ -n "$halt" ] && [ -z "$halt_spent" ]; then
     die 67 "grant-attempt: $unit_id is halted for something a grant does not answer: $halt. Nothing is written."
   fi
@@ -8518,8 +8657,14 @@ do_clear_halt() {
         elif map(select(startswith("design drift"))) | length > 0 then "restart"
         elif map(select(startswith("test wrong"))) | length > 0 then "retake-tests"
         else "" end')"
+  # A drift halt names a second route as well. `start` is the one action that computes drift, so
+  # it is also the one that clears a halt the design no longer earns; a second computation here
+  # would be a second producer for one fact.
+  local drift_route=""
+  [ "$other_action" != "restart" ] \
+    || drift_route=" Or run start again: it clears a halt about this order's own design file once the design no longer differs from the snapshot."
   [ -z "$other_action" ] \
-    || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead. Nothing is written."
+    || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead.$drift_route Nothing is written."
 
   local today new_ledger
   today="$(date -u +%Y-%m-%d)"

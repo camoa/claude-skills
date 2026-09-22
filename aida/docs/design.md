@@ -274,7 +274,8 @@ start on a contract or an order that no longer matches the hash. That is what ca
 edited after design closed. Changing a closed design is supported: edit the order, then close
 again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
 done-when row may skip the research and guide reading. That reading shapes an order, not its file
-list.
+list. A change to an order that implementation already started halts that order for design drift.
+Put the design back and the next build clears the halt, or take the restart.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its

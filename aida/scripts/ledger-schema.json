@@ -71,7 +71,7 @@
       "items": {
         "$ref": "#/$defs/haltCleared"
       },
-      "description": "One entry per halt a person cleared with `clear-halt`, in the order it happened. Present only when at least one was. The grant and the restart clear their own halts and record them in their own fields; every other halt names something a person does outside this script, and this is the record that they did it and why. The order's haltedBecause is removed at the same moment, so the reason lives on here and nowhere else."
+      "description": "One entry per halt cleared, in the order it happened. Present only when at least one was. Three actions write here. `clear-halt` writes one when a person did what the halt named. `retake-tests` writes one when a test-wrong ruling sent the order back to its tests. A resumed `start` writes one when its own comparison no longer finds the drift a halt was written for, since `start` is the one action that computes drift (live-run row 143). The grant and the restart clear their own halts and record them in their own fields. The order's haltedBecause is removed at the same moment, so the reason lives on here and nowhere else. A `start` clearing removes only the `design drift` segment, so the order stays halted for any other segment it carried."
     },
     "resnapshots": {
       "type": "array",
@@ -282,7 +282,7 @@
         "reason": {
           "type": "string",
           "minLength": 1,
-          "description": "The haltedBecause text as it stood, every segment, copied before it was removed."
+          "description": "The haltedBecause text as it stood, every segment, copied before it was removed. A clearing that removes one segment copies the whole text here too, so the entry says what the order was stopped for."
         },
         "clearedAt": {
           "type": "string",

@@ -94,6 +94,18 @@ A halt beginning `design drift` means `start` found the live design changed afte
 started. That can be direct, or through a started order it depends on. The halted orders start
 over; every other order keeps what it has.
 
+A halt about an order's own design file clears itself when the drift does. Put the design back
+to what the snapshot holds, then run `start` again: it compares, finds no drift for that order,
+and removes that segment. Any other segment stays and the order stays halted with it. The
+clearing is recorded under `haltsCleared` in the ledger, with the halt text as it stood. Two
+drift reasons never clear this way and always take the restart. One names a changed criterion.
+The run that wrote it replaced the snapshot's contract, so no later comparison sees the change.
+The order's frozen tests still assert the old sentence. One reopen that changed the design file
+and a criterion together writes both segments. The criterion one then holds the order when only
+the file goes back. The other names another order that
+drifted, and it waits for the restart of the order it names. Offer the restart when the new
+design is the one to build, and for either of those two reasons.
+
 Put that to the person, opening with: "The design changed after this unit of work was started, so
 what was built no longer matches it. Only you can say the new design is the one to build.
 Rebuild it and its tests and code are written again; every other unit keeps what it has. A unit
@@ -151,7 +163,8 @@ plain words. When they have repaired the test, ruled on the finding, or committe
 It removes the halt from the order and records the reason and the date under `haltsCleared` in
 the ledger. It prints the step the order resumes at; nothing moves the order. It refuses a halt
 the grant, the restart or the retake answers (exit 85), naming that action, and a closed order
-(exit 67). It
+(exit 67). For a drift halt the refusal also names `start`, which clears a segment about the
+order's own design file once the design no longer differs. It
 refuses when the task's implement stage is autonomous (exit 68), because clearing a halt is a
 person's judgement. The person sets the task interactive first. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`

@@ -37,8 +37,16 @@ never that nothing changed; those are different facts and only that line tells t
 same to the person: nothing was compared yet, not that a check found nothing.
 
 A resumed run that halts one or more work orders for drift is not a failure. Say plainly which
-orders halted and why. A halted order stays halted until a person looks at it; nothing here
-un-halts one automatically, and nothing here decides whether the drift is acceptable.
+orders halted and why. This run un-halts one thing by itself. It removes a `design drift` segment
+about an order's own design file, once its own comparison finds no drift for that order. Every
+other halt stays until a person acts on it, and nothing here decides whether the drift is
+acceptable.
+
+The `driftCleared:` line names each order whose own design file no longer differs, and whose
+drift segment this run removed. It prints only when one was removed. An order left with no other
+segment is no longer halted and resumes at its own step. An order carrying another segment stays
+halted for that one. The ledger records each clearing under `haltsCleared`, with the halt text as
+it stood. Tell the person which orders cleared, and which are still halted and why.
 
 After a restart, a `partialBuild(<order>):` line names each restarted order whose commits are
 still on the branch, with the commits and their kinds. It prints only while one is there. It is
