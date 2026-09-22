@@ -141,10 +141,11 @@ at setup goes stale, and a capture against a stale address fails without saying 
 Every stage of a task runs in the task's own worktree, and a worktree has the branch's files and
 no site. A capture taken there without its own site would show the main checkout, not the branch.
 So AIDA offers one yes: bring the worktree's own site up from the framework's recipe. The offer
-comes when the task is created, if that window entered the worktree, or when you run
-`/aida:task start <task-id>` by hand; `/aida:next` writes nothing and offers nothing.
-`/aida:task environment <task-id> up` does the same later, and `show` in place of `up` prints
-what it would run without running it.
+comes when the task is created, if that window entered the worktree. It comes again when the
+task starts, whichever stage starts it, while the task records no answer. `/aida:next` writes
+nothing and offers nothing. A no is recorded with your reason, so nothing asks again.
+`/aida:task environment <task-id> up` still brings it up later, and `show` in place of `up`
+prints what it would run without running it.
 
 `show` lists the files the recipe writes, the preconditions it checks, and the commands it runs.
 A failing precondition stops the step with the script's message and leaves nothing behind. A

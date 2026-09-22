@@ -45,6 +45,12 @@ record needs and lacks goes in `gaps`, one sentence each, naming what is missing
 belongs. A record path that does not exist is absent, and named in `gaps`; it is never a reason
 to stop.
 
+For scope, `alignment.json` carries `decidedWithoutAPerson`. Its schema says: "Each entry names
+one question an unattended run answered on a person's behalf while drafting or updating this
+contract." And: "Empty for a run made with a person present, and empty is the only value an
+interactive run ever writes." An empty list is not a gap. An attended run always leaves it
+empty, and the approval itself lives in each criterion's `author`.
+
 ## What you write
 
 One file, `<task folder>/records/<stage>-distill.json`, in the shape of `scripts/distill-schema.json`:

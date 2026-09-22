@@ -9,13 +9,14 @@ that reference outside the thing it judges.
 ## Resolve the recipes for this step
 
 Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup twice, for each
-framework the project declares, naming the project folder. Name the role, and pass the lookup's
-answer in its own word: SKILL.md holds both rules.
+framework the project declares. Each message names the point as `point: <phase>`, then each
+framework, then the project folder. Name the role, and pass the lookup's answer in its own word:
+SKILL.md holds both rules.
 
-**The `test-authoring` point.** This answers where a test file goes, which levels exist and when
+**`point: test-authoring`.** This answers where a test file goes, which levels exist and when
 each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
 
-**The `implement` point, for its patterns and its path.** Take the file patterns from its `## Oracle files`
+**`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
 naming test files, so this is not a guess at what the block is for. Pass those globs and the path
 to the freeze below. This is the one recipe this step reads itself, because it needs the patterns as data rather
@@ -44,7 +45,7 @@ order that consumes what it configures. Every other order takes the steps below.
 no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` line. Design's
 `update --proof gate` is the way onto the gate.
 
-`record` means its deliverable is a document in the task folder, and nothing runs a document.
+`record` means its deliverable is a document in the project folder, and nothing runs a document.
 Skip `tests-brief` and dispatch no test author. Its done-when rows are its checkpoint. Put them
 to the `row-checker`, or to the person, the way the checkpoint below puts a test's rows. The
 question is whether each row names something a reader can confirm from the deliverable alone.
@@ -101,7 +102,7 @@ the line.
 `--deny-read` below is applied by the runtime, through the read-denial hook. `--allow-write` is
 not: no hook reads it. It is recorded for a person reading the dispatch record later, the same as
 the read denial and the shell door named under "What this skill does" in `SKILL.md`. The build is
-serial, so a project has at most one open dispatch at a time.
+serial, so a task has at most one open dispatch at a time.
 
 Open it first:
 ```

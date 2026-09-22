@@ -13,7 +13,9 @@ check answered, and where each record is. It asks a question only where a script
 Every question opens with one plain sentence that names the decision and what each answer causes.
 You may be returning to the terminal days later with none of the order in mind. Every role this
 stage dispatches gets the same message: the role, the run mode, and what it reads, one per
-line. Its rules are in its own definition and its data in a brief on disk.
+line. Its rules are in its own definition and its data in a brief on disk. The one labelled
+line is the catalog identifier's process-recipe point, `point: <phase>`, so a phase name is
+never read as a task.
 
 ## What happens before anything is built
 
@@ -57,7 +59,9 @@ review tools. A project that declares no framework refuses here, because no reci
 for it. A lookup has three answers that are not the same thing. The catalog holds none for this
 framework, the listing could not be reached, or the fetch failed. Only the first says anything
 about the framework. AIDA records which one happened rather than treating an unreachable catalog
-as a recipe that declared nothing.
+as a recipe that declared nothing. A framework the catalog holds nothing for is recorded as
+undeclared, and the build goes on. A listing that could not be reached is recorded as unknown,
+and stops. Every framework the project declares gets its own line on every run.
 
 The test-execution recipe declares what must be true before a test runs. Each condition answers
 in one of four words:
@@ -80,6 +84,10 @@ one test file nor the tests for changed paths. No order on it could ever have it
 And two frameworks whose review recipes each command the same tool, coding standards say. That
 gives one question two answers, and AIDA refuses rather than choose. The same refusal returns at
 every later step that runs the tools. The way past is one check recipe for the task, or two tasks.
+
+A task whose every order is proved by its record runs no test. Its conditions and its smoke
+command are recorded as not needed and never run. No suite baseline is taken, and the build
+goes on. The review tools still run over any file an order owns under the code path.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist
@@ -112,7 +120,10 @@ writes the tests, watches each one fail, and stops. It is a separate context fro
 will write the code, on a mid tier. It may not read production source, this order's or any order
 already built, and a hook refuses the read. If it saw the code, the tests would describe the code
 instead of the intent, which is the failure this stage exists to prevent. It may not write
-production code either. That bound is recorded on the dispatch, not applied by a hook.
+production code either. That bound is recorded on the dispatch, not applied by a hook. The
+dispatch record is the task's own. So a task has at most one open dispatch, and two tasks of one
+project build side by side. It carries the time it opened, so a record a role never closed is
+named with its age.
 
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of
@@ -212,35 +223,42 @@ closes, its criteria are recorded as judged by the gate, a third judge beside pe
 
 ## A document order
 
-A work order whose deliverable is a document in the task folder, a dependency review or a
-report, has `record` as its proof kind. It owns files under the task folder only, and lands no
-commit in the code repository. No test author is dispatched. Its done-when rows are its
+A work order whose deliverable is a document, a dependency review or a report, has `record`
+as its proof kind. It owns files under the project folder, in a folder the project commits,
+the task folder's `deliverables/` by default. It lands no commit in the code repository. No test author is dispatched. Its done-when rows are its
 checkpoint. The row-checker, or you, confirms that each row names something a reader can check
 from the document alone. The freeze records that judgement. The implementer writes the
 document and commits it in the project folder, staging its owned files alone. The build reads
 the range, the tree and the diff from the project folder's history. The empty-range refusal
 and the unchanged refusal compare against that history. The suite and the three tool checks
 read undeclared, naming the proof kind. The done-when check takes the place of the tests, met
-when the row was confirmed. The reviewer is handed the document by path and the task folder's
-diff, and reads it whole against the done-when rows. When the order closes, its criteria are
+when the row was confirmed. The reviewer is handed the document by path and the project
+folder's diff, and reads it whole against the done-when rows. When the order closes, its criteria are
 recorded as judged by whoever judged the row, a person or a model, never the gate.
 
-Every diff for such an order is the task folder's alone: the owned-files check, the review diff
+Every diff for such an order is the project folder's: the owned-files check, the review diff
 and the fix patch. AIDA commits the project folder between a build brief and its record, when a
-note is saved or another task closes a stage. None of that is the implementer's. Inside the task
-folder, the files AIDA's own scripts write are set aside before the owned list is compared.
-Those are the task record, the contract, the stage folders and the notes. The check's detail
-says how many. A file a person writes is never set aside, so a second document the order does
-not own still fails the check.
+note is saved or another task closes a stage. None of that is the implementer's, so the files
+AIDA's own scripts write are set aside before the owned list is compared. Those are the task
+record, the contract, the stage folders and the notes of this task, every other task's folder,
+and the project record. The check's detail says how many. A file a person writes is never set
+aside, so a second document the order does not own still fails the check, wherever it lands.
 
 ## A page order
 
 A work order whose deliverable is what a page shows, a layout or a rendered block, has
 `observe` as its proof kind. No test author is dispatched and no row goes to the checker,
 because nothing can be judged before the page exists. The order freezes with no test and no
-row. After the implementer returns, AIDA opens each surface the order names, at each viewport
-the surface file declares, in a browser. It judges each done-when row against what renders and
-saves a screenshot per surface and viewport under the task folder. It writes an observed record
+row. Before the implementer is dispatched, AIDA takes each surface at each viewport once. A row
+that says the page is as it was then has a before to judge against. After the implementer
+returns, AIDA opens each surface the order names, at each viewport
+the surface file declares, in a browser. Each page renders at the viewport's width, and each
+screenshot lies under the order's observed folder, or the build refuses it. When the build ran
+a configuration gate, the look waits for the recipe's restore or rebuild step, since the gate
+rewound the site. It judges each done-when row against what renders and
+saves a screenshot per surface and viewport under the task folder. It also judges the
+verification clause of each machine criterion the order owns as its own row, since rows may say
+less. It writes an observed record
 with one row per sentence, surface and viewport, and the build reads that record as the order's
 own check. Every row met is met; one unmet row stops the attempt the way a failing test does.
 The judge on the record is a model. When the order closes, its criteria are recorded as judged
@@ -355,6 +373,15 @@ round runs on a mid tier, the second on the top tier. The fixer may not change a
 not fix a finding not on its list. A finding whose scope is too small is reported, not widened.
 You rule on it; an autonomous run halts the order with the report as the reason.
 
+A reviewer may set a finding's fix scope to a file the order does not own. The review record
+names those paths on the finding, and the fix brief withholds them from the fixer. You may allow
+one with `fix-brief --allow <path>`. The brief records it, the fixer's dispatch record carries
+it, and the owned-files check after the round accepts it. An autonomous run cannot allow. A
+finding whose whole scope is withheld is still handed over, so the fixer reports it and you rule
+on it after the round. The write hook holds the fixer to the order's files plus the allowed
+paths, the way it holds the implementer. The owned-files check after the round only spends the
+round.
+
 After each round, seven of the eight checks run again, every one but the interface record. A fix
 that breaks a passing test has not fixed anything. A check answering unmet or unknown spends
 the round and leaves every finding open. Then the reviewer returns in verify mode and gives each
@@ -370,9 +397,11 @@ with an obvious answer. Autonomous, the order halts instead.
 
 A finding the fixer reported out of its scope may be ruled before the cap, at that round's
 verification. The fixer's report is the evidence that no round can reach it, so no second round
-is spent to hear it again. `test-wrong` says the finding is real and the fix needs a frozen test
-changed. The order halts, and the retake sends it back to its tests. The build, review, fix
-and verify records and their briefs move aside into a `retaken` folder, nothing deleted, and
+is spent to hear it again. When the round was verified first, the ruling is the same call again
+with the rulings and no verdicts file, and the round's verdicts stand. `test-wrong` says the
+finding is real and the fix needs a frozen test changed. The order halts, and the retake sends
+it back to its tests. The build, review, fix and verify records and their briefs move aside
+into a `retaken` folder, nothing deleted, and
 the order returns to `tests-frozen`. The test author corrects that test, the checker reads its rows, and the freeze
 runs again and prints `retaken:`. The attempt counter stays, because the attempts were real.
 When it is already spent, the next build refuses and the grant answers it. The fix rounds go
@@ -475,9 +504,10 @@ the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` 
 path a shell assembles at run time passes. The rule exists to stop a role opening the source
 because that is the obvious way to write a test about it. A role working around it on purpose
 has already failed in a way no hook catches. The implementer's owned files are enforced too: the
-write hook refuses it a write under the code path outside them. A `mkdir` of a directory an owned
+write hook refuses it a write under the code path outside them. The fixer is held the same way,
+to the order's files plus the paths you allowed for the round. A `mkdir` of a directory an owned
 file lies under passes, because design owns files and a new unit's first directory needs it. A
 heredoc body is never read as a write, and a refusal of a shell command names the token it read
-as the path. Three things are recorded and enforced by nothing: the paths every other role may
-write, the fixer's fix scope, and the builder's five answers. A write outside the fix scope
-surfaces when the reviewer reads the fix diff, not as it happens.
+as the path. Two things are recorded and enforced by nothing: the paths every other role may
+write, and the builder's five answers. A write inside the order's files but outside the fix
+scope surfaces when the reviewer reads the fix diff, not as it happens.

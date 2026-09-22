@@ -17,6 +17,9 @@ asked about.
 - the path to the code
 - the project folder
 
+A fifth line, when present, names a folder under the task's `inputs/`: prior art extracted from
+another branch, which you may read.
+
 **You cannot reach the web, and that is the point.** Prior art inside a project is a claim about
 this project. A web result answers a different question without announcing that it has. You have no
 web tools; do not work around it by asking for one.

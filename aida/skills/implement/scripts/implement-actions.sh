@@ -12,9 +12,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # asks a question and never judges whether a criterion is met. What each step is for, and why, is
 # ideal/implementation.md; this header says only what a caller needs.
 #
-# `dispatch-open` and `dispatch-close` open and clear the one record, <project path>/dispatch.json,
-# that the two permission hooks (hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh) read
-# to tell a dispatched role apart from a person working their own repository.
+# `dispatch-open` and `dispatch-close` open and clear the one record per task,
+# <task_folder>/implementation/dispatch.json. The two permission hooks (hooks/deny-prior-source.sh,
+# hooks/deny-frozen-test-writes.sh) read it to tell a dispatched role apart from a person working
+# their own repository.
 #
 # Two steps halt an order rather than refuse. A halt is the run continuing correctly, so it exits 0,
 # writes the reason into the ledger and says so on standard error. The one exception is an
@@ -60,7 +61,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
 #   implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
-#   implement-actions.sh fix-brief     <task_folder> <unit_id>
+#   implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
 #   implement-actions.sh fix-record    <task_folder> <unit_id> \
 #                            --report <path to the fixer's report> \
 #                            --started-at <commit the round began from> \
@@ -71,8 +72,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--nothing-ran <literal substring>] \
 #                            [--scope-insufficient <finding id>=<reason>]...
 #   implement-actions.sh verify-brief  <task_folder> <unit_id>
-#   implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path> \
+#   implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>] \
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
+#                            (--verdicts is required until the round is on the record; after that,
+#                            --ruling alone rules on the round's open findings)
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
@@ -93,7 +96,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # writes the same order's files for the same reason (decision 8 of step five). `--deny-read` adds to what was derived; it is how a path outside codePath is
 # denied, such as the recipe each role may not open. An implementer's record also carries its own
 # owned files under `ownedFiles`, the list hooks/deny-frozen-test-writes.sh holds it to while the
-# record is open (live-run row 92). No other role's record carries the key.
+# record is open (live-run row 92). A fixer's record carries the key too: the order's list plus
+# the `allowedFiles` of the round's fix brief, which must exist (live-run row 116). No other
+# role's record carries the key.
 #   implement-actions.sh dispatch-close <task_folder>
 #   implement-actions.sh step <name>
 #
@@ -161,7 +166,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot-schema.json   the shape `start` writes to snapshot.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-schema.json     the shape `start` writes to ledger.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-schema.json   the shape `dispatch-open` writes to
-#                                                        <project path>/dispatch.json
+#                                                        <task_folder>/implementation/dispatch.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/finished-schema.json   the shape `finish` writes to
 #                                                        <task_folder>/implementation/finished.json
 #
@@ -251,7 +256,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      proceed, never that nothing was learned. `undeclared` does not land here: a recipe saying
 #      this framework needs nothing before a test runs, or nothing before a smoke command proves
 #      one, has answered, and refusing on it would stop every project on that framework. It is
-#      reported, never counted as met.
+#      reported, never counted as met. A framework passed as `--lookup-failed <fw>=no-recipe` is
+#      `undeclared` too: the catalog looked and holds nothing for it (live-run row 137). The other
+#      two lookup failures are nobody looking, and they land here as `unknown`. `not-needed` does
+#      not land here either. Every order in the snapshot is proved by its record, so no condition
+#      and no smoke row was run. The record says so per framework (live-run row 136).
 #  20  an action after `start` was asked to run on a task whose build has never started: no
 #      snapshot and no ledger. `preconditions` names this fact with it, and so does every step-five
 #      action. Run `start` first.
@@ -302,9 +311,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      path this step records is relative to codePath (baseline.json's own `scope` field is
 #      relative for the same reason: a frozen path must survive the checkout moving), so a path
 #      that cannot be made relative to it at all cannot be recorded either.
-#  37  `dispatch-open` found <project path>/dispatch.json already open. The build is serial, so a
-#      project has at most one active dispatch; the message names the role, task and unit that
-#      already hold it. `dispatch-close` clears it.
+#  37  `dispatch-open` found <task_folder>/implementation/dispatch.json already open. The build
+#      of one task is serial, so a task has at most one active dispatch. The message names the
+#      role and unit that hold it, and its age when it opened over a day ago (live-run row 139).
+#      Another task's open record does not refuse this one. `dispatch-close` clears it.
 #  38  `build-brief` was given a unit id that is not in the frozen snapshot. The same fact exit 22
 #      already names for `tests-brief` and `tests-freeze`; `build-brief` shares the number rather
 #      than minting a second one for the same meaning.
@@ -336,6 +346,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      nothing left to hand a verifier. The message names both values, because a caller who calls
 #      this twice for one attempt or one round is not shown a stale success silently.
 #      `verify-record` on a round already verified reports the verification on record instead.
+#      With --ruling it applies the rulings to that round's open findings, and writes no second
+#      round entry (live-run row 111).
 #
 #  46  `dispatch-open` was given a role that names no agent under ${CLAUDE_PLUGIN_ROOT}/agents, or
 #      found that folder empty. A role nothing checks opens a record no agent's own `agent_type`
@@ -453,10 +465,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      in that step reads a per-criterion list, so an order with none passes all of them and
 #      freezes a reference that proves nothing. An order whose proof is gate, record or observe is
 #      exempt from the second half: its record holds no test row on purpose.
-#  75  `dispatch-close` was given a task folder that is not the one the open record names. The
-#      record lives at the project root and two tasks in one project is a supported state, so a
-#      second task's close would clear the first task's live permission record. The message names
-#      the record's own task and the folder given.
+#  75  retired on 2026-09-22 (live-run row 139). `dispatch-close` refused a task folder that was
+#      not the one the open record named, while the record lived at the project root. It now
+#      lives under the task's own folder, so a close reaches this task's record and no other.
 #  76  `tests-freeze` was asked to re-freeze an order that has already left the frozen state. A
 #      re-freeze rewinds the step and leaves the spent attempt counter and the stale build record
 #      where they are, so the order would rebuild with no attempts and a record for tests that no
@@ -502,7 +513,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      first twenty, and the sidecar holding the whole output; a fix commit on the branch and a
 #      second `finish` is the route. Unknown names its own cause: no baseline to subtract from, a
 #      placeholder with no --value, a runner not found, or a run that selected nothing. Nothing
-#      is recorded; the sidecar stays, because it is what a person reads next.
+#      is recorded; the sidecar stays, because it is what a person reads next. `not-needed` never
+#      lands here. A task whose every order is proved by its record ran no test, so the suite
+#      is recorded not-needed and not run (live-run row 136).
 #
 # The code the record proof added (nyc defect 17).
 #  87  a step reading the range of an order whose proof is record found the project folder is not
@@ -554,20 +567,32 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  92  no --observed was passed for an order whose proof is observe. The message names the flag.
 #  93  the --observed file is missing, is not JSON, or does not match observed-schema.json: no
 #      order, observedAt, judgedBy or rows, an order that is not this unit, a judgedBy that is
-#      not model, or a row without doneWhen, surface, viewport, screenshot, verdict and note. Or
-#      it is at a path other than <task_folder>/implementation/observed-<unit_id>.json: a fix
+#      not model, or a row without doneWhen, surface, viewport, screenshot, before, verdict and
+#      note. Or it is at a path other than <task_folder>/implementation/observed-<unit_id>.json: a fix
 #      round and a re-check read that path and no other, so a record accepted from elsewhere
 #      would pass the build and stop every fix round. The message names the path.
-#  94  a row names a screenshot that is not on disk. The look is the evidence, and a row with no
-#      image is a claim.
+#  94  a row names a screenshot that is not on disk, or one that lies outside
+#      <task_folder>/implementation/observed-<unit_id>/. The look is the evidence, and a row with
+#      no image is a claim. A file where a browser tool put it vanishes with that folder (live-run
+#      row 112). The same for a row's before image, against
+#      <task_folder>/implementation/observed-<unit_id>-before/: a sameness row has no before to
+#      judge from without it (live-run row 114). The message names which field, each path and
+#      the folder.
 #  95  a row names a surface the order does not name. The order's surfaces are the pages it
 #      changes, and a look at another page proves nothing about this order.
-#  96  a row's doneWhen is not one of the order's own done-when rows. The row is the sentence a
-#      model judges, and a judgement of another sentence is not this order's proof.
-#  97  a row the order owes is missing: one per done-when row, per surface the order names, per
-#      viewport the surface file declares. A look not taken is not a met, and the check reads
-#      every row present as the whole only when the whole is there. The message names the first
-#      missing row.
+#  96  a row's doneWhen is not one of the order's own done-when rows, nor the verification clause
+#      of a machine criterion the order owns. The row is the sentence a model judges, and a
+#      judgement of another sentence is not this order's proof. A row whose sentence is a clause
+#      carries `criterion`. The same code refuses a clause row without it. It refuses a
+#      `criterion` the order does not own, or one whose clause is not the row's sentence
+#      (live-run row 115).
+#  97  a row the order owes is missing: one per sentence, per surface the order names, per
+#      viewport the surface file declares. The sentences are the done-when rows and each owned
+#      machine criterion's verification clause. The rows may say less than the clause, and no
+#      script can tell, so the look judges the clause too (live-run row 115). A look not taken
+#      is not a met, and the check reads every row present as the whole only when the whole is
+#      there. The message names the first missing row and whether it is a done-when row or a
+#      criterion's clause.
 #  98  the surface file cannot be read, so the rows the order owes cannot be known: the project
 #      record names no surfaces.registryPath, the file is missing or unreadable, or it declares
 #      no viewport. The surfaces skill's install writes it.
@@ -577,6 +602,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the build, review, fix and verify records aside and sends the order back to `tests-frozen`,
 #      which is right only after a person ruled a finding `test-wrong` at `verify-record`. The
 #      message names the halt found, or that the order is not halted, and nothing is written.
+#
+# The code a fix scope outside the order's files added (live-run row 116).
+# 100  `fix-brief` was given `--allow` on an unattended run. An allow is a person's grant of one
+#      path outside the order's ownedFiles to one fix round. An unattended run has nobody to
+#      grant it. Nothing is written. Three argument faults stay exit 3: a path already owned, a
+#      frozen test or support file, and a path no open finding's fixScope names.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -735,7 +766,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--nothing-ran <literal substring>]
        implement-actions.sh review-brief  <task_folder> <unit_id>
        implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
-       implement-actions.sh fix-brief     <task_folder> <unit_id>
+       implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
        implement-actions.sh fix-record    <task_folder> <unit_id>
                             --report <path to the fixer's report>
                             --started-at <commit the round began from>
@@ -745,8 +776,10 @@ usage: implement-actions.sh read  <task_folder>
                             [--nothing-ran <literal substring>]
                             [--scope-insufficient <finding id>=<reason>]...
        implement-actions.sh verify-brief  <task_folder> <unit_id>
-       implement-actions.sh verify-record <task_folder> <unit_id> --verdicts <path>
+       implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>]
                             [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
+                            (--verdicts is required until the round is on the record; after that,
+                            --ruling alone rules on the round's open findings)
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
@@ -2152,7 +2185,8 @@ pc_check_is_unsafe() {
 
 # Runs one check as arguments from inside $2, and prints only its exit status. Globbing is off for
 # the split, so a `*` that survived the refusal above could not expand against the working
-# directory anyway.
+# directory anyway. Standard input is empty. The caller reads the framework names from a pipe.
+# A command that reads its input would swallow the frameworks still to come (live-run row 137).
 pc_run_check() {
   local value="$1" dir="$2" outfile="$3"
   (
@@ -2171,7 +2205,7 @@ pc_run_check() {
     # came out empty would read as a condition that passed. Exit 126 instead.
     [ "$#" -gt 0 ] || exit 126
     exec "$@"
-  ) >"$outfile" 2>/dev/null
+  ) >"$outfile" 2>/dev/null </dev/null
   printf '%s' "$?"
 }
 
@@ -2311,7 +2345,8 @@ pc_worse() {
 # Prints one of two tab-separated results on stdout, never dies: `UNRESOLVED<TAB><name>` when a
 # token still held a placeholder $4 supplied no value for, naming it; or `RAN<TAB><exit status>`
 # once the command actually ran, whatever it exited with. $3 receives standard output and standard
-# error together, exactly as the command wrote them, for the caller to trim and record.
+# error together, exactly as the command wrote them, for the caller to trim and record. Standard
+# input is empty, for the reason pc_run_check gives.
 tc_run_smoke() {
   local argv_json="$1" dir="$2" outfile="$3" values="$4"
   local count i tok name
@@ -2338,7 +2373,7 @@ tc_run_smoke() {
   (
     cd "$dir" || exit 127
     exec "$@"
-  ) >"$outfile" 2>&1
+  ) >"$outfile" 2>&1 </dev/null
   printf 'RAN\t%s' "$?"
 }
 
@@ -2685,6 +2720,7 @@ do_preconditions() {
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
+  local harness_needed harness_reason
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -2740,6 +2776,17 @@ do_preconditions() {
   [ -n "$frameworks" ] \
     || die 77 "preconditions: $project_folder/project.json is valid and records no frameworks, so no recipe can be chosen for this project. Exit 14 is the separate fact that the file is not valid JSON."
 
+  # A task whose every order is proved by its record writes no test and runs none, so the test
+  # harness is not needed. Its conditions and its smoke row are recorded `not-needed` and never
+  # run, and the baseline runs no suite (live-run row 136). Any other proof needs the harness. A
+  # `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
+  # An `observe` order's build runs the suite against the baseline. The recipe is still
+  # resolved and recorded, because the freeze and finish read its path.
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
+    [ (.workOrders // [])[] | (.proof // "tests") ]
+    | if length > 0 and all(. == "record") then "no" else "yes" end')"
+  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record, so no test is written or run"
+
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
   # framework that can never answer is named now rather than at the first build-record. An order
   # whose own tests nothing runs never reaches checks-passed, so a framework declaring both rows
@@ -2783,13 +2830,18 @@ do_preconditions() {
     : >"$tc_rows_file"
     if [ "$lookup" = "resolved" ]; then
       [ -f "$recipe_path" ] || die 3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
-      section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
-      case "$section_state" in
-        undeclared)     fw_verdict="undeclared" ;;
-        declared-empty) fw_verdict="undeclared" ;;
-        unparseable)    fw_verdict="unknown" ;;
-        *)              fw_verdict="met" ;;
-      esac
+      if [ "$harness_needed" = "no" ]; then
+        section_state="not-needed"
+        fw_verdict="not-needed"
+      else
+        section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
+        case "$section_state" in
+          undeclared)     fw_verdict="undeclared" ;;
+          declared-empty) fw_verdict="undeclared" ;;
+          unparseable)    fw_verdict="unknown" ;;
+          *)              fw_verdict="met" ;;
+        esac
+      fi
       # The test-commands block never affects a verdict; it is read here only because it lives in
       # the same recipe file this framework already resolved, and the record already has a place
       # for the rest of what that recipe declared. cr_resolve above already parsed it, so this
@@ -2799,9 +2851,18 @@ do_preconditions() {
       printf '%s' "$CR_DOC" | jq -c --arg f "$fw" \
         '[ (.frameworks // [])[] | select(.framework == $f) ][0].testCommandsRows // [] | .[]' >"$tc_rows_file"
     else
-      # Nobody looked. That is a different fact from a recipe that looked and declared nothing.
+      # The catalog looked and holds no recipe for this framework: it declared nothing, and the
+      # build goes on (live-run row 137). A listing that could not be reached or a fetch that
+      # failed is nobody looking, a different fact, and that stops. A harness nobody needs is
+      # not-needed whichever it was.
       section_state="not-looked"
-      fw_verdict="unknown"
+      if [ "$harness_needed" = "no" ]; then
+        fw_verdict="not-needed"
+      elif [ "$lookup" = "no-recipe" ]; then
+        fw_verdict="undeclared"
+      else
+        fw_verdict="unknown"
+      fi
       tc_state="not-looked"
     fi
 
@@ -2823,10 +2884,16 @@ EOF
     smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false
     smoke_exit_code_json="null"
     case "$fw_verdict" in
+      not-needed)
+        smoke_verdict="not-needed"
+        smoke_reason="$harness_reason"
+        ;;
       met|undeclared)
-        if [ "$tc_state" = "undeclared" ]; then
+        if [ "$tc_state" = "undeclared" ] || [ "$tc_state" = "not-looked" ]; then
           # No `## Test commands` heading at all is the recipe declaring nothing about a smoke
           # command, the same fact `undeclared` already names at the framework's own conditions.
+          # A framework the catalog holds no recipe for has no smoke row either. It is the only
+          # not-looked framework whose verdict lets this run reach here.
           smoke_verdict="undeclared"
         elif [ "$tc_state" != "ok" ]; then
           smoke_verdict="unknown"
@@ -2898,10 +2965,12 @@ EOF
 
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
-          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" '
+          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
+          --arg reason "$harness_reason" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
+      + (if $verdict == "not-needed" then {reason: $reason} else {} end)
     ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
@@ -2909,10 +2978,12 @@ EOF
 
   # The worst of every framework's own verdict AND its own smoke run's verdict: the run's answer
   # is never met while a framework's smoke command is unmet or unknown, the same way it is never
-  # met while a condition is.
+  # met while a condition is. A check that was not needed did not run, so it is left out, and a
+  # run where none ran answers not-needed.
   run_verdict="$(jq -s -r '
     def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
-    ([ .[] | .verdict, .smoke.verdict ] + ["met"]) | max_by(rank)
+    ([ .[] | .verdict, .smoke.verdict ] | map(select(. != "not-needed")))
+    | if length == 0 then "not-needed" else (. + ["met"]) | max_by(rank) end
   ' "$fw_json_file")"
 
   today="$(date -u +%Y-%m-%d)"
@@ -2936,7 +3007,7 @@ EOF
   baseline_summary_json='null'
 
   case "$run_verdict" in
-    met|undeclared)
+    met|undeclared|not-needed)
       LEDGER_FILE="$STARTED_LEDGER_FILE"
       ledger_doc="$STARTED_LEDGER_DOC"
       ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
@@ -2950,7 +3021,14 @@ EOF
 
           suite_json_file="$task_folder/implementation/.baseline-suite.$$"
           : >"$suite_json_file"
-          bl_run_suite "$record_json" "$codepath" "$values" "$suite_json_file"
+          if [ "$harness_needed" = "no" ]; then
+            # No suite runs for a task that runs no test. One entry per framework says so, so a
+            # reader sees the row was skipped and not forgotten.
+            printf '%s' "$record_json" | jq -c --arg reason "$harness_reason" \
+              '.frameworks[] | {framework: .framework, verdict: "not-needed", reason: $reason}' >"$suite_json_file"
+          else
+            bl_run_suite "$record_json" "$codepath" "$values" "$suite_json_file"
+          fi
           suite_json="$(jq -s '.' "$suite_json_file" 2>/dev/null)" || suite_json="[]"
           rm -f "$suite_json_file"
 
@@ -3010,7 +3088,7 @@ EOF
   local pc_next
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
-    met|undeclared) ;;
+    met|undeclared|not-needed) ;;
     *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
@@ -3048,9 +3126,9 @@ EOF
   # would mean no project on that framework ever builds. The two never share a value in the
   # record, and the report names which one happened, which is the whole of what "undeclared is
   # not met" protects: a caller must not report a recipe that declared nothing as a set of
-  # conditions that passed.
+  # conditions that passed. `not-needed` goes on too: nothing was checked because nothing runs.
   case "$run_verdict" in
-    met|undeclared) ;;
+    met|undeclared|not-needed) ;;
     *) exit 19 ;;
   esac
 }
@@ -4685,6 +4763,21 @@ do_build_brief() {
   if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
     bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
   fi
+  # An order whose proof is observe owes a look before the build, at this headNow. A row that
+  # says the page is as it was needs that before to judge from (live-run row 114). The folder is
+  # named here; the orchestrator fills it once, on the first attempt, and every later attempt
+  # and fix round reuse it. The state is read from the folder, not the ledger: an image there is
+  # a look taken, and nothing else records one.
+  local bb_before bb_before_state
+  bb_before=""; bb_before_state=""
+  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+    bb_before="$IMPL_DIR/observed-$unit_id-before"
+    if [ -n "$(find "$bb_before" -mindepth 1 -maxdepth 1 -type f -name '*.png' 2>/dev/null | head -n 1)" ]; then
+      bb_before_state="taken"
+    else
+      bb_before_state="owed"
+    fi
+  fi
   # The report has one named path per attempt, so a later attempt never writes over the answers a
   # reviewer already compared a diff against. The brief is one file per order, rewritten on each
   # attempt: only its counters and its report path change between two attempts. The interface
@@ -4700,15 +4793,19 @@ do_build_brief() {
         --arg interfacePath "$IMPL_DIR/interface-$unit_id.md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+        --arg beforeLookPath "$bb_before" \
     '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
-      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}')"
+      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
+     + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   # headNow is printed because the caller passes it back as --started-at, and the report path
-  # because the dispatch names it. Everything else the implementer reads from the file.
-  im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+  # because the dispatch names it. Everything else the implementer reads from the file. The
+  # before-look line prints only for an observe order, with its state, and next names the look
+  # while it is owed.
+  im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" --arg beforeState "$bb_before_state" '
     {order: .unit.id,
      brief: $brief,
      reportPath: .reportPath,
@@ -4719,8 +4816,11 @@ do_build_brief() {
      ownedFiles: (.unit.ownedFiles | length),
      frozenTests: (.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
-     dependencyInformation: (.dependencyInformation | length),
-     next: "dispatch implementer with the brief path and the implement recipe path, then build-record"}')"
+     dependencyInformation: (.dependencyInformation | length)}
+    + (if has("beforeLookPath") then {beforeLook: "\(.beforeLookPath) (\($beforeState))"} else {} end)
+    + {next: (if $beforeState == "owed"
+              then "take the before-look at headNow into the beforeLook folder, then dispatch implementer with the brief path and the implement recipe path, then build-record"
+              else "dispatch implementer with the brief path and the implement recipe path, then build-record" end)}')"
   exit 0
 }
 
@@ -4779,9 +4879,13 @@ br_require_real_base() {
 #                       observe: `build-record` takes it from --observed, checked first; a fix
 #                       round and a re-check read the path the build step names,
 #                       <task_folder>/implementation/observed-<unit_id>.json
+#   BRC_ALLOWED_JSON    the paths a person allowed for this fix round with `fix-brief --allow`,
+#                       the round's brief's `allowedFiles`. The owned-files check reads them
+#                       beside the order's ownedFiles (live-run row 116). A build attempt
+#                       leaves it `[]`
 # ------------------------------------------------------------------------------------------------
 BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""; BRC_SCOPE=""
-BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""
+BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""; BRC_ALLOWED_JSON="[]"
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
 BRC_GATE_RECIPES=""
@@ -5212,9 +5316,9 @@ br_test_check() {
 br_gate_check() {
   local verdict="" detail="" rc="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
   local line n=0 argv_json result kind payload owned_json run_out
-  if [ "$(jq -r '.environment | type' "$TASK_PATH/task.json" 2>/dev/null)" != "object" ]; then
+  if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
     verdict="unknown"
-    detail="task.json records no environment, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
+    detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
   elif [ -z "$BRC_GATE_RECIPES" ]; then
     verdict="unknown"
     detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."
@@ -5325,10 +5429,10 @@ br_observed_check() {
     | .surface + " at " + .viewport + ": " + .doneWhen + " (" + .note + ")"' "$BRC_OBSERVED")"
   if [ -n "$unmet_row" ]; then
     verdict="unmet"
-    detail="a model judged the done-when row unmet on $unmet_row; the observed record holds every row and the screenshots."
+    detail="a model judged a row unmet on $unmet_row; the observed record holds every row and the screenshots."
   else
     verdict="met"
-    detail="a model judged every done-when row met at every surface and viewport ($rows_count rows); the observed record holds the screenshots."
+    detail="a model judged every done-when row and every owned clause met at every surface and viewport ($rows_count rows); the observed record holds the screenshots."
   fi
   jq -n --arg verdict "$verdict" --arg detail "$detail" --arg judgedBy "$(jq -r '.judgedBy' "$BRC_OBSERVED")" \
     '{id: "observed", verdict: $verdict, detail: $detail, judgedBy: $judgedBy}'
@@ -5344,6 +5448,26 @@ br_aida_writes_in_task() {
   case "$1" in
     task.json|task.md|alignment.json|alignment.md|design-closed.json) return 0 ;;
     research/*|design/*|implementation/*|implementation-*/*|review/*|completion/*|notes/*|records/*) return 0 ;;
+  esac
+  return 1
+}
+
+# True when $1, a path relative to the project folder, is one AIDA's own scripts write there
+# (live-run row 127). A record order's diff reads the project folder whole, since its
+# deliverable may sit beside earlier reports outside the task folder. Inside this task's own
+# folder the list above decides. Another task's folder is written by that task's stage closes
+# and notes, never by this order's implementer. project.json is the project skill's. The
+# project's records/ is ignored, so it never appears in a diff.
+br_aida_writes_in_project() {
+  local task_rel rel
+  task_rel="${TASK_PATH#"$BRC_CODEPATH"/}"
+  rel="${1#"$task_rel"/}"
+  if [ "$rel" != "$1" ]; then
+    br_aida_writes_in_task "$rel"
+    return $?
+  fi
+  case "$1" in
+    project.json|tasks/*) return 0 ;;
   esac
   return 1
 }
@@ -5371,7 +5495,7 @@ br_seven_checks() {
   fi
   if [ "$proof" = "record" ]; then
     for rc_id in suite-regression coding-standards static-analysis security; do
-      jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the task folder, which the $rc_id row does not read, so the row does not apply to it." \
+      jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
         '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
     done
   else
@@ -5384,29 +5508,36 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
+  local own_count allowed_hit=""
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
   diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
-  owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  # The paths a person allowed for a fix round follow the order's own. So an index at or past
+  # own_count is an allowed path, and the detail names it (live-run row 116).
+  owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c --argjson a "$BRC_ALLOWED_JSON" '(.ownedFiles // []) + $a')"
+  own_count="$(printf '%s' "$BRC_UNIT_JSON" | jq '.ownedFiles // [] | length')"
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    # A record order owns absolute paths under the task folder, and its diff is the project
+    # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
     if [ "$proof" = "record" ]; then
-      p="$BRC_CODEPATH/$p"
-      if br_aida_writes_in_task "${p#"$TASK_PATH"/}"; then
+      if br_aida_writes_in_project "$p"; then
         set_aside=$((set_aside + 1))
         continue
       fi
+      p="$BRC_CODEPATH/$p"
     fi
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
       g="$(printf '%s' "$owned_files_json" | jq -r --argjson gi "$gi" '.[$gi]')"
       tf_path_matches_catalog_glob "$p" "$g" && matched=true
-      [ "$matched" = "true" ] && break
+      if [ "$matched" = "true" ]; then
+        [ "$gi" -lt "$own_count" ] || case ", $allowed_hit" in *", $g, "*) ;; *) allowed_hit="$allowed_hit$g, " ;; esac
+        break
+      fi
       gi=$((gi + 1))
     done
     [ "$matched" = "true" ] || unmatched="$unmatched$p, "
@@ -5416,14 +5547,16 @@ BR_DIFF
   if [ -n "$unmatched" ]; then
     ofc_verdict="unmet"
     ofc_detail="these changed files match none of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')'s own ownedFiles: ${unmatched%, }"
+    [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
   else
     ofc_verdict="met"
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   fi
+  [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
   if [ "$proof" = "record" ]; then
     aside_noun="files"
     [ "$set_aside" -ne 1 ] || aside_noun="file"
-    ofc_detail="$ofc_detail The diff is the task folder's alone, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger) set aside."
+    ofc_detail="$ofc_detail The diff is the project folder's, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger, another task's close) set aside."
   fi
   jq -n --arg verdict "$ofc_verdict" --arg detail "$ofc_detail" \
     '{id: "owned-files", verdict: $verdict, detail: $detail}' >>"$parts_file"
@@ -5635,9 +5768,11 @@ br_eight_checks() {
 # own number (live-run row 104). $1 the action, $2 the unit id, $3 the --observed path, empty when
 # none was passed. The top level is compared against observed-schema.json through the one library
 # every record check uses; the rows are read here, since that comparison stops at the top level.
-# Reads UNIT_JSON for the order's surfaces and done-when rows.
+# The two image fields go through the helper below it. Reads UNIT_JSON for the order's surfaces
+# and done-when rows. Reads CRITERIA_JSON for the verification clause of each machine criterion
+# the order owns. The look judges those clauses as rows of their own (live-run row 115).
 br_require_observed() {
-  local who="$1" unit_id="$2" observed="$3" compare gaps missing_shots bad_surfaces bad_done_when
+  local who="$1" unit_id="$2" observed="$3" compare gaps bad_surfaces bad_done_when clauses_json
   [ -n "$observed" ] \
     || die 92 "$who: $unit_id is proved by a model's observation, and no --observed was passed. After the implementer returns, open each of the order's surfaces at each viewport with the browser tool, judge each done-when row against what renders, write $IMPL_DIR/observed-$unit_id.json with a screenshot per row, and pass it as --observed."
   [ -f "$observed" ] \
@@ -5662,36 +5797,48 @@ br_require_observed() {
                   or ((.value.surface | type) != "string") or (.value.surface == "")
                   or ((.value.viewport | type) != "string") or (.value.viewport == "")
                   or ((.value.screenshot | type) != "string") or (.value.screenshot == "")
+                  or ((.value.before | type) != "string") or (.value.before == "")
                   or ((.value.verdict != "met") and (.value.verdict != "unmet"))
-                  or ((.value.note | type) != "string"))
-                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, a met or unmet verdict, or a note" ] end)
+                  or ((.value.note | type) != "string")
+                  or (.value.criterion != null and (if (.value.criterion | type) != "string" then true
+                                                    else (.value.criterion | test("^c[1-9][0-9]*$") | not) end)))
+                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, before, a met or unmet verdict, or a note, or its criterion is not a c<n> id" ] end)
       | join("; ")' "$observed" 2>/dev/null)"
   [ -z "$gaps" ] \
     || die 93 "$who: $observed does not match $OBSERVED_SCHEMA_FILE: $gaps. Nothing is recorded."
-  # Every name the loop uses is declared above it (trap 5 in this file's own header).
-  local shot
-  missing_shots=""
-  while IFS= read -r shot; do
-    [ -n "$shot" ] || continue
-    [ -f "$shot" ] || missing_shots="$missing_shots$shot, "
-  done <<BR_SHOTS
-$(jq -r '.rows[].screenshot' "$observed")
-BR_SHOTS
-  [ -z "$missing_shots" ] \
-    || die 94 "$who: these screenshots the observed record names are not on disk: ${missing_shots%, }. The look is the evidence, and a row with no image is a claim. Save each screenshot under $IMPL_DIR/observed-$unit_id/<surface>-<viewport>.png and name it in the row."
+  # The look after lies under the observed folder, and the look before under the before folder
+  # (live-run rows 112 and 114).
+  br_require_observed_images "$who" "$observed" screenshot "$IMPL_DIR/observed-$unit_id"
+  br_require_observed_images "$who" "$observed" before "$IMPL_DIR/observed-$unit_id-before"
   bad_surfaces="$(jq -r --argjson unit "$UNIT_JSON" '
       ($unit.surfaces // []) as $named
       | [ .rows[].surface | select(. as $s | ($named | index($s)) == null) ] | unique | join(", ")' "$observed")"
   [ -z "$bad_surfaces" ] \
     || die 95 "$who: the observed record names surfaces $unit_id does not: $bad_surfaces. The order's own surfaces are $(printf '%s' "$UNIT_JSON" | jq -r '(.surfaces // []) | join(", ")'). A look at another page proves nothing about this order."
-  bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" '
+  # A row's sentence is a done-when row, or the verification clause of a machine criterion the
+  # order owns, named by `criterion`. The rows may say less than the clause and no script can
+  # tell, so the look judges the clause itself (live-run row 115).
+  clauses_json="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson owned "$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')" '
+      [ .[] | select(.verifiedBy == "machine" and ((.id as $i | $owned | index($i)) != null)) | {id, clause: .verification} ]')"
+  bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" --argjson clauses "$clauses_json" --arg unit_id "$unit_id" '
       ($unit.doneWhen // []) as $held
-      | [ .rows[].doneWhen | select(. as $d | ($held | index($d)) == null) ] | unique | join(" | ")' "$observed")"
+      | [ .rows[] | .criterion as $c | .doneWhen as $d
+          | if $c != null then
+              (([ $clauses[] | select(.id == $c) ][0]) as $k
+               | if $k == null then "\"" + $d + "\" carries criterion " + $c + ", which " + $unit_id + " does not own as a machine criterion"
+                 elif $k.clause != $d then "\"" + $d + "\" carries criterion " + $c + ", whose verification clause is \"" + $k.clause + "\""
+                 else empty end)
+            elif ($held | index($d)) != null then empty
+            else (([ $clauses[] | select(.clause == $d) ][0]) as $k
+                  | if $k == null then "\"" + $d + "\" is neither a done-when row nor an owned criterion\u0027s clause"
+                    else "\"" + $d + "\" is the verification clause of " + $k.id + " and carries no criterion" end)
+            end ] | unique | join(" | ")' "$observed")"
   [ -z "$bad_done_when" ] \
-    || die 96 "$who: the observed record judges sentences $unit_id does not hold as done-when rows: $bad_done_when. A row is one of the order's own done-when rows, verbatim."
-  # Every row the order owes: each done-when row, at each surface the order names, at each
-  # viewport the surface file declares. The file is the one review's surface step reads, at
-  # surfaces.registryPath in the project record, joined to the task's own tree.
+    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
+  # Every row the order owes: each done-when row and each owned machine criterion's clause, at
+  # each surface the order names, at each viewport the surface file declares. The file is the
+  # one review's surface step reads, at surfaces.registryPath in the project record, joined to
+  # the task's own tree.
   local project_folder registry surface_file missing_row
   project_folder="$(resolve_project_folder "$TASK_PATH")" \
     || die 3 "$who: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
@@ -5704,13 +5851,41 @@ BR_SHOTS
     || die 98 "$who: the surface file at $surface_file is $SF_STATE, so the viewports $unit_id owes a look at cannot be known. The surfaces skill's install writes it."
   [ "$(printf '%s' "$SF_VIEWPORTS" | jq 'length')" -gt 0 ] \
     || die 98 "$who: the surface file at $surface_file declares no viewport, so the rows $unit_id owes cannot be known. Run the surfaces skill's install with a viewport list."
-  missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" '
-      [ .rows[] | .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
-      | [ ($unit.doneWhen // [])[] as $d | ($unit.surfaces // [])[] as $s | $viewports[] as $v
-          | select(($have | index($d + "\u001f" + $s + "\u001f" + $v)) == null)
-          | "\"" + $d + "\" at " + $s + " at " + $v ][0] // ""' "$observed")"
+  missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" --argjson clauses "$clauses_json" '
+      [ .rows[] | (.criterion // "") + "\u001f" + .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
+      | ([ ($unit.doneWhen // [])[] | {criterion: "", sentence: ., kind: "a done-when row"} ]
+         + [ $clauses[] | {criterion: .id, sentence: .clause, kind: ("the verification clause of " + .id)} ]) as $owed
+      | [ $owed[] as $o | ($unit.surfaces // [])[] as $s | $viewports[] as $v
+          | select(($have | index($o.criterion + "\u001f" + $o.sentence + "\u001f" + $s + "\u001f" + $v)) == null)
+          | "\"" + $o.sentence + "\" at " + $s + " at " + $v + ", " + $o.kind ][0] // ""' "$observed")"
   [ -z "$missing_row" ] \
-    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per done-when row, per surface it names, per viewport in $surface_file. A look not taken is not a met; take it and add the row."
+    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
+}
+
+# One image field of the observed record, on every row. Each path is on disk and lies under its
+# folder, resolved the way the record's path is above. A file where a browser tool put it, in
+# /tmp or a scratch folder in the worktree, vanishes with that folder (live-run row 112). Dies 94
+# naming the field, each path once and the folder: a clause row shares its image with a done-when
+# row (live-run row 115). $1 the action, $2 the record, $3 the field, `screenshot` or `before`,
+# $4 the folder the field's images belong under. Every name the loop uses is declared above it
+# (trap 5 in this file's own header).
+br_require_observed_images() {
+  local who="$1" observed="$2" field="$3" folder="$4" shot shot_dir folder_real missing_shots stray_shots
+  folder_real="$(cd "$folder" 2>/dev/null && pwd -P)"
+  missing_shots=""; stray_shots=""
+  while IFS= read -r shot; do
+    [ -n "$shot" ] || continue
+    if [ ! -f "$shot" ]; then missing_shots="$missing_shots$shot, "; continue; fi
+    shot_dir="$(cd "$(dirname -- "$shot")" 2>/dev/null && pwd -P)"
+    [ -n "$folder_real" ] && is_under "$shot_dir" "$folder_real" \
+      || stray_shots="$stray_shots$shot, "
+  done <<BR_SHOTS
+$(jq -r --arg f "$field" '[ .rows[][$f] ] | unique[]' "$observed")
+BR_SHOTS
+  [ -z "$missing_shots" ] \
+    || die 94 "$who: these $field images the observed record names are not on disk: ${missing_shots%, }. The look is the evidence, and a row with no image is a claim. Save each under $folder/<surface>-<viewport>.png and name it in the row's $field."
+  [ -z "$stray_shots" ] \
+    || die 94 "$who: these $field images the observed record names lie outside $folder/: ${stray_shots%, }. A file where a browser tool put it vanishes with that folder, and the evidence with it. Move each under that folder and name the new path in the row's $field."
 }
 
 do_build_record() {
@@ -5879,8 +6054,13 @@ do_build_record() {
   # (observed-schema.json, live-run row 104). Its shape and every row are checked against the
   # frozen order before any check runs, so the observed check below reads a record that is this
   # order's: a screenshot on disk per row, a surface the order names, a done-when the order holds.
+  # The summary names the criteria whose clause the look judged (live-run row 115). Null keeps
+  # the line off a code order's summary. It also keeps it off an observe order that owns no
+  # machine criterion.
+  local criteria_judged_json='null'
   if [ "$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
     br_require_observed "build-record" "$unit_id" "$observed_path"
+    criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
 
   local ledger_run_mode
@@ -5984,12 +6164,14 @@ do_build_record() {
   br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
   im_print_summary "build-record" "$(printf '%s' "$record_json" | jq -c \
     --arg attempts "$attempt_number of $attempts_allowed" --arg state "$br_state" \
-    --arg halt "${halt_why:-none}" --arg record "$record_file" --arg next "$br_next" '
+    --arg halt "${halt_why:-none}" --arg record "$record_file" --arg next "$br_next" \
+    --argjson criteriaJudged "$criteria_judged_json" '
     {order: .unit,
      attempt: $attempts,
      range: "\(.startedAt)..\(.commit)",
-     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-     executed: "\(.executed) of 8 ran a command, a diff or a hash",
+     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ])}
+    + (if $criteriaJudged == null then {} else {criteriaJudged: $criteriaJudged} end)
+    + {executed: "\(.executed) of 8 ran a command, a diff or a hash",
      state: $state,
      halt: $halt,
      record: $record,
@@ -6231,13 +6413,14 @@ rv_load_state() {
 }
 
 # The repository an order's range lives in, and the paths a tree check reads there. An order whose
-# proof is record lands its deliverable in the task folder, so its commits are the project
+# proof is record lands its deliverable in the project folder, so its commits are the project
 # folder's, and every range, HEAD, diff and tree read for it goes there; the tree check reads its
 # owned files alone, because the running stage keeps the rest of that folder dirty on purpose
-# (nyc defect 17). Its diffs read the task folder alone. AIDA's own actions commit the rest of
-# the project folder in the same range. A task note commits tasks/ whole; another task's stage
-# close commits its folder. None of that is the implementer's. Every other order reads the
-# code worktree whole. Call after rv_load_codepath.
+# (nyc defect 17). Its diffs read the project folder whole, because the deliverable may sit
+# outside the task folder (live-run row 127). AIDA's own actions commit that folder in the same
+# range. A task note commits tasks/ whole; another task's stage close commits its folder. None of
+# that is the implementer's, and br_aida_writes_in_project sets each aside. Every other order
+# reads the code worktree whole. Call after rv_load_codepath.
 # $1 the action's own name, $2 the frozen work order. Sets RV_RANGE_REPO, RV_RANGE_PATHS (one
 # pathspec per line, empty for the whole tree) and RV_RANGE_NAME, the words a message uses.
 # Also RV_RANGE_SCOPE, the one path every diff is scoped to, empty for the whole tree.
@@ -6250,7 +6433,7 @@ rv_load_range_repo() {
     || die 87 "$who: $(printf '%s' "$unit_json" | jq -r '.id') is proved by its record, so its range lives in the project folder, and $RV_PROJECT_FOLDER is not a git repository. Run git init there and commit it."
   RV_RANGE_REPO="$RV_PROJECT_FOLDER"
   RV_RANGE_PATHS="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
-  RV_RANGE_SCOPE="$TASK_PATH"
+  RV_RANGE_SCOPE="$RV_PROJECT_FOLDER"
   RV_RANGE_NAME="the project folder"
 }
 
@@ -6299,6 +6482,35 @@ rv_frozen_test_paths_json() {
   [ -n "$tests_doc" ] || { printf '[]'; return 0; }
   printf '%s' "$tests_doc" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
+}
+
+# Prints the paths of scope list $1, a JSON array, that lie outside owned list $2, one per line,
+# each as the reviewer wrote it. A path is resolved against codePath $3 and compared the way the
+# owned-files check compares a diff path, through tf_path_matches_catalog_glob. A path under the
+# task folder $4 is never outside: the report and the records live there (live-run row 116).
+rv_scope_outside() {
+  local scope_json="$1" owned_json="$2" codepath="$3" task_path="$4"
+  local count owned_count i gi p abs g matched
+  count="$(printf '%s' "$scope_json" | jq 'length')"
+  owned_count="$(printf '%s' "$owned_json" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    p="$(printf '%s' "$scope_json" | jq -r --argjson i "$i" '.[$i]')"
+    i=$((i + 1))
+    [ -n "$p" ] || continue
+    abs="$(normalize_abs "$(resolve_against "$p" "$codepath")")"
+    is_under "$abs" "$task_path" && continue
+    is_under "$abs" "$codepath" && abs="${abs#"$codepath"/}"
+    matched=false
+    gi=0
+    while [ "$gi" -lt "$owned_count" ]; do
+      g="$(printf '%s' "$owned_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+      tf_path_matches_catalog_glob "$abs" "$g" && matched=true
+      [ "$matched" = "true" ] && break
+      gi=$((gi + 1))
+    done
+    [ "$matched" = "true" ] || printf '%s\n' "$p"
+  done
 }
 
 # How many findings in review record $1 are open and actionable. A finding recorded with
@@ -6623,7 +6835,7 @@ do_review_record() {
   [ -z "$dirty" ] \
     || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
-  local raw_findings alignment count i one built findings_json information_json
+  local raw_findings alignment count i one built findings_json information_json outside outside_lines=""
   rv_read_findings_array "$findings_path" "findings" "review-record"
   raw_findings="$RV_FINDINGS_ARRAY"
   rv_read_information_array "$findings_path" "review-record"
@@ -6635,6 +6847,16 @@ do_review_record() {
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$raw_findings" | jq -c --argjson i "$i" '.[$i]')"
     built="$(rv_finding_record "$one" "$alignment" "review")"
+    # Live-run row 116. The paths of the finding's fixScope outside the order's own ownedFiles are
+    # stored on the finding, when there are any, and printed before the summary. Nothing is ruled
+    # here: fix-brief withholds them, and a person allows one there.
+    outside="$(rv_scope_outside "$(printf '%s' "$built" | jq -c '.fixScope')" \
+      "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')" "$RV_CODEPATH" "$TASK_PATH")"
+    if [ -n "$outside" ]; then
+      built="$(printf '%s' "$built" | jq -c --arg o "$outside" '.outsideOwned = ($o | split("\n"))')"
+      outside_lines="$outside_lines$(printf '%s' "$built" | jq -r '"outsideOwned: \(.id): \(.outsideOwned | join(", "))"')
+"
+    fi
     findings_json="$(printf '%s' "$findings_json" | jq -c --argjson f "$built" '. + [$f]')"
     i=$((i + 1))
   done
@@ -6678,6 +6900,7 @@ do_review_record() {
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
+  [ -z "$outside_lines" ] || printf '%s' "$outside_lines"
   # One line per finding: its severity, whether it is actionable and what it cites. Its evidence
   # stays in the record, named by path.
   im_print_summary "review-record" "$(printf '%s' "$record_json" | jq -c --arg record "$review_file" \
@@ -6729,10 +6952,27 @@ do_review_record() {
 # ------------------------------------------------------------------------------------------------
 
 do_fix_brief() {
-  [ "$#" -ge 2 ] || die 3 "fix-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die 3 "fix-brief: unrecognized extra argument: $3"
-  local unit_id="$2" resolve_rc
-  TASK_PATH="$(resolve_task_folder "$1" "fix-brief")"
+  local task_arg="" unit_id="" allow_raw=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --allow)
+        [ "$#" -ge 2 ] || die 3 "fix-brief: --allow needs a path relative to codePath"
+        [ -n "$2" ] || die 3 "fix-brief: --allow was given an empty path."
+        allow_raw="$allow_raw$2
+"
+        shift 2 ;;
+      -*) die 3 "fix-brief: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then task_arg="$1"
+        elif [ -z "$unit_id" ]; then unit_id="$1"
+        else die 3 "fix-brief: unrecognized extra argument: $1"; fi
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die 3 "fix-brief: a task folder is required"
+  [ -n "$unit_id" ]  || die 3 "fix-brief: a unit id is required"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "fix-brief")"
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
@@ -6753,22 +6993,83 @@ do_fix_brief() {
 
   rv_load_build_record "fix-brief" "$unit_id"
 
-  local open_json scope_json tests_json
+  local open_json scope_json tests_json owned_json
   open_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '
     [ (.findings // [])[] | select(.actionable == true and .status == "open") ]
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin})')"
-  scope_json="$(printf '%s' "$open_json" | jq -c '[ .[] | (.fixScope // [])[] ] | unique')"
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
+  owned_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
 
   rv_load_codepath "fix-brief"
   rv_load_range_repo "fix-brief" "$RV_UNIT_JSON"
+
+  # Live-run row 116. A fixScope path outside the order's ownedFiles is withheld from the fixer
+  # unless a person allows it here. An allow is a person's grant, so unattended refuses it
+  # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
+  # be granted. A path no open finding names is a grant for nothing (exit 3, each).
+  local allowed_json='[]' ap ap_abs tf fp frozen_list frozen_hit named
+  [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
+    || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files."
+  # Every frozen test and support path of the task, the list the write hook reads.
+  frozen_list=""
+  for tf in "$IMPL_DIR"/tests-*.json; do
+    [ -e "$tf" ] || continue
+    frozen_list="$frozen_list$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$tf" 2>/dev/null)
+"
+  done
+  while IFS= read -r ap; do
+    [ -n "$ap" ] || continue
+    ap_abs="$(normalize_abs "$(resolve_against "$ap" "$RV_CODEPATH")")"
+    [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] \
+      || die 3 "fix-brief: --allow names $ap, which $unit_id already owns. A grant is for a path outside the order's own files."
+    frozen_hit=""
+    while IFS= read -r fp; do
+      [ -n "$fp" ] || continue
+      [ "$(normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")")" = "$ap_abs" ] && frozen_hit="$fp"
+    done <<FB_FROZEN
+$frozen_list
+FB_FROZEN
+    [ -z "$frozen_hit" ] \
+      || die 3 "fix-brief: --allow names $ap, a frozen test or a support file. A fixer never changes a test; rule the finding test-wrong at verify-record instead."
+    named="$(printf '%s' "$open_json" | jq -r --arg p "$ap" --arg abs "$ap_abs" --arg code "$RV_CODEPATH" '
+      [ .[] | (.fixScope // [])[] | select(. == $p or . == $abs or ($code + "/" + .) == $abs) ] | length')"
+    [ "$named" != "0" ] \
+      || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
+    # Stored resolved and relative to codePath, whatever form was typed: the withhold, the
+    # owned-files check and the hook all read that one spelling.
+    allowed_json="$(printf '%s' "$allowed_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
+  done <<FB_ALLOW
+$allow_raw
+FB_ALLOW
+
+  # Per finding, the fixScope paths outside ownedFiles and the allowed list are withheld. The
+  # union the fixer gets is every other fixScope path. A finding wholly withheld is still handed
+  # over, so the fixer reports it scope-insufficient and the ruling route opens.
+  local fcount fn one withheld reach_json
+  reach_json="$(jq -nc --argjson o "$owned_json" --argjson a "$allowed_json" '$o + $a | unique')"
+  fcount="$(printf '%s' "$open_json" | jq 'length')"
+  fn=0
+  while [ "$fn" -lt "$fcount" ]; do
+    one="$(printf '%s' "$open_json" | jq -c --argjson i "$fn" '.[$i]')"
+    withheld="$(rv_scope_outside "$(printf '%s' "$one" | jq -c '.fixScope // []')" "$reach_json" "$RV_CODEPATH" "$TASK_PATH")"
+    if [ -n "$withheld" ]; then
+      one="$(printf '%s' "$one" | jq -c --arg w "$withheld" '.withheld = ($w | split("\n"))')"
+    else
+      one="$(printf '%s' "$one" | jq -c '.withheld = []')"
+    fi
+    open_json="$(printf '%s' "$open_json" | jq -c --argjson i "$fn" --argjson f "$one" '.[$i] = $f')"
+    fn=$((fn + 1))
+  done
+  scope_json="$(printf '%s' "$open_json" | jq -c '[ .[] | (.fixScope // [])[] as $p | select(.withheld | index($p) | not) | $p ] | unique')"
+
   local fb_head brief_file brief_json
   fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   # One brief per round, because each round's open findings differ from the last round's and the
   # record of what a fixer was given is worth keeping beside its report.
   brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
+    --argjson allowedFiles "$allowed_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
     --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
@@ -6781,6 +7082,7 @@ do_fix_brief() {
       roundsAllowed: $roundsAllowed,
       findings: $findings,
       fixScope: $fixScope,
+      allowedFiles: $allowedFiles,
       frozenTests: $frozenTests,
       headNow: $headNow,
       diffBudget: $diffBudget,
@@ -6798,6 +7100,8 @@ do_fix_brief() {
      headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
      finding: ([ .findings[] | {id, severity, linkedTo: ("cites " + (.linkedTo // "nothing")), file} ]),
      fixScope: .fixScope,
+     withheld: ([ .findings[] | select((.withheld | length) > 0) | {id, paths: (.withheld | join(", "))} ]),
+     allowed: .allowedFiles,
      frozenTests: (.frozenTests | length),
      diffBudget: (if .diffBudget == "" then "none" else .diffBudget end),
      next: "dispatch fixer with the brief path, then fix-record"}')"
@@ -7003,6 +7307,11 @@ RV_SCOPE
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  # The paths a person allowed for this round, from the brief fix-brief wrote for it. The
+  # owned-files check reads them beside the order's own, so an allowed change passes (live-run
+  # row 116). A round with no brief on disk allows nothing.
+  BRC_ALLOWED_JSON="$(jq -c '.allowedFiles // []' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
+  [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
   local selected_tests_json
   selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
@@ -7253,7 +7562,8 @@ do_verify_record() {
   done
   [ -n "$task_arg" ]      || die 3 "verify-record: a task folder is required"
   [ -n "$unit_id" ]       || die 3 "verify-record: a unit id is required"
-  [ -n "$verdicts_path" ] || die 3 "verify-record: --verdicts is required"
+  [ -n "$verdicts_path" ] || [ -n "$rulings_raw" ] \
+    || die 3 "verify-record: --verdicts is required to record a round. On a round already on the record, --ruling alone rules on its open findings."
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "verify-record")"
@@ -7271,12 +7581,19 @@ do_verify_record() {
   [ "$rounds_used" -gt 0 ] 2>/dev/null \
     || die 3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
 
+  # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
+  # the flag outright rather than recording a model's own word as a person's (decision 12). Read
+  # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
+  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
+  fi
+
   # Exit 45: a round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
-  local already
+  local already ruled_doc ruled_ledger
   already="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson r "$rounds_used" \
     '[ (.rounds // [])[] | select(.round == $r) ] | length')"
-  if [ "$already" != "0" ]; then
+  if [ "$already" != "0" ] && [ -z "$rulings_raw" ]; then
     # The verification is already on the record. rv_write_verification writes the review record and
     # then the ledger, so a crash between the two leaves this state with the ledger unmoved. There
     # is nothing left to verify and nothing to write twice, so this reports the record it found.
@@ -7284,17 +7601,35 @@ do_verify_record() {
     echo "VERIFY-RECORD: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing was verified twice." >&2
     exit 0
   fi
+  if [ "$already" != "0" ]; then
+    # A ruling after the round is on the record (live-run row 111). The round's verdicts stand,
+    # and the rulings land on its open findings through the gates the first-call path uses. No
+    # second round entry is written, so roundsUsed and lastStep do not move. A --verdicts file
+    # given here is not read. The person who re-ran the whole command with the rulings added is
+    # told so below, not sent back.
+    rv_apply_rulings "$unit_id" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')" "$rounds_used" "$rulings_raw"
+    ruled_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson f "$RV_RULED_FINDINGS" '.findings = $f')"
+    [ -n "$ruled_doc" ] || die 3 "verify-record: the review record update for $unit_id failed."
+    write_atomic "$RV_REVIEW_FILE" "$ruled_doc"
+    RV_REVIEW_DOC="$ruled_doc"
+    if [ -n "$RV_RULING_HALT" ]; then
+      ruled_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$RV_RULING_HALT")"
+      [ -n "$ruled_ledger" ] || die 3 "verify-record: the halt on $unit_id could not be written."
+      write_atomic "$RV_LEDGER_FILE" "$ruled_ledger"
+      RV_LEDGER_DOC="$ruled_ledger"
+    fi
+    rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
+    [ -z "$verdicts_path" ] || echo "verdicts: ignored, round $rounds_used was already on the record and its verdicts stand"
+    [ -z "$RV_RULING_HALT" ] || echo "VERIFY-RECORD: $unit_id is halted. $RV_RULING_HALT" >&2
+    exit 0
+  fi
+  [ -n "$verdicts_path" ] \
+    || die 3 "verify-record: --verdicts is required. Round $rounds_used of $unit_id is not on the record yet, and --ruling alone rules only on a round already verified."
 
   local fix_file
   fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
   [ -f "$fix_file" ] \
     || die 3 "verify-record: $fix_file not found, though the ledger records round $rounds_used of $unit_id. Run fix-record on it again."
-
-  # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
-  # the flag outright rather than recording a model's own word as a person's (decision 12).
-  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
-  fi
 
   local verdicts_doc verdict_rows breakage_rows outofscope_json
   [ -f "$verdicts_path" ] || die 52 "verify-record: $verdicts_path not found. The file named on the command line has to exist."
@@ -7384,13 +7719,55 @@ do_verify_record() {
   local nongoal_hits
   nongoal_hits="$(rv_nongoal_hits "$(printf '%s' "$updated_findings" | jq -c --argjson ids "$breakage_ids" '[ .[] | select(.id as $i | $ids | index($i)) ]')" "$alignment")"
 
-  # Decision 12: the rulings. A ruling's own syntax is read here, before anything asks whether a
-  # ruling is allowed yet, so a malformed one is refused for what is wrong with it whatever the
-  # round. Refusing it for its timing instead sends the caller to fix the round rather than the
-  # text. What the ruling may do, and whether it may be given at all, is decided below.
+  # Decision 12: the rulings, through the helper the already-verified path shares. The syntax
+  # loop, the two gates and the per-ruling loop live there.
+  rv_apply_rulings "$unit_id" "$updated_findings" "$rounds_used" "$rulings_raw"
+  updated_findings="$RV_RULED_FINDINGS"
+  local open_now unruled
+  open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    local open_list
+    open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
+      "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
+    echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
+    die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
+  fi
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
+    unruled="$(printf '%s' "$updated_findings" | jq -r \
+      '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    [ -z "$unruled" ] \
+      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
+  fi
+
+  local halt_why=""
+  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
+    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
+  elif [ -n "$RV_RULING_HALT" ]; then
+    halt_why="$RV_RULING_HALT"
+  fi
+  rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
+
+  rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
+  [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is halted. $halt_why" >&2
+  exit 0
+}
+
+# Decision 12: the rulings, on the round's findings. Shared by verify-record's two paths: the call
+# that records the round, and the call on a round already on the record (live-run row 111). So
+# both hold the same gates in the same words. A ruling's own syntax is read first, before
+# anything asks whether a ruling is allowed yet. A malformed one is then refused for what is
+# wrong with it, whatever the round. Refusing it for its timing instead sends the caller to fix
+# the round rather than the text. Then the before-the-cap gate, the nothing-left gate, and each
+# ruling landing on its finding. The unattended refusal (exit 55) is the caller's, read before
+# the round is looked up. $1 unit, $2 the findings array, $3 the round, $4 the raw --ruling
+# values, one per line. Sets RV_RULED_FINDINGS and RV_RULING_HALT, empty when nothing halts.
+RV_RULED_FINDINGS=""; RV_RULING_HALT=""
+rv_apply_rulings() {
+  local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
   local open_now ruling_halt="" rulings_json="[]"
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
-  local rline rid rrest rverdict rreason
+  local rline rid rrest rverdict rreason rulable_now early_ok early_ids rcount ri is_open
   while IFS= read -r rline; do
     [ -n "$rline" ] || continue
     case "$rline" in
@@ -7418,11 +7795,9 @@ RV_RULINGS
   # its scope, which fix-record marked scopeInsufficientInRound. The fixer's own report is the
   # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
   # nothing (live-run row 110). Any other finding waits for the cap, as before.
-  local rulable_now
   rulable_now="$(printf '%s' "$updated_findings" | jq -r \
     '[ .[] | select(.actionable == true and .status == "open" and has("scopeInsufficientInRound")) | .id ] | join(", ")')"
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
-    local early_ok early_ids
     early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
     early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" \
       '[ $r[].id ] as $ids | [ .[] | select(has("scopeInsufficientInRound") and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
@@ -7438,19 +7813,10 @@ RV_RULINGS
   if [ -n "$rulings_raw" ] && [ "$open_now" = "0" ]; then
     die 3 "verify-record: a --ruling was given and $unit_id has no open actionable finding left to rule on."
   fi
-  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    local open_list
-    open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
-    rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
-      "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
-    echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
-    die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
-  fi
   # Each ruling lands on its finding. `test-wrong` halts the way `load-bearing` does, and its
   # reason begins `test wrong:` because `retake-tests` and `clear-halt` read the front of it; it
   # takes the halt over a load-bearing ruling in the same call, since the retake moves the review
   # record aside and the load-bearing finding is ruled again after the rebuild.
-  local rcount ri unruled is_open
   rcount="$(printf '%s' "$rulings_json" | jq 'length')"
   ri=0
   while [ "$ri" -lt "$rcount" ]; do
@@ -7474,24 +7840,8 @@ RV_RULINGS
     esac
     ri=$((ri + 1))
   done
-  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
-    unruled="$(printf '%s' "$updated_findings" | jq -r \
-      '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
-    [ -z "$unruled" ] \
-      || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
-  fi
-
-  local halt_why=""
-  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
-    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
-  elif [ -n "$ruling_halt" ]; then
-    halt_why="$ruling_halt"
-  fi
-  rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
-
-  rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
-  [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is halted. $halt_why" >&2
-  exit 0
+  RV_RULED_FINDINGS="$updated_findings"
+  RV_RULING_HALT="$ruling_halt"
 }
 
 # The verify-record summary, from the review record as it now stands: one line per verdict this
@@ -7841,10 +8191,17 @@ do_finish() {
   # subtraction they use, over the whole task range: the baseline was taken at startedFrom and
   # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
   # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
-  # more than an argument or a reader can carry.
-  local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar=""
+  # more than an argument or a reader can carry. A task whose every order is proved by its
+  # record ran no test and took no suite baseline. So the suite is recorded not-needed and never
+  # run, the same reading preconditions makes of the snapshot (live-run row 136).
+  local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
+    [ (.workOrders // [])[] | (.proof // "tests") ]
+    | if length > 0 and all(. == "record") then "no" else "yes" end')"
   pre_file="$IMPL_DIR/preconditions.json"
-  if [ -f "$pre_file" ]; then
+  if [ "$harness_needed" = "no" ]; then
+    :
+  elif [ -f "$pre_file" ]; then
     while IFS= read -r recipe_line; do
       [ -n "$recipe_line" ] || continue
       cr_recipe_pair "finish" "frameworks[].recipePath in $pre_file" "${recipe_line%%	*}=${recipe_line#*	}"
@@ -7869,7 +8226,12 @@ FN_RECIPES
   BRC_VALUES="$values"
   BRC_END_OF_TASK=true
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
-  br_test_check "suite-regression" "suite" "suite" >"$suite_file"
+  if [ "$harness_needed" = "no" ]; then
+    jq -nc '{id: "suite-regression", verdict: "not-needed",
+             detail: "the suite was not run: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken."}' >"$suite_file"
+  else
+    br_test_check "suite-regression" "suite" "suite" >"$suite_file"
+  fi
   [ -s "$suite_file" ] || { rm -f "$suite_file"; die 3 "finish: the suite check produced nothing."; }
   if [ "$(jq -r 'has("output")' "$suite_file")" = "true" ]; then
     sidecar="finished-suite.txt"
@@ -7882,7 +8244,7 @@ FN_RECIPES
   [ -n "$suite_json" ] || die 3 "finish: could not assemble the suite result."
   suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
   case "$suite_verdict" in
-    met|undeclared) ;;
+    met|undeclared|not-needed) ;;
     unmet)
       # The new lines go to standard error as their own block, the way the clean-tree refusal
       # lists its paths, so the message stays one line a reader can act on.
@@ -7938,10 +8300,11 @@ FN_RECIPES
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
     --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
-    --argjson suite "$suite_json" '
+    --argjson suite "$suite_json" --arg pluginVersion "$(plugin_version)" '
     ([ ($snap.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]) as $kinds
     | {
       schemaVersion: 1,
+      pluginVersion: $pluginVersion,
       takenAt: $takenAt,
       task: $task,
       commitRange: $range,
@@ -8522,12 +8885,12 @@ do_restart() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# dispatch-open, dispatch-close: open and clear <project path>/dispatch.json
+# dispatch-open, dispatch-close: open and clear <task_folder>/implementation/dispatch.json
 # (scripts/dispatch-schema.json), the one record hooks/deny-prior-source.sh and
 # hooks/deny-frozen-test-writes.sh read to tell a dispatched role apart from a person working
-# their own repository. The build is serial, so a project has at most one active dispatch;
-# dispatch-open refuses to overwrite one already there (exit 37), and dispatch-close removes it,
-# safe to call when none is open.
+# their own repository. The build of one task is serial, so a task has at most one active
+# dispatch. dispatch-open refuses to overwrite one already there (exit 37). dispatch-close
+# removes it, safe to call when none is open. Two tasks of one project each hold their own.
 # ------------------------------------------------------------------------------------------------
 
 do_dispatch_open() {
@@ -8613,9 +8976,8 @@ do_dispatch_open() {
   task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
   [ -n "$task_id" ] || die 3 "dispatch-open: $TASK_PATH/task.json has no usable id field"
 
-  local project_folder codepath
+  local codepath
   rv_load_codepath "dispatch-open"
-  project_folder="$RV_PROJECT_FOLDER"
   codepath="$RV_CODEPATH"
 
   # The test author's one denial is that it cannot read production source, and production source is
@@ -8699,8 +9061,10 @@ TG_OWNED
   # other unit to withhold, which is different from a test author having nothing to withhold.
   # The fixer takes this same derivation (decision 8 of step five). A fix round writes the same
   # order's files for the same reason a build attempt does, and the fix scope in the brief is
-  # narrower still. A write outside the scope is caught by the owned-files check after the round,
-  # never by a hook, so nothing here is loosened to let a fixer reach further.
+  # narrower still. The hook holds the fixer to the list too (live-run row 116). The owned-files
+  # check after the round only spends the round, and the write it would have caught is already
+  # committed. The one widening is the round's `allowedFiles`, a person's grant recorded on
+  # the fix brief, read below.
   if [ "$role_bare" = "implementer" ] || [ "$role_bare" = "fixer" ]; then
     local mine_json others_json mine_count
     mine_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
@@ -8748,15 +9112,24 @@ TG_OWNED
     fi
   fi
 
-  local dispatch_file="$project_folder/dispatch.json"
+  # One record per task, under its own implementation folder (live-run row 139). The build of one
+  # task is serial, so a task has at most one open dispatch. A second task of the same project
+  # opens its own. A record carries the time it opened, so one left by a role that never returned
+  # can be told from a live one. The refusal prints its age once it is over a day old.
+  local dispatch_file="$TASK_PATH/implementation/dispatch.json"
   if [ -f "$dispatch_file" ]; then
     jq empty "$dispatch_file" 2>/dev/null \
       || die 3 "dispatch-open: $dispatch_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
-    local held_role held_task held_unit
+    local held_role held_unit held_age
     held_role="$(jq -r '.role // "?"' "$dispatch_file" 2>/dev/null)"
-    held_task="$(jq -r '.task // "?"' "$dispatch_file" 2>/dev/null)"
     held_unit="$(jq -r '.unit // "?"' "$dispatch_file" 2>/dev/null)"
-    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on task $held_task, unit $held_unit. Run dispatch-close first."
+    held_age="$(jq -r '
+      (.openedAt // "") as $at
+      | if $at == "" then ""
+        else ((now - ($at | fromdateiso8601)) / 3600 | floor) as $h
+          | if $h < 24 then "" else " It was opened at \($at), \($h) hours ago, so its role may never have returned." end
+        end' "$dispatch_file" 2>/dev/null)"
+    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on unit $held_unit.$held_age Run dispatch-close first."
   fi
 
   local deny_json allow_json
@@ -8765,16 +9138,28 @@ TG_OWNED
 
   # The implementer's own list goes under `ownedFiles` too, and not under allowWrite: allowWrite
   # takes hand-passed paths and no hook applies it, while this key is derived alone and the write
-  # hook refuses the implementer a write under codePath outside it (live-run row 92).
-  local record_json owned_extra='{}'
+  # hook refuses the implementer a write under codePath outside it (live-run row 92). The fixer's
+  # record carries the same key: the order's list plus the `allowedFiles` of the round's fix
+  # brief. So the hook refuses it a write outside the scope a person allowed (live-run row 116).
+  # A fixer with no fix brief for the round has nothing to be held to, so that refuses.
+  local record_json owned_extra='{}' fx_round fx_brief fx_allowed
   if [ "$role_bare" = "implementer" ]; then
     owned_extra="$(jq -nc --argjson m "$mine_json" '{ownedFiles: $m}')"
+  elif [ "$role_bare" = "fixer" ]; then
+    fx_round="$(jq -r --arg id "$unit_id" '(.orders // [])[] | select(.id == $id) | (.roundsUsed // 0) + 1' \
+      "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+    [ -n "$fx_round" ] || fx_round=1
+    fx_brief="$IMPL_DIR/brief-$unit_id-fix-$fx_round.json"
+    fx_allowed="$(jq -c '.allowedFiles // []' "$fx_brief" 2>/dev/null)"
+    [ -n "$fx_allowed" ] \
+      || die 3 "dispatch-open: no fix brief for round $fx_round of $unit_id at $fx_brief. Run fix-brief first: the fixer's record takes the paths it allowed."
+    owned_extra="$(jq -nc --argjson m "$mine_json" --argjson a "$fx_allowed" '{ownedFiles: ($m + $a | unique)}')"
   fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
-    --argjson extra "$owned_extra" \
+    --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
-      denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
+      openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
@@ -8824,26 +9209,10 @@ do_dispatch_close() {
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
 
-  local project_folder
-  project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die 3 "dispatch-close: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-
-  local dispatch_file="$project_folder/dispatch.json"
+  # The record lives under the task's own folder, so a close can only reach this task's record
+  # and another task's stays open (live-run row 139).
+  local dispatch_file="$TASK_PATH/implementation/dispatch.json"
   if [ -f "$dispatch_file" ]; then
-    # The record lives at the project root while `read` and `start` are per task, and two tasks in
-    # one project is a supported state. A second task closing the first task record would leave
-    # both hooks on the no-record branch, allowing every read and every write to a frozen test for
-    # the rest of that role run, and the message reporting it reaches the running role and nobody
-    # else. So the record says whose it is, and a close that does not match refuses.
-    local open_doc open_task this_task
-    open_doc="$(jq -c '.' "$dispatch_file" 2>/dev/null)"
-    if [ -n "$open_doc" ]; then
-      open_task="$(printf '%s' "$open_doc" | jq -r '.task // ""')"
-      this_task="$(basename -- "$TASK_PATH")"
-      if [ -n "$open_task" ] && [ "$open_task" != "$this_task" ]; then
-        die 75 "dispatch-close: $dispatch_file was opened for task $open_task, and this call names task $this_task. A close belongs to the task that opened the record; clearing another task record would leave its role with every permission the record withheld."
-      fi
-    fi
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"
   else

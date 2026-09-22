@@ -4,6 +4,88 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.22] - 2026-09-22
+
+Live-run rows 111 to 141. Rows 111 to 116 come from the implement stage on beta.21, rows 112 to
+115 being the first live use of the `observe` proof kind. Rows 117 to 141 come from a second
+project's run on beta.15 to beta.21 (`volunteer-role-complexity-analysis`), every stage.
+
+### Added
+- A task action `decline-recipe` records that a framework needs no process recipe in this task,
+  so the missing-recipe ask is not repeated for it at research or design. (row 123)
+- The outward searcher names a `fetch-failed` finding for a page it could not fetch, and the
+  research page lets the conversation fetch that one page into `inputs/`. Prior art on another
+  branch is extracted with `git show` into `inputs/prior-art/<branch>/` and named to the
+  internal searcher. (rows 124, 125)
+- `design update --append-reasoning <text>` appends a paragraph; `--reasoning` replaces, and
+  the page says so. `design close --critique-outcome <text>` records how the critiques were
+  answered beside the finding count; unattended refuses it. (rows 131, 135)
+- Every stage's close record carries `pluginVersion`, the plugin that wrote it, so a task that
+  spans an update shows which rules produced which record. (row 134)
+- The dispatch record lives at `<task_folder>/implementation/dispatch.json` with `openedAt`;
+  both hooks find it through one helper, and two tasks of one project can build at once.
+  Exit 75 is retired. (row 139)
+- `repair` moves a version 5 epic's nested children to `tasks/<child>/` in the same call, sets
+  `parent` and `children`, and accepts `## Problem` as the goal heading when `## Goal` is
+  absent. (rows 140, 141)
+- A fix scope outside the order's files is named at birth, withheld from the fixer, allowed
+  only by a person, and refused by the hook. `review-record` stores and prints `outsideOwned`
+  for a finding whose `fixScope` leaves the order's `ownedFiles`. `fix-brief` hands the fixer
+  only the owned paths and the paths `--allow <path>` names, resolved relative to the code
+  path; the rest is withheld per finding, so the fixer reports it scope-insufficient and the
+  ruling route opens. `fix-record`'s owned-files check reads the round's allowed paths. The
+  fixer's dispatch record carries `ownedFiles`, and the write hook's rule two holds the fixer
+  as it holds the implementer. `--allow` unattended is exit 100. (row 116)
+- An observe order gets a look before the build. `build-brief` names the before folder and says
+  whether the before-look is owed or taken; the look is the same surfaces at the same viewports
+  at `headNow`, before the implementer runs. Each observed row carries `before` beside
+  `screenshot`, both checked on disk under their folders, and completion names both images to
+  the person. (row 114)
+- The look judges each owned criterion's own clause. `build-record --observed` owes one row per
+  sentence per surface per viewport, where the sentences are the done-when rows and the
+  verification clause of each machine criterion the order owns; a clause row carries
+  `criterion`. The critic's buildability lens reads each owned clause beside the rows.
+  `design update --proof` prints `stillNamesATest:` for fields whose text still names a test
+  file. (row 115)
+
+### Changed
+- The way into a task's tree is `/cd <path>` (Claude Code 2.1.169 or later), with
+  `cd <path> &&` at the front of a Bash call as the per-call form; the exit 79 message names it.
+  `start` puts the site offer, or records `not-applicable`, whoever called it. `save` on a task
+  with no stage record skips the distiller, and the stage reads scope until scope's sidecar
+  exists. Every task commit stages the task's own folder, `split` its children too, never
+  `tasks/` whole. (rows 117 to 120)
+- Every scope action that writes `alignment.json` renders `alignment.md`; `render` only shows
+  it, and the design critic reads the JSON. The distiller's definition says what
+  `decidedWithoutAPerson` holds. The retry rule on the scope, research and design pages gains
+  the case of a dispatch that ends before its first write. (rows 121, 129, 130, 132, 133)
+- Research fit `unsure` takes the `false` branch and asks. (row 122)
+- A record order may own a path under the project folder in a folder the project commits,
+  not only under the task folder; the implement stage scopes such an order's diff to the
+  project folder and sets aside AIDA's own records. The false-fit question folds in "write the
+  recipe first". (rows 127, 128)
+- Preconditions and `finish` on a record-only snapshot record the suite and the smoke as
+  `not-needed` instead of running a harness no order needs. `no-recipe` scores `undeclared`
+  and every framework prints on every run; the recipe command no longer reads the framework
+  list from stdin, which swallowed a framework name. The identifier's message carries
+  `point: <phase>`. (rows 136 to 138)
+- The look step names viewport control as the requirement, not a window resize, and the scratch
+  route for a tool that refuses to write under the task folder. `build-record --observed`
+  refuses a screenshot outside the order's observed folder. (row 112)
+- When the implementer's report says it ran the configuration gate, or restored the seed
+  snapshot, the look waits for the site's content to be put back. The recipe change is a
+  catalog ask. (row 113)
+
+### Fixed
+- `verify-record --ruling` on a round already on the record applied nothing: the branch that
+  reports the recorded verification returned before the ruling flags were read, so two rulings a
+  person gave were dropped with exit 0 and `ruling: none`. It now applies them through the same
+  gates as the recording call (unattended refuses, before the cap only a finding the fixer
+  reported out of its scope, nothing open refuses) and writes no second round entry.
+  `--verdicts` is required only until the round is on the record; given with a ruling on a
+  verified round it is ignored and one summary line says so. The review page names the call as
+  how a person reaches a ruling, and the retake, after the verification is on record. (row 111)
+
 ## [6.0.0-beta.21] - 2026-09-21
 
 Live-run row 110, the implement stage on beta.20.

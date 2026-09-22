@@ -90,7 +90,8 @@ last child's close tells you the parent is ready.
 
 A criterion owned by an order a model judged through a browser is put to you before the close.
 AIDA asks one question per criterion. It shows each row the model judged: the sentence, the
-surface and viewport, and the verdict. It names the screenshot so you can open it. You say
+surface and viewport, and the verdict. It names the screenshot so you can open it, and the
+image taken before the build beside it. You say
 whether you accept the observation. A no closes the task only on your reason, the way a failed
 verdict does. The record keeps each answer. The pull request body says beside the criterion that
 a model judged it from a screenshot, with the path, and whether you accepted it. On an autonomous run

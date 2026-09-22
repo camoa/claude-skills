@@ -12,6 +12,11 @@
       "default": 1,
       "description": "The shape this file was written in, the same field task.json and project.json both carry. A repair reads format-changes.md by this number and applies the change that matches, instead of guessing the old shape from what the file happens to contain. Bumped only when a later change to this schema says so, never for a value change inside an unchanged shape."
     },
+    "pluginVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The plugin version that wrote this record, copied by scope's approve or distill from the plugin's own plugin.json. It reads unknown when that file could not be read. A task can span a plugin update, and its records then come from two sets of rules. This field says which version wrote which record (live-run row 134). Nothing reads it back; it is for a person or a later reader."
+    },
     "goal": {
       "type": "string",
       "description": "The goal, in a person's words. A plain string, because nothing cites it and nothing counts it, unlike a criterion's own text, which a finding and a stage's own `serves` field both point back to by id (ideal/scope.md, 'Where the records live')."

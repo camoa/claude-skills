@@ -16,8 +16,8 @@ a diff through this conversation. It costs the review the context its own steps 
 
 ## Resolve one recipe per point, per framework
 
-Dispatch `catalog-identifier` for the `review` point and each framework the project declares,
-naming the project folder. Then dispatch it again for the `test-execution` point and each
+Dispatch `catalog-identifier` with the lines `point: review`, each framework the project declares,
+and the project folder. Then dispatch it again with `point: test-execution` and each
 framework. **These are review's only two lookups.** Name the role, and pass the lookup's answer in
 its own word: SKILL.md holds both rules. The role identifies a path and never opens the body. Never
 fetch a catalog address yourself, and never read a cached copy behind the navigator's back. The

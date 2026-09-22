@@ -74,7 +74,9 @@ Configuration counts as prior art too: an existing view or content type solves a
 no code written. The project's own task records are searched the same way, so "have we built
 this" is asked of the project's history. This searcher has no web tools, because prior art
 inside a project is a claim about this project. A web result answers a different question
-without saying so. This search runs on every task that changes code.
+without saying so. This search runs on every task that changes code. Prior art that lives only
+on another branch is extracted into the task's inputs folder first, and the searcher is told
+where.
 
 Where the project's own code lives, as against framework and vendor code, is a framework
 convention, so it comes from the process recipe below. The searcher hands candidates over
@@ -86,7 +88,8 @@ sources recommend; or one assumption that might have changed. One subject per se
 current, dated source every time. Anything found is judged on three things that transfer to
 every stack: is it maintained, is it used, is it supported. Checking an assumption has three
 outcomes, true, false, or could not be settled, and all three are recorded. A false assumption
-is one of the most useful things research produces.
+is one of the most useful things research produces. A page the searcher could not fetch is
+recorded as a snippet, marked so. Research may then fetch that one page itself and say so.
 
 **The catalog.** The navigator is the plugin that reads the guide catalog. Research asks it
 which guides and recipes cover each criterion, and records the names and which kind each is.
@@ -114,14 +117,16 @@ your framework, looked up once, before the first search. A folder you declared a
 and the catalog answers when no folder holds it.
 
 Research reads the recipe body and judges once whether it describes the work the criteria name.
-When it does not, research says so and asks whether to continue with it, without it, or stop.
-Autonomously it continues with the recipe and records the misfit.
+When it does not, or it cannot tell, research says so and asks whether to continue with it,
+without it, or stop. Autonomously it continues with the recipe and records the verdict as
+judged, unsure included.
 
 When no recipe covers your framework, research records that and falls back. Outside, it applies
 the plain three-part test. Inside, it searches from the project root, and the finding says the
 bound on custom code was not enforced. It never guesses a framework's layout. Interactively it
 then offers to write a recipe with you, from a template that carries the sections the catalog
-requires. Autonomously it records the gap and continues.
+requires. A third answer, not for this framework, is recorded on the task, and neither research
+nor design asks again for that framework. Autonomously it records the gap and continues.
 
 A recipe that does not exist, a listing that could not be reached, and a network that failed are
 three different findings. Only the first says anything about your framework. Research records

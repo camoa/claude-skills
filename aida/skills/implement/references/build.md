@@ -5,7 +5,7 @@ reference now. Nothing below may change one.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` for the `implement` point and each framework, naming the project
+Dispatch `catalog-identifier` with the lines `point: implement`, each framework, and the project
 folder. Skip it when an earlier step of this build has resolved it, the tests step included. Name
 the role, and pass the lookup's answer in its own word: SKILL.md holds both rules. Once resolved,
 reuse the path per framework for every order in this build. No record holds these paths. They
@@ -34,7 +34,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes nine things to
+It reads the frozen copy and the frozen tests. It writes ten things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
@@ -50,7 +50,9 @@ It reads the frozen copy and the frozen tests. It writes nine things to
 - `headNow`, the commit of the repository this order lands in at the moment of this call, and
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
-- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
+- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
+- `beforeLookPath`, on an order whose proof is `observe` only: the folder the before-look goes
+  in, `implementation/observed-<order id>-before/`.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
@@ -65,6 +67,22 @@ It refuses when the tests for this order were never frozen, when an order this o
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
 
 That list is the withheld list.
+
+## On an order whose proof is `observe`, look before the build
+
+A done-when row often says the page is as it was apart from one thing. That row needs a before
+to judge from, and a script cannot tell which rows say it. So every observe order gets a look
+before the build. Take the same surfaces at the same viewports as the look after, at the
+brief's `headNow`, before the implementer is dispatched. The viewport and destination rules are
+the look after's, below. Save each image as
+`<task_folder>/implementation/observed-<order id>-before/<surface>-<viewport>.png`. That is the
+brief's `beforeLookPath`. Write no verdict; the images are the before.
+
+One before-look per order, at the first attempt's `headNow`. The brief prints `beforeLook:`
+with `(owed)` while the folder holds no image and `(taken)` once it does. A later attempt and
+every fix round reuse the images that are there; take them once. Each row of the observed
+record names its before image, and `build-record` refuses one not on disk or outside that
+folder (exit 94).
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -138,17 +156,41 @@ Close the dispatch record as soon as the role returns, per SKILL.md.
 The implementer does not look. You do. Read the surface file that `surfaces.registryPath` in
 `<projectPath>/project.json` names. Review's surface step reads the same file. Take each
 surface the order names, its `url`, and the file's `viewports` list. Open each surface at each
-viewport with the browser tool, against the task's own site. Judge each of the order's done-when
-rows against what renders. Give one verdict per row per surface per viewport, `met` or `unmet`,
-with one sentence on what you saw. Save each screenshot under
-`<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`. Then write
-`<task_folder>/implementation/observed-<order id>.json`:
+viewport with the browser tool, against the task's own site.
+
+The viewport is the requirement: the page must render at the viewport's width. Resizing the
+browser window is not that, because the page can still render wider than the window. A tool
+that reaches a small width does so by device emulation.
+
+When the implementer's report says it ran the configuration gate, or any restore of the seed
+snapshot, the site holds only the seed's content. It stays so until the recipe's restore or
+rebuild step has run, and the look waits for that step. A note on a row judged against stale
+content is a lie.
+
+Judge each of the order's done-when rows against what renders. A row that says the page is as
+it was is judged against the before image of that surface and viewport. Also judge the
+`verification` clause of each machine criterion the order owns, as a row of its own beside the
+done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
+the clause, and no script can compare the two, so the look judges the clause itself. Such a row
+carries `criterion` with the id, and `build-record` refuses a clause row without it (exit 96).
+Give one verdict per row per surface per viewport, `met` or `unmet`, with one sentence on what
+you saw. Save each
+screenshot under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
+The screenshot must lie under that folder, and `build-record` refuses one that does not (exit
+94). A tool that refuses to write there writes into a folder inside the worktree. Move the
+file, then remove that folder before you record the attempt, because the tree check reads it.
+Then write `<task_folder>/implementation/observed-<order id>.json`:
 ```
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
-              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
+              "screenshot": "<absolute path>", "before": "<absolute path of the before image>",
+              "verdict": "met|unmet", "note": "<what you saw>" },
+            { "doneWhen": "<the criterion's verification clause, verbatim>", "criterion": "<c-id>",
+              "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
+              "before": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
-Every done-when row goes in, at every surface and viewport. The verdict is what the page
+Every done-when row and every owned clause goes in, at every surface and viewport, and
+`build-record` refuses a record missing one (exit 97). The verdict is what the page
 showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
 for such an order and no row was judged before the build, so this look is its check. The judge
 on the record is a model. Completion puts each such criterion to the person.
@@ -176,8 +218,9 @@ runs them as the order's own check. Every other order ignores it.
 
 `--observed` is the record written above. An order whose proof is `observe` refuses without it
 (exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose
-screenshot is not on disk (94) and a surface the order does not name (95). It refuses a sentence
-the order does not hold (96). Nothing is recorded on any of these.
+screenshot or before image is not on disk or lies outside its folder (94), naming which. It
+refuses a surface the order does not name (95). It refuses a sentence the order does not hold (96). Nothing is
+recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
@@ -200,17 +243,19 @@ landed, and the code repository may hold no commit at all for it. The tree read 
 files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
 project folder with no history refuses (exit 87).
 
-**A `record` order's diff is the task folder's alone.** AIDA commits the project folder between
-a build brief and its record. A task note commits `tasks/` whole, and another task's stage
-close commits its folder. None of that is the implementer's. So the owned-files check, the
-review diff and the fix patch read `git diff <range> -- <task folder>`. Inside the task
-folder, the files AIDA's own scripts write are set aside before the owned list is compared.
-Those are `task.json`, `alignment.json`, their renderings, `design-closed.json`, and the
-`research/`, `design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`,
-`completion/`, `notes/` and `records/` folders. The check's detail says how many were set
-aside. A person's places are `inputs/` and `deliverables/`, and a file under a stage folder is
-set aside even when a person wrote it. A file under `deliverables/` is never set aside, so a
-second document there that the order does not own still reads unmet.
+**A `record` order's diff is the project folder's.** Its deliverable may sit beside earlier
+reports outside the task folder. So the owned-files check, the review diff and the fix patch
+read `git diff <range>` over the project folder whole. AIDA commits that folder between a
+build brief and its record. A task note commits `tasks/` whole, and another task's stage close
+commits its folder. None of that is the implementer's, so the files AIDA's own scripts write
+are set aside before the owned list is compared. Inside this task's folder those are
+`task.json`, `alignment.json`, their renderings, `design-closed.json`, and the `research/`,
+`design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`, `completion/`,
+`notes/` and `records/` folders. Outside it, every other task's folder and `project.json`.
+The check's detail says how many were set aside. A person's places are `inputs/`,
+`deliverables/` and the project folders a report lands in. A file under a stage folder is set
+aside even when a person wrote it. A file in a person's place is never set aside, so a second
+document there that the order does not own still reads unmet.
 
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
 `references/preconditions.md` already resolved for the baseline. The script parses `## Test

@@ -13,7 +13,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Rule two, added 2026-09-19 (live-run row 92), holds the implementer to its unit's owned files.
 # While the open dispatch record names the implementer and carries `ownedFiles`, a write to a path
 # under codePath that is not one of those files, or under one of those directories, is refused,
-# and the reason tells the role to stop and report. A path outside codePath, the task folder where
+# and the reason tells the role to stop and report. Since 2026-09-21 (live-run row 116) the rule
+# holds the fixer the same way. Its record's `ownedFiles` is the order's list plus the paths a
+# person allowed for the round. The reason tells it to report the finding scope-insufficient.
+# A path outside codePath, the task folder where
 # the report and the interface record live, is not this rule's. Any other role, or a record without
 # the key, leaves the rule off. A write the frozen rule already refuses never reaches it. A payload
 # naming no agent type is the person, allowed with a note, the same three cases as rule one. Its
@@ -54,7 +57,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, no project
 # registered for this working directory, or no dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
-# guard kept. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
+# guard kept. The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json,
+# found as the one whose codePath holds the payload's working directory (scripts/lib/paths.sh,
+# dispatch_record_for). Records open for other trees only: allow, through `systemMessage` naming
+# why. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
 # this task and rule two is off: allow, through `systemMessage` naming why. Nothing is frozen
 # before the third step of implementation runs, and that is a real state, not a fault, the same
 # distinction dispatch-schema.json's own header draws. An agent that reports a test author type
@@ -115,8 +121,19 @@ MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit
 PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
 [ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
 
-DISPATCH_FILE="$PROJECT_PATH/dispatch.json"
-[ -f "$DISPATCH_FILE" ] || { echo '{}'; exit 0; }
+# Each task keeps its own record under its implementation folder (live-run row 139). The one this
+# agent works under is the one whose codePath holds the payload's working directory. A record
+# open for another tree is another task's dispatch, and it says so rather than passing in silence.
+# The directory is held in the same canonical form codePath is, so the two compare as strings,
+# and a working directory that no longer exists still normalizes textually.
+CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
+[ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+dispatch_record_for "$PROJECT_PATH" "$CWD_CANON"
+DISPATCH_FILE="$DISPATCH_RECORD"
+if [ -z "$DISPATCH_FILE" ]; then
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  echo '{}'; exit 0
+fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"
 
@@ -133,12 +150,8 @@ CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
 [ -n "$CODE_CANON" ] \
   || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
 
-IMPL_DIR="$PROJECT_PATH/tasks/$TASK_ID/implementation"
-
-# The payload's working directory in the same canonical form codePath is held in, so the two
-# compare as strings. A working directory that no longer exists still normalizes textually.
-CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
-[ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+# The frozen records sit beside the dispatch record, in the task's own implementation folder.
+IMPL_DIR="$(dirname -- "$DISPATCH_FILE")"
 
 # ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test or support file
 FROZEN=""
@@ -159,11 +172,12 @@ $paths
 FROZEN_EOF
 done
 
-# ---- rule two's list: the implementer's owned files, one absolute path per line ----------------
-# Read only when the record names the implementer; every other role leaves OWNED empty and the
-# rule off. Resolved against codePath the way the frozen paths are, so the two compare as strings.
+# ---- rule two's list: the implementer's or the fixer's owned files, one absolute path per line --
+# Read only when the record names the implementer or the fixer; every other role leaves OWNED empty
+# and the rule off. Resolved against codePath the way the frozen paths are, so the two compare as
+# strings. The fixer's list already holds the paths a person allowed for the round.
 OWNED=""
-if [ "${ROLE##*:}" = "implementer" ]; then
+if [ "${ROLE##*:}" = "implementer" ] || [ "${ROLE##*:}" = "fixer" ]; then
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
     OWNED="$OWNED$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")
@@ -279,9 +293,14 @@ stray_exit() {
   # That makes a false stop legible. The Write door's path is the tool's own field and needs no note.
   [ -z "$STRAY_VIA" ] || shown="$STRAY (read from the token '$STRAY_TOKEN' after '$STRAY_VIA')"
   [ -n "$AGENT" ] || {
-    jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $STRAY is not a file $UNIT owns, and the implementer dispatched for $UNIT may not write it. The owned-files check reads the diff after the attempt." '{systemMessage:$m}'
+    jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $STRAY is not a file $UNIT owns, and the ${ROLE##*:} dispatched for $UNIT may not write it. The owned-files check reads the diff after the attempt." '{systemMessage:$m}'
     exit 0
   }
+  # The fixer's next step is its own. It reports the finding that needs the path
+  # scope-insufficient, and a person allows the path at the next fix-brief or rules on it.
+  if [ "${ROLE##*:}" = "fixer" ]; then
+    deny "$shown$1: outside the fix scope. The fixer writes only inside the files its order owns and the paths a person allowed for this round. Do not widen it: report the finding that needs this file scope-insufficient in your report, and move to the next."
+  fi
   deny "$shown$1: not a file $UNIT owns. The implementer writes only inside the files its unit owns. Stop: name this file and why the unit needs it in your report, commit nothing, and return."
 }
 

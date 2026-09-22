@@ -152,8 +152,9 @@ Record which one happened, in those words.
 **Judge the fit once, after the body is read and before the first order.** Does this method, by
 its `description`, Goal and Preconditions, describe the work the criteria and non-goals name? Keep
 the verdict, the path and one sentence of reason for `close`. On `false`, interactive: say so with
-the reason, then ask whether to continue with the recipe, without it (the fallback below), or
-stop. Autonomous: continue with the recipe and record `false`.
+the reason, then ask one question with four answers. Continue with the recipe, continue without
+it (the fallback below), write the recipe first, or stop. Autonomous: continue with the recipe
+and record `false`.
 
 This is what makes the work orders right, and no check below can replace it. Read it for what
 AIDA cannot know on its own:
@@ -164,17 +165,20 @@ AIDA cannot know on its own:
   with no code in it. It states no test. Its proof is the implement recipe's
   `## Configuration gate` lines, so it is created with `--proof gate`. The recipe's sizing rule decides what it owns.
 - What is a document rather than code or configuration: a dependency review, a report, a note.
-  Such an order owns files under the task folder only, in a folder the project commits, such as
-  `<task_folder>/deliverables/`. Never `records/`, which the project ignores. It states no test.
+  Such an order owns files under the project folder, in a folder the project commits, the task
+  folder's `deliverables/` by default. A report may land beside earlier reports elsewhere in
+  the project folder. Never `records/`, which the project ignores. It states no test.
   Its proof is its done-when rows, so it is created with `--proof record`. `add-owned-file`
-  sets that value itself once every owned file lies under the task folder, on an order created
-  with no `--proof`. Such a file must live in a folder the project commits: `add-owned-file`
-  refuses an ignored path on a record order.
+  sets that value itself once every owned file lies under the project folder, on an order
+  created with no `--proof`. Such a file must live in a folder the project commits:
+  `add-owned-file` refuses an ignored path on a record order.
 - What is proved by what a page shows rather than by a test. A layout, a rendered block, a
   page at each viewport. Such an order is created with `--proof observe`. It names at least one
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
   the build, the orchestrator opens each surface at each viewport in a browser. It judges the
-  row against what renders, with a screenshot as the evidence. Write each row as one thing
+  row against what renders, with a screenshot as the evidence. The look also judges the
+  verification clause of each machine criterion the order owns, as a row of its own. So the
+  rows describe the page, and the clause is still judged. Write each row as one thing
   the page must show. The judge is a model, and completion puts each such criterion to the
   person to accept.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
@@ -189,9 +193,12 @@ AIDA cannot know on its own:
 **No recipe covers this framework:** say so, and write `written without framework input` into the
 `reasoning` of every order in this pass. Do not invent a kind of unit and do not guess at a
 framework convention.
-Interactive: ask whether to write the recipe first, before drafting anything. The shape is in
+Interactive, when the navigator found no recipe: ask whether to write the recipe first, before
+drafting anything. Reached from a `false` fit, that answer was already put with the fit
+question, so do not ask it again. The shape is in
 `${CLAUDE_PLUGIN_ROOT}/templates/process-recipe-design.md`, which carries the sections the catalog
-requires and the five things design needs from a framework.
+requires and the five things design needs from a framework. Skip the ask for a framework that
+`task.json`'s `recipesDeclined` names; research recorded that answer.
 
 ## The stated approach
 
@@ -259,7 +266,7 @@ anything.
 
 Never this conversation's own account: being denied that is the entire reason the role exists,
 and handing it over turns the check into the decision reading itself. Record what it found with
-`update --reasoning`, appended to the text `dispose` wrote.
+`update --append-reasoning`, which adds a paragraph after the text `dispose` wrote.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
@@ -349,7 +356,7 @@ may not write:
 ```
 Each prints what it removed. The last owned file is refused, because an order that names no
 file gives the builder no boundary. Add the replacement first, or fold the order with `merge`. A
-`record` order left with no file under the task folder loses its proof, and the output says so.
+`record` order left with no file under the project folder loses its proof, and the output says so.
 Set `--proof` again if that was wrong.
 
 A shared decision, like one base class serving two later orders, lives in the order that builds
@@ -430,9 +437,14 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--diff-budget <text>] [--proof <tests|gate|record|observe>] \
-  [--surface <id>]...
+  [--interface <text>] [--reasoning <text>] [--append-reasoning <text>] [--diff-budget <text>] \
+  [--proof <tests|gate|record|observe>] [--surface <id>]...
 ```
+`--reasoning` replaces the whole field, the paragraphs `dispose` wrote included. To keep them,
+pass `--append-reasoning`: it adds the text as a new paragraph after a blank line. The two
+flags are refused together.
+When `--proof` becomes `gate`, `record` or `observe`, `update` prints `stillNamesATest:` naming
+each of `interface`, `reasoning` and `diffBudget` that still names a test file.
 
 ## Serving a criterion is not completing it
 
@@ -468,7 +480,7 @@ zero it adds one `open:` line naming what is open. The report holds:
   is `gate`, `record` or `observe`;
 - every work order whose proof is `gate` and that declares a test;
 - every work order whose proof is `record` and that declares a test, owns a file outside the
-  task folder, or has no done-when row;
+  project folder or under a path the project ignores, or has no done-when row;
 - every work order whose proof is `observe` and that declares a test, names no surface, or has
   no done-when row;
 - every work order that owns nothing and that no owning order depends on, directly or through
@@ -490,9 +502,10 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a work order missing a required test needs an `add-test` call;
   - a `gate` order declaring a test needs a `remove-test` call for it, or `--proof tests` if it
     builds code after all;
-  - a `record` order declaring a test needs a `remove-test` call for it; one owning a file
-    outside the task folder needs `--proof tests` if it builds code after all; one with no
-    done-when row needs an `add-done-when` call;
+  - a `record` order declaring a test needs a `remove-test` call for it. One owning a file
+    outside the project folder needs `--proof tests` if it builds code after all. One owning a
+    file under an ignored path needs `remove-owned-file`, then a path the project commits. One
+    with no done-when row needs an `add-done-when` call;
   - an `observe` order declaring a test needs a `remove-test` call for it. One naming no
     surface needs `update --surface <id>`. One with no done-when row needs an `add-done-when`
     call;
@@ -542,7 +555,7 @@ critic. The critic decides nothing about closing, and neither does the count.
 why it matters and what would fix it. Take one answer per finding: change the order, or leave
 it. A change is one of the `update`, `add-owned-file`, `add-done-when` or `add-test` calls above,
 then `check` again. A leave needs a reason from the person. Write it into that order's
-`reasoning` with `update`, appended to what is there, so the reason outlives this conversation.
+`reasoning` with `update --append-reasoning`, so the reason outlives this conversation.
 A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
 the contract has to change.
 
@@ -563,17 +576,25 @@ that a person was present, and that record is the yes. The person closes by runn
 those words to the call below. Autonomous, nobody says so: run it once the check is clean. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
-  close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>"
+  close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>" \
+  [--critique-outcome "<one line>"]...
 ```
 Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
 `close` refuses with neither, and a later close restates the verdict rather than carrying it over.
+
+Interactive, when critique files exist: ask the person for one line. It names how many findings
+changed an order and how many were left with a reason. Pass it as `--critique-outcome`. The
+record holds it as `critique.outcome` beside the files and the count, and `close` prints it as
+`critiqueOutcome:`. Autonomous: pass none; the flag is refused unattended, and the record says
+`none`, because nobody answered the findings. A count alone said nothing about what changed.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 The record is committed when the stage closes: `close` commits the task folder, and the work order
 edits above commit nothing. Closing records what design closed on: a hash over the contract and every work order, the run mode,
 and who was present. Pass the run mode you settled at the start. An interactive close records
 `person`, an autonomous one records `nobody`, and implementation reads which. It also records the
-critique files under `records/` and their finding count, so a person sees what was read before closing.
+critique files under `records/`, their finding count and the outcome line. So a person sees what
+was read and answered before closing.
 
 A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
 Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and
@@ -600,7 +621,9 @@ written. Send the same agent one message: write the file and read it back. An ag
 a write it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar
 was malformed. The script set it aside at the `setAside:` path it printed. Dispatch a fresh
 distiller, with the rule it broke quoted from `agents/distiller.md`. Then run the same call
-again. A second exit 4 stops for the person: show the stderr line and the path set aside.
+again. A second exit 4 stops for the person: show the stderr line and the path set aside. A
+dispatch that ends before the role's first write is the third case. The scope skill states the
+rule under "The distill check": once more with the same message, then once on `model: sonnet`.
 
 Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
 never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with

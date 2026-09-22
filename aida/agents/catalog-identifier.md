@@ -39,7 +39,10 @@ Stop and say so when the navigator cannot be reached. That is different from the
 and finding nothing, and the two must never arrive as the same result.
 
 **When asked for one process-recipe point.** A step file may ask you for one phase and one
-framework, the same lookup implementation uses, and it names the project folder. The project's own
+framework, the same lookup implementation uses, and it names the project folder. A line
+`point: <phase>` names the process-recipe point. A bare word on its own line is not a point. Read
+it as a framework or a path, never as the phase. When no `point:` line is present, do not guess
+one; return and say the message named no point. The project's own
 sources are asked before the catalog, so run this first, once per phase and framework:
 
 ```

@@ -8,10 +8,11 @@
 #
 # Public functions:
 #
-#   commit_project <folder> <subject> <why> <principle> <ruled out> <task> <stage> [<pathspec>]
-#     Commits the folder as aida: everything in it, or only the pathspec when one is given, the
-#     way task-actions.sh commits `tasks` alone. Returns 1 before any git call when the folder is
-#     not a repository, 0 when there was nothing to commit, else git's own status.
+#   commit_project <folder> <subject> <why> <principle> <ruled out> <task> <stage> [<pathspec>...]
+#     Commits the folder as aida: everything in it, or only the pathspecs when any are given.
+#     That is how task-actions.sh commits one task folder alone. Returns 1 before any git call
+#     when the folder is not a repository, 0 when there was nothing to commit, else git's own
+#     status.
 #
 # Portability: bash 3.2+ and zsh. This file is a library. Source it; do not run it.
 if [ -n "${ZSH_VERSION:-}" ]; then
@@ -37,7 +38,9 @@ COMMIT_SHAPE_SCRIPT="${PLUGIN_ROOT}/scripts/check-commit-shape.sh"
 # Moved here from project-actions.sh unchanged, so the playbooks skill commits the same way.
 commit_project() {
   local project_path="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
-  local pathspec="${8:-.}" msg_file
+  local msg_file
+  shift 7
+  [ "$#" -gt 0 ] || set -- .
   msg_file="$(mktemp)" || die3 "cannot create a temp file for the commit message"
   {
     printf '%s\n' "$subject"
@@ -58,7 +61,7 @@ commit_project() {
   # A folder that is not a repository yet returns 1 before any git call, so git prints no
   # error. The caller says the write was not committed. A version 5 pickup is such a folder.
   git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || { rm -f "$msg_file"; return 1; }
-  git -C "$project_path" add -A -- "$pathspec"
+  git -C "$project_path" add -A -- "$@"
   if git -C "$project_path" diff --cached --quiet 2>/dev/null; then
     rm -f "$msg_file"
     return 0

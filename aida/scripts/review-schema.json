@@ -27,6 +27,11 @@
       "default": 1,
       "description": "The shape this file was written in, the same field every other AIDA record carries."
     },
+    "pluginVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The plugin version that wrote this record, copied by review's close from the plugin's own plugin.json. It reads unknown when that file could not be read. A task can span a plugin update, and its records then come from two sets of rules. This field says which version wrote which record (live-run row 134). Nothing reads it back; it is for a person or a later reader."
+    },
     "takenAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",

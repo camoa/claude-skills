@@ -7,14 +7,15 @@ once per build, not once per work order.
 
 Read the project's own `frameworks`. A `project.json` recording none refuses outright (exit 77):
 no recipe can be chosen for a project the run cannot name a framework for. For each framework,
-dispatch `catalog-identifier` to ask the navigator's process-recipe lookup for the `test-execution`
-point and that framework, naming the project folder. It answers whether one is available and, when
-it is, a path to the body on disk. Name the role, and pass the lookup's answer in its own word:
-SKILL.md holds both rules. The role identifies and returns a path, and it never opens the body.
+dispatch `catalog-identifier` to ask the navigator's process-recipe lookup, with the lines
+`point: test-execution`, that framework, and the project folder. It answers whether one is
+available and, when it is, a path to the body on disk. Name the role, and pass the lookup's
+answer in its own word: SKILL.md holds both rules. The role identifies and returns a path, and it
+never opens the body.
 Never fetch a catalog address yourself and never read a cached copy behind the navigator's back.
 The role reads a folder source this project configured itself first, so it wins over the catalog.
 
-Dispatch `catalog-identifier` once more, for the `review` point and each framework. This is a
+Dispatch `catalog-identifier` once more, with `point: review` and each framework. This is a
 second recipe, never the same file as the `test-execution` one above. Pass its path straight
 through; the script reads its `## Check commands` block itself, per SKILL.md.
 
@@ -37,8 +38,20 @@ always passes.
 
 Every framework the project declares needs a `--recipe` or a `--lookup-failed` for it. The script
 refuses rather than guess, because a lookup nobody ran must never be recorded as a recipe that
-declared nothing. `--check-recipe` is optional per framework: absent, its three tool checks record
+declared nothing. `no-recipe` records the framework `undeclared`: the catalog looked and holds
+nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` record it
+`unknown`, and stop: nobody looked. Every framework prints its own line on every run.
+`--check-recipe` is optional per framework: absent, its three tool checks record
 undeclared, with a reason saying no check recipe was resolved.
+
+**A task whose orders are all proved by their records runs no test, so it needs no harness.**
+When every order in the snapshot has `proof: record`, the script records each framework's
+conditions and its smoke row as `not-needed`, with the reason, and runs neither. The verdict is
+`not-needed` and the build goes on. The recipe is still resolved and recorded, because the freeze
+reads its path. The baseline runs no suite and records `not-needed` per framework there too. The
+`## Check commands` tools still run where an order owns a file under the code path, and read
+undeclared where none does. Any other proof needs the harness. A `gate` order runs the recipe's
+lines in the same environment, and an `observe` order's build runs the suite against the baseline.
 
 **Two frameworks may not both command one tool.** A project declaring two frameworks whose review
 recipes each carry a coding-standards row, say, gives the script two answers to one question, and
@@ -65,17 +78,18 @@ declares. Pass it with `--value <name>=<value>`. The script never guesses one an
 default out of a recipe's prose: an unsupplied placeholder makes the run unknown and names
 which one had no value.
 
-## Read the four verdicts to the person
+## Read the verdicts to the person
 
 - **met.** Every declared condition answered yes. The build can go on.
 - **unmet.** A condition answered no. Name it, name the framework, and name the owner the recipe
   gave. An owner is the action; without one the person has to work out what to do.
 - **unknown.** Nobody could tell. A checker that is not installed says nothing about the condition
   it was meant to probe, so this is never reported as a failure of the condition.
-- **undeclared.** The recipe named no conditions. Say that, and never say met. A recipe that
-  declared nothing was not checked.
+- **undeclared.** The recipe named no conditions, or the catalog holds no recipe for this
+  framework. Say that, and never say met. A recipe that declared nothing was not checked.
+- **not-needed.** No order runs a test, so nothing was checked. Say that, and never say met.
 
-`met` and `undeclared` both continue. A recipe saying this framework needs nothing before a test
+`met`, `undeclared` and `not-needed` continue. A recipe saying this framework needs nothing before a test
 runs has answered, and stopping on it would mean no project on that framework ever builds. Say
 which of the two happened; never report `undeclared` as conditions that passed.
 
@@ -117,8 +131,8 @@ recorded at a different commit refuses rather than overwrites, and names both co
 
 The record pins each recipe's path, and every later step reads that path. When the catalog
 republishes a recipe this task pinned, the record still names the old body. Resolve the recipe
-again the way the first section says: dispatch `catalog-identifier` for the `test-execution`
-point and that framework, never a cached copy. Then run, with one flag per framework that changed:
+again the way the first section says: dispatch `catalog-identifier` with `point: test-execution`
+and that framework, never a cached copy. Then run, with one flag per framework that changed:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
   --recipe <framework>=<path to the test-execution recipe>

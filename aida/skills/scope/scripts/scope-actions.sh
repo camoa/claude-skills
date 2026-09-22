@@ -45,7 +45,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # own nonGoal has only id and text), so no action here ever writes one for it.
 #
 # Depends on, shipped by the same part and never edited here:
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/alignment-render.sh   called by `render`, unmodified
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/alignment-render.sh   called by `render` and by every action that
+#                                                       writes alignment.json, unmodified
 #
 # This script never runs check-alignment.sh. Every field it writes is validated before the write,
 # so what it produces is shaped correctly by construction; a stale or hand-edited alignment.json
@@ -97,11 +98,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
 #      autonomous; a missing or unusable nextCriterionId or nextNonGoalId; the plugin root could
 #      not be resolved; or a write that failed.
-#   4  a script this action calls ran and failed. `render` calls alignment-render.sh; that
-#      script's own stderr is the answer, printed here rather than duplicated. For `approve` and
-#      `distill`, the sidecar exists but fails scripts/distill-schema.json, or says standsAlone
-#      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
-#      and stdout names it in a `setAside:` line.
+#   4  a script this action calls ran and failed. `render`, and every action that writes
+#      alignment.json, call alignment-render.sh; that script's own stderr is the answer, printed
+#      here rather than duplicated. For `approve` and `distill`, the sidecar exists but fails
+#      scripts/distill-schema.json, or says standsAlone false with no gap. That sidecar is moved
+#      aside first, to <name>.malformed-<date>.json, and stdout names it in a `setAside:` line.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -295,6 +296,7 @@ do_init() {
 
   echo "INITIALIZED: $ALIGNMENT_FILE"
   contract_summary
+  render_alignment
   exit 0
 }
 
@@ -333,6 +335,7 @@ do_set_goal() {
 
   echo "GOAL SET"
   contract_summary
+  render_alignment
   exit 0
 }
 
@@ -402,6 +405,7 @@ do_add() {
   echo "verifiedBy: $verified_by"
   echo "author: $author"
   contract_summary
+  render_alignment
   exit 0
 }
 
@@ -440,6 +444,7 @@ do_add_non_goal() {
 
   echo "ADDED: $id"
   contract_summary
+  render_alignment
   exit 0
 }
 
@@ -541,6 +546,7 @@ do_update() {
   [ "$set_author" -eq 0 ] || fields_set="$fields_set author"
   echo "fields-set:${fields_set}"
   contract_summary
+  render_alignment
   exit 0
 }
 
@@ -584,24 +590,34 @@ do_remove() {
   echo "REMOVED: $id"
   echo "This id is retired. It is never minted again for this task."
   contract_summary
+  render_alignment
   exit 0
 }
 
-# ------------------------------------------------------------------------------------------------
-# render: calls alignment-render.sh. Its stderr passes straight through. Its stdout is one line
-# naming the file it wrote, and this prints that path as a `rendered:` line instead.
-# ------------------------------------------------------------------------------------------------
-
-do_render() {
-  [ "$#" -eq 0 ] || die3 "render: unrecognized argument: $1"
-
+# Renders alignment.md from alignment.json by calling alignment-render.sh, and prints the path
+# as a `rendered:` line. The render script's stderr passes straight through; its own stdout line
+# is dropped. `render` calls this to show the page. Every action that writes alignment.json
+# calls it after the write, so the page never lags the contract (live-run rows 121, 130 and
+# 132: a page nothing re-rendered still read "designer" after approve, and three critics
+# reported it). No writer is excepted: a rule with no exception is simpler to keep true.
+render_alignment() {
   [ -f "$ALIGNMENT_RENDER_SCRIPT" ] \
-    || die3 "render: cannot find alignment-render.sh at $ALIGNMENT_RENDER_SCRIPT"
+    || die3 "cannot find alignment-render.sh at $ALIGNMENT_RENDER_SCRIPT"
 
   bash "$ALIGNMENT_RENDER_SCRIPT" "$TASK_PATH" >/dev/null
   local rc=$?
   [ "$rc" -eq 0 ] || exit 4
   echo "rendered: $TASK_PATH/alignment.md"
+}
+
+# ------------------------------------------------------------------------------------------------
+# render: shows the page. It renders alignment.md through render_alignment and nothing else.
+# ------------------------------------------------------------------------------------------------
+
+do_render() {
+  [ "$#" -eq 0 ] || die3 "render: unrecognized argument: $1"
+
+  render_alignment
   exit 0
 }
 
@@ -676,6 +692,7 @@ do_record_decision() {
 
   echo "DECISION RECORDED"
   contract_summary
+  render_alignment
   exit 0
 }
 
@@ -689,6 +706,16 @@ close_scope() {
   local why
   why="$(jq -r '.goal // empty' "$ALIGNMENT_FILE" 2>/dev/null)"
   [ -n "$why" ] || why="closed with no goal recorded"
+  # The contract is scope's close record, so the version that closed it goes in before the
+  # commit. Both approve and distill close through here, and a distill with no contract yet
+  # still runs, so the stamp waits for the file. A contract jq cannot read is left as it is,
+  # never overwritten with nothing.
+  local stamped
+  if [ -f "$ALIGNMENT_FILE" ]; then
+    stamped="$(jq --arg v "$(plugin_version)" '.pluginVersion = $v' "$ALIGNMENT_FILE")" \
+      || die3 "close: could not update $ALIGNMENT_FILE"
+    write_atomic "$ALIGNMENT_FILE" "$stamped"
+  fi
   commit_stage_close "$TASK_PATH" scope "Close scope for $(jq -r '.id' "$TASK_FILE")" "$why"
   distill_read "$TASK_PATH" scope
 }
@@ -723,6 +750,8 @@ do_approve() {
   echo "promoted: $count"
   [ -z "$ids" ] || echo "promoted-ids: $ids"
   contract_summary
+  # Rendered before the commit, so the committed folder carries the page as promoted.
+  render_alignment
   close_scope
   exit 0
 }

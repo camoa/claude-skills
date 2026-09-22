@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA dispatch record",
-  "description": "What is dispatched right now, at <project path>/dispatch.json. The build is serial, so a project has at most one active dispatch: `dispatch-open` refuses to overwrite one already there, and `dispatch-close` removes it. This is the one record two PreToolUse hooks read to tell a dispatched role's own guardrails apart from a person working their own repository: hooks/deny-prior-source.sh (a test author reading past its own interface record) and hooks/deny-frozen-test-writes.sh (anyone writing to a test this task already froze, and since 2026-09-19 an implementer writing under codePath outside the files its unit owns, read from `ownedFiles`). Neither hook writes this file; the implement skill writes it immediately before a dispatch and clears it immediately after, through implement-actions.sh's own `dispatch-open` and `dispatch-close` actions. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What is dispatched right now, at <task folder>/implementation/dispatch.json. One record per task since 2026-09-22 (live-run row 139). Before that it was one per project, at <project path>/dispatch.json, which made a second task's build wait on the first. The build of one task is serial, so a task has at most one active dispatch. `dispatch-open` refuses to overwrite one already there, and `dispatch-close` removes it. Two tasks of one project each hold their own. This is the one record two PreToolUse hooks read to tell a dispatched role's own guardrails apart from a person working their own repository: hooks/deny-prior-source.sh (a test author reading past its own interface record) and hooks/deny-frozen-test-writes.sh (anyone writing to a test this task already froze, and since 2026-09-19 an implementer writing under codePath outside the files its unit owns, read from `ownedFiles`). Neither hook writes this file; the implement skill writes it immediately before a dispatch and clears it immediately after, through implement-actions.sh's own `dispatch-open` and `dispatch-close` actions. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "role", "task", "unit", "codePath", "denyRead", "allowWrite"],
+  "required": ["schemaVersion", "role", "task", "unit", "codePath", "openedAt", "denyRead", "allowWrite"],
   "properties": {
     "schemaVersion": {
       "type": "integer",
@@ -20,7 +20,12 @@
     "task": {
       "type": "string",
       "minLength": 1,
-      "description": "The task id this dispatch belongs to, the same value task.json's own `id` carries. A hook joins on it to find <project path>/tasks/<task>/implementation, where the frozen test records deny-frozen-test-writes.sh reads actually live."
+      "description": "The task id this dispatch belongs to, the same value task.json's own `id` carries. The record lives in that task's own implementation folder, beside the frozen test records deny-frozen-test-writes.sh reads. A hook finds the record as the one whose codePath holds the payload's working directory (scripts/lib/paths.sh, dispatch_record_for). It reads this field to report which task holds it."
+    },
+    "openedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "When `dispatch-open` wrote this record, UTC, to the second. Set by the script, never typed. A record left by a role that never returned looks like a live one otherwise. `dispatch-open` reads this and names the age in its refusal once the record is over a day old (live-run row 139). Nothing clears a stale record on its own: a person runs `dispatch-close`."
     },
     "unit": {
       "type": "string",
@@ -47,7 +52,7 @@
     "ownedFiles": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
-      "description": "Present on an implementer's record only, since 2026-09-19 (live-run row 92): the files its work order owns in the frozen snapshot, relative to codePath, derived by `dispatch-open` and never passed by hand. hooks/deny-frozen-test-writes.sh reads it as its second rule: while this record names the implementer, a write to a path under codePath that is not one of these files, or under one of these directories, is refused with a reason telling the role to stop and report. A path outside codePath, the task folder where the report and the interface record live, is not judged. The same list sits in allowWrite for this role; it is repeated here because allowWrite also takes hand-passed paths and is enforced by nothing, and a write bound must come from the snapshot alone."
+      "description": "Present on an implementer's record since 2026-09-19 (live-run row 92), and on a fixer's since 2026-09-21 (live-run row 116): the files its work order owns in the frozen snapshot, relative to codePath, derived by `dispatch-open` and never passed by hand. A fixer's list also holds the `allowedFiles` of the round's fix brief, the paths a person granted with `fix-brief --allow`. hooks/deny-frozen-test-writes.sh reads it as its second rule while this record names the implementer or the fixer. A write to a path under codePath that is not one of these files, or under one of these directories, is refused. The reason tells the role to stop and report. A path outside codePath, the task folder where the report and the interface record live, is not judged. The same list sits in allowWrite for this role; it is repeated here because allowWrite also takes hand-passed paths and is enforced by nothing, and a write bound must come from the snapshot alone."
     }
   }
 }

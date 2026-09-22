@@ -147,7 +147,9 @@ answered with the changed line, and the turn ends. When the contract is right, s
 own words, or run `/aida:scope approve <task-id>`. Either runs the approve action: every
 criterion still recorded as the designer's becomes yours, and the close below runs. That is the
 moment the contract is approved, and there is no other. A yes on the draft alone promotes
-nothing. Ask to see the whole document again at any point, and scope renders it.
+nothing. Ask to see the whole document again at any point, and scope renders it. Every change
+to the contract, and the approval itself, renders the page again, so it never lags the
+contract.
 
 An earlier version rendered the document and asked for a yes after every correction. On one task
 it asked five times in a row, once per correction, and the person answered "Stop". A question

@@ -122,9 +122,10 @@ criterion they add is `add`; one they drop is `remove`; a non-goal they name is 
 criterion the person rephrases or adds is `--author owner` at once, on that same call.
 
 Answer a correction with the changed lines: the `UPDATED:`, `ADDED:` or `REMOVED:` line and the
-summary the call printed. Then the turn ends. Do not render, and do not ask whether the contract
-is now right. The person says when it is, in their own words or with `/aida:scope approve
-<task-id>`; that is "Approval" below. Render only when they ask to see the whole document again.
+summary the call printed. Then the turn ends. Do not run `render`, do not show the page, and do
+not ask whether the contract is now right. The person says when it is, in their own words or
+with `/aida:scope approve <task-id>`; that is "Approval" below. Show the whole document only
+when they ask to see it again.
 
 A question is one at a time, with a recommended answer. A draft is not a question: show the whole
 draft, and ask what is wrong. The draft carries everything that can be drafted, and what is left
@@ -157,7 +158,9 @@ is a gap: ask for one, with a recommended answer. Then run:
   init "<task_folder>"
 ```
 only on a first run, before anything else is written; it refuses when `alignment.json` already
-exists. Then, on a first run and on any later correction to either sentence, run:
+exists. When its output holds `environment: none`, put the task skill's site offer to the person
+now, or say it waits when it says so. Then, on a first run and on any later correction to either
+sentence, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   set-goal "<task_folder>" --goal "<goal text>" --expected-result "<expected result text>"
@@ -292,8 +295,11 @@ for a yes on it, even for one small change. On one task it asked five times in a
 row, once per correction, until the person answered "Stop". A question the model decides when to
 ask is one it can repeat, so the question is gone and the action replaced it.
 
-The render is for showing, not for approving. Run it once when the draft is first shown, and
-again only when the person asks to see the whole document:
+The page is rendered on every write. Every action that writes `alignment.json` renders
+`alignment.md` again after its write and prints `rendered:` with its path, so the page never
+lags the contract. A page nothing re-rendered once still read "designer" on every criterion
+after `approve`, and three design critics reported it. `render` only shows the page. Run it once
+when the draft is first shown, and again only when the person asks to see the whole document:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   render "<task_folder>"
@@ -330,6 +336,16 @@ repeats. Then run the same call again. Exit 4 means the sidecar was malformed. T
 aside at the `setAside:` path it printed. Dispatch a fresh distiller, with the rule it broke
 quoted from `agents/distiller.md`. Then run the same call again. A second exit 4 stops for the
 person: show the stderr line and the path set aside.
+
+The third case is a dispatch that ends before the role's first write. The Agent call returns
+with no reply from the role, and no sidecar exists, before `approve` or `distill` runs.
+Re-dispatch once with the same message. When it ends the same way, dispatch once more with
+`model: sonnet` on the Agent call. The distiller's definition keeps `model: opus`, and the
+call's `model` overrides it. The reason: the harness once ended the distiller on opus twice
+before it wrote anything, and the same message on sonnet completed. A rejection tied to one
+model is not tied to the message, so the message stays and the model moves. When the sonnet
+dispatch also ends before its first write, stop: interactive, put it to the person with the
+Agent call's own error; autonomous, halt. The research and design pages refer to this rule.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove` or `set-mechanism` again. A drafted line is `designer`, and

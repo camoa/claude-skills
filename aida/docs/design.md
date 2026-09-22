@@ -81,13 +81,14 @@ belong, and what build order does the framework force? No check below can see th
 about the wrong kind of thing, so this read has no substitute.
 
 Design judges the recipe's fit once, before the first order. Interactively, design shows a poor
-fit with the reason, and you choose: continue with the recipe, without it, or stop. Autonomously,
-design continues with the recipe and records the verdict.
+fit with the reason, and you choose: continue with the recipe, without it, write the recipe
+first, or stop. Autonomously, design continues with the recipe and records the verdict.
 
 No recipe for your framework, a catalog that could not be reached, and a failed network are three
 different answers. Design records which one happened. With no recipe, design marks every order as
 written without framework input, and it invents no kind of unit and guesses at no convention.
-Interactively, it asks whether to write the recipe first.
+Interactively, it asks whether to write the recipe first. After a poor fit that question was
+already put, and design does not ask it again.
 
 A stated approach recorded at scope is read as a claim, never as a specification. A required
 claim must be followed once design judges it sound, not before. A claim edited after research
@@ -112,7 +113,9 @@ Design decides by the candidate's distance, same name, same directory, or same l
 cost model. Build cost is paid once; carry, agent and risk cost are paid forever. Design
 records the disposition on the order it lands on: the candidate, the distance, the costs
 compared, the verdict and the reason. Each disposition is appended, so an order with several
-candidates keeps every verdict, and re-disposing one adds a paragraph. A fixed table applies. A supersede that cites only build
+candidates keeps every verdict, and re-disposing one adds a paragraph. Replacing an order's
+reasoning outright drops those paragraphs, so a later note is appended as a paragraph of its
+own, after a blank line. A fixed table applies. A supersede that cites only build
 cost, or a candidate sharing only a layer, comes back as extend. Interactively, a supersede
 stands only after you are asked, because it widens the task and owes a migration. A supersede
 naming no cost dimension is refused until you say what it compared. Autonomously, a supersede
@@ -148,9 +151,10 @@ Deleting a field owns each display that lists it. An order that owns the field's
 leaves the displays to other orders cannot import on its own, so its gate fails.
 
 An order whose deliverable is a document, a dependency review or a report, writes no test
-either. Such an order owns files under the task folder only, in a folder the project commits,
-such as `deliverables/`. Never `records/`, which the project ignores. It carries
-`proof: record`, and design sets that value itself once every owned file lies under the task
+either. Such an order owns files under the project folder, in a folder the project commits, the
+task folder's `deliverables/` by default. A report may land beside earlier reports elsewhere in
+the project folder. Never `records/`, which the project ignores. It carries
+`proof: record`, and design sets that value itself once every owned file lies under the project
 folder, unless you set a proof by hand. Its proof is its done-when rows. The checkpoint judges them, the build reads that
 judgement in place of the tests, and the reviewer reads the document whole against them. It
 lands no commit in the code repository. Its commits are the project folder's.
@@ -158,7 +162,8 @@ lands no commit in the code repository. Its commits are the project folder's.
 An order whose deliverable is what a page shows, a layout or a rendered block at each viewport,
 writes no test either. It carries `proof: observe`, names at least one surface, and has at least
 one done-when row. Each done-when row is the sentence a model judges. After the build, AIDA opens
-each surface at each viewport in a browser and judges each row against what renders. It keeps a
+each surface at each viewport in a browser and judges each row against what renders. It judges
+the verification clause of each machine criterion the order owns as a row of its own. It keeps a
 screenshot per surface and viewport as the evidence. The build reads that record as the order's
 own check. The judge on the record is a model, never a person, and completion puts each such
 criterion to you to accept. The design check refuses an `observe` order that declares a test,
@@ -197,8 +202,9 @@ The check stops first on a work order file with a missing or malformed field, be
 finding. You fix that file by hand or with an update, then check again. Past that, it finds a
 criterion no order serves or owns, or that two orders own, and an order serving no criterion. It
 finds an owner of a machine-verified criterion with no test, unless its proof is the gate or the
-record or the observation. It finds a gate order declaring a test. It finds a record order declaring a test, owning a
-file outside the task folder, or missing a done-when row. It finds an observe order declaring a
+record or the observation. It finds a gate order declaring a test. It finds a record order declaring a test or missing a
+done-when row. It finds a record order owning a file outside the project folder, or under a
+path the project ignores. It finds an observe order declaring a
 test, naming no surface, or missing a done-when row. It finds an order no owner reaches and a dependency cycle. It finds
 two orders declaring one file, a wildcard in an owned file, and an id that resolves to nothing.
 
@@ -224,7 +230,8 @@ owned list against the couplings your framework's design recipe names, such as a
 its definition file.
 
 Each reader is dispatched with the run mode, the task folder, its lens and the recipe's path,
-one per line, and nothing else. Each reader writes one findings file,
+one per line, and nothing else. Each reads the contract from `alignment.json`, and treats the
+rendered page beside it as a copy that answers nothing. Each reader writes one findings file,
 `records/design-critique-<lens>.md`. A finding is blocking
 when implementation would build the wrong thing or could not start, and a concern otherwise.
 They never repeat what the check counted, and a clean report names what it compared. A lens whose
@@ -237,7 +244,9 @@ the order's reasoning so it outlives the conversation. Each change is answered w
 lines, and the turn ends; design never asks whether it is ready to close. A finding on the
 contract is a scope question. Autonomously, design asks nothing and changes nothing. The
 findings stay in their files, and the close records the paths and the count for you to read
-later. The close never blocks on the critique, in either mode.
+later. The close never blocks on the critique, in either mode. Interactively, the close asks you
+for one line: how many findings changed an order, and how many were left with a reason. It
+records the line beside the count. Unattended, the record says `none`.
 
 ## Running it unattended
 
@@ -257,7 +266,8 @@ step; the close records that a person was present, and that record is the yes.
 The close runs the check once more and writes `design-closed.json` only when it is clean. It
 commits the task folder at that moment; the order edits before it commit nothing. The record
 holds a hash over the contract and every order together, the run mode, and who was present,
-`person` or `nobody`. It also holds the recipe verdict and the critique files with their count.
+`person` or `nobody`. It also holds the recipe verdict and the critique files with their count
+and your outcome line.
 
 Implementation reads this record on its first run, before it freezes anything, and refuses to
 start on a contract or an order that no longer matches the hash. That is what catches an order

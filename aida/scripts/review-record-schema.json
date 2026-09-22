@@ -126,6 +126,12 @@
           "type": "string",
           "description": "Which lines the verifier looked at, as it wrote it. Present only on an addressed finding, and may be empty."
         },
+        "outsideOwned": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "The paths of this finding's fixScope that lie outside the order's own ownedFiles, as the reviewer wrote them (live-run row 116). Each is resolved against codePath and compared the way the owned-files check compares. A path under the task folder is never outside. Written by `review-record` on the review's own findings, and only when there is one. A finding wholly inside reads as it did before the key existed. Nothing is ruled at birth. `fix-brief` withholds these paths from the fixer unless a person allows one with `--allow`. The finding is still handed over, so the fixer reports it scope-insufficient and the ruling route opens."
+        },
         "scopeInsufficientInRound": {
           "type": "integer",
           "minimum": 1,
