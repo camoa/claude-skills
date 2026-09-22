@@ -15,6 +15,8 @@
 #   looks_like_flag <value>               true when the value is another option, not data
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   write_atomic <target> <content>       writes through a temporary file beside the target
+#   plugin_version                        prints the version from the plugin's own plugin.json,
+#                                         or unknown when that file cannot be read
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, else interactive
 #   mark_task_in_progress <folder> <why> <stage>
@@ -87,6 +89,20 @@ write_atomic() {
     || die3 "could not create a temporary file in $dir"
   printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
   mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
+}
+
+# The plugin version, from .claude-plugin/plugin.json under the caller's PLUGIN_ROOT. Every stage
+# close record carries it, so a task that spans a plugin update shows which rules wrote which
+# record. Live-run row 134 had critics dispatched by beta.15 and the close written by beta.21,
+# and nothing on disk said so. Nothing reads the field back; it is for a person or a later
+# reader. A file that is missing, unreadable or malformed prints `unknown`, never an empty
+# string. The record then still says a version was asked for and not found. This is the one jq
+# call on plugin.json in the plugin.
+plugin_version() {
+  local version
+  version="$(jq -r '.version // empty' "${PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null)"
+  [ -n "$version" ] || version="unknown"
+  printf '%s' "$version"
 }
 
 # The run mode of one stage, from task.json (task-schema.json, runMode and runModeStages). The

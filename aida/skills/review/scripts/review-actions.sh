@@ -2188,7 +2188,8 @@ RW_ROWS
      + [ (.criteria // [])[] | select(.verdict == "unmet" or .verdict == "unanswered") | (.id + " reads " + .verdict) ])
     | join("; ")')"
   if [ -n "$failing" ]; then verdict_word="failed"; else verdict_word="passed"; fi
-  updated="$(printf '%s' "$updated" | jq -c --arg v "$verdict_word" '.verdict = $v')"
+  updated="$(printf '%s' "$updated" | jq -c --arg v "$verdict_word" --arg pv "$(plugin_version)" \
+    '.verdict = $v | .pluginVersion = $pv')"
   rw_write_record "close" "$updated"
 
   # The one field review writes into the contract. The hash covers the whole file, so the next

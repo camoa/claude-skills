@@ -706,6 +706,16 @@ close_scope() {
   local why
   why="$(jq -r '.goal // empty' "$ALIGNMENT_FILE" 2>/dev/null)"
   [ -n "$why" ] || why="closed with no goal recorded"
+  # The contract is scope's close record, so the version that closed it goes in before the
+  # commit. Both approve and distill close through here, and a distill with no contract yet
+  # still runs, so the stamp waits for the file. A contract jq cannot read is left as it is,
+  # never overwritten with nothing.
+  local stamped
+  if [ -f "$ALIGNMENT_FILE" ]; then
+    stamped="$(jq --arg v "$(plugin_version)" '.pluginVersion = $v' "$ALIGNMENT_FILE")" \
+      || die3 "close: could not update $ALIGNMENT_FILE"
+    write_atomic "$ALIGNMENT_FILE" "$stamped"
+  fi
   commit_stage_close "$TASK_PATH" scope "Close scope for $(jq -r '.id' "$TASK_FILE")" "$why"
   distill_read "$TASK_PATH" scope
 }

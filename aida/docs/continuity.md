@@ -18,7 +18,8 @@ whose close record is absent is the current one. Scope's record is the contract,
 `alignment.json`. Research's is `records/research-check.json` with a passing exit code. Design's
 is `design-closed.json`, implementation's is `implementation/finished.json`, and review's is
 `review/review.json` with a verdict. Nothing stores that answer, so nothing can hold a stale
-copy of it.
+copy of it. Each close record also names the plugin version that wrote it, as `pluginVersion`.
+A task that spans an update then shows which rules produced which record.
 
 There is no session file, because a stored active task goes stale. AIDA derives the active task
 from what is open, so a new session asks the same question and gets the same answer. See

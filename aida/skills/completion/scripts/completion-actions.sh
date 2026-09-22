@@ -662,8 +662,9 @@ CP_LEAVES2
   record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \
     --arg closedBy "$closed_by" --arg reason "$reason" --argjson rows "$rows" \
     --argjson offered "${captures_offered:-0}" --arg skipped "$captures_skipped" \
-    --argjson observed "$observed_rows" --arg observedSkipped "$observed_skipped" '
-    {schemaVersion: 1, takenAt: $today, task: $task, reviewVerdict: $verdict, closedBy: $closedBy, reason: $reason,
+    --argjson observed "$observed_rows" --arg observedSkipped "$observed_skipped" \
+    --arg pluginVersion "$(plugin_version)" '
+    {schemaVersion: 1, pluginVersion: $pluginVersion, takenAt: $today, task: $task, reviewVerdict: $verdict, closedBy: $closedBy, reason: $reason,
      followUps: [ $rows[] | {finding: .finding, task: .task, reason: .reason} ],
      capturesOffered: $offered, capturesSkipped: $skipped,
      observedAccepted: [ $observed[] | select(.answer != "") | {criterion: .criterion, accepted: (.answer == "yes")} ],

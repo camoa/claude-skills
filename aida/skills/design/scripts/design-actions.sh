@@ -1399,8 +1399,8 @@ do_close() {
   closed_at="$(date -u +%Y-%m-%d)"
   if [ "$RUN_MODE" = "autonomous" ]; then closed_by="nobody"; else closed_by="person"; fi
   doc="$(jq -n --arg closedAt "$closed_at" --arg hash "$hash" \
-    --arg runMode "$RUN_MODE" --arg closedBy "$closed_by" \
-    '{schemaVersion: 1, closedAt: $closedAt, runMode: $runMode, closedBy: $closedBy, hash: $hash}')"
+    --arg runMode "$RUN_MODE" --arg closedBy "$closed_by" --arg pluginVersion "$(plugin_version)" \
+    '{schemaVersion: 1, pluginVersion: $pluginVersion, closedAt: $closedAt, runMode: $runMode, closedBy: $closedBy, hash: $hash}')"
   [ -z "$fit_json" ] || doc="$(printf '%s' "$doc" | jq --argjson rf "$fit_json" '.recipeFit = $rf')"
 
   # The critique files the design skill's critics wrote before this close: their paths and the

@@ -8300,10 +8300,11 @@ FN_RECIPES
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
     --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
-    --argjson suite "$suite_json" '
+    --argjson suite "$suite_json" --arg pluginVersion "$(plugin_version)" '
     ([ ($snap.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]) as $kinds
     | {
       schemaVersion: 1,
+      pluginVersion: $pluginVersion,
       takenAt: $takenAt,
       task: $task,
       commitRange: $range,

@@ -632,7 +632,8 @@ do_check() {
       h="$(printf '%s' "$line" | "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1)"
       hashes="$(printf '%s' "$hashes" | jq --arg h "$h" '. + [$h]')"
     done < <(jq -c '.mechanismHints[]? | .approach' "$TASK_PATH/task.json" 2>/dev/null)
-    write_atomic "$CHECK_FILE" "$(jq --argjson h "$hashes" '.mechanismHashes = $h' "$CHECK_FILE")"
+    write_atomic "$CHECK_FILE" "$(jq --argjson h "$hashes" --arg v "$(plugin_version)" \
+      '.mechanismHashes = $h | .pluginVersion = $v' "$CHECK_FILE")"
     # The close is the stage boundary, so it commits the task folder, with the coverage the
     # report just recorded as the reason. A check run again on a closed stage commits nothing.
     commit_stage_close "$TASK_PATH" research "Close research for $(jq -r '.id' "$TASK_PATH/task.json")" \
