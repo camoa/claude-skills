@@ -95,6 +95,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh record-declined <directory>
        project-actions.sh rebuild-registry [projectsHome]
        project-actions.sh read-projects-base
+       project-actions.sh check-machine
 EOF
 }
 
@@ -1124,6 +1125,168 @@ do_read_projects_base() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# check-machine: can this machine reach a task's worktree at all (ideal/project.md, "The machine
+# check"). A person runs it cold, on a machine that has never entered a tree.
+#
+# Report only, like check-project.sh: it asks nothing, writes nothing, repairs nothing, and names
+# the repair for each finding it has. It always exits 0, because every line here is a fact about
+# the machine and not a verdict on a project.
+# ------------------------------------------------------------------------------------------------
+
+# True when $1, a dotted version, is $2 or later. Three fields, compared as numbers, because
+# `sort -V` is not on every build. A field that is not a number counts as zero.
+version_at_least() {
+  local have="$1" want="$2" hp wp i
+  i=1
+  while [ "$i" -le 3 ]; do
+    hp="$(printf '%s' "$have" | cut -d. -f"$i")"
+    wp="$(printf '%s' "$want" | cut -d. -f"$i")"
+    case "$hp" in ''|*[!0-9]*) hp=0 ;; esac
+    case "$wp" in ''|*[!0-9]*) wp=0 ;; esac
+    [ "$hp" -gt "$wp" ] && return 0
+    [ "$hp" -lt "$wp" ] && return 1
+    i=$((i + 1))
+  done
+  return 0
+}
+
+do_check_machine() {
+  local cwd version plugin git_dir common_dir match code name rows listed recorded gone unnamed row id wt
+  cwd="$(pwd -P)"
+  printf 'Machine check: %s\n' "$cwd"
+  printf 'Checked: %s\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  version=""
+  command -v claude >/dev/null 2>&1 \
+    && version="$(claude --version 2>/dev/null | head -n 1 | cut -d' ' -f1)"
+  if [ -z "$version" ]; then
+    printf 'Claude Code: unknown. The claude command is not on this PATH.\n'
+    printf '  Repair: run this check from a shell that has claude on its PATH.\n'
+  else
+    printf 'Claude Code: %s\n' "$version"
+    if version_at_least "$version" 2.1.169; then
+      printf '  /cd moves this session into a tree: yes, 2.1.169 or later.\n'
+    else
+      printf '  /cd moves this session into a tree: no. It arrived in 2.1.169.\n'
+      printf '  Repair: update Claude Code, or run claude from inside the tree.\n'
+    fi
+    if version_at_least "$version" 2.1.206; then
+      printf '  Entry outside .claude/worktrees/ asks for approval: yes, 2.1.206 or later.\n'
+    else
+      printf '  Entry outside .claude/worktrees/ asks for approval: no. The prompt arrived in 2.1.206.\n'
+    fi
+  fi
+
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" \
+    || die3 "check-machine: the library failed to load: task-helpers.sh"
+  plugin="$(plugin_version)"
+  printf 'AIDA plugin: %s, at %s\n' "$plugin" "$PLUGIN_ROOT"
+  # The session-start hook exports the version it loaded into $CLAUDE_ENV_FILE, which Claude Code
+  # runs before each Bash command in the same shell process (the mirror's hooks reference and its
+  # environment variables page). Absent, the hook did not run in this session, and no line here
+  # may claim what the session loaded.
+  if [ -z "${AIDA_SESSION_PLUGIN_VERSION:-}" ]; then
+    printf '  Changed since this session started: not known. The session-start hook did not run\n'
+    printf '  in this session, or this shell did not read its exports.\n'
+  elif [ "$AIDA_SESSION_PLUGIN_VERSION" = "$plugin" ]; then
+    printf '  Changed since this session started: no. The session loaded %s.\n' "$AIDA_SESSION_PLUGIN_VERSION"
+  else
+    printf '  Changed since this session started: yes. The session loaded %s.\n' "$AIDA_SESSION_PLUGIN_VERSION"
+    printf '  This window holds the older rules. Repair: start a new session.\n'
+  fi
+
+  # A linked worktree has its own git directory and shares the repository's common one. Both are
+  # canonicalised from $cwd, because git prints either one relative to the current directory. The
+  # empty answer is tested before the cd, since `cd ""` stays where it is and reports success.
+  git_dir="$(git -C "$cwd" rev-parse --git-dir 2>/dev/null)"
+  common_dir="$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null)"
+  if [ -n "$git_dir" ]; then
+    git_dir="$(cd "$cwd" && cd "$git_dir" && pwd -P)"
+    common_dir="$(cd "$cwd" && cd "$common_dir" && pwd -P)"
+  fi
+  # This is the directory the script ran in. A call carrying a `cd <tree> &&` prefix runs here and
+  # not where the session sits, so no line below says "the session".
+  if [ -z "$git_dir" ]; then
+    printf 'This check ran inside a worktree: no. %s is not in a git work tree.\n' "$cwd"
+  elif [ "$git_dir" != "$common_dir" ]; then
+    printf 'This check ran inside a worktree: yes, %s.\n' "$(git -C "$cwd" rev-parse --show-toplevel)"
+    printf '  Entry from a session inside a worktree reaches only targets under .claude/worktrees/,\n'
+    printf '  so a task tree is out of reach. Repair: start each call with cd <tree> &&.\n'
+  else
+    printf 'This check ran inside a worktree: no. %s is the main checkout.\n' "$cwd"
+  fi
+
+  if ! match="$(registry_resolve_by_directory "$cwd")"; then
+    printf 'Project: none registered for this directory.\n'
+    printf '  Repair: run this check again from the code path, for the task lines.\n'
+    return 0
+  fi
+  name="$(printf '%s' "$match" | jq -r '.name')"
+  code="$(printf '%s' "$match" | jq -r '.codePath')"
+  printf 'Project: %s, code path %s\n' "$name" "$code"
+
+  listed="$(git -C "$code" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')"
+  rows="$("${PLUGIN_ROOT}/skills/next/scripts/next-actions.sh" report 2>/dev/null \
+    | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' | grep '^{' \
+    | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
+  if [ -z "$rows" ]; then
+    printf 'Task in progress: none.\n'
+  fi
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    id="$(printf '%s' "$row" | jq -r '.id')"
+    wt="$(printf '%s' "$row" | jq -r '.worktree')"
+    printf 'Task in progress: %s\n' "$id"
+    if [ "$wt" = "none" ]; then
+      printf '  Recorded tree: none. The first stage action that needs the code makes one.\n'
+      continue
+    fi
+    if [ -d "$wt" ]; then
+      printf '  Recorded tree: %s, on disk.\n' "$wt"
+    else
+      printf '  Recorded tree: %s, gone from disk.\n' "$wt"
+      printf '    Repair: run a stage action from %s, which makes the tree again.\n' "$code"
+    fi
+    if printf '%s\n' "$listed" | grep -Fxq "$wt"; then
+      printf '  Git lists it: yes.\n'
+    else
+      printf '  Git lists it: no. Nothing written there reaches a branch.\n'
+      printf '    Repair: remove that folder, then run a stage action from %s.\n' "$code"
+    fi
+  done <<ROWS
+$rows
+ROWS
+
+  gone="$(printf '%s\n' "$listed" \
+    | while IFS= read -r p; do [ -n "$p" ] && [ ! -d "$p" ] && printf '%s ' "$p"; done)"
+  if [ -n "$gone" ]; then
+    printf 'Trees git lists that are gone from disk: %s\n' "${gone% }"
+    printf '  Repair: run git worktree prune in %s.\n' "$code"
+  else
+    printf 'Trees git lists that are gone from disk: none.\n'
+  fi
+
+  # The other half of the same question: a tree git still holds that no task record names. Every
+  # task's record is read, not only the open ones, because a finished task's tree stays registered
+  # until someone removes it. The main checkout is not a task's tree and is skipped.
+  recorded="$(jq -r '.worktree.path // empty' \
+    "$(printf '%s' "$match" | jq -r '.path')"/tasks/*/task.json 2>/dev/null)"
+  unnamed="$(printf '%s\n' "$listed" | while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      [ "$p" = "$code" ] && continue
+      printf '%s\n' "$recorded" | grep -Fxq "$p" || printf '%s ' "$p"
+    done)"
+  if [ -n "$unnamed" ]; then
+    printf 'Trees git lists that no task record names: %s\n' "${unnamed% }"
+    printf '  Repair: find the task that owns each, or remove it with git worktree remove.\n'
+  else
+    printf 'Trees git lists that no task record names: none.\n'
+  fi
+  return 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
@@ -1150,5 +1313,6 @@ case "$action" in
   record-declined) do_record_declined "$@" ;;
   rebuild-registry) do_rebuild_registry "$@" ;;
   read-projects-base) do_read_projects_base ;;
+  check-machine) do_check_machine ;;
   *) usage; exit 3 ;;
 esac

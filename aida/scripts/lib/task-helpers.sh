@@ -37,27 +37,88 @@
 #   playbooks_record_path <folder>        prints the path of the playbook record research loads
 #   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
 #
-# task_worktree also takes resolve_project_folder, project_code_path_value and is_git_repo from
-# scripts/lib/recipes.sh, and the refusal in resolve_task_folder takes die79 from the caller.
+# task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
+# and is_git_repo from scripts/lib/recipes.sh. Two callers, scope and design, do not source that
+# file, so resolve_task_folder sources it when the function is absent, the way task_worktree
+# sources playbooks.sh for pb_slug. Every caller resolves inside a command substitution, so that
+# source lands in a subshell and clobbers nothing. The refusal takes die79 from the caller.
 
 # The task folder must already exist and already hold a task.json (ideal/scope.md, "Scope runs
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
 # one). Prints the canonical path on success.
 resolve_task_folder() {
-  local arg="$1" who="$2" p
+  local arg="$1" who="$2" p wt branch project code here top found cand line
   [ -n "$arg" ] || die3 "$who: a task folder is required"
   p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
   [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
   # Every stage action but read runs inside the task's own worktree, or a folder under it
-  # (ideal/task.md, "Two windows"). A task with no field yet, or a recorded tree gone from disk,
-  # is not refused here: the action that makes the tree names it, and the next action refuses.
-  local wt here
+  # (ideal/task.md, "Two windows"). A task with no field yet is not refused here: the action that
+  # makes the tree names it, and the next action refuses.
+  [ "$who" != "read" ] || { printf '%s' "$p"; return 0; }
   wt="$(jq -r '.worktree.path // empty' "$p/task.json" 2>/dev/null)"
-  here="$(pwd -P)/"
-  if [ -n "$wt" ] && [ -d "$wt" ] && [ "$who" != "read" ] && [ "${here#"$wt"/}" = "$here" ]; then
-    die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree first, or start the call with: cd $wt &&"
+  [ -n "$wt" ] || { printf '%s' "$p"; return 0; }
+  # Git says where this window is, not a string prefix on the recorded path. A tree moved with
+  # `git worktree move` is still this task's tree, and a folder git no longer registers is not.
+  # active_tree_for answers both, and it needs the project's own code path to answer at all.
+  if ! command -v resolve_project_folder >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "${PLUGIN_ROOT}/scripts/lib/recipes.sh" \
+      || die3 "$who: the library failed to load: recipes.sh"
   fi
-  printf '%s' "$p"
+  project="$(resolve_project_folder "$p")" || project=""
+  code=""
+  [ -z "$project" ] || code="$(project_code_path_value "$project")"
+  here="$(pwd -P)/"
+  # Without a code path on disk git cannot be asked at all, so the string test this helper used
+  # before is the evidence left. Standing in the tree still passes, so a prefixed call works.
+  if [ -z "$code" ] || [ ! -d "$code" ]; then
+    [ -d "$wt" ] && [ "${here#"$wt"/}" = "$here" ] \
+      && die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Start the call with: cd $wt &&"
+    printf '%s' "$p"
+    return 0
+  fi
+  code="$(cd "$code" && pwd -P)"
+  top="$(active_tree_for "$code" "${here%/}")"
+  branch="$(jq -r '.worktree.branch // empty' "$p/task.json" 2>/dev/null)"
+  # Which registered tree carries this task's branch. active_tree_for answers about the current
+  # directory alone, and a tree moved while the window stands elsewhere is invisible to it. The
+  # main checkout is skipped: a branch checked out there is not this task's tree.
+  found=""
+  if [ -n "$branch" ]; then
+    cand=""
+    while IFS= read -r line; do
+      if [ "${line#worktree }" != "$line" ]; then cand="${line#worktree }"; fi
+      if [ "$line" = "branch refs/heads/$branch" ] && [ "$cand" != "$code" ]; then found="$cand"; fi
+    done <<GIT_WORKTREES
+$(git -C "$code" worktree list --porcelain 2>/dev/null)
+GIT_WORKTREES
+  fi
+  # Git and the record disagree: the tree moved. task_worktree produces worktree.path, and this
+  # writes that one field again with git's answer, so the next action and git agree. One line says
+  # so, and keeps the recorded path.
+  if [ -n "$found" ] && [ "$found" != "$wt" ]; then
+    write_atomic "$p/task.json" "$(jq --arg wp "$found" '.worktree.path = $wp' "$p/task.json")"
+    printf '%s: git lists this task tree at %s, and task.json recorded %s. The record now says %s.\n' \
+      "$who" "$found" "$wt" "$found" >&2
+    wt="$found"
+  fi
+  [ "$top" != "$wt" ] || { printf '%s' "$p"; return 0; }
+  # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
+  # makes it again names it.
+  [ -d "$wt" ] || { printf '%s' "$p"; return 0; }
+  [ "$(active_tree_for "$code" "$wt")" = "$wt" ] \
+    || die79 "$who: task.json records the worktree $wt, and git does not list it as a worktree of $code. Nothing written there reaches the branch. Remove that folder, and the next action that needs the code makes the tree again."
+  # The route named is the one that works where this call ran. EnterWorktree takes a worktree of
+  # this window's own repository on first entry, and from a worktree session only a target under
+  # .claude/worktrees/ (the mirror's tools reference). A task tree is a sibling of the checkout,
+  # so entry is offered from the checkout alone. The prefix works from anywhere.
+  if [ "$top" = "$code" ] && [ "${here#"$code"/}" != "$here" ]; then
+    die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree with EnterWorktree, or start the call with: cd $wt &&"
+  fi
+  if [ "$top" = "$code" ]; then
+    die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}, outside the code repository $code. Entry refuses from there, so start the call with: cd $wt &&"
+  fi
+  die79 "$who: this task builds in its worktree $wt, and this window is in another worktree, $top. Entry reaches only trees under .claude/worktrees/ from there, so start the call with: cd $wt &&"
 }
 
 # True (exit 0) when $1 looks like another option rather than real data for the option that wanted

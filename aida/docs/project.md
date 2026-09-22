@@ -151,6 +151,11 @@ whole creation interview, and never a guess, and it never overwrites a value alr
 present, so running the check twice in a row changes nothing. Checking is cheap, so it
 always runs; repairing is not, so it is only ever offered.
 
+A second check answers a different question. `/aida:project check-machine` reports whether this
+machine can reach a task's worktree at all. It reads the Claude Code version, the plugin version,
+where the check ran, and the trees git holds against the task records. It names each repair and
+performs none of them.
+
 ## Ending a project
 
 A project carries one of three lifecycle states, and every transition between them is

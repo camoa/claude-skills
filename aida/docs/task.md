@@ -43,6 +43,10 @@ task's branch, `feature/<task-id>`. The slug is the folder name lowercased, with
 other characters made one hyphen and the end hyphens trimmed. So `sfup.newyorkcares` gives
 `sfup-newyorkcares-<task-id>`, and the site name is predictable.
 
+Every stage action of the task runs inside that worktree, and refuses from anywhere else. AIDA
+can move this session into the tree, which asks for your approval, or start each call with
+`cd <worktree> &&`. The refusal names whichever route works from where you stand.
+
 Interactively, AIDA asks for whichever of the two you did not already give. A name and a goal are
 the two facts nothing can guess. Autonomously, a run missing either halts and reports which one,
 the same way a missing code path halts project creation.

@@ -1,8 +1,8 @@
 ---
 name: project
-description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
+description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
 disable-model-invocation: true
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path>]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -423,6 +423,26 @@ built-in `~/.claude/aida/projects` when no project was ever created. Replaces th
 with what it found.
 `declinedOffers` and `directoryChoices` cannot be recovered this way and start empty again; say so
 plainly rather than letting it pass unremarked.
+
+## `check-machine`
+
+Answers one question: can this machine reach a task's worktree at all. A person runs it cold, on
+a new machine or after a plugin update:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh check-machine
+```
+Show the whole output. It prints the Claude Code version, and whether that version carries `/cd`
+(2.1.169) and the approval prompt for a path outside `.claude/worktrees/` (2.1.206). It prints
+the plugin version on disk, and whether that version changed since this session started. The
+session-start hook exports the version it loaded, so a session that hook never ran in reads
+`not known`. It prints whether the check itself ran inside a worktree, which is where entry
+refuses. Then, per task in progress, whether the recorded tree is on disk and whether git lists
+it. Last, the trees git lists that are gone from disk, and the trees git holds that no task
+record names.
+
+Each finding carries its repair on the next line, and the action performs none of them. It always
+exits 0, so read the lines and not the code. Run it from the code path, with no `cd` prefix. A
+window elsewhere resolves no project, and the task lines are then absent.
 
 ## Reading the check's report
 

@@ -66,9 +66,9 @@ line names each file already on disk. Read the criteria's text from the contract
 drafting.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
-the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
-the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
-again.
+the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
+route that works from here, either the `EnterWorktree` tool or the call started with
+`cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop; a work order with nothing
 to serve is nothing this stage can check.
@@ -109,7 +109,9 @@ by its id in that order's `reasoning`.
 
 Research named these without opening them, so design is the first read. Research recorded an
 address for each; open it through the navigator the same way, and read a project's own source
-directly. One agentic recipe
+directly. A tooling recipe has no navigator mode yet. Fetch its body from the address research
+recorded, check its sha256 against the catalog line, and store it by hand. Record it below the
+same way. That stands until the navigator's `tooling --name` mode exists. One agentic recipe
 covering the work means the decision is already made: follow it. Two: read both, pick the one
 that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
