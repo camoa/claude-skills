@@ -225,7 +225,8 @@ owned list against the couplings your framework's design recipe names, such as a
 its definition file.
 
 Each reader is dispatched with the run mode, the task folder, its lens and the recipe's path,
-one per line, and nothing else. Each reader writes one findings file,
+one per line, and nothing else. Each reads the contract from `alignment.json`, and treats the
+rendered page beside it as a copy that answers nothing. Each reader writes one findings file,
 `records/design-critique-<lens>.md`. A finding is blocking
 when implementation would build the wrong thing or could not start, and a concern otherwise.
 They never repeat what the check counted, and a clean report names what it compared. A lens whose

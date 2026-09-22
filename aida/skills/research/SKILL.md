@@ -379,7 +379,9 @@ Send the same agent one message: write the file and read it back. An agent has r
 it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar was
 malformed. The script set it aside at the `setAside:` path it printed. Dispatch a fresh
 distiller, with the rule it broke quoted from `agents/distiller.md`. Then run the same call
-again. A second exit 4 stops for the person: show the stderr line and the path set aside.
+again. A second exit 4 stops for the person: show the stderr line and the path set aside. A
+dispatch that ends before the role's first write is the third case. The scope skill states the
+rule under "The distill check": once more with the same message, then once on `model: sonnet`.
 
 Then show what research found, before anything else. This is a presentation, not a question.
 Research asks nothing here, and the person speaks up only when something looks missing. Read
