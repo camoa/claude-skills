@@ -195,6 +195,12 @@ AIDA cannot know on its own:
   feature, so the feature is reachable without its UI.
 - What order the framework forces, where it forces one.
 
+**The proof follows the criteria, and `tests` is the default.** The contract already says what
+would settle each criterion, in its `verification` clause and its `verifiedBy` value. `create` and
+`update` print `impliedProof:`, what the owned criteria imply, beside the proof the order declares.
+The default is `tests` because a wrongly tested configuration order wastes one build, and a wrongly
+untested code order ships unproven.
+
 **No recipe covers this framework:** say so, and write `written without framework input` into the
 `reasoning` of every order in this pass. Do not invent a kind of unit and do not guess at a
 framework convention.
@@ -492,6 +498,13 @@ zero it adds one `open:` line naming what is open. The report holds:
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
+
+`check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
+proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
+those orders open, because which of the other three proofs fits is a judgment. Either the order
+owns a machine-verified criterion after all, which `update --criteria-owned` sets. Or its proof is
+one of the other three, which `update --proof` sets. Read the `verification` clause of each
+criterion the order owns, and ask what would settle it.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 

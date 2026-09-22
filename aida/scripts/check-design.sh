@@ -27,6 +27,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order whose proof is observe declares no test either, names at least one surface, and
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
+#   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
+#     when it owns any criterion at all. The rule above asks whether an order owning a machine
+#     criterion declares a test. This asks the same question the other way, so the default proof is
+#     questioned as well as a departure from it (live-run row 145). This one list reports and never
+#     raises the exit code, the way designStarted below never raises it: which of the other three
+#     proofs fits is a judgment, and a script that cannot name the repair must not hold the close;
 #   - every criterion's verifiedBy is machine or person, and never a third value: a criterion whose
 #     verifiedBy is neither needs no test, no checklist and no checkpoint row, so implementation
 #     would freeze it with nothing at all behind it. scripts/check-alignment.sh already refuses the
@@ -157,6 +163,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record and observe orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
+#                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
 #     graph: { checked, note,
@@ -530,6 +537,7 @@ RECORD_ORDERS_DECLARING_TESTS_JSON='[]'
 RECORD_ORDERS_OWNING_OUTSIDE_JSON='[]'
 RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON='[]'
 OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
+TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
@@ -609,6 +617,23 @@ else
   ')"
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.proof == "observe") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
+  ')"
+
+  # The same question asked the other way (live-run row 145). The list above asks whether an order
+  # owning a machine-verified criterion declares a test. This one asks whether an order left at the
+  # default proof owns one at all. The finding is the disagreement itself, so a declared test is
+  # not part of it: an order owning only person-verified criteria is not a test order whether it
+  # declared a test or not. Only a `tests` order is asked. A gate, record or observe order
+  # declaring a test is already named on its own list, with its own repair. An order owning nothing
+  # is not asked either, because its owned criteria imply no proof at all, so nothing disagrees
+  # with the proof it declares. A supporting order that builds shared code is exactly that case.
+  # This list is reported and never counted toward the exit code: the header bullet says why.
+  TEST_ORDERS_OWNING_NO_MACHINE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o | select($o.proof == "tests")
+        | select(($o.criteriaOwned // []) | length > 0)
+        | select([ ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine") ] | length == 0)
+        | {id: $o.id, path: $o.path} ]
   ')"
 
   # A fact about the contract alone, so it needs no work order and is never withheld when one
@@ -832,6 +857,7 @@ jq -n \
   --argjson recordOrdersOwningOutsideProjectFolder "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" \
   --argjson recordOrdersWithNoDoneWhen "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
+  --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
   --argjson graphChecked "$([ "$DESIGN_STARTED" = "true" ] && echo true || echo false)" \
@@ -868,6 +894,7 @@ jq -n \
       recordOrdersOwningOutsideProjectFolder: $recordOrdersOwningOutsideProjectFolder,
       recordOrdersWithNoDoneWhen: $recordOrdersWithNoDoneWhen,
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
+      testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds
     },
