@@ -12,9 +12,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # asks a question and never judges whether a criterion is met. What each step is for, and why, is
 # ideal/implementation.md; this header says only what a caller needs.
 #
-# `dispatch-open` and `dispatch-close` open and clear the one record, <project path>/dispatch.json,
-# that the two permission hooks (hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh) read
-# to tell a dispatched role apart from a person working their own repository.
+# `dispatch-open` and `dispatch-close` open and clear the one record per task,
+# <task_folder>/implementation/dispatch.json. The two permission hooks (hooks/deny-prior-source.sh,
+# hooks/deny-frozen-test-writes.sh) read it to tell a dispatched role apart from a person working
+# their own repository.
 #
 # Two steps halt an order rather than refuse. A halt is the run continuing correctly, so it exits 0,
 # writes the reason into the ledger and says so on standard error. The one exception is an
@@ -165,7 +166,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot-schema.json   the shape `start` writes to snapshot.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-schema.json     the shape `start` writes to ledger.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-schema.json   the shape `dispatch-open` writes to
-#                                                        <project path>/dispatch.json
+#                                                        <task_folder>/implementation/dispatch.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/finished-schema.json   the shape `finish` writes to
 #                                                        <task_folder>/implementation/finished.json
 #
@@ -255,7 +256,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      proceed, never that nothing was learned. `undeclared` does not land here: a recipe saying
 #      this framework needs nothing before a test runs, or nothing before a smoke command proves
 #      one, has answered, and refusing on it would stop every project on that framework. It is
-#      reported, never counted as met.
+#      reported, never counted as met. A framework passed as `--lookup-failed <fw>=no-recipe` is
+#      `undeclared` too: the catalog looked and holds nothing for it (live-run row 137). The other
+#      two lookup failures are nobody looking, and they land here as `unknown`. `not-needed` does
+#      not land here either. Every order in the snapshot is proved by its record, so no condition
+#      and no smoke row was run. The record says so per framework (live-run row 136).
 #  20  an action after `start` was asked to run on a task whose build has never started: no
 #      snapshot and no ledger. `preconditions` names this fact with it, and so does every step-five
 #      action. Run `start` first.
@@ -306,9 +311,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      path this step records is relative to codePath (baseline.json's own `scope` field is
 #      relative for the same reason: a frozen path must survive the checkout moving), so a path
 #      that cannot be made relative to it at all cannot be recorded either.
-#  37  `dispatch-open` found <project path>/dispatch.json already open. The build is serial, so a
-#      project has at most one active dispatch; the message names the role, task and unit that
-#      already hold it. `dispatch-close` clears it.
+#  37  `dispatch-open` found <task_folder>/implementation/dispatch.json already open. The build
+#      of one task is serial, so a task has at most one active dispatch. The message names the
+#      role and unit that hold it, and its age when it opened over a day ago (live-run row 139).
+#      Another task's open record does not refuse this one. `dispatch-close` clears it.
 #  38  `build-brief` was given a unit id that is not in the frozen snapshot. The same fact exit 22
 #      already names for `tests-brief` and `tests-freeze`; `build-brief` shares the number rather
 #      than minting a second one for the same meaning.
@@ -459,10 +465,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      in that step reads a per-criterion list, so an order with none passes all of them and
 #      freezes a reference that proves nothing. An order whose proof is gate, record or observe is
 #      exempt from the second half: its record holds no test row on purpose.
-#  75  `dispatch-close` was given a task folder that is not the one the open record names. The
-#      record lives at the project root and two tasks in one project is a supported state, so a
-#      second task's close would clear the first task's live permission record. The message names
-#      the record's own task and the folder given.
+#  75  retired on 2026-09-22 (live-run row 139). `dispatch-close` refused a task folder that was
+#      not the one the open record named, while the record lived at the project root. It now
+#      lives under the task's own folder, so a close reaches this task's record and no other.
 #  76  `tests-freeze` was asked to re-freeze an order that has already left the frozen state. A
 #      re-freeze rewinds the step and leaves the spent attempt counter and the stale build record
 #      where they are, so the order would rebuild with no attempts and a record for tests that no
@@ -508,7 +513,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      first twenty, and the sidecar holding the whole output; a fix commit on the branch and a
 #      second `finish` is the route. Unknown names its own cause: no baseline to subtract from, a
 #      placeholder with no --value, a runner not found, or a run that selected nothing. Nothing
-#      is recorded; the sidecar stays, because it is what a person reads next.
+#      is recorded; the sidecar stays, because it is what a person reads next. `not-needed` never
+#      lands here. A task whose every order is proved by its record ran no test, so the suite
+#      is recorded not-needed and not run (live-run row 136).
 #
 # The code the record proof added (nyc defect 17).
 #  87  a step reading the range of an order whose proof is record found the project folder is not
@@ -2178,7 +2185,8 @@ pc_check_is_unsafe() {
 
 # Runs one check as arguments from inside $2, and prints only its exit status. Globbing is off for
 # the split, so a `*` that survived the refusal above could not expand against the working
-# directory anyway.
+# directory anyway. Standard input is empty. The caller reads the framework names from a pipe.
+# A command that reads its input would swallow the frameworks still to come (live-run row 137).
 pc_run_check() {
   local value="$1" dir="$2" outfile="$3"
   (
@@ -2197,7 +2205,7 @@ pc_run_check() {
     # came out empty would read as a condition that passed. Exit 126 instead.
     [ "$#" -gt 0 ] || exit 126
     exec "$@"
-  ) >"$outfile" 2>/dev/null
+  ) >"$outfile" 2>/dev/null </dev/null
   printf '%s' "$?"
 }
 
@@ -2337,7 +2345,8 @@ pc_worse() {
 # Prints one of two tab-separated results on stdout, never dies: `UNRESOLVED<TAB><name>` when a
 # token still held a placeholder $4 supplied no value for, naming it; or `RAN<TAB><exit status>`
 # once the command actually ran, whatever it exited with. $3 receives standard output and standard
-# error together, exactly as the command wrote them, for the caller to trim and record.
+# error together, exactly as the command wrote them, for the caller to trim and record. Standard
+# input is empty, for the reason pc_run_check gives.
 tc_run_smoke() {
   local argv_json="$1" dir="$2" outfile="$3" values="$4"
   local count i tok name
@@ -2364,7 +2373,7 @@ tc_run_smoke() {
   (
     cd "$dir" || exit 127
     exec "$@"
-  ) >"$outfile" 2>&1
+  ) >"$outfile" 2>&1 </dev/null
   printf 'RAN\t%s' "$?"
 }
 
@@ -2711,6 +2720,7 @@ do_preconditions() {
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
+  local harness_needed harness_reason
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -2766,6 +2776,17 @@ do_preconditions() {
   [ -n "$frameworks" ] \
     || die 77 "preconditions: $project_folder/project.json is valid and records no frameworks, so no recipe can be chosen for this project. Exit 14 is the separate fact that the file is not valid JSON."
 
+  # A task whose every order is proved by its record writes no test and runs none, so the test
+  # harness is not needed. Its conditions and its smoke row are recorded `not-needed` and never
+  # run, and the baseline runs no suite (live-run row 136). Any other proof needs the harness. A
+  # `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
+  # An `observe` order's build runs the suite against the baseline. The recipe is still
+  # resolved and recorded, because the freeze and finish read its path.
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
+    [ (.workOrders // [])[] | (.proof // "tests") ]
+    | if length > 0 and all(. == "record") then "no" else "yes" end')"
+  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record, so no test is written or run"
+
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
   # framework that can never answer is named now rather than at the first build-record. An order
   # whose own tests nothing runs never reaches checks-passed, so a framework declaring both rows
@@ -2809,13 +2830,18 @@ do_preconditions() {
     : >"$tc_rows_file"
     if [ "$lookup" = "resolved" ]; then
       [ -f "$recipe_path" ] || die 3 "preconditions: the recipe handed over for $fw is not a file: $recipe_path"
-      section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
-      case "$section_state" in
-        undeclared)     fw_verdict="undeclared" ;;
-        declared-empty) fw_verdict="undeclared" ;;
-        unparseable)    fw_verdict="unknown" ;;
-        *)              fw_verdict="met" ;;
-      esac
+      if [ "$harness_needed" = "no" ]; then
+        section_state="not-needed"
+        fw_verdict="not-needed"
+      else
+        section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
+        case "$section_state" in
+          undeclared)     fw_verdict="undeclared" ;;
+          declared-empty) fw_verdict="undeclared" ;;
+          unparseable)    fw_verdict="unknown" ;;
+          *)              fw_verdict="met" ;;
+        esac
+      fi
       # The test-commands block never affects a verdict; it is read here only because it lives in
       # the same recipe file this framework already resolved, and the record already has a place
       # for the rest of what that recipe declared. cr_resolve above already parsed it, so this
@@ -2825,9 +2851,18 @@ do_preconditions() {
       printf '%s' "$CR_DOC" | jq -c --arg f "$fw" \
         '[ (.frameworks // [])[] | select(.framework == $f) ][0].testCommandsRows // [] | .[]' >"$tc_rows_file"
     else
-      # Nobody looked. That is a different fact from a recipe that looked and declared nothing.
+      # The catalog looked and holds no recipe for this framework: it declared nothing, and the
+      # build goes on (live-run row 137). A listing that could not be reached or a fetch that
+      # failed is nobody looking, a different fact, and that stops. A harness nobody needs is
+      # not-needed whichever it was.
       section_state="not-looked"
-      fw_verdict="unknown"
+      if [ "$harness_needed" = "no" ]; then
+        fw_verdict="not-needed"
+      elif [ "$lookup" = "no-recipe" ]; then
+        fw_verdict="undeclared"
+      else
+        fw_verdict="unknown"
+      fi
       tc_state="not-looked"
     fi
 
@@ -2849,10 +2884,16 @@ EOF
     smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false
     smoke_exit_code_json="null"
     case "$fw_verdict" in
+      not-needed)
+        smoke_verdict="not-needed"
+        smoke_reason="$harness_reason"
+        ;;
       met|undeclared)
-        if [ "$tc_state" = "undeclared" ]; then
+        if [ "$tc_state" = "undeclared" ] || [ "$tc_state" = "not-looked" ]; then
           # No `## Test commands` heading at all is the recipe declaring nothing about a smoke
           # command, the same fact `undeclared` already names at the framework's own conditions.
+          # A framework the catalog holds no recipe for has no smoke row either. It is the only
+          # not-looked framework whose verdict lets this run reach here.
           smoke_verdict="undeclared"
         elif [ "$tc_state" != "ok" ]; then
           smoke_verdict="unknown"
@@ -2924,10 +2965,12 @@ EOF
 
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
-          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" '
+          --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
+          --arg reason "$harness_reason" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
+      + (if $verdict == "not-needed" then {reason: $reason} else {} end)
     ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
@@ -2935,10 +2978,12 @@ EOF
 
   # The worst of every framework's own verdict AND its own smoke run's verdict: the run's answer
   # is never met while a framework's smoke command is unmet or unknown, the same way it is never
-  # met while a condition is.
+  # met while a condition is. A check that was not needed did not run, so it is left out, and a
+  # run where none ran answers not-needed.
   run_verdict="$(jq -s -r '
     def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
-    ([ .[] | .verdict, .smoke.verdict ] + ["met"]) | max_by(rank)
+    ([ .[] | .verdict, .smoke.verdict ] | map(select(. != "not-needed")))
+    | if length == 0 then "not-needed" else (. + ["met"]) | max_by(rank) end
   ' "$fw_json_file")"
 
   today="$(date -u +%Y-%m-%d)"
@@ -2962,7 +3007,7 @@ EOF
   baseline_summary_json='null'
 
   case "$run_verdict" in
-    met|undeclared)
+    met|undeclared|not-needed)
       LEDGER_FILE="$STARTED_LEDGER_FILE"
       ledger_doc="$STARTED_LEDGER_DOC"
       ledger_started_from="$(ledger_required_string "$ledger_doc" "startedFrom")" \
@@ -2976,7 +3021,14 @@ EOF
 
           suite_json_file="$task_folder/implementation/.baseline-suite.$$"
           : >"$suite_json_file"
-          bl_run_suite "$record_json" "$codepath" "$values" "$suite_json_file"
+          if [ "$harness_needed" = "no" ]; then
+            # No suite runs for a task that runs no test. One entry per framework says so, so a
+            # reader sees the row was skipped and not forgotten.
+            printf '%s' "$record_json" | jq -c --arg reason "$harness_reason" \
+              '.frameworks[] | {framework: .framework, verdict: "not-needed", reason: $reason}' >"$suite_json_file"
+          else
+            bl_run_suite "$record_json" "$codepath" "$values" "$suite_json_file"
+          fi
           suite_json="$(jq -s '.' "$suite_json_file" 2>/dev/null)" || suite_json="[]"
           rm -f "$suite_json_file"
 
@@ -3036,7 +3088,7 @@ EOF
   local pc_next
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
-    met|undeclared) ;;
+    met|undeclared|not-needed) ;;
     *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
@@ -3074,9 +3126,9 @@ EOF
   # would mean no project on that framework ever builds. The two never share a value in the
   # record, and the report names which one happened, which is the whole of what "undeclared is
   # not met" protects: a caller must not report a recipe that declared nothing as a set of
-  # conditions that passed.
+  # conditions that passed. `not-needed` goes on too: nothing was checked because nothing runs.
   case "$run_verdict" in
-    met|undeclared) ;;
+    met|undeclared|not-needed) ;;
     *) exit 19 ;;
   esac
 }
@@ -8139,10 +8191,17 @@ do_finish() {
   # subtraction they use, over the whole task range: the baseline was taken at startedFrom and
   # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
   # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
-  # more than an argument or a reader can carry.
-  local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar=""
+  # more than an argument or a reader can carry. A task whose every order is proved by its
+  # record ran no test and took no suite baseline. So the suite is recorded not-needed and never
+  # run, the same reading preconditions makes of the snapshot (live-run row 136).
+  local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
+    [ (.workOrders // [])[] | (.proof // "tests") ]
+    | if length > 0 and all(. == "record") then "no" else "yes" end')"
   pre_file="$IMPL_DIR/preconditions.json"
-  if [ -f "$pre_file" ]; then
+  if [ "$harness_needed" = "no" ]; then
+    :
+  elif [ -f "$pre_file" ]; then
     while IFS= read -r recipe_line; do
       [ -n "$recipe_line" ] || continue
       cr_recipe_pair "finish" "frameworks[].recipePath in $pre_file" "${recipe_line%%	*}=${recipe_line#*	}"
@@ -8167,7 +8226,12 @@ FN_RECIPES
   BRC_VALUES="$values"
   BRC_END_OF_TASK=true
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
-  br_test_check "suite-regression" "suite" "suite" >"$suite_file"
+  if [ "$harness_needed" = "no" ]; then
+    jq -nc '{id: "suite-regression", verdict: "not-needed",
+             detail: "the suite was not run: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken."}' >"$suite_file"
+  else
+    br_test_check "suite-regression" "suite" "suite" >"$suite_file"
+  fi
   [ -s "$suite_file" ] || { rm -f "$suite_file"; die 3 "finish: the suite check produced nothing."; }
   if [ "$(jq -r 'has("output")' "$suite_file")" = "true" ]; then
     sidecar="finished-suite.txt"
@@ -8180,7 +8244,7 @@ FN_RECIPES
   [ -n "$suite_json" ] || die 3 "finish: could not assemble the suite result."
   suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
   case "$suite_verdict" in
-    met|undeclared) ;;
+    met|undeclared|not-needed) ;;
     unmet)
       # The new lines go to standard error as their own block, the way the clean-tree refusal
       # lists its paths, so the message stays one line a reader can act on.
@@ -8820,12 +8884,12 @@ do_restart() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# dispatch-open, dispatch-close: open and clear <project path>/dispatch.json
+# dispatch-open, dispatch-close: open and clear <task_folder>/implementation/dispatch.json
 # (scripts/dispatch-schema.json), the one record hooks/deny-prior-source.sh and
 # hooks/deny-frozen-test-writes.sh read to tell a dispatched role apart from a person working
-# their own repository. The build is serial, so a project has at most one active dispatch;
-# dispatch-open refuses to overwrite one already there (exit 37), and dispatch-close removes it,
-# safe to call when none is open.
+# their own repository. The build of one task is serial, so a task has at most one active
+# dispatch. dispatch-open refuses to overwrite one already there (exit 37). dispatch-close
+# removes it, safe to call when none is open. Two tasks of one project each hold their own.
 # ------------------------------------------------------------------------------------------------
 
 do_dispatch_open() {
@@ -8911,9 +8975,8 @@ do_dispatch_open() {
   task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
   [ -n "$task_id" ] || die 3 "dispatch-open: $TASK_PATH/task.json has no usable id field"
 
-  local project_folder codepath
+  local codepath
   rv_load_codepath "dispatch-open"
-  project_folder="$RV_PROJECT_FOLDER"
   codepath="$RV_CODEPATH"
 
   # The test author's one denial is that it cannot read production source, and production source is
@@ -9048,15 +9111,24 @@ TG_OWNED
     fi
   fi
 
-  local dispatch_file="$project_folder/dispatch.json"
+  # One record per task, under its own implementation folder (live-run row 139). The build of one
+  # task is serial, so a task has at most one open dispatch. A second task of the same project
+  # opens its own. A record carries the time it opened, so one left by a role that never returned
+  # can be told from a live one. The refusal prints its age once it is over a day old.
+  local dispatch_file="$TASK_PATH/implementation/dispatch.json"
   if [ -f "$dispatch_file" ]; then
     jq empty "$dispatch_file" 2>/dev/null \
       || die 3 "dispatch-open: $dispatch_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
-    local held_role held_task held_unit
+    local held_role held_unit held_age
     held_role="$(jq -r '.role // "?"' "$dispatch_file" 2>/dev/null)"
-    held_task="$(jq -r '.task // "?"' "$dispatch_file" 2>/dev/null)"
     held_unit="$(jq -r '.unit // "?"' "$dispatch_file" 2>/dev/null)"
-    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on task $held_task, unit $held_unit. Run dispatch-close first."
+    held_age="$(jq -r '
+      (.openedAt // "") as $at
+      | if $at == "" then ""
+        else ((now - ($at | fromdateiso8601)) / 3600 | floor) as $h
+          | if $h < 24 then "" else " It was opened at \($at), \($h) hours ago, so its role may never have returned." end
+        end' "$dispatch_file" 2>/dev/null)"
+    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on unit $held_unit.$held_age Run dispatch-close first."
   fi
 
   local deny_json allow_json
@@ -9084,9 +9156,9 @@ TG_OWNED
   fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
-    --argjson extra "$owned_extra" \
+    --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
-      denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
+      openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
@@ -9136,26 +9208,10 @@ do_dispatch_close() {
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
 
-  local project_folder
-  project_folder="$(resolve_project_folder "$TASK_PATH")" \
-    || die 3 "dispatch-close: could not resolve a project folder two levels up from $TASK_PATH, or it has no project.json"
-
-  local dispatch_file="$project_folder/dispatch.json"
+  # The record lives under the task's own folder, so a close can only reach this task's record
+  # and another task's stays open (live-run row 139).
+  local dispatch_file="$TASK_PATH/implementation/dispatch.json"
   if [ -f "$dispatch_file" ]; then
-    # The record lives at the project root while `read` and `start` are per task, and two tasks in
-    # one project is a supported state. A second task closing the first task record would leave
-    # both hooks on the no-record branch, allowing every read and every write to a frozen test for
-    # the rest of that role run, and the message reporting it reaches the running role and nobody
-    # else. So the record says whose it is, and a close that does not match refuses.
-    local open_doc open_task this_task
-    open_doc="$(jq -c '.' "$dispatch_file" 2>/dev/null)"
-    if [ -n "$open_doc" ]; then
-      open_task="$(printf '%s' "$open_doc" | jq -r '.task // ""')"
-      this_task="$(basename -- "$TASK_PATH")"
-      if [ -n "$open_task" ] && [ "$open_task" != "$this_task" ]; then
-        die 75 "dispatch-close: $dispatch_file was opened for task $open_task, and this call names task $this_task. A close belongs to the task that opened the record; clearing another task record would leave its role with every permission the record withheld."
-      fi
-    fi
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"
   else

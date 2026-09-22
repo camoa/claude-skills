@@ -112,14 +112,15 @@
           "enum": [
             "met",
             "unmet",
-            "unknown"
+            "unknown",
+            "not-needed"
           ],
-          "description": "met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all: the recipe named no suite row, the row is one of the recipe's own absent rows, its argv did not parse, a placeholder had no supplied --value, or the command could not be found (exit 127). undeclared is not here: a whole framework declining to say how it runs its own tests at all is not a fact this stage has seen yet, and adding the word before a recipe ever needs it would be a guess."
+          "description": "met on exit 0, unmet on any other exit the command actually returned, unknown when it could not be run at all: the recipe named no suite row, the row is one of the recipe's own absent rows, its argv did not parse, a placeholder had no supplied --value, or the command could not be found (exit 127). not-needed when the suite was not run. Every order in the snapshot is proved by its record, so no build ever compares against it (live-run row 136). undeclared is not here: a whole framework declining to say how it runs its own tests at all is not a fact this stage has seen yet, and adding the word before a recipe ever needs it would be a guess."
         },
         "reason": {
           "type": "string",
           "minLength": 1,
-          "description": "Why this is unknown, present only on that verdict. Free text rather than a closed set, the same convention preconditions.json's own smoke.reason follows, because one of its causes is a placeholder token no --value supplied and naming which one is the point."
+          "description": "Why this is unknown or not-needed, present only on those verdicts. Free text rather than a closed set, the same convention preconditions.json's own smoke.reason follows, because one of its causes is a placeholder token no --value supplied and naming which one is the point."
         },
         "exitCode": {
           "type": "integer",

@@ -40,7 +40,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
 # for this working directory, or no dispatch.json: the same. Those last two are every read
 # outside an AIDA task, and a message on each would be noise, the rule version 5's guard kept.
-# dispatch.json
+# The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json, found as the
+# one whose codePath holds the payload's working directory (scripts/lib/paths.sh,
+# dispatch_record_for). Records open for other trees only: allow, through `systemMessage` naming
+# why. dispatch.json
 # unreadable, a record naming no role, an agent whose type is not the role the record names, or a
 # dispatch whose denyRead list is empty:
 # allow, but through `systemMessage`, the one hook-output channel the model sees on exit 0, naming
@@ -98,8 +101,19 @@ MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit
 PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
 [ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
 
-DISPATCH_FILE="$PROJECT_PATH/dispatch.json"
-[ -f "$DISPATCH_FILE" ] || { echo '{}'; exit 0; }
+# Each task keeps its own record under its implementation folder (live-run row 139). The one this
+# agent works under is the one whose codePath holds the payload's working directory. A record
+# open for another tree is another task's dispatch, and it says so rather than passing in silence.
+# The directory is held in the same canonical form codePath is, so the two compare as strings.
+# The Bash door below resolves a relative operand against it too.
+CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
+[ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+dispatch_record_for "$PROJECT_PATH" "$CWD_CANON"
+DISPATCH_FILE="$DISPATCH_RECORD"
+if [ -z "$DISPATCH_FILE" ]; then
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this read was allowed without being checked"
+  echo '{}'; exit 0
+fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"
 
@@ -158,12 +172,10 @@ deny_if_listed() {
 if [ "$TOOL" = "Bash" ]; then
   CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
   [ -n "$CMD" ] || { echo '{}'; exit 0; }
-  # The payload's working directory in the same canonical form codePath is held in. A relative
-  # operand is resolved against both, for the reason the write hook's header gives. A dispatched
-  # agent's working directory is not guaranteed to be codePath, and a shell's own relative path
-  # really is relative to where the command runs.
-  CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
-  [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+  # A relative operand is resolved against codePath and the payload's working directory both,
+  # for the reason the write hook's header gives. A dispatched agent's working directory is not
+  # guaranteed to be codePath, and a shell's own relative path really is relative to where the
+  # command runs.
   # zsh indexes an array from 1 by default; KSH_ARRAYS makes read_words' array agree with bash.
   if [ -n "${ZSH_VERSION:-}" ]; then
     setopt KSH_ARRAYS 2>/dev/null

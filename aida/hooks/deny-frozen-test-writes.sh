@@ -57,7 +57,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, no project
 # registered for this working directory, or no dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
-# guard kept. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
+# guard kept. The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json,
+# found as the one whose codePath holds the payload's working directory (scripts/lib/paths.sh,
+# dispatch_record_for). Records open for other trees only: allow, through `systemMessage` naming
+# why. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
 # this task and rule two is off: allow, through `systemMessage` naming why. Nothing is frozen
 # before the third step of implementation runs, and that is a real state, not a fault, the same
 # distinction dispatch-schema.json's own header draws. An agent that reports a test author type
@@ -118,8 +121,19 @@ MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit
 PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
 [ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
 
-DISPATCH_FILE="$PROJECT_PATH/dispatch.json"
-[ -f "$DISPATCH_FILE" ] || { echo '{}'; exit 0; }
+# Each task keeps its own record under its implementation folder (live-run row 139). The one this
+# agent works under is the one whose codePath holds the payload's working directory. A record
+# open for another tree is another task's dispatch, and it says so rather than passing in silence.
+# The directory is held in the same canonical form codePath is, so the two compare as strings,
+# and a working directory that no longer exists still normalizes textually.
+CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
+[ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+dispatch_record_for "$PROJECT_PATH" "$CWD_CANON"
+DISPATCH_FILE="$DISPATCH_RECORD"
+if [ -z "$DISPATCH_FILE" ]; then
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  echo '{}'; exit 0
+fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"
 
@@ -136,12 +150,8 @@ CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
 [ -n "$CODE_CANON" ] \
   || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
 
-IMPL_DIR="$PROJECT_PATH/tasks/$TASK_ID/implementation"
-
-# The payload's working directory in the same canonical form codePath is held in, so the two
-# compare as strings. A working directory that no longer exists still normalizes textually.
-CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
-[ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
+# The frozen records sit beside the dispatch record, in the task's own implementation folder.
+IMPL_DIR="$(dirname -- "$DISPATCH_FILE")"
 
 # ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test or support file
 FROZEN=""

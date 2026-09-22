@@ -149,8 +149,11 @@ unenforced one.
 **The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
 call, and set the model where the step says. The message itself is one line per item: the run
 mode, `interactive` or `autonomous`, then each path the step hands over. Where a step names one
-word beside the paths, such as a lens, that word is a line too. Nothing else goes in. The role's
-rules and its return shape live in its agent definition, which reaches it on every dispatch.
+word beside the paths, such as a lens, that word is a line too. The one labelled line is the
+identifier's process-recipe point, written `point: <phase>` and never a bare word. A bare
+`implement` reads as a task and not a phase (live-run row 138). Nothing else goes in. The
+role's rules and its return shape live in its agent definition, which reaches it on every
+dispatch.
 The data it needs lives in the brief the paths name. So the message restates neither, and two
 runs of one step hand the role the same words. Each step below names this shape and lists its
 own paths.
@@ -175,8 +178,11 @@ Verdict words and a missing heading follow
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-close "<task_folder>"
 ```
-It refuses (exit 75) when the open record names a different task than this one: closing another
-task's record would leave that task's own role holding every permission the record withheld.
+The record is the task's own, under its implementation folder. So a task has at most one open
+dispatch, and a second task of the same project builds beside it. A close reaches this task's
+record only. An open record refuses the next dispatch (exit 37), naming the role and the unit
+that hold it. The refusal names the record's age when it opened over a day ago, because a role
+that never returned leaves one.
 
 ## What this skill does
 

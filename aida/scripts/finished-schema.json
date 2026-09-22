@@ -93,9 +93,10 @@
           "type": "string",
           "enum": [
             "met",
-            "undeclared"
+            "undeclared",
+            "not-needed"
           ],
-          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. met: every framework's suite exited 0, or failed only on lines the baseline already held. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass."
+          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. met: every framework's suite exited 0, or failed only on lines the baseline already held. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136)."
         },
         "detail": {
           "type": "string",
@@ -120,7 +121,8 @@
                 "type": "string",
                 "enum": [
                   "met",
-                  "undeclared"
+                  "undeclared",
+                  "not-needed"
                 ]
               },
               "failureLine": {

@@ -13,7 +13,9 @@ check answered, and where each record is. It asks a question only where a script
 Every question opens with one plain sentence that names the decision and what each answer causes.
 You may be returning to the terminal days later with none of the order in mind. Every role this
 stage dispatches gets the same message: the role, the run mode, and what it reads, one per
-line. Its rules are in its own definition and its data in a brief on disk.
+line. Its rules are in its own definition and its data in a brief on disk. The one labelled
+line is the catalog identifier's process-recipe point, `point: <phase>`, so a phase name is
+never read as a task.
 
 ## What happens before anything is built
 
@@ -57,7 +59,9 @@ review tools. A project that declares no framework refuses here, because no reci
 for it. A lookup has three answers that are not the same thing. The catalog holds none for this
 framework, the listing could not be reached, or the fetch failed. Only the first says anything
 about the framework. AIDA records which one happened rather than treating an unreachable catalog
-as a recipe that declared nothing.
+as a recipe that declared nothing. A framework the catalog holds nothing for is recorded as
+undeclared, and the build goes on. A listing that could not be reached is recorded as unknown,
+and stops. Every framework the project declares gets its own line on every run.
 
 The test-execution recipe declares what must be true before a test runs. Each condition answers
 in one of four words:
@@ -80,6 +84,10 @@ one test file nor the tests for changed paths. No order on it could ever have it
 And two frameworks whose review recipes each command the same tool, coding standards say. That
 gives one question two answers, and AIDA refuses rather than choose. The same refusal returns at
 every later step that runs the tools. The way past is one check recipe for the task, or two tasks.
+
+A task whose every order is proved by its record runs no test. Its conditions and its smoke
+command are recorded as not needed and never run. No suite baseline is taken, and the build
+goes on. The review tools still run over any file an order owns under the code path.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist
@@ -112,7 +120,10 @@ writes the tests, watches each one fail, and stops. It is a separate context fro
 will write the code, on a mid tier. It may not read production source, this order's or any order
 already built, and a hook refuses the read. If it saw the code, the tests would describe the code
 instead of the intent, which is the failure this stage exists to prevent. It may not write
-production code either. That bound is recorded on the dispatch, not applied by a hook.
+production code either. That bound is recorded on the dispatch, not applied by a hook. The
+dispatch record is the task's own. So a task has at most one open dispatch, and two tasks of one
+project build side by side. It carries the time it opened, so a record a role never closed is
+named with its age.
 
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of
