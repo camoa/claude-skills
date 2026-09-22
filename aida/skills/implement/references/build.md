@@ -34,7 +34,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes nine things to
+It reads the frozen copy and the frozen tests. It writes ten things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
@@ -50,7 +50,9 @@ It reads the frozen copy and the frozen tests. It writes nine things to
 - `headNow`, the commit of the repository this order lands in at the moment of this call, and
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
-- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
+- `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
+- `beforeLookPath`, on an order whose proof is `observe` only: the folder the before-look goes
+  in, `implementation/observed-<order id>-before/`.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
@@ -65,6 +67,22 @@ It refuses when the tests for this order were never frozen, when an order this o
 no completion record, and when the attempts are already spent. Read a refusal and act on it.
 
 That list is the withheld list.
+
+## On an order whose proof is `observe`, look before the build
+
+A done-when row often says the page is as it was apart from one thing. That row needs a before
+to judge from, and a script cannot tell which rows say it. So every observe order gets a look
+before the build. Take the same surfaces at the same viewports as the look after, at the
+brief's `headNow`, before the implementer is dispatched. The viewport and destination rules are
+the look after's, below. Save each image as
+`<task_folder>/implementation/observed-<order id>-before/<surface>-<viewport>.png`. That is the
+brief's `beforeLookPath`. Write no verdict; the images are the before.
+
+One before-look per order, at the first attempt's `headNow`. The brief prints `beforeLook:`
+with `(owed)` while the folder holds no image and `(taken)` once it does. A later attempt and
+every fix round reuse the images that are there; take them once. Each row of the observed
+record names its before image, and `build-record` refuses one not on disk or outside that
+folder (exit 94).
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -149,17 +167,19 @@ snapshot, the site holds only the seed's content. It stays so until the recipe's
 rebuild step has run, and the look waits for that step. A note on a row judged against stale
 content is a lie.
 
-Judge each of the order's done-when rows against what renders. Give one verdict per row per
-surface per viewport, `met` or `unmet`, with one sentence on what you saw. Save each screenshot
-under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`. The
-screenshot must lie under that folder, and `build-record` refuses one that does not (exit 94).
-A tool that refuses to write there writes into a folder inside the worktree. Move the file,
-then remove that folder before you record the attempt, because the tree check reads it. Then
-write `<task_folder>/implementation/observed-<order id>.json`:
+Judge each of the order's done-when rows against what renders. A row that says the page is as
+it was is judged against the before image of that surface and viewport. Give one verdict per
+row per surface per viewport, `met` or `unmet`, with one sentence on what you saw. Save each
+screenshot under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
+The screenshot must lie under that folder, and `build-record` refuses one that does not (exit
+94). A tool that refuses to write there writes into a folder inside the worktree. Move the
+file, then remove that folder before you record the attempt, because the tree check reads it.
+Then write `<task_folder>/implementation/observed-<order id>.json`:
 ```
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
-              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
+              "screenshot": "<absolute path>", "before": "<absolute path of the before image>",
+              "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
 Every done-when row goes in, at every surface and viewport. The verdict is what the page
 showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
@@ -189,8 +209,8 @@ runs them as the order's own check. Every other order ignores it.
 
 `--observed` is the record written above. An order whose proof is `observe` refuses without it
 (exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose
-screenshot is not on disk or lies outside the observed folder (94). It refuses a surface the
-order does not name (95). It refuses a sentence the order does not hold (96). Nothing is
+screenshot or before image is not on disk or lies outside its folder (94), naming which. It
+refuses a surface the order does not name (95). It refuses a sentence the order does not hold (96). Nothing is
 recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer

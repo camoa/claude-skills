@@ -238,7 +238,9 @@ not own still fails the check.
 A work order whose deliverable is what a page shows, a layout or a rendered block, has
 `observe` as its proof kind. No test author is dispatched and no row goes to the checker,
 because nothing can be judged before the page exists. The order freezes with no test and no
-row. After the implementer returns, AIDA opens each surface the order names, at each viewport
+row. Before the implementer is dispatched, AIDA takes each surface at each viewport once. A row
+that says the page is as it was then has a before to judge against. After the implementer
+returns, AIDA opens each surface the order names, at each viewport
 the surface file declares, in a browser. Each page renders at the viewport's width, and each
 screenshot lies under the order's observed folder, or the build refuses it. When the build ran
 a configuration gate, the look waits for the recipe's restore or rebuild step, since the gate

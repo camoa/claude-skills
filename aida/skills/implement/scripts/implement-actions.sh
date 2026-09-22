@@ -558,14 +558,17 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  92  no --observed was passed for an order whose proof is observe. The message names the flag.
 #  93  the --observed file is missing, is not JSON, or does not match observed-schema.json: no
 #      order, observedAt, judgedBy or rows, an order that is not this unit, a judgedBy that is
-#      not model, or a row without doneWhen, surface, viewport, screenshot, verdict and note. Or
-#      it is at a path other than <task_folder>/implementation/observed-<unit_id>.json: a fix
+#      not model, or a row without doneWhen, surface, viewport, screenshot, before, verdict and
+#      note. Or it is at a path other than <task_folder>/implementation/observed-<unit_id>.json: a fix
 #      round and a re-check read that path and no other, so a record accepted from elsewhere
 #      would pass the build and stop every fix round. The message names the path.
 #  94  a row names a screenshot that is not on disk, or one that lies outside
 #      <task_folder>/implementation/observed-<unit_id>/. The look is the evidence, and a row with
 #      no image is a claim. A file where a browser tool put it vanishes with that folder (live-run
-#      row 112). The message names each path and the folder.
+#      row 112). The same for a row's before image, against
+#      <task_folder>/implementation/observed-<unit_id>-before/: a sameness row has no before to
+#      judge from without it (live-run row 114). The message names which field, each path and
+#      the folder.
 #  95  a row names a surface the order does not name. The order's surfaces are the pages it
 #      changes, and a look at another page proves nothing about this order.
 #  96  a row's doneWhen is not one of the order's own done-when rows. The row is the sentence a
@@ -4693,6 +4696,21 @@ do_build_brief() {
   if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
     bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
   fi
+  # An order whose proof is observe owes a look before the build, at this headNow. A row that
+  # says the page is as it was needs that before to judge from (live-run row 114). The folder is
+  # named here; the orchestrator fills it once, on the first attempt, and every later attempt
+  # and fix round reuse it. The state is read from the folder, not the ledger: an image there is
+  # a look taken, and nothing else records one.
+  local bb_before bb_before_state
+  bb_before=""; bb_before_state=""
+  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+    bb_before="$IMPL_DIR/observed-$unit_id-before"
+    if [ -n "$(find "$bb_before" -mindepth 1 -maxdepth 1 -type f -name '*.png' 2>/dev/null | head -n 1)" ]; then
+      bb_before_state="taken"
+    else
+      bb_before_state="owed"
+    fi
+  fi
   # The report has one named path per attempt, so a later attempt never writes over the answers a
   # reviewer already compared a diff against. The brief is one file per order, rewritten on each
   # attempt: only its counters and its report path change between two attempts. The interface
@@ -4708,15 +4726,19 @@ do_build_brief() {
         --arg interfacePath "$IMPL_DIR/interface-$unit_id.md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+        --arg beforeLookPath "$bb_before" \
     '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
-      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}')"
+      attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
+     + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   # headNow is printed because the caller passes it back as --started-at, and the report path
-  # because the dispatch names it. Everything else the implementer reads from the file.
-  im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
+  # because the dispatch names it. Everything else the implementer reads from the file. The
+  # before-look line prints only for an observe order, with its state, and next names the look
+  # while it is owed.
+  im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" --arg beforeState "$bb_before_state" '
     {order: .unit.id,
      brief: $brief,
      reportPath: .reportPath,
@@ -4727,8 +4749,11 @@ do_build_brief() {
      ownedFiles: (.unit.ownedFiles | length),
      frozenTests: (.tests | length),
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
-     dependencyInformation: (.dependencyInformation | length),
-     next: "dispatch implementer with the brief path and the implement recipe path, then build-record"}')"
+     dependencyInformation: (.dependencyInformation | length)}
+    + (if has("beforeLookPath") then {beforeLook: "\(.beforeLookPath) (\($beforeState))"} else {} end)
+    + {next: (if $beforeState == "owed"
+              then "take the before-look at headNow into the beforeLook folder, then dispatch implementer with the brief path and the implement recipe path, then build-record"
+              else "dispatch implementer with the brief path and the implement recipe path, then build-record" end)}')"
   exit 0
 }
 
@@ -5643,9 +5668,10 @@ br_eight_checks() {
 # own number (live-run row 104). $1 the action, $2 the unit id, $3 the --observed path, empty when
 # none was passed. The top level is compared against observed-schema.json through the one library
 # every record check uses; the rows are read here, since that comparison stops at the top level.
-# Reads UNIT_JSON for the order's surfaces and done-when rows.
+# The two image fields go through the helper below it. Reads UNIT_JSON for the order's surfaces
+# and done-when rows.
 br_require_observed() {
-  local who="$1" unit_id="$2" observed="$3" compare gaps missing_shots stray_shots bad_surfaces bad_done_when
+  local who="$1" unit_id="$2" observed="$3" compare gaps bad_surfaces bad_done_when
   [ -n "$observed" ] \
     || die 92 "$who: $unit_id is proved by a model's observation, and no --observed was passed. After the implementer returns, open each of the order's surfaces at each viewport with the browser tool, judge each done-when row against what renders, write $IMPL_DIR/observed-$unit_id.json with a screenshot per row, and pass it as --observed."
   [ -f "$observed" ] \
@@ -5670,32 +5696,17 @@ br_require_observed() {
                   or ((.value.surface | type) != "string") or (.value.surface == "")
                   or ((.value.viewport | type) != "string") or (.value.viewport == "")
                   or ((.value.screenshot | type) != "string") or (.value.screenshot == "")
+                  or ((.value.before | type) != "string") or (.value.before == "")
                   or ((.value.verdict != "met") and (.value.verdict != "unmet"))
                   or ((.value.note | type) != "string"))
-                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, a met or unmet verdict, or a note" ] end)
+                | "row " + (.key | tostring) + " lacks doneWhen, surface, viewport, screenshot, before, a met or unmet verdict, or a note" ] end)
       | join("; ")' "$observed" 2>/dev/null)"
   [ -z "$gaps" ] \
     || die 93 "$who: $observed does not match $OBSERVED_SCHEMA_FILE: $gaps. Nothing is recorded."
-  # Every name the loop uses is declared above it (trap 5 in this file's own header). A screenshot
-  # on disk must also lie under the observed folder, resolved the way the record's path is above.
-  # A file where a browser tool put it, in /tmp or a scratch folder in the worktree, vanishes with
-  # that folder (live-run row 112).
-  local shot shot_dir folder_real
-  folder_real="$(cd "$IMPL_DIR/observed-$unit_id" 2>/dev/null && pwd -P)"
-  missing_shots=""; stray_shots=""
-  while IFS= read -r shot; do
-    [ -n "$shot" ] || continue
-    if [ ! -f "$shot" ]; then missing_shots="$missing_shots$shot, "; continue; fi
-    shot_dir="$(cd "$(dirname -- "$shot")" 2>/dev/null && pwd -P)"
-    [ -n "$folder_real" ] && is_under "$shot_dir" "$folder_real" \
-      || stray_shots="$stray_shots$shot, "
-  done <<BR_SHOTS
-$(jq -r '.rows[].screenshot' "$observed")
-BR_SHOTS
-  [ -z "$missing_shots" ] \
-    || die 94 "$who: these screenshots the observed record names are not on disk: ${missing_shots%, }. The look is the evidence, and a row with no image is a claim. Save each screenshot under $IMPL_DIR/observed-$unit_id/<surface>-<viewport>.png and name it in the row."
-  [ -z "$stray_shots" ] \
-    || die 94 "$who: these screenshots the observed record names lie outside $IMPL_DIR/observed-$unit_id/: ${stray_shots%, }. A file where a browser tool put it vanishes with that folder, and the evidence with it. Move each under that folder and name the new path in the row."
+  # The look after lies under the observed folder, and the look before under the before folder
+  # (live-run rows 112 and 114).
+  br_require_observed_images "$who" "$observed" screenshot "$IMPL_DIR/observed-$unit_id"
+  br_require_observed_images "$who" "$observed" before "$IMPL_DIR/observed-$unit_id-before"
   bad_surfaces="$(jq -r --argjson unit "$UNIT_JSON" '
       ($unit.surfaces // []) as $named
       | [ .rows[].surface | select(. as $s | ($named | index($s)) == null) ] | unique | join(", ")' "$observed")"
@@ -5728,6 +5739,31 @@ BR_SHOTS
           | "\"" + $d + "\" at " + $s + " at " + $v ][0] // ""' "$observed")"
   [ -z "$missing_row" ] \
     || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per done-when row, per surface it names, per viewport in $surface_file. A look not taken is not a met; take it and add the row."
+}
+
+# One image field of the observed record, on every row. Each path is on disk and lies under its
+# folder, resolved the way the record's path is above. A file where a browser tool put it, in
+# /tmp or a scratch folder in the worktree, vanishes with that folder (live-run row 112). Dies 94
+# naming the field, each path and the folder. $1 the action, $2 the record, $3 the field,
+# `screenshot` or `before`, $4 the folder the field's images belong under. Every name the loop
+# uses is declared above it (trap 5 in this file's own header).
+br_require_observed_images() {
+  local who="$1" observed="$2" field="$3" folder="$4" shot shot_dir folder_real missing_shots stray_shots
+  folder_real="$(cd "$folder" 2>/dev/null && pwd -P)"
+  missing_shots=""; stray_shots=""
+  while IFS= read -r shot; do
+    [ -n "$shot" ] || continue
+    if [ ! -f "$shot" ]; then missing_shots="$missing_shots$shot, "; continue; fi
+    shot_dir="$(cd "$(dirname -- "$shot")" 2>/dev/null && pwd -P)"
+    [ -n "$folder_real" ] && is_under "$shot_dir" "$folder_real" \
+      || stray_shots="$stray_shots$shot, "
+  done <<BR_SHOTS
+$(jq -r --arg f "$field" '.rows[][$f]' "$observed")
+BR_SHOTS
+  [ -z "$missing_shots" ] \
+    || die 94 "$who: these $field images the observed record names are not on disk: ${missing_shots%, }. The look is the evidence, and a row with no image is a claim. Save each under $folder/<surface>-<viewport>.png and name it in the row's $field."
+  [ -z "$stray_shots" ] \
+    || die 94 "$who: these $field images the observed record names lie outside $folder/: ${stray_shots%, }. A file where a browser tool put it vanishes with that folder, and the evidence with it. Move each under that folder and name the new path in the row's $field."
 }
 
 do_build_record() {

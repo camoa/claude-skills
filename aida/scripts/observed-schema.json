@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA observed record",
-  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens each surface the order names, at each viewport the surface file declares, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93), a row whose screenshot is not on disk (94), a surface the order does not name (95) and a doneWhen the order does not hold (96). The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
+  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens each surface the order names, at each viewport the surface file declares, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. Before the implementer was dispatched it took the same surfaces at the same viewports into implementation/observed-<order id>-before/. A row that says the page is as it was is judged against that before (live-run row 114). `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93). It refuses a row whose screenshot or before image is not on disk or lies outside its folder (94). It refuses a surface the order does not name (95) and a doneWhen the order does not hold (96). The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
   "type": "object",
   "additionalProperties": false,
   "required": ["order", "observedAt", "judgedBy", "rows"],
@@ -32,7 +32,7 @@
     "row": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["doneWhen", "surface", "viewport", "screenshot", "verdict", "note"],
+      "required": ["doneWhen", "surface", "viewport", "screenshot", "before", "verdict", "note"],
       "properties": {
         "doneWhen": {
           "type": "string",
@@ -53,6 +53,11 @@
           "type": "string",
           "minLength": 1,
           "description": "The image the judgement was made from, an absolute path under implementation/observed-<order id>/. build-record refuses a row whose image is not on disk."
+        },
+        "before": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The image of the same surface at the same viewport, taken before the build at the first attempt's headNow. An absolute path under implementation/observed-<order id>-before/. A row that says the page is as it was is judged against this image. build-record refuses a row whose before image is not on disk or lies outside that folder (exit 94)."
         },
         "verdict": {
           "type": "string",
