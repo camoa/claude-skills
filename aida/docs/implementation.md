@@ -441,7 +441,8 @@ and unattended none of them is the model's to pick: the run ends with the report
 
 **Budget spent.** A run has a ceiling when the task's own `task.json` sets a budget in dispatches
 or minutes. The spend is recomputed from the ledger before every dispatch, so nothing a builder
-writes can reset it. Raise the budget in `task.json` first; a grant alone brings the halt back.
+writes can reset it. Raise it with `/aida:task set-budget <task-id> --dispatches <n>`, or
+`--minutes <n>`, first; a grant alone brings the halt back.
 
 **Design drift** has the restart. Running the build again after a design change compares the live
 design to the snapshot. An order drifts when its own file changed, or when a criterion it serves

@@ -70,6 +70,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/design-schema.json: the file's field list, as data
 #   <plugin root>/scripts/design-guides-read-schema.json: the guides-read record's field list
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
+#   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -242,10 +243,18 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 DESIGN_SCHEMA_FILE="$PLUGIN_ROOT/scripts/design-schema.json"
 SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
+PROOF_LIB="$PLUGIN_ROOT/scripts/lib/proof.sh"
 
 [ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
+
+# The proof-kind classification, for the cross-order lists below. A shell function cannot be
+# called from inside a jq program. So the projection at step 5 reads its jq twin, and every list
+# here selects on a named field.
+[ -f "$PROOF_LIB" ] || die3 "cannot read the proof-kind library: $PROOF_LIB not found"
+# shellcheck source=/dev/null
+source "$PROOF_LIB" || die3 "the proof-kind library failed to load: $PROOF_LIB"
 
 [ -f "$DESIGN_SCHEMA_FILE" ] || die3 "cannot read the design field list: $DESIGN_SCHEMA_FILE not found"
 jq empty "$DESIGN_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the design field list: $DESIGN_SCHEMA_FILE is not valid JSON"
@@ -406,7 +415,8 @@ if [ "$DESIGN_STARTED" = "true" ]; then
       # failing its own shape is already named above and must not also surface as "unknown".
       ID_OK="$(jq -r 'if (.id? | type) == "string" and (.id | test("^wo[1-9][0-9]*$")) then "true" else "false" end' "$wfile")"
       if [ "$ID_OK" = "true" ]; then
-        THIS_ORDER="$(jq -c '
+        THIS_ORDER="$(jq -c "$BR_ORDER_FACTS_JQ"'
+          orderFacts as $f |
           {
             path: $path,
             id: .id,
@@ -416,6 +426,9 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             dependsOn: [ (.dependsOn // [])[] | select(type == "string" and test("^wo[1-9][0-9]*$")) ],
             ownedFiles: [ (.ownedFiles // [])[] | select(type == "string" and (length > 0)) ],
             proof: (.proof // "tests"),
+            slot: $f.slot,
+            range: $f.range,
+            ownsCode: $f.ownsCode,
             surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
             # A test counts on its description alone. The level is optional and design does not set
@@ -591,19 +604,19 @@ else
   # entry.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
-    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.proof != "gate" and $o.proof != "record" and $o.proof != "observe")
+    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests")
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
         | {id: $o.id, path: $o.path, criterionId: $cid} ]
   ')"
   GATE_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.proof == "gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
+    [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
   ')"
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.proof == "record" or .proof == "observe") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
+    [ $orders[] | select(.slot == "done-when" or .slot == "observed") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
   RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
-    [ $orders[] | .id as $id | select(.proof == "record") | (.ownedFiles // [])[]
+    [ $orders[] | .id as $id | select(.range == "project") | (.ownedFiles // [])[]
       | select(startswith($p) | not) | {id: $id, path: ., reason: "outside the project folder"} ]
   ')"
   TAB="$(printf '\t')"
@@ -613,13 +626,13 @@ else
     RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(printf '%s' "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" | jq -c --arg id "$REC_ID" --arg path "$REC_PATH" \
       '. + [{id: $id, path: $path, reason: "under a path the project ignores"}]')"
   done < <(jq -r -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
-    $orders[] | .id as $id | select(.proof == "record") | (.ownedFiles // [])[]
+    $orders[] | .id as $id | select(.range == "project") | (.ownedFiles // [])[]
       | select(startswith($p)) | [$id, .] | @tsv')
   RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.proof == "record" or .proof == "observe") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
+    [ $orders[] | select(.slot == "done-when" or .slot == "observed") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.proof == "observe") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
+    [ $orders[] | select(.slot == "observed") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
   ')"
 
   # The same question asked the other way (live-run row 145). The list above asks whether an order
@@ -633,7 +646,7 @@ else
   # This list is reported and never counted toward the exit code: the header bullet says why.
   TEST_ORDERS_OWNING_NO_MACHINE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
-    | [ $orders[] | . as $o | select($o.proof == "tests")
+    | [ $orders[] | . as $o | select($o.slot == "order-tests")
         | select(($o.criteriaOwned // []) | length > 0)
         | select([ ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine") ] | length == 0)
         | {id: $o.id, path: $o.path} ]

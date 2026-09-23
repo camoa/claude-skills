@@ -231,12 +231,14 @@ single questions people skip, so they are asked on their own. On "out", write it
 ```
 On "in", it becomes a criterion instead: go back to the criterion flow above.
 
-**Autonomous:** raise the same candidates, take the recommended answer on each, and run:
+**Autonomous:** raise the same candidates and take the recommended answer on each. On "out", run
+`add-non-goal` above first, and read the new id from its `ADDED:` line. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
-  record-decision "<task_folder>" --text "<the candidate non-goal, and the recommended answer taken>"
+  record-decision "<task_folder>" --text "<the candidate non-goal, its id, and the recommended answer taken>"
 ```
-to record that this run decided it. A non-goal carries no author field; only criteria do.
+to record that this run decided it. A non-goal carries no author field; only criteria do. So the
+id in that entry is the only mark a non-goal this run wrote itself carries.
 
 ## Tests and checks
 

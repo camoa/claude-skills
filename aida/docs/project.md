@@ -12,7 +12,8 @@ without you still has to find a project. What that session cannot do is answer f
 things refuse outright when nobody is present: installing the task rule, declining it, removing
 it, uninstalling AIDA from your repository, recording that you want no project in a folder, and
 unregistering a project folder that sits outside your projects folder. Each of those writes into
-something you own, or records an answer you never gave.
+something you own, records an answer you never gave, or drops the only copy of a path you need to
+keep.
 
 A session with nobody present, in a folder no project owns, makes no project there. It says the
 folder is not set up and carries on. One thing such a session does settle: picking up a version 5
@@ -132,6 +133,29 @@ project it finds, per case 2 above. Switching from inside a registered code path
 only this conversation; a directory that already resolves on its own is not worth
 remembering a second way.
 
+Point switch at a project folder rather than a name and it registers that folder. This is how a
+project AIDA has never seen, or one you unregistered, comes back. The code path and the name come
+out of the folder's own project file, and no field is written back to it. The one thing it does
+write there is the check's own record, at `records/check-project.json`, on a refusal as well as
+on a pickup.
+
+Point it at a folder whose project is still registered and it simply switches to that project.
+Nothing is registered twice.
+
+Four things make it refuse. A project file that will not parse. A code path AIDA refuses on
+safety grounds. A code path or a name another project already holds. A project file naming its
+own folder as the code path. A project file with fields missing is registered instead, and the
+check tells you which fields to fill.
+
+Picking up a version 5 folder refuses on the same name test, which is new. That pickup takes the
+folder name as the project name, so two version 5 folders in different places can carry one name.
+Rename the folder you are picking up, then point switch at it again.
+
+The refusal always means a different project holds that name. A folder that already has a row was
+matched by its path and switched to. So the rename is safe there. Do not rename a project that is
+already registered. Its project file would stop agreeing with its own row, and the check would
+report that mismatch every time from then on.
+
 ## The check
 
 The check is a script, never a judgment call by the model. It compares the project's state
@@ -198,8 +222,9 @@ decide, rather than refusing outright or pretending nothing was left.
 **Unregistering is not one of the three states.** It drops the project from AIDA's list and
 leaves the folder untouched. It is the answer for a duplicate entry or a mistake, not for work
 that is merely done or parked. `/aida:project rebuild-registry` reads the folder and lists it
-again, with one exception. A project folder outside the projects base does not come back: its
-registry row was the only record of where it sits. The unregister output names which case it is.
+again, with one exception. A project folder outside the projects base is not in that walk:
+`/aida:project switch "<project folder>"` brings it back instead, and the dropped row held the
+only copy of that path. The unregister output names which case it is, and prints the path.
 
 ## Cleaning up
 

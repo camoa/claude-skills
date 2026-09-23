@@ -691,6 +691,9 @@ do_record_decision() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "DECISION RECORDED"
+  # The one text this script prints: the entry just written, so the run that wrote it can say
+  # what it decided without opening the contract. contract_summary below keeps to the count.
+  echo "decided: $text"
   contract_summary
   render_alignment
   exit 0

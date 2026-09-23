@@ -44,9 +44,10 @@ active task: act interactively, the safe default. Decide this once, at the start
 A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
 when the list names `research`; otherwise this stage is interactive.
 
-Research never blocks on this choice the way scope does. The run mode only changes what happens
-at three points below: a recipe fit of `false` or `unsure`, a missing process recipe, and an
-unaccepted guide source. Everything else runs the same way in both modes.
+Research never blocks on this choice the way scope does. The run mode changes what this skill
+asks at two points below: a recipe fit of `false` or `unsure`, and a missing process recipe. The
+split step and the close differ too, and each says so where it stands. Everything else runs the
+same way in both modes.
 
 ## Find the task
 
@@ -78,6 +79,12 @@ route that works from here, either the `EnterWorktree` tool or the call started 
 `cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop.
+
+`criteria-by-designer:` names any id: say so in one line, with the ids. Interactive: say that the
+contract carries criteria a run wrote on the person's behalf. Name `/aida:scope` as the place to
+approve or change them. Research does not block, so go on after saying it. Autonomous: say the
+same line for the record and go on. The fact is already on disk, in each criterion's `author`
+field, so write nothing new.
 
 `search:` lines present: this is a resumed or repeated run. Read each named file before deciding
 what is still missing, rather than starting over.
@@ -120,6 +127,34 @@ It reads the person's file, the project's file and the loader's record, and writ
 `unreachable` set in one line, and go on; the next run tries again. The plays are the rules
 every later role follows. This step loads them once, where the task's evidence starts, so design
 and implementation read one record and never fetch. Research itself cites no play.
+
+## Read the parent's research
+
+A task made by a split carries `parent` in its `task.json`, the parent task's id. Read that
+field before planning any search. Absent, or the file does not hold it: go to the next section.
+
+Present: the parent's research folder is `<projectPath>/tasks/<parent>/research/`, a sibling of
+this task's own folder. Read every `<search>.json` in it. Then walk this task's criteria. Skip a
+criterion this task already holds a finding for. The `search:` lines from `read` name every file
+already on disk, and "Read what is already there" says to read each one first. `record` only
+appends, so a repeated run would otherwise record the parent's findings a second time. Record
+each parent finding that answers a criterion here, through `record` below, one `--search` per
+parent file, named `parent-<the parent's search name>`. `--searched-for` is that file's own
+`searchedFor`. `--text` is the finding's own text. `--source` holds the finding's `source` and
+its `lookedAt` date, so the finding still names where it came from and when it was looked at.
+`record` stamps today, which is when this task wrote the finding down, and the source says when
+the parent looked. Never claim a fresh look at something nobody looked at again.
+`--criteria-served` names this task's own criterion ids, from the contract read above. A parent
+criterion id means nothing here, because this task's contract minted its own.
+
+Dispatch a search only for a criterion nothing in that folder covers. Research is the most
+expensive thing AIDA does, so a child that re-runs its parent's searches pays twice for one
+answer.
+
+The parent's folder is gone or unreadable: plan every search as if this task had no parent, and
+say so in one line. A missing parent is not a failure.
+
+This step asks nothing. It runs the same way in both run modes.
 
 ## Decide which searches are needed
 
@@ -479,9 +514,10 @@ record, so a stage cannot run out of order. That is why this chain is safe.
 
 Research decides nothing about the problem, so there is nothing for a person to approve. It never
 asks permission to look something up, and every finding carries its source, so a wrong finding is
-checkable afterward by anyone. The one question it asks is the split, and only after its own work
-is done. Autonomous mode runs every step above the same way. At a recipe that does not fit, a
-missing recipe or an unaccepted source, it takes the noted branch instead of asking.
+checkable afterward by anyone. The questions it asks are the two above and the split, and the
+split comes after its own work is done. Autonomous mode runs every step the same way, apart from
+those three and the close. At a recipe that does not fit, or a missing recipe, it takes the noted
+branch instead of asking.
 
 ## What this skill never does
 

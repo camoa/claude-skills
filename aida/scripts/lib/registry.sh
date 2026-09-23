@@ -307,6 +307,19 @@ registry_resolve_by_directory() {
   printf '%s\n' "$match"
 }
 
+# Exit 0 when no row carries this name, 1 when one does, 2 when the store could not be read.
+# Two is its own code because a caller that reports an unreadable store as a name collision names
+# the wrong cause. registry_add_project below refuses a codePath twice over and never tests the
+# name, so each route that writes a row asks this first. Two rows sharing one name make
+# check-project.sh exit 4 fire for both projects, forever after. The project file cannot say
+# which row is its own.
+registry_name_free() {
+  registry__require_jq || return 2
+  local name="${1:?registry_name_free: a name is required}" current
+  current="$(registry__current)" || return 2
+  ! printf '%s' "$current" | jq -e --arg n "$name" 'any(.projects[]?; .name == $n)' >/dev/null 2>&1
+}
+
 registry_add_project() {
   registry__require_jq || return 1
   local codepath="${1:?registry_add_project: a codePath is required}"

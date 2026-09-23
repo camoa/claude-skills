@@ -34,7 +34,8 @@ Five actions need a person. The script refuses each one at exit 70 on an autonom
 writes nothing. `task-rule` and `uninstall` change the repository the person owns.
 `task-rule-remove` takes AIDA's own block back out of it. `record-declined` writes a no nobody
 said, and a recorded no is never offered again. `unregister` refuses only when the project folder
-sits outside the projects base, because `rebuild-registry` cannot find that folder again.
+sits outside the projects base, because the dropped row holds the only copy of the path
+`switch` needs to find that folder again.
 
 Every other action does the same thing in both modes. Where a step needs a fact nobody supplied,
 the matching section below says the skill halts rather than guess it.
@@ -213,6 +214,12 @@ missing, and each field's own producer fills it in later, which is the design. E
 line after `PICKED UP:` names a task still in version 5's own folder, untouched by the pickup.
 Name them. Then name `/aida:next` as the step that moves the one the person picks.
 
+This pickup refuses at exit 3 when another project already holds the folder's name, and it writes
+nothing. The folder name is the project name here, so two version 5 folders under different
+parents can carry one name. Tell the person to rename this folder, then pick it up again. The
+rename is right only because the row belongs to a different folder. Never offer it for a project
+that is already registered, where renaming makes the project file disagree with its own row.
+
 The pickup writes two files into the folder: `project.json`, and the check's own record at
 `records/check-project.json`. To undo a pickup, run `unregister` below and remove those two
 files by hand; nothing else was written. A folder left with its `project.json` is picked up again
@@ -243,6 +250,38 @@ Interactive: after the `git-init` offer, offer once to rewrite it, in one line. 
 `task-rule` section below, which replaces that block in place. No records the refusal with
 `task-rule "<name>" --decline`, the same as create's step 6. The block stays as it is.
 Autonomous: say the offer is waiting and continue, as at create.
+
+`switch <path>` on a folder holding a `project.json` registers that folder again. This is the way
+back after `unregister`. It is the only way back for a folder outside the projects base.
+`rebuild-registry` reaches such a folder only through the row it no longer has. The `codePath` and
+the `name` come out of the folder's own project file. That file is the truth and the registry is
+an index, so no field is written back.
+
+The pickup writes one file into the folder, the check's own record at
+`records/check-project.json`, and creates `records/` when the folder has none. It writes that
+record on a refusal too, because the check runs before the registry row. Only an unreadable
+project file leaves nothing, since the check stops at the parse. The record is overwritten on
+every check and the folder's ignore file already excludes it.
+
+It prints `PICKED UP:` and then the same lines any switch prints. A folder holding both
+`project_state.md` and `project.json` comes here, not to the version 5 pickup above. That folder
+was already picked up, and its project file is worth more than a fresh bare one.
+
+A folder whose project is still registered is switched to, not picked up again. The row holds the
+folder's path, and `switch` reads that before it registers anything. It prints no `PICKED UP:`
+line, because nothing was registered. Say the project was already known.
+
+Four things refuse this pickup, and each writes no registry row. A project file that will not
+parse refuses at exit 3. A `codePath` naming a refused location refuses at exit 5. A `codePath` or
+a `name` another project already holds refuses at exit 3, saying which. A project file naming its
+own folder as the code path refuses at exit 3, because a project folder is never its own code
+folder. A project file with fields missing does not refuse. It is registered, and the check names
+each missing field, the same as the version 5 pickup. Show the refusal and stop.
+
+The name refusal always names a different project's row, because a registered folder was matched
+by its path above. So its repair, changing the name in this folder's own project file, is safe
+here. Never carry that repair to a project that already has a row. Changing the name there makes
+the project file disagree with its row, and the check then exits 4 for that project every time.
 
 ## `list [active|complete|archived]...`
 
@@ -397,12 +436,14 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> unregister "<target>"
 ```
 Drops the registry row only. It prints both folders it names, the project folder and the code
-path, and it touches neither. The one route back is `rebuild-registry` below. `create` is not
-that route: it refuses a project folder that already exists.
+path, and it touches neither. Two routes back: `rebuild-registry` below, and
+`switch "<project folder>"` above. `create` is neither: it refuses a project folder that already
+exists.
 
 The last line is `PROJECTS BASE:`, and it names which of two cases this is. A project folder
-under that base comes back with `rebuild-registry`. A folder outside it does not, because the
-dropped row held the only record of where it sits. Relay that line, with the folder's path.
+under that base comes back with `rebuild-registry`, which needs nothing from the person. A folder
+outside it comes back only through `switch`, which needs the folder's path, and the dropped row
+held the only copy of it. Relay that line, with the folder's path, so the person keeps the path.
 
 That second case is the one an autonomous run refuses, at exit 70, having dropped nothing. Say
 that the row waits for a person, and continue. A folder under the base drops in both modes.

@@ -393,7 +393,7 @@ seven answered.
 
 One order has nothing for this check to run: an order serving only criteria a person verifies.
 Its frozen record carries checklist rows and no test, which design allows. order-tests answers
-met there, with a detail saying so, and completion confirms the checklists. A machine-verified
+met there, with a detail saying so, and review's close confirms the checklists. A machine-verified
 criterion frozen with no test path still reads unknown, and the order stays at `code-written`.
 
 The summary's `executed:` line says how many of the eight actually ran a command, a diff or a

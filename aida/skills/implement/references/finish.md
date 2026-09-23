@@ -1,6 +1,6 @@
 # Finish the task, grant an attempt, restart the build, or clear a halt
 
-This step covers four actions that act on the task rather than on one order. `finish` runs once
+This step covers four actions that act on the task rather than on one order. `finish` runs when
 every order is closed. `grant-attempt` answers a spent attempt counter, when a person wants to
 grant one more, and a spent run budget, once the person has raised it. `restart` follows a
 mid-build design change: it halted one or more orders, and a person wants a fresh build against the
@@ -41,8 +41,13 @@ per order. They carry the criteria by row state, the checklist count, the deferr
 and the model-judged count.
 
 **Finish ends implementation only.** It never touches `task.json`. The task goes to the review
-stage next, which reads `finished.json`; completion, not this step, is what confirms the criteria a
+stage next, which reads `finished.json`. Review's close, not this step, confirms the criteria a
 person verifies by checklist.
+
+**Finish runs again after a failed review.** The person commits the fix on the task branch, then
+takes this step again. It rewrites `finished.json` with a range ending at the new head, and review
+runs from its first step. Keep the fix inside the files the orders own. A file no order owns reads
+unmet at review's check that every change serves a criterion.
 
 Interactive: stop here. Name the next command for the person, `/aida:review <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:review` through the Skill tool, once, with the task
@@ -84,9 +89,14 @@ Put them to the person, opening with: "The build reached the limit you set on th
 dispatches or in minutes, and stopped. Only you can raise it. Raise the limit in the task's
 record and the build can continue. Leave it and the build stays stopped." Then name the two
 numbers the halt holds. The spend is recomputed at every dispatch, so a grant alone brings the
-halt straight back. The person raises `budget.dispatches` or `budget.minutes` in `task.json`
-first. Then `grant-attempt` clears the halt as it clears `attempts spent`. It also raises that
-order's attempts by one; say so.
+halt straight back. The person raises the ceiling first, with the task skill:
+```
+/aida:task set-budget <task-id> --dispatches <n>
+```
+`--minutes <n>` raises the other ceiling, and both may be given. A number they do not name keeps
+the value it had. Name the command and let them run it; nothing here runs it for them. Then
+`grant-attempt` clears the halt as it clears `attempts spent`. It also raises that order's attempts
+by one; say so.
 
 ## Offer the restart, when a halt reads "design drift"
 
@@ -134,7 +144,9 @@ ledger. Its records move aside with the rest, and the summary names it. The next
 resumed run.
 
 The records move; the commits they name stay on the branch. The restart reads each halted
-order's freeze commit and its build and fix ranges. It finds the build and fix records wherever
+order's freeze commits and its build and fix ranges. A retake supersedes one freeze commit and
+records it, so a retaken order has more than one. The test a person ruled wrong sits in the
+earlier one. It finds the build and fix records wherever
 a retake or an earlier restart moved them. An order's own commits are then never counted as
 later ones. It lists the ones still on the branch, one
 `commits:` line each, with the order and the kind. It writes them into `restarted.json` too.

@@ -33,7 +33,8 @@ Research needs a task, and that task needs a scope contract. Two things stop it 
 search runs. No task is known: it says so, names the task stage, and stops. The task has no
 contract: it says so, names the scope stage, and stops, because there is nowhere to write. It
 checks that a contract exists, not that a person approved it. It lists any criterion that only
-the model wrote, so you see those before they are researched.
+the model wrote, so you see those before they are researched. It names `/aida:scope` as where to
+approve or change them. It does not wait for you: research blocks on nothing.
 
 If the task folder holds material captured before the task existed, research reads all of it
 first. That material is input, never a finding. It names things to search for, and a claim from
@@ -43,6 +44,13 @@ A second run on the same task reads the searches already on disk before deciding
 missing. Nothing starts over. A task from version 5 keeps its old research. The first run reads it
 and records each finding that still holds, one search per old file. New searches run only for
 what those files never covered.
+
+A task made by a split reads its parent's research the same way, before it plans anything. Each
+parent finding that answers one of this task's criteria is recorded here, keeping the parent's own
+source and the date the parent looked. A search runs only for a criterion the parent's folder
+never covered. Research is the most expensive stage, so a child pays for its gap and not for the
+answers its parent already holds. A parent folder that is gone is said in one line, and the task
+researches as if it had no parent.
 
 ## The playbooks loaded here
 

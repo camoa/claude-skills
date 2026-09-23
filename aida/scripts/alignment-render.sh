@@ -20,6 +20,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # never the same sentence an empty, well-formed list prints (defect 21): a person approving this
 # document must be able to tell "nothing recorded" apart from "recorded on disk, unreadable here".
 #
+# decidedWithoutAPerson gets a section of its own, so a person approving this document sees which
+# answers nobody gave (live-run row 165). It follows both rules above, with one difference: an
+# empty list prints no section at all, because an attended run always leaves it empty and a
+# "none" line on every contract is noise.
+#
 # Usage:
 #   alignment-render.sh <task_folder>
 #
@@ -197,6 +202,31 @@ trap 'rm -f "$TMP_FILE"' EXIT
       N_ID="$(printf '%s' "$row" | jq -r '.id? // "(no id)"')"
       printf -- '- %s (`%s`)\n' "$N_TEXT" "$N_ID"
     done < <(jq -c '.nonGoals[]' "$ALIGNMENT_FILE")
+  fi
+
+  DECIDED_TYPE="$(jq -r '(.decidedWithoutAPerson? // []) | type' "$ALIGNMENT_FILE")"
+  if [ "$DECIDED_TYPE" != "array" ]; then
+    # defect 21's distinction again: present and unreadable is not the same fact as empty.
+    printf '\n## Decided without a person\n\n'
+    printf 'The decidedWithoutAPerson field could not be read: it is present but is a %s, not a list. This is not the same as no decisions recorded; run check-alignment.sh against this task before approving this document.\n' "$DECIDED_TYPE"
+  elif [ "$(jq '(.decidedWithoutAPerson // []) | length' "$ALIGNMENT_FILE")" -gt 0 ]; then
+    # An empty list prints nothing at all, the one place this document says less than the others:
+    # an attended run always leaves it empty, so a "none" line on every contract is noise.
+    printf '\n## Decided without a person\n\n'
+    printf 'Nobody answered these. An unattended run took the recommended answer on each one.\n\n'
+    DIDX=0
+    while IFS= read -r row; do
+      [ -n "$row" ] || continue
+      DIDX=$((DIDX + 1))
+      ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
+      if [ "$ROW_TYPE" != "string" ]; then
+        # defect 20's rule, for a list of sentences: assert the entry's type before reading it,
+        # and name its position when it is not one.
+        printf -- '- (entry %d is not a sentence, is a %s: it cannot be rendered)\n' "$((DIDX - 1))" "$ROW_TYPE"
+        continue
+      fi
+      printf -- '- %s\n' "$(printf '%s' "$row" | jq -r '.')"
+    done < <(jq -c '.decidedWithoutAPerson[]' "$ALIGNMENT_FILE")
   fi
 } > "$TMP_FILE" || die3 "could not write to $TMP_FILE"
 

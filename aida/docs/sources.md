@@ -148,7 +148,9 @@ What happens next depends on the point, because a missing recipe costs different
 - **`implement`** means no test patterns, so the freeze refuses every test. A `record` order and
   an `observe` order still freeze in full, and a `gate` order freezes but its own check reads
   `unknown`, which is not met. Every order proved by tests is blocked. The build's precondition
-  step resolves this lookup and names each blocked order before any order is built.
+  step resolves this lookup and names each blocked order before any order is built. Where an
+  order is blocked and a framework was never looked up, it names that framework too, on a line
+  of its own.
 - **`review`** goes on at the build: the tool checks record `undeclared`. At the review stage,
   no recipe reads `undeclared`, which passes and is reported in that word. A listing that could
   not be reached reads `unknown`, which fails the review, because nobody looked.

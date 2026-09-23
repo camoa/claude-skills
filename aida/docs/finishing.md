@@ -153,7 +153,8 @@ look.
 
 The commit range section adds two lines when they apply. When the branch has no upstream, it
 says to push before opening the pull request. When the task has a worktree, it names the branch
-and the worktree, and says what to run after the merge, below.
+and the worktree, and says what to run after the merge, below. When the task's site is also up,
+it names the tear-down first, to run before the worktree is removed.
 
 ## The move to complete
 

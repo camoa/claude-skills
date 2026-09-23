@@ -322,7 +322,7 @@ recorded beside the test, and the review brief says where it is.
 confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the
 order id. Rows follow the tests. A criterion this order only serves and names on no test needs no
 row from it; the row for it belongs to its owner. A criterion a person verifies carries a
-checklist instead, never a row: it has no judgement, and completion is what confirms it. A row for
+checklist instead, never a row: it has no judgement, and review's close is what confirms it. A row for
 anything no test of this order claims refuses the freeze, the same way a missing row does. So does
 a row for a criterion a person verifies. Every accepted criterion row is appended to that
 criterion's own record in the ledger, and the done-when row to this order's own entry. `close` is

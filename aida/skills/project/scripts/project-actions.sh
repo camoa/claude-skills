@@ -41,9 +41,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Five actions need a person, and each exits 70 on an autonomous run having written nothing:
 # task-rule in both its forms, task-rule-remove, uninstall, record-declined, and unregister on a
 # project folder outside the projects base. Each writes into the person's own repository, records
-# an answer nobody gave, or drops the only record of where a folder sits. foundations.md, Run
-# mode: nobody's silence stands for a yes, so a run with nobody present records nothing on a
-# person's behalf.
+# an answer nobody gave, or drops the only copy of the path switch needs to find that folder
+# again. foundations.md, Run mode: nobody's silence stands for a yes, so a run with nobody
+# present records nothing on a person's behalf.
 #
 # What reaches stdout is what reaches the orchestrator's context. A project is named by one
 # `project:` line carrying its name, state, code path and folder, never by its registry row or
@@ -213,12 +213,30 @@ resolve_target() {
   ' "$REGISTRY_FILE" 2>/dev/null
 }
 
+# Looks a target up by its exact project folder path, the one address resolve_target never reads.
+# Prints the matching registry row as one JSON object, or prints nothing. A project folder path
+# and a code path are never the same folder, so the two lookups cannot both answer. Named for the
+# row it returns: scripts/lib/recipes.sh, which this file sources, already has a
+# resolve_project_folder, and that one takes a task folder and returns the folder two levels up.
+resolve_row_by_project_path() {
+  local canon
+  [ -r "$REGISTRY_FILE" ] || return 1
+  canon="$(canon_path "$1")"
+  jq -c --arg p "$canon" '
+    [.projects[]? | select((.path // "" | sub("/+$"; "")) == $p)] | first // empty
+  ' "$REGISTRY_FILE" 2>/dev/null
+}
+
 # The project folder's ignore file, written by create and by git-init on a version 5 pickup. A
 # whitelist, not a blacklist: everything is ignored until named back in. records/ is named back
 # in for .json only by the line above it, so it is re-ignored on its own line below. The check
 # overwrites records/check-project.json on every run. A file that changes on every check is a
 # derived value, never something to commit (foundations.md, State). The unanchored pattern
 # covers a task's own records folder too: a task check writes one per task.
+# hooks/pre-compact.sh skips this folder for the same reason, so it never sees a stage that writes
+# only here. Research's playbooks step already does. That is safe on two counts: nobody answers
+# anything in it, and each record it writes has a producer that runs again. So a record must never
+# live only here when it carries a person's answer, or when nothing can produce it again.
 write_project_gitignore() {
   cat > "$1/.gitignore" <<'EOF'
 *
@@ -273,6 +291,17 @@ run_check() {
   return $?
 }
 
+# The one name refusal, for every route that writes a registry row. $1 the name, $2 what to tell
+# the person when a row already holds it. Returns when the name is free, and stops the script
+# otherwise. The two outcomes stay apart. An unreadable store is not a name collision. Saying it
+# is would name the wrong cause, and send the person to rename a project that is fine.
+refuse_taken_name() {
+  local rc
+  registry_name_free "$1"; rc=$?
+  [ "$rc" -ne 1 ] || die3 "$2"
+  [ "$rc" -eq 0 ] || die3 "the registry could not be read, so nothing was written. See the error above."
+}
+
 # The one summary printer: one line per registry row. $1 the row, $2 an optional trailing note.
 project_line() {
   printf '%s' "$1" | jq -r --arg extra "${2:-}" '
@@ -323,10 +352,7 @@ do_create() {
       'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c)' >/dev/null 2>&1; then
     die3 "a project is already registered for $code_path. Nothing was written."
   fi
-  if printf '%s' "$registry_snapshot" | jq -e --arg n "$name" \
-      'any(.projects[]?; .name == $n)' >/dev/null 2>&1; then
-    die3 "the name '$name' is already registered. Choose a different name."
-  fi
+  refuse_taken_name "$name" "the name '$name' is already registered. Choose a different name."
 
   [ -d "$code_path" ] || printf 'project-actions: %s does not exist yet; it will when the code is written there.\n' "$code_path" >&2
 
@@ -478,6 +504,12 @@ register_v5_folder() {
     || echo "NOTE: project_state.md says the project folder is '$v5_path'. That line is stale; the folder is registered where it is."
   name="$(basename -- "$folder")"
   code_path="$(canon_path "$code_path")"
+  # The name is the folder's own basename, so two version 5 folders under different parents can
+  # carry one name. Tested here, before anything is written, because the row a duplicate makes is
+  # not an error anybody sees: check-project.sh then exits 4 for both projects, forever. The row
+  # is always another folder's here. do_switch matched this folder's own path first, and a folder
+  # this function accepts holds no project file to have been registered from.
+  refuse_taken_name "$name" "switch: another project already holds the name '$name'. This folder has no row of its own, so rename $folder, then pick it up again."
   registry_add_project "$code_path" "$folder" "$name" || die3 "the registry row for $folder was not written; see the message above."
   # The folder's parent is the projects base when none is recorded yet. A first version 6 run on
   # a machine with version 5 projects then finds the rest of them. The helper keeps an existing base.
@@ -504,11 +536,75 @@ register_v5_folder() {
   done < <(find "$folder/implementation_process/in_progress" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 }
 
+# The name the pickup below reads out of the project file, for do_switch to resolve the row by.
+PICKED_UP_NAME=""
+
+# A version 6 project folder holds its own project.json, and that file is the truth (registry.sh,
+# the standing rule). Unregistering drops the index row and leaves the folder, so pointing switch
+# at the folder again is the way back. It is the only way back for a folder outside the projects
+# base: rebuild-registry walks the base, and reaches an outside folder only through the row this
+# folder no longer has. Reads codePath and name out of the folder's own file and writes the
+# registry row. No field is written back, because every one is already there. The check it runs
+# does write records/check-project.json into the folder, on a refusal as well as on a pickup. It
+# creates records/ when there is none. Returns 1, having done nothing, when the target is not such
+# a folder. Runs in the caller's shell, never in a substitution, so die3 stops the script.
+register_v6_folder() {
+  local folder="$1" report rc code_path name
+  [ -d "$folder" ] && [ -f "$folder/project.json" ] || return 1
+  folder="$(canon_path "$folder")"
+  # The check runs before the row is written, so a folder whose project file cannot be read, and
+  # one whose code path is a refused location, never enter the registry. Its report is held back
+  # for those two cases: do_switch runs the check again once the row is there, and that run is the
+  # one a person reads. Exit 4 always fires here, because no row exists yet, so it cannot refuse.
+  # Exit 1 does not refuse either: the version 5 pickup registers a file with missing fields, and
+  # a route stricter than the pickup it copies is the wrong shape.
+  report="$(run_check "$folder" 2>&1)"; rc=$?
+  case "$rc" in
+    3|5) printf '%s\n' "$report" >&2 ;;
+  esac
+  [ "$rc" -ne 3 ] || die3 "switch: the project file in $folder could not be read. Nothing was registered."
+  if [ "$rc" -eq 5 ]; then
+    printf 'project-actions: the code path in %s/project.json names a refused location. Nothing\n' "$folder" >&2
+    printf 'was registered. See the safety report above for the exact reason.\n' >&2
+    exit 5
+  fi
+  code_path="$(jq -r '.codePath // empty' "$folder/project.json" 2>/dev/null)"
+  [ -n "$code_path" ] || die3 "switch: $folder/project.json has no codePath, so nothing says where the code lives."
+  name="$(jq -r '.name // empty' "$folder/project.json" 2>/dev/null)"
+  [ -n "$name" ] || die3 "switch: $folder/project.json has no name, so nothing says what to call the project."
+  code_path="$(canon_path "$code_path")"
+  # do_create's own guard, and this route needs it more: the codePath comes out of a file this
+  # action did not write. A symlinked ancestor once made the two folders one, and the project
+  # committed the person's own CLAUDE.md into its history.
+  [ "$folder" != "$code_path" ] \
+    || die3 "switch: $folder/project.json names this same folder as the code path. A project folder is never its own code folder."
+  # do_switch matched this folder's own path against the rows before reaching here, so the row
+  # holding the name is always another folder's. A rename is the repair for that. For a folder
+  # colliding with itself it would be the defect: the file would stop agreeing with its own row.
+  refuse_taken_name "$name" "switch: another project already holds the name '$name'. This folder has no row of its own, so change its name in $folder/project.json, then pick it up again."
+  registry_add_project "$code_path" "$folder" "$name" \
+    || die3 "the registry row for $folder was not written; see the message above."
+  PICKED_UP_NAME="$name"
+  echo "PICKED UP: ${folder}"
+}
+
 do_switch() {
   local target="${1:?switch: a name or a code path is required}" match project_path cwd
   match="$(resolve_target "$target")"
+  # A project that is still registered, named by its own folder path. resolve_target reads a name
+  # and a code path, so it misses that address. The version 6 pickup below would then refuse on
+  # this project's own name. Its refusal tells the person to edit the name in their project file,
+  # and that edit is what makes check-project.sh exit 4 for good. The folder is already the row's,
+  # so the answer is to switch to it.
+  [ -n "$match" ] || match="$(resolve_row_by_project_path "$target")"
+  # Order matters. A version 5 folder holds no project.json, so register_v5_folder returns 1 for
+  # every folder the second branch takes. A folder holding both files is a version 5 pickup that
+  # already ran: its project file is the truth, and the version 5 branch would overwrite it.
   if [ -z "$match" ] && register_v5_folder "$target"; then
     target="$(basename -- "$(canon_path "$target")")"
+    match="$(resolve_target "$target")"
+  elif [ -z "$match" ] && register_v6_folder "$target"; then
+    target="$PICKED_UP_NAME"
     match="$(resolve_target "$target")"
   fi
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
@@ -945,11 +1041,13 @@ do_unregister() {
   base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
   base="$(canon_path "$base")"
 
-  # A folder under the base comes back with rebuild-registry. A folder outside it does not, so
-  # dropping its row is irreversible, and foundations.md halts an irreversible step with nobody
-  # present. The recoverable case is left alone.
+  # A folder under the base comes back with rebuild-registry, which needs nothing from anybody. A
+  # folder outside it comes back only through switch <path>, which needs the path, and this row
+  # holds the only copy of it. So the person who loses that path is the person who must supply it
+  # again. foundations.md does not let a run with nobody present spend it. The recoverable case is
+  # left alone.
   [ "$(dirname -- "$project_path")" = "$base" ] \
-    || cr_require_person unregister "a person accepted losing the only record of where $project_path sits"
+    || cr_require_person unregister "a person accepted holding on to the path of $project_path, which switch needs to pick it up again"
 
   registry_remove_project "$project_path" || die3 "could not remove the registry row for $project_path"
 
@@ -959,7 +1057,7 @@ do_unregister() {
   if [ "$(dirname -- "$project_path")" = "$base" ]; then
     echo "PROJECTS BASE: ${base}. rebuild-registry reads this folder and lists the project again."
   else
-    echo "PROJECTS BASE: ${base}. This project folder is outside it, and rebuild-registry cannot find it again."
+    echo "PROJECTS BASE: ${base}. This project folder is outside it, so rebuild-registry cannot find it. switch ${project_path} picks it up again."
   fi
 }
 

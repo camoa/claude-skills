@@ -161,6 +161,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/schema-check.sh   sourced, for schema_check_compare, the
 #                                                        one field-list comparison every stage
 #                                                        reads; `start` runs it over baseline.json
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/proof.sh          sourced. br_order_facts says which check
+#                                                        takes one order's proof slot, which
+#                                                        repository holds its range, and whether
+#                                                        it owns a file in the code path. Every
+#                                                        step below asks one of those three, and
+#                                                        never reads the proof kind itself.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/baseline-schema.json   the shape `preconditions` writes to
 #                                                        baseline.json, which `start` compares a
 #                                                        resumed run's copy against (exit 83)
@@ -458,9 +464,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      this order's own work. Exit 43 stays the separate fact that the value is not a commit at all.
 #  72  two frameworks each declare a command for one check row, and nothing here may choose between
 #      two answers to one question. The message names both frameworks and the row.
-#  73  the check recipe resolved for a framework now is not the one the baseline was taken with: its
+#  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
 #      sha256 differs. Every tool check compares its own result against that baseline, so a changed
-#      recipe compares one tool's output against another tool's baseline. Take the baseline again.
+#      recipe compares one tool's output against another tool's baseline. The baseline is not
+#      retaken mid-task: it reads the tree before the task, and the tree now holds this task's own
+#      code. Run again with the recipe body the baseline read.
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
@@ -661,6 +669,7 @@ RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
+PROOF_LIB="${PLUGIN_ROOT}/scripts/lib/proof.sh"
 SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
 PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
 BASELINE_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/baseline-schema.json"
@@ -697,6 +706,12 @@ source "$RECIPES_LIB" || die 3 "the recipes library failed to load: $RECIPES_LIB
 [ -f "$SCHEMA_CHECK_LIB" ] || die 3 "cannot find the schema-check library at $SCHEMA_CHECK_LIB"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die 3 "the schema-check library failed to load: $SCHEMA_CHECK_LIB"
+
+# What one order's proof kind means for a check about to answer. Every step below reads its three
+# variables, or its jq twin where the question is asked over the whole snapshot at once.
+[ -f "$PROOF_LIB" ] || die 3 "cannot find the proof-kind library at $PROOF_LIB"
+# shellcheck source=/dev/null
+source "$PROOF_LIB" || die 3 "the proof-kind library failed to load: $PROOF_LIB"
 
 # The surface file reader review uses, and the path join it needs: the observed check reads the
 # viewport list from the same file review's surface step reads, so there is one reader.
@@ -1114,7 +1129,7 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    printf 'none: implementation is finished, and the review stage is next'
+    printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
     return 0
   fi
   # How many actionable findings each reviewed order still has open, read once per order here so
@@ -2797,6 +2812,7 @@ do_preconditions() {
   local task_folder="" project_folder codepath
   local recipes="" failures="" values="" check_recipes="" fw
   local implement_lookups="" im_answer im_lookup im_path im_resolved im_blocked im_freeze
+  local im_notgiven im_by_tests im_unlooked im_advice
   local cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
@@ -2878,9 +2894,9 @@ do_preconditions() {
   # `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
   # An `observe` order's build runs the suite against the baseline. The recipe is still
   # resolved and recorded, because the freeze and finish read its path.
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
-    [ (.workOrders // [])[] | (.proof // "tests") ]
-    | if length > 0 and all(. == "record") then "no" else "yes" end')"
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
+    [ (.workOrders // [])[] | orderFacts.slot ]
+    | if length > 0 and all(. == "done-when") then "no" else "yes" end')"
   harness_reason="no order in the snapshot is proved by a test. Every order's proof is record, so no test is written or run"
 
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
@@ -3115,15 +3131,36 @@ EOF
   # author already ran. This step is the first place a person can be told, and telling them is
   # what this line is for. A lookup nobody ran is a third answer, never folded into the other two.
   im_resolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.implementLookup == "resolved") | .framework ] | join(", ")')"
-  im_blocked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '[ (.workOrders // [])[] | select((.proof // "tests") == "tests") | .id ] | join(", ")')"
+  im_blocked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'[ (.workOrders // [])[] | select(orderFacts.slot == "order-tests") | .id ] | join(", ")')"
+  im_notgiven="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.implementLookup == "not-given") | .framework ] | join(", ")')"
+  # The warning of its own, printed beside the freeze line (live-run row 171). A framework nobody
+  # looked up says nothing about a test-proved order, so the run that answered for one framework
+  # and skipped a second is warned too, not the flagless run alone. It carries its own line
+  # because the freeze line is already near the 240 characters a summary value prints.
+  im_unlooked="none"
+  im_advice="none"
+  [ -z "$im_notgiven" ] || [ -z "$im_blocked" ] \
+    || im_unlooked="nobody looked up $im_notgiven, so nothing here says whether these test-proved orders can freeze: $im_blocked"
+  # A summary value prints 240 characters (`im_print_summary`), and two of these messages carry a
+  # value that grows with the project: the framework names and every test-proved order id. So a
+  # growing message keeps the freeze line, and the fixed instruction that goes with it takes the
+  # `freezeAdvice` line, which no project can make longer. A cut instruction is the one part a
+  # person cannot work out again.
+  im_by_tests="No order in this snapshot is proved by tests, so none of them needs one"
+  [ -z "$im_blocked" ] || im_by_tests="These orders are proved by tests: $im_blocked"
   if [ -n "$im_resolved" ]; then
-    im_freeze="an implement recipe resolved for $im_resolved, so every order in this snapshot can be built"
+    im_freeze="an implement recipe resolved for $im_resolved. $im_by_tests"
+    # No record maps a work order to a framework, so a resolved recipe cannot say which orders it
+    # covers. The line names what it read, and a person makes the match.
+    [ -z "$im_blocked" ] \
+      || im_advice="No record maps an order to a framework. Check that one of those frameworks carries the ## Oracle files globs for each of those orders"
   elif ! printf '%s' "$record_json" | jq -e '[ .frameworks[] | select(.implementLookup != "not-given") ] | length > 0' >/dev/null; then
     im_freeze="the implement recipe lookup was not run. Ask the navigator for point: implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
   elif [ -z "$im_blocked" ]; then
     im_freeze="no implement recipe for any framework. No order in this snapshot is proved by tests, so none of them needs one"
   else
-    im_freeze="no implement recipe for any framework, so these orders cannot be built and each freeze exits 27: $im_blocked. Without that recipe a project builds its record and observe orders in full, and a gate order freezes but its own check reads unknown, which is not met. Write the implement recipe for a framework this project declares, or change each blocked order's proof"
+    im_freeze="no implement recipe for any framework, so these orders cannot be built and each freeze exits 27: $im_blocked"
+    im_advice="a project builds its record and observe orders in full. A gate order freezes, but its own check reads unknown, which is not met. Write the implement recipe for a framework this project declares, or change each blocked order's proof"
   fi
 
   # ---- the baseline: only when this run's own verdict permits the build to continue -------------
@@ -3223,7 +3260,8 @@ EOF
     *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
-        --argjson report "$record_json" --arg freeze "$im_freeze" \
+        --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
+        --arg freezeAdvice "$im_advice" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" '
@@ -3244,6 +3282,8 @@ EOF
                     + (if (.implementRecipePath // "") == "" then "" else " " + .implementRecipePath end)),
         smoke: ("smoke=" + .smoke.verdict + (if (.smoke.reason // "") == "" then "" else " (" + .smoke.reason + ")" end)) } ],
      freeze: $freeze,
+     notLookedUp: $notLookedUp,
+     freezeAdvice: $freezeAdvice,
      baseline: ($baselineStatus + " | " + $baselineNote),
      baselineFile: (if $baselineStatus == "not-attempted" then "none" else $baselineFile end),
      baselineCommit: (if $baselineCommit == "" then "none" else $baselineCommit end),
@@ -3273,9 +3313,11 @@ EOF
 # appends what changed under `recipeRefreshes`. It re-runs nothing: the verdict stands, because a
 # recipe's preconditions heading changes more rarely than its markers do, and the person who
 # refreshes knows why. Only the test-execution recipe is refreshed. The review recipe is pinned by
-# baseline.json with its sha256, and exit 73 refuses every later record under another body, so
-# there is no path swap that keeps the baseline honest; references/preconditions.md records the
-# gap. Every refusal runs before the one write, so a refused call leaves the record as it was.
+# baseline.json with its sha256, and swapping that path would need a new baseline. A baseline is a
+# reading of the tree before the task. It cannot be taken again once the task has changed the tree.
+# bl_tool_result runs each tool where the tree stands, so a second reading would record this task's
+# own findings as pre-existing. references/preconditions.md records the gap. Every refusal
+# runs before the one write, so a refused call leaves the record as it was.
 do_recipe_refresh() {
   local task_folder="" recipes="" fw rp line from kind
   local record_file record_doc today refreshed=""
@@ -4001,15 +4043,18 @@ do_tests_freeze() {
   # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17). An order whose
   # proof is observe freezes no test and no row: a model judges its done-when rows against its
   # surfaces after the build, so there is nothing to judge here (live-run row 104).
+  # The frozen record carries the proof word itself, below, because a record holds the value. The
+  # refusals and the guards read the check that takes this order's proof slot.
   local tf_proof
   tf_proof="$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')"
-  if [ "$tf_proof" = "gate" ] && [ -n "$test_raw" ]; then
+  br_order_facts "$UNIT_JSON"
+  if [ "$BR_ORDER_SLOT" = "configuration-gate" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by the configuration gate and takes no --test. A test for exported configuration reads the YAML back and cannot fail for the right reason; the gate lines are its check."
   fi
-  if [ "$tf_proof" = "record" ] && [ -n "$test_raw" ]; then
+  if [ "$BR_ORDER_SLOT" = "done-when" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by its record and takes no --test. Its deliverable is a document in the task folder; its done-when row, --row $unit_id=..., is its checkpoint."
   fi
-  if [ "$tf_proof" = "observe" ] && [ -n "$test_raw" ]; then
+  if [ "$BR_ORDER_SLOT" = "observed" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
   fi
 
@@ -4240,7 +4285,7 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] || [ "$tf_proof" = "observe" ] \
+  [ -z "$missing_machine" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
     || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
@@ -4316,10 +4361,10 @@ TF_EOF
   # A record order has no test, so the doneWhen row is the one row it owes: the rows are what
   # judge the deliverable, and the freeze is where they are judged (nyc defect 17).
   rows_expected_json="$(jq -nc --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" \
-      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --arg proof "$tf_proof" '
+      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --arg slot "$BR_ORDER_SLOT" '
       ($tests | map(.criteria) | add // []) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
-        + (if $dw or $proof == "record" then [$unit] else [] end)
+        + (if $dw or $slot == "done-when" then [$unit] else [] end)
     ')"
   rows_missing="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
       ($rows | map(.criterion)) as $named
@@ -4672,7 +4717,7 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
-  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] || [ "$tf_proof" = "observe" ] \
+  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -4945,7 +4990,8 @@ do_build_brief() {
   # the brief says so under commitIn (nyc defect 17).
   local bb_codepath bb_head
   bb_head=""
-  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "record" ]; then
+  br_order_facts "$BB_UNIT_JSON"
+  if [ "$BR_ORDER_RANGE" = "project" ]; then
     bb_codepath="$(resolve_project_folder "$TASK_PATH")"
   else
     bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
@@ -4960,7 +5006,7 @@ do_build_brief() {
   # a look taken, and nothing else records one.
   local bb_before bb_before_state
   bb_before=""; bb_before_state=""
-  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+  if [ "$BR_ORDER_SLOT" = "observed" ]; then
     bb_before="$IMPL_DIR/observed-$unit_id-before"
     if [ -n "$(find "$bb_before" -mindepth 1 -maxdepth 1 -type f -name '*.png' 2>/dev/null | head -n 1)" ]; then
       bb_before_state="taken"
@@ -5670,20 +5716,17 @@ br_aida_writes_in_project() {
 # holds observed, and the rest run as they do for a code order (live-run row 104). Prints the
 # JSON array.
 br_seven_checks() {
-  local parts_file proof rc_id
+  local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
-  proof="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.proof // "tests"')"
-  if [ "$proof" = "gate" ]; then
-    br_gate_check >>"$parts_file"
-  elif [ "$proof" = "record" ]; then
-    br_record_check >>"$parts_file"
-  elif [ "$proof" = "observe" ]; then
-    br_observed_check >>"$parts_file"
-  else
-    br_test_check "order-tests"    "orderTests" "order-tests" >>"$parts_file"
-  fi
-  if [ "$proof" = "record" ]; then
+  br_order_facts "$BRC_UNIT_JSON"
+  case "$BR_ORDER_SLOT" in
+    configuration-gate) br_gate_check >>"$parts_file" ;;
+    done-when)          br_record_check >>"$parts_file" ;;
+    observed)           br_observed_check >>"$parts_file" ;;
+    *)                  br_test_check "order-tests" "orderTests" "order-tests" >>"$parts_file" ;;
+  esac
+  if [ "$BR_ORDER_OWNS_CODE" = "no" ]; then
     for rc_id in suite-regression coding-standards static-analysis security; do
       jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
         '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
@@ -5712,7 +5755,7 @@ br_seven_checks() {
     # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
-    if [ "$proof" = "record" ]; then
+    if [ "$BR_ORDER_RANGE" = "project" ]; then
       if br_aida_writes_in_project "$p"; then
         set_aside=$((set_aside + 1))
         continue
@@ -5743,7 +5786,7 @@ BR_DIFF
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   fi
   [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
-  if [ "$proof" = "record" ]; then
+  if [ "$BR_ORDER_RANGE" = "project" ]; then
     aside_noun="files"
     [ "$set_aside" -ne 1 ] || aside_noun="file"
     ofc_detail="$ofc_detail The diff is the project folder's, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger, another task's close) set aside."
@@ -6256,7 +6299,8 @@ do_build_record() {
   # the line off a code order's summary. It also keeps it off an observe order that owns no
   # machine criterion.
   local criteria_judged_json='null'
-  if [ "$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+  br_order_facts "$UNIT_JSON"
+  if [ "$BR_ORDER_SLOT" = "observed" ]; then
     br_require_observed "build-record" "$unit_id" "$observed_path"
     criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
@@ -6626,7 +6670,8 @@ RV_RANGE_REPO=""; RV_RANGE_PATHS=""; RV_RANGE_SCOPE=""; RV_RANGE_NAME=""
 rv_load_range_repo() {
   local who="$1" unit_json="$2"
   RV_RANGE_REPO="$RV_CODEPATH"; RV_RANGE_PATHS=""; RV_RANGE_SCOPE=""; RV_RANGE_NAME="the code repository"
-  [ "$(printf '%s' "$unit_json" | jq -r '.proof // "tests"')" = "record" ] || return 0
+  br_order_facts "$unit_json"
+  [ "$BR_ORDER_RANGE" = "project" ] || return 0
   is_git_repo "$RV_PROJECT_FOLDER" \
     || die 87 "$who: $(printf '%s' "$unit_json" | jq -r '.id') is proved by its record, so its range lives in the project folder, and $RV_PROJECT_FOLDER is not a git repository. Run git init there and commit it."
   RV_RANGE_REPO="$RV_PROJECT_FOLDER"
@@ -8187,12 +8232,10 @@ do_close() {
   # An observe order is judged by `model`, which the observed check carries the same way: a
   # model looked at the page, and completion puts the look to a person (live-run row 104).
   local slot_check slot_verdict slot_judge slot_detail
-  case "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.proof // "tests"')" in
-    gate) slot_check="configuration-gate" ;;
-    record) slot_check="done-when" ;;
-    observe) slot_check="observed" ;;
-    *) slot_check="" ;;
-  esac
+  br_order_facts "$RV_UNIT_JSON"
+  slot_check="$BR_ORDER_SLOT"
+  # An order proved by its own tests has its criteria judged by the checkpoint rows it froze.
+  [ "$slot_check" != "order-tests" ] || slot_check=""
   if [ -n "$slot_check" ]; then
     slot_verdict="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].verdict // ""' "$last_record" 2>/dev/null)"
     slot_detail="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].detail // ""' "$last_record" 2>/dev/null)"
@@ -8393,9 +8436,9 @@ do_finish() {
   # record ran no test and took no suite baseline. So the suite is recorded not-needed and never
   # run, the same reading preconditions makes of the snapshot (live-run row 136).
   local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
-    [ (.workOrders // [])[] | (.proof // "tests") ]
-    | if length > 0 and all(. == "record") then "no" else "yes" end')"
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
+    [ (.workOrders // [])[] | orderFacts.slot ]
+    | if length > 0 and all(. == "done-when") then "no" else "yes" end')"
   pre_file="$IMPL_DIR/preconditions.json"
   if [ "$harness_needed" = "no" ]; then
     :
@@ -8850,7 +8893,11 @@ do_retake_tests() {
 # ledger document.
 # The freeze record's `commit` is HEAD at the freeze, whether or not the freeze committed: a gate
 # order commits nothing, and a test already in HEAD makes no commit either. So the commit is the
-# order's only when its subject is the one the freeze writes for this order. A build record holds
+# order's only when its subject is the one the freeze writes for this order.
+# One record holds one commit, and the freeze after a retake overwrites it. So each `retakes`
+# entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
+# the same subject test decides it. Without them the reset answer stops at the superseded freeze
+# and leaves the wrong test standing in the tree (live-run row 147). A build record holds
 # the last attempt's range; a fix record each round's. A record whose commits git no longer has
 # names nothing (live-run row 94).
 # A build and fix record does not stay at the top of the implementation folder. `retake-tests`
@@ -8860,13 +8907,20 @@ do_retake_tests() {
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
   local out='[]' c range file kind dir files
-  c="$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null)"
-  if [ -n "$c" ] && git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1; then
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
     case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
-      "Freeze the tests of $one_id through the implement skill:"*)
-        out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '. + [{order: $id, kind: "freeze", commit: $c, range: $c}]')" ;;
+      "Freeze the tests of $one_id through the implement skill:"*) ;;
+      *) continue ;;
     esac
-  fi
+    out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '
+      if any(.[]; .commit == $c) then . else . + [{order: $id, kind: "freeze", commit: $c, range: $c}] end')"
+  done <<RS_FREEZES
+$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
+printf '%s' "$ledger" | jq -r --arg id "$one_id" \
+  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty' 2>/dev/null)
+RS_FREEZES
   # Each retake folder comes from the ledger entry's own `movedTo`, never from a guessed folder
   # name. A folder or a record a person removed holds nothing, which is not fatal.
   files="$impl/build-$one_id.json
@@ -9348,7 +9402,7 @@ TG_OWNED
       bg_ledger="$(halt_order_in "$bg_ledger" "$unit_id" "$bg_why")"
       [ -n "$bg_ledger" ] || die 3 "dispatch-open: the halt on $unit_id could not be written."
       write_atomic "$TASK_PATH/implementation/ledger.json" "$bg_ledger"
-      die 78 "dispatch-open: $unit_id is halted, $bg_why. The run's ceiling is task.json's budget; raise it there, then grant-attempt clears the halt. Nothing was dispatched."
+      die 78 "dispatch-open: $unit_id is halted, $bg_why. The run's ceiling is task.json's budget. A person raises it with 'task set-budget <task-id> --dispatches <n>', or --minutes <n>, and then grant-attempt clears the halt. Nothing was dispatched."
     fi
   fi
 

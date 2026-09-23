@@ -51,6 +51,10 @@ contract." And: "Empty for a run made with a person present, and empty is the on
 interactive run ever writes." An empty list is not a gap. An attended run always leaves it
 empty, and the approval itself lives in each criterion's `author`.
 
+A non-empty list is a decision the record holds, so name it in `decisions`. It is never a gap:
+the fact is written down, and nothing is missing. `decisions` takes five sentences at most, so
+write one that says an unattended run answered questions on the person's behalf, and how many.
+
 ## What you write
 
 One file, `<task folder>/records/<stage>-distill.json`, in the shape of `scripts/distill-schema.json`:

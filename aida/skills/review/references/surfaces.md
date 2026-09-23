@@ -19,10 +19,13 @@ Offer setup for each kind that is off, not declined, and carries surface rows in
 every such kind on its own, and take an answer per kind. The two are separate capabilities, so a
 person may take one and refuse the other.
 
-Ask once per kind. A yes on a kind invokes the `surfaces` skill through the Skill tool, naming that
-kind. A no on a kind runs `decline <kind>`, and that kind is never asked again. An offer repeated
-every task is a nag, and a nag gets clicked through. Autonomous, the offer is not made, and the
-record says it was not offered.
+Ask once per kind, with a recommended answer per kind. Give three answers per kind: yes, not this
+task, or no. Say the difference between "not this task" and "no" in the ask itself, so the person
+knows what a "no" silences. A yes on a kind invokes the `surfaces` skill through the Skill tool,
+naming that kind. "Not this task" records nothing for that kind, and the next task may ask again.
+A no on a kind runs `decline <kind>`, project-wide, and that kind is never asked again. An offer
+repeated every task is a nag, and a nag gets clicked through. Autonomous, the offer is not made,
+and the record says it was not offered.
 
 ## Run them
 

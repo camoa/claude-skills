@@ -3,11 +3,12 @@
 A Claude Code plugin. AIDA keeps AI coding work inside a process that produces better code for
 your project.
 
-Every task runs through five stages. Scope writes a contract: the goals, the non-goals, and the
+Every task runs through six stages. Scope writes a contract: the goals, the non-goals, and the
 criteria that prove each goal was met. Research looks for prior art in your own code first, then
 outside, and reads current documentation rather than the model's memory. Design writes a spec
 detailed enough to build from. Implementation writes the tests first. Review runs the blocking
-checks and compares the result against the contract.
+checks and compares the result against the contract. Completion closes the task on that verdict
+and writes the pull request body from the records.
 
 Two things hold the process together.
 
@@ -16,14 +17,14 @@ decidable, a script decides it. A step that could not run says so, instead of re
 over nothing it looked at.
 
 **The stack knowledge is not in AIDA.** Each stage fetches a recipe for your language or
-framework and follows it. The same five stages work for PHP, Python, Go, Drupal, or a Claude
+framework and follows it. The same six stages work for PHP, Python, Go, Drupal, or a Claude
 plugin, because AIDA holds the process and the recipe holds the stack.
 
 AIDA also remembers. A new window, or the same window after its context is compacted, knows which
 task is active, which stage it is in, what the contract says, and what was already decided. You
 make a decision once.
 
-## The five stages
+## The six stages
 
 | Stage | What it produces |
 |---|---|
@@ -32,6 +33,7 @@ make a decision once.
 | Design | the spec: what to build, where the logic lives, which pattern each part follows |
 | Implementation | the code, written test first, reviewed as it lands |
 | Review | the blocking checks, and the result held against the contract |
+| Completion | the pull request body, and the task closed on the review's verdict |
 
 ## Status
 
