@@ -498,7 +498,10 @@ built-in `~/.claude/aida/projects` when no project was ever created. It reads ev
 the registry names outside that base too, so a version 5 pickup survives the rebuild. Replaces the
 whole registry with what it found.
 Each folder it keeps from outside the base, and each one it drops because the project file is
-gone, gets a line on stderr. Show those lines.
+gone, gets a line on stderr. A folder whose project file carries a name, or a code path, the
+rebuild already wrote gets one too, and that folder is skipped. Two rows cannot share either
+value. Show those lines, and name the repair each one names: change that value in one of the two
+project files, then rebuild again.
 `declinedOffers` and `directoryChoices` cannot be recovered this way and start empty again; say so
 plainly rather than letting it pass unremarked.
 
@@ -534,9 +537,18 @@ Read its exit code to decide what happens next, never its text alone:
 | 1 | A project-file field is missing or the wrong shape. | Name each missing field and its producer as the report printed them. Also name any repair the report printed beside them, such as `git init` for a folder that is not a git repository. One exit code carries only the highest condition, so a lower one shows only in the text. |
 | 2 | The code path does not exist on disk. | Right after `create`, this is expected; say so and move on. Elsewhere, only the project's owner can say where the code went, and nothing here fixes it. Say that plainly and stop. |
 | 3 | The check itself could not run. | Show the error text and stop. |
-| 4 | The registry disagrees with the project file, has no row for it, or two rows share a name. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above; a shared name needs a person to rename one project. |
+| 4 | The registry disagrees with the project file, has no row for it, or two rows share a name or a code path. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above. A shared name or a shared code path needs a person. They change that value in one of the two project files, then rebuild. |
 | 5 | The code path names a refused location: a system root, the home directory, or anything above it. | Say why it was refused. Right after `create` or `set-code-path`, the script has already undone the change; elsewhere, ask for a corrected code path. |
 | 6 | The project folder is not yet a git repository, or holds uncommitted work. | Say which. Not a git repository yet only happens on a project that predates this check; running `git init` there is the repair, and this skill does not do it silently. Uncommitted work is worth showing before starting anything else on top of it. |
+
+One route does not pass that code on. A `switch` that picked a folder up exits 0, because it
+registered the folder and that was its job. A folder it registers has fields no producer has
+filled yet, so the check is never 0 there. Read the report it printed for the findings. Name each
+missing field and its producer, as the table above says.
+
+Exit 3 and exit 5 still come through a pickup. Three says the check could not run, so there are
+no findings to read. Five says the code path names a refused location. Both rows above apply as
+written.
 
 The check never asks a question, in either mode. When the run is autonomous and a non-zero exit
 code came back, the report already says `Autonomous run: ... Recorded, not performed.`; this

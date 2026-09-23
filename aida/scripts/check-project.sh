@@ -44,7 +44,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 #   0  Every check below passed: project.json matches its schema and its codePath directory
 #      exists; codePath is not a refused location; the registry holds a row for this project
-#      that agrees with it, and no two registry rows share a name; the project folder is a
+#      that agrees with it, and no two registry rows share a name or a code path; the folder is a
 #      git repository with no uncommitted work. Nothing more is said.
 #   1  One or more fields are missing from project.json, present with the wrong shape, or
 #      fail one of the two cross-field checks project-schema.json's own descriptions
@@ -64,8 +64,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      above, a failure of the check itself, reported to stderr, never confused with a
 #      finding about the project.
 #   4  The registry disagrees with this project, has no row for it, or holds two rows sharing
-#      one name. The project file is authoritative in every case; this script reports the
-#      disagreement and picks no winner.
+#      one name or one code path. The project file is authoritative in every case; this script
+#      reports the disagreement and picks no winner.
 #   5  codePath names a refused location: a system root, the home directory itself, or a path
 #      above the home directory. Ported from version 5's set-code-path safety filter.
 #   6  The project folder is not yet a git repository, or it is one with uncommitted work in
@@ -83,9 +83,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     path, `projects[2].path`. Seven keyword families are still not evaluated: `minimum`,
 #     `maximum`, `maxItems`, `uniqueItems`, `const`, `minProperties`, `propertyNames`, and
 #     `required` anywhere below the root. No line in this report claims that they were. A rule
-#     about two entries together was never a schema question, which is why the
-#     no-two-rows-share-a-name test below exists as its own, separate step, the same as the
-#     three project-level cross-field tests in step 4b below;
+#     about two entries together was never a schema question, which is why the tests below that
+#     no two rows share a name and no two share a code path exist as their own, separate steps,
+#     the same as the three project-level cross-field tests in step 4b below;
 #   - `description`, shown verbatim as the repair guidance for a field this script finds
 #     missing or the wrong shape, since neither schema carries a separate short "producer"
 #     string.
@@ -485,6 +485,35 @@ fi
 DUPLICATE_NAME_COUNT="$(printf '%s' "$DUPLICATE_NAMES_JSON" | jq 'length')"
 
 # ---------------------------------------------------------------------------
+# 8b. The same test one field over: no two rows share a code path. A directory
+#     resolves to one project, so two rows on one code path make that lookup
+#     answer with whichever row was written first, and nothing else reports it.
+#     A trailing slash is stripped, so one directory written two ways counts
+#     once. A row with no code path, or a non-string one, is left out of this
+#     test, and the note says how many.
+# ---------------------------------------------------------------------------
+
+DUPLICATE_CODEPATHS_JSON='[]'
+DUPLICATE_CODEPATH_TEST_NOTE="ran: compared every row's codePath in $REGISTRY_PATH"
+
+if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
+  DUPLICATE_CODEPATH_TEST_NOTE="skipped: the registry file is corrupt"
+else
+  DUPLICATE_CODEPATHS_JSON="$(printf '%s' "$REGISTRY_JSON" | jq -c '
+    [ .projects[]? | select((.codePath? // null) != null and (.codePath | type) == "string" and (.codePath | length) > 0) ]
+    | group_by(.codePath | sub("/+$"; ""))
+    | map(select(length > 1) | {codePath: (.[0].codePath | sub("/+$"; "")), count: length, paths: (map(.path // null))})
+  ')"
+  UNPATHED_ROW_COUNT="$(printf '%s' "$REGISTRY_JSON" | jq '
+    [ .projects[]? | select((.codePath? // null) == null or (.codePath | type) != "string" or (.codePath | length) == 0) ] | length
+  ')"
+  if [ "${UNPATHED_ROW_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+    DUPLICATE_CODEPATH_TEST_NOTE="ran: compared every row carrying a codePath in $REGISTRY_PATH; $UNPATHED_ROW_COUNT row(s) with none were left out of this test"
+  fi
+fi
+DUPLICATE_CODEPATH_COUNT="$(printf '%s' "$DUPLICATE_CODEPATHS_JSON" | jq 'length')"
+
+# ---------------------------------------------------------------------------
 # 9. Does the registry hold a row for this project, and does it agree with
 #    project.json? The project file is authoritative; this step reports a
 #    disagreement, it never resolves one.
@@ -647,7 +676,7 @@ case "$SAFETY_VERDICT" in
       EXIT_CODE=1
     elif [ "$REG_MISSING_COUNT" -gt 0 ] || [ "$REG_UNREADABLE_COUNT" -gt 0 ] \
          || [ "$REGISTRY_ROW_FOUND" = "false" ] || [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ] \
-         || [ "$DUPLICATE_NAME_COUNT" -gt 0 ]; then
+         || [ "$DUPLICATE_NAME_COUNT" -gt 0 ] || [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ]; then
       EXIT_CODE=4
     elif [ "$GIT_IS_REPO" = "false" ] || [ "$GIT_HAS_UNCOMMITTED" = "true" ]; then
       EXIT_CODE=6
@@ -734,6 +763,11 @@ else
     echo "    Duplicate names found:"
     echo "$DUPLICATE_NAMES_JSON" | jq -r '.[] | "      - \"" + .name + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
   fi
+  echo "  No two registry rows share a code path. $DUPLICATE_CODEPATH_TEST_NOTE"
+  if [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ]; then
+    echo "    Duplicate code paths found. The directory resolves to one of these rows and nothing says which:"
+    echo "$DUPLICATE_CODEPATHS_JSON" | jq -r '.[] | "      - \"" + .codePath + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
+  fi
   echo "  Registry row for this project: $REGISTRY_ROW_NOTE"
   if [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ]; then
     echo "  Mismatch between the project file and its registry row. The project file wins; nothing was changed:"
@@ -798,6 +832,7 @@ jq -n \
   --argjson registryMissingFields "$REG_MISSING_JSON" \
   --argjson registryUnreadableFields "$REG_UNREADABLE_JSON" \
   --argjson duplicateRegistryNames "$DUPLICATE_NAMES_JSON" \
+  --argjson duplicateRegistryCodePaths "$DUPLICATE_CODEPATHS_JSON" \
   --argjson registryRowFound "$REGISTRY_ROW_FOUND" \
   --arg registryRowMatchedBy "$REGISTRY_ROW_MATCHED_BY" \
   --argjson registryMismatches "$REGISTRY_MISMATCHES_JSON" \
@@ -823,6 +858,7 @@ jq -n \
       missingFields: $registryMissingFields,
       unreadableFields: $registryUnreadableFields,
       duplicateNames: $duplicateRegistryNames,
+      duplicateCodePaths: $duplicateRegistryCodePaths,
       rowFound: $registryRowFound,
       rowMatchedBy: $registryRowMatchedBy,
       mismatches: $registryMismatches

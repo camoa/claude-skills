@@ -6,16 +6,20 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
-#   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <extra args>]
+#   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
 #
 # show     prints where the recipe is and the commands it holds, and runs nothing.
 # install  runs every command in the recipe's Install block, in order.
-# run      runs the recipe's Run command. A missing tool is that command failing.
+# run      runs the recipe's Run command. A missing tool is that command failing. What follows
+#          `--` reaches that command as arguments. show and install refuse the form at 3, because
+#          they take their commands from the recipe and would otherwise drop what a caller typed.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
-# folder derived files already live in. They print `status:`, `lines:` and `output:` with that
-# path. A status that is not zero adds `first:`, the first line the failing command printed.
+# folder derived files already live in. Each command is written there as it ran, its arguments
+# included, above its own output, so the record says what produced it. They print `status:`,
+# `lines:` and `output:` with that path. A status that is not zero adds `first:`, the first line
+# the failing command printed.
 #
 # Exit codes:
 #   0  did what was asked
@@ -64,8 +68,20 @@ case "$TOOL" in
   *[!a-z0-9-]*|-*|*-|"") printf 'tool-actions: tool name must be lowercase letters, digits and hyphens, got %s\n' "$TOOL" >&2; exit 3 ;;
 esac
 
-EXTRA=()
-if [ "${3:-}" = "--" ]; then shift 3; EXTRA=("$@"); fi
+EXTRA=(); DASHDASH=no
+if [ "${3:-}" = "--" ]; then DASHDASH=yes; shift 3; EXTRA=("$@"); fi
+
+# Only run hands extra arguments to a command. install and show read their commands from the
+# recipe and have nowhere to put these, so they refuse the form rather than drop what a caller
+# typed. The refusal comes before the project is resolved, so nothing runs and nothing is written.
+case "$ACTION" in
+  install|show)
+    [ "$DASHDASH" = "no" ] || {
+      printf 'tool-actions: %s takes no arguments after --, and only run passes them to a command. Nothing ran.\n' "$ACTION" >&2
+      exit 3
+    }
+    ;;
+esac
 
 # ---------------------------------------------------------------- the project
 
@@ -258,7 +274,8 @@ case "$ACTION" in
       recipe_output_summary 0 "$OUTFILE" 1
       exit 0
     fi
-    recipe_output_summary 4 "$OUTFILE" 1
+    # Line 2: the record opens with the command as it ran, and `first:` quotes its output.
+    recipe_output_summary 4 "$OUTFILE" 2
     exit 4
     ;;
 

@@ -595,6 +595,7 @@ register_v6_folder() {
 
 do_switch() {
   local target="${1:?switch: a name or a code path is required}" match project_path cwd
+  local registered=0 rc
   match="$(resolve_target "$target")"
   # A project that is still registered, named by its own folder path. resolve_target reads a name
   # and a code path, so it misses that address. The version 6 pickup below would then refuse on
@@ -606,9 +607,11 @@ do_switch() {
   # every folder the second branch takes. A folder holding both files is a version 5 pickup that
   # already ran: its project file is the truth, and the version 5 branch would overwrite it.
   if [ -z "$match" ] && register_v5_folder "$target"; then
+    registered=1
     target="$(basename -- "$(canon_path "$target")")"
     match="$(resolve_target "$target")"
   elif [ -z "$match" ] && register_v6_folder "$target"; then
+    registered=1
     target="$PICKED_UP_NAME"
     match="$(resolve_target "$target")"
   fi
@@ -635,7 +638,19 @@ do_switch() {
   echo "PROJECT: ${project_path}"
   project_line "$match"
   echo "project-file: ${project_path}/project.json"
-  run_check "$project_path"
+  run_check "$project_path"; rc=$?
+  # An exit code says whether the action did its job. A pickup wrote the registry row, so it did.
+  # Both pickups register a folder whose fields no producer has filled yet, and the check is then
+  # never 0. Returning what it returned reported a failure over work that succeeded. The findings
+  # still reach the person: the report is printed above, and the check wrote its own record.
+  # Two codes pass through a pickup all the same. Exit 3 says the check could not run, so there
+  # are no findings to read, and exit 5 says the code path names a refused location. The version 6
+  # pickup refuses on both before it registers anything; the version 5 branch reaches them here.
+  case "$rc" in
+    3|5) return "$rc" ;;
+  esac
+  [ "$registered" -eq 0 ] || return 0
+  return "$rc"
 }
 
 # ------------------------------------------------------------------------------------------------

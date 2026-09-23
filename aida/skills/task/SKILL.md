@@ -122,9 +122,10 @@ line per `## Preconditions` command `up` runs.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
 says what `up` would do.
 
-`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with the
-output in `records/environment-up.txt`, in this order. First it writes each `## Files` block
-absent from the worktree. A file present with other content refuses at 3. Then it runs each
+`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with each
+command as it ran and that command's own output in `records/environment-up.txt`, in this order.
+First it writes each `## Files` block absent from the worktree. A file present with other content
+refuses at 3. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
 failing line stops at 3, prints its output, removes the files this run wrote, and commits
 nothing. Then it commits the written files alone, so other changed or staged work is never
@@ -144,7 +145,7 @@ up by hand. It records `environment` in `task.json`: the address, the recipe, wh
 other address keys. It prints `address:`. Running it twice is safe: the recipe promises every
 step runs again cleanly.
 
-`down` runs the tear-down lines, output to `records/environment-down.txt`, and removes
+`down` runs the tear-down lines, each one and its output to `records/environment-down.txt`, and removes
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
 nothing up it says so and exits 0. Run it before the worktree is removed, or the framework keeps
 an orphaned registry entry; the completion body names it when a site is up. Review and `baseline`

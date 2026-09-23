@@ -1227,12 +1227,18 @@ fill_line_or_refuse() {
 # are read from. Both streams are appended to $3, standard error after standard output, so the
 # record holds them and the caller reads a clean value. Returns the command's exit status. A line
 # refused by refuse_if_unsafe, holding no command, or still holding a `{name}` exits 3.
+# A caller that quotes a line of this record counts two past the length it held before the call:
+# the command's own line, then its first line of output. Both refusals here fire when the command
+# printed nothing, so the record's last line is that command, never output.
 run_recipe_capture() {
   local line="$1" dir="$2" outfile="$3" capture="$4" err_file result tab; tab="$(printf '\t')"
   line="$(fill_tokens "$line")"
   refuse_if_unsafe environment "$RECIPE" "$line" || exit 3
   err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
   printf '+ %s\n' "$line"
+  # The filled line, above the output it produced, the same shape run_recipe_line writes. The
+  # record holds a token's output, and the recipe's unfilled line does not say what produced it.
+  printf '+ %s\n' "$line" >>"$outfile"
   result="$(br_run_resolved "$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')" "$dir" "$capture" '[]' "" "$err_file")"
   cat "$capture" "$err_file" >>"$outfile"; rm -f "$err_file"
   case "$result" in RAN*) return "${result#*"$tab"}" ;; esac
@@ -1330,7 +1336,7 @@ do_environment() {
   # shellcheck disable=SC2034
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
-  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
+  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list before
   preconditions="$(sh_blocks_under "$RECIPE" Preconditions)"
   bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
   address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
@@ -1396,9 +1402,10 @@ TA_TOKEN_LIST
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"
   while IFS="$tab" read -r n name; do
     [ -n "$n" ] || continue
+    before="$(wc -l <"$outfile" | tr -d '[:space:]')"
     run_recipe_capture "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")" "$wt" "$outfile" "$capture"; result=$?
     value="$(head -n 1 "$capture")"
-    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
     TOKENS="$TOKENS$name$tab$value
 "
   done <<TA_TOKEN_LIST
@@ -1406,9 +1413,10 @@ $token_list
 TA_TOKEN_LIST
   rm -rf "$tokens_dir"
   run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" before)" "$outfile" "environment: up" fill_line_or_refuse
+  before="$(wc -l <"$outfile" | tr -d '[:space:]')"
   run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
   value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
-  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
   keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"
   TOKENS="$TOKENS$keys
 "

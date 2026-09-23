@@ -68,7 +68,8 @@
 #   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
 #   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
 #   recipe_files_into <recipe> <heading> <dir>  one file per fenced block; prints <n><TAB><path>
-#   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a shell
+#   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a
+#                                               shell; writes the command, then its output, to <out>
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
@@ -1443,6 +1444,10 @@ run_recipe_line() {
   shift 4
   refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
   printf '+ %s\n' "$line"
+  # The record says what ran, above the output that run produced. The extra arguments come from
+  # the conversation, so the recipe line alone does not account for the output, and after a
+  # compaction nothing does. One line per command, so a block of commands reads in order.
+  { printf '+ %s' "$line"; [ "$#" -eq 0 ] || printf ' %s' "$@"; printf '\n'; } >>"$outfile"
   (
     if [ -n "${ZSH_VERSION:-}" ]; then
       setopt SH_WORD_SPLIT 2>/dev/null
@@ -1481,7 +1486,9 @@ run_recipe_lines() {
     before="$(wc -l <"$outfile" | tr -d '[:space:]')"
     run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
     printf '%s step failed: %s\n' "$label" "$line" >&2
-    recipe_output_summary 4 "$outfile" "$((before + 1))"; exit 4
+    # Two past the count: the command's own line, then its first line of output, which is what
+    # `first:` quotes.
+    recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4
   done <<RL_STEPS
 $steps
 RL_STEPS

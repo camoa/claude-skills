@@ -121,6 +121,13 @@
 #     bounded rebuild never drops a project silently. A project folder the current registry names
 #     outside <projectsHome>, which a version 5 pickup makes, is read the same way and kept: the
 #     walk alone would drop it, and the registry row is the only thing that knows where it is.
+#     A folder whose project.json carries a name, or a codePath, this rebuild has already written
+#     is skipped with a line naming both folders, the value and the repair. Two rows cannot share
+#     either: a name makes check-project.sh exit 4 for both projects, and a codePath makes the
+#     directory resolve to whichever row was written first. The folders outside <projectsHome> are
+#     read first, so a value two folders claim is kept for the one outside, and the skip falls on
+#     the folder the next rebuild finds again. The line names the repair each case needs: rebuild
+#     again for a folder under the base, `switch` for one outside it.
 #     One whose project.json is gone is named on stderr as it is dropped. lastAccessed cannot be recovered from
 #     project.json, which does not carry it: this rebuild uses the project folder's own last git
 #     commit date as the closest available fact, and today's date when the folder carries no git
@@ -538,15 +545,15 @@ registry_rebuild() {
   # registry row is the only record of where such a folder is, so those paths join the walk and
   # go through the same reader. Nothing is dropped silently: a folder whose project file is gone
   # is named here, and the loop below names one that will not read.
-  local outside outside_path
+  local outside outside_path outside_kept=""
   outside="$(registry__current | jq -r '(.projects // [])[]? | .path // empty' 2>/dev/null)"
   while IFS= read -r outside_path; do
     [ -n "$outside_path" ] || continue
     [ "$(dirname -- "$outside_path")" != "$home_canon" ] || continue
     if [ -f "$outside_path/project.json" ]; then
       printf 'registry_rebuild: keeping %s, a project folder outside %s.\n' "$outside_path" "$projects_home" >&2
-      listing="$listing
-$outside_path"
+      outside_kept="$outside_kept$outside_path
+"
     else
       printf 'registry_rebuild: dropping %s, registered outside %s and its project.json is gone.\n' \
         "$outside_path" "$projects_home" >&2
@@ -556,10 +563,16 @@ $outside_path"
 $outside
 OUTSIDE
 
+  # The folders outside the base are read first, so a name or a code path two folders claim is
+  # kept for the one outside. A folder under the base comes back on the next rebuild, and one
+  # outside it comes back only through `switch`, because no walk reaches it once its row is gone.
+  # So the skip below falls on the folder a rebuild can recover.
+  listing="$outside_kept$listing"
+
   # A herestring, not a pipe, so the loop body runs in this shell and projects_json survives past
   # the loop: piping "find | while read" into bash puts the loop in a subshell, and every update
   # to projects_json inside it would be lost the moment the loop ends.
-  local entry proj_file row proj_path last
+  local entry proj_file row proj_path last proj_name proj_code held repair
   while IFS= read -r entry; do
     [ -n "$entry" ] || continue
     proj_file="$entry/project.json"
@@ -578,16 +591,59 @@ OUTSIDE
       continue
     fi
 
+    # The fourth door. registry_add_project is never called here, so registry_name_free never runs
+    # and a duplicate name would pass. That helper tests the store on disk, which this rebuild
+    # replaces whole, so the only set a rebuild can test against is the one it has built so far.
+    # Two rows sharing a name make check-project.sh exit 4 for both projects, forever after. The
+    # rebuild is a recovery operation over a whole base, so it skips the second folder and carries
+    # on, the same shape it uses for a project file it cannot read.
+    # Two repairs, because a skipped folder comes back two different ways. Under the base the next
+    # rebuild finds it. Outside the base nothing walks it, and the row this rebuild is replacing
+    # was the only record of where it sits, so `switch` on the folder is the way back.
+    if [ "$(dirname -- "$entry")" = "$home_canon" ]; then
+      repair="then rebuild again"
+    else
+      repair="then run switch on that folder, because a rebuild does not walk it"
+    fi
+
+    proj_name="$(printf '%s' "$row" | jq -r '.name')"
+    held="$(printf '%s' "$projects_json" | jq -r --arg n "$proj_name" \
+      'map(select(.name == $n)) | .[0].path // empty')"
+    if [ -n "$held" ]; then
+      printf "registry_rebuild: skipping %s, the name '%s' is already written for %s. Change the name in one project.json, %s.\n" \
+        "$entry" "$proj_name" "$held" "$repair" >&2
+      warned=1
+      continue
+    fi
+
+    # registry_add_project refuses a codePath already registered, and that refusal is behind the
+    # same door. Two rows on one code path make registry_resolve_by_directory answer with either,
+    # so the directory's owner is then whichever row the walk wrote first. Both sides are
+    # canonicalised, the way the base above is, because two project files can spell one directory
+    # two ways, through a symlink or a trailing slash, and two spellings are one owner.
+    proj_code="$(registry__canon "$(printf '%s' "$row" | jq -r '.codePath')")"
+    held="$(printf '%s' "$projects_json" | jq -r --arg c "$proj_code" \
+      'map(select((._codeCanon // "") == $c)) | .[0].path // empty')"
+    if [ -n "$held" ]; then
+      printf 'registry_rebuild: skipping %s, the code path %s is already written for %s. Change the codePath in one project.json, %s.\n' \
+        "$entry" "$proj_code" "$held" "$repair" >&2
+      warned=1
+      continue
+    fi
+
     proj_path="$(registry__canon "$entry")"
     last="$(git -C "$entry" log -1 --format=%cd --date=short -- . 2>/dev/null)"
     [ -n "$last" ] || last="$(date -u +%Y-%m-%d)"
-    row="$(printf '%s' "$row" | jq -c --arg p "$proj_path" --arg t "$last" '. + {path: $p, lastAccessed: $t}')"
+    # _codeCanon carries the canonical code path for the test above, and the write below drops it.
+    # The row keeps the project file's own spelling, which is the value the check compares against.
+    row="$(printf '%s' "$row" | jq -c --arg p "$proj_path" --arg t "$last" --arg c "$proj_code" \
+      '. + {path: $p, lastAccessed: $t, _codeCanon: $c}')"
     projects_json="$(printf '%s' "$projects_json" | jq -c --argjson r "$row" '. + [$r]')"
   done <<< "$listing"
 
   local new
   new="$(jq -n --argjson projects "$projects_json" \
-    '{version: 1, projects: $projects, declinedOffers: [], directoryChoices: []}')" || return 1
+    '{version: 1, projects: ($projects | map(del(._codeCanon))), declinedOffers: [], directoryChoices: []}')" || return 1
   printf '%s' "$new" | registry__write || return 1
 
   if [ "$warned" -eq 1 ]; then

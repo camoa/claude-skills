@@ -1,8 +1,8 @@
 ---
 name: tool
 description: This skill should be used when a tool has to be installed or run in the AIDA project that owns this directory, for example PHPUnit, PHPStan, Playwright or that project's own test runner, or when a stage needs a tool before it can do its work. It follows that tool's recipe for this project's framework, and it does nothing outside a project.
-argument-hint: "<install | run | show> <tool>"
-arguments: [action, tool]
+argument-hint: "<install | run | show> <tool> [-- <arguments>]"
+arguments: [action, tool, runArguments]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
 ---
 
@@ -11,8 +11,9 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
 Install or run one tool. The framework decides how, and that answer lives in a recipe outside this
 plugin. This skill knows no tool's name and no framework's habits.
 
-Read the two arguments. The first is `install`, `run` or `show`. The second is the tool, in
-lowercase, as the recipe names it: `phpunit`, `phpstan`, `playwright`, `pytest`.
+Read the arguments. The first is `install`, `run` or `show`. The second is the tool, in
+lowercase, as the recipe names it: `phpunit`, `phpstan`, `playwright`, `pytest`. `run` takes more
+after `--`, described below; `install` and `show` take none and refuse them.
 
 Every call below runs `tool-actions.sh`, named in this skill's own grant, so it runs without asking.
 Any other Bash command still asks for approval.
@@ -26,20 +27,27 @@ stage this call runs inside.
 
 `install` is the one action that needs a person. The script refuses it at exit 70 on an
 autonomous run, and runs no step. `run` and `show` do the same thing in both modes. `show` runs
-nothing. `run` runs the one command the recipe holds, and writes that command's output under the
-project's own `records/` folder.
+nothing. `run` runs the one command the recipe holds, and writes that command, with its output,
+under the project's own `records/` folder.
 
 ## Run a tool
 
 This is the common case, and it is also how you find out whether the tool is there.
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> run <tool>
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> run <tool> [-- <arguments>]
 ```
 
-Read the exit code first, never the text alone. The command's own output goes to the file named
-on the `output:` line, under the project's `records/` folder. The `status:` and `lines:` lines say
-how it ended and how much it printed.
+The recipe holds the command. Anything the person asked for on top of it goes after `--`, one
+word per argument, such as a path to test or a filter. Those words reach the command as arguments,
+never through a shell, so quoting and expanding do nothing. Pass nothing after `--` when the person
+asked for nothing; the recipe's own command is the default.
+
+Read the exit code first, never the text alone. The file named on the `output:` line sits under
+the project's `records/` folder. It opens with the command as it ran, with the `--` arguments,
+and holds that command's own output under it. So the record says what produced the output, and a
+later reader needs no part of this conversation. The `status:` and `lines:` lines say how it
+ended and how many lines the file now holds.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
@@ -66,6 +74,10 @@ answer, not a fault. Report what it said. Do not install anything and do not run
 "${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> install <tool>
 ```
 
+`install` and `show` take no `--` arguments. They read every command from the recipe, so there is
+nowhere to put one. Passing any refuses at 3, rather than dropping what the person typed. Only
+`run` takes them.
+
 Interactive: run `show <tool>` first, print its commands, and wait for a plain yes before you run
 `install`. Autonomous: halt here and say the install needs a person, because an install changes the
 project and nobody is there to approve it. Before you ask, name the files the recipe's commands
@@ -76,7 +88,7 @@ change and check them against the active order's untouched list.
 | 0 | Every step ran. | Run the tool once to confirm it works. |
 | 70 | The run is autonomous, and an install needs a person. | Say the install waits for a person. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
-| 3 | A command was refused, or the recipe has no install steps. | Show the error text and stop. It names the recipe, which is where the fix belongs. |
+| 3 | A command was refused, the recipe has no install steps, or arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. The third is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
 | 4 | A step failed. | The `first:` line quotes the step's first line of output, and the file at `output:` holds the rest. Show what it said; it says what is missing better than a guess would. |
 
 Do not install by hand when a step fails. A missing package manager or a wrong version is the

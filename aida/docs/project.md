@@ -147,6 +147,10 @@ safety grounds. A code path or a name another project already holds. A project f
 own folder as the code path. A project file with fields missing is registered instead, and the
 check tells you which fields to fill.
 
+A pickup that registered the folder reports success, even when the check then names missing
+fields. The fields are the next step, not a failed pickup, so the findings are reported and the
+pickup stands.
+
 Picking up a version 5 folder refuses on the same name test, which is new. That pickup takes the
 folder name as the project name, so two version 5 folders in different places can carry one name.
 Rename the folder you are picking up, then point switch at it again.
@@ -225,6 +229,10 @@ that is merely done or parked. `/aida:project rebuild-registry` reads the folder
 again, with one exception. A project folder outside the projects base is not in that walk:
 `/aida:project switch "<project folder>"` brings it back instead, and the dropped row held the
 only copy of that path. The unregister output names which case it is, and prints the path.
+
+The rebuild skips a folder whose project file carries a name, or a code path, it has already
+listed, and says which folder it skipped. Two projects can share neither value. Change that value
+in one of the two project files, then rebuild again.
 
 ## Cleaning up
 
