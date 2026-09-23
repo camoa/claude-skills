@@ -157,8 +157,16 @@ is_blank() {
 # Writes $2 (assumed already-valid JSON text) to $1 through a temporary file in the target's own
 # directory, then renames over the target. The rename stays inside one filesystem, and a failure
 # partway through never leaves a half-written file at $1.
+#
+# This refuses content with nothing in it, and leaves the target the bytes it had. Almost every
+# caller builds $2 in a jq command substitution. A jq that cannot read its input exits non-zero
+# and prints nothing, so the substitution yields an empty string. Without this test the rename
+# puts an empty file over a record the task still needs, and the caller still exits 0. The test
+# lives here, once, rather than at each call site, so a caller added later cannot reproduce the
+# defect by hand (live-run row 173).
 write_atomic() {
   local target="$1" content="$2" dir tmp
+  is_blank "$content" && die3 "refused to write $target: the content had nothing in it. Nothing was written"
   dir="$(dirname -- "$target")"
   tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
     || die3 "could not create a temporary file in $dir"

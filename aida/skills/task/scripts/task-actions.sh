@@ -1301,12 +1301,19 @@ do_environment() {
 
   if [ "$sub" = "down" ]; then
     [ "$#" -eq 0 ] || die3 "environment: down reads the recipe the record names and takes no flag, got: $1"
-    RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")"
+    # A record this cannot read is not a record saying nothing was up. Without this test jq's
+    # failure reads as an absent recipe, and a person hears that no site is up while it still is.
+    RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")" \
+      || die3 "environment: could not read $task_json. Nothing was torn down"
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
     # The address keys the record kept, so `{worktreeProject}` reaches the tear-down.
     TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt") | "\(.key)\t\(.value)"' "$task_json")"
     wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
+    # task_worktree runs in a command substitution, so its own die3 ends that subshell alone and
+    # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
+    # caller stood. The refusal it already printed is above this one.
+    [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
     cd "$wt" || die3 "environment: could not enter $wt"
     run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
@@ -1355,6 +1362,10 @@ TA_TOKEN_LIST
   fi
   cr_require_person up "a person approved the site coming up"
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
+  # Same reason as the down branch above: an empty path here means task_worktree already refused
+  # inside its own subshell. Without this test `cd ""` changes nothing and the bring-up lines run
+  # in the caller's directory, which is any tree at all.
+  [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
   recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
@@ -1417,9 +1428,17 @@ TA_TOKEN_LIST
     # paths are the recipe's to know, and a commit of everything would sweep other work in.
     [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
   done
-  write_atomic "$task_json" "$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  # The site is already up when this write runs, and this beta does not reorder the two. So this
+  # site tests the record itself rather than leaving write_atomic to name the file alone. Nothing
+  # finds a site the record forgot: down, prune and the finish page all read .environment from
+  # here. The message therefore says what is running and how to stop it by hand. The address
+  # command's own lines are in $outfile, and a tear-down line may need them (fill_tokens).
+  local up_doc
+  up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
     '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
+  [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value, and $task_json could not be written. No record names that site, so task environment $id down cannot find it. Tear it down by hand: run the Tear down block of $RECIPE in $wt. The values that block may need are the address command's lines in $outfile"
+  write_atomic "$task_json" "$up_doc"
   commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
   printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
@@ -1492,7 +1511,10 @@ do_prune() {
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
     [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
-    state="$(jq -r '.state // "?"' "$task_json")"
+    # A record this cannot read names no state, and the refusal below would then print an empty
+    # word where the state belongs. It says what happened instead.
+    state="$(jq -r '.state // "?"' "$task_json")" \
+      || die3 "prune: could not read $task_json. Nothing was removed"
     [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
     [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
   done <<TA_IDS

@@ -2809,7 +2809,7 @@ bl_tool_result() {
 # The step. Every framework the project declares must be answered for, because the build runs in
 # one repository that is all of them at once.
 do_preconditions() {
-  local task_folder="" project_folder codepath
+  local task_folder="" project_folder codepath resolve_rc
   local recipes="" failures="" values="" check_recipes="" fw
   local implement_lookups="" im_answer im_lookup im_path im_resolved im_blocked im_freeze
   local im_notgiven im_by_tests im_unlooked im_advice
@@ -2871,6 +2871,8 @@ do_preconditions() {
   done
 
   task_folder="$(resolve_task_folder "$task_folder" "preconditions")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   # Every other action calls the folder TASK_PATH, and the shared loaders read that name.
   TASK_PATH="$task_folder"
 
@@ -3203,9 +3205,17 @@ EOF
           # The three tools run over the baseline scope, the same union of every order's ownedFiles
           # recorded above. A caller that passed no flag for one of them leaves it undeclared, with
           # the reason this record has always carried.
+          # bl_tool_result runs in a command substitution, so a die inside it ends that subshell
+          # alone and leaves nothing here. Each value is tested where it lands, because a helper
+          # around the call would hold the same die in the same subshell. Without these three the
+          # jq below fails on an empty --argjson, and write_atomic then refuses naming the
+          # baseline file, which tells a person the wrong thing about what went wrong.
           cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$task_folder/implementation")"
+          [ -n "$cs_json" ] || die 3 "preconditions: the coding-standards run produced no result. No baseline was written"
           sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$task_folder/implementation")"
+          [ -n "$sa_json" ] || die 3 "preconditions: the static-analysis run produced no result. No baseline was written"
           sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")"
+          [ -n "$sec_json" ] || die 3 "preconditions: the security run produced no result. No baseline was written"
 
           baseline_json="$(jq -n \
             --arg takenAt "$today" --arg commit "$ledger_started_from" \
@@ -3319,7 +3329,7 @@ EOF
 # own findings as pre-existing. references/preconditions.md records the gap. Every refusal
 # runs before the one write, so a refused call leaves the record as it was.
 do_recipe_refresh() {
-  local task_folder="" recipes="" fw rp line from kind
+  local task_folder="" recipes="" fw rp line from kind resolve_rc
   local record_file record_doc today refreshed=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3342,6 +3352,8 @@ do_recipe_refresh() {
   [ -n "$recipes" ] || die 3 "recipe-refresh: nothing to refresh; pass --recipe <framework>=<path>"
 
   task_folder="$(resolve_task_folder "$task_folder" "recipe-refresh")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   TASK_PATH="$task_folder"
   IMPL_DIR="$task_folder/implementation"
   require_started_build "recipe-refresh"

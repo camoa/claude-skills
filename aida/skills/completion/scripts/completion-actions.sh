@@ -232,7 +232,7 @@ CP_FINDINGS
 # Sets CP_OBSERVED to [{criterion, order, record, rows: [{doneWhen, surface, viewport,
 # screenshot, before, verdict, note}]}]. $1 the action.
 cp_load_observed() {
-  local who="$1" rows_out one cid wo observed_file observed_state observed_doc tab
+  local who="$1" rows_out one cid wo observed_file observed_state observed_doc observed_rc tab
   CP_OBSERVED="[]"
   [ "$(json_file_state "$SNAPSHOT_FILE")" = "ok" ] || return 0
   rows_out="$(mktemp)" || die 3 "$who: could not create a temporary file"
@@ -243,7 +243,12 @@ cp_load_observed() {
     cid="${one%%"$tab"*}"; wo="${one#*"$tab"}"
     observed_file="$TASK_PATH/implementation/observed-$wo.json"
     observed_state="$(json_file_state "$observed_file")"
+    # cp_record_doc refuses an unreadable record, and it runs in a command substitution, so that
+    # refusal ends the subshell alone. Untested, the jq below fails on an empty --argjson, writes
+    # no row, and this criterion then leaves the observed list without a word said.
     observed_doc="$(cp_record_doc "$who" "$observed_file" "observed record")"
+    observed_rc=$?
+    [ "$observed_rc" -eq 0 ] || exit "$observed_rc"
     jq -nc --arg cid "$cid" --arg wo "$wo" --arg state "$observed_state" --argjson doc "$observed_doc" \
       '{criterion: $cid, order: $wo, record: $state, rows: (($doc // {}).rows // [])}' >>"$rows_out"
   done <<CP_OBSERVE
