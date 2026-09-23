@@ -121,6 +121,34 @@ It reads the person's file, the project's file and the loader's record, and writ
 every later role follows. This step loads them once, where the task's evidence starts, so design
 and implementation read one record and never fetch. Research itself cites no play.
 
+## Read the parent's research
+
+A task made by a split carries `parent` in its `task.json`, the parent task's id. Read that
+field before planning any search. Absent, or the file does not hold it: go to the next section.
+
+Present: the parent's research folder is `<projectPath>/tasks/<parent>/research/`, a sibling of
+this task's own folder. Read every `<search>.json` in it. Then walk this task's criteria. Skip a
+criterion this task already holds a finding for. The `search:` lines from `read` name every file
+already on disk, and "Read what is already there" says to read each one first. `record` only
+appends, so a repeated run would otherwise record the parent's findings a second time. Record
+each parent finding that answers a criterion here, through `record` below, one `--search` per
+parent file, named `parent-<the parent's search name>`. `--searched-for` is that file's own
+`searchedFor`. `--text` is the finding's own text. `--source` holds the finding's `source` and
+its `lookedAt` date, so the finding still names where it came from and when it was looked at.
+`record` stamps today, which is when this task wrote the finding down, and the source says when
+the parent looked. Never claim a fresh look at something nobody looked at again.
+`--criteria-served` names this task's own criterion ids, from the contract read above. A parent
+criterion id means nothing here, because this task's contract minted its own.
+
+Dispatch a search only for a criterion nothing in that folder covers. Research is the most
+expensive thing AIDA does, so a child that re-runs its parent's searches pays twice for one
+answer.
+
+The parent's folder is gone or unreadable: plan every search as if this task had no parent, and
+say so in one line. A missing parent is not a failure.
+
+This step asks nothing. It runs the same way in both run modes.
+
 ## Decide which searches are needed
 
 Walk the criteria list. For each criterion, or each small group of related criteria, work out

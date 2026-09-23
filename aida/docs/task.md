@@ -121,8 +121,11 @@ above:
   will satisfy it. A criterion no child claims, and a child whose criteria nothing researched,
   both come back as findings rather than passing quietly.
 
-No research is copied. The parent's findings stay in the parent's folder, and each child runs
-its own scope and then its own research against its own criteria.
+No research is copied. The parent's findings stay in the parent's folder, and each child runs its
+own scope and then its own research against its own criteria. That research reads the parent's
+folder first. A parent finding that answers one of the child's criteria is recorded in the child,
+keeping the parent's own source and date. A search runs only for what the parent never covered,
+so a child pays for its gap and not for the whole ground again.
 
 Splitting sets each child's parent and adds it to the parent's own list of children; no folder
 moves, and the parent's own materials stay exactly where they were. Nesting goes two levels deep

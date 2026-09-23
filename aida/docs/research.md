@@ -44,6 +44,13 @@ missing. Nothing starts over. A task from version 5 keeps its old research. The 
 and records each finding that still holds, one search per old file. New searches run only for
 what those files never covered.
 
+A task made by a split reads its parent's research the same way, before it plans anything. Each
+parent finding that answers one of this task's criteria is recorded here, keeping the parent's own
+source and the date the parent looked. A search runs only for a criterion the parent's folder
+never covered. Research is the most expensive stage, so a child pays for its gap and not for the
+answers its parent already holds. A parent folder that is gone is said in one line, and the task
+researches as if it had no parent.
+
 ## The playbooks loaded here
 
 Research is where the task's playbooks are loaded, once, because this is where the task's
