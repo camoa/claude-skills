@@ -97,6 +97,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                      against review-schema.json before it lands.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/surfaces.sh      sourced. The surface file reader the
 #                                                      surfaces skill's writer is proved by.
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/proof.sh         sourced, for br_order_facts and
+#                                                       br_proof_facts: what a proof kind means
+#                                                       for a check about to answer, per order
+#                                                       and over the whole snapshot.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/paths.sh         sourced, for resolve_against, which
 #                                                      sf_surface_path joins a relative registryPath
 #                                                      through.
@@ -132,6 +136,7 @@ TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
 SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
 PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
+PROOF_LIB="${PLUGIN_ROOT}/scripts/lib/proof.sh"
 REVIEW_SCHEMA="${PLUGIN_ROOT}/scripts/review-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'review-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
@@ -146,7 +151,7 @@ die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
 die79() { die 79 "$1"; }
 
-for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB" "$SURFACES_LIB" "$PATHS_LIB"; do
+for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB" "$SURFACES_LIB" "$PATHS_LIB" "$PROOF_LIB"; do
   [ -f "$lib_name" ] || die 3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die 3 "the library failed to load: $lib_name"
@@ -761,15 +766,16 @@ rw_check_coverage_verdict() {
         | select(((.kind == "machine") and (((.tests // []) | length) > 0))
                  or ((.kind == "person") and ((.checklist // "") != ""))) ] | length > 0')"
     if [ "$covered" != "true" ]; then
-      observed_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" \
-        '[ (.workOrders // [])[] | select((.proof // "tests") == "observe") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
+      observed_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
+        [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
       [ -n "$observed_owner" ] \
         && covered="$(jq -r '((.rows // []) | length) > 0' "$IMPL_DIR/observed-$observed_owner.json" 2>/dev/null)"
     fi
     if [ "$covered" != "true" ]; then
-      judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" '
+      judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
         [ (.workOrders // [])[]
-          | select(((.proof // "tests") == "gate") or ((.proof // "tests") == "record"))
+          | orderFacts.slot as $slot
+          | select($slot == "configuration-gate" or $slot == "done-when")
           | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
       [ -n "$judged_owner" ] \
         && covered="$(jq -r --arg id "$cid" --arg unit "$judged_owner" '
@@ -2199,8 +2205,8 @@ do_close() {
     # judged the order's done-when rows at each surface and viewport, and the observed record
     # the build read holds those rows (live-run row 104). Met when every row is met, unmet when
     # one is not, unanswered when the record is not there to read.
-    observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" \
-      '[ (.workOrders // [])[] | select((.proof // "tests") == "observe") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
+    observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
+      [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
     if [ "$kind" = "person" ]; then
       verdict="$(cr_lookup "$rows" "$cid")"
       if [ -n "$verdict" ]; then

@@ -161,6 +161,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/schema-check.sh   sourced, for schema_check_compare, the
 #                                                        one field-list comparison every stage
 #                                                        reads; `start` runs it over baseline.json
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/proof.sh          sourced. br_order_facts says which check
+#                                                        takes one order's proof slot, which
+#                                                        repository holds its range, and whether
+#                                                        it owns a file in the code path. Every
+#                                                        step below asks one of those three, and
+#                                                        never reads the proof kind itself.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/baseline-schema.json   the shape `preconditions` writes to
 #                                                        baseline.json, which `start` compares a
 #                                                        resumed run's copy against (exit 83)
@@ -661,6 +667,7 @@ RECORDS_HASH_LIB="${PLUGIN_ROOT}/scripts/lib/records-hash.sh"
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
+PROOF_LIB="${PLUGIN_ROOT}/scripts/lib/proof.sh"
 SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
 PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
 BASELINE_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/baseline-schema.json"
@@ -697,6 +704,12 @@ source "$RECIPES_LIB" || die 3 "the recipes library failed to load: $RECIPES_LIB
 [ -f "$SCHEMA_CHECK_LIB" ] || die 3 "cannot find the schema-check library at $SCHEMA_CHECK_LIB"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die 3 "the schema-check library failed to load: $SCHEMA_CHECK_LIB"
+
+# What one order's proof kind means for a check about to answer. Every step below reads its three
+# variables, or its jq twin where the question is asked over the whole snapshot at once.
+[ -f "$PROOF_LIB" ] || die 3 "cannot find the proof-kind library at $PROOF_LIB"
+# shellcheck source=/dev/null
+source "$PROOF_LIB" || die 3 "the proof-kind library failed to load: $PROOF_LIB"
 
 # The surface file reader review uses, and the path join it needs: the observed check reads the
 # viewport list from the same file review's surface step reads, so there is one reader.
@@ -2878,9 +2891,9 @@ do_preconditions() {
   # `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
   # An `observe` order's build runs the suite against the baseline. The recipe is still
   # resolved and recorded, because the freeze and finish read its path.
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
-    [ (.workOrders // [])[] | (.proof // "tests") ]
-    | if length > 0 and all(. == "record") then "no" else "yes" end')"
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
+    [ (.workOrders // [])[] | orderFacts.slot ]
+    | if length > 0 and all(. == "done-when") then "no" else "yes" end')"
   harness_reason="no order in the snapshot is proved by a test. Every order's proof is record, so no test is written or run"
 
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
@@ -3115,7 +3128,7 @@ EOF
   # author already ran. This step is the first place a person can be told, and telling them is
   # what this line is for. A lookup nobody ran is a third answer, never folded into the other two.
   im_resolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.implementLookup == "resolved") | .framework ] | join(", ")')"
-  im_blocked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '[ (.workOrders // [])[] | select((.proof // "tests") == "tests") | .id ] | join(", ")')"
+  im_blocked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'[ (.workOrders // [])[] | select(orderFacts.slot == "order-tests") | .id ] | join(", ")')"
   if [ -n "$im_resolved" ]; then
     im_freeze="an implement recipe resolved for $im_resolved, so every order in this snapshot can be built"
   elif ! printf '%s' "$record_json" | jq -e '[ .frameworks[] | select(.implementLookup != "not-given") ] | length > 0' >/dev/null; then
@@ -4001,15 +4014,18 @@ do_tests_freeze() {
   # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17). An order whose
   # proof is observe freezes no test and no row: a model judges its done-when rows against its
   # surfaces after the build, so there is nothing to judge here (live-run row 104).
+  # The frozen record carries the proof word itself, below, because a record holds the value. The
+  # refusals and the guards read the check that takes this order's proof slot.
   local tf_proof
   tf_proof="$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')"
-  if [ "$tf_proof" = "gate" ] && [ -n "$test_raw" ]; then
+  br_order_facts "$UNIT_JSON"
+  if [ "$BR_ORDER_SLOT" = "configuration-gate" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by the configuration gate and takes no --test. A test for exported configuration reads the YAML back and cannot fail for the right reason; the gate lines are its check."
   fi
-  if [ "$tf_proof" = "record" ] && [ -n "$test_raw" ]; then
+  if [ "$BR_ORDER_SLOT" = "done-when" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by its record and takes no --test. Its deliverable is a document in the task folder; its done-when row, --row $unit_id=..., is its checkpoint."
   fi
-  if [ "$tf_proof" = "observe" ] && [ -n "$test_raw" ]; then
+  if [ "$BR_ORDER_SLOT" = "observed" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
   fi
 
@@ -4240,7 +4256,7 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_machine" ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] || [ "$tf_proof" = "observe" ] \
+  [ -z "$missing_machine" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
     || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
@@ -4316,10 +4332,10 @@ TF_EOF
   # A record order has no test, so the doneWhen row is the one row it owes: the rows are what
   # judge the deliverable, and the freeze is where they are judged (nyc defect 17).
   rows_expected_json="$(jq -nc --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" \
-      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --arg proof "$tf_proof" '
+      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --arg slot "$BR_ORDER_SLOT" '
       ($tests | map(.criteria) | add // []) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
-        + (if $dw or $proof == "record" then [$unit] else [] end)
+        + (if $dw or $slot == "done-when" then [$unit] else [] end)
     ')"
   rows_missing="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
       ($rows | map(.criterion)) as $named
@@ -4672,7 +4688,7 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
-  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$tf_proof" = "gate" ] || [ "$tf_proof" = "record" ] || [ "$tf_proof" = "observe" ] \
+  [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -4945,7 +4961,8 @@ do_build_brief() {
   # the brief says so under commitIn (nyc defect 17).
   local bb_codepath bb_head
   bb_head=""
-  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "record" ]; then
+  br_order_facts "$BB_UNIT_JSON"
+  if [ "$BR_ORDER_RANGE" = "project" ]; then
     bb_codepath="$(resolve_project_folder "$TASK_PATH")"
   else
     bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
@@ -4960,7 +4977,7 @@ do_build_brief() {
   # a look taken, and nothing else records one.
   local bb_before bb_before_state
   bb_before=""; bb_before_state=""
-  if [ "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+  if [ "$BR_ORDER_SLOT" = "observed" ]; then
     bb_before="$IMPL_DIR/observed-$unit_id-before"
     if [ -n "$(find "$bb_before" -mindepth 1 -maxdepth 1 -type f -name '*.png' 2>/dev/null | head -n 1)" ]; then
       bb_before_state="taken"
@@ -5670,20 +5687,17 @@ br_aida_writes_in_project() {
 # holds observed, and the rest run as they do for a code order (live-run row 104). Prints the
 # JSON array.
 br_seven_checks() {
-  local parts_file proof rc_id
+  local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
-  proof="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.proof // "tests"')"
-  if [ "$proof" = "gate" ]; then
-    br_gate_check >>"$parts_file"
-  elif [ "$proof" = "record" ]; then
-    br_record_check >>"$parts_file"
-  elif [ "$proof" = "observe" ]; then
-    br_observed_check >>"$parts_file"
-  else
-    br_test_check "order-tests"    "orderTests" "order-tests" >>"$parts_file"
-  fi
-  if [ "$proof" = "record" ]; then
+  br_order_facts "$BRC_UNIT_JSON"
+  case "$BR_ORDER_SLOT" in
+    configuration-gate) br_gate_check >>"$parts_file" ;;
+    done-when)          br_record_check >>"$parts_file" ;;
+    observed)           br_observed_check >>"$parts_file" ;;
+    *)                  br_test_check "order-tests" "orderTests" "order-tests" >>"$parts_file" ;;
+  esac
+  if [ "$BR_ORDER_OWNS_CODE" = "no" ]; then
     for rc_id in suite-regression coding-standards static-analysis security; do
       jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
         '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
@@ -5712,7 +5726,7 @@ br_seven_checks() {
     # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
-    if [ "$proof" = "record" ]; then
+    if [ "$BR_ORDER_RANGE" = "project" ]; then
       if br_aida_writes_in_project "$p"; then
         set_aside=$((set_aside + 1))
         continue
@@ -5743,7 +5757,7 @@ BR_DIFF
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   fi
   [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
-  if [ "$proof" = "record" ]; then
+  if [ "$BR_ORDER_RANGE" = "project" ]; then
     aside_noun="files"
     [ "$set_aside" -ne 1 ] || aside_noun="file"
     ofc_detail="$ofc_detail The diff is the project folder's, with $set_aside $aside_noun AIDA's own scripts write there (a task note, the ledger, another task's close) set aside."
@@ -6256,7 +6270,8 @@ do_build_record() {
   # the line off a code order's summary. It also keeps it off an observe order that owns no
   # machine criterion.
   local criteria_judged_json='null'
-  if [ "$(printf '%s' "$UNIT_JSON" | jq -r '.proof // "tests"')" = "observe" ]; then
+  br_order_facts "$UNIT_JSON"
+  if [ "$BR_ORDER_SLOT" = "observed" ]; then
     br_require_observed "build-record" "$unit_id" "$observed_path"
     criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
@@ -6626,7 +6641,8 @@ RV_RANGE_REPO=""; RV_RANGE_PATHS=""; RV_RANGE_SCOPE=""; RV_RANGE_NAME=""
 rv_load_range_repo() {
   local who="$1" unit_json="$2"
   RV_RANGE_REPO="$RV_CODEPATH"; RV_RANGE_PATHS=""; RV_RANGE_SCOPE=""; RV_RANGE_NAME="the code repository"
-  [ "$(printf '%s' "$unit_json" | jq -r '.proof // "tests"')" = "record" ] || return 0
+  br_order_facts "$unit_json"
+  [ "$BR_ORDER_RANGE" = "project" ] || return 0
   is_git_repo "$RV_PROJECT_FOLDER" \
     || die 87 "$who: $(printf '%s' "$unit_json" | jq -r '.id') is proved by its record, so its range lives in the project folder, and $RV_PROJECT_FOLDER is not a git repository. Run git init there and commit it."
   RV_RANGE_REPO="$RV_PROJECT_FOLDER"
@@ -8187,12 +8203,10 @@ do_close() {
   # An observe order is judged by `model`, which the observed check carries the same way: a
   # model looked at the page, and completion puts the look to a person (live-run row 104).
   local slot_check slot_verdict slot_judge slot_detail
-  case "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.proof // "tests"')" in
-    gate) slot_check="configuration-gate" ;;
-    record) slot_check="done-when" ;;
-    observe) slot_check="observed" ;;
-    *) slot_check="" ;;
-  esac
+  br_order_facts "$RV_UNIT_JSON"
+  slot_check="$BR_ORDER_SLOT"
+  # An order proved by its own tests has its criteria judged by the checkpoint rows it froze.
+  [ "$slot_check" != "order-tests" ] || slot_check=""
   if [ -n "$slot_check" ]; then
     slot_verdict="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].verdict // ""' "$last_record" 2>/dev/null)"
     slot_detail="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].detail // ""' "$last_record" 2>/dev/null)"
@@ -8393,9 +8407,9 @@ do_finish() {
   # record ran no test and took no suite baseline. So the suite is recorded not-needed and never
   # run, the same reading preconditions makes of the snapshot (live-run row 136).
   local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '
-    [ (.workOrders // [])[] | (.proof // "tests") ]
-    | if length > 0 and all(. == "record") then "no" else "yes" end')"
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
+    [ (.workOrders // [])[] | orderFacts.slot ]
+    | if length > 0 and all(. == "done-when") then "no" else "yes" end')"
   pre_file="$IMPL_DIR/preconditions.json"
   if [ "$harness_needed" = "no" ]; then
     :

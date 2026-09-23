@@ -52,7 +52,6 @@
 #   git_diff_of <repo> <from> <to> [<scope>] [<options>]...  the diff, whole tree or under one path
 #   br_require_clean_tree <action> <repo> [<unit> <run mode> <ledger file> <ledger doc>]  exit 61
 #   br_worst_verdict <verdicts>               the verdict that wins across several frameworks
-#   br_proof_facts <snapshot>                 commits in the code repository, owns a file there
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
 #   rv_is_finding_id <id>                     true for `f` and then digits, no leading zero
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
@@ -1206,24 +1205,6 @@ br_worst_verdict() {
     def rank: if . == "undeclared" then 0 elif . == "not-needed" then 1 elif . == "met" then 2
               elif . == "deferred" then 3 elif . == "unknown" then 4 else 5 end;
     (. + ["undeclared"]) | max_by(rank)'
-}
-
-# What the frozen snapshot's proof kinds mean for a check that is about to answer. $1 the snapshot
-# document. Prints two words separated by a tab: whether any order commits in the code repository,
-# and whether any order owns a file there, each `yes` or `no`.
-#
-# No check wants the proof kind itself. Every site that reads `.proof` converts it into a question
-# about what there is to look at, and a site converting it on its own is why the two review sites
-# covered one value while the twelve build sites covered four (live-run row 167). The two questions
-# have one answer today, because an order proved by its record is the one kind that lands its
-# deliverable in the project folder. They are asked apart because a check reads one or the other,
-# and a fifth proof kind separates them here rather than at fifteen call sites.
-br_proof_facts() {
-  printf '%s' "$1" | jq -r '
-    def yesno(f): if any((.workOrders // [])[]; (.proof // "tests") | f) then "yes" else "no" end;
-    # An order proved by its record commits in the project folder and owns its files there. Every
-    # other proof kind lands both in the code repository.
-    yesno(. != "record") + "\t" + yesno(. != "record")'
 }
 
 
