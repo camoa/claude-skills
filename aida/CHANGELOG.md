@@ -4,6 +4,139 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.24] - 2026-09-23
+
+Fifteen rows, every one left open by beta.23. Most were a record page and the
+code disagreeing. The triage of the 2026-09-15 pass named which side was wrong
+in each. Three were not page corrections. The gates survey had asked for a per-order
+reader. A project folder outside the base had no way back. And the freeze
+warning was half built.
+
+### Added
+- `task set-budget <task-id> --dispatches <n> --minutes <n>`, either flag or
+  both. The record has always described `budget` as a field a person sets. No
+  action wrote it, so the only route was editing `task.json` by hand. One site
+  reads the field, and the halt it drives is routed in four more. So the field
+  stays and gains a producer. A call naming one number keeps the other. That
+  departs from `set-run-mode`, and four pages and the schema say so. A value
+  below one is refused in the action. The schema check enforces no minimum, and
+  a zero would halt the first dispatch. (row 151)
+- `switch <path>` registers a version 6 project folder again, from its own
+  `project.json`. A folder outside the projects base had no way back once
+  unregistered. `create` refuses an existing folder, the rebuild walks the base
+  only, and the version 5 pickup requires that no project file exist. Four
+  refusals guard the new branch. A folder holding a version 5 state file
+  and a version 6 project file takes the new branch. The old branch ends in a
+  writer that would overwrite a good project file. A code path that is gone is registered
+  and reported, which is what both routes it copies do. (row 169)
+- `scripts/lib/proof.sh`, one reader for what a work order's proof kind means.
+  It answers which check takes the order's slot, which repository holds its
+  range, and whether it owns a file in the code path. Twenty-three sites read
+  the field, each converting it in its own words, so adding a kind meant finding
+  all of them. Twenty-two now read the reader. Nine of those live inside one jq
+  program and read its jq twin. The twenty-third writes the word into a build
+  brief, where it is a record's value and not a question. Adding a fifth kind is
+  now one file. Nothing changes for any of the four kinds, proved against a tree
+  at the merge base under both shells. (row 170)
+
+### Changed
+- The restart lists every freeze an order has had. A retake records the freeze
+  commit it supersedes, and the restart read only the current one. The reset it
+  offered could leave the order's first freeze standing, with the test a person
+  had ruled wrong still in the tree. A superseded freeze is listed only when its
+  commit subject names this order. The recorded commit is the head at that
+  moment, so it can belong to another order. (row 147)
+- The freeze warning fires on the ordinary path. It was reachable only by
+  passing the lookup flag, which is the documented path and not the common one.
+  The flag stays optional. Requiring it would touch 31 call sites in 27 of this
+  rewrite's own fixtures. It would also delete the state that tells a lookup
+  which never ran from one that found nothing. The resolved line no longer says
+  every order can be built when one framework of several resolved. It names what
+  it read. A message that grows keeps the `freeze:` line, and the fixed
+  instruction it carries moves to `freezeAdvice:`, which no project can
+  lengthen. The first split had moved the truncation risk onto the tightest
+  branch, where fourteen test-proved orders cut the line mid-identifier.
+  (row 171)
+- The completion body names `environment down` when a site is up. It drops the
+  tear-down clause when none is. The task page has promised that since it was
+  written. (row 150)
+- The compaction refusal counts what this task's own work wrote. A file under
+  `inputs/`, the check record `task start` writes, and the task file no longer
+  read as unsaved stage work. A task that had done nothing refused a manual
+  compact. One step sits in a window the hook cannot see: research's playbooks
+  step writes only under `records/`. It is safe, because nobody answers anything
+  in it and every record it writes has a producer that runs again. Three places
+  say so, with the rule a later author needs. (row 152)
+- The two messages telling a person to take the baseline again say what is true.
+  No action retakes it, and none should. The baseline runs each tool against the
+  tree as it stands, so one taken after the build would record this task's own
+  findings as pre-existing. The reason recorded for the exclusion was circular,
+  and now states the real one. (row 153)
+- Review's surface offer takes the same three answers as scope and design. "Not
+  this task" has a meaning at the last stage. It leaves the kind to be asked
+  again, while a no silences it project wide. (row 155)
+- The contract a person approves names each question an unattended run answered
+  for them. The record has carried those questions since it was written, and the
+  rendering showed none. So a person could approve a contract holding answers
+  nobody gave. A non-goal an unattended run decided records one entry naming its
+  id. The distiller raises a list that is not empty. (row 165)
+- Research's run mode is counted correctly. The page named a difference it never
+  defined, at an unaccepted guide source, where both modes record the same
+  thing. It omitted two that exist. The skill also shows the criteria no person
+  approved, which its own script header said it routed on. (row 164)
+- Research reads the parent's research before planning its searches. A split
+  hands down the goal and the criteria and copies no research. So every child
+  re-ran the searches its parent had already run, one folder away. The child
+  reads the parent's folder through the `parent` field it already carries. It
+  records what covers a criterion with the parent's own source and date. Copying
+  the records was rejected: criterion ids do not survive a split, so every
+  copied finding would cite an id the child does not hold. (row 166)
+- Four implement pages name review's close as the stage that confirms a
+  criterion a person verifies. Completion names neither a checklist nor a
+  verification, and never has. (row 162)
+- The implement skill says that finish runs again after a failed review. The
+  route already worked, and the skill would not say so. Its read printed that
+  nothing was left, and its step table held no row for a finished task.
+  (row 163)
+- Six record pages say what the plugin does, where they disagreed with it. The
+  playbook capture is live. A split is judged rather than counted. One open task
+  is loaded whatever its state. A body from an unconfigured source is recorded
+  and not shown. The run ceiling binds every run. The write hooks have run in a
+  live dispatch. Four places still counted five stages and now read six.
+  (rows 156, 162, 166)
+
+### Fixed
+- The version 5 pickup tests the name before it writes a registry row. Two
+  folders sharing a basename wrote two rows with one name. The switch then
+  resolved by basename and took the first, so a person was sent into the wrong
+  project in silence. The rename that the refusal names as the repair could not
+  work before this release. The failed pickup had already written a project
+  file, which made the guard refuse the renamed folder. Pointing the switch at a
+  project that is still registered now switches to it. It used to refuse, with a
+  message telling a person to rename a project over a collision with itself.
+  (row 169)
+
+### Checks
+Forty-six fixtures, 3,438 rows, pass under bash and under zsh, every run exit 0.
+Line-count, vocabulary and execute-bit specs pass. Shellcheck at warning level
+is clean over every script this release changed. Each of the eight builds had a
+fresh checker over the artifacts and one fix round. Four checks failed and were
+fixed.
+
+Caught before commit, each by a checker or a builder's own sweep:
+
+- A brief of ours that would have taken the test harness away from a task of
+  configuration orders. It was disproved three ways on one input.
+- A new action that truncated `task.json` to one byte and exited 0.
+- Three fixture rows asserting over an array that was always empty. They held
+  under every variant, including the wrong one.
+- A message cut before its repair sentence. The first fix moved the same risk
+  onto the tightest line.
+- A new function whose name a sourced library already used. It silently
+  overrode that function for the whole script.
+- Four pages saying a pickup writes nothing into a folder it writes a record
+  into.
+
 ## [6.0.0-beta.23] - 2026-09-23
 
 Sixteen rows, in two batches. The first five come from the live run on beta.22
