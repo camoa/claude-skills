@@ -151,7 +151,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
 #      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
 #      `update` was given --reasoning and --append-reasoning together; or `close` was given
-#      --critique-outcome with no finished critique file to record it beside, or unattended.
+#      --critique-outcome with no finished critique file to record it beside, or unattended; or
+#      `close` found something that is not a file where a critique file has to move.
 #   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
@@ -1479,6 +1480,12 @@ do_close() {
     [ -n "$crit_file" ] || continue
     crit_dest="$DESIGN_DIR/$(basename -- "$crit_file")"
     if critique_findings_of "$crit_file" >/dev/null; then
+      # A directory at the destination takes the move inside itself, and `mv` exits 0. The count
+      # loop below then reads one file fewer. The record names fewer files than the close carried,
+      # with a total nothing on disk adds up to. Nothing in AIDA makes such a directory, so this
+      # needs a hand. It is still the one shape where the record and the disk disagree in silence.
+      [ ! -e "$crit_dest" ] || [ -f "$crit_dest" ] \
+        || die3 "close: $crit_dest is not a file, so the critique $crit_file cannot move there. Remove it and close again"
       mv -f -- "$crit_file" "$crit_dest" || die3 "close: could not move $crit_file to $crit_dest"
     else
       printf 'close: %s has no findings line, so its critic did not finish; it stays under records and is not counted\n' "$crit_file" >&2
