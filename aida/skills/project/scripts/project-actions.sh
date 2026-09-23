@@ -219,6 +219,10 @@ resolve_target() {
 # overwrites records/check-project.json on every run. A file that changes on every check is a
 # derived value, never something to commit (foundations.md, State). The unanchored pattern
 # covers a task's own records folder too: a task check writes one per task.
+# hooks/pre-compact.sh skips this folder for the same reason, so it never sees a stage that writes
+# only here. Research's playbooks step already does. That is safe on two counts: nobody answers
+# anything in it, and each record it writes has a producer that runs again. So a record must never
+# live only here when it carries a person's answer, or when nothing can produce it again.
 write_project_gitignore() {
   cat > "$1/.gitignore" <<'EOF'
 *

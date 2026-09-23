@@ -11,7 +11,7 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *)
 A task is one unit of work inside a project: a folder holding `task.json` (every field a script
 reads) and `task.md` (the goal, in prose, that nothing parses). This skill makes one, moves an old
 one into place, changes its state, splits it into a parent with children, or sets its run mode. It
-does not run any of the five stages, and it does not pick which task is active: that is
+does not run any of the six stages, and it does not pick which task is active: that is
 `/aida:next`.
 
 Every action below needs the active project's own folder (the one holding `project.json`, never

@@ -92,7 +92,7 @@ holds the line there.
 
 - **A manual `/compact` with unsaved work is refused.** The message names the task, its stage, and
   the command: `/aida:task save <task-id>`. Save, then compact. Nothing overrides you; the refusal
-  only orders the two steps.
+  only orders the two steps. What counts as unsaved is below, under What "unsaved" means.
 - **An automatic compaction is never refused.** The platform says a refusal there can fail the
   request it was recovering from. AIDA leaves a marker in the task folder instead. The next
   session start names it once, with the time and whether work was unsaved. It tells the session
@@ -127,10 +127,14 @@ Only you run a save. Nothing in AIDA dispatches it, in either run mode.
 ### What "unsaved" means
 
 A task is unsaved when a file in its folder is newer than its last save. A task never saved is
-measured against its newest note instead. With neither, any file counts beyond the two task
-files, the compaction marker, the notes, and the files kept from version 5. So a file dropped
-into `inputs/` counts, and a manual compact is refused until you save. A task repaired from
-version 5 and not yet touched compacts freely.
+measured against its newest note instead. With neither, any file counts.
+
+Four things never count. The two task files. Anything under `notes/`. Anything you carried in,
+under `inputs/`. And anything under `records/`, which holds derived check output the project
+never commits. The compaction marker sits there too.
+
+So a file dropped into `inputs/` refuses nothing, and neither does a task you only just started.
+A task repaired from version 5 and not yet touched compacts freely.
 
 ### A note is never a record
 

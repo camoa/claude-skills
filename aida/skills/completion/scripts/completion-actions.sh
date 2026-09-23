@@ -474,9 +474,16 @@ cp_render_body() {
                     then ["The code repository holds nothing from this task: both ends of this range are one commit. Every deliverable is committed in the project folder."]
                     else [] end)) end)
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
+        # A task page promises the tear-down here (live-run row 150). The old line printed for
+        # every worktree. It told a task with no site to prune, and a task with a live site
+        # nothing. A site is up only while `environment.address` is there. Both `not-applicable`
+        # and an absent key mean no site.
         + (if ($taskDoc.worktree // null) == null then [] else
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
-            + ["After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end))
+            + (if ($taskDoc.environment.address // null) == null
+               then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
+               else ["The site of this task is up. Run `task environment " + $task + " down` before the worktree is removed, or the framework keeps an orphaned registry entry.",
+                     "After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end) end))
     + section("Review audit";
         if $review == null then ["no review record; nothing was checked"]
         else ($audit | split("\n") | map(select(length > 0) | "- " + .)) end)

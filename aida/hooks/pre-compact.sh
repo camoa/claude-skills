@@ -19,8 +19,30 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the last save. `task save` stamps savedAt in task.json on every call, even with nothing to say.
 # A task with no savedAt is compared against its newest note under notes/, the file a save with
 # text appends to. A task never saved is unsaved only once it holds a version 6 record: task.json,
-# task.md, compacted.json and the .v5 files a version 5 repair keeps
+# task.md and the .v5 files a version 5 repair keeps
 # (skills/task/scripts/task-actions.sh, keep_v5_files) do not count on their own.
+#
+# Two folders are excluded beside notes/ in all three branches (live-run row 152).
+#
+# inputs/ first. docs/task.md calls it material carried in from before the task existed. A file
+# there is usually not work this window decided. Research is the exception: it writes a fetched
+# page and a pulled tree there. Each of those is already a finding's source, and that finding's
+# record under research/ still refuses, so the window is one step wide.
+#
+# records/ second. It is derived check output, and the project's ignore file keeps it out of
+# history. That covers records/compacted.json, which this hook writes, and records/check-task.json,
+# which `task start` writes about the task.
+#
+# One bound, for the next author. Nothing stops a stage writing its only record under records/, and
+# this hook would then not see that stage. One check refuses one case.
+# skills/design/scripts/design-actions.sh:915-919 refuses an owned path there for a record order
+# alone. An order proved by tests is not refused.
+#
+# One step already sits in that window. Research's playbooks step writes only
+# records/playbooks-catalog.json, records/playbooks.json and records/playbooks.md, while research/
+# is still empty. A manual compact is allowed there. It is safe on two counts: the step asks nobody
+# anything, and every record it wrote has a producer that runs again. So a record must never live
+# only under records/ when it carries a person's answer, or when nothing can produce it again.
 #
 # Exit 2 refuses, and stderr is shown to the person on a manual compaction (the platform's hooks
 # reference, PreCompact). Nothing is printed on stdout in any case.
@@ -51,16 +73,18 @@ if [ -n "$SAVED_AT" ]; then
   # reshaped. task.json is excluded because the save writes it a moment after the stamp it holds.
   REF="$(mktemp)"
   TZ=UTC touch -t "$(printf '%s' "$SAVED_AT" | sed 's/[-:T]//g; s/Z$//; s/\(..\)$/.\1/')" "$REF"
-  NEWER="$(find "$TASK_PATH" -type f -newer "$REF" ! -name task.json ! -name compacted.json ! -path '*/notes/*' 2>/dev/null | head -1)"
+  NEWER="$(find "$TASK_PATH" -type f -newer "$REF" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null | head -1)"
   rm -f "$REF"
 elif [ -n "$NOTE" ]; then
-  NEWER="$(find "$TASK_PATH" -type f -newer "$NOTE" ! -path '*/notes/*' ! -name compacted.json 2>/dev/null | head -1)"
+  # task.json is excluded here for the reason the branch above gives. The save that wrote this note
+  # wrote task.json straight after it. Without this, the note is never the newest file.
+  NEWER="$(find "$TASK_PATH" -type f -newer "$NOTE" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null | head -1)"
 else
   # A never-saved task holds only task.json, task.md and whatever a version 5 repair kept under
   # a .v5 name (skills/task/scripts/task-actions.sh, keep_v5_files). None of those is a version 6
   # stage record, so this task is unsaved only once a version 6 stage writes something else.
-  NEWER="$(find "$TASK_PATH" -type f ! -name task.json ! -name task.md ! -name compacted.json \
-    ! -name '*.v5.md' ! -name '*.v5' ! -path '*/notes/*' ! -path '*.v5/*' 2>/dev/null | head -1)"
+  NEWER="$(find "$TASK_PATH" -type f ! -name task.json ! -name task.md \
+    ! -name '*.v5.md' ! -name '*.v5' ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' ! -path '*.v5/*' 2>/dev/null | head -1)"
 fi
 UNSAVED="false"
 [ -z "$NEWER" ] || UNSAVED="true"
