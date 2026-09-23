@@ -52,6 +52,7 @@
 #   git_diff_of <repo> <from> <to> [<scope>] [<options>]...  the diff, whole tree or under one path
 #   br_require_clean_tree <action> <repo> [<unit> <run mode> <ledger file> <ledger doc>]  exit 61
 #   br_worst_verdict <verdicts>               the verdict that wins across several frameworks
+#   br_proof_facts <snapshot>                 commits in the code repository, owns a file there
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
 #   rv_is_finding_id <id>                     true for `f` and then digits, no leading zero
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
@@ -1190,11 +1191,36 @@ br_require_clean_tree() {
 # what a whole run may report, and a recipe declaring nothing must not read as a pass. Here the
 # question is what one check answered across several frameworks, and a framework with no row to run
 # has said nothing about it. Collapsing the two would make one of the two questions answer wrongly.
+#
+# `not-needed` sits between undeclared and met. Below met, so a check no order asked for never drags
+# down one that ran and passed. Above undeclared, because the two are folded together whenever a
+# framework declares no recipe, and the word that says no order asked for this check is the one a
+# reader needs; the fold appends undeclared, so an equal rank would drop the word every time. Before
+# this the ranking read every word it did not know as worse than unmet, which made the best possible
+# answer rank as the worst (live-run row 167).
 br_worst_verdict() {
   printf '%s' "$1" | jq -r '
-    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "deferred" then 2
-              elif . == "unknown" then 3 else 4 end;
+    def rank: if . == "undeclared" then 0 elif . == "not-needed" then 1 elif . == "met" then 2
+              elif . == "deferred" then 3 elif . == "unknown" then 4 else 5 end;
     (. + ["undeclared"]) | max_by(rank)'
+}
+
+# What the frozen snapshot's proof kinds mean for a check that is about to answer. $1 the snapshot
+# document. Prints two words separated by a tab: whether any order commits in the code repository,
+# and whether any order owns a file there, each `yes` or `no`.
+#
+# No check wants the proof kind itself. Every site that reads `.proof` converts it into a question
+# about what there is to look at, and a site converting it on its own is why the two review sites
+# covered one value while the twelve build sites covered four (live-run row 167). The two questions
+# have one answer today, because an order proved by its record is the one kind that lands its
+# deliverable in the project folder. They are asked apart because a check reads one or the other,
+# and a fifth proof kind separates them here rather than at fifteen call sites.
+br_proof_facts() {
+  printf '%s' "$1" | jq -r '
+    def yesno(f): if any((.workOrders // [])[]; (.proof // "tests") | f) then "yes" else "no" end;
+    # An order proved by its record commits in the project folder and owns its files there. Every
+    # other proof kind lands both in the code repository.
+    yesno(. != "record") + "\t" + yesno(. != "record")'
 }
 
 

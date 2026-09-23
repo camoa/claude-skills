@@ -79,6 +79,15 @@ survivor by file, so its survivors are recorded as not readable and named as unr
 The row still reads met on exit 0, because the coverage half and the score were read. The outcome
 counts are in the score, and `mutmut results` lists the survivors by mutant name.
 
+**A task that commits nothing in the code repository answers in its own word.** An order proved by
+its record commits its document in the project folder, so the range holds nothing. Check 3 reads
+undeclared, not met: it opened no file. The three tool rows and the mutation row read undeclared
+too, the word the build stage answers with. The mutation command never runs over zero paths. The
+suite reads not-needed, which finishing the build already decided. Every lens reads undeclared:
+the diff holds nothing, and this stage does not hand the reviewer the deliverables. Check 4 reads
+the judgement such an order left on the ledger, the way it reads an observed record for a page
+order. A criterion judged at build time is covered.
+
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A hunk inside an
 owned file that serves nothing is the reviewer's to raise, and its finding cites an id or is not
 acted on.

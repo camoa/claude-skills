@@ -20,6 +20,10 @@ carries its id. It reads unmet when a failing test carries the id. It reads unan
 could not run. Implementation puts the criterion id at the end of each test's name, delimited, so the
 script compares strings. Do not re-derive that join by hand.
 
+A suite reading not-needed reads the row state the same way a passing suite does. No order in the
+task runs a test, so no suite was ever going to name the criterion, and the build already confirmed
+the row.
+
 ## Close
 
 Run, with one `--row` per criterion a person verified:
@@ -42,8 +46,9 @@ The verdict is two words, `passed` and `failed`.
 
 1. **A check reading unmet fails the review.** A failure dominates.
 2. **A check reading unknown fails the review.** A result nobody could read is never waved through.
-3. **Met and undeclared both pass**, and undeclared is reported in its own word. A framework with no
-   tool has answered, and blocking there blocks every project on that framework.
+3. **Met, undeclared and not-needed all pass**, and each is reported in its own word. A framework
+   with no tool has answered, and blocking there blocks every project on that framework. A check no
+   order asked for has answered too.
 4. **A criterion reading unmet or unanswered means no sign off**, whatever the checks said.
 
 Name the check or the criterion that caused a fail. Then hand the record to the person. No fixer

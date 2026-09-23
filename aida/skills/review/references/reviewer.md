@@ -74,6 +74,11 @@ returned a finding, and unknown when the findings file is absent or unreadable. 
 never a clean one**, and version 5 paid for that four times. Check 16 has a floor before its lens,
 described in `references/checks.md`: a playbook record that was never loaded reads unknown.
 
+Checks 12 and 16 have one more floor, and it is the research records. Both read them and nothing
+else. A task whose research records cite no source leaves both undeclared, because neither lens
+had a guide or an accepted practice to judge against. A task with no research record at all leaves
+both unknown, because nobody looked. Met means a judgement happened.
+
 ## Classify every finding
 
 - **A finding citing a criterion** is this task's work. That criterion reads unmet, and the task is

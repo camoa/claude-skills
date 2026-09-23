@@ -47,7 +47,9 @@ checkout is on no branch, or the build would land on the repository's own trunk 
 on a detached head belongs to no branch, which this build must never risk. When there is no
 `origin` remote, the trunk cannot be derived. AIDA continues and tells you the trunk was not
 confirmed. That is a check that could not look, not a pass. A first run compares nothing, so it
-reports drift as not checked, never as none found.
+reports drift as not checked, never as none found. These three refuse whatever each order is
+proved by. That includes a task that will commit nothing in the code repository. The refusal is
+about where a commit could land, and nothing here can promise in advance that none will.
 
 ## Can this repository test at all
 
@@ -87,7 +89,9 @@ every later step that runs the tools. The way past is one check recipe for the t
 
 A task whose every order is proved by its record runs no test. Its conditions and its smoke
 command are recorded as not needed and never run. No suite baseline is taken, and the build
-goes on. The review tools still run over any file an order owns under the code path.
+goes on. The review tools still run over any file an order owns under the code path. One order
+proved by a test, by a configuration gate or by a look at a page brings the whole harness back.
+That one order runs the suite.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist
@@ -278,7 +282,9 @@ the lines it expects to add and delete, and the files and blocks it targets. The
 diff against those answers.
 
 It writes only inside the files its order owns. A hook refuses it a write under the code path
-outside them. A file it needs and does not own is a stop, and the report names the file. It may
+outside them. A file it needs and does not own is a stop, and the report names the file. That hook
+judges a path inside the code repository only. So an order writing a document in the project
+folder is held by the owned-files check after the attempt, rather than at the write itself. It may
 not change a test; a hook refuses the write and names the order that froze the file. It may not read another order's source; what
 another unit exposes is its interface record. It is refused the recipe that writes tests, because
 that file chooses a level and names a test, and this reader may do neither. It stops rather than
@@ -302,7 +308,8 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 3. **coding-standards**, **static-analysis** and **security.** Does the tool raise anything the
    baseline did not already have.
 4. **owned-files.** Did the change stay inside the files this order owns.
-5. **frozen-tests.** Does every frozen test file still hash to what the freeze recorded.
+5. **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An
+   order that froze none reads undeclared here, because there was nothing to hash.
 6. **interface-record.** Does the builder's record name every element the order's declared
    interface names in backticks.
 
@@ -313,8 +320,9 @@ owned file the order deleted, because the tools refuse a missing path. The detai
 were left out. The first check is the floor.
 Every other check may answer undeclared and the order still goes on. Order-tests must answer
 met, because it is the one check that says this code does what its tests ask. AIDA also tells
-you how many of the eight actually ran a command, a diff or a hash. Eight answers do not by
-themselves say the code was tested. A record that would hold fewer than eight is refused rather
+you how many of the eight actually ran a command, a diff or a hash. A frozen-tests row that hashed
+nothing is not counted, because counting it would do the thing the count exists to stop. Eight
+answers do not by themselves say the code was tested. A record that would hold fewer than eight is refused rather
 than written, naming the absent check. The interface check is the one script that cannot decide
 alone, because both sides are prose. It counts what it can, that every backticked element is
 present, and the disagreement goes to the reviewer as a finding. A declaration naming nothing in

@@ -5730,8 +5730,12 @@ BR_DIFF
     ftc_verdict="unmet"
     ftc_detail="these frozen test or support files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
   elif [ "$frozen_count" -eq 0 ]; then
-    ftc_verdict="met"
-    ftc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') froze no test file, so there is nothing to hash."
+    # This order froze no test file, so the row hashed nothing and does not apply to it. met read
+    # as a hash that was taken and matched, and the executed count then counted a check that ran
+    # nothing, which is the one thing that count exists to stop (live-run row 167). undeclared is
+    # the word the suite row and the three tool rows already carry on such an order.
+    ftc_verdict="undeclared"
+    ftc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') froze no test file, so there is nothing to hash and the row does not apply to it."
   else
     ftc_verdict="met"
     ftc_detail="every frozen test file for $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') is unchanged."
@@ -5755,10 +5759,13 @@ BR_DIFF
 #
 # The count exists because a record saying eight checks answered, without saying how many of them
 # ran, reads the same whether the code was tested or nothing was. That was the defect this count
-# closes, and it is recorded and printed for the same reason.
+# closes, and it is recorded and printed for the same reason. So a frozen-tests row that hashed
+# nothing is not counted: it reads undeclared, and counting it did the thing the count prevents
+# (live-run row 167).
 br_executed_count() {
   printf '%s' "$1" | jq -r '
-    [ .[] | select(has("exitCode") or .id == "owned-files" or .id == "frozen-tests") ] | length'
+    [ .[] | select(has("exitCode") or .id == "owned-files"
+                   or (.id == "frozen-tests" and .verdict != "undeclared")) ] | length'
 }
 
 # Whether the checks in $1 let the order pass. $2 is the id whose unknown does not stop the attempt

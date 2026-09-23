@@ -464,7 +464,15 @@ cp_render_body() {
         if $alignment == null then ["no contract"]
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)
     + section("Commit range";
-        (if $finished == null then ["no build record; no range"] else [$finished.commitRange // ""] end)
+        # Both ends of the range are one commit, so the code repository holds nothing from this
+        # task. The body printed `abc1234..abc1234` and then offered the branch and the push lines
+        # under it, with no word saying there is nothing there to push (live-run row 167).
+        (if $finished == null then ["no build record; no range"]
+         else [$finished.commitRange // ""]
+              + (((($finished.commitRange // "") | split("..")) as $ends
+                  | if ($ends | length) == 2 and $ends[0] == $ends[1]
+                    then ["The code repository holds nothing from this task: both ends of this range are one commit. Every deliverable is committed in the project folder."]
+                    else [] end)) end)
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         + (if ($taskDoc.worktree // null) == null then [] else
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]

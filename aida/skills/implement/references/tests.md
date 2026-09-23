@@ -53,6 +53,9 @@ Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
 
+An order that freezes no test file leaves the build's `frozen-tests` row undeclared. The row
+hashed nothing. So it says the row did not apply, rather than that a hash matched.
+
 `observe` means its deliverable is what a page shows, and a model judges that after the build.
 Skip `tests-brief` and dispatch no test author. Put no row to anyone: there is nothing to judge
 before the page exists. Freeze with no `--test` and no `--row`, and a `--checklist` for each

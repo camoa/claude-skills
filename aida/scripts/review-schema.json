@@ -105,7 +105,7 @@
         "verdict": {
           "type": "string",
           "enum": ["met", "unmet", "unknown", "undeclared"],
-          "description": "The four words every check in this stage uses, for the mutation row's own run."
+          "description": "The four words the mutation row's own run answers in. not-needed is not here: no site writes it on this row, and an enum carrying a value nothing writes invites one."
         },
         "detail": {
           "type": "string",
@@ -190,8 +190,8 @@
         },
         "verdict": {
           "type": "string",
-          "enum": ["met", "unmet", "unknown", "undeclared"],
-          "description": "The same four words the build record uses, and build-record-schema.json is the authority for them. `undeclared` means nothing declared a command for this check, or the recipe declared that row absent, or the row did not apply to the changed files; it is never satisfied and never a pass, and it does not fail the review. `unknown` means nothing this check reads could be read, and it does fail the review. A check with two inputs that got one answers from that one and names what it did not get."
+          "enum": ["met", "unmet", "unknown", "undeclared", "not-needed"],
+          "description": "The same four words the build record uses, and build-record-schema.json is the authority for them. `undeclared` means nothing declared a command for this check, or the recipe declared that row absent, or the row did not apply to the changed files; it is never satisfied and never a pass, and it does not fail the review. `not-needed` means no order in the snapshot asked for this check, which `finish` writes on the suite row of a task where no order runs a test; it passes and the audit reads it as off. `unknown` means nothing this check reads could be read, and it does fail the review. A check with two inputs that got one answers from that one and names what it did not get."
         },
         "detail": {
           "type": "string",
@@ -320,7 +320,7 @@
         "verdict": {
           "type": "string",
           "enum": ["met", "unmet", "unknown", "undeclared"],
-          "description": "What this surface came to. A registry surface with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform. A run that selected nothing reads unknown, which is version 5's own comment on its end-to-end gate: zero tests ran is never a pass."
+          "description": "What this surface came to. not-needed is not here: no site writes it on a surface row. A registry surface with no result reads unmet, because a gate that cannot notice its subject going absent cannot inform. A run that selected nothing reads unknown, which is version 5's own comment on its end-to-end gate: zero tests ran is never a pass."
         },
         "ran": {
           "type": "boolean",

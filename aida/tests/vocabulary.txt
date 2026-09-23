@@ -18,7 +18,11 @@ met | a check that looked and the answer is yes | satisfied
 unmet | a check that looked and the answer is no | unsatisfied
 unknown | a check that could not look | undecidable
 undeclared | a check the recipe never declared |
-not-needed | a check no order asked for: every order in the snapshot is proved by its record |
+# not-needed names a wider idea than the one site that writes it, so the two lines are kept
+# apart. The idea is a check the orders it covers did not ask for. The one site today is the
+# suite of a task whose every order is proved by its record, which is the condition every
+# writer tests (implement-actions.sh, `all(. == "record")`).
+not-needed | a check the orders it covers did not ask for: today, the suite of a task whose every order is proved by its record |
 deferred | put off to a later step: a suite check a record step left to finish, or a finding ruled for a later task |
 # A criterion answers in the contract's three words, scripts/alignment-schema.json.
 unanswered | a criterion nobody answered | unresolved
