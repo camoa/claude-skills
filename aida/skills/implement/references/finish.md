@@ -1,6 +1,6 @@
 # Finish the task, grant an attempt, restart the build, or clear a halt
 
-This step covers four actions that act on the task rather than on one order. `finish` runs once
+This step covers four actions that act on the task rather than on one order. `finish` runs when
 every order is closed. `grant-attempt` answers a spent attempt counter, when a person wants to
 grant one more, and a spent run budget, once the person has raised it. `restart` follows a
 mid-build design change: it halted one or more orders, and a person wants a fresh build against the
@@ -41,8 +41,13 @@ per order. They carry the criteria by row state, the checklist count, the deferr
 and the model-judged count.
 
 **Finish ends implementation only.** It never touches `task.json`. The task goes to the review
-stage next, which reads `finished.json`; completion, not this step, is what confirms the criteria a
+stage next, which reads `finished.json`. Review's close, not this step, confirms the criteria a
 person verifies by checklist.
+
+**Finish runs again after a failed review.** The person commits the fix on the task branch, then
+takes this step again. It rewrites `finished.json` with a range ending at the new head, and review
+runs from its first step. Keep the fix inside the files the orders own. A file no order owns reads
+unmet at review's check that every change serves a criterion.
 
 Interactive: stop here. Name the next command for the person, `/aida:review <task-id>`, and never
 invoke it yourself. Autonomous: invoke `aida:review` through the Skill tool, once, with the task

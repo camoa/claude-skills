@@ -1127,7 +1127,7 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    printf 'none: implementation is finished, and the review stage is next'
+    printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
     return 0
   fi
   # How many actionable findings each reviewed order still has open, read once per order here so

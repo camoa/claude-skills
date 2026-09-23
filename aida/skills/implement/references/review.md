@@ -373,7 +373,7 @@ confirmed once every order serving it is closed and every judgement on it reads 
 Otherwise it stays not-judged. A rejected judgement cannot reach here, since `tests-freeze` already
 refused it, but the state is still derived from the judgements every time, never assumed. A
 person-verified criterion stays at not-judged too: it carries a checklist instead of a judgement,
-and completion is what confirms it.
+and review's close is what confirms it.
 
 It prints the closed order's state and commit range. It prints one `criterion(...)` line per
 affected criterion, with its row state and judge. `rowsJudgedByModel:` says how many rows across

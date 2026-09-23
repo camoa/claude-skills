@@ -68,6 +68,7 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line at `reviewed` or `fixed`, with `review: open=0` | Close the order | `review` |
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
+| `finished: recorded` | The review stage is next. After a failed review, fix what it found and take `finish` again | `finish` |
 | An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart, or the design put back and `start` run again | `finish` |
 | An `order(...)` line whose halt says `the design removed` it, and an order `not started` that could move | Offer the restart before those tests are written: the removed order's frozen record still guards its test files | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
@@ -188,8 +189,10 @@ that never returned leaves one.
 
 The permissions this step describes are applied by the runtime, not by the words above. Two hooks
 do it, and both report through a message when they cannot find what they need rather than passing in
-silence. Neither has run inside a live dispatch yet, so say that plainly rather than reporting them
-as proven.
+silence. Both hooks have refused inside a live dispatch. The read hook refused a row-checker two
+paths on its denied list. The write hook refused an implementer a write outside its owned files.
+The message they send when they cannot find the record has not run live, so do not report that
+part as proven.
 
 The read denial covers Read, Grep and the plain shell reads: `cat`, `head`, `tail`, `less`,
 `more`, `sed`, `awk`, `grep`, `rg` and `nl`. A path a shell assembles at run time passes. That
