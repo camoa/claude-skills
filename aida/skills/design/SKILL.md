@@ -49,7 +49,8 @@ skill. Stop; there is nowhere to write.
 
 An invocation line whose first word is `close` is the person's yes on the design. The task is
 the word after it, or the active one. Go straight to "Close the design" below. When no
-`records/design-critique-*.md` exists yet, run "Critique the design" first.
+`design-critique-*.md` exists yet, under `records/` or under `design/`, run "Critique the design"
+first. An earlier close moved the files into `design/`, so look in both.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -568,6 +569,10 @@ its `findings:` line, means that lens was not read. Dispatch it again, once. If 
 say so and go on: the close leaves that file out and names it. Read the three files, never the
 dispatch replies.
 
+The close moves each finished file into `<task_folder>/design/` and commits it with the record.
+A critic goes on writing into `records/`, which the project ignores: a critique is a working file
+until the close decides it is evidence. An unfinished file stays under `records/`.
+
 A person reads the findings, because a critic that can block trains the builder to write for the
 critic. The critic decides nothing about closing, and neither does the count.
 
@@ -585,8 +590,8 @@ person takes, never a question this skill asks. Scope learned this from a run th
 yes on the whole contract after each of five corrections.
 
 **Autonomous:** ask nothing and change nothing. The findings stay in the three files, and the
-close below records their paths and the count, so a person sees them later. Say once, at the
-end of this run, that the critique's findings were recorded and not judged.
+close below commits them and records their paths and the count, so a person sees them later. Say
+once, at the end of this run, that the critique's findings were recorded and not judged.
 
 ## Close the design
 
@@ -613,8 +618,8 @@ The record is committed when the stage closes: `close` commits the task folder, 
 edits above commit nothing. Closing records what design closed on: a hash over the contract and every work order, the run mode,
 and who was present. Pass the run mode you settled at the start. An interactive close records
 `person`, an autonomous one records `nobody`, and implementation reads which. It also records the
-critique files under `records/`, their finding count and the outcome line. So a person sees what
-was read and answered before closing.
+critique files it moved into `design/`, their finding count and the outcome line. So a person sees
+later what was read and answered before closing, and can open the files the record names.
 
 A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
 Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and

@@ -251,6 +251,8 @@ rendered page beside it as a copy that answers nothing. Each reader writes one f
 when implementation would build the wrong thing or could not start, and a concern otherwise.
 They never repeat what the check counted, and a clean report names what it compared. A lens whose
 file never arrives is dispatched once more. If it fails again, the close leaves it out and says so.
+The project ignores `records/`, so the close moves each finished file into `design/` and commits
+it. A file whose critic never finished is not evidence, and it stays where the critic left it.
 
 You answer each finding, because a critic that can block trains the builder to write for the
 critic. Interactively, design shows the findings grouped by order, and each takes one answer:
@@ -258,10 +260,11 @@ change the order, then check again, or leave it with a reason. Design writes the
 the order's reasoning so it outlives the conversation. Each change is answered with the changed
 lines, and the turn ends; design never asks whether it is ready to close. A finding on the
 contract is a scope question. Autonomously, design asks nothing and changes nothing. The
-findings stay in their files, and the close records the paths and the count for you to read
-later. The close never blocks on the critique, in either mode. Interactively, the close asks you
-for one line: how many findings changed an order, and how many were left with a reason. It
-records the line beside the count. Unattended, the record says `none`.
+findings stay in their files, and the close commits them and records the paths and the count.
+You read them later, from this branch or from another machine. The close never blocks on the
+critique, in either mode. Interactively, the close asks you for one line: how many findings
+changed an order, and how many were left with a reason. It records the line beside the count.
+Unattended, the record says `none`.
 
 ## Running it unattended
 
@@ -282,7 +285,8 @@ The close runs the check once more and writes `design-closed.json` only when it 
 commits the task folder at that moment; the order edits before it commit nothing. The record
 holds a hash over the contract and every order together, the run mode, and who was present,
 `person` or `nobody`. It also holds the recipe verdict and the critique files with their count
-and your outcome line.
+and your outcome line. Those files are in the same commit, so the paths the record cites open
+for a reader who has only the branch.
 
 Implementation reads this record on its first run, before it freezes anything, and refuses to
 start on a contract or an order that no longer matches the hash. That is what catches an order

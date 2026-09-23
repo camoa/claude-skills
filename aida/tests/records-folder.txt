@@ -38,7 +38,7 @@ check-project.json | scripts/check-project.sh | every project check writes it, a
 check-task.json | scripts/check-task.sh | every task check writes it, and `task start` ends by running one
 compacted.json | hooks/pre-compact.sh | every automatic compaction writes it, and hooks/session-start.sh names it once and removes it
 design-check.json | skills/design/scripts/design-actions.sh, action `check` | the action runs scripts/check-design.sh into it again
-design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again
+design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again. A finished one moves to design/ at the close
 <>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again
 design-distill.json | the distiller agent | design close dispatches the distiller again
 environment-down.txt | skills/task/scripts/task-actions.sh, action `environment down` | the action runs the tear-down lines again

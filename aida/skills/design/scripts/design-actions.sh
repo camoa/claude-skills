@@ -12,8 +12,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the design check. Deciding whether design is done belongs to whoever calls this, never to this
 # script.
 #
-# `close` also records the critique files under <task_folder>/records/, their finding count, and
-# the outcome line --critique-outcome passed, `none` without one, and refused unattended.
+# `close` also moves each finished critique file from <task_folder>/records/, which the project
+# ignores, into <task_folder>/design/, which it commits. It records the new paths, their finding
+# count, and the outcome line --critique-outcome passed, `none` without one, and refused unattended.
 #
 # What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
 # summary lines and the paths it wrote, and never a record body. A caller that needs a field reads
@@ -450,6 +451,16 @@ proof_disagreement_of() {
   printf '%s' "$1" | jq -r '
       [ (.coverage.testOrdersOwningNoMachineCriterion // [])[] | .id ] | join(", ")
     ' 2>/dev/null
+}
+
+# The `findings: N` last line of the critique file at $1, or exit 1 when the file carries none.
+# No line means its critic did not finish. `close` reads it twice: once to decide the file is
+# evidence worth committing, once to count it.
+critique_findings_of() {
+  local n
+  n="$(grep -E '^findings: [0-9]+$' "$1" | tail -n 1 | sed 's/^findings: //')"
+  [ -n "$n" ] || return 1
+  printf '%s' "$n"
 }
 
 # Prints $1, a work order document, with $2 added to its `reasoning` as a new paragraph. The
@@ -1454,33 +1465,53 @@ do_close() {
     '{schemaVersion: 1, pluginVersion: $pluginVersion, closedAt: $closedAt, runMode: $runMode, closedBy: $closedBy, hash: $hash}')"
   [ -z "$fit_json" ] || doc="$(printf '%s' "$doc" | jq --argjson rf "$fit_json" '.recipeFit = $rf')"
 
-  # The critique files the design skill's critics wrote before this close: their paths and the
-  # total of their `findings: N` last lines, so the close says what was read before it. Absent when
-  # no critic ran. A file without that line was not finished by its critic, and a count read from
-  # it would be invented, so that file is left out of the record and named on stderr. The critique
-  # blocks nothing, which is the design: a critic that can stop a close trains a design that
-  # writes for the critic. Beside the count sits `outcome`, the --critique-outcome line: how the
-  # findings were answered, in the person's words, one line per flag. A count alone said nothing
-  # about what changed (live-run row 135). `none` when no flag was passed, which is every
-  # unattended close: nobody answered the findings there, so the flag is refused above.
-  local critique_files critique_total crit_file crit_n
+  # Each finished critique moves out of `records/`, which the project ignores, and into the design
+  # folder, which this close commits. The record used to cite the paths under `records/`. A reader
+  # a month later, on another branch or another machine, found a count and three paths the
+  # repository never held (live-run row 176). A critique is not reproducible: the critics run at
+  # opus, so a second dispatch answers with a different table. On an unattended close nobody read
+  # the findings at the time either, and the count was then the whole surviving statement. The move
+  # runs before the commit below, so one commit carries the record and the evidence it names. The
+  # design folder is the committed place the stage already writes: `design-render.sh` puts
+  # `design/<id>.md` there beside every order. A work order id can never take this name.
+  local crit_file crit_dest
+  while IFS= read -r crit_file; do
+    [ -n "$crit_file" ] || continue
+    crit_dest="$DESIGN_DIR/$(basename -- "$crit_file")"
+    if critique_findings_of "$crit_file" >/dev/null; then
+      mv -f -- "$crit_file" "$crit_dest" || die3 "close: could not move $crit_file to $crit_dest"
+    else
+      printf 'close: %s has no findings line, so its critic did not finish; it stays under records and is not counted\n' "$crit_file" >&2
+    fi
+  done < <(find "$TASK_PATH/records" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
+
+  # The critique files this close carries: their paths, and the total of their `findings: N` last
+  # lines. So the close says what was read before it. Absent when no critic ran. A file without
+  # that line was not finished by its critic, and a count read from it would be invented, so that
+  # file is left out of the record and named on stderr. The critique blocks nothing, which is the
+  # design: a critic that can stop a close trains a design that writes for the critic. Beside the
+  # count sits `outcome`, the --critique-outcome line: how the findings were answered, in the
+  # person's words, one line per flag. A count alone said nothing about what changed (live-run row
+  # 135). `none` when no flag was passed, which is every unattended close: nobody answered the
+  # findings there, so the flag is refused above. A second close reads the files the first close
+  # moved and records them again, so the record still names what is on disk.
+  local critique_files critique_total crit_n
   critique_files=""; critique_total=0
   while IFS= read -r crit_file; do
     [ -n "$crit_file" ] || continue
-    crit_n="$(grep -E '^findings: [0-9]+$' "$crit_file" | tail -n 1 | sed 's/^findings: //')"
-    if [ -z "$crit_n" ]; then
+    crit_n="$(critique_findings_of "$crit_file")" || {
       printf 'close: %s has no findings line, so its critic did not finish; it is not counted\n' "$crit_file" >&2
       continue
-    fi
+    }
     critique_total=$((critique_total + crit_n))
     critique_files="$critique_files$crit_file
 "
-  done < <(find "$TASK_PATH/records" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
+  done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
   if [ -n "$critique_files" ]; then
     doc="$(printf '%s' "$doc" | jq --arg files "$critique_files" --argjson n "$critique_total" --arg outcome "${outcome:-none}" \
       '.critique = {files: ($files | split("\n") | map(select(length > 0))), findings: $n, outcome: $outcome}')"
   elif [ -n "$outcome" ]; then
-    die3 "close: --critique-outcome names how the critique's findings were answered, and no finished critique file is under $TASK_PATH/records to record it beside"
+    die3 "close: --critique-outcome names how the critique's findings were answered, and no finished critique file is under $TASK_PATH/records or $DESIGN_DIR to record it beside"
   fi
 
   write_atomic "$CLOSED_FILE" "$doc"
