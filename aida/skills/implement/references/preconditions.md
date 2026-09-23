@@ -61,13 +61,34 @@ lines in the same environment, and an `observe` order's build runs the suite aga
 **A project with no implement recipe cannot build a test-proved order, and this step says so.**
 `tests-freeze` takes its test globs from the implement recipe's `## Oracle files` block. With no
 such recipe, every order proved by tests dies at the freeze, exit 27, after the design closed,
-the build started and the test author already ran. Pass `--implement-lookup` per framework and
-the script prints a `freeze:` line naming each order that cannot be built. What a project can
+the build started and the test author already ran. Pass `--implement-lookup` per framework. What
+a project can
 still build without that recipe: a `record` order and an `observe` order in full, and a `gate`
 order that freezes, but whose own check reads `unknown`, which is not met. The repair is writing
 the implement recipe for a framework this project declares, or changing each blocked order's
 proof. `--implement-lookup` is optional, and a framework with none records `not-given`: the
 lookup was not run, which is a different fact from a catalog holding no recipe.
+
+**Three lines carry this, and each one says a different thing.** The `freeze:` line says what
+the lookup found. It names the orders proved by tests on two paths only: where a recipe resolved,
+and where none did and orders are blocked. Where the lookup was not run, or where no order is
+proved by tests, that line names no order. On the flagless path the `notLookedUp:` line names
+them instead.
+
+**The `freezeAdvice:` line carries the instruction that goes with the freeze line.** A summary
+value prints 240 characters. The freeze line holds the framework names and the order ids, which
+grow with the project. An instruction a person cannot work out
+again must never be the part that is cut. It reads `none` where the freeze line needs no
+instruction.
+
+**A resolved recipe names its own framework, and never more.** No record maps a work order to a
+framework. So check that one of the named frameworks carries the `## Oracle files` globs for
+each order proved by tests.
+
+**A `notLookedUp:` line follows, whether or not a framework resolved.** It names every framework
+nobody looked up, and the orders proved by tests. A lookup nobody ran says nothing about such an
+order, so a run that answered for one framework and skipped a second is told so. It reads `none`
+when every framework was answered, or when no order is proved by tests.
 
 **Two frameworks may not both command one tool.** A project declaring two frameworks whose review
 recipes each carry a coding-standards row, say, gives the script two answers to one question, and

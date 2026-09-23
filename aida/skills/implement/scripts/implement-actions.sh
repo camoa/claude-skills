@@ -2812,6 +2812,7 @@ do_preconditions() {
   local task_folder="" project_folder codepath
   local recipes="" failures="" values="" check_recipes="" fw
   local implement_lookups="" im_answer im_lookup im_path im_resolved im_blocked im_freeze
+  local im_notgiven im_by_tests im_unlooked im_advice
   local cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
@@ -3131,14 +3132,35 @@ EOF
   # what this line is for. A lookup nobody ran is a third answer, never folded into the other two.
   im_resolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.implementLookup == "resolved") | .framework ] | join(", ")')"
   im_blocked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'[ (.workOrders // [])[] | select(orderFacts.slot == "order-tests") | .id ] | join(", ")')"
+  im_notgiven="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.implementLookup == "not-given") | .framework ] | join(", ")')"
+  # The warning of its own, printed beside the freeze line (live-run row 171). A framework nobody
+  # looked up says nothing about a test-proved order, so the run that answered for one framework
+  # and skipped a second is warned too, not the flagless run alone. It carries its own line
+  # because the freeze line is already near the 240 characters a summary value prints.
+  im_unlooked="none"
+  im_advice="none"
+  [ -z "$im_notgiven" ] || [ -z "$im_blocked" ] \
+    || im_unlooked="nobody looked up $im_notgiven, so nothing here says whether these test-proved orders can freeze: $im_blocked"
+  # A summary value prints 240 characters (`im_print_summary`), and two of these messages carry a
+  # value that grows with the project: the framework names and every test-proved order id. So a
+  # growing message keeps the freeze line, and the fixed instruction that goes with it takes the
+  # `freezeAdvice` line, which no project can make longer. A cut instruction is the one part a
+  # person cannot work out again.
+  im_by_tests="No order in this snapshot is proved by tests, so none of them needs one"
+  [ -z "$im_blocked" ] || im_by_tests="These orders are proved by tests: $im_blocked"
   if [ -n "$im_resolved" ]; then
-    im_freeze="an implement recipe resolved for $im_resolved, so every order in this snapshot can be built"
+    im_freeze="an implement recipe resolved for $im_resolved. $im_by_tests"
+    # No record maps a work order to a framework, so a resolved recipe cannot say which orders it
+    # covers. The line names what it read, and a person makes the match.
+    [ -z "$im_blocked" ] \
+      || im_advice="No record maps an order to a framework. Check that one of those frameworks carries the ## Oracle files globs for each of those orders"
   elif ! printf '%s' "$record_json" | jq -e '[ .frameworks[] | select(.implementLookup != "not-given") ] | length > 0' >/dev/null; then
     im_freeze="the implement recipe lookup was not run. Ask the navigator for point: implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
   elif [ -z "$im_blocked" ]; then
     im_freeze="no implement recipe for any framework. No order in this snapshot is proved by tests, so none of them needs one"
   else
-    im_freeze="no implement recipe for any framework, so these orders cannot be built and each freeze exits 27: $im_blocked. Without that recipe a project builds its record and observe orders in full, and a gate order freezes but its own check reads unknown, which is not met. Write the implement recipe for a framework this project declares, or change each blocked order's proof"
+    im_freeze="no implement recipe for any framework, so these orders cannot be built and each freeze exits 27: $im_blocked"
+    im_advice="a project builds its record and observe orders in full. A gate order freezes, but its own check reads unknown, which is not met. Write the implement recipe for a framework this project declares, or change each blocked order's proof"
   fi
 
   # ---- the baseline: only when this run's own verdict permits the build to continue -------------
@@ -3238,7 +3260,8 @@ EOF
     *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
-        --argjson report "$record_json" --arg freeze "$im_freeze" \
+        --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
+        --arg freezeAdvice "$im_advice" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" '
@@ -3259,6 +3282,8 @@ EOF
                     + (if (.implementRecipePath // "") == "" then "" else " " + .implementRecipePath end)),
         smoke: ("smoke=" + .smoke.verdict + (if (.smoke.reason // "") == "" then "" else " (" + .smoke.reason + ")" end)) } ],
      freeze: $freeze,
+     notLookedUp: $notLookedUp,
+     freezeAdvice: $freezeAdvice,
      baseline: ($baselineStatus + " | " + $baselineNote),
      baselineFile: (if $baselineStatus == "not-attempted" then "none" else $baselineFile end),
      baselineCommit: (if $baselineCommit == "" then "none" else $baselineCommit end),
@@ -8868,7 +8893,11 @@ do_retake_tests() {
 # ledger document.
 # The freeze record's `commit` is HEAD at the freeze, whether or not the freeze committed: a gate
 # order commits nothing, and a test already in HEAD makes no commit either. So the commit is the
-# order's only when its subject is the one the freeze writes for this order. A build record holds
+# order's only when its subject is the one the freeze writes for this order.
+# One record holds one commit, and the freeze after a retake overwrites it. So each `retakes`
+# entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
+# the same subject test decides it. Without them the reset answer stops at the superseded freeze
+# and leaves the wrong test standing in the tree (live-run row 147). A build record holds
 # the last attempt's range; a fix record each round's. A record whose commits git no longer has
 # names nothing (live-run row 94).
 # A build and fix record does not stay at the top of the implementation folder. `retake-tests`
@@ -8878,13 +8907,20 @@ do_retake_tests() {
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
   local out='[]' c range file kind dir files
-  c="$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null)"
-  if [ -n "$c" ] && git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1; then
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
     case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
-      "Freeze the tests of $one_id through the implement skill:"*)
-        out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '. + [{order: $id, kind: "freeze", commit: $c, range: $c}]')" ;;
+      "Freeze the tests of $one_id through the implement skill:"*) ;;
+      *) continue ;;
     esac
-  fi
+    out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '
+      if any(.[]; .commit == $c) then . else . + [{order: $id, kind: "freeze", commit: $c, range: $c}] end')"
+  done <<RS_FREEZES
+$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
+printf '%s' "$ledger" | jq -r --arg id "$one_id" \
+  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty' 2>/dev/null)
+RS_FREEZES
   # Each retake folder comes from the ledger entry's own `movedTo`, never from a guessed folder
   # name. A folder or a record a person removed holds nothing, which is not fatal.
   files="$impl/build-$one_id.json

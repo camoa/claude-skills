@@ -144,7 +144,9 @@ ledger. Its records move aside with the rest, and the summary names it. The next
 resumed run.
 
 The records move; the commits they name stay on the branch. The restart reads each halted
-order's freeze commit and its build and fix ranges. It finds the build and fix records wherever
+order's freeze commits and its build and fix ranges. A retake supersedes one freeze commit and
+records it, so a retaken order has more than one. The test a person ruled wrong sits in the
+earlier one. It finds the build and fix records wherever
 a retake or an earlier restart moved them. An order's own commits are then never counted as
 later ones. It lists the ones still on the branch, one
 `commits:` line each, with the order and the kind. It writes them into `restarted.json` too.
