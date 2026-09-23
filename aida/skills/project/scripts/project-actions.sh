@@ -895,17 +895,28 @@ do_subscription() {
 # ------------------------------------------------------------------------------------------------
 
 do_unregister() {
-  local target="${1:?unregister: a name or a code path is required}" match project_path code_path
+  local target="${1:?unregister: a name or a code path is required}" match project_path code_path base
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
+
+  # rebuild-registry is the way back, and it reads the base and the rows the registry still holds.
+  # A folder outside the base has neither once this row is gone, so the output says so here. The
+  # person cannot compare the two paths themselves: nothing else prints the base.
+  base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
+  base="$(canon_path "$base")"
 
   registry_remove_project "$project_path" || die3 "could not remove the registry row for $project_path"
 
   echo "UNREGISTERED: $(printf '%s' "$match" | jq -r '.name')"
   echo "PROJECT FOLDER (not removed): ${project_path}"
   echo "CODE PATH (not touched): ${code_path}"
+  if [ "$(dirname -- "$project_path")" = "$base" ]; then
+    echo "PROJECTS BASE: ${base}. rebuild-registry reads this folder and lists the project again."
+  else
+    echo "PROJECTS BASE: ${base}. This project folder is outside it, and rebuild-registry cannot find it again."
+  fi
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1268,7 +1279,11 @@ do_check_machine() {
       printf '  Recorded tree: %s, on disk.\n' "$wt"
     else
       printf '  Recorded tree: %s, gone from disk.\n' "$wt"
-      printf '    Repair: run a stage action from %s, which makes the tree again.\n' "$code"
+      # Only a stage action that needs the code reaches the producer. Scope, research and design
+      # run with the tree absent, so naming them here sends a person to an action that changes
+      # nothing.
+      printf '    Repair: from %s, run a stage action that needs the code.\n' "$code"
+      printf '    Implementation, review and completion need it, and make the tree again.\n'
     fi
     if printf '%s\n' "$listed" | grep -Fxq "$wt"; then
       printf '  Git lists it: yes.\n'

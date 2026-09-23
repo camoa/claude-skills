@@ -211,7 +211,7 @@ legacy_stages() {
 
 gather_new_tasks() {
   local project_path="$1"
-  local tasks_dir="$project_path/tasks" d tj state key line review notes stage legacy
+  local tasks_dir="$project_path/tasks" d tj state key line review notes stage legacy wtp ondisk
   [ -d "$tasks_dir" ] || return 0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
@@ -241,12 +241,20 @@ gather_new_tasks() {
     notes="${notes%.md}"
     stage="$(task_stage "$d" "$review")"
     legacy="$(legacy_stages "$d")"
+    # A recorded path that is not on disk is a state of its own, never a path to hand on: the
+    # tree was removed, or another machine recorded it. jq cannot look at disk, so the shell does.
+    wtp="$(jq -r '.worktree.path // empty' "$tj" 2>/dev/null)"
+    ondisk=""
+    if [ -n "$wtp" ]; then
+      if [ -d "$wtp" ]; then ondisk="yes"; else ondisk="no"; fi
+    fi
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
-      --arg legacy "$legacy" \
+      --arg legacy "$legacy" --arg ondisk "$ondisk" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
         children:(.children // []), runMode:(.runMode // "interactive"), runModeStages:(.runModeStages // []),
         review:$review, notes:$notes,
         worktree:(.worktree.path // "none"), stage:$stage, path:$p}
+       | if $ondisk != "" then . + {worktreeOnDisk:$ondisk} else . end
        | if $legacy != "" then . + {legacyStages:($legacy | split(" "))} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
     printf '%s\t%s\n' "$key" "$line"
@@ -358,6 +366,12 @@ do_open() {
       "runMode: " + (.runMode // "interactive")
         + (if ((.runModeStages // []) | length) > 0 then " (" + (.runModeStages | join(", ")) + ")" else "" end),
       "worktree: " + (.worktree.path // "none")' "$tj"
+    # The same state the list carries: a path is recorded, and disk either holds it or does not.
+    local wtp
+    wtp="$(jq -r '.worktree.path // empty' "$tj" 2>/dev/null)"
+    if [ -n "$wtp" ]; then
+      if [ -d "$wtp" ]; then echo "worktree-on-disk: yes"; else echo "worktree-on-disk: no"; fi
+    fi
     local review
     review="$(review_verdict_of "$project_path/tasks/$target")"
     echo "review: $review"

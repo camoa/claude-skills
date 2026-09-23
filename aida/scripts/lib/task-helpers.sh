@@ -29,6 +29,9 @@
 #                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
 #   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
+#   task_tree_from_git <folder> <code> <action>
+#                                         prints the registered worktree carrying the task's
+#                                         branch, and repairs worktree.path when git disagrees
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
@@ -43,11 +46,41 @@
 # sources playbooks.sh for pb_slug. Every caller resolves inside a command substitution, so that
 # source lands in a subshell and clobbers nothing. The refusal takes die79 from the caller.
 
+# Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
+# task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree
+# that carries the task's branch and is on disk, and nothing when git lists no such tree. The main
+# checkout is skipped: a branch checked out there is not this task's tree. One reader answers
+# "where is this task's tree", and the refusal below and the producer both ask it, so they never
+# disagree. worktree.path has one producer, so git's answer is written to that one field again,
+# and one line says so. Calls no die function.
+task_tree_from_git() {
+  local folder="$1" code="$2" who="$3" branch wt found cand line
+  branch="$(jq -r '.worktree.branch // empty' "$folder/task.json" 2>/dev/null)"
+  [ -n "$branch" ] || return 0
+  found=""
+  cand=""
+  while IFS= read -r line; do
+    if [ "${line#worktree }" != "$line" ]; then cand="${line#worktree }"; fi
+    if [ "$line" = "branch refs/heads/$branch" ] && [ "$cand" != "$code" ]; then found="$cand"; fi
+  done <<GIT_WORKTREES
+$(git -C "$code" worktree list --porcelain 2>/dev/null)
+GIT_WORKTREES
+  # A path git still registers and disk no longer holds is not where the tree is.
+  [ -n "$found" ] && [ -d "$found" ] || return 0
+  wt="$(jq -r '.worktree.path // empty' "$folder/task.json" 2>/dev/null)"
+  if [ "$found" != "$wt" ]; then
+    write_atomic "$folder/task.json" "$(jq --arg wp "$found" '.worktree.path = $wp' "$folder/task.json")"
+    printf '%s: git lists this task tree at %s, and task.json recorded %s. The record now says %s.\n' \
+      "$who" "$found" "$wt" "$found" >&2
+  fi
+  printf '%s' "$found"
+}
+
 # The task folder must already exist and already hold a task.json (ideal/scope.md, "Scope runs
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
 # one). Prints the canonical path on success.
 resolve_task_folder() {
-  local arg="$1" who="$2" p wt branch project code here top found cand line
+  local arg="$1" who="$2" p wt project code here top found
   [ -n "$arg" ] || die3 "$who: a task folder is required"
   p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
   [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
@@ -79,29 +112,10 @@ resolve_task_folder() {
   fi
   code="$(cd "$code" && pwd -P)"
   top="$(active_tree_for "$code" "${here%/}")"
-  branch="$(jq -r '.worktree.branch // empty' "$p/task.json" 2>/dev/null)"
   # Which registered tree carries this task's branch. active_tree_for answers about the current
-  # directory alone, and a tree moved while the window stands elsewhere is invisible to it. The
-  # main checkout is skipped: a branch checked out there is not this task's tree.
-  found=""
-  if [ -n "$branch" ]; then
-    cand=""
-    while IFS= read -r line; do
-      if [ "${line#worktree }" != "$line" ]; then cand="${line#worktree }"; fi
-      if [ "$line" = "branch refs/heads/$branch" ] && [ "$cand" != "$code" ]; then found="$cand"; fi
-    done <<GIT_WORKTREES
-$(git -C "$code" worktree list --porcelain 2>/dev/null)
-GIT_WORKTREES
-  fi
-  # Git and the record disagree: the tree moved. task_worktree produces worktree.path, and this
-  # writes that one field again with git's answer, so the next action and git agree. One line says
-  # so, and keeps the recorded path.
-  if [ -n "$found" ] && [ "$found" != "$wt" ]; then
-    write_atomic "$p/task.json" "$(jq --arg wp "$found" '.worktree.path = $wp' "$p/task.json")"
-    printf '%s: git lists this task tree at %s, and task.json recorded %s. The record now says %s.\n' \
-      "$who" "$found" "$wt" "$found" >&2
-    wt="$found"
-  fi
+  # directory alone, and a tree moved while the window stands elsewhere is invisible to it.
+  found="$(task_tree_from_git "$p" "$code" "$who")"
+  [ -z "$found" ] || wt="$found"
   [ "$top" != "$wt" ] || { printf '%s' "$p"; return 0; }
   # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
   # makes it again names it.
@@ -320,7 +334,10 @@ task_stage() {
 # path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
-# git refuses a path it still registers; a branch gone too starts from HEAD again. The base is
+# git refuses a path it still registers; a branch gone too starts from HEAD again. The recorded
+# path is not trusted as an address: a path that is not beside this machine's code path is
+# computed again by the rule above, and the tree is made and recorded there. That is the repair
+# for a task carried to a second machine, which records the first machine's path. The base is
 # HEAD of the directory this action was started from when that directory is inside the code
 # repository, so a follow-up made from its parent's tree stacks on the parent's work; otherwise
 # it is the code path's HEAD. Uncommitted changes in the code path are not in a tree cut from a
@@ -328,6 +345,7 @@ task_stage() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
+  local found rule parent
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -337,14 +355,29 @@ task_worktree() {
   is_git_repo "$code" || die3 "$who: the project's codePath is not a git repository: $code"
   code="$(cd "$code" && pwd -P)"
   branch="$(jq -r '.worktree.branch // empty' "$task_json" 2>/dev/null)"
+  id="$(jq -r '.id' "$task_json")"
+  # shellcheck source=/dev/null
+  command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
+    || die3 "$who: the library failed to load: playbooks.sh"
+  # The path rule, run here rather than read from the record, because the record is an address on
+  # the machine that wrote it. One copy serves both branches below.
+  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$id"
   if [ -n "$wt" ]; then
+    # The tree may have moved rather than gone. git answers that, through the one reader.
+    found="$(task_tree_from_git "$task_folder" "$code" "$who")"
+    if [ -n "$found" ]; then printf '%s' "$found"; return 0; fi
+    # A recorded path is usable here when its folder is the code path's own folder, which is what
+    # the rule computes. Another machine's home fails that test, and so does a folder this machine
+    # does not have. Then the producer runs again: the path is computed, made, and recorded.
+    parent="$(cd "$(dirname -- "$wt")" 2>/dev/null && pwd -P)" || parent=""
+    if [ "$parent" != "$(dirname -- "$rule")" ]; then
+      printf '%s: task.json records the worktree %s, which is not beside the code path %s here. The tree is made at %s instead.\n' \
+        "$who" "$wt" "$code" "$rule" >&2
+      wt="$rule"
+    fi
     printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
   else
-    id="$(jq -r '.id' "$task_json")"
-    # shellcheck source=/dev/null
-    command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
-      || die3 "$who: the library failed to load: playbooks.sh"
-    wt="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$id"
+    wt="$rule"
     branch="feature/$id"
     printf 'worktree: %s\n' "$wt" >&2
   fi

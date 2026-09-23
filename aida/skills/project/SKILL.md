@@ -377,9 +377,12 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh unregister "<target>"
 ```
 Drops the registry row only. It prints both folders it names, the project folder and the code
-path, and it touches neither. This is recoverable: create a fresh registration pointed at the
-same project folder. To recover every unregistered project at once, use `rebuild-registry`
-below.
+path, and it touches neither. The one route back is `rebuild-registry` below. `create` is not
+that route: it refuses a project folder that already exists.
+
+The last line is `PROJECTS BASE:`, and it names which of two cases this is. A project folder
+under that base comes back with `rebuild-registry`. A folder outside it does not, because the
+dropped row held the only record of where it sits. Relay that line, with the folder's path.
 
 ## `task-rule <name-or-path> [--remove | --decline]`
 
@@ -426,8 +429,11 @@ corrupted or lost registry file, or after unregistering something by mistake:
 ```
 Walks every immediate subdirectory of the projects-folder base and reads each one's project file.
 With no base given, it walks the base recorded when the first project was created, or the
-built-in `~/.claude/aida/projects` when no project was ever created. Replaces the whole registry
-with what it found.
+built-in `~/.claude/aida/projects` when no project was ever created. It reads every project folder
+the registry names outside that base too, so a version 5 pickup survives the rebuild. Replaces the
+whole registry with what it found.
+Each folder it keeps from outside the base, and each one it drops because the project file is
+gone, gets a line on stderr. Show those lines.
 `declinedOffers` and `directoryChoices` cannot be recovered this way and start empty again; say so
 plainly rather than letting it pass unremarked.
 

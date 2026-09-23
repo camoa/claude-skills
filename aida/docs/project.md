@@ -177,8 +177,10 @@ Closing a project that still has unfinished work says what is still open and let
 decide, rather than refusing outright or pretending nothing was left.
 
 **Unregistering is not one of the three states.** It drops the project from AIDA's list and
-leaves the folder untouched, so it is recoverable by pointing at the folder again. This is
-the answer for a duplicate entry or a mistake, not for work that is merely done or parked.
+leaves the folder untouched. It is the answer for a duplicate entry or a mistake, not for work
+that is merely done or parked. `/aida:project rebuild-registry` reads the folder and lists it
+again, with one exception. A project folder outside the projects base does not come back: its
+registry row was the only record of where it sits. The unregister output names which case it is.
 
 ## Cleaning up
 
