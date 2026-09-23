@@ -52,6 +52,7 @@
 #   git_diff_of <repo> <from> <to> [<scope>] [<options>]...  the diff, whole tree or under one path
 #   br_require_clean_tree <action> <repo> [<unit> <run mode> <ledger file> <ledger doc>]  exit 61
 #   br_worst_verdict <verdicts>               the verdict that wins across several frameworks
+#   br_proof_facts <snapshot>                 commits in the code repository, owns a file there
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
 #   rv_is_finding_id <id>                     true for `f` and then digits, no leading zero
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
@@ -59,6 +60,9 @@
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
+#   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
+#   sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog>  one folder source's file
+#   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
 #   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
 #   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
 #   fenced_blocks_under <recipe> <heading> <tag>  the lines of every block with that tag, in order
@@ -1190,11 +1194,36 @@ br_require_clean_tree() {
 # what a whole run may report, and a recipe declaring nothing must not read as a pass. Here the
 # question is what one check answered across several frameworks, and a framework with no row to run
 # has said nothing about it. Collapsing the two would make one of the two questions answer wrongly.
+#
+# `not-needed` sits between undeclared and met. Below met, so a check no order asked for never drags
+# down one that ran and passed. Above undeclared, because the two are folded together whenever a
+# framework declares no recipe, and the word that says no order asked for this check is the one a
+# reader needs; the fold appends undeclared, so an equal rank would drop the word every time. Before
+# this the ranking read every word it did not know as worse than unmet, which made the best possible
+# answer rank as the worst (live-run row 167).
 br_worst_verdict() {
   printf '%s' "$1" | jq -r '
-    def rank: if . == "undeclared" then 0 elif . == "met" then 1 elif . == "deferred" then 2
-              elif . == "unknown" then 3 else 4 end;
+    def rank: if . == "undeclared" then 0 elif . == "not-needed" then 1 elif . == "met" then 2
+              elif . == "deferred" then 3 elif . == "unknown" then 4 else 5 end;
     (. + ["undeclared"]) | max_by(rank)'
+}
+
+# What the frozen snapshot's proof kinds mean for a check that is about to answer. $1 the snapshot
+# document. Prints two words separated by a tab: whether any order commits in the code repository,
+# and whether any order owns a file there, each `yes` or `no`.
+#
+# No check wants the proof kind itself. Every site that reads `.proof` converts it into a question
+# about what there is to look at, and a site converting it on its own is why the two review sites
+# covered one value while the twelve build sites covered four (live-run row 167). The two questions
+# have one answer today, because an order proved by its record is the one kind that lands its
+# deliverable in the project folder. They are asked apart because a check reads one or the other,
+# and a fifth proof kind separates them here rather than at fifteen call sites.
+br_proof_facts() {
+  printf '%s' "$1" | jq -r '
+    def yesno(f): if any((.workOrders // [])[]; (.proof // "tests") | f) then "yes" else "no" end;
+    # An order proved by its record commits in the project folder and owns its files there. Every
+    # other proof kind lands both in the code repository.
+    yesno(. != "record") + "\t" + yesno(. != "record")'
 }
 
 
@@ -1204,6 +1233,115 @@ br_worst_verdict() {
 # files, and one copy is what keeps their refusals listing their sets in the same shape.
 md_basenames_in() {
   find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
+
+# ------------------------------------------------------------------------------------------------
+# The sources a project declares, walked once for every kind a path can answer
+# ------------------------------------------------------------------------------------------------
+# `sources` in project.json is one list for five kinds. Two readers each walked it with their own
+# loop before this block: `recipe-source` in project-actions.sh and the tool skill's own copy.
+# One walk now serves process recipes, tooling recipes and agentic recipes. Guides are not here.
+# They key on neither a framework nor a phase and are found by matching words, so a path probe
+# cannot serve them, and their lookup shape is still undecided.
+#
+# A folder source holds `<location>/<folder>/<framework>/<leaf>.md`, where the folder is the
+# kind's own name: process-recipes, tooling-recipes or agentic-recipes.
+#
+# Nothing here refuses. A library that called `die` would need every caller to define it, and the
+# tool skill defines none.
+
+# `<locationType><TAB><location>`, one line per source providing $2, lowest precedence first.
+# Nothing when the project declares no source for that kind. $1 is the project file.
+sw_source_lines() {
+  jq -r --arg kind "$2" '
+    (.sources // [])
+    | map(select((.provides // []) | index($kind)))
+    | sort_by(.precedence[$kind] // 999)
+    | .[] | .locationType + "\t" + .location' "$1" 2>/dev/null
+}
+
+# Defaults only: a caller that set one before loading this file keeps its value.
+: "${SW_PATH:=}"; : "${SW_SOURCE:=}"; : "${SW_SEARCHED:=}"; : "${SW_CATALOG:=}"; : "${SW_OTHER:=}"
+: "${SW_UNREADABLE:=}"; : "${SW_UNKNOWN:=}"
+
+# sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog: yes|no>
+# Probes each folder source in precedence order and stops at the first file on disk. Sets SW_PATH
+# and SW_SOURCE to it, or both to empty; SW_SEARCHED to the folders probed, space separated with a
+# trailing space; SW_CATALOG to yes when the walk stopped at a catalog entry; SW_OTHER to the
+# sources it did not probe, `<location> (<type>)` comma separated; SW_UNKNOWN to those of them
+# whose type is outside the four project-schema.json declares, in the same form. SW_UNKNOWN is a
+# subset of SW_OTHER, never a replacement for it, so a caller reading only SW_OTHER still names
+# every source this walk passed over. Returns 0 when SW_PATH is set.
+# The last argument says whether the caller can ask the catalog itself. `yes` stops the walk at
+# the first catalog entry, because a folder ranked behind the catalog is ranked behind the answer
+# the caller is about to get. `no` puts catalog entries in SW_OTHER and walks on, because a caller
+# that cannot ask the catalog must still reach the folders below one.
+#
+# A file that is on disk and cannot be read ends the walk with SW_UNREADABLE set to its path and
+# SW_PATH empty. Missing and unreadable are different facts, always (foundations.md), and walking
+# on would answer from a lower-ranked source while the source this project ranked first sat there
+# unread. Every caller refuses on SW_UNREADABLE and names the path.
+sw_probe() {
+  local pf="$1" kind="$2" folder="$3" fw="$4" leaf="$5" asks="$6"
+  local line loc_type loc cand tab
+  SW_PATH=""; SW_SOURCE=""; SW_SEARCHED=""; SW_CATALOG=""; SW_OTHER=""; SW_UNREADABLE=""
+  SW_UNKNOWN=""
+  tab="$(printf '\t')"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    loc_type="${line%%"$tab"*}"; loc="${line#*"$tab"}"
+    if [ "$loc_type" != "folder" ]; then
+      if [ "$loc_type" = "catalog" ] && [ "$asks" = "yes" ]; then SW_CATALOG="yes"; break; fi
+      SW_OTHER="$SW_OTHER${SW_OTHER:+, }$loc ($loc_type)"
+      case "$loc_type" in
+        folder|catalog|site|search) : ;;
+        *) SW_UNKNOWN="$SW_UNKNOWN${SW_UNKNOWN:+, }$loc ($loc_type)" ;;
+      esac
+      continue
+    fi
+    cand="$loc/$folder/$fw/$leaf.md"
+    if [ -f "$cand" ]; then
+      if [ -r "$cand" ]; then SW_PATH="$cand"; SW_SOURCE="$loc"; return 0; fi
+      SW_UNREADABLE="$cand"; return 1
+    fi
+    SW_SEARCHED="$SW_SEARCHED$loc "
+  done <<SW_LINES
+$(sw_source_lines "$pf" "$kind")
+SW_LINES
+  return 1
+}
+
+# sw_list <project file> <kind> <folder> <framework>
+# `<name><TAB><location>`, one line per .md file under `<location>/<folder>/<framework>/`, the
+# folder sources in precedence order. The first folder holding a name wins it, so a later folder
+# never shadows an earlier one. A kind resolved by name rather than by point reads this.
+#
+# A source this walk did not read prints `<TAB><type><TAB><location>`, an empty first field, in
+# its own place in the precedence order. A name comes from a .md basename and is never empty, so
+# the two forms cannot collide. The record travels on stdout because the caller reads this
+# through `$(...)`, where a variable would die with the subshell. Nothing here refuses and
+# nothing here warns: the caller decides what to say, the same way it does with SW_OTHER
+# (foundations.md, nothing is dropped silently).
+sw_list() {
+  local pf="$1" kind="$2" folder="$3" fw="$4"
+  local line loc_type loc name seen tab
+  seen=" "
+  tab="$(printf '\t')"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    loc_type="${line%%"$tab"*}"; loc="${line#*"$tab"}"
+    if [ "$loc_type" != "folder" ]; then
+      printf '\t%s\t%s\n' "$loc_type" "$loc"
+      continue
+    fi
+    for name in $(md_basenames_in "$loc/$folder/$fw"); do
+      case "$seen" in *" $name "*) continue ;; esac
+      seen="$seen$name "
+      printf '%s\t%s\n' "$name" "$loc"
+    done
+  done <<SW_LINES
+$(sw_source_lines "$pf" "$kind")
+SW_LINES
 }
 
 # ------------------------------------------------------------------------------------------------

@@ -71,7 +71,10 @@ repair the message gives and stop.
 from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
 so scoping in this same window is not refused. The tool asks for approval, because the path is
 outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
-tool refuses on first entry. On that refusal the scripts are still reachable: start every Bash
+tool refuses on first entry, and from a session already inside a worktree it refuses too. A
+person may also decline the prompt, which is not a refusal. After either outcome, do not call the
+tool again. Take the other route, and read `/aida:next` for the whole rule. The scripts stay
+reachable without entry: start every Bash
 call with `cd <path> &&`. Every call needs it, because the shell's directory resets between
 calls. The `cd` part asks for approval, because the tree sits outside this window's directory.
 The exit 79 message names that form too. The way in is `/cd <path>`, typed by the person: it

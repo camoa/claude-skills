@@ -47,11 +47,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that agrees with it, and no two registry rows share a name; the project folder is a
 #      git repository with no uncommitted work. Nothing more is said.
 #   1  One or more fields are missing from project.json, present with the wrong shape, or
-#      fail one of the three cross-field checks project-schema.json's own descriptions
+#      fail one of the two cross-field checks project-schema.json's own descriptions
 #      promise (a schema checks one field at a time, never two fields against each other):
-#      a playbookSubscriptions key naming a framework this project never declared; a
-#      source's precedence keys not matching its own provides list; or a source's
-#      answersFor naming a framework this project never declared. Each is named, on
+#      a playbookSubscriptions key naming a framework this project never declared, or a
+#      source's precedence keys not matching its own provides list. Each is named, on
 #      stdout, with the text that would produce it. Nothing is repaired; a repair is
 #      proposed.
 #   2  codePath is present and well-formed, but the directory it names does not exist. A
@@ -76,15 +75,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # data rather than asking a person or a model: a JSON Schema 2020-12 document whose top-level
 # `properties` object has one entry per field. This script reads, per field:
 #   - the expected type, from that field's own `type`, or from `oneOf`/`$ref` when the field
-#     is nullable or defined in `$defs` (both schema files use exactly these three shapes and
-#     nothing deeper);
-#   - once the type matches, the `minLength`, `pattern`, `minItems` and `enum` keywords
-#     declared on that same property, checked directly against the value. Only a keyword on
-#     the property's own definition is checked. A constraint declared one level deeper,
-#     inside `items` or inside a `$defs` object the property points to, is not checked here,
-#     and no line in this report claims that it was. This is why the registry's own
-#     comparison sees `projects` only as "an array, present", never checking that each row
-#     inside it carries its own required fields. That gap is exactly why the
+#     is nullable or defined in `$defs`;
+#   - once the type matches, the `minLength`, `pattern`, `minItems` and `enum` keywords, and
+#     `additionalProperties`. Since 2026-09-23 the shared comparison applies all of those at
+#     every level: it descends into `items` and into a `$defs` object a `$ref` points at, so
+#     the registry's own comparison reads each row inside `projects` and names a fault by its
+#     path, `projects[2].path`. Seven keyword families are still not evaluated: `minimum`,
+#     `maximum`, `maxItems`, `uniqueItems`, `const`, `minProperties`, `propertyNames`, and
+#     `required` anywhere below the root. No line in this report claims that they were. A rule
+#     about two entries together was never a schema question, which is why the
 #     no-two-rows-share-a-name test below exists as its own, separate step, the same as the
 #     three project-level cross-field tests in step 4b below;
 #   - `description`, shown verbatim as the repair guidance for a field this script finds
@@ -228,7 +227,7 @@ PROJECT_FILE="$PROJECT_PATH/project.json"
 jq empty "$PROJECT_FILE" 2>/dev/null || die3 "cannot read the project file: $PROJECT_FILE is not valid JSON"
 
 # ---------------------------------------------------------------------------
-# 4. Compare a data file against a schema's top-level field list. The
+# 4. Compare a data file against the field list a schema declares. The
 #    comparison itself (a jq program, never a model's judgment) lives in
 #    schema-check.sh, sourced in section 2 above, so this same algorithm
 #    serves project.json against project-schema.json here, the registry
@@ -247,6 +246,9 @@ UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c '.unreadable')"
 MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
 UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
 FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
+# Fields, never faults: the comparison reads every level, so twenty refused elements in one list
+# would subtract twenty from a count of top-level fields and print a number below zero.
+WELL_FORMED_COUNT="$(echo "$COMPARE_JSON" | jq '.wellFormedCount')"
 
 CODEPATH_VALUE_JSON="$(jq -c '.codePath // null' "$PROJECT_FILE")"
 CODEPATH_IS_STRING="$(echo "$CODEPATH_VALUE_JSON" | jq -r '. | type == "string"')"
@@ -265,17 +267,23 @@ STATE_NAMED_IN_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "state")"
 STATE_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "state")"
 
 # ---------------------------------------------------------------------------
-# 4b. Three cross-field tests project-schema.json's own descriptions promise
+# 4b. Two cross-field tests project-schema.json's own descriptions promise
 #     but a schema cannot express, since a JSON Schema checks one field at a
 #     time, never two fields against each other:
 #       - every playbookSubscriptions key names a framework this project
 #         declared;
 #       - every source's precedence keys are exactly that source's own
-#         provides list, neither more nor fewer;
-#       - every source's answersFor, where its extent is "frameworks", names
-#         only frameworks this project declared.
+#         provides list, neither more nor fewer.
 #     Skipped, and said so, when frameworks itself failed the schema check
-#     above: there is nothing to compare the other three fields against.
+#     above: there is nothing to compare the other two fields against.
+#     A third test read every source's answersFor against frameworks until
+#     6.0.0-beta.24. The field is retired: nothing writes it and nothing reads
+#     it, so a value in an older file decides nothing and checking it would
+#     refuse a project for a field that no longer means anything. A value
+#     written by hand is accepted here in silence, deliberately. The schema
+#     still declares the field's shape, so a reader learns there what the
+#     field means now; a check that refused a project over a value nothing
+#     reads would be a refusal with no consequence behind it.
 # ---------------------------------------------------------------------------
 
 CROSS_FIELD_JQ='
@@ -298,16 +306,6 @@ CROSS_FIELD_JQ='
             reason: ("source \"" + ($s.location // "(no location)") + "\" has precedence keys that do not match its provides list: " + ($diff | join(", "))),
             detail: "precedence must have exactly one key per entry in provides, and no other keys." }
       ]
-      +
-      [ (($p.sources // [])[]) as $s
-        | ($s.answersFor // {}) as $af
-        | select(($af.extent // "") == "frameworks")
-        | (($af.frameworks // [])[]) as $f
-        | select(($fw | index($f)) == null)
-        | { field: "sources",
-            reason: ("source \"" + ($s.location // "(no location)") + "\" answersFor names framework \"" + $f + "\", which this project never declared"),
-            detail: "answersFor frameworks entries must be names this project declared under frameworks." }
-      ]
     )
 '
 
@@ -317,7 +315,7 @@ CROSS_FIELD_TEST_NOTE="skipped: frameworks is missing or not well-formed above, 
 if [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREADABLE" = "false" ]; then
   CROSS_FIELD_ISSUES_JSON="$(jq -n --slurpfile data "$PROJECT_FILE" "$CROSS_FIELD_JQ")" \
     || die3 "the cross-field comparison itself failed to run. Check project.json for a malformed sources or playbookSubscriptions entry"
-  CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, source precedence against each source's own provides, and source answersFor frameworks against frameworks"
+  CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, and source precedence against each source's own provides"
 fi
 
 CROSS_FIELD_COUNT="$(printf '%s' "$CROSS_FIELD_ISSUES_JSON" | jq 'length')"
@@ -444,6 +442,7 @@ REG_UNREADABLE_JSON='[]'
 REG_MISSING_COUNT=0
 REG_UNREADABLE_COUNT=0
 REG_FIELD_COUNT="$REGISTRY_SCHEMA_FIELD_COUNT"
+REG_WELL_FORMED_COUNT="$REGISTRY_SCHEMA_FIELD_COUNT"
 
 if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
   : # nothing to compare; the report says so under "Registry:" below
@@ -455,6 +454,7 @@ else
   REG_MISSING_COUNT="$(echo "$REG_COMPARE_JSON" | jq '.missing | length')"
   REG_UNREADABLE_COUNT="$(echo "$REG_COMPARE_JSON" | jq '.unreadable | length')"
   REG_FIELD_COUNT="$(echo "$REG_COMPARE_JSON" | jq '.fieldCount')"
+  REG_WELL_FORMED_COUNT="$(echo "$REG_COMPARE_JSON" | jq '.wellFormedCount')"
 fi
 
 # ---------------------------------------------------------------------------
@@ -691,7 +691,7 @@ echo "Code path safety: $SAFETY_VERDICT"
 echo "  $SAFETY_DETAIL"
 echo
 
-echo "Project file against its schema, top-level fields present and well-formed: $((FIELD_COUNT - MISSING_COUNT - UNREADABLE_COUNT))/$FIELD_COUNT"
+echo "Project file against its schema, declared fields carrying no fault at any depth: $WELL_FORMED_COUNT/$FIELD_COUNT"
 echo
 
 if [ "$MISSING_COUNT" -gt 0 ]; then
@@ -720,7 +720,7 @@ echo "Registry: $REGISTRY_PATH ($REGISTRY_FILE_STATE)"
 if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
   echo "  Exists but could not be read as JSON. Every registry test below was skipped."
 else
-  echo "  Registry file against its schema, fields present and well-formed: $((REG_FIELD_COUNT - REG_MISSING_COUNT - REG_UNREADABLE_COUNT))/$REG_FIELD_COUNT"
+  echo "  Registry file against its schema, declared fields carrying no fault at any depth: $REG_WELL_FORMED_COUNT/$REG_FIELD_COUNT"
   if [ "$REG_MISSING_COUNT" -gt 0 ]; then
     echo "  Missing top-level fields:"
     echo "$REG_MISSING_JSON" | jq -r '.[] | "    - " + .field + ": not set.\n        " + .detail'

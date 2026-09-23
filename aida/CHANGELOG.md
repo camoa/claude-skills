@@ -4,6 +4,112 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.23] - 2026-09-23
+
+Sixteen rows, in two batches. The first five come from the live run on beta.22
+and from the owner's own asks. The second eleven come from re-reading the
+thirty-nine findings of the 2026-09-15 documentation pass against this branch,
+eight betas after they were written: eight were already fixed, one was deferred
+work rather than a defect, and one was wrong about itself.
+
+### Added
+- `tests-brief` writes a `retake` key after `retake-tests`, while no freeze has
+  answered the retake. It carries the ruled finding with its evidence,
+  severity, file, lines, `linkedTo` and ruling reason, read from the review
+  record at the retake entry's own `movedTo`, and the rows and globs the order
+  already froze. A record a person removed is named, not dropped. The test
+  author reads the key as a correction and leaves every other frozen test
+  alone. Before this a fresh author read a first-run brief and wrote the
+  order's tests again, which the wrong-test route forbids. (row 142)
+- `add` and `update` print the proof an order's owned criteria imply, beside
+  the proof it declares, on every call. `check-design.sh` reports every order
+  whose proof is `tests` and that owns no machine-verified criterion, and
+  never raises the exit code; `check` prints `impliedProofDisagrees:` at every
+  exit code, with the repair. The design critic sends a criterion nothing
+  would settle back to scope, rather than giving it a proof kind. (row 145)
+- `project check-machine`, report only: the Claude Code version against the
+  two that matter, whether the plugin changed after this session started,
+  whether the check ran inside a worktree, trees git lists that are gone from
+  disk, and trees git lists that no task record names. The session start hook
+  exports the loaded version through the hook environment file. (row 146)
+
+### Changed
+- A resumed `start` clears a drift halt whose order no longer drifts. It
+  removes only a segment about the order's own design copy, keeps every other
+  segment, and records the clearing. A reopen that changes both an order's
+  design file and a criterion it serves now writes both segments, so restoring
+  the file alone leaves the order halted. `clear-halt` keeps exit 85 and names
+  `start`. The design page says a change to a started order halts it, and the
+  rulings page says to correct the design and restart when the ruling's cause
+  is the done-when wording. (row 143)
+- `restart` finds an order's build and fix records wherever they are: the top
+  of the implementation folder, each folder a retake recorded moving them to,
+  and every earlier restart's archive. The `tree:` line then counts only the
+  commits that are not the order's own, and its carry answer says the order's
+  own code stays in the tree, so its next tests cannot go red. (row 144)
+- The exit 79 refusal names the route that works where the call ran: the
+  `cd <tree> &&` prefix alone from outside the code repository or from another
+  task's tree, and entry first from inside the checkout. The test asks git
+  through `active_tree_for`, repairs `worktree.path` when a tree moved, and
+  falls back to the string test when git cannot be asked. Eight stage pages
+  relay both routes, and `next` says what to do after a decline and after a
+  refusal. (row 146)
+- The design page says a tooling recipe body is fetched, checked against the
+  catalog's sha and stored by hand, until a navigator mode serves one. Owed
+  since beta.22. (row 126)
+
+
+### Added, in the second batch
+- The review stage learns the proof kinds. A criterion owned by a `gate` or a
+  `record` order reads the judgement the build wrote on the ledger, as an
+  `observe` order's criterion already read the observed record. `not-needed` is
+  legal in the check row enum and ranks above `undeclared`. (rows 154, 167)
+- `project check-machine` and the worktree route, from the first batch, gain a
+  producer that recomputes a task's tree path when the recorded one is not this
+  machine's. One reader answers where a task's tree is. (row 148)
+- A declared `playbooks` folder is read, in declared order. One walk serves
+  every kind that resolves by path, and agentic recipes gain a layout, a reader
+  and a dispatch that reaches it. (rows 157, 159)
+- `preconditions` names each order that cannot be frozen without an implement
+  recipe, so a person hears before any order is built. (row 160)
+
+### Changed, in the second batch
+- The schema comparison reads a field at every depth. It applies the type test
+  and four keywords at every level, enforces undeclared fields everywhere, and
+  descends through properties, items, a resolved reference, every branch of an
+  all-of and a one-of. A reference it cannot resolve fails the whole call. 255
+  constraints in 23 of the 24 schema files were decoration. Seven keyword
+  families are still unevaluated and `docs/project.md` names them. (row 168)
+- `project` and `tool` drop `disable-model-invocation`, decision 27's third
+  amendment, so a dispatched session can set a project up. Six actions refuse
+  with nobody present; the run mode is validated, so a misspelled value is
+  refused rather than read as interactive. (row 172)
+- `answersFor` is gone: every source carried the same value and nothing read
+  it. An older project file that still holds it passes its own check. (row 158)
+- `rebuild-registry` walks the canonical base, so a base path ending in a
+  symlink no longer writes an empty registry in silence, and a project outside
+  the base is kept. (row 149)
+
+### Fixed, in the second batch
+- Every review lens that returned no finding was recorded met, whether it was
+  judged or never had anything to judge. All six now answer `undeclared` when
+  no order commits in the code repository. The reviewer cannot see a record
+  order's deliverable, so a lens judging an empty diff was reporting met about
+  work it could not read. (row 154)
+- The well-formed field tally counted faults at any depth against a field count
+  of the top level alone, so a task with twenty faults in one list printed a
+  negative number. It counts fields.
+- Review's practices floor did not count a declared playbooks folder, so a
+  folder that failed to load read met. It counts a folder, and only a folder.
+- A recipe on disk that could not be read fell through to the catalog. Missing
+  and unreadable are different. (row 161 and the walk)
+
+### Fixed
+- A resumed `start` rebuilt the ledger without `haltsCleared`, dropping every
+  clearing `clear-halt` and `retake-tests` had recorded.
+- A stage action ran from any folder when the project's code path was off
+  disk, found while building row 146 and fixed before it shipped.
+
 ## [6.0.0-beta.22] - 2026-09-22
 
 Live-run rows 111 to 141. Rows 111 to 116 come from the implement stage on beta.21, rows 112 to

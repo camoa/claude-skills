@@ -384,6 +384,41 @@ wo_summary() {
     "proof: " + (.proof // "tests")'
 }
 
+# One line naming the proof the order's owned criteria imply, printed beside the proof it declares
+# (live-run row 145). $1 is the work order document, $2 its id. Derived from criteriaOwned alone.
+# A machine-verified criterion needs a test, so an order owning one implies `tests`. An order
+# owning criteria of which none is machine-verified implies a proof other than `tests`, and the
+# line stops there: nothing in the contract tells `gate`, `record` and `observe` apart. An order
+# owning nothing implies nothing. Printed on every create and update, not only on a disagreement,
+# so one line says what the contract says about this order.
+implied_proof_line() {
+  local owned machine
+  owned="$(printf '%s' "$1" | jq -r '(.criteriaOwned // []) | length')"
+  if [ "$owned" -eq 0 ]; then
+    echo "impliedProof: none, because $2 owns no criterion"
+    return
+  fi
+  if [ "$(contract_ok)" != "true" ]; then
+    echo "impliedProof: not read, because the contract could not be read"
+    return
+  fi
+  # The machine-verified criteria this order owns, read the way check-design.sh reads them.
+  machine="$(jq -r --argjson wo "$1" '
+    [ (.criteria // [])[]? | select(type == "object") | select(.verifiedBy == "machine") | .id ] as $m
+    | [ ($wo.criteriaOwned // [])[] | select(. as $c | $m | index($c) != null) ] | join(",")
+  ' "$ALIGNMENT_FILE" 2>/dev/null)"
+  if [ -n "$machine" ]; then
+    local word
+    case "$machine" in
+      *,*) word="criteria" ;;
+      *)   word="criterion" ;;
+    esac
+    echo "impliedProof: tests, because $2 owns the machine-verified $word $machine"
+  else
+    echo "impliedProof: not tests, because no criterion $2 owns is machine-verified"
+  fi
+}
+
 # One line naming everything a check report left open, for `check` and `close` alike.
 open_summary_of() {
   printf '%s' "$1" | jq -r '
@@ -404,6 +439,16 @@ open_summary_of() {
         ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
         (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", ")))
       ] | join("; ")
+    ' 2>/dev/null
+}
+
+# The orders whose declared proof disagrees with what their owned criteria imply, from a check
+# report (live-run row 145). This one finding never raises the exit code, so `check` prints it on
+# a line of its own. open_summary_of above prints only when the verdict is not zero, and a finding
+# that never raises the verdict would vanish from every line whenever it is the only one.
+proof_disagreement_of() {
+  printf '%s' "$1" | jq -r '
+      [ (.coverage.testOrdersOwningNoMachineCriterion // [])[] | .id ] | join(", ")
     ' 2>/dev/null
 }
 
@@ -662,6 +707,7 @@ do_create() {
 
   echo "CREATED: $file"
   wo_summary "$doc"
+  implied_proof_line "$doc" "$id"
 
   render_wo "$id"
   exit 0
@@ -780,6 +826,7 @@ do_update() {
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   wo_summary "$doc"
+  implied_proof_line "$doc" "$id"
 
   # A proof that is no longer tests leaves the prose fields naming the test files the order
   # once declared. A reviewer then holds the order to them (live-run row 115). Named, never
@@ -1276,7 +1323,7 @@ do_check() {
 
   # The report goes to a file and the summary to stdout, so the conversation holds the verdict and
   # a path rather than the whole report.
-  local rc verdict lines
+  local rc verdict lines disagrees
   mkdir -p "$TASK_PATH/records" || die3 "check: could not create $TASK_PATH/records"
   bash "$CHECK_DESIGN_SCRIPT" "$TASK_PATH" >"$CHECK_FILE"
   rc=$?
@@ -1292,6 +1339,10 @@ do_check() {
   echo "status: $verdict"
   echo "lines: $lines"
   echo "report: $CHECK_FILE"
+  disagrees="$(proof_disagreement_of "$(cat "$CHECK_FILE")")"
+  echo "impliedProofDisagrees: ${disagrees:-none}"
+  [ -z "$disagrees" ] \
+    || echo "next: each order above owns a machine-verified criterion after all, or its proof is the gate, the record or the observation"
   if [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   fi

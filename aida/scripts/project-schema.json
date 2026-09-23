@@ -55,7 +55,7 @@
       "items": {
         "$ref": "#/$defs/source"
       },
-      "description": "Where guides, playbooks, process recipes and agentic recipes come from. Guides, playbooks, process recipes and agentic recipes are one mechanism, not one source: a project declares as many sources as it wants, and each says what it provides, what it answers for and its own per-kind precedence. Mixing is the point, not a special case: your playbooks can come from your folder, your process recipes from the hosted catalog, and your guides from a site you trust, all at once. A project that configures nothing still resolves once a source naming the hosted catalog for every kind is declared for it; that declaration is not made by this schema. Declared lazily, the first time a stage needs a kind it has no source for; starts empty. A folder source of process recipes holds `process-recipes/<framework>/<phase>.md`, the phase being the word a stage asks for. Declaring one puts it before the catalog for that kind: the catalog answers what no declared folder holds. Declared too (`locationType` catalog), it takes its own rank among the folders."
+      "description": "Where guides, playbooks, process recipes and agentic recipes come from. Guides, playbooks, process recipes and agentic recipes are one mechanism, not one source: a project declares as many sources as it wants, and each says what it provides and its own per-kind precedence. Mixing is the point, not a special case: your playbooks can come from your folder, your process recipes from the hosted catalog, and your guides from a site you trust, all at once. A project that configures nothing still resolves once a source naming the hosted catalog for every kind is declared for it; that declaration is not made by this schema. Declared lazily, the first time a stage needs a kind it has no source for; starts empty. A folder source of process recipes holds `process-recipes/<framework>/<phase>.md`, the phase being the word a stage asks for. A folder source of agentic recipes holds `agentic-recipes/<framework>/<capability>.md`, and every capability it holds is named to design. A folder source of playbooks holds `playbook.md` at its root, in the same format as the person's file and the project's file. The plugin names no layout for a folder of guides: a guide is found by matching words, not by a path, so a folder of them needs a lookup nothing has decided yet. Declaring one puts it before the catalog for that kind: the catalog answers what no declared folder holds. Declared too (`locationType` catalog), it takes its own rank among the folders."
     },
     "playbookSubscriptions": {
       "type": "object",
@@ -109,7 +109,6 @@
         "location",
         "locationType",
         "provides",
-        "answersFor",
         "precedence"
       ],
       "properties": {
@@ -144,7 +143,7 @@
         },
         "answersFor": {
           "$ref": "#/$defs/answersFor",
-          "description": "What this source answers for: everything, only certain stages, or only certain frameworks. The project's own source winning by default is a sensible rule applied per kind through `precedence`, not a claim about scope; this field is the separate answer to a separate question, which is why a source naming one framework and one naming everything can coexist without conflict on their own kinds."
+          "description": "Retired. `add-source` wrote `{extent: \"everything\"}` into every entry, nothing ever read it, and `precedence` already answers which source a stage asks first. It is no longer written and no longer required. The shape stays declared for the project files that still carry it: `scripts/lib/schema-check.sh` compares top-level properties only today, so `additionalProperties` here is unenforced and dropping the declaration would refuse nothing yet, but the comparison is being made to descend and an undeclared field would then refuse every older file at once. Nothing reads the value, so a value nothing validates decides nothing."
         },
         "precedence": {
           "type": "object",

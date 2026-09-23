@@ -195,7 +195,7 @@ EOF
 
 IMPL_DIR=""; REVIEW_DIR=""; RECORD_FILE=""; DIFF_FILE=""
 FINISHED_FILE=""; SNAPSHOT_FILE=""; BASELINE_FILE=""; ALIGNMENT_FILE=""
-FINDINGS_TARGET=""; BRIEF_FILE=""
+FINDINGS_TARGET=""; BRIEF_FILE=""; LEDGER_FILE=""
 
 # $1 the action's own name, $2 the task folder as given. Sets TASK_PATH and every path above.
 rw_paths() {
@@ -211,12 +211,16 @@ rw_paths() {
   BRIEF_FILE="$REVIEW_DIR/brief.json"
   FINISHED_FILE="$IMPL_DIR/finished.json"
   SNAPSHOT_FILE="$IMPL_DIR/snapshot.json"
+  LEDGER_FILE="$IMPL_DIR/ledger.json"
   BASELINE_FILE="$IMPL_DIR/baseline.json"
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 }
 
 RW_FINISHED_DOC=""; RW_SNAPSHOT_DOC=""; RW_RECORD_DOC=""
 RW_RUN_MODE="interactive"; RW_PROJECT_DOC=""; RW_TASK_ID=""
+# What the snapshot's proof kinds mean for a check about to answer, from br_proof_facts. A check
+# reads one of these two and never re-derives a proof kind of its own.
+RW_COMMITS_IN_CODE="yes"; RW_OWNS_IN_CODE="yes"
 
 # Exit 66. Implementation has not finished, so there is nothing to review.
 rw_require_finished() {
@@ -246,6 +250,12 @@ rw_require_frozen() {
   RW_SNAPSHOT_DOC="$(jq -c '.' "$SNAPSHOT_FILE")"
   RW_TASK_ID="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
   [ -n "$RW_TASK_ID" ] || die 3 "$who: $TASK_PATH/task.json has no usable id field."
+  local facts
+  facts="$(br_proof_facts "$RW_SNAPSHOT_DOC")"
+  RW_COMMITS_IN_CODE="${facts%%	*}"
+  RW_OWNS_IN_CODE="${facts##*	}"
+  [ -n "$RW_COMMITS_IN_CODE" ] && [ -n "$RW_OWNS_IN_CODE" ] \
+    || die 3 "$who: the proof kinds in $SNAPSHOT_FILE could not be read, so no check here knows whether this task has code to look at."
 }
 
 # The project record, for the frameworks and the two surface fields. rv_load_codepath has already
@@ -696,6 +706,14 @@ rw_check_serves() {
   owned="$(rw_owned_files)"
   owned_count="$(printf '%s' "$owned" | jq 'length')"
   if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+    # No order commits in the code repository, so this range was never going to hold anything and
+    # the deliverables are in the project folder, which this check does not read. met would read to
+    # every later reader, the pull request body included, as a range that was looked at and found
+    # clean (live-run row 167).
+    if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
+      rw_check_row "$CHECK_SERVES" "undeclared" "no order in this task commits in the code repository, so the range $RW_RANGE holds nothing and this check read no file. Each order's deliverable is a document in the project folder, which this check does not open."
+      return 0
+    fi
     rw_check_row "$CHECK_SERVES" "met" "the range $RW_RANGE changed no file, so no file in it fails to match an order. The range itself is reported separately: a finished task whose range is empty is worth a person's attention."
     return 0
   fi
@@ -726,11 +744,16 @@ RW_CHANGED
 # an order whose proof is observe is covered by the observed record the build read, when it
 # holds a row: a model judged the order's done-when rows at each surface and viewport, and no
 # test names such a criterion (live-run row 104).
+#
+# A criterion owned by an order whose proof is gate or record is covered by the judgement `close`
+# wrote onto the ledger from the order's configuration-gate or done-when check. No test names such
+# a criterion either, and reading it as covered by nothing said "each was signed off on nothing"
+# about a criterion somebody had signed off (live-run row 167).
 rw_check_coverage_verdict() {
-  local criteria count i cid covered uncovered="" observed_owner
+  local criteria count i cid covered uncovered="" observed_owner judged_owner
   criteria="$(rw_alignment | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
-  i=0; cid=""; covered=""; observed_owner=""
+  i=0; cid=""; covered=""; observed_owner=""; judged_owner=""
   while [ "$i" -lt "$count" ]; do
     cid="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].id')"
     covered="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" '
@@ -743,6 +766,16 @@ rw_check_coverage_verdict() {
       [ -n "$observed_owner" ] \
         && covered="$(jq -r '((.rows // []) | length) > 0' "$IMPL_DIR/observed-$observed_owner.json" 2>/dev/null)"
     fi
+    if [ "$covered" != "true" ]; then
+      judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" '
+        [ (.workOrders // [])[]
+          | select(((.proof // "tests") == "gate") or ((.proof // "tests") == "record"))
+          | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
+      [ -n "$judged_owner" ] \
+        && covered="$(jq -r --arg id "$cid" --arg unit "$judged_owner" '
+              [ (.criteria // [])[] | select(.id == $id) | (.judgements // [])[]
+                | select(.unit == $unit) ] | length > 0' "$LEDGER_FILE" 2>/dev/null)"
+    fi
     [ "$covered" = "true" ] || uncovered="$uncovered$cid, "
     i=$((i + 1))
   done
@@ -751,9 +784,9 @@ rw_check_coverage_verdict() {
     return 0
   fi
   if [ -n "$uncovered" ]; then
-    printf 'unmet\tthese criteria are covered by no frozen test and no checklist row, so each was signed off on nothing: %s' "${uncovered%, }"
+    printf 'unmet\tthese criteria are covered by no frozen test, no checklist row, no observed record and no judgement on the ledger, so each was signed off on nothing: %s' "${uncovered%, }"
   else
-    printf 'met\tevery one of the %s criteria carries a frozen test naming it, a checklist row a person reads, or an observed record a model judged.' "$count"
+    printf 'met\tevery one of the %s criteria carries a frozen test naming it, a checklist row a person reads, an observed record a model judged, or the judgement its owning order left on the ledger.' "$count"
   fi
 }
 
@@ -768,9 +801,9 @@ rw_check_coverage_verdict() {
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
-  local fw_count fwi fw_obj fw row outfile rc tool
+  local fw_count fwi fw_obj fw row outfile rc tool has_paths
   local detail output survivors score combined mut_file
-  verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""; tool=""
+  verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""; tool=""; has_paths=false
   # The output of the last framework that ran, kept by file for the record (rw_check_row).
   mut_file="$(mktemp)" || die 3 "a temporary file for the mutation output could not be created"
   fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
@@ -783,6 +816,24 @@ rw_run_mutation() {
     if [ "$(printf '%s' "$row" | jq -r 'has("argv")')" != "true" ]; then
       combined="$(rw_worse "$combined" "undeclared")"
       detail="$detail $fw: $(printf '%s' "$row" | jq -r '.absent // .missing')"
+      fwi=$((fwi + 1))
+      continue
+    fi
+    # A path placeholder over zero changed files expands to zero arguments, and the tool then reads
+    # that as its own default scope and mutates the whole repository. The survivors are matched
+    # against zero file names, so nothing matches and the row reads met on exit 0: a full mutation
+    # run paid for and a pass that proves nothing (live-run row 167). The tool rows answer this
+    # same question above, and this row answers it the same way.
+    has_paths=false
+    printf '%s' "$row" | jq -e 'any(.argv[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1 && has_paths=true
+    if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+      if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
+        combined="$(rw_worse "$combined" "undeclared")"
+        detail="$detail $fw: no order in this task commits in the code repository, so the mutation command has no changed file to run over and the row does not apply to it."
+      else
+        combined="$(rw_worse "$combined" "unknown")"
+        detail="$detail $fw: the mutation command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over the whole repository and answer about code this task did not touch."
+      fi
       fwi=$((fwi + 1))
       continue
     fi
@@ -906,6 +957,14 @@ rw_tool_row_check() {
   [ -z "$exts" ] || scoped="$(br_filter_extensions "$RW_CHANGED_JSON" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
 
+  if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
+    # No order owns a file in the code repository, so no file this tool reads was ever going to be
+    # here. The build stage answers the same question the same way (br_tool_check), and the two
+    # stages answering it in opposite words failed a task that legitimately touched no code
+    # (live-run row 167).
+    rw_check_row "$row_id" "undeclared" "no order in this task owns a file in the code repository, so the $row_id command would read no file this task wrote, and the row does not apply to it." "" "" "$framework"
+    return 0
+  fi
   if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
     rw_check_row "$row_id" "unknown" "the $row_id command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over no path at all and answer about the whole repository." "" "" "$framework"
     return 0
@@ -1486,33 +1545,84 @@ do_findings() {
   # Check 16's floor, before its lens verdict. The practices lens reads the plays research loaded
   # into records/playbooks.json, so a missing load is a lens that did not run, never a lens that
   # found nothing to follow. Unknown when the record is absent; unknown when no source in it is
-  # loaded while the project subscribes to a set or holds a playbook.md, since then something was
-  # there to load. A record whose sources are all absent with nothing to load is the ordinary case
-  # for a project with no plays, and the lens verdict stands.
+  # loaded while the project subscribes to a set, holds a playbook.md, or declares a folder as a
+  # source of playbooks, since then something was there to load. A folder and nothing else: the
+  # loader reads folder sources only, and `add-source <project> playbooks catalog` writes a
+  # catalog entry the loader skips, so counting that entry would hold the check at unknown for
+  # ever with a repair that cannot clear it. A record whose sources are all absent with nothing
+  # to load is the ordinary case for a project with no plays, and the lens verdict stands.
+  # A person never runs the load, so the repair names the stage that does.
   local playbooks_record playbooks_floor
   playbooks_record="$(playbooks_record_path "$TASK_PATH")"
   playbooks_floor=""
   if [ ! -f "$playbooks_record" ]; then
-    playbooks_floor="playbooks not loaded: $playbooks_record is absent, so the practices lens read no play. Run playbooks load on this task."
+    playbooks_floor="playbooks not loaded: $playbooks_record is absent, so the practices lens read no play. Run /aida:research on this task again; it loads the plays at its start."
   elif [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ]; then
     if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.playbookSubscriptions // {})[] | .[] ] | length')" != "0" ] \
+      || [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.sources // [])[] | select(.locationType == "folder") | select((.provides // []) | index("playbooks")) ] | length')" != "0" ] \
       || [ -f "$RV_PROJECT_FOLDER/playbook.md" ]; then
-      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set or holds playbook.md. Run playbooks load on this task."
+      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set, declares a folder of plays, or holds playbook.md. Run /aida:research on this task again; it loads the plays at its start."
     fi
   fi
+
+  # The floor the guides lens and the practices lens share, before either verdict. Both read the
+  # research records and nothing else: check 12 asks whether a guide research cited was followed,
+  # and check 16 whether a practice research grounded was applied. A lens with no source to read
+  # judged nothing, and met said it had (live-run row 154).
+  #
+  # Two facts, kept apart. No research record at all is nobody having looked, which is unknown and
+  # fails the review. Records that cite no source is research that looked and grounded nothing,
+  # which is undeclared and passes in its own word. Which of a cited source is a guide and which is
+  # an agentic recipe is a sentence inside the finding's own text, so no script decides it and both
+  # lenses read the same count (ideal/review.md, check 16).
+  local research_count research_sources one_research found_here
+  research_count=0; research_sources=0; one_research=""; found_here=0
+  while IFS= read -r one_research; do
+    [ -n "$one_research" ] || continue
+    research_count=$((research_count + 1))
+    found_here="$(jq -r '[ (.findings // [])[] | select((.source // "") != "") ] | length' "$one_research" 2>/dev/null)"
+    case "$found_here" in ''|*[!0-9]*) found_here=0 ;; esac
+    research_sources=$((research_sources + found_here))
+  done <<RW_RESEARCH_FILES
+$(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
+RW_RESEARCH_FILES
+  local source_floor source_note
+  source_floor=""; source_note=""
+  if [ "$research_count" -eq 0 ]; then
+    source_floor="unknown"
+    source_note="research recorded nothing: $TASK_PATH/research holds no record, so this lens read no source and judged nothing. Run the research stage on this task."
+  elif [ "$research_sources" -eq 0 ]; then
+    source_floor="undeclared"
+    source_note="research recorded $research_count search(es) and none of them cites a source, so this lens had no guide and no accepted practice to judge the diff against."
+  fi
+
+  # Every lens judges the whole-task diff, and that diff is the code repository's. No order commits
+  # there, so it holds nothing this task produced. The deliverables are documents in the project
+  # folder, and this stage's brief does not name them: `ideal/review.md` records that as a gap and
+  # says it is not built. So the lens read an empty diff, and `met` said it had judged the work
+  # (live-run row 154).
+  local diff_floor
+  diff_floor=""
+  [ "$RW_COMMITS_IN_CODE" = "yes" ] \
+    || diff_floor="no order in this task commits in the code repository, so the diff this lens reads holds nothing the task produced. Each deliverable is a document in the project folder, which this stage does not hand the reviewer."
 
   local rows_file lens_word check_id hits updated
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
     check_id="$(rw_check_for_lens "$lens_word")"
     # Met when this lens returned nothing, unmet when it returned a finding. An absent verdict is
-    # never a clean one, which is why every one of the six is written whatever the file held.
+    # never a clean one, which is why every one of the six is written whatever the file held. A
+    # finding beats both floors below it: a lens that raised one judged something.
     hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
       '[ .[] | select(.lens == $l) | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
     if [ "$lens_word" = "practices" ] && [ -n "$playbooks_floor" ]; then
       rw_check_row "$check_id" "unknown" "$playbooks_floor" >>"$rows_file"
     elif [ -n "$hits" ]; then
       rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits" >>"$rows_file"
+    elif [ -n "$source_floor" ] && { [ "$lens_word" = "guides" ] || [ "$lens_word" = "practices" ]; }; then
+      rw_check_row "$check_id" "$source_floor" "$source_note" >>"$rows_file"
+    elif [ -n "$diff_floor" ]; then
+      rw_check_row "$check_id" "undeclared" "$diff_floor" >>"$rows_file"
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
@@ -2117,7 +2227,11 @@ do_close() {
         | [ $rows[] | select(.criterion == $id) | (.tests // [])[] | .name
           | select($out | contains(.)) ] | length > 0')"
       case "$suite_verdict" in
-        met)
+        # not-needed reads the row state the same way met does. No order in the snapshot runs a
+        # test, so no suite was ever going to name this criterion, and the row state two lines up
+        # already says the build confirmed it. Falling through to unanswered read "no sign off"
+        # over a record that says the opposite (live-run row 167).
+        met|not-needed)
           case "$state" in
             confirmed) verdict="met" ;;
             rejected)  verdict="unmet" ;;
@@ -2235,7 +2349,8 @@ RW_ROWS
 # One line per check, in the record's order, with the word for how its verdict came about. `ran`: a
 # command or a lens ran and returned it. `read`: a record field decided it and nothing ran. `off`:
 # the project turned the thing off, a kind disabled, a row the recipe declares absent, an accept
-# row nobody asked for. `could-not-look`: a recipe, a row, a file or a tool was absent. Then one
+# row nobody asked for, a check reading not-needed. `could-not-look`: a recipe, a row, a file or a
+# tool was absent. Then one
 # line per surface row, run or not, with the reason: disabled, unaffected, or no harness when the
 # run itself did not happen. Then the counts per word over the checks.
 #
@@ -2255,11 +2370,18 @@ do_audit() {
     | def how: .id as $id | .verdict as $v | .detail as $d |
         if has("exitCode") then "ran"
         elif (.absent // false) then "off"
-        elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" then "could-not-look" else "ran" end)
+        # A lens reading undeclared had no source and no diff to judge, so it looked at nothing.
+        # Calling that `ran` contradicted the floors this stage applies before a lens verdict, and
+        # completion prints these lines into the pull request body (live-run row 154).
+        elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" or $v == "undeclared" then "could-not-look" else "ran" end)
         elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
         elif $id == "test-and-mutation" then
           (if ($r.mutation | has("output")) then "ran" elif $v == "unknown" then "could-not-look" else "read" end)
         elif ($id | endswith("-accept")) then "off"
+        # A check no order asked for was turned off by the design, not missed by a reader. Without
+        # this arm the suite row of a task built from document orders read could-not-look, which
+        # completion then printed into the pull request body (live-run row 167).
+        elif $v == "not-needed" then "off"
         elif $v == "met" then "read"
         elif ($d | test("the project record says|holds no enabled surface|declares its suite row absent")) then "off"
         elif ($d | test("does not apply to it|changed no file")) then "read"

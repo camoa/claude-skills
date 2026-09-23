@@ -169,6 +169,13 @@ own check. The judge on the record is a model, never a person, and completion pu
 criterion to you to accept. The design check refuses an `observe` order that declares a test,
 names no surface, or has no done-when row.
 
+Creating an order and updating one both print `impliedProof:`, beside the proof the order
+declares. It says `tests` when the order owns a machine-verified criterion, and `not tests` when it
+owns criteria and none of them is machine-verified. It never chooses among the gate, the record and
+the observation, because nothing in the contract tells those three apart. An order owning nothing
+implies nothing, and the line says so. The default is `tests` because a wrongly tested
+configuration order wastes one build, and a wrongly untested code order ships unproven.
+
 An order that changes a page or a screen names it from the project's surface file,
 `.visual-review/surfaces.json`. When no
 visual or browser test covers that kind of surface, design offers the setup once per task,
@@ -205,8 +212,13 @@ finds an owner of a machine-verified criterion with no test, unless its proof is
 record or the observation. It finds a gate order declaring a test. It finds a record order declaring a test or missing a
 done-when row. It finds a record order owning a file outside the project folder, or under a
 path the project ignores. It finds an observe order declaring a
-test, naming no surface, or missing a done-when row. It finds an order no owner reaches and a dependency cycle. It finds
+test, naming no surface, or missing a done-when row. It finds an order no owner reaches and a
+dependency cycle. It finds
 two orders declaring one file, a wildcard in an owned file, and an id that resolves to nothing.
+
+The check asks that question the other way too, and reports without holding the close. It prints
+`impliedProofDisagrees:` with every test order that owns criteria of which none is machine-verified.
+Which of the other three proofs fits is a judgment, so no exit code holds it.
 
 A clean check says design is finished, subject to your confirmation above. An open item names
 the order it is on and its remedy: the missing test, the owner to reconcile, the dependency to
@@ -227,7 +239,10 @@ non-goal. The reuse lens asks whether an order rebuilds something research found
 buildability lens asks whether a test author and an implementer could work from the order alone.
 Of every order, it asks whether the order owns every file its operation rewrites. It reads the
 owned list against the couplings your framework's design recipe names, such as a service and
-its definition file.
+its definition file. It also reads each criterion an order owns against that criterion's own
+verification clause. A clause naming nothing that would settle the criterion is a finding on the
+contract. The fix is the criterion rewritten at scope, never a proof kind that carries it into the
+build.
 
 Each reader is dispatched with the run mode, the task folder, its lens and the recipe's path,
 one per line, and nothing else. Each reads the contract from `alignment.json`, and treats the
@@ -274,7 +289,8 @@ start on a contract or an order that no longer matches the hash. That is what ca
 edited after design closed. Changing a closed design is supported: edit the order, then close
 again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
 done-when row may skip the research and guide reading. That reading shapes an order, not its file
-list.
+list. A change to an order that implementation already started halts that order for design drift.
+Put the design back and the next build clears the halt, or take the restart.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its

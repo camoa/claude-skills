@@ -11,12 +11,19 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-acti
 A playbook is a set of rules a person wants followed on their projects. Each play says do it
 this way, not that way, with the reason and where it applies. Every role that writes or judges
 code reads the plays.
-Three sources, in precedence order:
+Four sources, in precedence order:
 
 1. The person's own file, `~/.claude/aida/playbook.md`. Their preferences, on every project.
 2. The project's own file, `<projectPath>/playbook.md`. What this project decided.
-3. Catalog sets, one per framework the project declares, recorded in `project.json` under
+3. Each folder the project declares as a source of playbooks, in the order it declared them. The
+   folder holds `playbook.md` at its root, in the format below. The project skill's
+   `add-source <target> playbooks <folder>` declares one. A team with one shared set of plays
+   puts it here: the person's file is per machine and the project's file is per project.
+4. Catalog sets, one per framework the project declares, recorded in `project.json` under
    `playbookSubscriptions`. The project skill's `subscribe-playbook` writes one.
+
+A play's id is its source and its title as a slug, so a play from a folder carries that folder's
+path. Open the file the id names to read the play in full.
 
 Every call below runs `playbook-actions.sh`, named in this skill's own grant, so it runs without
 asking. Read the exit code first, never the text alone. Exit 3 means the script could not do its
@@ -56,7 +63,8 @@ refused for a missing field. A play's id is its source and its title as a slug, 
 "${CLAUDE_PLUGIN_ROOT}"/skills/playbooks/scripts/playbook-actions.sh list "<projectPath>"
 ```
 One line per play, `<id>  <title>`, from the person's file, the project's file, and the newest
-loaded record under the project's tasks. A source with nothing prints `<source>: none`. Show the
+loaded record under the project's tasks. That record also holds the plays from each declared
+folder and each catalog set. A source with nothing prints `<source>: none`. Show the
 lines as printed. To read one play in full, open the file the id names.
 
 ## `capture`, a play by hand
@@ -77,11 +85,12 @@ each note the person accepts as a play.
 ## Where `load` runs
 
 `load <task_folder>` writes `records/playbooks.json` and renders `records/playbooks.md` from the
-three sources. Research runs it at its start, after the loader agent has written the catalog
+four sources. Research runs it at its start, after the loader agent has written the catalog
 record, and its stage report names the count per source. A person never needs to run it. It
 fetches nothing: a subscribed set the catalog cannot reach is recorded `unreachable`, never as
 zero plays.
 
 `load` refuses at exit 79 when the task builds in its worktree and this window is elsewhere. The
-refusal names the tree. Call the `EnterWorktree` tool with that path, the way `/aida:next` does.
-Then run the same call again.
+refusal names the tree and the route that works from here, either the `EnterWorktree` tool or the
+call started with `cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run
+the call again.

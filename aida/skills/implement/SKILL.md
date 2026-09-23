@@ -46,9 +46,9 @@ This prints summary lines, one `key: value` each:
 No contract, or design has not started: say so in one line and name the missing stage. Stop.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
-the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
-the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
-again.
+the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
+route that works from here, either the `EnterWorktree` tool or the call started with
+`cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 ## Which step, and where its instructions are
 
@@ -68,7 +68,7 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line at `reviewed` or `fixed`, with `review: open=0` | Close the order | `review` |
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
-| An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart | `finish` |
+| An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart, or the design put back and `start` run again | `finish` |
 | An `order(...)` line whose halt says `the design removed` it, and an order `not started` that could move | Offer the restart before those tests are written: the removed order's frozen record still guards its test files | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 | An `order(...)` line whose halt holds none of those three segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |

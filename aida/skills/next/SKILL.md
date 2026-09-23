@@ -61,7 +61,9 @@ Each `OPEN:` line is one of two shapes:
   record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
   `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
   `worktree`: the path of the task's own git worktree, or `none` for a task made before every
-  task had one. And `stage`: where the task stands, the first stage whose close record is absent,
+  task had one. With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
+  is on this machine. The key is absent with `none`.
+  And `stage`: where the task stands, the first stage whose close record is absent,
   one of `scope`, `research`, `design`, `implementation`, `review`, `completion`.
   `legacyStages` appears only on a moved version 5 task. It lists the stages whose version 5
   file the move kept under a `.v5` name and whose version 6 record is absent. The order is the
@@ -94,13 +96,39 @@ tasks folder existed and are not part of the choice above.
 ## Enter the tree
 
 Every stage action of a task runs inside its own git worktree, and refuses from anywhere else.
-Once a task is active, call the `EnterWorktree` tool with its `worktree` path, a sibling folder
-of the checkout. The tool asks for approval, because the path is outside `.claude/worktrees/`;
-that is expected. From inside another task's tree, call `ExitWorktree` first. From a window
-outside the code repository the tool refuses on first entry. Then print the path and say
-that `/cd <path>`, typed by the person, moves this session into the tree (Claude Code 2.1.169
-or later), and stop. A task reading `none` has no tree yet; the first stage action that needs
-the code makes one and names it. A legacy line never reaches this step: the
+Two routes reach that tree. The refusal at exit 79 names the one that works where the call ran,
+so read the message and take the route it names.
+
+**First, test the path.** Two readings stop this step before either route. A task reading
+`worktree: none` has no tree yet. A task reading `worktreeOnDisk: no` records a path this machine
+does not have: the tree was removed, or another machine recorded it. On either reading, do not
+call the entry tool and do not name a route. Say the first stage action that needs the code makes
+the tree and names the path it made. Say a recorded path is computed again here, never reused.
+Stop there. Only a task whose `worktreeOnDisk` reads `yes` goes on to the two routes.
+
+**The prefix.** Start the Bash call with `cd <worktree> &&`. It works from any folder on the
+machine. It needs no approval and no version. The shell forgets the directory between calls, so
+every call carries the prefix.
+
+**Entry.** From a window inside the code checkout, call the `EnterWorktree` tool with the task's
+`worktree` path, a sibling folder of the checkout. The tool asks for approval, because the path
+sits outside `.claude/worktrees/`. No permission rule and no "don't ask again" stops that prompt.
+
+Entry fails in two different ways. Key on the kind of outcome, never on the words of a message.
+
+- **The person declines the prompt.** Do not call the tool again. Say that the prefix is the
+  route now, and use it on every call.
+- **The tool refuses.** Entry is not available from this window at all, so use the prefix. It
+  refuses from a window outside the code repository, and from a session already inside a
+  worktree, where it reaches only targets under `.claude/worktrees/`. From a session inside
+  another task's tree, `ExitWorktree` returns to the directory that session started in. Entry
+  works from there when that directory is inside the code repository.
+
+Then print the path and name the route the person types. `/cd <path>` moves this session into the
+tree and keeps the conversation (Claude Code 2.1.169 or later). Running `claude` from inside the
+tree needs no version and no approval. Stop there.
+
+A legacy line never reaches this step: the
 move, below, comes first, and this skill then reads the task again as `kind: new`.
 
 ## With nothing open
@@ -148,7 +176,7 @@ Read the first line.
 
 - **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
   `children:`, `runMode:` (with the stages the mode covers in brackets when it covers fewer
-  than all), `worktree:`, `review:` and `stage:`, with `legacyStages:` when
+  than all), `worktree:`, `worktree-on-disk:` when a path is recorded, `review:` and `stage:`, with `legacyStages:` when
   it applies. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
   `/aida:<stage>` as the skill to run next. Treat it as active. Read
   the file at `task-file:` only when another field is needed. With `legacyStages:`, go to

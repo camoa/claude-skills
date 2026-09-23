@@ -1,7 +1,6 @@
 ---
 name: tool
-description: This skill should be used when a tool has to be installed or run in the current project, for example "install PHPUnit here", "set up PHPStan", "run the test runner", "is Playwright installed", or when a stage needs a tool before it can do its work. It follows that tool's recipe for this project's framework.
-disable-model-invocation: true
+description: This skill should be used when a tool has to be installed or run in the AIDA project that owns this directory, for example PHPUnit, PHPStan, Playwright or that project's own test runner, or when a stage needs a tool before it can do its work. It follows that tool's recipe for this project's framework, and it does nothing outside a project.
 argument-hint: "<install | run | show> <tool>"
 arguments: [action, tool]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
@@ -24,6 +23,11 @@ Read the active task's run mode. A task that states none is interactive, and so 
 task active. Pass `--run-mode autonomous` on every call only when the task states it. Decide this
 once, at the start. A mode that names stages in brackets covers this call only when it names the
 stage this call runs inside.
+
+`install` is the one action that needs a person. The script refuses it at exit 70 on an
+autonomous run, and runs no step. `run` and `show` do the same thing in both modes. `show` runs
+nothing. `run` runs the one command the recipe holds, and writes that command's output under the
+project's own `records/` folder.
 
 ## Run a tool
 
@@ -70,6 +74,7 @@ change and check them against the active order's untouched list.
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran. | Run the tool once to confirm it works. |
+| 70 | The run is autonomous, and an install needs a person. | Say the install waits for a person. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
 | 3 | A command was refused, or the recipe has no install steps. | Show the error text and stop. It names the recipe, which is where the fix belongs. |
 | 4 | A step failed. | The `first:` line quotes the step's first line of output, and the file at `output:` holds the rest. Show what it said; it says what is missing better than a guess would. |

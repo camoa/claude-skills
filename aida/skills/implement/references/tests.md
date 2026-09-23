@@ -53,6 +53,9 @@ Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
 
+An order that freezes no test file leaves the build's `frozen-tests` row undeclared. The row
+hashed nothing. So it says the row did not apply, rather than that a hash matched.
+
 `observe` means its deliverable is what a page shows, and a model judges that after the build.
 Skip `tests-brief` and dispatch no test author. Put no row to anyone: there is nothing to judge
 before the page exists. Freeze with no `--test` and no `--row`, and a `--checklist` for each
@@ -88,6 +91,15 @@ It reads the frozen copy and never the live files. It writes exactly eight thing
 A ninth, `treeHolds`, only after a restart left this order's earlier commits on the branch.
 It holds those commits and one sentence. The tree holds a partial build of this unit, so a
 test that passes on arrival is suspect. The summary prints the commits on a `treeHolds:` line.
+
+A tenth, `retake`, only while a `test-wrong` ruling is still unanswered by a freeze. It holds
+the ruled finding, the criterion it names, its evidence, its severity, and the file and lines it
+cites. It holds the ruling reason too, read from the review record the retake moved. It holds
+the rows and the test globs the order already froze, and those rows are keyed by criterion. So
+the criterion the finding names says which rows to correct.
+And it says what the author must do: correct the tests the finding names,
+and leave every other frozen row alone. A record a person removed is named under `absent`, and
+the brief carries what is left. The summary prints a `retake:` line.
 
 It prints the brief's path and counts, never the brief.
 

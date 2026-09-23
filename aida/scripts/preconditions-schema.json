@@ -70,12 +70,28 @@
     "frameworkResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["framework", "lookup", "verdict", "entries", "testCommands", "smoke"],
+      "required": ["framework", "lookup", "implementLookup", "verdict", "entries", "testCommands", "smoke"],
       "properties": {
         "framework": {
           "type": "string",
           "minLength": 1,
           "description": "The framework name as project.json records it. Joined on, never re-derived from the repository."
+        },
+        "implementLookup": {
+          "type": "string",
+          "enum": [
+            "resolved",
+            "no-recipe",
+            "listing-unreachable",
+            "fetch-failed",
+            "not-given"
+          ],
+          "description": "What the `point: implement` lookup returned for this framework. `tests-freeze` takes its test globs from that recipe's `## Oracle files` block, so a framework with no implement recipe cannot freeze a test-proved order, and this step is where a person is told. `not-given` is a fifth value because a lookup nobody ran is not a lookup that found nothing: the caller passed no --implement-lookup for this framework."
+        },
+        "implementRecipePath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The implement recipe on disk, present only when implementLookup is `resolved`. Recorded rather than read here: this step resolves the lookup so the freeze wall is named before any order is built, and the per-order tests step reads the body itself."
         },
         "lookup": {
           "type": "string",

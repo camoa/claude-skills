@@ -61,9 +61,9 @@ Every write below prints the same summary lines and never the contract's text. R
 a criterion's own words are needed.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
-the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
-the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
-again.
+the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
+route that works from here, either the `EnterWorktree` tool or the call started with
+`cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 On a first run only, also read `task.md` directly. A task split by the task skill carries its
 handed-down criteria there, as plain prose with no id, no verify clause and no author. That prose

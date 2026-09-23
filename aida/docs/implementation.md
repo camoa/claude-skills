@@ -47,7 +47,9 @@ checkout is on no branch, or the build would land on the repository's own trunk 
 on a detached head belongs to no branch, which this build must never risk. When there is no
 `origin` remote, the trunk cannot be derived. AIDA continues and tells you the trunk was not
 confirmed. That is a check that could not look, not a pass. A first run compares nothing, so it
-reports drift as not checked, never as none found.
+reports drift as not checked, never as none found. These three refuse whatever each order is
+proved by. That includes a task that will commit nothing in the code repository. The refusal is
+about where a commit could land, and nothing here can promise in advance that none will.
 
 ## Can this repository test at all
 
@@ -87,7 +89,9 @@ every later step that runs the tools. The way past is one check recipe for the t
 
 A task whose every order is proved by its record runs no test. Its conditions and its smoke
 command are recorded as not needed and never run. No suite baseline is taken, and the build
-goes on. The review tools still run over any file an order owns under the code path.
+goes on. The review tools still run over any file an order owns under the code path. One order
+proved by a test, by a configuration gate or by a look at a page brings the whole harness back.
+That one order runs the suite.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist
@@ -278,7 +282,9 @@ the lines it expects to add and delete, and the files and blocks it targets. The
 diff against those answers.
 
 It writes only inside the files its order owns. A hook refuses it a write under the code path
-outside them. A file it needs and does not own is a stop, and the report names the file. It may
+outside them. A file it needs and does not own is a stop, and the report names the file. That hook
+judges a path inside the code repository only. So an order writing a document in the project
+folder is held by the owned-files check after the attempt, rather than at the write itself. It may
 not change a test; a hook refuses the write and names the order that froze the file. It may not read another order's source; what
 another unit exposes is its interface record. It is refused the recipe that writes tests, because
 that file chooses a level and names a test, and this reader may do neither. It stops rather than
@@ -302,7 +308,8 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 3. **coding-standards**, **static-analysis** and **security.** Does the tool raise anything the
    baseline did not already have.
 4. **owned-files.** Did the change stay inside the files this order owns.
-5. **frozen-tests.** Does every frozen test file still hash to what the freeze recorded.
+5. **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An
+   order that froze none reads undeclared here, because there was nothing to hash.
 6. **interface-record.** Does the builder's record name every element the order's declared
    interface names in backticks.
 
@@ -313,8 +320,9 @@ owned file the order deleted, because the tools refuse a missing path. The detai
 were left out. The first check is the floor.
 Every other check may answer undeclared and the order still goes on. Order-tests must answer
 met, because it is the one check that says this code does what its tests ask. AIDA also tells
-you how many of the eight actually ran a command, a diff or a hash. Eight answers do not by
-themselves say the code was tested. A record that would hold fewer than eight is refused rather
+you how many of the eight actually ran a command, a diff or a hash. A frozen-tests row that hashed
+nothing is not counted, because counting it would do the thing the count exists to stop. Eight
+answers do not by themselves say the code was tested. A record that would hold fewer than eight is refused rather
 than written, naming the absent check. The interface check is the one script that cannot decide
 alone, because both sides are prose. It counts what it can, that every backticked element is
 present, and the disagreement goes to the reviewer as a finding. A declaration naming nothing in
@@ -402,7 +410,9 @@ with the rulings and no verdicts file, and the round's verdicts stand. `test-wro
 finding is real and the fix needs a frozen test changed. The order halts, and the retake sends
 it back to its tests. The build, review, fix and verify records and their briefs move aside
 into a `retaken` folder, nothing deleted, and
-the order returns to `tests-frozen`. The test author corrects that test, the checker reads its rows, and the freeze
+the order returns to `tests-frozen`. Its next tests brief carries the ruled finding and the rows
+the order already froze. The author corrects that test and leaves the others alone.
+The checker reads its rows, and the freeze
 runs again and prints `retaken:`. The attempt counter stays, because the attempts were real.
 When it is already spent, the next build refuses and the grant answers it. The fix rounds go
 back to zero with the review record.
@@ -441,7 +451,12 @@ order that has started, with frozen tests or a build record, halts, and so does 
 depends on it. Restarting moves only the halted orders' records aside, resets them to not started,
 and keeps every finished order. A finished order is never redone for a change it never depended on.
 Design has to close again on the live files first. A restart is a person's judgement, so an
-autonomous run cannot take it.
+autonomous run cannot take it. Putting the design back and running the build again clears the
+halt instead. The run compares, finds no drift for that order, and removes that one reason. Two
+drift reasons still take the restart. A changed criterion is one: the run that halted the order
+took the new contract, so no later run sees the change. An order halted because another order
+drifted is the other. A reopen that changed an order's design file and a criterion it serves
+halts it for both reasons. The criterion one then holds the order when only the file goes back.
 
 One change to a started order does not halt it: an owned file added and nothing else. The
 build found a file the operation rewrites that no order owned, and design added it. The frozen
@@ -454,7 +469,8 @@ A restart moves records, not commits. The halted order's frozen tests and its bu
 are still on the branch. A test author sent against them could write a test that passes at
 once. So the restart lists those commits, and says one of two things about the tree. When
 nothing later depends on them, it names the commit to take the branch back to. That is a hard
-reset, and you run it. When other commits sit after them, they are carried. Either way the
+reset, and you run it. When other commits sit after them, they are carried, and the unit's own
+code stays in the tree, so its next tests cannot go red. Either way the
 next run names them while they are still there. The test author's brief then says the tree
 holds a partial build of the unit. A test green on arrival is reported, never taken as proof.
 

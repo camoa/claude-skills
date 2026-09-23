@@ -7,10 +7,19 @@ first thing AIDA needs from you.
 One skill answers every question about a project: which one owns this folder, create one,
 switch to another, or close one out. Type `/aida:project`, with or without arguments.
 
-You type it yourself. Creating, switching, and closing all change what is on disk or which
-project this conversation uses. Nothing here runs on Claude's own judgment: nothing invokes
-it for you. A session-start hook says which project owns your directory before your first
-turn; run `/aida:project` yourself for the full report, or to create, switch, or close one.
+You usually type it yourself, and Claude may also invoke it, because a session running a task
+without you still has to find a project. What that session cannot do is answer for you. Six
+things refuse outright when nobody is present: installing the task rule, declining it, removing
+it, uninstalling AIDA from your repository, recording that you want no project in a folder, and
+unregistering a project folder that sits outside your projects folder. Each of those writes into
+something you own, or records an answer you never gave.
+
+A session with nobody present, in a folder no project owns, makes no project there. It says the
+folder is not set up and carries on. One thing such a session does settle: picking up a version 5
+folder on a machine with no projects yet sets where every later project folder goes, from the
+folder you named. A session-start hook says which project owns your directory
+before your first turn; run `/aida:project` yourself for the full report, or to create, switch,
+or close one.
 
 ## What a project is
 
@@ -138,6 +147,16 @@ Three things can come back from comparing the file against its shape:
 | A field missing, or present but the wrong shape | Named, with the step that produces it offered as the repair. |
 | The code path does not exist on disk | Reported as a fact. Right after creating a project, this is expected. Anywhere else, only you can say where the code went, and nothing here fixes it. |
 
+The comparison reads a field at every depth, not the outermost layer alone. A fault inside a
+list, or inside a nested object, is named by its path, `sources[0].locationType`, so the report
+says which value is refused and not only which field holds it.
+
+It checks each value's type, that a text field is not empty, that it matches the pattern its
+field requires, that a list is long enough, that a value is one of the words its field allows,
+and that no field is present that the shape does not declare. It does not check a smallest
+number, a longest list, a list whose entries must differ, or which fields an entry inside a list
+must carry. Those are stated in the shape and nothing enforces them yet.
+
 A schema checks shape, not truth: it says a code path is a string shaped like an absolute
 path, not that the folder still exists, and it cannot say two entries in the list share a
 name, because a schema expresses one entry's own shape, not a relationship between two
@@ -150,6 +169,11 @@ Repair means running the one step that produces a flagged field again. It is nev
 whole creation interview, and never a guess, and it never overwrites a value already
 present, so running the check twice in a row changes nothing. Checking is cheap, so it
 always runs; repairing is not, so it is only ever offered.
+
+A second check answers a different question. `/aida:project check-machine` reports whether this
+machine can reach a task's worktree at all. It reads the Claude Code version, the plugin version,
+where the check ran, and the trees git holds against the task records. It names each repair and
+performs none of them.
 
 ## Ending a project
 
@@ -172,8 +196,10 @@ Closing a project that still has unfinished work says what is still open and let
 decide, rather than refusing outright or pretending nothing was left.
 
 **Unregistering is not one of the three states.** It drops the project from AIDA's list and
-leaves the folder untouched, so it is recoverable by pointing at the folder again. This is
-the answer for a duplicate entry or a mistake, not for work that is merely done or parked.
+leaves the folder untouched. It is the answer for a duplicate entry or a mistake, not for work
+that is merely done or parked. `/aida:project rebuild-registry` reads the folder and lists it
+again, with one exception. A project folder outside the projects base does not come back: its
+registry row was the only record of where it sits. The unregister output names which case it is.
 
 ## Cleaning up
 
@@ -224,10 +250,10 @@ stays missing until its producer runs.
 ## Using your own guides, playbooks, and recipes
 
 Guides, playbooks, process recipes, and agentic recipes are one mechanism, not four separate
-ones. A project declares as many sources as it wants, and each source says what it provides,
-what it answers for, and where it ranks against every other source offering the same kind of
-content. Mixing is the point: your playbooks can come from your own folder, your process
-recipes from the hosted catalog, and your guides from a site your team trusts, all at once.
+ones. A project declares as many sources as it wants, and each source says what it provides and
+where it ranks against every other source offering the same kind of content. Mixing is the point:
+your playbooks can come from your own folder, your process recipes from the hosted catalog, and
+your guides from a site your team trusts, all at once.
 
 A new project declares no sources at all: the list starts empty, for every kind of content.
 Declaring is cheap and fetching is lazy. No stage fetches anything from the hosted catalog, or
@@ -237,7 +263,8 @@ places, in order: your declared folders, then the catalog, then research writes 
 A folder that holds nothing is not an answer, so the walk goes on to the catalog.
 You set this per kind: `add-source` takes a kind and a folder, and a team's own recipes for
 one kind can stand alongside the catalog's answer for every other kind. A folder holds process
-recipes or tooling recipes, each in a fixed layout;
+recipes, tooling recipes, agentic recipes or plays, each in a fixed layout. A folder of guides
+is the one kind nothing reads, because a guide is found by matching words and not by a path.
 [Where content comes from](sources.md#using-your-own-folder-before-the-catalog) says what a
 folder can hold.
 

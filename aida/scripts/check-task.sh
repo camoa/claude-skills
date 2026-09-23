@@ -200,6 +200,9 @@ UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c '.unreadable')"
 MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
 UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
 FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
+# Fields, never faults: the comparison reads every level, so twenty refused elements in one list
+# would subtract twenty from a count of top-level fields and print a number below zero.
+WELL_FORMED_COUNT="$(echo "$COMPARE_JSON" | jq '.wellFormedCount')"
 
 # runMode absent is the normal, safe state for a task that never asked for autonomous
 # (task-schema.json's own description; foundations.md, Run mode). It is still shown below under
@@ -384,7 +387,7 @@ echo "Task: $TASK_PATH"
 echo "Checked: $TIMESTAMP"
 echo
 
-echo "Task file against its schema, fields present and well-formed: $((FIELD_COUNT - MISSING_COUNT - UNREADABLE_COUNT))/$FIELD_COUNT"
+echo "Task file against its schema, declared fields carrying no fault at any depth: $WELL_FORMED_COUNT/$FIELD_COUNT"
 echo
 
 if [ "$MISSING_COUNT" -gt 0 ]; then

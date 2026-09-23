@@ -19,6 +19,10 @@ Dispatch `catalog-identifier` once more, with `point: review` and each framework
 second recipe, never the same file as the `test-execution` one above. Pass its path straight
 through; the script reads its `## Check commands` block itself, per SKILL.md.
 
+Dispatch it a third time, with `point: implement` and each framework. Do not read that recipe
+here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
+dispatch exists so the freeze wall below is named before any order is built.
+
 ## Run the checks
 
 Run, with one `--recipe` and one `--check-recipe` per framework:
@@ -27,6 +31,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
+  --implement-lookup <framework>=<path to the implement recipe, or the lookup's own word> \
   --value <name>=<value>...
 ```
 `--recipe` names the `test-execution` recipe this step already resolved, for the `## Preconditions`
@@ -52,6 +57,17 @@ reads its path. The baseline runs no suite and records `not-needed` per framewor
 `## Check commands` tools still run where an order owns a file under the code path, and read
 undeclared where none does. Any other proof needs the harness. A `gate` order runs the recipe's
 lines in the same environment, and an `observe` order's build runs the suite against the baseline.
+
+**A project with no implement recipe cannot build a test-proved order, and this step says so.**
+`tests-freeze` takes its test globs from the implement recipe's `## Oracle files` block. With no
+such recipe, every order proved by tests dies at the freeze, exit 27, after the design closed,
+the build started and the test author already ran. Pass `--implement-lookup` per framework and
+the script prints a `freeze:` line naming each order that cannot be built. What a project can
+still build without that recipe: a `record` order and an `observe` order in full, and a `gate`
+order that freezes, but whose own check reads `unknown`, which is not met. The repair is writing
+the implement recipe for a framework this project declares, or changing each blocked order's
+proof. `--implement-lookup` is optional, and a framework with none records `not-given`: the
+lookup was not run, which is a different fact from a catalog holding no recipe.
 
 **Two frameworks may not both command one tool.** A project declaring two frameworks whose review
 recipes each carry a coding-standards row, say, gives the script two answers to one question, and

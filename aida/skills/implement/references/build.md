@@ -346,7 +346,9 @@ This step runs all eight deciding checks. The record holds every one.
 - **owned-files.** Did the change stay inside the files this order owns. On a `record` order the
   change is the task folder's diff in the project folder, with the files AIDA's own scripts
   write there set aside and counted in the detail.
-- **frozen-tests.** Does every frozen test file still hash to what the freeze recorded.
+- **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An order
+  that froze none reads undeclared, because the row hashed nothing, and the executed count does
+  not count it.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks.
 

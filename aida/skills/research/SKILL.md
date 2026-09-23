@@ -73,9 +73,9 @@ line names each research file already on disk with its finding count.
 Read the criteria's text from the contract file.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
-the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
-the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
-again.
+the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
+route that works from here, either the `EnterWorktree` tool or the call started with
+`cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop.
 
@@ -197,7 +197,9 @@ what makes "prior art in this project" a claim about this project rather than ab
 For each search decided above, dispatch its role with the message this file names. Its lines are
 the role, the run mode, the words to search, and the bound. The `internal-searcher` message
 carries the code path and the project folder in place of the bound. The code path is the task's
-worktree, from the `worktree:` line.
+worktree, from the `worktree:` line. The `catalog-identifier` message carries the project folder
+and the project's frameworks beside the bound. Without those two the agent cannot ask this
+project's own folders, and an agentic recipe a project put in its own folder is never named.
 The agent never sees this conversation and this conversation never sees what the agent read,
 only what it reports back. That isolation is what keeps the cost bounded.
 

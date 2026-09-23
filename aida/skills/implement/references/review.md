@@ -346,6 +346,15 @@ affected rows, then `tests-freeze` with every flag the first freeze took. That f
 order is at `tests-frozen`, so exit 76 does not fire. Then build again. When the attempts are
 already spent, `build-brief` refuses (exit 41) and the grant in `references/finish.md` answers it.
 
+The retake's own brief carries the ruled finding, the criterion it names, its evidence and its
+severity. It carries the file and lines it cites, the ruling reason, and the rows the order
+already froze. The dispatch stays the role, the run mode and the two paths.
+
+When the finding's cause is the done-when row's own wording, the design is wrong and not only the
+test. Rule the finding, correct the design, then take the restart in `references/finish.md`. A
+retake would correct a test against a row that is still wrong, because the tests were frozen
+against the old wording.
+
 ## Close
 
 Run:

@@ -152,7 +152,9 @@ On the other machine, the project must be in AIDA's own list, and creating a pro
 folder that already exists. So put the project folder under AIDA's projects folder there and run
 `/aida:project rebuild-registry <base>`, naming that folder. The default base is
 `~/.claude/aida/projects`. The rebuild replaces the whole list with the base's immediate
-subfolders, so a project registered from anywhere else disappears from it. The choices
+subfolders. It keeps every project folder the list already named somewhere else, which is how a
+picked-up version 5 folder survives. It names each of those, and names any it drops because
+the project file is gone. The choices
 remembered per directory start empty. The rebuild runs no check; run `/aida:project` for that.
 It says whether the code path is on disk, and a different layout needs `/aida:project
 set-code-path`.
@@ -165,11 +167,15 @@ that action, fetch the task's branch and make it local. The tree is cut from the
 when one exists. Without one it starts from the checkout's current commit, and carries none of
 the other machine's work.
 
-The worktree is made again at the absolute path the task records, the other machine's path. When
-that path cannot exist here, the tree cannot be made, git's own error is shown, and no command
-resets the field. The only route is to open the task file and remove its `worktree`
-field by hand. The next action that needs the code then makes a fresh tree beside this
-machine's checkout.
+The recorded path is the other machine's, and AIDA does not treat it as an address here. The
+action tests whether that path sits beside this machine's code path. When it does not, it
+computes the path again from this checkout. It makes the tree there, says both paths in one
+line, and records the new one. Nothing has to be edited by hand. A tree you moved with
+`git worktree move` is found instead of remade, because git is asked where the task's branch is
+checked out.
+
+Until that action runs, `/aida:next` says the recorded path is not on disk, and names no route
+into it.
 
 For another person, the same holds. They see the contract, the findings, the work orders, and the
 notes exactly as committed. What they do not see is anything you decided and never saved.

@@ -14,6 +14,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Depends on, both shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh        (sourced, never executed)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -37,6 +38,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # AIDA_RUN_MODE=autonomous script.sh does not match a rule naming script.sh and asks for approval
 # every time. AIDA_RUN_MODE is still read as a fallback, for a caller that is not the skill.
 #
+# Five actions need a person, and each exits 70 on an autonomous run having written nothing:
+# task-rule in both its forms, task-rule-remove, uninstall, record-declined, and unregister on a
+# project folder outside the projects base. Each writes into the person's own repository, records
+# an answer nobody gave, or drops the only record of where a folder sits. foundations.md, Run
+# mode: nobody's silence stands for a yes, so a run with nobody present records nothing on a
+# person's behalf.
+#
 # What reaches stdout is what reaches the orchestrator's context. A project is named by one
 # `project:` line carrying its name, state, code path and folder, never by its registry row or
 # its project file. The check's own report follows where the skill shows it to the person.
@@ -52,6 +60,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
 CHECK_SCRIPT="${PLUGIN_ROOT}/scripts/check-project.sh"
 COMMIT_LIB="${PLUGIN_ROOT}/scripts/lib/project-commit.sh"
+SOURCES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 REGISTRY_FILE="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
 PROJECTS_HOME_DEFAULT="${AIDA_PROJECTS_HOME:-$HOME/.claude/aida/projects}"
 SETTINGS_FILE="${AIDA_SETTINGS_PATH:-$HOME/.claude/aida/settings.json}"
@@ -62,6 +71,12 @@ if [ "${1:-}" = "--run-mode" ]; then
   RUN_MODE="$2"
   shift 2
 fi
+# Five refusals below hang on this string, so a value that is neither word is refused rather than
+# read as interactive. `--run-mode autonmous` used to turn every one of them off in silence.
+case "$RUN_MODE" in
+  interactive|autonomous) ;;
+  *) printf 'project-actions: run mode must be interactive or autonomous, got %s\n' "$RUN_MODE" >&2; exit 3 ;;
+esac
 
 check_flags=()
 if [ "$RUN_MODE" = "autonomous" ]; then
@@ -72,6 +87,10 @@ die3() {
   printf 'project-actions: %s\n' "$1" >&2
   exit 3
 }
+
+# The refusal function scripts/lib/recipes.sh takes from its caller, so cr_require_person can
+# refuse an action that needs a person. Exit 70 is that library's own code for it.
+die() { printf 'project-actions: %s\n' "$2" >&2; exit "$1"; }
 
 usage() {
   cat <<'EOF' >&2
@@ -86,15 +105,17 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh git-init <name-or-codePath>
        project-actions.sh add-source <name-or-codePath> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
+       project-actions.sh agentic-source <projectFolder> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
-       project-actions.sh unregister <name-or-codePath>
+       project-actions.sh [--run-mode <interactive|autonomous>] unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
-       project-actions.sh task-rule-remove <name-or-codePath>
-       project-actions.sh uninstall <name-or-codePath>
-       project-actions.sh record-declined <directory>
+       project-actions.sh [--run-mode <interactive|autonomous>] task-rule-remove <name-or-codePath>
+       project-actions.sh [--run-mode <interactive|autonomous>] uninstall <name-or-codePath>
+       project-actions.sh [--run-mode <interactive|autonomous>] record-declined <directory>
        project-actions.sh rebuild-registry [projectsHome]
        project-actions.sh read-projects-base
+       project-actions.sh check-machine
 EOF
 }
 
@@ -105,6 +126,8 @@ require_jq
 source "$REGISTRY_LIB"
 # shellcheck source=/dev/null
 source "$COMMIT_LIB"
+# shellcheck source=/dev/null
+source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -721,9 +744,13 @@ do_git_init() {
 # Appends one entry to project.json's `sources`, or adds the kind to the entry already naming
 # that folder, so calling it twice writes the same thing once. A folder is the only location type
 # this plugin's own scripts read (tool-actions.sh, "reads folder sources only"), so it is the
-# only one this declares. The entry answers for everything and ranks first for its kind: the
-# project's own source wins, and the hosted catalog is the fallback (project-schema.json,
-# precedence). Nothing here fetches anything; declaring is cheap and fetching stays lazy.
+# only one this declares. The entry ranks first for its kind: the project's own source wins, and
+# the hosted catalog is the fallback (project-schema.json, precedence). No `answersFor` is
+# written. Every entry carried the same value, nothing read it, and `precedence` already answers
+# which source a stage asks first. The schema still declares the field's shape, for the older
+# files that carry it: the field list comparison reads top-level properties only today, so that
+# declaration is not load-bearing yet, and it becomes so the moment the comparison descends.
+# Nothing here fetches anything; declaring is cheap and fetching stays lazy.
 do_add_source() {
   local target="${1:?add-source: a name or a code path is required}"
   local kind="${2:?add-source: a kind is required}"
@@ -761,7 +788,7 @@ do_add_source() {
                    else . end)
         else
           $s + [{location: $loc, locationType: $type, provides: [$kind],
-                 answersFor: {extent: "everything"}, precedence: {($kind): $next}}]
+                 precedence: {($kind): $next}}]
         end)'
 
   commit_project "$project_path" \
@@ -803,31 +830,65 @@ do_recipe_source() {
     *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
   esac
   [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
-  local entry loc_type loc cand searched="" tab catalog=""
+  # The walk itself is scripts/lib/recipes.sh, shared with the tool skill's own lookup. `yes`
+  # says this caller asks the navigator, so a catalog entry ends the walk. The library refuses
+  # nothing, by its own header, so both refusals below are made here.
+  local probe_rc
+  sw_probe "$project_path/project.json" processRecipes process-recipes "$fw" "$phase" yes
+  probe_rc=$?
+  # A locationType outside the four is a record this walk cannot read. One answer comes back from
+  # this action and precedence decides which, so a source of unknown rank makes that answer a
+  # guess. check-project.sh refuses the same record; this says the same thing where a stage runs.
+  [ -z "$SW_UNKNOWN" ] \
+    || die3 "recipe-source: $project_path/project.json declares a source this walk cannot read: $SW_UNKNOWN. A locationType is one of folder, catalog, site or search. Repair that source, then run this again"
+  [ -z "$SW_UNREADABLE" ] \
+    || die3 "recipe-source: $SW_UNREADABLE is on disk and could not be read. A source this project ranked first is not a source that held nothing, so the catalog is not asked. Fix the file's permissions, or remove it"
+  # A site or a search source holds no folder this walk can probe, so it is named rather than
+  # passed over in silence. An answer from the folders is then not read as the whole story.
+  [ -z "$SW_OTHER" ] || echo "unread: $SW_OTHER"
+  if [ "$probe_rc" -eq 0 ]; then
+    echo "RECIPE: $SW_PATH source=$SW_SOURCE"
+    return 0
+  fi
+  [ -n "$SW_SEARCHED$SW_CATALOG" ] || return 0
+  echo "RECIPE: catalog${SW_SEARCHED:+ searched=${SW_SEARCHED% }}"
+  return 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# agentic-source: the agentic recipes a project's own folder sources hold for one framework
+# ------------------------------------------------------------------------------------------------
+
+# An agentic recipe carries one decision already made, and it is named for the capability it
+# covers, never for a point in AIDA's process. So a folder of them is listed, not probed. The
+# layout is `<folder>/agentic-recipes/<framework>/<capability>.md`, and this prints one
+# `AGENTIC: <capability> path=<path> source=<folder>` line per file, the folders in declared
+# order. The first folder holding a capability wins it. A project put these in its own folder
+# deliberately, so every one is named and design decides which fits, the same judgement design
+# already makes when the catalog answers with two. Nothing is fetched and no body is opened. A
+# project declaring no folder of the kind prints nothing, and the caller asks the catalog.
+do_agentic_source() {
+  local project_path="${1:?agentic-source: a project folder is required}"
+  local fw="${2:?agentic-source: a framework is required}"
+  [ -f "$project_path/project.json" ] || die3 "agentic-source: no project.json in $project_path"
+  local line name loc rest tab unread=""
   tab="$(printf '\t')"
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    loc_type="${entry%%"$tab"*}"; loc="${entry#*"$tab"}"
-    if [ "$loc_type" = "catalog" ]; then
-      catalog=yes
-      break
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    name="${line%%"$tab"*}"; rest="${line#*"$tab"}"
+    # An empty name is a source the walk did not read, `<TAB><type><TAB><location>`. It is named
+    # below rather than passed over, so a list from the folders is not read as the whole story.
+    if [ -z "$name" ]; then
+      loc="${rest#*"$tab"}"
+      unread="$unread${unread:+, }$loc (${rest%%"$tab"*})"
+      continue
     fi
-    [ "$loc_type" = "folder" ] || continue
-    cand="$loc/process-recipes/$fw/$phase.md"
-    if [ -f "$cand" ]; then
-      echo "RECIPE: $cand source=$loc"
-      return 0
-    fi
-    searched="$searched$loc "
-  done <<RS_SOURCES
-$(jq -r '
-    (.sources // [])
-    | map(select((.provides // []) | index("processRecipes")))
-    | sort_by(.precedence.processRecipes // 999)
-    | .[] | .locationType + "\t" + .location' "$project_path/project.json")
-RS_SOURCES
-  [ -n "$searched$catalog" ] || return 0
-  echo "RECIPE: catalog${searched:+ searched=${searched% }}"
+    loc="$rest"
+    echo "AGENTIC: $name path=$loc/agentic-recipes/$fw/$name.md source=$loc"
+  done <<AS_NAMES
+$(sw_list "$project_path/project.json" agenticRecipes agentic-recipes "$fw")
+AS_NAMES
+  [ -z "$unread" ] || echo "unread: $unread"
   return 0
 }
 
@@ -872,17 +933,34 @@ do_subscription() {
 # ------------------------------------------------------------------------------------------------
 
 do_unregister() {
-  local target="${1:?unregister: a name or a code path is required}" match project_path code_path
+  local target="${1:?unregister: a name or a code path is required}" match project_path code_path base
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
+
+  # rebuild-registry is the way back, and it reads the base and the rows the registry still holds.
+  # A folder outside the base has neither once this row is gone, so the output says so here. The
+  # person cannot compare the two paths themselves: nothing else prints the base.
+  base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
+  base="$(canon_path "$base")"
+
+  # A folder under the base comes back with rebuild-registry. A folder outside it does not, so
+  # dropping its row is irreversible, and foundations.md halts an irreversible step with nobody
+  # present. The recoverable case is left alone.
+  [ "$(dirname -- "$project_path")" = "$base" ] \
+    || cr_require_person unregister "a person accepted losing the only record of where $project_path sits"
 
   registry_remove_project "$project_path" || die3 "could not remove the registry row for $project_path"
 
   echo "UNREGISTERED: $(printf '%s' "$match" | jq -r '.name')"
   echo "PROJECT FOLDER (not removed): ${project_path}"
   echo "CODE PATH (not touched): ${code_path}"
+  if [ "$(dirname -- "$project_path")" = "$base" ]; then
+    echo "PROJECTS BASE: ${base}. rebuild-registry reads this folder and lists the project again."
+  else
+    echo "PROJECTS BASE: ${base}. This project folder is outside it, and rebuild-registry cannot find it again."
+  fi
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -920,6 +998,9 @@ EOF
 }
 
 do_task_rule() {
+  # Both paths are a person's answer to the same offer. The write puts an instruction the harness
+  # enforces into a repository the person owns; the decline suppresses the offer for good.
+  cr_require_person task-rule "a person answered the task-rule offer"
   local target="${1:?task-rule: a name or a code path is required}"
   shift
   local declining="false"
@@ -1034,6 +1115,7 @@ do_task_rule() {
 }
 
 do_task_rule_remove() {
+  cr_require_person task-rule-remove "a person asked for the block to leave their own repository"
   local target="${1:?task-rule-remove: a name or a code path is required}" match code_path project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
@@ -1082,6 +1164,7 @@ do_task_rule_remove() {
 # ------------------------------------------------------------------------------------------------
 
 do_uninstall() {
+  cr_require_person uninstall "a person asked for AIDA to leave their own repository"
   local target="${1:?uninstall: a name or a code path is required}" match project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
@@ -1103,6 +1186,9 @@ do_uninstall() {
 # ------------------------------------------------------------------------------------------------
 
 do_record_declined() {
+  # A recorded no is never asked again, so nobody's silence may write one (foundations.md, Run
+  # mode). An unrecorded question is offered again at the next interactive session, which is right.
+  cr_require_person record-declined "a person declined the offer of a project here"
   local directory="${1:?record-declined: a directory is required}"
   registry_record_declined_offer "$directory"
 }
@@ -1124,11 +1210,179 @@ do_read_projects_base() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# check-machine: can this machine reach a task's worktree at all (ideal/project.md, "The machine
+# check"). A person runs it cold, on a machine that has never entered a tree.
+#
+# Report only, like check-project.sh: it asks nothing, writes nothing, repairs nothing, and names
+# the repair for each finding it has. It always exits 0, because every line here is a fact about
+# the machine and not a verdict on a project.
+# ------------------------------------------------------------------------------------------------
+
+# True when $1, a dotted version, is $2 or later. Three fields, compared as numbers, because
+# `sort -V` is not on every build. A field that is not a number counts as zero.
+version_at_least() {
+  local have="$1" want="$2" hp wp i
+  i=1
+  while [ "$i" -le 3 ]; do
+    hp="$(printf '%s' "$have" | cut -d. -f"$i")"
+    wp="$(printf '%s' "$want" | cut -d. -f"$i")"
+    case "$hp" in ''|*[!0-9]*) hp=0 ;; esac
+    case "$wp" in ''|*[!0-9]*) wp=0 ;; esac
+    [ "$hp" -gt "$wp" ] && return 0
+    [ "$hp" -lt "$wp" ] && return 1
+    i=$((i + 1))
+  done
+  return 0
+}
+
+do_check_machine() {
+  local cwd version plugin git_dir common_dir match code name rows listed recorded gone unnamed row id wt
+  cwd="$(pwd -P)"
+  printf 'Machine check: %s\n' "$cwd"
+  printf 'Checked: %s\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  version=""
+  command -v claude >/dev/null 2>&1 \
+    && version="$(claude --version 2>/dev/null | head -n 1 | cut -d' ' -f1)"
+  if [ -z "$version" ]; then
+    printf 'Claude Code: unknown. The claude command is not on this PATH.\n'
+    printf '  Repair: run this check from a shell that has claude on its PATH.\n'
+  else
+    printf 'Claude Code: %s\n' "$version"
+    if version_at_least "$version" 2.1.169; then
+      printf '  /cd moves this session into a tree: yes, 2.1.169 or later.\n'
+    else
+      printf '  /cd moves this session into a tree: no. It arrived in 2.1.169.\n'
+      printf '  Repair: update Claude Code, or run claude from inside the tree.\n'
+    fi
+    if version_at_least "$version" 2.1.206; then
+      printf '  Entry outside .claude/worktrees/ asks for approval: yes, 2.1.206 or later.\n'
+    else
+      printf '  Entry outside .claude/worktrees/ asks for approval: no. The prompt arrived in 2.1.206.\n'
+    fi
+  fi
+
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" \
+    || die3 "check-machine: the library failed to load: task-helpers.sh"
+  plugin="$(plugin_version)"
+  printf 'AIDA plugin: %s, at %s\n' "$plugin" "$PLUGIN_ROOT"
+  # The session-start hook exports the version it loaded into $CLAUDE_ENV_FILE, which Claude Code
+  # runs before each Bash command in the same shell process (the mirror's hooks reference and its
+  # environment variables page). Absent, the hook did not run in this session, and no line here
+  # may claim what the session loaded.
+  if [ -z "${AIDA_SESSION_PLUGIN_VERSION:-}" ]; then
+    printf '  Changed since this session started: not known. The session-start hook did not run\n'
+    printf '  in this session, or this shell did not read its exports.\n'
+  elif [ "$AIDA_SESSION_PLUGIN_VERSION" = "$plugin" ]; then
+    printf '  Changed since this session started: no. The session loaded %s.\n' "$AIDA_SESSION_PLUGIN_VERSION"
+  else
+    printf '  Changed since this session started: yes. The session loaded %s.\n' "$AIDA_SESSION_PLUGIN_VERSION"
+    printf '  This window holds the older rules. Repair: start a new session.\n'
+  fi
+
+  # A linked worktree has its own git directory and shares the repository's common one. Both are
+  # canonicalised from $cwd, because git prints either one relative to the current directory. The
+  # empty answer is tested before the cd, since `cd ""` stays where it is and reports success.
+  git_dir="$(git -C "$cwd" rev-parse --git-dir 2>/dev/null)"
+  common_dir="$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null)"
+  if [ -n "$git_dir" ]; then
+    git_dir="$(cd "$cwd" && cd "$git_dir" && pwd -P)"
+    common_dir="$(cd "$cwd" && cd "$common_dir" && pwd -P)"
+  fi
+  # This is the directory the script ran in. A call carrying a `cd <tree> &&` prefix runs here and
+  # not where the session sits, so no line below says "the session".
+  if [ -z "$git_dir" ]; then
+    printf 'This check ran inside a worktree: no. %s is not in a git work tree.\n' "$cwd"
+  elif [ "$git_dir" != "$common_dir" ]; then
+    printf 'This check ran inside a worktree: yes, %s.\n' "$(git -C "$cwd" rev-parse --show-toplevel)"
+    printf '  Entry from a session inside a worktree reaches only targets under .claude/worktrees/,\n'
+    printf '  so a task tree is out of reach. Repair: start each call with cd <tree> &&.\n'
+  else
+    printf 'This check ran inside a worktree: no. %s is the main checkout.\n' "$cwd"
+  fi
+
+  if ! match="$(registry_resolve_by_directory "$cwd")"; then
+    printf 'Project: none registered for this directory.\n'
+    printf '  Repair: run this check again from the code path, for the task lines.\n'
+    return 0
+  fi
+  name="$(printf '%s' "$match" | jq -r '.name')"
+  code="$(printf '%s' "$match" | jq -r '.codePath')"
+  printf 'Project: %s, code path %s\n' "$name" "$code"
+
+  listed="$(git -C "$code" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')"
+  rows="$("${PLUGIN_ROOT}/skills/next/scripts/next-actions.sh" report 2>/dev/null \
+    | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' | grep '^{' \
+    | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
+  if [ -z "$rows" ]; then
+    printf 'Task in progress: none.\n'
+  fi
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    id="$(printf '%s' "$row" | jq -r '.id')"
+    wt="$(printf '%s' "$row" | jq -r '.worktree')"
+    printf 'Task in progress: %s\n' "$id"
+    if [ "$wt" = "none" ]; then
+      printf '  Recorded tree: none. The first stage action that needs the code makes one.\n'
+      continue
+    fi
+    if [ -d "$wt" ]; then
+      printf '  Recorded tree: %s, on disk.\n' "$wt"
+    else
+      printf '  Recorded tree: %s, gone from disk.\n' "$wt"
+      # Only a stage action that needs the code reaches the producer. Scope, research and design
+      # run with the tree absent, so naming them here sends a person to an action that changes
+      # nothing.
+      printf '    Repair: from %s, run a stage action that needs the code.\n' "$code"
+      printf '    Implementation, review and completion need it, and make the tree again.\n'
+    fi
+    if printf '%s\n' "$listed" | grep -Fxq "$wt"; then
+      printf '  Git lists it: yes.\n'
+    else
+      printf '  Git lists it: no. Nothing written there reaches a branch.\n'
+      printf '    Repair: remove that folder, then run a stage action from %s.\n' "$code"
+    fi
+  done <<ROWS
+$rows
+ROWS
+
+  gone="$(printf '%s\n' "$listed" \
+    | while IFS= read -r p; do [ -n "$p" ] && [ ! -d "$p" ] && printf '%s ' "$p"; done)"
+  if [ -n "$gone" ]; then
+    printf 'Trees git lists that are gone from disk: %s\n' "${gone% }"
+    printf '  Repair: run git worktree prune in %s.\n' "$code"
+  else
+    printf 'Trees git lists that are gone from disk: none.\n'
+  fi
+
+  # The other half of the same question: a tree git still holds that no task record names. Every
+  # task's record is read, not only the open ones, because a finished task's tree stays registered
+  # until someone removes it. The main checkout is not a task's tree and is skipped.
+  recorded="$(jq -r '.worktree.path // empty' \
+    "$(printf '%s' "$match" | jq -r '.path')"/tasks/*/task.json 2>/dev/null)"
+  unnamed="$(printf '%s\n' "$listed" | while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      [ "$p" = "$code" ] && continue
+      printf '%s\n' "$recorded" | grep -Fxq "$p" || printf '%s ' "$p"
+    done)"
+  if [ -n "$unnamed" ]; then
+    printf 'Trees git lists that no task record names: %s\n' "${unnamed% }"
+    printf '  Repair: find the task that owns each, or remove it with git worktree remove.\n'
+  else
+    printf 'Trees git lists that no task record names: none.\n'
+  fi
+  return 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
 action="${1:-}"
 [ -n "$action" ] && shift || true
+# shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
+ACTION="$action"  # cr_require_person names the action it refused, and reads it from here.
 
 case "$action" in
   create) do_create "$@" ;;
@@ -1141,6 +1395,7 @@ case "$action" in
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   recipe-source) do_recipe_source "$@" ;;
+  agentic-source) do_agentic_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
   unregister) do_unregister "$@" ;;
@@ -1150,5 +1405,6 @@ case "$action" in
   record-declined) do_record_declined "$@" ;;
   rebuild-registry) do_rebuild_registry "$@" ;;
   read-projects-base) do_read_projects_base ;;
+  check-machine) do_check_machine ;;
   *) usage; exit 3 ;;
 esac

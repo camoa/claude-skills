@@ -79,6 +79,15 @@ survivor by file, so its survivors are recorded as not readable and named as unr
 The row still reads met on exit 0, because the coverage half and the score were read. The outcome
 counts are in the score, and `mutmut results` lists the survivors by mutant name.
 
+**A task that commits nothing in the code repository answers in its own word.** An order proved by
+its record commits its document in the project folder, so the range holds nothing. Check 3 reads
+undeclared, not met: it opened no file. The three tool rows and the mutation row read undeclared
+too, the word the build stage answers with. The mutation command never runs over zero paths. The
+suite reads not-needed, which finishing the build already decided. Every lens reads undeclared:
+the diff holds nothing, and this stage does not hand the reviewer the deliverables. Check 4 reads
+the judgement such an order left on the ledger, the way it reads an observed record for a page
+order. A criterion judged at build time is covered.
+
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A hunk inside an
 owned file that serves nothing is the reviewer's to raise, and its finding cites an id or is not
 acted on.
@@ -90,9 +99,11 @@ every review, which is how version 5 trained the habit of skipping a check.
 **Check 16 has a floor the `findings` step applies before its lens.** The `practices` lens reads
 the plays research loaded into `records/playbooks.json`. The check reads unknown, with the detail
 "playbooks not loaded", when that record is absent. It also reads unknown when no source in the
-record is `loaded` while `project.json` carries a playbook subscription or the project folder
-holds `playbook.md`. Otherwise the lens verdict stands. A missing load means the lens did not run,
-never that there was nothing to follow. The repair is running `playbooks load` on the task.
+record is `loaded` while `project.json` carries a playbook subscription, declares a folder as a
+source of playbooks, or the project folder holds `playbook.md`. Otherwise the lens verdict
+stands. A missing load means the lens did not run, never that there was nothing to follow. The
+repair is running `/aida:research <task-id>` again, which loads the plays at its start. Nobody
+runs the load by hand.
 
 ## Report what the range itself said
 

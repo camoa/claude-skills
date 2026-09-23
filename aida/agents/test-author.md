@@ -33,6 +33,12 @@ read its shape; the brief is where design put it. Read the brief first. When it 
 `treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
 is suspect: report it by name, as below, and never take it as proof.
 
+When the brief holds `retake`, this is a correction and not a first run: a person ruled one
+frozen test wrong. Correct the tests that finding names. Leave every other frozen row alone.
+Write no new test for a criterion the frozen rows already cover. The finding's `linkedTo` names
+a criterion, and the frozen rows are keyed by criterion, so that field says which rows to read.
+A test the correction makes necessary is allowed, and the checker reads the affected rows.
+
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
 plays are the person's own rules, so a play outranks a guide's default where the two differ. A

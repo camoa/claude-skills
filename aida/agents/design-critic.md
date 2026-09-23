@@ -67,6 +67,9 @@ block. Read the design recipe from the path you were given, and the named recipe
 beside it. Given no path, say so and report the order as not read under that question.
 For an order whose `proof` is `observe`, read each machine criterion it owns beside its
 done-when rows. A clause that names a fact no row shows the page displaying is a finding.
+Read each criterion an order owns against its own `verification` clause. A clause naming nothing
+that would settle the criterion is a finding, on `contract`. What would fix it is the criterion
+rewritten at scope, never a proof kind that carries it into the build.
 
 ## What you write
 

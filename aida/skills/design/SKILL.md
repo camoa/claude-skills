@@ -66,9 +66,9 @@ line names each file already on disk. Read the criteria's text from the contract
 drafting.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
-the task builds in its worktree and this window is elsewhere. The refusal names the tree. Call
-the `EnterWorktree` tool with that path, the way `/aida:next` does. Then run the same call
-again.
+the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
+route that works from here, either the `EnterWorktree` tool or the call started with
+`cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop; a work order with nothing
 to serve is nothing this stage can check.
@@ -82,6 +82,11 @@ research and guide reading below. Those calls are `add-owned-file`, `remove-owne
 list. The route is the change, then `check`, `close` with the verdict the last
 `design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
 an order's interface, criteria or dependencies, reads as a first run does.
+
+A change to an order that implementation already started halts that order for design drift at
+the next `start`, whatever the call. Two routes lead back. Restore the design and `start` clears
+the halt. Or take the restart in the implement skill's `references/finish.md`, which rebuilds the
+order against the new design. The cheap reopen stays cheap for an order that has not started.
 
 Then start design:
 ```
@@ -104,7 +109,9 @@ by its id in that order's `reasoning`.
 
 Research named these without opening them, so design is the first read. Research recorded an
 address for each; open it through the navigator the same way, and read a project's own source
-directly. One agentic recipe
+directly. A tooling recipe has no navigator mode yet. Fetch its body from the address research
+recorded, check its sha256 against the catalog line, and store it by hand. Record it below the
+same way. That stands until the navigator's `tooling --name` mode exists. One agentic recipe
 covering the work means the decision is already made: follow it. Two: read both, pick the one
 that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
@@ -189,6 +196,12 @@ AIDA cannot know on its own:
 - The entry point every feature has that is not a screen. Name it in the order that builds the
   feature, so the feature is reachable without its UI.
 - What order the framework forces, where it forces one.
+
+**The proof follows the criteria, and `tests` is the default.** The contract already says what
+would settle each criterion, in its `verification` clause and its `verifiedBy` value. `create` and
+`update` print `impliedProof:`, what the owned criteria imply, beside the proof the order declares.
+The default is `tests` because a wrongly tested configuration order wastes one build, and a wrongly
+untested code order ships unproven.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
 `reasoning` of every order in this pass. Do not invent a kind of unit and do not guess at a
@@ -487,6 +500,13 @@ zero it adds one `open:` line naming what is open. The report holds:
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
+
+`check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
+proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
+those orders open, because which of the other three proofs fits is a judgment. Either the order
+owns a machine-verified criterion after all, which `update --criteria-owned` sets. Or its proof is
+one of the other three, which `update --proof` sets. Read the `verification` clause of each
+criterion the order owns, and ask what would settle it.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 

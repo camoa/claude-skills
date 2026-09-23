@@ -20,7 +20,7 @@
     "sources": {
       "type": "array",
       "items": { "$ref": "#/$defs/source" },
-      "description": "One entry per source read, in precedence order: person, project, then each catalog set. The four states are distinct on purpose: a person with no file is `absent`, a set the navigator could not reach is `unreachable`, a file with no plays is `empty`. Only `loaded` with a count is coverage, and review's framework-practices check reads these states for its floor."
+      "description": "One entry per source read, in precedence order: person, project, each folder the project declares as a source of playbooks in its own declared order, then each catalog set. The four states are distinct on purpose: a person with no file is `absent`, a set the navigator could not reach is `unreachable`, a file with no plays is `empty`. Only `loaded` with a count is coverage, and review's framework-practices check reads these states for its floor."
     },
     "plays": {
       "type": "array",
@@ -34,7 +34,7 @@
       "additionalProperties": false,
       "required": ["source", "state", "plays"],
       "properties": {
-        "source": { "type": "string", "minLength": 1, "description": "`person`, `project`, or a set id shaped <framework>/best-practices/<author>." },
+        "source": { "type": "string", "minLength": 1, "description": "`person`, `project`, the path of a folder the project declares as a source of playbooks, or a set id shaped <framework>/best-practices/<author>." },
         "state": { "type": "string", "enum": ["loaded", "absent", "unreachable", "empty"], "description": "What reading this source found." },
         "plays": { "type": "integer", "minimum": 0, "description": "How many plays this source contributed. Zero for every state but loaded." }
       }

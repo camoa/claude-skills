@@ -54,6 +54,17 @@ if ! source "$REGISTRY_LIB" 2>/dev/null; then
   exit 0
 fi
 
+# The version this session loaded. A plugin updated mid-session leaves the window running the
+# rules it read here, and nothing else says which those were. Claude Code runs $CLAUDE_ENV_FILE
+# before each Bash command in the same shell process (the mirror's hooks reference, "Persist
+# environment variables"), so the project skill's `check-machine` reads this and answers whether
+# the plugin changed since. Nothing is printed: a person reads this block, and this fact serves a
+# check they run rarely. The append keeps an export another hook wrote.
+# shellcheck source=/dev/null
+if [ -n "${CLAUDE_ENV_FILE:-}" ] && source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" 2>/dev/null; then
+  printf "export AIDA_SESSION_PLUGIN_VERSION='%s'\n" "$(plugin_version)" >> "$CLAUDE_ENV_FILE"
+fi
+
 UNATTENDED="false"
 case "$(printf '%s' "${AIDA_UNATTENDED:-}" | tr '[:upper:]' '[:lower:]')" in
   true|yes|y|1|on) UNATTENDED="true" ;;

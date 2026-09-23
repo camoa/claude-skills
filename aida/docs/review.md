@@ -73,14 +73,15 @@ and record [your walk](testing.md#what-a-failed-surface-does-to-the-verdict) of 
 [Visual and end-to-end tests](testing.md) covers setting them up, what each one looks at, and
 how a new baseline is accepted.
 
-## The four answers a check can give
+## The five answers a check can give
 
 | Answer | What happened | What it does to the verdict |
 |---|---|---|
 | met | it looked, and the answer is yes | passes |
 | unmet | it looked, and the answer is no | fails the review |
 | unknown | it could not look: a tool did not run, a file was missing, a lens never answered | fails the review |
-| undeclared | the framework's recipe names no tool for it, or marks it absent | passes, reported in its own word |
+| undeclared | the framework's recipe names no tool for it, marks it absent, or the row does not apply to what this task built | passes, reported in its own word |
+| not-needed | no order in this task asked for it, so it was never going to run | passes, reported in its own word |
 
 Undeclared passes because the framework has answered: it has no such tool, and blocking there
 would block every project on that framework. Unknown fails because a result nobody could read is
@@ -90,6 +91,30 @@ that one and names the other. So one network failure does not stop every review.
 
 A criterion answers in three words instead: met, unmet, or unanswered. A criterion nobody could
 reach is not one that failed, and unanswered is never a pass.
+
+## A task that writes documents rather than code
+
+An order may be proved by its record rather than by a test. Its deliverable is a document, and it
+is committed in the project folder. A task built only from such orders moves no commit in the code
+repository. The checks that read the code say so, rather than pass over nothing.
+
+The check that every change serves a criterion reads undeclared. The range holds nothing, and the
+deliverables are in another repository this check does not open. The three tool rows and the
+mutation row read undeclared for the same reason. The suite reads not-needed: no order runs a
+test, so no suite was ever going to run.
+
+The criteria are still answered. An order proved by its record, or by a configuration gate, has
+its owned criteria judged during the build, and review reads that judgement. A criterion so
+judged reads met, the same as one a passing test proves.
+
+Every lens has the same rule. Each one judges the code diff, which holds nothing here, so each
+reads undeclared. The guides check and the framework practices check read the research records
+too. Research that cited no source leaves both undeclared. No research record at all leaves both
+unknown. Met means somebody judged something.
+
+On a task that also changes code, the lenses read that diff. A document deliverable is not in it,
+and review does not hand the reviewer its path. So that half of a mixed task goes unjudged by the
+lenses, and the answer you get is about the code.
 
 ## The baseline, so an old finding does not fail a new task
 
@@ -128,7 +153,7 @@ After the close, review prints one line per check: its name, its answer, and how
 |---|---|
 | ran | a command or a lens ran and returned the answer |
 | read | a record decided it, and nothing ran |
-| off | the project turned it off, or the recipe declares the row absent |
+| off | the project turned it off, the recipe declares the row absent, or no order asked for the check |
 | could-not-look | a recipe, a row, a file or a tool was missing, so the answer is unknown or undeclared |
 
 Then one line per surface, and a line of counts. You see this before the verdict word, so what

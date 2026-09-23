@@ -10,8 +10,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                               --when <when> [--example-file <path>]
 #   playbook-actions.sh list    [<projectPath>]
 #
-# `load` reads the person's file, the project's file and the catalog record the playbook-loader
-# agent wrote, writes records/playbooks.json and renders records/playbooks.md. It fetches nothing.
+# `load` reads the person's file, the project's file, every folder this project declares as a
+# source of playbooks, and the catalog record the playbook-loader agent wrote. It writes
+# records/playbooks.json and renders records/playbooks.md. It fetches nothing.
 # `capture` appends one play to the project's file and commits the project folder. `list` prints
 # one line per play. Every action prints `key: value` summary lines and paths, never a play body.
 #
@@ -66,8 +67,29 @@ pb_read_source() {
   printf '%s\n' "$plays"
 }
 
+# Every folder a project declares as a source of playbooks, read the same way, in the order
+# `precedence` gives them. The folder holds `playbook.md` at its root: one name for one thing, the
+# same name and the same format as the person's file and the project's file, so a person can point
+# a source at another project's folder and it loads. The source name is the folder's own path,
+# which is what a reader needs to open the file a play's id names. A team with one shared set of
+# plays has nowhere else to put it, because the person's file is per machine and the project's
+# file is per project. Prints the two lines pb_read_source prints, once per folder.
+pb_folder_sources() {
+  local project_file="$1"
+  local line loc tab
+  tab="$(printf '\t')"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    [ "${line%%"$tab"*}" = "folder" ] || continue
+    loc="${line#*"$tab"}"
+    pb_read_source "$loc" "$loc/playbook.md"
+  done <<PB_SOURCES
+$(sw_source_lines "$project_file" playbooks)
+PB_SOURCES
+}
+
 do_load() {
-  local task_path project catalog record result faults person project_src
+  local task_path project catalog record result faults person project_src folders folder_json
   task_path="$(resolve_task_folder "${1:-}" load)" || exit $?
   project="$(resolve_project_folder "$task_path")" \
     || die 3 "load: could not resolve a project folder two levels up from $task_path, or it has no project.json"
@@ -78,13 +100,23 @@ do_load() {
   esac
   person="$(pb_read_source person "$PERSON_FILE")"
   project_src="$(pb_read_source project "$project/playbook.md")"
+  # pb_read_source prints a source object then its play array, so the folders arrive as a stream
+  # of alternating values: the even ones are the sources, the odd ones their plays.
+  folders="$(pb_folder_sources "$project/project.json")"
+  folder_json="$(printf '%s' "$folders" | jq -s -c '
+    {sources: [ .[range(0; length; 2)] ], plays: [ .[range(1; length; 2)][] ]}')" \
+    || die 3 "load: could not read the playbooks folders this project declares"
+  # The person's file first, then the project's, then each declared folder in the order the
+  # project declared it, then the catalog sets. The two files are what this person and this
+  # project decided; a declared folder is a team default; the catalog is the outermost one.
   record="$(jq -n --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       --argjson ps "$(printf '%s' "$person" | sed -n 1p)" --argjson pp "$(printf '%s' "$person" | sed -n 2p)" \
       --argjson js "$(printf '%s' "$project_src" | sed -n 1p)" --argjson jp "$(printf '%s' "$project_src" | sed -n 2p)" \
+      --argjson fd "$folder_json" \
       --argjson cat "$( [ -n "$catalog" ] && cat "$catalog" || echo '{"sources":[],"plays":[]}')" '
     {schemaVersion: 1, loadedAt: $at,
-     sources: ([$ps, $js] + ($cat.sources // [])),
-     plays: ($pp + $jp + ($cat.plays // []))}')"
+     sources: ([$ps, $js] + $fd.sources + ($cat.sources // [])),
+     plays: ($pp + $jp + $fd.plays + ($cat.plays // []))}')"
   result="$(schema_check_compare "$SCHEMA" <(printf '%s\n' "$record"))" || die 3 "load: the record could not be compared with $SCHEMA"
   faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
   [ -z "$faults" ] || die 3 "load: the record does not match $SCHEMA: $faults. This is a defect in playbook-actions.sh"

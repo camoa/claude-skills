@@ -23,6 +23,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  no recipe for this tool and this project's frameworks
 #   3  the script could not do its job (bad arguments, unreadable file, refused command)
 #   4  a command from the recipe ran and failed; its own output, in the file, is the answer
+#  70  the action needs a person and this run is autonomous
 #
 # A command from a recipe runs as arguments, never through a shell. A command carrying a
 # shell metacharacter is refused, because a recipe is data written elsewhere and a
@@ -30,6 +31,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
 set -u
 trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
+
+# The refusal function scripts/lib/recipes.sh takes from its caller, so cr_require_person can
+# refuse an action that needs a person. Exit 70 is that library's own code for it.
+# shellcheck disable=SC2329 # called by cr_require_person in scripts/lib/recipes.sh
+die() { printf 'tool-actions: %s\n' "$2" >&2; exit "$1"; }
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)}"
 # shellcheck source=../../../scripts/lib/registry.sh
@@ -90,21 +96,19 @@ RECIPE=""
 RECIPE_FRAMEWORK=""
 UNREACHABLE=""
 
+# The walk is sw_probe in scripts/lib/recipes.sh, shared with the project skill's process-recipe
+# lookup. `no` says this caller cannot ask the catalog, so a catalog entry is reported rather than
+# followed, and the folders ranked below it are still read.
 while IFS= read -r fw; do
   [ -n "$fw" ] || continue
-  while IFS=$'\t' read -r loc kind; do
-    [ -n "$loc" ] || continue
-    if [ "$kind" != "folder" ]; then
-      UNREACHABLE="${UNREACHABLE}${UNREACHABLE:+, }${loc} (${kind})"
-      continue
-    fi
-    cand="${loc}/tooling-recipes/${fw}/${TOOL}.md"
-    if [ -r "$cand" ]; then RECIPE="$cand"; RECIPE_FRAMEWORK="$fw"; break 2; fi
-  done < <(jq -r '
-      (.sources // [])
-      | map(select((.provides // []) | index("toolingRecipes")))
-      | sort_by(.precedence.toolingRecipes // 999)
-      | .[] | [.location, .locationType] | @tsv' "$PROJECT_FILE" 2>/dev/null)
+  if sw_probe "$PROJECT_FILE" toolingRecipes tooling-recipes "$fw" "$TOOL" no; then
+    RECIPE="$SW_PATH"; RECIPE_FRAMEWORK="$fw"; break
+  fi
+  if [ -n "$SW_UNREADABLE" ]; then
+    printf 'tool-actions: %s is on disk and could not be read. A recipe that cannot be read is not a recipe that is absent, so no other source answered for it\n' "$SW_UNREADABLE" >&2
+    exit 3
+  fi
+  UNREACHABLE="$SW_OTHER"
 done <<< "$FRAMEWORKS"
 
 if [ -z "$RECIPE" ]; then
@@ -192,6 +196,9 @@ case "$ACTION" in
     ;;
 
   install)
+    # An install runs the recipe's own commands against the code the person owns, outside any
+    # task folder. Nobody's silence stands for a yes to that (foundations.md, Run mode).
+    cr_require_person install "a person approved the install"
     STEPS="$(sh_blocks_under "$RECIPE" Install)"
     if [ -z "$STEPS" ]; then
       printf 'tool-actions: %s has no block tagged sh under Install\n' "$RECIPE" >&2

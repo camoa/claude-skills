@@ -95,9 +95,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      <search>.md; or `check`'s own call to check-research.sh failing to run at all
 #      (check-research.sh's own exit 3, meaning it could not do its job either).
 #   4  `check` ran and found a research file that cannot be read as this format: not valid JSON,
-#      not an object, or a missing, malformed or unknown top-level field (check-research.sh's own
-#      exit 1, remapped here so it never collides with this script's own exit 1, "not a task
-#      folder"). Or `distill` found a sidecar that fails scripts/distill-schema.json, or says
+#      not an object, or a missing, malformed or unknown field at any depth (check-research.sh's
+#      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
+#      folder"). Since 2026-09-23 a malformed finding lands here rather than under 5: the schema
+#      comparison reads every level, so a fault a schema can state is a schema fault.
+#      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says
 #      standsAlone false with no gap.
 #      Or `split-read` found a sidecar that is not in the split-advisor's shape, or whose
 #      children do not claim every contract criterion exactly once (the id is on stderr).

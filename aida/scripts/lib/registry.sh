@@ -118,7 +118,10 @@
 #     A subdirectory with no project.json is skipped without comment, since not every folder there
 #     need be a project. A project.json that exists but will not read as JSON, or is missing
 #     codePath or name, is skipped with a line on stderr naming the folder and the reason, so a
-#     bounded rebuild never drops a project silently. lastAccessed cannot be recovered from
+#     bounded rebuild never drops a project silently. A project folder the current registry names
+#     outside <projectsHome>, which a version 5 pickup makes, is read the same way and kept: the
+#     walk alone would drop it, and the registry row is the only thing that knows where it is.
+#     One whose project.json is gone is named on stderr as it is dropped. lastAccessed cannot be recovered from
 #     project.json, which does not carry it: this rebuild uses the project folder's own last git
 #     commit date as the closest available fact, and today's date when the folder carries no git
 #     history yet. `declinedOffers` and `directoryChoices` are not derivable from
@@ -504,11 +507,41 @@ registry_rebuild() {
     return 1
   fi
 
+  # The walk and the test below both use the canonical base. `find` does not descend a symlink
+  # named without a trailing slash, so walking the base as given returns nothing when its last
+  # component is one, while every row's parent still matches the resolved base. The rebuild then
+  # wrote an empty registry and said nothing.
+  local home_canon
+  home_canon="$(registry__canon "$projects_home")"
+
   local projects_json='[]' warned=0 listing
   listing=""
-  if [ -d "$projects_home" ]; then
-    listing="$(find "$projects_home" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)"
+  if [ -d "$home_canon" ]; then
+    listing="$(find "$home_canon" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)"
   fi
+
+  # The walk sees the base and nothing else, so a project folder registered anywhere else, which
+  # a version 5 pickup makes, would be dropped by a rebuild that writes the whole file over. The
+  # registry row is the only record of where such a folder is, so those paths join the walk and
+  # go through the same reader. Nothing is dropped silently: a folder whose project file is gone
+  # is named here, and the loop below names one that will not read.
+  local outside outside_path
+  outside="$(registry__current | jq -r '(.projects // [])[]? | .path // empty' 2>/dev/null)"
+  while IFS= read -r outside_path; do
+    [ -n "$outside_path" ] || continue
+    [ "$(dirname -- "$outside_path")" != "$home_canon" ] || continue
+    if [ -f "$outside_path/project.json" ]; then
+      printf 'registry_rebuild: keeping %s, a project folder outside %s.\n' "$outside_path" "$projects_home" >&2
+      listing="$listing
+$outside_path"
+    else
+      printf 'registry_rebuild: dropping %s, registered outside %s and its project.json is gone.\n' \
+        "$outside_path" "$projects_home" >&2
+      warned=1
+    fi
+  done <<OUTSIDE
+$outside
+OUTSIDE
 
   # A herestring, not a pipe, so the loop body runs in this shell and projects_json survives past
   # the loop: piping "find | while read" into bash puts the loop in a subshell, and every update

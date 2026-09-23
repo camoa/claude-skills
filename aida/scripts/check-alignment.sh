@@ -9,15 +9,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A deterministic reader. It never asks a question, it never fetches anything, and it never
 # repairs anything. It compares one task's alignment.json against the frozen field list every
 # contract must have (alignment-schema.json), then checks what that schema comparison alone
-# cannot reach: alignment-schema.json declares its per-criterion and per-non-goal shape only
-# inside items/$defs, and schema-check.sh's own comparison, by its own header, reads only the
-# properties declared directly on the schema it is given. So this script also walks every
+# cannot reach. alignment-schema.json declares its per-criterion and per-non-goal shape only
+# inside items/$defs. schema-check.sh's own comparison reads that shape too since 2026-09-23, and
+# enforces `additionalProperties` at every level from the same date, so the hand pass here is a
+# second reading of both, kept until something removes it deliberately. This script walks every
 # criterion and every non-goal by hand: each entry is an object at all, its id matches its own
 # format, no id repeats within its own space, and, for a criterion, it carries a non-empty
 # verification, a verifiedBy of machine or person, an author of owner or designer, and a verdict
 # of unanswered, met or unmet. It also names any field, at the top level or inside a criterion or
-# a non-goal, that this schema does not declare, since `additionalProperties: false` on that
-# schema is a claim nothing here enforced until this check existed. And it checks the two id
+# a non-goal, that this schema does not declare. And it checks the two id
 # counters, nextCriterionId and nextNonGoalId, and the decidedWithoutAPerson log, against the
 # rules their own schema description states but the shared comparison cannot evaluate (see
 # "What this script could not check" below).
@@ -67,9 +67,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      consequences"), the schema file is missing or fails to parse, or the comparison itself
 #      failed to run. Reported to stderr; nothing is printed on stdout, so this is never confused
 #      with a finding about the contract, which is always reported as JSON.
-#   4  alignment.json matches its schema at the top level, but a criterion, a non-goal, one of
-#      the two id counters, or the decidedWithoutAPerson log fails one of its own checks named
-#      above: an entry that is not an object, a malformed id, a duplicate id within its own
+#   4  alignment.json passed the schema comparison, but a criterion, a non-goal, one of the two
+#      id counters, or the decidedWithoutAPerson log fails one of its own checks named above.
+#      Since 2026-09-23 the comparison reads every level, so a fault it can express now raises
+#      exit 1 instead, and this code covers only what a schema cannot state: an entry that is
+#      not an object, a malformed id, a duplicate id within its own
 #      space, an unknown field inside an entry, a criterion missing verification, a verifiedBy,
 #      author or verdict outside its allowed values, an id counter below 1 or at or below an id
 #      already minted, or a decidedWithoutAPerson entry that is not a string. Each is named in
@@ -194,13 +196,13 @@ TOP_TYPE="$(jq -r 'type' "$ALIGNMENT_FILE" 2>/dev/null)"
 [ "$TOP_TYPE" = "object" ] || die3 "cannot read $ALIGNMENT_FILE: valid JSON but a $TOP_TYPE, not an object"
 
 # ---------------------------------------------------------------------------
-# 4. Compare alignment.json against alignment-schema.json's top-level fields. The comparison
-#    itself lives in schema-check.sh, the same library check-task.sh and check-project.sh use,
-#    so this algorithm runs from one place rather than a fourth copy drifting apart. It reads
-#    only the top-level properties; a criterion's or a non-goal's own fields are checked by hand
-#    below, per this script's own header. It also does not evaluate the "minimum" keyword (see
-#    "What this script could not check" above), which is why nextCriterionId and nextNonGoalId
-#    get their own minimum check further down.
+# 4. Compare alignment.json against the field list alignment-schema.json declares. The
+#    comparison itself lives in schema-check.sh, the same library check-task.sh and
+#    check-project.sh use, so this algorithm runs from one place rather than a fourth copy
+#    drifting apart. It reads every level since 2026-09-23, so a criterion's and a non-goal's
+#    own fields go through it as well; the hand pass below reads them a second time. It does not
+#    evaluate the "minimum" keyword (see "What this script could not check" above), which is why
+#    nextCriterionId and nextNonGoalId get their own minimum check further down.
 # ---------------------------------------------------------------------------
 
 COMPARE_JSON="$(schema_check_compare "$ALIGNMENT_SCHEMA_FILE" "$ALIGNMENT_FILE")" \
@@ -213,7 +215,8 @@ UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
 
 # A field on the file that this schema does not declare at all. additionalProperties is false on
 # this schema precisely so a field like version 5's phaseContracts, or a per-criterion checked,
-# is a defect rather than something silently accepted; nothing enforced that until this check.
+# is a defect rather than something silently accepted. The shared comparison enforces it too
+# since 2026-09-23, so a field here is named twice in the report until one reading is removed.
 UNKNOWN_TOP_JSON="$(jq -c --argjson allowed "$ALLOWED_TOP_FIELDS_JSON" '
   [ keys_unsorted[] as $k | select(($allowed | index($k)) == null) | {field: $k} ]
 ' "$ALIGNMENT_FILE")"
@@ -414,8 +417,8 @@ IDS_ISSUE_COUNT=$(( \
 
 # ---------------------------------------------------------------------------
 # 8. Content check, decidedWithoutAPerson: run only when the field itself passed step 4. Each
-#    entry must be a string; the shared comparison checks the array's own type, never its items'
-#    (schema-check.sh's own header: "a constraint declared one level deeper... is not checked").
+#    entry must be a string. The shared comparison reads the array's items too since 2026-09-23,
+#    so this is a second reading of them, kept until something removes it deliberately.
 # ---------------------------------------------------------------------------
 
 DWAP_ISSUES_JSON='[]'
