@@ -234,9 +234,14 @@ resolve_row_by_project_path() {
 # derived value, never something to commit (foundations.md, State). The unanchored pattern
 # covers a task's own records folder too: a task check writes one per task.
 # hooks/pre-compact.sh skips this folder for the same reason, so it never sees a stage that writes
-# only here. Research's playbooks step already does. That is safe on two counts: nobody answers
-# anything in it, and each record it writes has a producer that runs again. So a record must never
-# live only here when it carries a person's answer, or when nothing can produce it again.
+# only here. Research's playbooks step already does. That is safe for the reason every file here
+# must satisfy. No file here carries a person's answer, and no file here is the only copy of
+# anything a person still needs. A record that cannot be made again is either consumed in the next
+# window, or it is output a person already saw on stdout.
+# The same file does not always come back. Four of these records are written by an agent, so a
+# second dispatch returns a different document. tests/records-folder.txt names every file this
+# folder may hold and what makes each one. tests/records-folder-spec.sh fails on a name outside
+# that list, and the list's header names what the spec cannot see.
 write_project_gitignore() {
   cat > "$1/.gitignore" <<'EOF'
 *

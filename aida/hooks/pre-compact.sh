@@ -40,9 +40,21 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # One step already sits in that window. Research's playbooks step writes only
 # records/playbooks-catalog.json, records/playbooks.json and records/playbooks.md, while research/
-# is still empty. A manual compact is allowed there. It is safe on two counts: the step asks nobody
-# anything, and every record it wrote has a producer that runs again. So a record must never live
-# only under records/ when it carries a person's answer, or when nothing can produce it again.
+# is still empty. A manual compact is allowed there. It is safe for the reason every file here
+# must satisfy. No file here carries a person's answer, and no file here is the only copy of
+# anything a person still needs.
+#
+# Not every record can be made again. records/compacted.json is written from the clock at the
+# instant an automatic compaction fired, and nothing can cause one on demand. It passes because
+# hooks/session-start.sh consumes it in the next window and removes it. A record that cannot be
+# made again is either consumed like that, or it is output a person already saw on stdout.
+#
+# The same file does not always come back either. Four records are written by an agent and not by
+# a script: records/design-critique-<lens>.md, records/<stage>-distill.json,
+# records/research-split.json and records/playbooks-catalog.json. A second dispatch reads the same
+# inputs and returns a different document. The catalog also needs the guide service reachable.
+# tests/records-folder-spec.sh holds this rule. tests/records-folder.txt names every file this
+# folder may hold and what makes each one. Its header names what the spec cannot see.
 #
 # Exit 2 refuses, and stderr is shown to the person on a manual compaction (the platform's hooks
 # reference, PreCompact). Nothing is printed on stdout in any case.

@@ -1,0 +1,57 @@
+# What a records/ folder may hold: <name> | <its producer> | <what makes it again>.
+# A project folder and a task folder each have one. Two things are true of every file here.
+# No file here carries a person's answer. And no file here is the only copy of anything a person
+# still needs. That pair is why hooks/pre-compact.sh may skip the folder. A record failing either
+# one does not belong here.
+#
+# Not every record can be made again. compacted.json is written from the clock at the instant an
+# automatic compaction fired, and nothing can cause one on demand. It passes because
+# hooks/session-start.sh consumes it in the next window and removes it. A record that cannot be
+# made again is either consumed like that, or it is output a person already saw on stdout.
+#
+# It is not that the same file comes back. Four of these are written by an agent and not by a
+# script: design-critique-<>.md, <>-distill.json, research-split.json and playbooks-catalog.json.
+# A second dispatch reads the same inputs and returns a different document. The catalog also needs
+# the guide service reachable. An entry naming an agent in column two is one of these four.
+#
+# tests/records-folder-spec.sh reads this list. It fails on a name under records/ that is not
+# here, and on a name here that nothing references.
+# A segment that varies reads as <>: ${TOOL}, <stage> and * all normalize to it.
+#
+# What the spec reads. The source text of every script under scripts/, skills/ and hooks/, and of
+# every agent and skill body. It strips the quotes first, so a split literal still reads as one
+# path. It follows a variable one file assigned a path ending in /records. It refuses a file name
+# built at run time, and a cd into a records folder, because it can read neither.
+#
+# What it cannot see, in four shapes. One: a records folder passed as an argument and not
+# assigned, as in `write_into "$d/records" "$n"`. `mkdir -p "$d/records"` is that same shape and
+# is correct, so a rule here needs a command list that goes stale. Two: templates/, evals/, docs/
+# and the schemas under scripts/ are outside the scan, and three schemas name records paths today.
+# Three: a subfolder named with no file after it. Four: a variable name one file reuses for
+# another path. The spec reads those names too, so it reports more than it should, never less.
+# Five, and it is the same blind spot: an agent given its output path by its dispatch.
+# agents/architecture-reviewer.md writes its findings file at the path the dispatch names. This
+# spec would not see a dispatch that named a records path. Nor would a count of the agents that
+# name one in their own body.
+#
+check-project.json | scripts/check-project.sh | every project check writes it, and a pickup writes it too
+check-task.json | scripts/check-task.sh | every task check writes it, and `task start` ends by running one
+compacted.json | hooks/pre-compact.sh | every automatic compaction writes it, and hooks/session-start.sh names it once and removes it
+design-check.json | skills/design/scripts/design-actions.sh, action `check` | the action runs scripts/check-design.sh into it again
+design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again
+<>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again
+design-distill.json | the distiller agent | design close dispatches the distiller again
+environment-down.txt | skills/task/scripts/task-actions.sh, action `environment down` | the action runs the tear-down lines again
+environment-up.txt | skills/task/scripts/task-actions.sh, action `environment up` | the action runs the bring-up lines again
+playbooks-catalog.json | the playbook-loader agent | the research skill dispatches the loader again
+playbooks.json | skills/playbooks/scripts/playbook-actions.sh, action `load` | the action reads the catalog record again
+playbooks.md | skills/playbooks/scripts/playbook-actions.sh, action `load` | the action renders it from playbooks.json again
+research-check.json | skills/research/scripts/research-actions.sh, action `check` | the action runs scripts/check-research.sh into it again
+research-distill.json | the distiller agent | research close dispatches the distiller again
+research-split.json | the split-advisor agent | the research skill dispatches the advisor again after the coverage check
+scope-distill.json | the distiller agent | scope close dispatches the distiller again
+surfaces-<>-install.txt | skills/surfaces/scripts/surfaces-actions.sh, action `install` | the action runs the install steps again
+surfaces-baseline.txt | skills/surfaces/scripts/surfaces-actions.sh, action `baseline` | the action runs the accept command again
+tool-<>-<>.txt | skills/tool/scripts/tool-actions.sh | the action runs the tool command again
+tool-<>-install.txt | skills/tool/scripts/tool-actions.sh, action `install` | the action runs the install command again
+tool-<>-run.txt | skills/tool/scripts/tool-actions.sh, action `run` | the action runs the tool command again
