@@ -72,10 +72,12 @@ records the names, saying which kind each is. Design is the first read. Design a
 anything a work order names that research did not search. It records a nothing as a finding too,
 so implementation never asks the same question again.
 
-No stage runs the tool skill for you. The build's precondition check names a condition that is
-unmet and who owns it, and you run `/aida:tool run <tool>` yourself. A command that is not found
-is the signal to install. `/aida:tool install <tool>` follows the recipe's steps after you have
-seen them. The skill knows no tool's name and no framework's habits.
+No stage runs the tool skill on its own. The build's precondition check names a condition that
+is unmet and who owns it, and `/aida:tool run <tool>` answers it. You can type that yourself, and
+Claude can invoke it. A command that is not found is the signal to install. `/aida:tool install
+<tool>` follows the recipe's steps after you have seen them, and it refuses when nobody is
+present, because an install changes your project. The skill knows no tool's name and no
+framework's habits.
 
 ## Does the recipe fit this task
 

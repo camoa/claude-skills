@@ -38,6 +38,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # AIDA_RUN_MODE=autonomous script.sh does not match a rule naming script.sh and asks for approval
 # every time. AIDA_RUN_MODE is still read as a fallback, for a caller that is not the skill.
 #
+# Five actions need a person, and each exits 70 on an autonomous run having written nothing:
+# task-rule in both its forms, task-rule-remove, uninstall, record-declined, and unregister on a
+# project folder outside the projects base. Each writes into the person's own repository, records
+# an answer nobody gave, or drops the only record of where a folder sits. foundations.md, Run
+# mode: nobody's silence stands for a yes, so a run with nobody present records nothing on a
+# person's behalf.
+#
 # What reaches stdout is what reaches the orchestrator's context. A project is named by one
 # `project:` line carrying its name, state, code path and folder, never by its registry row or
 # its project file. The check's own report follows where the skill shows it to the person.
@@ -64,6 +71,12 @@ if [ "${1:-}" = "--run-mode" ]; then
   RUN_MODE="$2"
   shift 2
 fi
+# Five refusals below hang on this string, so a value that is neither word is refused rather than
+# read as interactive. `--run-mode autonmous` used to turn every one of them off in silence.
+case "$RUN_MODE" in
+  interactive|autonomous) ;;
+  *) printf 'project-actions: run mode must be interactive or autonomous, got %s\n' "$RUN_MODE" >&2; exit 3 ;;
+esac
 
 check_flags=()
 if [ "$RUN_MODE" = "autonomous" ]; then
@@ -74,6 +87,10 @@ die3() {
   printf 'project-actions: %s\n' "$1" >&2
   exit 3
 }
+
+# The refusal function scripts/lib/recipes.sh takes from its caller, so cr_require_person can
+# refuse an action that needs a person. Exit 70 is that library's own code for it.
+die() { printf 'project-actions: %s\n' "$2" >&2; exit "$1"; }
 
 usage() {
   cat <<'EOF' >&2
@@ -91,11 +108,11 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh agentic-source <projectFolder> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
-       project-actions.sh unregister <name-or-codePath>
+       project-actions.sh [--run-mode <interactive|autonomous>] unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
-       project-actions.sh task-rule-remove <name-or-codePath>
-       project-actions.sh uninstall <name-or-codePath>
-       project-actions.sh record-declined <directory>
+       project-actions.sh [--run-mode <interactive|autonomous>] task-rule-remove <name-or-codePath>
+       project-actions.sh [--run-mode <interactive|autonomous>] uninstall <name-or-codePath>
+       project-actions.sh [--run-mode <interactive|autonomous>] record-declined <directory>
        project-actions.sh rebuild-registry [projectsHome]
        project-actions.sh read-projects-base
        project-actions.sh check-machine
@@ -928,6 +945,12 @@ do_unregister() {
   base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
   base="$(canon_path "$base")"
 
+  # A folder under the base comes back with rebuild-registry. A folder outside it does not, so
+  # dropping its row is irreversible, and foundations.md halts an irreversible step with nobody
+  # present. The recoverable case is left alone.
+  [ "$(dirname -- "$project_path")" = "$base" ] \
+    || cr_require_person unregister "a person accepted losing the only record of where $project_path sits"
+
   registry_remove_project "$project_path" || die3 "could not remove the registry row for $project_path"
 
   echo "UNREGISTERED: $(printf '%s' "$match" | jq -r '.name')"
@@ -975,6 +998,9 @@ EOF
 }
 
 do_task_rule() {
+  # Both paths are a person's answer to the same offer. The write puts an instruction the harness
+  # enforces into a repository the person owns; the decline suppresses the offer for good.
+  cr_require_person task-rule "a person answered the task-rule offer"
   local target="${1:?task-rule: a name or a code path is required}"
   shift
   local declining="false"
@@ -1089,6 +1115,7 @@ do_task_rule() {
 }
 
 do_task_rule_remove() {
+  cr_require_person task-rule-remove "a person asked for the block to leave their own repository"
   local target="${1:?task-rule-remove: a name or a code path is required}" match code_path project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
@@ -1137,6 +1164,7 @@ do_task_rule_remove() {
 # ------------------------------------------------------------------------------------------------
 
 do_uninstall() {
+  cr_require_person uninstall "a person asked for AIDA to leave their own repository"
   local target="${1:?uninstall: a name or a code path is required}" match project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
@@ -1158,6 +1186,9 @@ do_uninstall() {
 # ------------------------------------------------------------------------------------------------
 
 do_record_declined() {
+  # A recorded no is never asked again, so nobody's silence may write one (foundations.md, Run
+  # mode). An unrecorded question is offered again at the next interactive session, which is right.
+  cr_require_person record-declined "a person declined the offer of a project here"
   local directory="${1:?record-declined: a directory is required}"
   registry_record_declined_offer "$directory"
 }
@@ -1350,6 +1381,8 @@ ROWS
 
 action="${1:-}"
 [ -n "$action" ] && shift || true
+# shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
+ACTION="$action"  # cr_require_person names the action it refused, and reads it from here.
 
 case "$action" in
   create) do_create "$@" ;;

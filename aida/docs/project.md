@@ -7,10 +7,19 @@ first thing AIDA needs from you.
 One skill answers every question about a project: which one owns this folder, create one,
 switch to another, or close one out. Type `/aida:project`, with or without arguments.
 
-You type it yourself. Creating, switching, and closing all change what is on disk or which
-project this conversation uses. Nothing here runs on Claude's own judgment: nothing invokes
-it for you. A session-start hook says which project owns your directory before your first
-turn; run `/aida:project` yourself for the full report, or to create, switch, or close one.
+You usually type it yourself, and Claude may also invoke it, because a session running a task
+without you still has to find a project. What that session cannot do is answer for you. Six
+things refuse outright when nobody is present: installing the task rule, declining it, removing
+it, uninstalling AIDA from your repository, recording that you want no project in a folder, and
+unregistering a project folder that sits outside your projects folder. Each of those writes into
+something you own, or records an answer you never gave.
+
+A session with nobody present, in a folder no project owns, makes no project there. It says the
+folder is not set up and carries on. One thing such a session does settle: picking up a version 5
+folder on a machine with no projects yet sets where every later project folder goes, from the
+folder you named. A session-start hook says which project owns your directory
+before your first turn; run `/aida:project` yourself for the full report, or to create, switch,
+or close one.
 
 ## What a project is
 

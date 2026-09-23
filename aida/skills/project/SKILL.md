@@ -1,7 +1,6 @@
 ---
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
-disable-model-invocation: true
 argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
@@ -30,6 +29,20 @@ on every call to the scripts below. Anything else, including no active task: act
 the safe default. Decide this once, at the start, so nothing mid-flow has to ask again. A mode
 that names stages in brackets covers this call only when it names the stage this call runs
 inside.
+
+Five actions need a person. The script refuses each one at exit 70 on an autonomous run, and
+writes nothing. `task-rule` and `uninstall` change the repository the person owns.
+`task-rule-remove` takes AIDA's own block back out of it. `record-declined` writes a no nobody
+said, and a recorded no is never offered again. `unregister` refuses only when the project folder
+sits outside the projects base, because `rebuild-registry` cannot find that folder again.
+
+Every other action does the same thing in both modes. Where a step needs a fact nobody supplied,
+the matching section below says the skill halts rather than guess it.
+
+A session with nobody present, in a directory no project owns, gets no project made for it. The
+report says the directory is not set up, records nothing, and the run continues. A dispatch that
+wants a project names `create` with the name, the code path and the frameworks. A dispatch that
+wants one that exists names `switch`.
 
 ## No arguments: report
 
@@ -70,7 +83,7 @@ exists and that `switch <folder>` picks it up, and continue.
     for whatever it needs.
   - **No.** Run:
     ```
-    "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh record-declined "$(pwd -P)"
+    "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> record-declined "$(pwd -P)"
     ```
 - **`DECLINED: false`, autonomous.** Nobody is present to answer, so do not ask and do not record
   anything. Silence is not a decline: recording one would suppress the offer forever on the
@@ -204,6 +217,13 @@ The pickup writes two files into the folder: `project.json`, and the check's own
 `records/check-project.json`. To undo a pickup, run `unregister` below and remove those two
 files by hand; nothing else was written. A folder left with its `project.json` is picked up again
 by `rebuild-registry`, since the base was recorded at the pickup.
+
+The base it records is the one machine-wide value this skill writes, and only `create` and this
+pickup write it. Both write it once, when none is recorded, and no action changes it afterwards.
+A person edits `~/.claude/aida/settings.json` to change it. So a pickup with nobody present, on a
+machine where no project was ever created, settles where every later project folder goes. The
+value is the parent of the folder the call named, never a guess, which is why this does not
+refuse. Name the base in the report either way, so the person sees what was settled.
 
 When the check still reports `frameworks` missing, interactive asks "What is the stack?" once and
 runs `set-frameworks` below with the answer. Autonomous **halts**, reporting that the frameworks
@@ -374,7 +394,7 @@ Show the whole output.
 
 Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh unregister "<target>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> unregister "<target>"
 ```
 Drops the registry row only. It prints both folders it names, the project folder and the code
 path, and it touches neither. The one route back is `rebuild-registry` below. `create` is not
@@ -383,6 +403,9 @@ that route: it refuses a project folder that already exists.
 The last line is `PROJECTS BASE:`, and it names which of two cases this is. A project folder
 under that base comes back with `rebuild-registry`. A folder outside it does not, because the
 dropped row held the only record of where it sits. Relay that line, with the folder's path.
+
+That second case is the one an autonomous run refuses, at exit 70, having dropped nothing. Say
+that the row waits for a person, and continue. A folder under the base drops in both modes.
 
 ## `task-rule <name-or-path> [--remove | --decline]`
 
@@ -393,9 +416,10 @@ context; `CLAUDE.md` is an instruction the harness tells the model it must follo
 whole reason this exists as a separate, deliberate write.
 
 Confirm before writing: show what will change (a new block, or a refreshed one if already
-present) and ask for a plain yes or no. Autonomous: nobody is present to answer; invoking
-`task-rule` at all is itself the request, so skip the confirmation, record that this run made
-its own confirmation, and continue. On yes, or under an autonomous run, run:
+present) and ask for a plain yes or no. Autonomous: **halt.** The script refuses at exit 70 and
+writes nothing. The block is an instruction the harness makes the model follow, in a repository
+the person owns, so only a person asks for it. Say the offer is waiting, and continue. On yes,
+run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule "<target>" -- <reason...>
 ```
@@ -403,20 +427,20 @@ Refuses when the project has no code path. It refuses too when the code path nam
 that does not exist yet. Either way there is no repository to write into. Say so and stop. Do
 not ask again later in the same turn.
 
-`--remove` takes the block back out and leaves the rest of the file untouched:
+`--remove` takes the block back out and leaves the rest of the file untouched. It refuses the
+same way on an autonomous run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh task-rule-remove "<target>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule-remove "<target>"
 ```
 
 ## `uninstall <name-or-path>`
 
 Cleaning up removes AIDA's own instructions from the code repository, and nothing else: never
 tests, never test configuration, never any tooling. Confirm before running, since this touches
-the user's own repository. Autonomous: nobody is present to answer; invoking `uninstall` at all
-is itself the request, so skip the confirmation, record that this run made its own confirmation,
-and continue:
+the user's own repository. Autonomous: **halt.** The script refuses at exit 70 and removes
+nothing. Say that the cleanup waits for a person, and continue. On yes, run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh uninstall "<target>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> uninstall "<target>"
 ```
 Removes the task-rule block when one was installed.
 

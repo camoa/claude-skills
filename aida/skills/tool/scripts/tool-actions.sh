@@ -23,6 +23,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  no recipe for this tool and this project's frameworks
 #   3  the script could not do its job (bad arguments, unreadable file, refused command)
 #   4  a command from the recipe ran and failed; its own output, in the file, is the answer
+#  70  the action needs a person and this run is autonomous
 #
 # A command from a recipe runs as arguments, never through a shell. A command carrying a
 # shell metacharacter is refused, because a recipe is data written elsewhere and a
@@ -30,6 +31,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
 set -u
 trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
+
+# The refusal function scripts/lib/recipes.sh takes from its caller, so cr_require_person can
+# refuse an action that needs a person. Exit 70 is that library's own code for it.
+# shellcheck disable=SC2329 # called by cr_require_person in scripts/lib/recipes.sh
+die() { printf 'tool-actions: %s\n' "$2" >&2; exit "$1"; }
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)}"
 # shellcheck source=../../../scripts/lib/registry.sh
@@ -190,6 +196,9 @@ case "$ACTION" in
     ;;
 
   install)
+    # An install runs the recipe's own commands against the code the person owns, outside any
+    # task folder. Nobody's silence stands for a yes to that (foundations.md, Run mode).
+    cr_require_person install "a person approved the install"
     STEPS="$(sh_blocks_under "$RECIPE" Install)"
     if [ -z "$STEPS" ]; then
       printf 'tool-actions: %s has no block tagged sh under Install\n' "$RECIPE" >&2
