@@ -4,6 +4,63 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.23] - 2026-09-22
+
+Five rows from the live run and the owner's own asks. Rows 142 to 144 come from
+the implement stage on beta.22; 145 and 146 are asks, recorded as such.
+
+### Added
+- `tests-brief` writes a `retake` key after `retake-tests`, while no freeze has
+  answered the retake. It carries the ruled finding with its evidence,
+  severity, file, lines, `linkedTo` and ruling reason, read from the review
+  record at the retake entry's own `movedTo`, and the rows and globs the order
+  already froze. A record a person removed is named, not dropped. The test
+  author reads the key as a correction and leaves every other frozen test
+  alone. Before this a fresh author read a first-run brief and wrote the
+  order's tests again, which the wrong-test route forbids. (row 142)
+- `add` and `update` print the proof an order's owned criteria imply, beside
+  the proof it declares, on every call. `check-design.sh` reports every order
+  whose proof is `tests` and that owns no machine-verified criterion, and
+  never raises the exit code; `check` prints `impliedProofDisagrees:` at every
+  exit code, with the repair. The design critic sends a criterion nothing
+  would settle back to scope, rather than giving it a proof kind. (row 145)
+- `project check-machine`, report only: the Claude Code version against the
+  two that matter, whether the plugin changed after this session started,
+  whether the check ran inside a worktree, trees git lists that are gone from
+  disk, and trees git lists that no task record names. The session start hook
+  exports the loaded version through the hook environment file. (row 146)
+
+### Changed
+- A resumed `start` clears a drift halt whose order no longer drifts. It
+  removes only a segment about the order's own design copy, keeps every other
+  segment, and records the clearing. A reopen that changes both an order's
+  design file and a criterion it serves now writes both segments, so restoring
+  the file alone leaves the order halted. `clear-halt` keeps exit 85 and names
+  `start`. The design page says a change to a started order halts it, and the
+  rulings page says to correct the design and restart when the ruling's cause
+  is the done-when wording. (row 143)
+- `restart` finds an order's build and fix records wherever they are: the top
+  of the implementation folder, each folder a retake recorded moving them to,
+  and every earlier restart's archive. The `tree:` line then counts only the
+  commits that are not the order's own, and its carry answer says the order's
+  own code stays in the tree, so its next tests cannot go red. (row 144)
+- The exit 79 refusal names the route that works where the call ran: the
+  `cd <tree> &&` prefix alone from outside the code repository or from another
+  task's tree, and entry first from inside the checkout. The test asks git
+  through `active_tree_for`, repairs `worktree.path` when a tree moved, and
+  falls back to the string test when git cannot be asked. Eight stage pages
+  relay both routes, and `next` says what to do after a decline and after a
+  refusal. (row 146)
+- The design page says a tooling recipe body is fetched, checked against the
+  catalog's sha and stored by hand, until a navigator mode serves one. Owed
+  since beta.22. (row 126)
+
+### Fixed
+- A resumed `start` rebuilt the ledger without `haltsCleared`, dropping every
+  clearing `clear-halt` and `retake-tests` had recorded.
+- A stage action ran from any folder when the project's code path was off
+  disk, found while building row 146 and fixed before it shipped.
+
 ## [6.0.0-beta.22] - 2026-09-22
 
 Live-run rows 111 to 141. Rows 111 to 116 come from the implement stage on beta.21, rows 112 to
