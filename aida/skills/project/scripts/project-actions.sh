@@ -215,8 +215,10 @@ resolve_target() {
 
 # Looks a target up by its exact project folder path, the one address resolve_target never reads.
 # Prints the matching registry row as one JSON object, or prints nothing. A project folder path
-# and a code path are never the same folder, so the two lookups cannot both answer.
-resolve_project_folder() {
+# and a code path are never the same folder, so the two lookups cannot both answer. Named for the
+# row it returns: scripts/lib/recipes.sh, which this file sources, already has a
+# resolve_project_folder, and that one takes a task folder and returns the folder two levels up.
+resolve_row_by_project_path() {
   local canon
   [ -r "$REGISTRY_FILE" ] || return 1
   canon="$(canon_path "$1")"
@@ -594,7 +596,7 @@ do_switch() {
   # this project's own name. Its refusal tells the person to edit the name in their project file,
   # and that edit is what makes check-project.sh exit 4 for good. The folder is already the row's,
   # so the answer is to switch to it.
-  [ -n "$match" ] || match="$(resolve_project_folder "$target")"
+  [ -n "$match" ] || match="$(resolve_row_by_project_path "$target")"
   # Order matters. A version 5 folder holds no project.json, so register_v5_folder returns 1 for
   # every folder the second branch takes. A folder holding both files is a version 5 pickup that
   # already ran: its project file is the truth, and the version 5 branch would overwrite it.
