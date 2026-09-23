@@ -1095,7 +1095,7 @@ cr_require_baseline_recipes() {
     was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
     was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
     if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
-      die 73 "$who: the check recipe resolved for $fw is not the one the baseline was taken with. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline, so take the baseline again before recording this."
+      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. If that body is gone, the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
     fi
     idx=$((idx + 1))
   done

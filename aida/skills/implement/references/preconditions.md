@@ -159,6 +159,9 @@ heading changes more rarely than its markers, and the person who refreshes knows
 a framework with no resolved recipe on record, and a path that does not exist (exit 90). The
 freeze refuses a `--test-recipe` that is not the record's path (exit 91), so run this first.
 
-The review recipe is pinned by the baseline for the task's life. A republished one has a new body,
-so its hash differs from the baseline's, and the build refuses it (exit 73). No action takes a new
-baseline mid-task; that is a recorded gap, not a route.
+The review recipe is pinned by the baseline for the task's life, and `recipe-refresh` does not
+touch it. Adopting a republished body would need a new baseline, and a baseline reads the tree
+before the task. It cannot be taken again once the task has changed the tree. Each tool runs where
+the tree stands, so a second reading records this task's own findings as pre-existing. The build
+refuses a body the baseline did not read (exit 73). Finish the task with the pinned body. The other
+route is to abandon the baseline by hand, and checks 5 to 7 then subtract this task's own findings.

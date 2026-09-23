@@ -1,7 +1,7 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -294,6 +294,27 @@ asked. Run:
 alone unattended passes `--stage implement`. No `--stage` covers every stage. `interactive`
 removes the field and the stages: there is no `"interactive"` value to write, since the field's
 absence already means that. Show the whole output.
+
+## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
+
+A budget is the ceiling on one implementation run, and a person sets it. Nothing above asks about
+it, and nothing here proposes one. Only call this when asked. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
+  set-budget --project "<projectPath>" "<task-id>" [--dispatches <n>] [--minutes <n>]
+```
+`--dispatches` counts the roles implementation dispatches over the whole run. `--minutes` counts
+wall-clock time from the ledger's own start. Either one alone is a ceiling, and both may be given.
+Neither is refused. Each takes a whole number of 1 or more, and the action refuses anything else.
+The task check does not read the schema's minimum, so a zero would pass it and halt the first
+dispatch. A number this call does not name keeps the value it had. There is no action that removes
+a budget.
+
+The build halts the order it was about to dispatch when either number is reached, with `budget
+spent`. To answer that halt a person raises the number here first. Then they run `grant-attempt` in
+the implementation skill, which clears the halt segment. The order is the whole point. The spend is
+recomputed from the ledger at every dispatch, so a grant before the raise brings the halt straight
+back. Show the whole output.
 
 ## `save <task-id>`
 

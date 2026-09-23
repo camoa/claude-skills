@@ -152,3 +152,6 @@ as the project does.
 - `/aida:task set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...` sets the
   task's run mode, for every stage or for the stages named. See
   [Run modes](run-modes.md#setting-the-mode).
+- `/aida:task set-budget <task-id> [--dispatches <n>] [--minutes <n>]` sets the ceiling on the
+  task's build, in dispatches or in minutes or both. See
+  [Run modes](run-modes.md#setting-the-mode).

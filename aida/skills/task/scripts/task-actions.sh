@@ -43,6 +43,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    [--child <child-id> --goal <goal> [--criterion <text>]...]
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-run-mode --project <path> \
 #                    <task-id> <autonomous|interactive> [--stage <stage>]...
+#   task-actions.sh [--run-mode <interactive|autonomous>] set-budget --project <path> \
+#                    <task-id> [--dispatches <n>] [--minutes <n>]
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
 #                    -- <text...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] decline-recipe --project <path> \
@@ -119,6 +121,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
        task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
                                  [--stage <scope|research|design|implement|review|completion>]...
+       task-actions.sh set-budget --project <path> <task-id> [--dispatches <n>] [--minutes <n>]
        task-actions.sh save     --project <path> <task-id> -- <text...>
        task-actions.sh decline-recipe --project <path> <task-id> <framework>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
@@ -954,6 +957,86 @@ do_set_run_mode() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# set-budget: the ceiling on one implementation run (task-schema.json, budget). Written only when
+# a person sets one. Nothing here asks. Either number alone is a ceiling. A number this call does
+# not name keeps the value it had. A person raising the dispatches of a halted run must not lose
+# the minutes they set earlier.
+# ------------------------------------------------------------------------------------------------
+
+# Refuses the value $2 of the flag $1 unless it is a whole number of 1 or more. scripts/lib/
+# schema-check.sh states that it does not read `minimum`, so a 0 written here passes check-task.sh
+# and then halts the first dispatch. This is the only guard. Called as a plain statement: die3 in a
+# command substitution would end the subshell alone.
+budget_number_or_die() {
+  case "$2" in
+    ''|*[!0-9]*) die3 "set-budget: --$1 takes a whole number, got: $2" ;;
+  esac
+  [ "$2" -ge 1 ] || die3 "set-budget: --$1 must be 1 or more, got: $2"
+}
+
+do_set_budget() {
+  local project_path="" id="" dispatches="" minutes=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --dispatches)
+        [ "$#" -ge 2 ] || die3 "set-budget: --dispatches needs a number"
+        budget_number_or_die dispatches "$2"
+        dispatches="$2"; shift 2 ;;
+      --minutes)
+        [ "$#" -ge 2 ] || die3 "set-budget: --minutes needs a number"
+        budget_number_or_die minutes "$2"
+        minutes="$2"; shift 2 ;;
+      *)
+        if [ -z "$id" ]; then id="$1"; shift
+        else die3 "set-budget: unrecognized argument: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [ -n "$project_path" ] || die3 "set-budget: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "set-budget: not a folder: $project_path"
+  project_path="$_resolved_project"
+  [ -n "$id" ] || die3 "set-budget: a task id is required"
+  [ -n "$dispatches" ] || [ -n "$minutes" ] \
+    || die3 "set-budget: --dispatches <n> or --minutes <n>, or both. Neither sets no ceiling at all"
+
+  local task_dir task_json
+  task_dir="$(task_dir_for "$project_path" "$id")"
+  task_json="$task_dir/task.json"
+  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+
+  local budget_json='{}'
+  [ -z "$dispatches" ] \
+    || budget_json="$(printf '%s' "$budget_json" | jq -c --argjson n "$dispatches" '.dispatches = $n')"
+  [ -z "$minutes" ] \
+    || budget_json="$(printf '%s' "$budget_json" | jq -c --argjson n "$minutes" '.minutes = $n')"
+  # jq is tested before the write, the way set-run-mode tests it before its move. An unreadable
+  # task.json, or a budget that is not an object, makes jq write nothing. write_atomic would then
+  # rename an empty file over the record and the task would lose everything it held.
+  local written
+  written="$(jq --argjson b "$budget_json" '.budget = ((.budget // {}) + $b)' "$task_json")"
+  [ -n "$written" ] || die3 "set-budget: could not read $task_json. Nothing was written"
+  write_atomic "$task_json" "$written"
+
+  local wrote
+  wrote="$(jq -r '"dispatches " + ((.budget.dispatches // "none") | tostring)
+    + " minutes " + ((.budget.minutes // "none") | tostring)' "$task_json")"
+  commit_task_change "$project_path" \
+    "Set the budget of ${id} to ${wrote}" \
+    "a person set the ceiling on this run" \
+    "" \
+    "" \
+    "$id" "budget" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+
+  echo "BUDGET: ${wrote}"
+  task_summary "$task_json"
+}
+
+# ------------------------------------------------------------------------------------------------
 # decline-recipe: written only when a person answers "not for this framework" to the missing
 # process recipe ask (task-schema.json, recipesDeclined). Nothing here asks. The framework must
 # be one project.json declares, so a typo never silences the ask for a real framework. A repeat
@@ -1460,6 +1543,7 @@ case "$action" in
   complete) do_complete "$@" ;;
   split) do_split "$@" ;;
   set-run-mode) do_set_run_mode "$@" ;;
+  set-budget) do_set_budget "$@" ;;
   save) do_save "$@" ;;
   decline-recipe) do_decline_recipe "$@" ;;
   environment) do_environment "$@" ;;

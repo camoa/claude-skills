@@ -464,9 +464,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      this order's own work. Exit 43 stays the separate fact that the value is not a commit at all.
 #  72  two frameworks each declare a command for one check row, and nothing here may choose between
 #      two answers to one question. The message names both frameworks and the row.
-#  73  the check recipe resolved for a framework now is not the one the baseline was taken with: its
+#  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
 #      sha256 differs. Every tool check compares its own result against that baseline, so a changed
-#      recipe compares one tool's output against another tool's baseline. Take the baseline again.
+#      recipe compares one tool's output against another tool's baseline. The baseline is not
+#      retaken mid-task: it reads the tree before the task, and the tree now holds this task's own
+#      code. Run again with the recipe body the baseline read.
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
@@ -3286,9 +3288,11 @@ EOF
 # appends what changed under `recipeRefreshes`. It re-runs nothing: the verdict stands, because a
 # recipe's preconditions heading changes more rarely than its markers do, and the person who
 # refreshes knows why. Only the test-execution recipe is refreshed. The review recipe is pinned by
-# baseline.json with its sha256, and exit 73 refuses every later record under another body, so
-# there is no path swap that keeps the baseline honest; references/preconditions.md records the
-# gap. Every refusal runs before the one write, so a refused call leaves the record as it was.
+# baseline.json with its sha256, and swapping that path would need a new baseline. A baseline is a
+# reading of the tree before the task. It cannot be taken again once the task has changed the tree.
+# bl_tool_result runs each tool where the tree stands, so a second reading would record this task's
+# own findings as pre-existing. references/preconditions.md records the gap. Every refusal
+# runs before the one write, so a refused call leaves the record as it was.
 do_recipe_refresh() {
   local task_folder="" recipes="" fw rp line from kind
   local record_file record_doc today refreshed=""
@@ -9362,7 +9366,7 @@ TG_OWNED
       bg_ledger="$(halt_order_in "$bg_ledger" "$unit_id" "$bg_why")"
       [ -n "$bg_ledger" ] || die 3 "dispatch-open: the halt on $unit_id could not be written."
       write_atomic "$TASK_PATH/implementation/ledger.json" "$bg_ledger"
-      die 78 "dispatch-open: $unit_id is halted, $bg_why. The run's ceiling is task.json's budget; raise it there, then grant-attempt clears the halt. Nothing was dispatched."
+      die 78 "dispatch-open: $unit_id is halted, $bg_why. The run's ceiling is task.json's budget. A person raises it with 'task set-budget <task-id> --dispatches <n>', or --minutes <n>, and then grant-attempt clears the halt. Nothing was dispatched."
     fi
   fi
 

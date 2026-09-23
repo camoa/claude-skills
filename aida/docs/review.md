@@ -135,9 +135,16 @@ counts as this task's. The contract check already reports that file as work nobo
 
 The subtraction is honest only while both runs read the same recipe, so review refuses when the
 recipe it resolved is not the baseline's. That is rare: the catalog's review recipe changed while
-the task was open. No action retakes a baseline after a build, so the way past is by hand. Remove
-`implementation/baseline.json` from the task folder and run `/aida:implement <task-id>`; its
-preconditions step takes a new baseline. Then review again.
+the task was open. Nothing retakes a baseline mid-task, because a baseline reads the tree before
+the task and the tree now holds this task's code.
+
+You have two ways past, and the second costs something. Review again against the recipe body the
+baseline read. The refusal prints its path and its sha256, and nothing in AIDA restores a body the
+catalog replaced. Or abandon the baseline: move `implementation/baseline.json` and
+`implementation/baseline-output/` out of the task folder and run `/aida:implement <task-id>`, whose
+preconditions step takes a new one. That new baseline reads the tree as it stands, so the tool
+checks subtract this task's own findings and pass on findings this task added. Do it only
+deliberately.
 
 ## Narrowing the surfaces
 

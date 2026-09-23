@@ -89,9 +89,14 @@ Put them to the person, opening with: "The build reached the limit you set on th
 dispatches or in minutes, and stopped. Only you can raise it. Raise the limit in the task's
 record and the build can continue. Leave it and the build stays stopped." Then name the two
 numbers the halt holds. The spend is recomputed at every dispatch, so a grant alone brings the
-halt straight back. The person raises `budget.dispatches` or `budget.minutes` in `task.json`
-first. Then `grant-attempt` clears the halt as it clears `attempts spent`. It also raises that
-order's attempts by one; say so.
+halt straight back. The person raises the ceiling first, with the task skill:
+```
+/aida:task set-budget <task-id> --dispatches <n>
+```
+`--minutes <n>` raises the other ceiling, and both may be given. A number they do not name keeps
+the value it had. Name the command and let them run it; nothing here runs it for them. Then
+`grant-attempt` clears the halt as it clears `attempts spent`. It also raises that order's attempts
+by one; say so.
 
 ## Offer the restart, when a halt reads "design drift"
 

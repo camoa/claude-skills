@@ -57,7 +57,7 @@
         "dispatches": { "type": "integer", "minimum": 1 },
         "minutes": { "type": "integer", "minimum": 1 }
       },
-      "description": "A ceiling on one implementation run, present only when a person set one; absent means no ceiling. `dispatches` counts the roles the implementation skill dispatches over the whole run (the test author, each build attempt, the reviewer, and the fixer and the verifier of each round), and `minutes` counts wall-clock time from the ledger's own startedAt. Either number reached halts the order about to be dispatched with `budget spent`, in the same shape as the attempt cap, and the grant path answers it once this value is raised. The spend is recomputed from the ledger at every dispatch and stored nowhere."
+      "description": "A ceiling on one implementation run, present only when a person set one; absent means no ceiling. A person sets it with `task set-budget <task-id> [--dispatches <n>] [--minutes <n>]`, never by editing this file. That action refuses a value below 1, because this check does not read `minimum` (scripts/lib/schema-check.sh). A number the action does not name keeps the value it had. `dispatches` counts the roles the implementation skill dispatches over the whole run (the test author, each build attempt, the reviewer, and the fixer and the verifier of each round), and `minutes` counts wall-clock time from the ledger's own startedAt. Either number reached halts the order about to be dispatched with `budget spent`, in the same shape as the attempt cap, and the grant path answers it once this value is raised. The spend is recomputed from the ledger at every dispatch and stored nowhere."
     },
     "mechanismHints": {
       "type": "array",

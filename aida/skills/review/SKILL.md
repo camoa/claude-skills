@@ -205,12 +205,21 @@ One number never means two things, and these keep the meanings implementation ga
 | 66 | implementation has not finished, so there is no `finished.json` |
 | 70 | a person's answer was passed on a run with nobody present |
 | 72 | two frameworks each command one tool |
-| 73 | the check recipe resolved now is not the one the baseline was taken with, so take the baseline again first |
+| 73 | the check recipe moved after this task's baseline was taken, and the baseline is pinned to it for the task's life |
 | 77 | the project records no framework |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |
 
 Eight of these are review's own. The other eight arrive with the libraries both stages source, and each
 keeps the meaning implementation gave it. Code 70 is the one an autonomous run meets in ordinary use,
 the first time a `--walked` or a `--row` is passed.
+
+Code 73 has no action behind it, so put its two routes to the person. The first: run `checks` again
+with `--check-recipe` naming the recipe body the baseline read, whose sha256 the refusal prints.
+Nothing here restores a body the catalog replaced. The second: abandon the baseline, by moving
+`implementation/baseline.json` and `implementation/baseline-output/` aside and running the
+implement skill's `preconditions` again. Say what that costs. The new baseline reads the tree as it
+stands, which already holds this task's code. Checks 5 to 7 then subtract this task's own findings
+and read `met` whatever the tools found. No action retakes a baseline on its own, for that reason.
+A person moves the two files by hand, deliberately.
 
 Read a refusal and act on it. Do not repeat the same call unchanged.

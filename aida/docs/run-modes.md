@@ -55,8 +55,10 @@ mode you change after a halt takes at once. Review reads the task too, never the
 so a mode scoped to the build leaves review to you. Then invoke the stage the task is at,
 `/aida:scope <task-id>` for a new task, and let it run.
 
-A task can carry a ceiling on its build, in either mode. Add `budget` to the task's `task.json`
-by hand, with `dispatches` or `minutes` or both. Implementation recomputes the spend from its
+A task can carry a ceiling on its build, in either mode. Set it with
+`/aida:task set-budget <task-id> [--dispatches <n>] [--minutes <n>]`, either number or both, each
+a whole number of 1 or more. A number you do not name keeps the value it had, so raising one
+ceiling never drops the other. Implementation recomputes the spend from its
 own records before every dispatch, so nothing a builder writes can reset it. Reaching either
 number halts the order that was about to be dispatched. No budget means no ceiling; the
 per-order limits on attempts still hold either way.
