@@ -44,9 +44,10 @@ active task: act interactively, the safe default. Decide this once, at the start
 A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
 when the list names `research`; otherwise this stage is interactive.
 
-Research never blocks on this choice the way scope does. The run mode only changes what happens
-at three points below: a recipe fit of `false` or `unsure`, a missing process recipe, and an
-unaccepted guide source. Everything else runs the same way in both modes.
+Research never blocks on this choice the way scope does. The run mode changes what this skill
+asks at two points below: a recipe fit of `false` or `unsure`, and a missing process recipe. The
+split step and the close differ too, and each says so where it stands. Everything else runs the
+same way in both modes.
 
 ## Find the task
 
@@ -78,6 +79,12 @@ route that works from here, either the `EnterWorktree` tool or the call started 
 `cd <worktree> &&`. Take the route it names, the way `/aida:next` does, and run the call again.
 
 `contract: absent`: say so in one line and name the scope skill. Stop.
+
+`criteria-by-designer:` names any id: say so in one line, with the ids. Interactive: say that the
+contract carries criteria a run wrote on the person's behalf. Name `/aida:scope` as the place to
+approve or change them. Research does not block, so go on after saying it. Autonomous: say the
+same line for the record and go on. The fact is already on disk, in each criterion's `author`
+field, so write nothing new.
 
 `search:` lines present: this is a resumed or repeated run. Read each named file before deciding
 what is still missing, rather than starting over.
@@ -507,9 +514,10 @@ record, so a stage cannot run out of order. That is why this chain is safe.
 
 Research decides nothing about the problem, so there is nothing for a person to approve. It never
 asks permission to look something up, and every finding carries its source, so a wrong finding is
-checkable afterward by anyone. The one question it asks is the split, and only after its own work
-is done. Autonomous mode runs every step above the same way. At a recipe that does not fit, a
-missing recipe or an unaccepted source, it takes the noted branch instead of asking.
+checkable afterward by anyone. The questions it asks are the two above and the split, and the
+split comes after its own work is done. Autonomous mode runs every step the same way, apart from
+those three and the close. At a recipe that does not fit, or a missing recipe, it takes the noted
+branch instead of asking.
 
 ## What this skill never does
 

@@ -46,12 +46,12 @@ The offer comes where a page is first named, once per kind, and only with a pers
 - **Review.** When a kind is still off, not declined, and the framework's recipe can run it,
   review offers it once before it runs the surfaces.
 
-Each kind gets its own answer. At scope and design there are three: **yes**, **not this task**,
+Each kind gets its own answer, and every stage offers the same three: **yes**, **not this task**,
 or **no**. Yes runs the setup for that kind now. Not this task records nothing, so the next stage
 that names a page may ask again. No records a decline for that kind, project-wide, and no stage
-asks about that kind again. Review takes yes or no only: no later stage of this task can ask
-again, so "not this task" would mean nothing there. The offer at review is the weakest of the
-three: the page has already changed, so no baseline can record what it looked like before.
+asks about that kind again. At review, not this task means the next task asks again, because no
+later stage of this task can. The offer at review is the weakest of the three. The page has
+already changed, so no baseline can record what it looked like before.
 
 Autonomously nothing is offered. Scope and design say so in the conversation; review writes it
 into its record as not offered. Turning a kind on changes the project, and a change like that

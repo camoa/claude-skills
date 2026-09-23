@@ -186,9 +186,10 @@ record stops for you.
 Set on the task, an autonomous run mode changes four things here. See [Run modes](run-modes.md).
 
 - The draft is taken as it is, and every single question gets its recommended answer. Each one is
-  recorded as decided on your behalf, in words, in `alignment.json`; the rendered document does
-  not show them. The blank opening question has no answer to take; scope drafts from disk and
-  goes on.
+  recorded as decided on your behalf, in words, in `alignment.json`. The rendered document lists
+  them all under "Decided without a person". A non-goal the run wrote itself is named there by
+  its id, since a non-goal carries no author. The blank opening question has no answer
+  to take; scope drafts from disk and goes on.
 - Nothing is promoted to yours. A criterion AIDA proposed stays the designer's, since nobody
   approved it, and the approval itself is recorded as given on your behalf.
 - The test setup offer is skipped, and scope says so.
