@@ -185,14 +185,29 @@ plugin_version() {
 # or names that stage; every other case is interactive, the safe assumption (foundations.md, Run
 # mode). This is the one reader of those two fields: a stage that read runMode alone would run a
 # stage the person kept for themselves without asking. An unreadable file answers interactive.
+#
+# A name in runModeStages that is not one of the six matches no stage, so the mode reads
+# interactive for it for ever. That is the safe direction, and it discards what a person asked
+# for, so this names the value on stderr every time it reads one. The task check refuses such a
+# task, and it runs from `task start` alone, which a task already in progress never reaches. This
+# is the reader every stage goes through, so it is where the word is said. Nothing dies here: a
+# stage stopping mid-task over a field whose only effect is to ask a person more often would cost
+# more than the defect.
 # $1 the canonical task folder, $2 the stage name as the skills spell it.
 task_run_mode() {
-  local answer
-  answer="$(jq -r --arg stage "$2" '
-      if (.runMode // "") != "autonomous" then "interactive"
-      elif ((.runModeStages // []) | length) == 0 then "autonomous"
-      elif (.runModeStages | index($stage)) != null then "autonomous"
-      else "interactive" end' "$1/task.json" 2>/dev/null)"
+  local read_out answer unknown
+  read_out="$(jq -r --arg stage "$2" '
+      (if (.runMode // "") != "autonomous" then "interactive"
+       elif ((.runModeStages // []) | length) == 0 then "autonomous"
+       elif (.runModeStages | index($stage)) != null then "autonomous"
+       else "interactive" end),
+      ([ (.runModeStages // [])[] | tostring ] | map(. as $named
+         | select((["scope","research","design","implement","review","completion"] | index($named)) == null))
+       | join(", "))' "$1/task.json" 2>/dev/null)"
+  answer="$(printf '%s\n' "$read_out" | sed -n 1p)"
+  unknown="$(printf '%s\n' "$read_out" | sed -n 2p)"
+  [ -z "$unknown" ] \
+    || printf 'task-helpers: %s/task.json names a run-mode stage that matches no stage: %s. The six are scope, research, design, implement, review and completion. A name outside them reads interactive for ever. Repair it with `task set-run-mode`.\n' "$1" "$unknown" >&2
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
 }
 

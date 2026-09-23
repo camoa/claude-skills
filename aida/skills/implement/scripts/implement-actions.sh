@@ -1928,7 +1928,7 @@ do_start() {
     # --- exit 83: a baseline this version cannot subtract from --------------------------------------
     # An earlier version kept each tool's output inline and named no outputFile. build-record reads
     # only outputFile, so that baseline turns every failing tool check unknown and spends an attempt
-    # on a schema change. The schema comparison reads the top level; the one rule it states in words
+    # on a schema change. The schema comparison reads the shape; the one rule it states in words
     # and cannot express, outputFile present whenever the entry ran, is read here beside it.
     local bl_compare bl_gaps
     if [ -f "$IMPL_DIR/baseline.json" ]; then
@@ -5963,8 +5963,9 @@ br_eight_checks() {
 
 # The observed record for an order whose proof is observe, refused on one of five facts, each its
 # own number (live-run row 104). $1 the action, $2 the unit id, $3 the --observed path, empty when
-# none was passed. The top level is compared against observed-schema.json through the one library
-# every record check uses; the rows are read here, since that comparison stops at the top level.
+# none was passed. The record is compared against observed-schema.json through the one library
+# every record check uses. The rows are read here as well; since 2026-09-23 that comparison
+# descends into them too, so this is a second reading, kept until something removes it.
 # The two image fields go through the helper below it. Reads UNIT_JSON for the order's surfaces
 # and done-when rows. Reads CRITERIA_JSON for the verification clause of each machine criterion
 # the order owns. The look judges those clauses as rows of their own (live-run row 115).

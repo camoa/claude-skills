@@ -814,13 +814,25 @@ do_recipe_source() {
   esac
   [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
   # The walk itself is scripts/lib/recipes.sh, shared with the tool skill's own lookup. `yes`
-  # says this caller asks the navigator, so a catalog entry ends the walk.
-  if sw_probe "$project_path/project.json" processRecipes process-recipes "$fw" "$phase" yes; then
+  # says this caller asks the navigator, so a catalog entry ends the walk. The library refuses
+  # nothing, by its own header, so both refusals below are made here.
+  local probe_rc
+  sw_probe "$project_path/project.json" processRecipes process-recipes "$fw" "$phase" yes
+  probe_rc=$?
+  # A locationType outside the four is a record this walk cannot read. One answer comes back from
+  # this action and precedence decides which, so a source of unknown rank makes that answer a
+  # guess. check-project.sh refuses the same record; this says the same thing where a stage runs.
+  [ -z "$SW_UNKNOWN" ] \
+    || die3 "recipe-source: $project_path/project.json declares a source this walk cannot read: $SW_UNKNOWN. A locationType is one of folder, catalog, site or search. Repair that source, then run this again"
+  [ -z "$SW_UNREADABLE" ] \
+    || die3 "recipe-source: $SW_UNREADABLE is on disk and could not be read. A source this project ranked first is not a source that held nothing, so the catalog is not asked. Fix the file's permissions, or remove it"
+  # A site or a search source holds no folder this walk can probe, so it is named rather than
+  # passed over in silence. An answer from the folders is then not read as the whole story.
+  [ -z "$SW_OTHER" ] || echo "unread: $SW_OTHER"
+  if [ "$probe_rc" -eq 0 ]; then
     echo "RECIPE: $SW_PATH source=$SW_SOURCE"
     return 0
   fi
-  [ -z "$SW_UNREADABLE" ] \
-    || die3 "recipe-source: $SW_UNREADABLE is on disk and could not be read. A source this project ranked first is not a source that held nothing, so the catalog is not asked. Fix the file's permissions, or remove it"
   [ -n "$SW_SEARCHED$SW_CATALOG" ] || return 0
   echo "RECIPE: catalog${SW_SEARCHED:+ searched=${SW_SEARCHED% }}"
   return 0
@@ -842,15 +854,24 @@ do_agentic_source() {
   local project_path="${1:?agentic-source: a project folder is required}"
   local fw="${2:?agentic-source: a framework is required}"
   [ -f "$project_path/project.json" ] || die3 "agentic-source: no project.json in $project_path"
-  local line name loc tab
+  local line name loc rest tab unread=""
   tab="$(printf '\t')"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    name="${line%%"$tab"*}"; loc="${line#*"$tab"}"
+    name="${line%%"$tab"*}"; rest="${line#*"$tab"}"
+    # An empty name is a source the walk did not read, `<TAB><type><TAB><location>`. It is named
+    # below rather than passed over, so a list from the folders is not read as the whole story.
+    if [ -z "$name" ]; then
+      loc="${rest#*"$tab"}"
+      unread="$unread${unread:+, }$loc (${rest%%"$tab"*})"
+      continue
+    fi
+    loc="$rest"
     echo "AGENTIC: $name path=$loc/agentic-recipes/$fw/$name.md source=$loc"
   done <<AS_NAMES
 $(sw_list "$project_path/project.json" agenticRecipes agentic-recipes "$fw")
 AS_NAMES
+  [ -z "$unread" ] || echo "unread: $unread"
   return 0
 }
 

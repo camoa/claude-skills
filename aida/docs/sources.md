@@ -185,7 +185,10 @@ declared them, and takes the first file that exists. A phase with no file in any
 falls through to the catalog. A folder that holds nothing is not an answer. The stage
 takes its no-recipe path only when the catalog holds none either. A file that is there and
 cannot be read is a third case: the lookup names the path and stops, because a source nobody
-could read is not a source that held nothing. It records which folders
+could read is not a source that held nothing. A source that is not a folder and not the catalog,
+a site or a search, is named on an `unread:` line rather than passed over, for the same reason. A
+source whose kind of place is none of the four is a mistake in the project file: the lookup
+refuses it and says so, and the project check names the same field. It records which folders
 it looked in first. To rank the catalog between two folders, declare it in that place, with the
 word `catalog` in place of a folder. The lookup names the folder it answered from. The simplest way to
 start is to copy the catalog's recipe for that phase into the file and edit it; the headings a
@@ -197,7 +200,9 @@ declares one.
 
 A folder of agentic recipes holds `<folder>/agentic-recipes/<framework>/<capability>.md`. Every
 capability your folders hold for a framework you declare is named to research, whatever words it
-was asked about, because you put it there deliberately and the list is short. Design reads the
+was asked about, because you put it there deliberately and the list is short. A source this
+listing could not read is named on an `unread:` line beside the capabilities, so a short list
+never reads as the whole of what you declared. Design reads the
 ones that fit and follows one. The catalog's own agentic recipes are searched as before.
 
 The plugin names no layout for a folder of guides. A guide is found by matching words, not by a

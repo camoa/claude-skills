@@ -9,9 +9,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A deterministic reader. It never asks a question, it never reads a sentence and compares it to
 # another sentence, and it never repairs anything. It reads every file under
 # <task_folder>/design/, compares each one against the field list every work order must have
-# (design-schema.json), and then checks what that schema comparison alone cannot reach: a list
-# field's own items (schema-check.sh's own header: a constraint declared inside `items` is not
-# checked), and every claim one work order makes about another. Those cross-order claims are
+# (design-schema.json), and then checks what that schema comparison alone cannot reach: every
+# claim one work order makes about another. It also walks a list field's own items by hand. That
+# hand pass is a second reading since 2026-09-23, when schema-check.sh began to descend into
+# `items` itself; it is kept until something removes it deliberately. Those cross-order claims are
 # joined and walked here, never matched by text:
 #
 #   - every criterion in the contract is served by at least one work order;
@@ -105,8 +106,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      files checked, on stdout, at whatever exit code their own coverage produces, because
 #      design not having started, or having started with nothing written yet, is a fact about the
 #      task, not a reason this script cannot run.
-#   4  every work order file matches its schema at the top level, but a list item, or one of the
-#      cross-order checks named above, fails: a criterion/non-goal/work-order id that is not a
+#   4  every work order file passed the schema comparison, but a list item, or one of the
+#      cross-order checks named above, fails. Since 2026-09-23 the comparison reads every level,
+#      so a list item fault it can express now raises exit 1 instead. What is left here: a
+#      criterion/non-goal/work-order id that is not a
 #      valid shape, a tests entry that is not well-formed, a criterion with no serving order, a
 #      criterion owned by zero or by more than one order, an order serving no criterion, an order
 #      that owns a machine-verified criterion and declares no test, an order whose proof is gate
@@ -474,8 +477,8 @@ if [ -f "$GUIDES_FILE" ]; then
       || die3 "the guides-read field-list comparison itself failed to run on $GUIDES_FILE. Check $GUIDES_SCHEMA_FILE for a malformed entry"
     GUIDES_ALLOWED_JSON="$(jq -c '.properties | keys_unsorted' "$GUIDES_SCHEMA_FILE")"
     GUIDES_ENTRY_ALLOWED_JSON="$(jq -c '.["$defs"].guide.properties | keys_unsorted' "$GUIDES_SCHEMA_FILE")"
-    # The entries' own fields, which the shared comparison does not reach (its header: a
-    # constraint inside `items` is not checked), the same per-item pass the work order walk makes.
+    # The entries' own fields, the same per-item pass the work order walk makes. The shared
+    # comparison reads them too since 2026-09-23, so this is a second reading of the same items.
     GUIDES_ISSUES_JSON="$(jq -c --argjson cmp "$GUIDES_COMPARE_JSON" --argjson allowed "$GUIDES_ALLOWED_JSON" \
       --argjson entryAllowed "$GUIDES_ENTRY_ALLOWED_JSON" '
       def str_present($v): ($v != null) and (($v | type) == "string") and (($v | length) > 0);

@@ -9,11 +9,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A deterministic reader. It never asks a question, it never fetches anything, and it never
 # repairs anything. It reads every file under <task_folder>/research/, compares each one against
 # the field list every research file must have (research-schema.json), and then checks what that
-# schema comparison alone cannot reach: research-schema.json declares a finding's own shape only
-# inside $defs, and schema-check.sh's own comparison, by its own header, reads only the properties
-# declared directly on the schema it is given. So this script also walks every finding in every
-# file by hand: each one is an object at all, and it carries a non-empty text, a non-empty source,
-# a lookedAt matching YYYY-MM-DD, and a criteriaServed that is an array of strings. It then joins
+# schema comparison alone cannot reach. research-schema.json declares a finding's own shape only
+# inside $defs. schema-check.sh's own comparison reads that shape too since 2026-09-23, so the
+# hand pass here is a second reading of it, kept until something removes it deliberately. This
+# script walks every finding in every file by hand: each one is an object at all, and it carries
+# a non-empty text, a non-empty source, a lookedAt matching YYYY-MM-DD, and a criteriaServed that
+# is an array of strings. It then joins
 # every criteriaServed id against the task's own contract at <task_folder>/alignment.json, in both
 # directions: an id naming no criterion in that contract, a criterion the contract holds that no
 # finding anywhere cites, and a finding whose criteriaServed is empty, which is work nobody asked
@@ -71,8 +72,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      zero files checked, on stdout, at whatever exit code their own coverage produces, because
 #      research not having started, or having started with nothing found yet, is a fact about the
 #      task, not a reason this script cannot run.
-#   4  every research file matches its schema at the top level, but a finding, a criteriaServed
-#      id, or the coverage join fails one of its own checks named above: a finding that is not an
+#   4  every research file passed the schema comparison, but a finding, a criteriaServed id, or
+#      the coverage join fails one of its own checks named above. Since 2026-09-23 the
+#      comparison reads every level, so a fault it can express now raises exit 1 instead and
+#      this code covers only what a schema cannot state: a finding that is not an
 #      object, missing or empty text or source, a lookedAt not matching YYYY-MM-DD, a
 #      criteriaServed that is not an array of strings, a criteriaServed id naming no criterion in
 #      the contract, a criterion in the contract with no finding anywhere, or a finding whose

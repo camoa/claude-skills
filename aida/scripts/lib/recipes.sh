@@ -1262,13 +1262,16 @@ sw_source_lines() {
 
 # Defaults only: a caller that set one before loading this file keeps its value.
 : "${SW_PATH:=}"; : "${SW_SOURCE:=}"; : "${SW_SEARCHED:=}"; : "${SW_CATALOG:=}"; : "${SW_OTHER:=}"
-: "${SW_UNREADABLE:=}"
+: "${SW_UNREADABLE:=}"; : "${SW_UNKNOWN:=}"
 
 # sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog: yes|no>
 # Probes each folder source in precedence order and stops at the first file on disk. Sets SW_PATH
 # and SW_SOURCE to it, or both to empty; SW_SEARCHED to the folders probed, space separated with a
 # trailing space; SW_CATALOG to yes when the walk stopped at a catalog entry; SW_OTHER to the
-# sources it did not probe, `<location> (<type>)` comma separated. Returns 0 when SW_PATH is set.
+# sources it did not probe, `<location> (<type>)` comma separated; SW_UNKNOWN to those of them
+# whose type is outside the four project-schema.json declares, in the same form. SW_UNKNOWN is a
+# subset of SW_OTHER, never a replacement for it, so a caller reading only SW_OTHER still names
+# every source this walk passed over. Returns 0 when SW_PATH is set.
 # The last argument says whether the caller can ask the catalog itself. `yes` stops the walk at
 # the first catalog entry, because a folder ranked behind the catalog is ranked behind the answer
 # the caller is about to get. `no` puts catalog entries in SW_OTHER and walks on, because a caller
@@ -1282,6 +1285,7 @@ sw_probe() {
   local pf="$1" kind="$2" folder="$3" fw="$4" leaf="$5" asks="$6"
   local line loc_type loc cand tab
   SW_PATH=""; SW_SOURCE=""; SW_SEARCHED=""; SW_CATALOG=""; SW_OTHER=""; SW_UNREADABLE=""
+  SW_UNKNOWN=""
   tab="$(printf '\t')"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -1289,6 +1293,10 @@ sw_probe() {
     if [ "$loc_type" != "folder" ]; then
       if [ "$loc_type" = "catalog" ] && [ "$asks" = "yes" ]; then SW_CATALOG="yes"; break; fi
       SW_OTHER="$SW_OTHER${SW_OTHER:+, }$loc ($loc_type)"
+      case "$loc_type" in
+        folder|catalog|site|search) : ;;
+        *) SW_UNKNOWN="$SW_UNKNOWN${SW_UNKNOWN:+, }$loc ($loc_type)" ;;
+      esac
       continue
     fi
     cand="$loc/$folder/$fw/$leaf.md"
@@ -1307,6 +1315,13 @@ SW_LINES
 # `<name><TAB><location>`, one line per .md file under `<location>/<folder>/<framework>/`, the
 # folder sources in precedence order. The first folder holding a name wins it, so a later folder
 # never shadows an earlier one. A kind resolved by name rather than by point reads this.
+#
+# A source this walk did not read prints `<TAB><type><TAB><location>`, an empty first field, in
+# its own place in the precedence order. A name comes from a .md basename and is never empty, so
+# the two forms cannot collide. The record travels on stdout because the caller reads this
+# through `$(...)`, where a variable would die with the subshell. Nothing here refuses and
+# nothing here warns: the caller decides what to say, the same way it does with SW_OTHER
+# (foundations.md, nothing is dropped silently).
 sw_list() {
   local pf="$1" kind="$2" folder="$3" fw="$4"
   local line loc_type loc name seen tab
@@ -1315,7 +1330,10 @@ sw_list() {
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     loc_type="${line%%"$tab"*}"; loc="${line#*"$tab"}"
-    [ "$loc_type" = "folder" ] || continue
+    if [ "$loc_type" != "folder" ]; then
+      printf '\t%s\t%s\n' "$loc_type" "$loc"
+      continue
+    fi
     for name in $(md_basenames_in "$loc/$folder/$fw"); do
       case "$seen" in *" $name "*) continue ;; esac
       seen="$seen$name "

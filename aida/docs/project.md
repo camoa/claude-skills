@@ -138,6 +138,16 @@ Three things can come back from comparing the file against its shape:
 | A field missing, or present but the wrong shape | Named, with the step that produces it offered as the repair. |
 | The code path does not exist on disk | Reported as a fact. Right after creating a project, this is expected. Anywhere else, only you can say where the code went, and nothing here fixes it. |
 
+The comparison reads a field at every depth, not the outermost layer alone. A fault inside a
+list, or inside a nested object, is named by its path, `sources[0].locationType`, so the report
+says which value is refused and not only which field holds it.
+
+It checks each value's type, that a text field is not empty, that it matches the pattern its
+field requires, that a list is long enough, that a value is one of the words its field allows,
+and that no field is present that the shape does not declare. It does not check a smallest
+number, a longest list, a list whose entries must differ, or which fields an entry inside a list
+must carry. Those are stated in the shape and nothing enforces them yet.
+
 A schema checks shape, not truth: it says a code path is a string shaped like an absolute
 path, not that the folder still exists, and it cannot say two entries in the list share a
 name, because a schema expresses one entry's own shape, not a relationship between two
