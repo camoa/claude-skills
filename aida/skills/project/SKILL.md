@@ -325,6 +325,13 @@ none either. To rank the catalog between two folders, declare it in that place:
 catalog recipe into that layout and edit it. For `toolingRecipes`, the folder holds
 `tooling-recipes/<framework>/<tool>.md`, and the tool skill reads it the same way.
 
+For `playbooks`, the folder holds `playbook.md` at its root, the same format as the person's file
+and the project's own. Research loads it after those two, in the order the project declared it.
+For `agenticRecipes`, the folder holds `agentic-recipes/<framework>/<capability>.md`, and every
+capability a folder holds is named to research, which is what design reads. The plugin names no
+layout for a folder of `guides`. A guide is found by matching words, not by a path, so a folder
+of them needs a lookup nobody has decided yet. Say so when a person declares one.
+
 ## `subscribe-playbook <name-or-path> <framework> <set-id>`
 
 Subscribes the project to one catalog playbook set for one framework it declares. The set id is

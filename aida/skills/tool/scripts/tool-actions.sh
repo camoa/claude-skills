@@ -90,21 +90,19 @@ RECIPE=""
 RECIPE_FRAMEWORK=""
 UNREACHABLE=""
 
+# The walk is sw_probe in scripts/lib/recipes.sh, shared with the project skill's process-recipe
+# lookup. `no` says this caller cannot ask the catalog, so a catalog entry is reported rather than
+# followed, and the folders ranked below it are still read.
 while IFS= read -r fw; do
   [ -n "$fw" ] || continue
-  while IFS=$'\t' read -r loc kind; do
-    [ -n "$loc" ] || continue
-    if [ "$kind" != "folder" ]; then
-      UNREACHABLE="${UNREACHABLE}${UNREACHABLE:+, }${loc} (${kind})"
-      continue
-    fi
-    cand="${loc}/tooling-recipes/${fw}/${TOOL}.md"
-    if [ -r "$cand" ]; then RECIPE="$cand"; RECIPE_FRAMEWORK="$fw"; break 2; fi
-  done < <(jq -r '
-      (.sources // [])
-      | map(select((.provides // []) | index("toolingRecipes")))
-      | sort_by(.precedence.toolingRecipes // 999)
-      | .[] | [.location, .locationType] | @tsv' "$PROJECT_FILE" 2>/dev/null)
+  if sw_probe "$PROJECT_FILE" toolingRecipes tooling-recipes "$fw" "$TOOL" no; then
+    RECIPE="$SW_PATH"; RECIPE_FRAMEWORK="$fw"; break
+  fi
+  if [ -n "$SW_UNREADABLE" ]; then
+    printf 'tool-actions: %s is on disk and could not be read. A recipe that cannot be read is not a recipe that is absent, so no other source answered for it\n' "$SW_UNREADABLE" >&2
+    exit 3
+  fi
+  UNREACHABLE="$SW_OTHER"
 done <<< "$FRAMEWORKS"
 
 if [ -z "$RECIPE" ]; then

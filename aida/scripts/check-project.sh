@@ -47,11 +47,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that agrees with it, and no two registry rows share a name; the project folder is a
 #      git repository with no uncommitted work. Nothing more is said.
 #   1  One or more fields are missing from project.json, present with the wrong shape, or
-#      fail one of the three cross-field checks project-schema.json's own descriptions
+#      fail one of the two cross-field checks project-schema.json's own descriptions
 #      promise (a schema checks one field at a time, never two fields against each other):
-#      a playbookSubscriptions key naming a framework this project never declared; a
-#      source's precedence keys not matching its own provides list; or a source's
-#      answersFor naming a framework this project never declared. Each is named, on
+#      a playbookSubscriptions key naming a framework this project never declared, or a
+#      source's precedence keys not matching its own provides list. Each is named, on
 #      stdout, with the text that would produce it. Nothing is repaired; a repair is
 #      proposed.
 #   2  codePath is present and well-formed, but the directory it names does not exist. A
@@ -265,17 +264,23 @@ STATE_NAMED_IN_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "state")"
 STATE_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "state")"
 
 # ---------------------------------------------------------------------------
-# 4b. Three cross-field tests project-schema.json's own descriptions promise
+# 4b. Two cross-field tests project-schema.json's own descriptions promise
 #     but a schema cannot express, since a JSON Schema checks one field at a
 #     time, never two fields against each other:
 #       - every playbookSubscriptions key names a framework this project
 #         declared;
 #       - every source's precedence keys are exactly that source's own
-#         provides list, neither more nor fewer;
-#       - every source's answersFor, where its extent is "frameworks", names
-#         only frameworks this project declared.
+#         provides list, neither more nor fewer.
 #     Skipped, and said so, when frameworks itself failed the schema check
-#     above: there is nothing to compare the other three fields against.
+#     above: there is nothing to compare the other two fields against.
+#     A third test read every source's answersFor against frameworks until
+#     6.0.0-beta.24. The field is retired: nothing writes it and nothing reads
+#     it, so a value in an older file decides nothing and checking it would
+#     refuse a project for a field that no longer means anything. A value
+#     written by hand is accepted here in silence, deliberately. The schema
+#     still declares the field's shape, so a reader learns there what the
+#     field means now; a check that refused a project over a value nothing
+#     reads would be a refusal with no consequence behind it.
 # ---------------------------------------------------------------------------
 
 CROSS_FIELD_JQ='
@@ -298,16 +303,6 @@ CROSS_FIELD_JQ='
             reason: ("source \"" + ($s.location // "(no location)") + "\" has precedence keys that do not match its provides list: " + ($diff | join(", "))),
             detail: "precedence must have exactly one key per entry in provides, and no other keys." }
       ]
-      +
-      [ (($p.sources // [])[]) as $s
-        | ($s.answersFor // {}) as $af
-        | select(($af.extent // "") == "frameworks")
-        | (($af.frameworks // [])[]) as $f
-        | select(($fw | index($f)) == null)
-        | { field: "sources",
-            reason: ("source \"" + ($s.location // "(no location)") + "\" answersFor names framework \"" + $f + "\", which this project never declared"),
-            detail: "answersFor frameworks entries must be names this project declared under frameworks." }
-      ]
     )
 '
 
@@ -317,7 +312,7 @@ CROSS_FIELD_TEST_NOTE="skipped: frameworks is missing or not well-formed above, 
 if [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREADABLE" = "false" ]; then
   CROSS_FIELD_ISSUES_JSON="$(jq -n --slurpfile data "$PROJECT_FILE" "$CROSS_FIELD_JQ")" \
     || die3 "the cross-field comparison itself failed to run. Check project.json for a malformed sources or playbookSubscriptions entry"
-  CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, source precedence against each source's own provides, and source answersFor frameworks against frameworks"
+  CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, and source precedence against each source's own provides"
 fi
 
 CROSS_FIELD_COUNT="$(printf '%s' "$CROSS_FIELD_ISSUES_JSON" | jq 'length')"

@@ -18,11 +18,25 @@ does.
 Use the navigator to look a name up. Do not fetch a catalog index yourself and do not construct a
 URL.
 
+**A project's own agentic recipes are named too.** Do this when the message carries no `point:`
+line, which is the message that asks what covers some words. Research names the project folder
+and the project's frameworks on it. Run this once per framework, before you answer:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh agentic-source "<project folder>" <framework>
+```
+
+Each `AGENTIC: <capability> path=<path> source=<folder>` line is one agentic recipe this project
+put in its own folder. Return every one as a match, with its path and the folder it came from,
+beside the navigator's own matches. Do not filter them against the words you were asked about:
+the project placed them there deliberately, the list is short, and design decides which one
+fits. No line means the project declares no folder of agentic recipes. Open none of them.
+
 **Why you hold Bash.** The navigator's process-recipe lookup is a shell sequence. It revalidates
 the index, checks its own cache, and fetches a body with `curl` when the cache misses. The Skill
 tool loads the navigator's instructions into you. It does not run them. Without Bash you can read
-the steps and do none of them. Bash is for the folder-source resolver below, the navigator's lookup,
-and the one check on its answer. Do not create, edit or delete any file with it.
+the steps and do none of them. Bash is for the two folder-source resolvers, the navigator's
+lookup, and the one check on its answer. Do not create, edit or delete any file with it.
 
 Return two lists, kept apart:
 
@@ -56,7 +70,8 @@ this phase; ask the navigator as below. A folder that holds nothing is not an an
 folder miss never ends the lookup. When `searched=` is present, name those folders beside the
 navigator's answer. A reader then tells a folder miss from a project with no folder. No line:
 the project declares no source for process recipes, and the catalog is its default; ask the
-navigator as below.
+navigator as below. Exit 3 means a recipe is on disk and could not be read. Return that message
+and stop; a file nobody could read is not a folder that held nothing, so do not ask the navigator.
 
 The navigator answers with an `available` flag and, when false, sometimes a free-text reason. The
 step file's script needs one of three words, not the flag. Choose the word this way:

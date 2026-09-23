@@ -14,6 +14,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Depends on, both shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh        (sourced, never executed)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -52,6 +53,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set}"
 REGISTRY_LIB="${PLUGIN_ROOT}/scripts/lib/registry.sh"
 CHECK_SCRIPT="${PLUGIN_ROOT}/scripts/check-project.sh"
 COMMIT_LIB="${PLUGIN_ROOT}/scripts/lib/project-commit.sh"
+SOURCES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 REGISTRY_FILE="${AIDA_REGISTRY_PATH:-$HOME/.claude/aida/registry.json}"
 PROJECTS_HOME_DEFAULT="${AIDA_PROJECTS_HOME:-$HOME/.claude/aida/projects}"
 SETTINGS_FILE="${AIDA_SETTINGS_PATH:-$HOME/.claude/aida/settings.json}"
@@ -86,6 +88,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh git-init <name-or-codePath>
        project-actions.sh add-source <name-or-codePath> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
+       project-actions.sh agentic-source <projectFolder> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unregister <name-or-codePath>
@@ -106,6 +109,8 @@ require_jq
 source "$REGISTRY_LIB"
 # shellcheck source=/dev/null
 source "$COMMIT_LIB"
+# shellcheck source=/dev/null
+source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -722,9 +727,13 @@ do_git_init() {
 # Appends one entry to project.json's `sources`, or adds the kind to the entry already naming
 # that folder, so calling it twice writes the same thing once. A folder is the only location type
 # this plugin's own scripts read (tool-actions.sh, "reads folder sources only"), so it is the
-# only one this declares. The entry answers for everything and ranks first for its kind: the
-# project's own source wins, and the hosted catalog is the fallback (project-schema.json,
-# precedence). Nothing here fetches anything; declaring is cheap and fetching stays lazy.
+# only one this declares. The entry ranks first for its kind: the project's own source wins, and
+# the hosted catalog is the fallback (project-schema.json, precedence). No `answersFor` is
+# written. Every entry carried the same value, nothing read it, and `precedence` already answers
+# which source a stage asks first. The schema still declares the field's shape, for the older
+# files that carry it: the field list comparison reads top-level properties only today, so that
+# declaration is not load-bearing yet, and it becomes so the moment the comparison descends.
+# Nothing here fetches anything; declaring is cheap and fetching stays lazy.
 do_add_source() {
   local target="${1:?add-source: a name or a code path is required}"
   local kind="${2:?add-source: a kind is required}"
@@ -762,7 +771,7 @@ do_add_source() {
                    else . end)
         else
           $s + [{location: $loc, locationType: $type, provides: [$kind],
-                 answersFor: {extent: "everything"}, precedence: {($kind): $next}}]
+                 precedence: {($kind): $next}}]
         end)'
 
   commit_project "$project_path" \
@@ -804,31 +813,44 @@ do_recipe_source() {
     *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
   esac
   [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
-  local entry loc_type loc cand searched="" tab catalog=""
+  # The walk itself is scripts/lib/recipes.sh, shared with the tool skill's own lookup. `yes`
+  # says this caller asks the navigator, so a catalog entry ends the walk.
+  if sw_probe "$project_path/project.json" processRecipes process-recipes "$fw" "$phase" yes; then
+    echo "RECIPE: $SW_PATH source=$SW_SOURCE"
+    return 0
+  fi
+  [ -z "$SW_UNREADABLE" ] \
+    || die3 "recipe-source: $SW_UNREADABLE is on disk and could not be read. A source this project ranked first is not a source that held nothing, so the catalog is not asked. Fix the file's permissions, or remove it"
+  [ -n "$SW_SEARCHED$SW_CATALOG" ] || return 0
+  echo "RECIPE: catalog${SW_SEARCHED:+ searched=${SW_SEARCHED% }}"
+  return 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# agentic-source: the agentic recipes a project's own folder sources hold for one framework
+# ------------------------------------------------------------------------------------------------
+
+# An agentic recipe carries one decision already made, and it is named for the capability it
+# covers, never for a point in AIDA's process. So a folder of them is listed, not probed. The
+# layout is `<folder>/agentic-recipes/<framework>/<capability>.md`, and this prints one
+# `AGENTIC: <capability> path=<path> source=<folder>` line per file, the folders in declared
+# order. The first folder holding a capability wins it. A project put these in its own folder
+# deliberately, so every one is named and design decides which fits, the same judgement design
+# already makes when the catalog answers with two. Nothing is fetched and no body is opened. A
+# project declaring no folder of the kind prints nothing, and the caller asks the catalog.
+do_agentic_source() {
+  local project_path="${1:?agentic-source: a project folder is required}"
+  local fw="${2:?agentic-source: a framework is required}"
+  [ -f "$project_path/project.json" ] || die3 "agentic-source: no project.json in $project_path"
+  local line name loc tab
   tab="$(printf '\t')"
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    loc_type="${entry%%"$tab"*}"; loc="${entry#*"$tab"}"
-    if [ "$loc_type" = "catalog" ]; then
-      catalog=yes
-      break
-    fi
-    [ "$loc_type" = "folder" ] || continue
-    cand="$loc/process-recipes/$fw/$phase.md"
-    if [ -f "$cand" ]; then
-      echo "RECIPE: $cand source=$loc"
-      return 0
-    fi
-    searched="$searched$loc "
-  done <<RS_SOURCES
-$(jq -r '
-    (.sources // [])
-    | map(select((.provides // []) | index("processRecipes")))
-    | sort_by(.precedence.processRecipes // 999)
-    | .[] | .locationType + "\t" + .location' "$project_path/project.json")
-RS_SOURCES
-  [ -n "$searched$catalog" ] || return 0
-  echo "RECIPE: catalog${searched:+ searched=${searched% }}"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    name="${line%%"$tab"*}"; loc="${line#*"$tab"}"
+    echo "AGENTIC: $name path=$loc/agentic-recipes/$fw/$name.md source=$loc"
+  done <<AS_NAMES
+$(sw_list "$project_path/project.json" agenticRecipes agentic-recipes "$fw")
+AS_NAMES
   return 0
 }
 
@@ -1304,6 +1326,7 @@ case "$action" in
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   recipe-source) do_recipe_source "$@" ;;
+  agentic-source) do_agentic_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
   unregister) do_unregister "$@" ;;

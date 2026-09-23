@@ -33,7 +33,7 @@ Design reads them. Review checks that a guide research cited was followed.
 
 **A playbook** is the rules a person wants followed: do it this way, not that way, with the
 reason and where it applies. Every role that writes or judges code reads the plays.
-[Playbooks](playbooks.md) covers the three places plays come from and how a play is captured.
+[Playbooks](playbooks.md) covers the four places plays come from and how a play is captured.
 
 | Kind | What it is | Who reads it |
 |---|---|---|
@@ -137,14 +137,16 @@ What happens next depends on the point, because a missing recipe costs different
 - **`design`** goes on. Every work order's reasoning says `written without framework input`.
   Design invents no kind of unit and guesses no convention. With a person present, it offers to
   write the recipe first.
-- **`test-execution`** stops. The catalog answered, but the build's precondition check folds
-  every lookup that returned no path into `unknown`, and a person decides. An autonomous run
-  halts. No order on that framework could pass its checks without a way to run its tests, so
-  this is settled before any order.
+- **`test-execution`** depends on which of the three answers came back. `no-recipe` records the
+  framework `undeclared` and the build goes on: the catalog looked and holds nothing. A listing
+  that could not be reached, or a body that did not arrive, records `unknown` and stops, because
+  nobody looked. A person decides, and an autonomous run halts. This is settled before any order.
 - **`test-authoring`** leaves the test author with no recipe path, and the stage says nothing
   about it. The author has nothing to choose a level or a file name from.
-- **`implement`** means no test patterns, so the freeze refuses every test. No order but a
-  configuration order, proved by a gate, can freeze.
+- **`implement`** means no test patterns, so the freeze refuses every test. A `record` order and
+  an `observe` order still freeze in full, and a `gate` order freezes but its own check reads
+  `unknown`, which is not met. Every order proved by tests is blocked. The build's precondition
+  step resolves this lookup and names each blocked order before any order is built.
 - **`review`** goes on at the build: the tool checks record `undeclared`. At the review stage,
   no recipe reads `undeclared`, which passes and is reported in that word. A listing that could
   not be reached reads `unknown`, which fails the review, because nobody looked.
@@ -181,7 +183,9 @@ where the phase is the point a stage asks for: `research`, `design`, `implement`
 `visual-regression`. When a stage needs a recipe it looks in your folders, in the order you
 declared them, and takes the first file that exists. A phase with no file in any of your folders
 falls through to the catalog. A folder that holds nothing is not an answer. The stage
-takes its no-recipe path only when the catalog holds none either. It records which folders
+takes its no-recipe path only when the catalog holds none either. A file that is there and
+cannot be read is a third case: the lookup names the path and stops, because a source nobody
+could read is not a source that held nothing. It records which folders
 it looked in first. To rank the catalog between two folders, declare it in that place, with the
 word `catalog` in place of a folder. The lookup names the folder it answered from. The simplest way to
 start is to copy the catalog's recipe for that phase into the file and edit it; the headings a
@@ -189,15 +193,24 @@ stage reads stay the same.
 
 A folder of tooling recipes has its own layout, `<folder>/tooling-recipes/<framework>/<tool>.md`,
 and the tool skill reads folders and nothing else, so a project that wants AIDA to install a tool
-declares one. The plugin names no layout yet for a folder of guides or agentic recipes, so those
-two kinds still come from the catalog whatever a source declares.
+declares one.
 
-A folder of playbooks can be declared, and creation offers it, but nothing loads it today. A
-person who declares one gets no plays from it. The load reads two files, your own
-`~/.claude/aida/playbook.md` and the project's `<project folder>/playbook.md`, plus the catalog
-sets the project subscribes to through `subscribe-playbook`. Which sets apply is a standing
-choice recorded per framework. [Playbooks](playbooks.md) covers the load and how the plays reach
-the roles.
+A folder of agentic recipes holds `<folder>/agentic-recipes/<framework>/<capability>.md`. Every
+capability your folders hold for a framework you declare is named to research, whatever words it
+was asked about, because you put it there deliberately and the list is short. Design reads the
+ones that fit and follows one. The catalog's own agentic recipes are searched as before.
+
+The plugin names no layout for a folder of guides. A guide is found by matching words, not by a
+path, so a folder of them needs a lookup nothing has decided yet. Declare one and nothing reads
+it; guides come from the catalog.
+
+A folder of playbooks holds `<folder>/playbook.md`, the same format as your own file and the
+project's. The load reads four sources in order: your own `~/.claude/aida/playbook.md`, the
+project's `<project folder>/playbook.md`, each folder you declared, in the order you declared
+them, and then the catalog sets the project subscribes to through `subscribe-playbook`. Which
+sets apply is a standing choice recorded per framework. A team with one shared set of plays puts
+it in a folder: your file is per machine and the project's file is per project.
+[Playbooks](playbooks.md) covers the load and how the plays reach the roles.
 
 What an open web search finds is different. It was written by nobody you configured, so
 research marks the finding as coming from a source this project never accepted. Design reads

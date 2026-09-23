@@ -229,10 +229,10 @@ stays missing until its producer runs.
 ## Using your own guides, playbooks, and recipes
 
 Guides, playbooks, process recipes, and agentic recipes are one mechanism, not four separate
-ones. A project declares as many sources as it wants, and each source says what it provides,
-what it answers for, and where it ranks against every other source offering the same kind of
-content. Mixing is the point: your playbooks can come from your own folder, your process
-recipes from the hosted catalog, and your guides from a site your team trusts, all at once.
+ones. A project declares as many sources as it wants, and each source says what it provides and
+where it ranks against every other source offering the same kind of content. Mixing is the point:
+your playbooks can come from your own folder, your process recipes from the hosted catalog, and
+your guides from a site your team trusts, all at once.
 
 A new project declares no sources at all: the list starts empty, for every kind of content.
 Declaring is cheap and fetching is lazy. No stage fetches anything from the hosted catalog, or
@@ -242,7 +242,8 @@ places, in order: your declared folders, then the catalog, then research writes 
 A folder that holds nothing is not an answer, so the walk goes on to the catalog.
 You set this per kind: `add-source` takes a kind and a folder, and a team's own recipes for
 one kind can stand alongside the catalog's answer for every other kind. A folder holds process
-recipes or tooling recipes, each in a fixed layout;
+recipes, tooling recipes, agentic recipes or plays, each in a fixed layout. A folder of guides
+is the one kind nothing reads, because a guide is found by matching words and not by a path.
 [Where content comes from](sources.md#using-your-own-folder-before-the-catalog) says what a
 folder can hold.
 

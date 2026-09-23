@@ -28,6 +28,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh preconditions <task_folder> [--recipe <framework>=<path>]...
 #                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
+#                                                    [--implement-lookup <framework>=<path|reason>]...
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -737,6 +738,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
+                            [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -2794,6 +2796,7 @@ bl_tool_result() {
 do_preconditions() {
   local task_folder="" project_folder codepath
   local recipes="" failures="" values="" check_recipes="" fw
+  local implement_lookups="" im_answer im_lookup im_path im_resolved im_blocked im_freeze
   local cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
@@ -2827,6 +2830,14 @@ do_preconditions() {
         [ "$#" -ge 2 ] || die 3 "preconditions: --lookup-failed needs <framework>=<reason>"
         cr_lookup_failure_pair "preconditions" "--lookup-failed" "$2"
         failures="$failures$CR_PAIR
+"
+        shift 2 ;;
+      --implement-lookup)
+        [ "$#" -ge 2 ] || die 3 "preconditions: --implement-lookup needs <framework>=<path|no-recipe|listing-unreachable|fetch-failed>"
+        case "$2" in *=*) ;; *) die 3 "preconditions: --implement-lookup takes <framework>=<path or reason>, got: $2" ;; esac
+        [ -n "${2%%=*}" ] || die 3 "preconditions: --implement-lookup was given no framework name: $2"
+        [ -n "${2#*=}" ] || die 3 "preconditions: --implement-lookup was given neither a path nor a reason: $2"
+        implement_lookups="$implement_lookups$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
       --value)
@@ -2910,6 +2921,21 @@ do_preconditions() {
       lookup="$(cr_lookup "$failures" "$fw")"
       [ -n "$lookup" ] || die 18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
     fi
+
+    # The implement recipe is a second lookup, and this step is the first place a person can be
+    # told about it. Its `## Oracle files` block holds the globs `tests-freeze` needs, so without
+    # it a test-proved order dies at the freeze, after the design closed and the test author ran.
+    # A path is a resolved recipe; the three reason words are the navigator's own answers; nothing
+    # passed is `not-given`, which says the lookup was not run rather than that it found nothing.
+    im_answer="$(cr_lookup "$implement_lookups" "$fw")"
+    im_path=""
+    case "${im_answer:-not-given}" in
+      not-given|no-recipe|listing-unreachable|fetch-failed)
+        im_lookup="${im_answer:-not-given}" ;;
+      *)
+        im_lookup="resolved"; im_path="$im_answer"
+        [ -f "$im_path" ] || die 3 "preconditions: the implement recipe handed over for $fw is not a file: $im_path" ;;
+    esac
 
     : >"$entries_file"
     : >"$tc_rows_file"
@@ -3051,10 +3077,13 @@ EOF
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
           --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
-          --arg reason "$harness_reason" '
+          --arg reason "$harness_reason" \
+          --arg imLookup "$im_lookup" --arg imPath "$im_path" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
-       testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke}
+       testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke,
+       implementLookup: $imLookup}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
+      + (if $imPath == "" then {} else {implementRecipePath: $imPath} end)
       + (if $verdict == "not-needed" then {reason: $reason} else {} end)
     ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
@@ -3079,6 +3108,23 @@ EOF
 
   record_file="$task_folder/implementation/preconditions.json"
   write_atomic "$record_file" "$record_json"
+
+  # The freeze wall, announced here rather than at the first order's freeze. `tests-freeze` takes
+  # its test globs from the implement recipe's `## Oracle files` block, so with no such recipe a
+  # test-proved order dies at exit 27, after the design closed, the build started and the test
+  # author already ran. This step is the first place a person can be told, and telling them is
+  # what this line is for. A lookup nobody ran is a third answer, never folded into the other two.
+  im_resolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.implementLookup == "resolved") | .framework ] | join(", ")')"
+  im_blocked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r '[ (.workOrders // [])[] | select((.proof // "tests") == "tests") | .id ] | join(", ")')"
+  if [ -n "$im_resolved" ]; then
+    im_freeze="an implement recipe resolved for $im_resolved, so every order in this snapshot can be built"
+  elif ! printf '%s' "$record_json" | jq -e '[ .frameworks[] | select(.implementLookup != "not-given") ] | length > 0' >/dev/null; then
+    im_freeze="the implement recipe lookup was not run. Ask the navigator for point: implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
+  elif [ -z "$im_blocked" ]; then
+    im_freeze="no implement recipe for any framework. No order in this snapshot is proved by tests, so none of them needs one"
+  else
+    im_freeze="no implement recipe for any framework, so these orders cannot be built and each freeze exits 27: $im_blocked. Without that recipe a project builds its record and observe orders in full, and a gate order freezes but its own check reads unknown, which is not met. Write the implement recipe for a framework this project declares, or change each blocked order's proof"
+  fi
 
   # ---- the baseline: only when this run's own verdict permits the build to continue -------------
   # A baseline taken after a condition answered no would measure a broken environment, so
@@ -3177,7 +3223,7 @@ EOF
     *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
-        --argjson report "$record_json" \
+        --argjson report "$record_json" --arg freeze "$im_freeze" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" '
@@ -3194,7 +3240,10 @@ EOF
         testCommands: ("testCommands=" + .testCommands.state
                        + (([ .testCommands.rows[] | select((.unreadable // []) | length > 0) | .id ]) as $u
                           | if ($u | length) == 0 then "" else " unreadable=" + ($u | join(",")) end)),
+        implement: ("implement=" + .implementLookup
+                    + (if (.implementRecipePath // "") == "" then "" else " " + .implementRecipePath end)),
         smoke: ("smoke=" + .smoke.verdict + (if (.smoke.reason // "") == "" then "" else " (" + .smoke.reason + ")" end)) } ],
+     freeze: $freeze,
      baseline: ($baselineStatus + " | " + $baselineNote),
      baselineFile: (if $baselineStatus == "not-attempted" then "none" else $baselineFile end),
      baselineCommit: (if $baselineCommit == "" then "none" else $baselineCommit end),

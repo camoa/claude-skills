@@ -99,9 +99,11 @@ every review, which is how version 5 trained the habit of skipping a check.
 **Check 16 has a floor the `findings` step applies before its lens.** The `practices` lens reads
 the plays research loaded into `records/playbooks.json`. The check reads unknown, with the detail
 "playbooks not loaded", when that record is absent. It also reads unknown when no source in the
-record is `loaded` while `project.json` carries a playbook subscription or the project folder
-holds `playbook.md`. Otherwise the lens verdict stands. A missing load means the lens did not run,
-never that there was nothing to follow. The repair is running `playbooks load` on the task.
+record is `loaded` while `project.json` carries a playbook subscription, declares a folder as a
+source of playbooks, or the project folder holds `playbook.md`. Otherwise the lens verdict
+stands. A missing load means the lens did not run, never that there was nothing to follow. The
+repair is running `/aida:research <task-id>` again, which loads the plays at its start. Nobody
+runs the load by hand.
 
 ## Report what the range itself said
 

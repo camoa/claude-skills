@@ -1545,18 +1545,23 @@ do_findings() {
   # Check 16's floor, before its lens verdict. The practices lens reads the plays research loaded
   # into records/playbooks.json, so a missing load is a lens that did not run, never a lens that
   # found nothing to follow. Unknown when the record is absent; unknown when no source in it is
-  # loaded while the project subscribes to a set or holds a playbook.md, since then something was
-  # there to load. A record whose sources are all absent with nothing to load is the ordinary case
-  # for a project with no plays, and the lens verdict stands.
+  # loaded while the project subscribes to a set, holds a playbook.md, or declares a folder as a
+  # source of playbooks, since then something was there to load. A folder and nothing else: the
+  # loader reads folder sources only, and `add-source <project> playbooks catalog` writes a
+  # catalog entry the loader skips, so counting that entry would hold the check at unknown for
+  # ever with a repair that cannot clear it. A record whose sources are all absent with nothing
+  # to load is the ordinary case for a project with no plays, and the lens verdict stands.
+  # A person never runs the load, so the repair names the stage that does.
   local playbooks_record playbooks_floor
   playbooks_record="$(playbooks_record_path "$TASK_PATH")"
   playbooks_floor=""
   if [ ! -f "$playbooks_record" ]; then
-    playbooks_floor="playbooks not loaded: $playbooks_record is absent, so the practices lens read no play. Run playbooks load on this task."
+    playbooks_floor="playbooks not loaded: $playbooks_record is absent, so the practices lens read no play. Run /aida:research on this task again; it loads the plays at its start."
   elif [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ]; then
     if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.playbookSubscriptions // {})[] | .[] ] | length')" != "0" ] \
+      || [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.sources // [])[] | select(.locationType == "folder") | select((.provides // []) | index("playbooks")) ] | length')" != "0" ] \
       || [ -f "$RV_PROJECT_FOLDER/playbook.md" ]; then
-      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set or holds playbook.md. Run playbooks load on this task."
+      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set, declares a folder of plays, or holds playbook.md. Run /aida:research on this task again; it loads the plays at its start."
     fi
   fi
 
