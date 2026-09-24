@@ -46,7 +46,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exists; codePath is not a refused location; the registry holds a row for this project
 #      that agrees with it, and no two registry rows share a name or a code path; the folder is a
 #      git repository with no uncommitted work. Nothing more is said.
-#   1  One or more fields are missing from project.json, present with the wrong shape, or
+#   1  One or more fields are missing from project.json, present with the wrong shape, retired
+#      from the schema (its `retired` list; `drop-retired` is the repair), or
 #      fail one of the two cross-field checks project-schema.json's own descriptions
 #      promise (a schema checks one field at a time, never two fields against each other):
 #      a playbookSubscriptions key naming a framework this project never declared, or a
@@ -246,9 +247,19 @@ COMPARE_JSON="$(schema_check_compare "$PROJECT_SCHEMA_FILE" "$PROJECT_FILE")" \
   || die3 "the project field-list comparison itself failed to run. Check $PROJECT_SCHEMA_FILE for a malformed entry"
 
 MISSING_JSON="$(echo "$COMPARE_JSON" | jq -c '.missing')"
-UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c '.unreadable')"
 MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
-UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
+# A field the schema retired is still refused, and reported apart from a shape fault. It has no
+# producer to run again, so its repair is the one action that drops it (project-schema.json,
+# `retired`). The comparison stays generic; the split happens here, by name.
+SPLIT_JSON="$(echo "$COMPARE_JSON" | jq -c --slurpfile s "$PROJECT_SCHEMA_FILE" '
+  ($s[0].retired // {}) as $r
+  | { retired: [ .unreadable[] | .field as $f | select($r | has($f)) | {field: $f, detail: $r[$f]} ],
+      unreadable: [ .unreadable[] | .field as $f | select(($r | has($f)) | not) ] }')" \
+  || die3 "the retired-field split itself failed to run. Check $PROJECT_SCHEMA_FILE for a malformed retired entry"
+RETIRED_JSON="$(echo "$SPLIT_JSON" | jq -c '.retired')"
+RETIRED_COUNT="$(echo "$SPLIT_JSON" | jq '.retired | length')"
+UNREADABLE_JSON="$(echo "$SPLIT_JSON" | jq -c '.unreadable')"
+UNREADABLE_COUNT="$(echo "$SPLIT_JSON" | jq '.unreadable | length')"
 FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
 # Fields, never faults: the comparison reads every level, so twenty refused elements in one list
 # would subtract twenty from a count of top-level fields and print a number below zero.
@@ -647,7 +658,8 @@ if [ "$CODEPATH_EXISTS_JSON" = "true" ] \
    && [ "$SAFETY_VERDICT" != "refused-system-root" ] && [ "$SAFETY_VERDICT" != "refused-home" ] \
    && [ "$SAFETY_VERDICT" != "refused-above-home" ] \
    && [ "${REGISTRY_MISMATCH_COUNT:-0}" -eq 0 ] \
-   && [ "${MISSING_COUNT:-0}" -eq 0 ] && [ "${UNREADABLE_COUNT:-0}" -eq 0 ]; then
+   && [ "${MISSING_COUNT:-0}" -eq 0 ] && [ "${UNREADABLE_COUNT:-0}" -eq 0 ] \
+   && [ "${RETIRED_COUNT:-0}" -eq 0 ]; then
   READY_JSON="true"
   READY_REASON="codePath exists, is not a refused location, frameworks is set, and the registry row agrees with the project file"
 else
@@ -665,6 +677,7 @@ else
   # otherwise. Two answers to one question, and a person acts on the readable one.
   [ "${MISSING_COUNT:-0}" -gt 0 ] && reasons+=("$MISSING_COUNT required field(s) missing")
   [ "${UNREADABLE_COUNT:-0}" -gt 0 ] && reasons+=("$UNREADABLE_COUNT field(s) not well-formed")
+  [ "${RETIRED_COUNT:-0}" -gt 0 ] && reasons+=("$RETIRED_COUNT retired field(s) present")
   READY_REASON="$(IFS='; '; echo "${reasons[*]}")"
 fi
 
@@ -678,7 +691,8 @@ case "$SAFETY_VERDICT" in
   *)
     if [ "$CODEPATH_EXISTS_JSON" = "false" ]; then
       EXIT_CODE=2
-    elif [ "$MISSING_COUNT" -gt 0 ] || [ "$UNREADABLE_COUNT" -gt 0 ] || [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
+    elif [ "$MISSING_COUNT" -gt 0 ] || [ "$UNREADABLE_COUNT" -gt 0 ] || [ "$RETIRED_COUNT" -gt 0 ] \
+         || [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
       EXIT_CODE=1
     elif [ "$REG_MISSING_COUNT" -gt 0 ] || [ "$REG_UNREADABLE_COUNT" -gt 0 ] \
          || [ "$REGISTRY_ROW_FOUND" = "false" ] || [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ] \
@@ -703,6 +717,8 @@ fi
 # ---------------------------------------------------------------------------
 
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+# The name a repair line gives an action, which takes a project's name.
+REPAIR_NAME="$(echo "$NAME_VALUE_JSON" | jq -r 'if type == "string" then . else "<name>" end')"
 
 echo "Project: $PROJECT_PATH"
 echo "Checked: $TIMESTAMP"
@@ -744,6 +760,12 @@ else
   echo "No unreadable fields."
 fi
 echo
+
+if [ "$RETIRED_COUNT" -gt 0 ]; then
+  echo "Retired fields (the schema no longer declares them, and nothing reads them):"
+  echo "$RETIRED_JSON" | jq -r --arg n "$REPAIR_NAME" '.[] | "  - " + .field + ": " + .detail + "\n      Repair: drop-retired " + $n + " removes it."'
+  echo
+fi
 
 echo "Cross-field checks: $CROSS_FIELD_TEST_NOTE"
 if [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
@@ -808,6 +830,23 @@ if [ "$GIT_IS_REPO" = "true" ]; then
 fi
 echo
 
+# Version 5 wrote a task rule into the code path's CLAUDE.md that names commands which no longer
+# exist. It is named on every run, so the rewrite stays offered until a person answers it. A
+# recorded decline stops the offer and keeps the fact. No exit code moves: the project file is not
+# at fault. project-actions.sh task-rule replaces the block this marker opens.
+TASK_RULE_V5_BEGIN="<!-- ai-dev-assistant:task-rule:begin -->"
+if [ "$CODEPATH_EXISTS_JSON" = "true" ] \
+   && grep -qF "$TASK_RULE_V5_BEGIN" "${CODEPATH_VALUE%/}/CLAUDE.md" 2>/dev/null; then
+  echo "Task rule: version 5, in ${CODEPATH_VALUE%/}/CLAUDE.md. It names /ai-dev-assistant: commands that no longer exist."
+  if jq -e '(.taskRule | type) == "object" and .taskRule.offered == true and .taskRule.accepted == false' \
+       "$PROJECT_FILE" >/dev/null 2>&1; then
+    echo "  A decline is recorded, so this is not offered again. task-rule $REPAIR_NAME still rewrites it."
+  else
+    echo "  Repair: task-rule $REPAIR_NAME rewrites it in place. task-rule $REPAIR_NAME --decline keeps it and records the answer."
+  fi
+  echo
+fi
+
 echo "Ready for work: $READY_JSON"
 [ "$READY_JSON" = "false" ] && echo "  $READY_REASON"
 
@@ -830,6 +869,7 @@ jq -n \
   --argjson codePath "$CODEPATH_VALUE_JSON" \
   --argjson missingFields "$MISSING_JSON" \
   --argjson unreadableFields "$UNREADABLE_JSON" \
+  --argjson retiredFields "$RETIRED_JSON" \
   --argjson crossFieldIssues "$CROSS_FIELD_ISSUES_JSON" \
   --argjson codePathExists "$CODEPATH_EXISTS_JSON" \
   --arg codePathSafety "$SAFETY_VERDICT" \
@@ -858,6 +898,7 @@ jq -n \
     codePathSafety: {verdict: $codePathSafety, detail: $codePathSafetyDetail},
     missingFields: $missingFields,
     unreadableFields: $unreadableFields,
+    retiredFields: $retiredFields,
     crossFieldIssues: $crossFieldIssues,
     ignoredFiles: $ignoredFiles,
     registry: {

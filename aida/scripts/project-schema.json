@@ -1,9 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA project file",
-  "description": "The structured file at <path>/project.json. Every field a script reads lives here, in one place, so the check is a schema comparison rather than a parser. project_state.md sits beside this file and holds what a person writes; nothing here is derived from it, and no script parses it. A field present in a real project.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "The structured file at <path>/project.json. Every field a script reads lives here, in one place, so the check is a schema comparison rather than a parser. project_state.md sits beside this file and holds what a person writes; nothing here is derived from it, and no script parses it. A field present in a real project.json but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. The one exception is a field this schema once declared and retired: `retired` names each one and why. The check still refuses it, reports it as retired, and names `drop-retired`, the one action that removes exactly those names. No migration runs; an older file is repaired when a person runs that action.",
   "type": "object",
   "additionalProperties": false,
+  "retired": {
+    "processRecipes": "retired in 6.0.0-beta.7. create and the version 5 pickup wrote it empty until then, and nothing ever read it."
+  },
   "required": [
     "schemaVersion",
     "codePath",

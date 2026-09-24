@@ -108,6 +108,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh agentic-source <projectFolder> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
+       project-actions.sh drop-retired <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule-remove <name-or-codePath>
@@ -529,10 +530,6 @@ register_v5_folder() {
   write_project_file "$folder" "$code_path" "$name" "$fw_json" \
     || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
   echo "PICKED UP: ${folder}"
-  # Version 5 wrote a task rule naming its own commands. Printed so the skill offers the rewrite
-  # once; task-rule replaces a block between the version 5 markers.
-  [ -f "$code_path/CLAUDE.md" ] && grep -qF "$TASK_RULE_V5_BEGIN" "$code_path/CLAUDE.md" 2>/dev/null \
-    && echo "TASK_RULE: version 5"
   # The tasks the folder already holds, in version 5's own place, one line each, so the skill
   # can name them and the step that moves one. Folder names only; nothing inside them is read.
   local legacy
@@ -1045,6 +1042,38 @@ do_subscription() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# drop-retired: the repair the check names for a field the schema retired
+# ------------------------------------------------------------------------------------------------
+
+# A retired field has no producer to run again, so dropping it is its one repair. This drops
+# exactly the names project-schema.json lists under `retired`. A field that is undeclared and not
+# retired may be a person's own, so it stays and the check keeps naming it. Only AIDA's own
+# project file changes, so this runs in both modes.
+do_drop_retired() {
+  local target="${1:?drop-retired: a name or a code path is required}" match project_path present subject
+  local schema="${PLUGIN_ROOT}/scripts/project-schema.json"
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  present="$(jq -r --slurpfile s "$schema" \
+    '[keys_unsorted[] as $k | select(($s[0].retired // {}) | has($k)) | $k] | join(" ")' \
+    "$project_path/project.json")" || die3 "drop-retired: $project_path/project.json could not be read"
+  if [ -z "$present" ]; then
+    echo "UNCHANGED: $project_path/project.json holds no retired field."
+  else
+    write_project_field "$project_path" "could not drop the retired fields from $project_path/project.json" \
+      --slurpfile s "$schema" 'with_entries(.key as $k | select(($s[0].retired // {}) | has($k) | not))'
+    subject="Drop the retired field $present"
+    case "$present" in *" "*) subject="Drop the retired fields $present" ;; esac
+    commit_project "$project_path" "$subject" "the project schema retired it, and nothing reads it" \
+      "" "" "project" "retired" project.json \
+      || printf 'project-actions: the retired fields were dropped but not committed.\n' >&2
+    echo "DROPPED: $present"
+  fi
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
 # unregister: drops the row, leaves both folders untouched
 # ------------------------------------------------------------------------------------------------
 
@@ -1089,6 +1118,7 @@ TASK_RULE_BEGIN="<!-- task-rule:begin -->"
 TASK_RULE_END="<!-- task-rule:end -->"
 # Version 5's own markers. The write path replaces a block between them and the remove path takes
 # one out, so a picked-up repository never holds two blocks. --decline looks only for this version's.
+# check-project.sh holds the begin marker too, and names the block on every run.
 TASK_RULE_V5_BEGIN="<!-- ai-dev-assistant:task-rule:begin -->"
 TASK_RULE_V5_END="<!-- ai-dev-assistant:task-rule:end -->"
 
@@ -1288,9 +1318,13 @@ do_uninstall() {
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
-  local task_rule_state
+  local task_rule_state code_path
   task_rule_state="$(jq -r '.taskRule' "$project_path/project.json" 2>/dev/null)"
-  if [ "$task_rule_state" != "null" ] && [ -n "$task_rule_state" ]; then
+  code_path="$(printf '%s' "$match" | jq -r '.codePath')"
+  # A version 5 block is AIDA's own instruction too. A project picked up before the offer existed
+  # holds one with taskRule still null, and the remove path takes that block out as well.
+  if { [ "$task_rule_state" != "null" ] && [ -n "$task_rule_state" ]; } \
+     || grep -qF "$TASK_RULE_V5_BEGIN" "${code_path%/}/CLAUDE.md" 2>/dev/null; then
     do_task_rule_remove "$target"
   else
     echo "TASK RULE: not offered for this project; nothing to remove."
@@ -1516,6 +1550,7 @@ case "$action" in
   agentic-source) do_agentic_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
+  drop-retired) do_drop_retired "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
   task-rule-remove) do_task_rule_remove "$@" ;;

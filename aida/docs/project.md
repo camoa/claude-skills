@@ -202,6 +202,16 @@ whole creation interview, and never a guess, and it never overwrites a value alr
 present, so running the check twice in a row changes nothing. Checking is cheap, so it
 always runs; repairing is not, so it is only ever offered.
 
+A field the shape once declared and then retired has no step that produces it. The report lists
+it apart, under "Retired fields", and names `/aida:project drop-retired <name>` as the repair.
+That action removes exactly the retired fields and nothing else. Nothing is migrated for you: the
+check keeps failing until you run it.
+
+The check also reads your code repository's `CLAUDE.md`. When it still holds the task rule
+version 5 wrote, which names commands that no longer exist, every report says so and offers the
+rewrite. The offer stays open until you accept or decline it. After a decline, the report still
+states the fact and offers nothing.
+
 A second check answers a different question. `/aida:project check-machine` reports whether this
 machine can reach a task's worktree at all. It reads the Claude Code version, the plugin version,
 where the check ran, and the trees git holds against the task records. It names each repair and
@@ -248,9 +258,9 @@ Deleting a project's entry never touches your code, and unregistering never touc
 project folder either.
 
 Uninstalling removes only AIDA's own instructions: the marker-delimited task-rule block, when
-one was installed. It never touches tests, test configuration, or any tooling. A harness AIDA
-scaffolded, once it lands, belongs to the code the same way a linter does, and removing it
-would be deleting your tests rather than tidying up after AIDA.
+one was installed or version 5 left one. It never touches tests, test configuration, or any
+tooling. A harness AIDA scaffolded, once it lands, belongs to the code the same way a linter
+does, and removing it would be deleting your tests rather than tidying up after AIDA.
 
 The session-start hook ships with the plugin, so nothing installs it into your repository and
 uninstalling leaves it alone. What it prints is on
