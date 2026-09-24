@@ -102,7 +102,10 @@ do_load() {
   project_src="$(pb_read_source project "$project/playbook.md")"
   # pb_read_source prints a source object then its play array, so the folders arrive as a stream
   # of alternating values: the even ones are the sources, the odd ones their plays.
-  folders="$(pb_folder_sources "$project/project.json")"
+  # A refusal inside pb_folder_sources ends its subshell alone, and the jq below reads no folders
+  # from an empty stream without failing, so every declared folder's plays would leave the record
+  # in silence. The code is re-raised here instead.
+  folders="$(pb_folder_sources "$project/project.json")" || exit $?
   folder_json="$(printf '%s' "$folders" | jq -s -c '
     {sources: [ .[range(0; length; 2)] ], plays: [ .[range(1; length; 2)][] ]}')" \
     || die 3 "load: could not read the playbooks folders this project declares"

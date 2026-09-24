@@ -65,7 +65,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      finding about the project.
 #   4  The registry disagrees with this project, has no row for it, or holds two rows sharing
 #      one name or one code path. The project file is authoritative in every case; this script
-#      reports the disagreement and picks no winner.
+#      reports the disagreement and picks no winner. The code-path test compares the spellings
+#      the registry holds, so two spellings of one directory are not seen as one. Resolving them
+#      would mean reading every row's directory off disk, in a script whose job is to read
+#      records. The rebuild canonicalises both sides instead, so no route writes a second
+#      spelling. A registry written before that, or edited by hand, can still hold one.
 #   5  codePath names a refused location: a system root, the home directory itself, or a path
 #      above the home directory. Ported from version 5's set-code-path safety filter.
 #   6  The project folder is not yet a git repository, or it is one with uncommitted work in
@@ -488,8 +492,10 @@ DUPLICATE_NAME_COUNT="$(printf '%s' "$DUPLICATE_NAMES_JSON" | jq 'length')"
 # 8b. The same test one field over: no two rows share a code path. A directory
 #     resolves to one project, so two rows on one code path make that lookup
 #     answer with whichever row was written first, and nothing else reports it.
-#     A trailing slash is stripped, so one directory written two ways counts
-#     once. A row with no code path, or a non-string one, is left out of this
+#     A trailing slash is stripped, and nothing else. The comparison is between
+#     the spellings the registry holds. So a symbolic link, a relative path or a
+#     second name for one directory reads as two projects, and the report says
+#     so. A row with no code path, or a non-string one, is left out of this
 #     test, and the note says how many.
 # ---------------------------------------------------------------------------
 
@@ -764,6 +770,7 @@ else
     echo "$DUPLICATE_NAMES_JSON" | jq -r '.[] | "      - \"" + .name + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
   fi
   echo "  No two registry rows share a code path. $DUPLICATE_CODEPATH_TEST_NOTE"
+  echo "    The test compares the spellings the registry holds, so two spellings of one directory are not seen as one."
   if [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ]; then
     echo "    Duplicate code paths found. The directory resolves to one of these rows and nothing says which:"
     echo "$DUPLICATE_CODEPATHS_JSON" | jq -r '.[] | "      - \"" + .codePath + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'

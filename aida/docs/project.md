@@ -193,6 +193,10 @@ express, and says which it did: whether the project folder is a git repository a
 whether it holds work that was never committed. Either finding is a fact worth seeing before
 you start a new stage on top of it; neither is repaired automatically.
 
+The tests for a repeated name and a repeated code path read the spellings AIDA's own list holds.
+A trailing slash is ignored and nothing else, so two spellings of one directory read as two
+projects. The report says so on every run, whether or not it found a repeat.
+
 Repair means running the one step that produces a flagged field again. It is never the
 whole creation interview, and never a guess, and it never overwrites a value already
 present, so running the check twice in a row changes nothing. Checking is cheap, so it

@@ -8,34 +8,22 @@
 # scripts/lib/task-helpers.sh sources three more libraries, so the set a script really gets is
 # transitive and no text search can tell which library a variable or a loop word stands for.
 #
-# Four shapes count as a definition, all four of which both shells accept:
-#   name() {        name () {        function name {        function name() {
-# The first two count at any indent, because a function defined inside another function is global
-# all the same. The two with the keyword count at the start of a line only. An awk program writes
-# its helpers as `function name(args) {`, indented inside the quoted program, and reading those as
-# shell functions would put a name no script can call into the reserved set. A shell definition
-# written with the keyword and indented is the one shape this misses; nothing in the tree writes
-# one. A name built by expansion is invisible to any text search.
+# What counts as a definition, and what that misses, is tests/defname.awk, which this reads below.
 #
 # Prints one line per fault and exits 1; prints nothing and exits 0 on a clean tree.
-# Usage: shadowed-functions-spec.sh. Run by scripts/run-tests.sh. bash 3.2+ and zsh.
+# Usage: shadowed-functions-spec.sh. bash 3.2+ and zsh.
+# The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
+# from the plugin's own scripts/. It finds a spec through git ls-files, so an untracked spec
+# never runs.
 set -uo pipefail
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 HERE="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"
 PLUGIN="$(dirname "$HERE")"
 LIBFNS="$(mktemp)"; HITS="$(mktemp)"; trap 'rm -f "$LIBFNS" "$HITS"' EXIT
 
-# The one reader of a definition line, shared by both passes below so they cannot disagree.
-# Returns the name a line defines, or an empty string.
-DEFN='
-function defname(line,   n) {
-  if (line ~ /^function[ \t]+[A-Za-z_][A-Za-z0-9_]*/) {
-    n = line; sub(/^function[ \t]+/, "", n); sub(/[^A-Za-z0-9_].*$/, "", n); return n
-  }
-  sub(/^[ \t]*/, "", line)
-  if (line !~ /^[A-Za-z_][A-Za-z0-9_]*[ \t]*\(\)/) return ""
-  n = line; sub(/[ \t]*\(\).*$/, "", n); return n
-}'
+# The one reader of a definition line, shared by both passes below and by
+# tests/swallowed-refusals-spec.sh, so the three cannot disagree about what a definition is.
+DEFN="$(cat "$HERE/defname.awk")" || { printf 'no reader at %s/defname.awk\n' "$HERE"; exit 1; }
 
 # `<name> <library>` per function every library defines.
 (cd "$PLUGIN" && find scripts/lib -name '*.sh' | sort) \

@@ -1336,7 +1336,7 @@ do_environment() {
   # shellcheck disable=SC2034
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
-  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list before
+  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list before up_lines
   preconditions="$(sh_blocks_under "$RECIPE" Preconditions)"
   bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
   address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
@@ -1412,7 +1412,11 @@ TA_TOKEN_LIST
 $token_list
 TA_TOKEN_LIST
   rm -rf "$tokens_dir"
-  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" before)" "$outfile" "environment: up" fill_line_or_refuse
+  # bring_up_half refuses when it cannot make its temporary file, and inside a command
+  # substitution that refusal ends the subshell alone. An empty half runs no bring-up line, so it
+  # is read into a variable first and the code re-raised.
+  up_lines="$(bring_up_half "$RECIPE" before)" || exit $?
+  run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
   before="$(wc -l <"$outfile" | tr -d '[:space:]')"
   run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
   value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
@@ -1423,7 +1427,8 @@ TA_TOKEN_LIST
   root="$(cr_lookup "$keys" root)"
   [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
     || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
-  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" after)" "$outfile" "environment: up" fill_line_or_refuse
+  up_lines="$(bring_up_half "$RECIPE" after)" || exit $?
+  run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
   # The harness in the worktree: a setup recipe's `## Install` is declared safe to run twice, and
   # it is where npm lives. Without its path the site is still up, and the install is the person's
   # next step.

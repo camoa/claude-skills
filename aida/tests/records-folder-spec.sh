@@ -15,7 +15,10 @@
 # counts. It refuses a file name built at run time, because it cannot know that name. It refuses
 # a script that changes directory into a records folder, for the same reason.
 # What it still cannot see is named in tests/records-folder.txt's header.
-# Usage: records-folder-spec.sh [<list file>]. Run by scripts/run-tests.sh. bash 3.2+ and zsh.
+# Usage: records-folder-spec.sh [<list file>]. bash 3.2+ and zsh.
+# The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
+# from the plugin's own scripts/. It finds a spec through git ls-files, so an untracked spec
+# never runs.
 set -uo pipefail
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 HERE="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"

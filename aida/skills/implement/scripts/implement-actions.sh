@@ -2963,7 +2963,11 @@ do_preconditions() {
         section_state="not-needed"
         fw_verdict="not-needed"
       else
-        section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
+        # pc_parse_recipe refuses through pc_flush_entry when an entry cannot be recorded, and that
+        # die ends the substitution's subshell alone. An empty section_state falls to the `*` arm
+        # below and reads as met, so the code is re-raised here. This loop's own `done || exit $?`
+        # carries it out of the pipeline.
+        section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")" || exit $?
         case "$section_state" in
           undeclared)     fw_verdict="undeclared" ;;
           declared-empty) fw_verdict="undeclared" ;;

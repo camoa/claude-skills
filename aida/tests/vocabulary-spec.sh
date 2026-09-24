@@ -6,7 +6,10 @@
 # prints as `<path>:<line>: <word>`. The last line is `hits: <n>`; the exit is 1 on any hit.
 # A code span is stripped per line, so a span that wraps across lines is only half skipped.
 # Frontmatter is skipped: a description quotes what a person says, and a person may say "epic".
-# Usage: vocabulary-spec.sh [<list file>]. Run by scripts/run-tests.sh. bash 3.2+ and zsh.
+# Usage: vocabulary-spec.sh [<list file>]. bash 3.2+ and zsh.
+# The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
+# from the plugin's own scripts/. It finds a spec through git ls-files, so an untracked spec
+# never runs.
 set -uo pipefail
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 HERE="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"

@@ -1,0 +1,31 @@
+# A command substitution that calls a function which can refuse, and tests neither the exit code
+# nor the value: <file> | <callee> | <variable> | <the later test> | <why that makes this safe>.
+# tests/swallowed-refusals-spec.sh reads this list. Every other site in the tree tests one or the
+# other, and a new one fails until it does or a line here says why it need not.
+#
+# A line belongs here only when a later test in the same file refuses before any write and before
+# the empty value reaches a path. That test is column four, read from that file word for word, so
+# removing it fails this spec rather than passing on the line alone. A site whose later test is in
+# another file cannot be written here, because this spec reads one file per line; fix that site.
+#
+# A line is not a permission. It records that the rule is met elsewhere, and the elsewhere is
+# named. Nothing keeps it met but this list.
+#
+# What the spec cannot see, and what it reports when it should not, is in its own header. One of
+# those blind shapes belongs here as well, because it decides what may be listed. A function that
+# signals a refusal by returning non-zero, as refuse_if_unsafe does, is the same hazard in another
+# shape, and this check reads die and exit alone. No such site is on this list, and none is seen,
+# so a caller that assigns from one is tested by a person or not at all.
+#
+# Beta.25 left eight sites with a reason each, and four of those eight are gone. One reason did
+# not hold when it was read again: the jq it named reads an empty stream without failing. One
+# named a test that a second caller of the same loader never reaches. The other two stood in an
+# argument, where a caller can test nothing. Reading each line is what found them, and a fifth
+# site nobody had listed.
+#
+# A reason has to hold on every path into the site, not on the path that found it. Column five
+# says which reader the value reaches, so a later author can grep for a second one.
+skills/completion/scripts/completion-actions.sh | cp_record_doc | CP_ALIGNMENT_DOC | [ -n "$body" ] | cp_render_body is its one reader, the empty value goes there as a jq --argjson argument, that jq fails, and the body test refuses at 3 before the pull request body and the record are written
+skills/completion/scripts/completion-actions.sh | cp_record_doc | CP_FINISHED_DOC | [ -n "$body" ] | cp_render_body is its one reader too, so the same jq, the same test, and the same refusal before either write
+skills/playbooks/scripts/playbook-actions.sh | pb_read_source | person | schema_check_compare "$SCHEMA" | the empty value makes the record's own jq fail, and the comparison of an empty record returns 1 and refuses at 3 before write_atomic
+skills/playbooks/scripts/playbook-actions.sh | pb_read_source | project_src | schema_check_compare "$SCHEMA" | the same jq, the same comparison, the same refusal before the write

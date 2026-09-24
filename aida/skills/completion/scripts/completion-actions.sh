@@ -273,7 +273,10 @@ cp_load() {
   CP_RECORD_STATE="$(json_file_state "$RECORD_FILE")"
   CP_ALIGNMENT_DOC="$(cp_record_doc "$who" "$ALIGNMENT_FILE" "contract")"
   CP_FINISHED_DOC="$(cp_record_doc "$who" "$FINISHED_FILE" "build record")"
-  CP_REVIEW_DOC="$(cp_record_doc "$who" "$REVIEW_FILE" "review record")"
+  # The other two reach cp_render_body alone, which tests the body it built. This one also reaches
+  # cp_load_follow_ups, where an empty value is a follow-up list with nothing in it. A caller that
+  # asked for the follow-ups would be told there are none. So the code is re-raised here.
+  CP_REVIEW_DOC="$(cp_record_doc "$who" "$REVIEW_FILE" "review record")" || exit $?
   # Four words, because a review that never ran, one that did not close, and one that failed are
   # three different facts. Only `passed` closes the task with nothing asked.
   case "$CP_REVIEW_STATE" in
