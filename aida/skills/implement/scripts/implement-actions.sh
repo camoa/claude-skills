@@ -628,8 +628,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 101  `tests-freeze` was given a `--locks-in` reason written `commit:<id>` whose id is not
 #      hexadecimal, is shorter than seven characters, or is not one of this order's own build or
 #      fix commits on the branch. The message names the id and lists the commits that are this
-#      order's own, which `tests-brief` already put in the brief under `treeHolds`. A reason with
-#      no `commit:` prefix is prose, names the existing code, and never reaches this check.
+#      order's own, which `tests-brief` already put in the brief under `treeHolds`. After a rebase
+#      it also names each recorded commit with no copy here that can be cited, and why. A reason
+#      with no `commit:` prefix is prose, names the existing code, and never reaches this check.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -2165,7 +2166,8 @@ do_start() {
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
     st_partial_json="$(rs_carried_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
-      group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind))})')"
+      group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind
+        + (if has("missing") then " not found on this branch: " + .missing else "" end)))})')"
   fi
   im_print_summary "start" "$(jq -n \
     --arg task "$TASK_PATH" --arg codePath "$code_path" \
@@ -3629,9 +3631,13 @@ do_tests_brief() {
   rv_load_codepath "tests-brief"
   tree_holds_json="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$ledger_doc" | jq -c '
     if length == 0 then null
-    else {commits: map({kind, commit}),
+    else {commits: [ .[] | select(has("missing") | not) | {kind, commit} ],
           note: "the tree holds these build and fix commits of this unit from an earlier attempt, which a restart or a retake sent back to the tests step, so a test that passes on arrival is suspect",
-          greenOnArrival: "A test of this unit that arrives green may pass because of one of the build or fix commits above. Give that commit as the --locks-in reason, written commit:<id>. Read no source to decide it."} end')"
+          greenOnArrival: "A test of this unit that arrives green may pass because of one of the build or fix commits above. Give that commit as the --locks-in reason, written commit:<id>. Read no source to decide it."}
+      + (if any(.[]; has("missing")) then
+          {notFound: [ .[] | select(has("missing")) | {kind, commit, why: .missing} ],
+           notFoundNote: "A rebase left no copy of these commits on the branch that can be cited. If a test arrives green on this code, report the test green on arrival and name that commit. A person decides."}
+         else {} end) end')"
 
   # A tenth thing, only while a retake is still unanswered: a person ruled one frozen test wrong
   # at `verify-record`, and `retake-tests` sent the order back to this step (live-run row 142).
@@ -4720,8 +4726,8 @@ TF_EOF
 
   # --- 101: a --locks-in reason written commit:<id> names one of this order's own commits --------
   # A test of the order's own done-when that arrives green has no code the author may cite: the
-  # code is this order's earlier build, which a restart left in the tree, and the author reads no
-  # production source (live-run row 183). So the reason may be a commit instead. `tests-brief`
+  # code is this order's earlier build, which a restart or a retake left in the tree, and the author
+  # reads no production source (live-run row 183). So the reason may be a commit instead. `tests-brief`
   # prints this order's own build and fix commits under `treeHolds`, and the author names one of
   # them. The same reader answers here, so the freeze accepts exactly what the brief offered, and
   # a commit of another order or one git no longer holds refuses.
@@ -4729,7 +4735,7 @@ TF_EOF
   # like. Reading a bare hex word as an id would refuse a prose reason nobody meant as one. The id
   # may be shorter than the brief printed, because `start`'s own line prints seven characters.
   local tf_lock_total tf_lock_i tf_lock_reason tf_lock_id tf_lock_name tf_lock_hit
-  local tf_own_commits tf_own_loaded tf_own_c
+  local tf_own_commits tf_own_loaded tf_own_c tf_carried tf_lost=""
   tf_lock_total="$(printf '%s' "$locks_json" | jq 'length')"
   tf_own_commits=""
   tf_own_loaded=false
@@ -4749,8 +4755,9 @@ TF_EOF
     [ "${#tf_lock_id}" -ge 7 ] \
       || die 101 "tests-freeze: --locks-in for $tf_lock_name reads commit:$tf_lock_id, which is shorter than seven characters and names no commit on its own. Read the whole id from treeHolds in the tests brief."
     if [ "$tf_own_loaded" = "false" ]; then
-      tf_own_commits="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger" \
-        | jq -r '.[].commit')"
+      tf_carried="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger")"
+      tf_own_commits="$(printf '%s' "$tf_carried" | jq -r '.[] | select(has("missing") | not) | .commit')"
+      tf_lost="$(printf '%s' "$tf_carried" | jq -r '[ .[] | select(has("missing")) | .commit + " " + .kind + ": " + .missing ] | join("; ")')"
       tf_own_loaded=true
     fi
     tf_lock_hit=""
@@ -4762,7 +4769,7 @@ TF_EOF
 $tf_own_commits
 TF_OWN_COMMITS
     [ -n "$tf_lock_hit" ] \
-      || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_id, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; else printf 'none, so no restart or retake left this order a build here'; fi). Read them from treeHolds in the tests brief. A reason with no commit: prefix names the existing code instead."
+      || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_id, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; elif [ -n "$tf_lost" ]; then printf 'none that can be cited'; else printf 'none, so no restart or retake left this order a build here'; fi). Read them from treeHolds in the tests brief.$(if [ -n "$tf_lost" ]; then printf ' These were not found on this branch after the rebase: %s. None of them can be cited. If the test arrives green on that code, report the test green on arrival and name that commit. A person decides.' "$tf_lost"; fi) A reason with no commit: prefix names the existing code instead."
     tf_lock_i=$((tf_lock_i + 1))
   done
 
@@ -9054,21 +9061,37 @@ do_retake_tests() {
   exit 0
 }
 
-# rs_on_branch <codepath> <commit> <table>: prints the commit when HEAD holds it. Otherwise prints
-# the commit on this branch that carries the same change, found in <table>, or nothing. <table> is
-# `git patch-id --stable` over the task's span, filled only after `start --rebased-onto`. A rebase
-# gives every commit a new id, and the records keep the old ones. So a commit: reason naming the
-# rebased build was refused. A clean replay keeps the diff, so the stable patch id matches. The old
-# object stays readable while the reflog holds it, thirty days by default. A replay whose conflict
-# changed the diff, or an old object git pruned, names nothing, as before this rule. The subject is
-# no link: the build and fix steps write none of their own.
+# rs_on_branch <codepath> <commit> <table>: prints the commit when HEAD holds it. Otherwise, after a
+# rebase, prints the commit on this branch that is its rebased copy, or `?` and why none is. Prints
+# nothing when HEAD does not hold it and <table> is empty: no rebase happened, so the commit is
+# simply gone, as a reset leaves it. <table> is rs_order_commits' list of the span's commits.
+# A rebase gives every commit a new id, and the records keep the old ones. The copy keeps the
+# change, so its stable patch id matches, and it keeps the author, the author date and the subject.
+# Both must match. A patch id alone is not enough: a revert of the copy and a revert of that revert
+# carry the same patch id, as can another order's identical change. Neither keeps the author date
+# and the subject. Of several matches, the oldest is taken, and that is the one tie left: the same
+# change by the same author in the same second, which nothing in the records can tell apart.
+# When the author, date and subject match and the patch id does not, the rebase changed the diff,
+# most often by resolving a conflict. The copy is then named but not taken: its code is no longer
+# what the order built, so a person decides. The old object stays readable while the reflog holds
+# it, thirty days by default. The subject alone is no link: the build and fix steps write none of
+# their own, so many commits share one.
 rs_on_branch() {
-  local pid
+  local pid who
   if git -C "$1" merge-base --is-ancestor "$2" HEAD >/dev/null 2>&1; then printf '%s' "$2"; return 0; fi
   [ -n "$3" ] || return 0
+  who="$(git -C "$1" log -1 --format='%at %ae %s' "$2" 2>/dev/null)"
+  if [ -z "$who" ]; then
+    printf '?%s' "the old commit is gone from the repository, so nothing links it to this branch"
+    return 0
+  fi
   pid="$(git -C "$1" show --no-color "$2" 2>/dev/null | git patch-id --stable 2>/dev/null | cut -d' ' -f1)"
-  [ -n "$pid" ] || return 0
-  printf '%s\n' "$3" | awk -v p="$pid" '$1 == p { printf "%s", $2; exit }'
+  printf '%s' "$3" | jq -r --arg pid "$pid" --arg who "$who" '
+    ([ .[] | select(.who == $who) ]) as $same
+    | ([ $same[] | select(.pid == $pid) ][0].commit) as $copy
+    | if $pid != "" and $copy != null then $copy
+      elif ($same | length) > 0 then "?its diff changed in the rebase; " + ($same[0].commit[0:7]) + " carries its author, date and subject"
+      else "?no commit on this branch carries its change with its author, date and subject, so the rebase dropped it or rewrote it" end'
 }
 
 # The commits one order's records name that HEAD still holds, as a JSON array of
@@ -9104,7 +9127,7 @@ rs_on_branch() {
 # folder the restart's own ledger reset had stopped naming (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
-  local out='[]' c old range file kind dir files started span pids=""
+  local out='[]' c old range file kind dir files started span table="" lost=""
   # `git log --grep` reads the whole message, so it only narrows the candidates; the subject test
   # below decides. HEAD alone when the ledger holds no usable startedFrom, which no ledger this
   # stage writes does: the field is required, and the wider search still answers this order.
@@ -9114,14 +9137,20 @@ rs_order_commits() {
     span="$started..HEAD"
   fi
   # `start --rebased-onto` keeps each rewritten start under startedFromBefore, so a ledger holding
-  # one is a branch whose ids may have moved since the records were written.
+  # one is a branch whose ids may have moved since the records were written. The table lists the
+  # span's commits oldest first, each with its stable patch id and its author, date and subject,
+  # for rs_on_branch. A commit with no diff has no patch id and is listed with an empty one.
   if [ "$(printf '%s' "$ledger" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
-    pids="$(git -C "$codepath" log --no-color -p "$span" 2>/dev/null | git patch-id --stable 2>/dev/null)"
+    table="$(git -C "$codepath" log --reverse --no-color -p "$span" 2>/dev/null | git patch-id --stable 2>/dev/null \
+      | jq -Rsc --arg who "$(git -C "$codepath" log --reverse --format='%H %at %ae %s' "$span" 2>/dev/null)" '
+        ([ split("\n")[] | select(length > 0) | split(" ") | {key: .[1], value: .[0]} ] | from_entries) as $pid
+        | [ $who | split("\n")[] | select(length > 0)
+            | {commit: .[0:40], pid: ($pid[.[0:40]] // ""), who: .[41:]} ]')"
   fi
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    c="$(rs_on_branch "$codepath" "$c" "$pids")"
-    [ -n "$c" ] || continue
+    c="$(rs_on_branch "$codepath" "$c" "$table")"
+    case "$c" in ""|"?"*) continue ;; esac
     case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
       "Freeze the tests of $one_id through the implement skill:"*) ;;
       *) continue ;;
@@ -9163,8 +9192,13 @@ RS_RETAKEN
     case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
     while IFS= read -r c; do
       [ -n "$c" ] || continue
-      c="$(rs_on_branch "$codepath" "$c" "$pids")"
-      [ -n "$c" ] || continue
+      old="$c"
+      c="$(rs_on_branch "$codepath" "$c" "$table")"
+      case "$c" in
+        "") continue ;;
+        "?"*) lost="$lost$kind	$old	${c#?}
+"; continue ;;
+      esac
       out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
         if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
     done <<RS_RANGE
@@ -9181,8 +9215,15 @@ RS_FILES
     while IFS= read -r c; do
       [ -n "$c" ] || continue
       old="$c"
-      c="$(rs_on_branch "$codepath" "$c" "$pids")"
-      [ -n "$c" ] || continue
+      c="$(rs_on_branch "$codepath" "$c" "$table")"
+      case "$c" in
+        "") continue ;;
+        "?"*)
+          kind="$(jq -r --arg old "$old" '[ (.commits // [])[] | select(.commit == $old) ][0].kind // "build"' "$file")"
+          [ "$kind" = "freeze" ] || lost="$lost$kind	$old	${c#?}
+"
+          continue ;;
+      esac
       out="$(jq -c --arg old "$old" --arg c "$c" --argjson have "$out" '
         ([ (.commits // [])[] | select(.commit == $old) ] | .[0]) as $e
         | if $e == null or ($have | any(.[]; .commit == $c)) then $have else $have + [$e | .commit = $c] end' "$file")"
@@ -9201,6 +9242,15 @@ RS_ARCHIVES
       | grep -F -x -f <(printf '%s' "$out" | jq -r '.[].commit') \
       | jq -R -s 'split("\n") | map(select(length > 0))')" \
       '[ $order[] as $c | $have[] | select(.commit == $c) ]')"
+  fi
+  # A commit the records name that a rebase left with no copy here comes last, marked `missing`
+  # with the reason, so every reader can say what it could not find. `restart` skips these.
+  if [ -n "$lost" ]; then
+    out="$(printf '%s' "$lost" | jq -Rsc --arg id "$one_id" --argjson have "$out" '
+      $have + ([ split("\n")[] | select(length > 0) | split("\t")
+                 | {order: $id, kind: .[0], commit: .[1], range: .[1], missing: .[2]} ]
+               | unique_by(.commit)
+               | map(. as $l | select(($have | any(.[]; .commit == $l.commit)) | not)))')"
   fi
   printf '%s' "$out"
 }
@@ -9341,7 +9391,8 @@ do_restart() {
   local commits_json tree_json one_id earliest parent span_count own_count
   commits_json='[]'
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
-    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" '$have + $more')"
+    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" \
+      '$have + [ $more[] | select(has("missing") | not) ]')"
   done
   tree_json='null'
   if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then

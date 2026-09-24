@@ -59,9 +59,11 @@ The line is read from the branch each time it prints. Every restart record the t
 orders started over, not the newest alone. The ledger names every retaken order. An order named
 twice gets one line. Each build and fix commit is read from the order's own records, in every folder
 a retake or an earlier restart moved them to. After `start --rebased-onto`, a commit the rebase
-rewrote is found again by its change. So the line agrees with the tree it describes. The commits are
-in the order the branch holds them, oldest first. The restart's own list also names the freezes,
-because its reset needs them. The line leaves them out, since no reader acts on one.
+rewrote is found again by its change and its author, date and subject. A commit whose diff the
+rebase changed is named as not found on this branch, with the reason. So the line agrees with the
+tree it describes. The commits are in the order the branch holds them, oldest first. The restart's
+own list also names the freezes, because its reset needs them. The line leaves them out, since no
+reader acts on one.
 
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
 snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason

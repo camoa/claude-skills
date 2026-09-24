@@ -92,6 +92,9 @@ A ninth, `treeHolds`, only after a restart or a retake left this order's build o
 branch. It holds those commits and two sentences. The tree holds this unit's own earlier code, so a
 test that passes on arrival is suspect. And the author may give one of those commits to
 `--locks-in`, below, written `commit:<id>`. The summary prints the commits on a `treeHolds:` line.
+After a rebase, `notFound` names each commit with no copy here that can be cited, and why. The
+author cannot cite one. If a test arrives green on that code, the author reports it green on arrival
+and names the commit.
 
 A tenth, `retake`, only while a `test-wrong` ruling is still unanswered by a freeze. It holds
 the ruled finding, the criterion it names, its evidence, its severity, and the file and lines it

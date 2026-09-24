@@ -157,9 +157,9 @@ nothing. You choose what happens to those commits." Then say the line. When it n
 to reset to, nothing later depends on those commits. Say: "Take the branch back to that commit
 and they are gone. That is a hard reset, which you run; this session cannot." When it says to
 carry them, other commits sit after them. Say: "They stay. This unit's own code stays in the
-tree, so its next tests cannot go red. The next start names them, and the
-test author is told the tree holds a partial build." Either way the next `start` prints a
-`partialBuild` line while any of them is still on the branch, until the unit is built again.
+tree, so its next tests cannot go red. The next start names its build and fix commits, and the
+test author is told the tree holds them." Either way the next `start` prints a `partialBuild`
+line of the unit's build and fix commits while one is on the branch, until the unit is built again.
 
 ## Clear any other halt, once the person has acted on it
 

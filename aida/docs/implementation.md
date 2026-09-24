@@ -498,9 +498,10 @@ tests cannot go red. Either way the next run names the unit's build and fix comm
 there. It stops once the unit is built again. A retake names them the same way, because it keeps the
 build and corrects only the test. They come in the order the branch holds them, oldest first. They
 are worked out again each time, from the unit's own records, wherever a retake or an earlier restart
-moved them. After a rebase, each is found again by its change. The test author's brief then carries
-those commits and says the tree holds the unit's earlier code. A test green on arrival is never
-taken as proof.
+moved them. After a rebase, each is found again by its change and its author, date and subject. One
+whose diff the rebase changed is named as not found, with the reason, and cannot be cited. The test
+author's brief then carries those commits and says the tree holds the unit's earlier code. A test
+green on arrival is never taken as proof.
 
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
