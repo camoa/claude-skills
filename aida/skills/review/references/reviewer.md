@@ -16,7 +16,8 @@ It writes the brief to `review/brief.json`. The brief holds the criteria and the
 frozen contract, and every work order. It holds the path to `review/diff.patch`. It holds the
 research records and the paths they cite. It holds the results of checks 4 to 8, with every tool
 row and every mutation survivor. It holds the findings implementation ruled deferred. It holds
-`playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null.
+`playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
+`absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 
 The call prints three things: the brief's own path, the path the findings go to at
 `review/findings.json`, and the counts. Read neither file into this conversation, per SKILL.md.
@@ -54,6 +55,16 @@ Write, and no Bash, so it runs nothing.
 and coupling across orders cannot be seen inside a diff, so it holds Glob and Grep over the code
 path. Do not narrow that by hand.
 
+**The routed done-when clauses come back as one verdict each.** A clause that asserts an absence
+says the change added nothing of a named kind, so no test of it could be watched failing and the
+tests step routed it here instead (live-run row 184). The reviewer judges each against the diff and
+writes `absenceVerdicts` in its findings file, beside the findings and the catalog notes. The three
+words are met, unmet and unknown. `findings` records one row per clause and one `absence-clauses`
+check over them all: unmet when one reads unmet, unknown when one reads unknown, met when every one
+reads met, and not-needed when no order routed a clause. The verdict rules then apply as they do to
+every other check, so a clause nobody could judge fails the review. Do not judge a clause yourself
+and do not send one back: the reviewer reads the diff, and this conversation does not.
+
 **Check 16 asks the catalog for nothing.** An agentic recipe is searched for by capability, and that
 search resolves no body, so there is no path to ask for. A recipe research never found was never a
 practice this project accepted. The reviewer opens the paths the research records already hold.
@@ -69,7 +80,7 @@ It refuses at exit 51 when the code path moved, or its tree went dirty, since `c
 the role left behind is caught there, rather than read as a finding.
 
 It records checks 2, 9 to 12 and 16, and every finding. It lowers checks 3 and 4 where their lens
-raised a finding. It prints one summary line per check with the counts. Each of those checks reads met when its lens returned nothing, unmet when that lens
+raised a finding. It records one row per routed done-when clause and one more check for them all. It prints one summary line per check with the counts. Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
 never a clean one**, and version 5 paid for that four times. Check 16 has a floor before its lens,
 described in `references/checks.md`: a playbook record that was never loaded reads unknown.

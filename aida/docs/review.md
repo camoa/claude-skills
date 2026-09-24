@@ -68,6 +68,14 @@ non-goal check whole. Mutation testing makes small changes to the code and runs 
 change no test catches is a survivor. The reviewer also judges every hunk for purpose and reads
 those survivors, so two of the contract checks are half script and half reviewer.
 
+The same reviewer answers one more check, which exists only when the build sent it something. A
+done-when clause that asserts an absence says the change added nothing of a named kind: no second
+engine for one job, no new dependency, no static call to the container. No test of it can be
+watched failing, so the tests step froze none and routed the clause here instead. The reviewer
+reads each routed clause against the whole diff and answers met, unmet or unknown. One check
+covers them all, and it reads unknown when one clause reads unknown, so a clause nobody could
+judge fails the review. When no order routed a clause, the check reads not-needed and passes.
+
 **The surfaces.** Three checks run the end to end and visual harnesses when the project has them,
 and record [your walk](testing.md#what-a-failed-surface-does-to-the-verdict) of every surface.
 [Visual and end-to-end tests](testing.md) covers setting them up, what each one looks at, and

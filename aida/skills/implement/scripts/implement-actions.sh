@@ -496,6 +496,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and the file is then accepted as `harness-new-unit`. The same exit when no
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
+#  81  `tests-freeze` was given an --absence the order cannot route to review. Two facts, one
+#      refusal, because both say the same thing: the flag names something that is not an absence
+#      clause of this order. The clause is not, verbatim, one of the order's frozen `doneWhen`
+#      entries; or it carries no negation word, which makes it a clause asserting a presence, and a
+#      presence is proved by a test that was watched failing (live-run row 184).
 #  84  the assembled checks do not count what the record schema requires: eight at `build-record`
 #      (build-record-schema.json) and seven at `fix-record` (fix-record-schema.json). A record
 #      that lost one would read complete while it is not. The message names the absent check.
@@ -774,6 +779,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
                             [--locks-in <test name>=<reason or commit:<id>>]...
+                            [--absence <a doneWhen clause of this order, verbatim>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
                             [--interface <path to the record the builder wrote>]
@@ -3910,6 +3916,23 @@ $raw
 TF_EOF
 }
 
+# Whether clause $1 carries a negation word, as a whole word and in any case. An absence clause
+# says the change added nothing of a named kind, and English says that with one of these words. The
+# list is closed, so this reads the same clause the same way every time. It is a floor and not the
+# whole rule: "the form shows no legacy field" carries `no` and a test can watch it fail, so
+# references/tests.md carries the judgement and this carries the refusal a script can make.
+tf_clause_denies() {
+  local w
+  while IFS= read -r w; do
+    case "$w" in
+      no|not|never|neither|nor|none|nothing|without) return 0 ;;
+    esac
+  done <<TF_EOF
+$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '\n')
+TF_EOF
+  return 1
+}
+
 # Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
 # recipe's own `## Test commands` rows are resolved: this step never carries a second, absolute
 # copy of a path that belongs to the repository, for the same reason baseline.json's own `scope`
@@ -3977,7 +4000,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
-  local support_raw=""
+  local support_raw="" absence_raw=""
   local test_recipes="" unit_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4036,6 +4059,12 @@ do_tests_freeze() {
         support_raw="$support_raw$2
 "
         shift 2 ;;
+      --absence)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --absence needs one doneWhen clause of this order, verbatim"
+        [ -n "$2" ] || die 3 "tests-freeze: --absence was given an empty clause."
+        absence_raw="$absence_raw$2
+"
+        shift 2 ;;
       -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
@@ -4081,6 +4110,42 @@ do_tests_freeze() {
   if [ "$BR_ORDER_SLOT" = "observed" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
   fi
+
+  # --- 81: an --absence routes one doneWhen clause to review, because no test can prove it --------
+  # A done-when clause that asserts an absence cannot be watched failing. The tree is already in the
+  # state the clause asserts, and making a test of it fail means adding the very thing the clause
+  # forbids (live-run row 184). Such a clause is answered where it can be: at review, against the
+  # task's own diff. The clause is recorded on the ledger, so a clause routed this way is visible
+  # rather than silently untested.
+  #
+  # Two facts refuse, and they share one code because both say the flag names something that is not
+  # an absence clause of this order. First, a clause the order's frozen doneWhen does not hold
+  # verbatim: review judges the words design wrote, never a paraphrase the freeze was handed.
+  # Second, a clause with no negation word, which asserts a presence and is proved by a test.
+  # This route relaxes nothing else. Every --test still needs its red run or its --locks-in reason
+  # (exit 33), and an order whose record would hold no row still refuses (exit 74).
+  local absence_json absence_clause absence_unknown="" absence_asserts=""
+  absence_json='[]'
+  while IFS= read -r absence_clause; do
+    [ -n "$absence_clause" ] || continue
+    if [ "$(printf '%s' "$UNIT_JSON" | jq -r --arg t "$absence_clause" \
+         '[ (.doneWhen // [])[] | select(. == $t) ] | length')" = "0" ]; then
+      absence_unknown="$absence_unknown$absence_clause; "
+      continue
+    fi
+    if ! tf_clause_denies "$absence_clause"; then
+      absence_asserts="$absence_asserts$absence_clause; "
+      continue
+    fi
+    absence_json="$(jq -nc --argjson have "$absence_json" --arg t "$absence_clause" \
+      'if ($have | index($t)) then $have else $have + [$t] end')"
+  done <<TF_EOF
+$absence_raw
+TF_EOF
+  [ -z "$absence_unknown" ] \
+    || die 81 "tests-freeze: these --absence clauses are not, verbatim, a doneWhen entry of $unit_id: ${absence_unknown%; }. Review judges the clause design wrote, so the flag carries the order's own words. Read the doneWhen in implementation/snapshot.json and pass one of its entries."
+  [ -z "$absence_asserts" ] \
+    || die 81 "tests-freeze: these --absence clauses carry no negation word, so each asserts a presence: ${absence_asserts%; }. An absence clause says the change added nothing of a named kind, and that is the only clause with no red run to watch. A clause asserting a presence is proved by a test that failed first."
 
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
   # Every guard below iterates a per-criterion list, so an order with none passes all of them and
@@ -4846,37 +4911,46 @@ TF_EOF
   # same commit with the same tests writes no record and must still carry the judgement a person or
   # a checker just made. A judgement this order already left is replaced rather than added to: one
   # order judges one criterion once, and two entries under one unit would count that row twice.
-  local judgement_count ledger_file_now ledger_doc_now ledger_with_judgements
-  judgement_count="$(printf '%s' "$rows_meta_json" | jq 'length')"
-  if [ "$judgement_count" -gt 0 ]; then
-    ledger_file_now="$IMPL_DIR/ledger.json"
-    [ -f "$ledger_file_now" ] \
-      || die 3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
-    ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
-    [ -n "$ledger_doc_now" ] \
-      || die 3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
-    # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
-    # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
-    # criterion judgement this order already left is replaced rather than added to.
-    ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
-      --arg unit "$unit_id" --argjson rows "$rows_meta_json" '
-      ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
-      | .criteria = ((.criteria // []) | map(
-        . as $c
-        | ([ $rows[] | select(.criterion == $c.id) ][0]) as $r
-        | if $r == null then $c
-          else ($c + {judgements: (
-                  (($c.judgements // []) | map(select(.unit != $unit)))
-                  + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
-          end))
-      | .orders = ((.orders // []) | map(
-        if .id != $unit then .
-        elif $dw == null then del(.doneWhenJudgement)
-        else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end))')"
-    [ -n "$ledger_with_judgements" ] \
-      || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
-    write_atomic "$ledger_file_now" "$ledger_with_judgements"
-  fi
+  #
+  # The clauses routed to review ride here too, on the order's own entry. This runs whatever the
+  # rows counted, because the routed list is replaced on every freeze: a re-freeze that drops a
+  # clause must not leave it owed to review, and an order with no row at all can still route one.
+  # The freeze already refuses a missing ledger at its last step, so requiring one here is no new
+  # refusal.
+  local ledger_file_now ledger_doc_now ledger_with_judgements
+  ledger_file_now="$IMPL_DIR/ledger.json"
+  [ -f "$ledger_file_now" ] \
+    || die 3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
+  ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
+  [ -n "$ledger_doc_now" ] \
+    || die 3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
+  # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
+  # criterion judgement this order already left is replaced rather than added to. The routed
+  # clauses are replaced the same way, and removed when this freeze routed none.
+  ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
+    --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" '
+    ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
+    | .criteria = ((.criteria // []) | map(
+      . as $c
+      | ([ $rows[] | select(.criterion == $c.id) ][0]) as $r
+      | if $r == null then $c
+        else ($c + {judgements: (
+                (($c.judgements // []) | map(select(.unit != $unit)))
+                + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
+        end))
+    | .orders = ((.orders // []) | map(
+      if .id != $unit then .
+      else ((if $dw == null then del(.doneWhenJudgement)
+             else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end)
+            | (if ($absences | length) == 0 then del(.absenceClauses)
+               else .absenceClauses = $absences end))
+      end))')"
+  [ -n "$ledger_with_judgements" ] \
+    || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
+  write_atomic "$ledger_file_now" "$ledger_with_judgements"
+  printf 'absenceClauses: %s (routed to review, on %s'"'"'s ledger entry)\n' \
+    "$(printf '%s' "$absence_json" | jq 'length')" "$unit_id"
 
   # The recipe each red was read against, per framework, so the record says what the freeze read
   # and a later reader can compare it with what preconditions.json holds now (live-run row 99).

@@ -183,6 +183,33 @@ branch, and refuses anything else (exit 101). The author reads no source. It nam
 brief already printed. This is honest because a person chose to carry that code rather than reset
 the branch.
 
+**A done-when clause that asserts an absence gets no test, and goes to review.** Such a clause says
+the change added nothing of a named kind: no second engine for one job, no new dependency, no
+static call to the container. No test of it can be watched failing, because the tree is already in
+the state the clause asserts, and making the test fail means adding the very thing the clause
+forbids. None of the four outcomes above fits, and the author is left choosing between an
+unprovable test and none (live-run row 184). Route the clause instead, on the freeze below:
+`--absence <the clause, verbatim>`, one flag per clause. The freeze records it on the order's
+ledger entry, review's brief carries it to the architecture reviewer, and that reviewer judges it
+against the task's own diff. A clause routed this way is visible as owed, rather than untested in
+silence.
+
+**What makes a clause an absence.** It is a claim about what the change added, answered by reading
+the diff and nothing else. "No new Composer dependency" is one. "The form shows the repeat field"
+is not, and neither is "the saved date matches the one entered": each is a claim about what the
+code does, and a test can watch it fail. A clause that merely holds the word `no` is not an absence
+either. "The form shows no legacy field" is a behaviour, so it takes a test. Judge the clause and
+not its wording, and route only what nothing can run.
+
+The freeze refuses the flag (exit 81) when the clause is not, verbatim, one of the order's frozen
+done-when entries, and when the clause carries no negation word at all. The second refusal is a
+floor and not the whole rule: a script cannot read meaning, so it catches a clause plainly
+asserting a presence and leaves the rest to the judgement above. **This route relaxes nothing
+else.** Every `--test` still needs its red run or its `--locks-in` reason (exit 33), and an order
+whose record would hold no row at all still refuses (exit 74). A clause a test could have proved,
+routed here, is how the rule that every frozen test was watched failing gets worked around. So
+route narrowly, and name every routed clause when you report this step to the person.
+
 **A failure is read from the framework's own signal, never from the exit status.** Three of five
 frameworks exit zero when a filter selects nothing. Only an assertion that ran and did not hold is
 a red run. A harness that never reached the behaviour is a setup gap, and a run that selected
@@ -273,7 +300,8 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
   --checklist <criterion id>=<the verification sentence> \
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
   --row <order id>=<confirmed|rejected>::<person|model>::<note> \
-  --support <path of a support file the author returned>
+  --support <path of a support file the author returned> \
+  --absence <a done-when clause of this order that asserts an absence, verbatim>
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of

@@ -32,7 +32,8 @@ open it.
 The brief holds the criteria and the non-goals from the frozen contract. Every work order. The path
 to the diff file. The research records, and the paths they cite. The results of checks 4 to 8,
 including every tool row and every mutation survivor. The findings implementation ruled deferred at
-its fix round cap, each with its reason and the id it cited.
+its fix round cap, each with its reason and the id it cited. It holds `absenceClauses`: the
+done-when clauses the tests step routed to you, each with the order it belongs to.
 
 Open the diff file, the paths the research records cite, and the playbook record `playbooksPath`
 names, yourself. You hold Read for exactly that.
@@ -92,6 +93,33 @@ looked for. Is every comment for a reader? A comment written for the model, such
 "as instructed", is a finding. Is every guard for a case that can happen? A null check on an
 injected dependency, or a try-catch around everything, is a finding.
 
+## The done-when clauses routed to you
+
+A done-when clause that asserts an absence says the change added nothing of a named kind: no second
+engine for one job, no new dependency, no static call to the container. No test of such a clause can
+be watched failing. The tree is already in the state the clause asserts, and making the test fail
+means adding the very thing the clause forbids. So the tests step froze no test for it and routed it
+here, where the diff answers it.
+
+Judge each clause in `absenceClauses` against the diff, and write one verdict per clause. Read the
+whole diff for it, not one hunk: a clause about what the change added is answered by everything it
+added. Use Glob and Grep over the code path where the diff alone does not settle it, the same
+widening the `dry` lens gets.
+
+- `met`: nothing in the diff adds what the clause forbids. Say in the note what you read to decide
+  that, such as the dependency file the diff leaves alone.
+- `unmet`: the diff adds it. Cite the file and the lines in the note.
+- `unknown`: you could not tell. Say what you would have had to read. A clause nobody judged is
+  never a pass, so `unknown` is the honest answer and it fails the review.
+
+**Answer only the clauses the brief carries, verbatim.** A verdict on a clause no order routed is
+refused, and the whole findings file is refused with it. Never paraphrase a clause to make it fit.
+
+**A verdict with nothing to read beside it is read as unknown.** Every one carries a note.
+
+An `unmet` clause is also a finding under the lens that fits it where one does, and the two are not
+the same record. The verdict answers the clause; the finding cites a criterion or a non-goal.
+
 ## What you write
 
 Write the findings file at the path your dispatch names, in this shape:
@@ -100,11 +128,17 @@ Write the findings file at the path your dispatch names, in this shape:
 { "findings": [
   { "id": "f1", "lens": "dry", "severity": "high|medium|low", "file": "...", "lines": "...",
     "linkedTo": "c3", "evidence": "..." }
-], "catalogNotes": [ { "seen": "...", "where": "..." } ] }
+], "catalogNotes": [ { "seen": "...", "where": "..." } ],
+  "absenceVerdicts": [
+  { "order": "wo8", "clause": "no new Composer dependency", "verdict": "met|unmet|unknown",
+    "note": "..." }
+] }
 ```
 
 Use `{ "findings": [], "catalogNotes": [] }` when you find nothing. A lens that returned nothing is
-read as met, so an empty list is an answer and not a gap.
+read as met, so an empty list is an answer and not a gap. Leave `absenceVerdicts` out only when the
+brief carried no clause. A clause you leave unanswered is recorded unknown, and that fails the
+review.
 
 **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and only one the
 contract gave you. A finding that cites neither carries `"disposition": "follow-up"` instead, which
