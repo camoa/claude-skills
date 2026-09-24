@@ -145,10 +145,15 @@ comes when the task is created, if that window entered the worktree. It comes ag
 task starts, whichever stage starts it, while the task records no answer. `/aida:next` writes
 nothing and offers nothing. A no is recorded with your reason, so nothing asks again.
 `/aida:task environment <task-id> up` still brings it up later, and `show` in place of `up`
-prints what it would run without running it.
+prints the commands `up` would run.
 
 `show` lists the files the recipe writes, the preconditions it checks, and the commands it runs.
-A failing precondition stops the step with the script's message and leaves nothing behind. A
+`show` runs the precondition checks too, so a site that cannot come up is never offered. It
+leaves the worktree as it found it and commits nothing. A failing precondition stops the step
+with the script's message and leaves nothing behind. When that message says to commit, AIDA
+names two branches. A commit on the task's own branch reaches the worktree at once, and review
+reads it as part of the task. A commit on the branch the main checkout is on reaches the
+worktree only after you merge it into the task's branch. A
 site that resolved to a tree other than the worktree stops it too, because a capture of the
 wrong tree is worse than none. With a kind on, the harness is installed in the tree as well. On
 success you see one address line. The address is recorded in the task, and review and the

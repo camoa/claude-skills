@@ -1258,6 +1258,49 @@ run_recipe_capture() {
   die3 "environment: the line holds no command, or a token nothing fills: ${result#*"$tab"}. The tokens are {codePath}, the ## Tokens names and the address keys"
 }
 
+# Writes the absent `## Files` blocks into the worktree $2 and runs each `## Preconditions` line
+# there, with the output in $3. The files come first, because the check is a script the recipe
+# ships. $1 is up or show. `up` keeps the written files for its commit. `show` removes them after
+# the check, so it leaves the tree as it found it, and it passes "" for $3 to use a temporary file.
+# A failing line exits 3. It prints the output and the branches a commit can land on, and removes
+# the written files. The loop runs in a command substitution, so its `status:` summary and its
+# exit 4 stay inside. Reads RECIPE, preconditions, file_list, files_dir, tokens_dir, task_json
+# and CODE_PATH from do_environment.
+environment_check() {
+  local sub="$1" wt="$2" outfile="$3" result="" failed=0 name branch base
+  recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
+  [ -n "$outfile" ] || outfile="$(mktemp)" || die3 "environment: could not create a temporary file"
+  : >"$outfile"
+  if [ "$sub" = up ]; then
+    recipe_files_write environment "$file_list" "$wt" "$files_dir"
+    printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+  else
+    recipe_files_write environment "$file_list" "$wt" "$files_dir" >/dev/null
+  fi
+  if [ -n "$preconditions" ]; then
+    result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || failed=1
+  fi
+  if [ "$failed" -eq 1 ] || [ "$sub" = show ]; then
+    printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
+      [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
+    done
+  fi
+  if [ "$failed" -eq 1 ]; then
+    cat "$outfile" >&2
+    # A remedy may say to commit, and the worktree reads one branch only. A commit on the branch
+    # the code path is on reaches it only through a merge, and nothing else says so.
+    branch="$(jq -r '.worktree.branch // empty' "$task_json")"
+    base="$(git -C "$CODE_PATH" symbolic-ref -q --short HEAD 2>/dev/null)"
+    printf "environment: where the remedy says to commit, a commit on %s reaches this worktree now, and review reads it in the task's diff.\n" "$branch" >&2
+    [ -z "$base" ] || [ "$base" = "$branch" ] \
+      || printf 'environment: %s is on %s. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
+        "$CODE_PATH" "$base" "$base" "$base" "$branch" >&2
+    rm -f "$outfile"; rm -rf "$tokens_dir" "$files_dir"
+    exit 3
+  fi
+  if [ "$sub" = show ]; then rm -f "$outfile"; else [ -z "$result" ] || printf '%s\n' "$result"; fi
+}
+
 do_environment() {
   local project_path="" id="" sub="" setup_recipes="" n tab; tab="$(printf '\t')"
   while [ "$#" -gt 0 ]; do
@@ -1396,7 +1439,20 @@ TA_TOKEN_LIST
     printf 'TEAR DOWN:\n'; fill_tokens "$tear_down" | sed 's/^/  /'; printf '\n'
     printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
     printf 'FILES:\n'; printf '%s\n' "$file_list" | cut -f2 | sed 's/^./  &/'
-    rm -rf "$tokens_dir" "$files_dir"; return 0
+    rm -rf "$tokens_dir"
+    # The check runs here too, so a site that cannot come up is never offered. The path is read
+    # from the record, because task_worktree makes a missing tree again, and show writes nothing.
+    wt="$(jq -r '.worktree.path // empty' "$task_json")"
+    if [ -z "$preconditions" ]; then
+      printf 'precondition check: none, the recipe has no precondition line\n'
+    elif [ -z "$wt" ] || [ ! -d "$wt" ]; then
+      printf 'precondition check: not run, the worktree %s is not on disk. up makes it again and runs the check there\n' "${wt:-none recorded}"
+    else
+      cd "$wt" || die3 "environment: could not enter $wt"
+      environment_check show "$wt" ""
+      printf 'precondition check: passed in %s\n' "$wt"
+    fi
+    rm -rf "$files_dir"; return 0
   fi
   cr_require_person up "a person approved the site coming up"
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
@@ -1406,25 +1462,7 @@ TA_TOKEN_LIST
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
-  recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
-  : >"$outfile"
-  recipe_files_write environment "$file_list" "$wt" "$files_dir"; rm -rf "$files_dir"
-  printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
-  # The preconditions run after the files are written, because the check is a script the recipe
-  # ships, and before the commit, so a refused site leaves no commit. The loop runs in a command
-  # substitution: its `status:` summary and its exit 4 stay inside, and the refusal here is 3
-  # with the output on stderr, the written files removed, and the output file gone.
-  if [ -n "$preconditions" ]; then
-    result="$(run_recipe_lines up "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || {
-      cat "$outfile" >&2
-      printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
-        [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
-      done
-      rm -f "$outfile"; rm -rf "$tokens_dir"
-      exit 3
-    }
-    printf '%s\n' "$result"
-  fi
+  environment_check up "$wt" "$outfile"; rm -rf "$files_dir"
   # Only the written files are staged and committed. A person's uncommitted or staged work beside
   # them is never taken into this commit and never refuses it.
   [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \

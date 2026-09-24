@@ -84,18 +84,25 @@ Print the path and say so. Go on to step 5 either way.
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
 site, so a review or a baseline taken there would capture the served checkout instead. Dispatch
-`catalog-identifier` once with the line `point: worktree-environment`, then every framework the
-project records and the project folder. Those are the same words the surfaces skill uses for its
-points. When the project record has `surfaces.e2e.enabled` or
-`surfaces.visualRegression.enabled`, name `e2e-setup` or `visual-regression` in the same
-dispatch, so `up` can install that harness in the tree. Pass the answer as
-`--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one flag per framework,
-and each setup recipe as `--setup-recipe <kind>=<path>`, where the kind is `e2e` or
-`visual-regression`, then run `environment <name> show`.
+`catalog-identifier` once per point, as the surfaces skill does. The role reads one `point:` line
+per message, and it reads any other word as a framework. The first dispatch has the line
+`point: worktree-environment`, then every framework the project records and the project folder.
+When the project record has `surfaces.e2e.enabled`, dispatch the role again with
+`point: e2e-setup` and the same other lines. When it has `surfaces.visualRegression.enabled`,
+dispatch it again with `point: visual-regression`. `up` then installs that harness in the tree.
+Pass the worktree-environment answer as `--recipe <framework>=<path>` or
+`--lookup-failed <framework>=<word>`, one flag per framework. Pass each setup recipe as
+`--setup-recipe <kind>=<path>`, where the kind is `e2e` or `visual-regression`. A setup lookup
+that returns no path gives no flag, and `up` says that harness is not installed. Then run
+`environment <name> show`.
 The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script refuses any other.
 `not-applicable` from `show` means no framework has a recipe: record it with
 `environment <name> not-applicable -- <that reason>`, and say once that this worktree has files
-and no site. Otherwise, interactive: show the commands and the prose, and ask once whether to
+and no site. `show` runs the precondition checks and exits 3 when one fails. A failing check
+means the site cannot come up, so make no offer. Show the check's output and the remedy it names.
+When the remedy says to commit, give the two `environment:` lines that name the branches. Record
+nothing, so the offer comes again at `start`. Otherwise, interactive: show the commands and the
+prose, and ask once whether to
 bring the site up now. A yes runs `environment <name> up` with the same flags. A no is recorded
 too, with the person's reason, through the same `not-applicable` call, so nothing offers again.
 Say `up` with the same flags still brings it up later. Autonomous: never bring it up, record
@@ -116,9 +123,13 @@ and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the 
 `not-applicable` writes `environment` as the reason alone, and commits. It is a person's answer,
 so it refuses unattended at 70. `up` replaces it; `down` with it recorded says nothing was up.
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
-the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
-It prints the paths of the `## Files` blocks, the files `up` writes, and one `precondition:`
-line per `## Preconditions` command `up` runs.
+the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs none of
+them. It prints the paths of the `## Files` blocks, the files `up` writes, and one
+`precondition:` line per `## Preconditions` command `up` runs.
+`show` runs each `## Preconditions` line the way `up` does, with the same code. It removes the
+files it wrote for the check, so it commits nothing and leaves the tree as it found it. A failing
+check exits 3 and prints what `up` prints. A worktree not on disk prints
+`precondition check: not run`, because only `up` makes a tree again.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
 says what `up` would do.
 
@@ -130,7 +141,8 @@ First it writes each `## Files` block absent from the worktree. A file present w
 refuses at 3. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
 failing line stops at 3, prints its output, removes the files this run wrote, and commits
-nothing. Then it commits the written files alone, so other changed or staged work is never
+nothing. It also prints two lines that name the task branch and the branch of the code path.
+Then it commits the written files alone, so other changed or staged work is never
 taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
