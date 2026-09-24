@@ -1123,6 +1123,16 @@ TASK_RULE_END="<!-- task-rule:end -->"
 # one out, so a picked-up repository never holds two blocks. --decline looks only for this version's.
 # TASK_RULE_V5_BEGIN and TASK_RULE_V5_END come from scripts/lib/project-findings.sh.
 
+# Stops the script when a block in $1, between the markers $2 and $3, opens and never closes. The
+# text below that marker may be the person's own, so neither the rewrite nor the removal runs
+# blind. The detection is scripts/lib/project-findings.sh's, the same one the check reports.
+refuse_open_block() {
+  local lines
+  lines="$(pf_block_lines "$1" "$2" "$3")"
+  [ "${lines#* }" != "0" ] \
+    || die3 "$1: line ${lines%% *} holds $2 and no end marker follows it. Nothing was changed. Add $3 where that block ends, or delete the block by hand, then run this again."
+}
+
 task_rule_block() {
   local project_name="$1"
   cat <<EOF
@@ -1206,6 +1216,8 @@ do_task_rule() {
   }
 
   claude_md="${code_path%/}/CLAUDE.md"
+  refuse_open_block "$claude_md" "$TASK_RULE_V5_BEGIN" "$TASK_RULE_V5_END"
+  refuse_open_block "$claude_md" "$TASK_RULE_BEGIN" "$TASK_RULE_END"
   present="false"
   [ -f "$claude_md" ] && grep -qF -e "$TASK_RULE_BEGIN" -e "$TASK_RULE_V5_BEGIN" "$claude_md" 2>/dev/null && present="true"
 
@@ -1228,7 +1240,7 @@ do_task_rule() {
     block_file="$(mktemp)"
     task_rule_block "$project_name" > "$block_file"
     awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v vb="$TASK_RULE_V5_BEGIN" -v ve="$TASK_RULE_V5_END" -v bf="$block_file" '
-      index($0,b) || index($0,vb){ while ((getline line < bf) > 0) print line; close(bf); skip=1; next }
+      index($0,b) || index($0,vb){ if (!done) { while ((getline line < bf) > 0) print line; close(bf); done=1 } skip=1; next }
       index($0,e) || index($0,ve){ skip=0; next }
       !skip{print}
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
@@ -1273,22 +1285,19 @@ do_task_rule_remove() {
 
   local claude_md="${code_path%/}/CLAUDE.md"
   if [ -f "$claude_md" ] && grep -qF -e "$TASK_RULE_BEGIN" -e "$TASK_RULE_V5_BEGIN" "$claude_md" 2>/dev/null; then
+    refuse_open_block "$claude_md" "$TASK_RULE_V5_BEGIN" "$TASK_RULE_V5_END"
+    refuse_open_block "$claude_md" "$TASK_RULE_BEGIN" "$TASK_RULE_END"
     local tmp
     tmp="$(mktemp)"
+    # Every block of either kind goes, with the one blank line above it. A blank line is held
+    # back until the next line shows whether a block follows it.
     awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v vb="$TASK_RULE_V5_BEGIN" -v ve="$TASK_RULE_V5_END" '
-      { lines[NR] = $0 }
-      END {
-        for (i = 1; i <= NR; i++) {
-          if (index(lines[i], b) || index(lines[i], vb)) bi = i
-          if (index(lines[i], e) || index(lines[i], ve)) ei = i
-        }
-        if (bi == 0) { for (i = 1; i <= NR; i++) print lines[i]; exit }
-        if (ei == 0) ei = bi
-        start = bi
-        if (bi > 1 && lines[bi-1] == "") start = bi - 1
-        for (i = 1; i < start; i++) print lines[i]
-        for (i = ei + 1; i <= NR; i++) print lines[i]
-      }
+      index($0,b) || index($0,vb) { held = 0; skip = 1; next }
+      skip { if (index($0,e) || index($0,ve)) skip = 0; next }
+      { if (held) print ""; held = 0 }
+      $0 == "" { held = 1; next }
+      { print }
+      END { if (held) print "" }
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
       rm -f "$tmp"
       echo "REFUSED: rewriting ${claude_md} failed. The task rule was not removed." >&2

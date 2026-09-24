@@ -207,10 +207,12 @@ it apart, under "Retired fields", and names `/aida:project drop-retired <name>` 
 That action removes exactly the retired fields and nothing else. Nothing is migrated for you: the
 check keeps failing until you run it.
 
-The check also reads your code repository's `CLAUDE.md`. When it still holds the task rule
-version 5 wrote, which names commands that no longer exist, every report says so and offers the
-rewrite. The offer stays open until you accept or decline it. After a decline, the report still
-states the fact and offers nothing.
+The check also reads your code repository's `CLAUDE.md`, which may still hold the task rule
+version 5 wrote. That rule names commands that no longer exist. Every report then says so and
+offers the rewrite. The offer stays open until you accept or decline it. After a decline, the
+report still states the fact and offers nothing. A block whose end marker is missing is never
+rewritten or removed, because the text below it may be yours. The report names the line to fix
+by hand.
 
 A second check answers a different question. `/aida:project check-machine` reports whether this
 machine can reach a task's worktree at all. It reads the Claude Code version, the plugin version,

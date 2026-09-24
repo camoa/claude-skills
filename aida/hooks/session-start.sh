@@ -112,17 +112,24 @@ if [ -n "$MATCH" ]; then
   echo ""
 
   # Two findings of the project check that cannot wait for /aida:project. A stale version 5 task
-  # rule is an instruction the session follows before any check runs (live-run row 191). The
-  # detection is the check's own, from the library. Silent when neither is found, or when the
-  # library or the project file cannot be read: the check says why.
+  # rule, with its offer open or with no end marker, is an instruction the session follows before
+  # any check runs (live-run row 191). The detection is the check's own, from the library. Silent
+  # when neither is found, or when the library or the project file cannot be read: the check says
+  # why.
   # shellcheck source=/dev/null
   if source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh" 2>/dev/null; then
     FILE_CODE="$(jq -r '.codePath // empty' "$PROJECT_PATH/project.json" 2>/dev/null)"
     FOUND=""
-    if [ -n "$FILE_CODE" ] && [ "$(pf_task_rule_v5 "$FILE_CODE" "$PROJECT_PATH/project.json")" = "open" ]; then
-      echo "Task rule: the version 5 block in ${FILE_CODE%/}/CLAUDE.md is stale. Do not follow it; its /ai-dev-assistant: commands no longer exist. \`/aida:project\` offers the rewrite."
-      FOUND="yes"
-    fi
+    V5_RULE=""
+    [ -z "$FILE_CODE" ] || V5_RULE="$(pf_task_rule_v5 "$FILE_CODE" "$PROJECT_PATH/project.json")"
+    case "$V5_RULE" in
+      open)
+        echo "Task rule: the version 5 block in ${FILE_CODE%/}/CLAUDE.md is stale. Do not follow it; its /ai-dev-assistant: commands no longer exist. \`/aida:project\` offers the rewrite."
+        FOUND="yes" ;;
+      malformed*)
+        echo "Task rule: the version 5 block in ${FILE_CODE%/}/CLAUDE.md is stale. Do not follow it; its /ai-dev-assistant: commands no longer exist. Line ${V5_RULE#* } has no end marker; \`/aida:project\` says how to fix it."
+        FOUND="yes" ;;
+    esac
     RETIRED="$(pf_retired_fields "${PLUGIN_ROOT}/scripts/project-schema.json" "$PROJECT_PATH/project.json" \
       | jq -r 'map(.field) | join(", ")' 2>/dev/null)"
     if [ -n "$RETIRED" ]; then

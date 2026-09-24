@@ -839,7 +839,10 @@ TASK_RULE_V5="none"
 [ "$CODEPATH_EXISTS_JSON" = "true" ] && TASK_RULE_V5="$(pf_task_rule_v5 "$CODEPATH_VALUE" "$PROJECT_FILE")"
 if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
   echo "Task rule: version 5, in ${CODEPATH_VALUE%/}/CLAUDE.md. It names /ai-dev-assistant: commands that no longer exist."
-  if [ "$TASK_RULE_V5" = "declined" ]; then
+  if [ "${TASK_RULE_V5%% *}" = "malformed" ]; then
+    echo "  Line ${TASK_RULE_V5#* } opens the block, and no end marker follows it, so nothing rewrites or removes it."
+    echo "  Fix it by hand: add $TASK_RULE_V5_END where the block ends, or delete the block."
+  elif [ "$TASK_RULE_V5" = "declined" ]; then
     echo "  A decline is recorded, so this is not offered again. task-rule $REPAIR_NAME still rewrites it."
   else
     echo "  Repair: task-rule $REPAIR_NAME rewrites it in place. task-rule $REPAIR_NAME --decline keeps it and records the answer."

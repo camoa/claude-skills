@@ -474,10 +474,15 @@ run:
 ```
 Refuses when the project has no code path. It refuses too when the code path names a directory
 that does not exist yet. Either way there is no repository to write into. Say so and stop. Do
-not ask again later in the same turn.
+not ask again later in the same turn. Exit 3 names a line in `CLAUDE.md` that opens a block no
+end marker closes. Nothing was written. Show that message and stop.
 
-`--remove` takes the block back out and leaves the rest of the file untouched. It refuses the
-same way on an autonomous run:
+A file that already holds a version 6 block keeps that one block, refreshed in place. Any version
+5 block in the same file is removed, so the file never holds two task rules.
+
+`--remove` takes every block of either version back out and leaves the rest of the file
+untouched. It refuses the same way on an autonomous run, and at exit 3 on a block with no end
+marker:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule-remove "<target>"
 ```
@@ -565,6 +570,10 @@ offer once in this invocation to rewrite it, in one line. Yes runs the `task-rul
 which replaces that block in place. No records the refusal with `task-rule "<name>" --decline`,
 the same as create's step 6. Autonomous: say the offer is waiting and continue, as at create. A
 line that says a decline is recorded is not an offer. Name the fact and do not ask.
+
+A line that says no end marker follows the block is not an offer either. The text below the
+marker may be the person's own, so the rewrite and the removal both refuse at exit 3. Name the
+line the report gives, and say the person fixes it by hand. Then the offer comes back.
 
 Exit 3 and exit 5 still come through a pickup. Three says the check could not run, so there are
 no findings to read. Five says the code path names a refused location. Both rows above apply as

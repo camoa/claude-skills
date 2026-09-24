@@ -175,7 +175,7 @@ do_capture() {
     END { if (!found) { if (!blank) print ""; print "## " d; blank = 0 } if (!done) put() }
   ' "$file" > "$play.out" && mv "$play.out" "$file" || { rm -f "$play" "$play.out"; die 3 "capture: could not write $file"; }
   rm -f "$play"
-  commit_project "$project" "Capture the play $id" "captured" "" "" "project" "playbook" || printf 'playbook-actions: the play was written but not committed.\n' >&2
+  commit_project "$project" "Capture the play $id" "captured" "" "" "project" "playbook" playbook.md || printf 'playbook-actions: the play was written but not committed.\n' >&2
   echo "written: $file"
   echo "play: project:$id"
 }
