@@ -178,11 +178,12 @@ entry. Review carries it to the architecture reviewer, which judges it against t
 diff. So the clause is visible as owed rather than untested in silence, and the author no longer
 chooses between an unprovable test and none.
 
-The route is narrow on purpose. The freeze refuses a clause the order's done-when does not hold
-word for word, and a clause with no negation word in it at all. Every other test still needs the
-run that failed, and an order that froze no test at all still refuses. A clause a test could have
-proved, routed this way, is how the rule that every frozen test was watched failing gets worked
-around.
+The route is narrow on purpose. The freeze refuses a clause the order's done-when does not hold word
+for word. It refuses a clause with no negation word in it at all. A contraction such as doesn't
+counts as one. Every other test still needs the run that failed, and an order that froze no test at
+all still refuses. A clause a test could have proved, routed this way, is how the rule that every
+frozen test was watched failing gets worked around. So the reviewer also says whether a test could
+have watched each routed clause fail, and a yes fails the review.
 
 When the author returns, the coding-standards tool runs over the new test files, and a finding
 goes back to the author before the freeze. This is the one place the tests' own standards are

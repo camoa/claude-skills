@@ -59,12 +59,15 @@ path. Do not narrow that by hand.
 says the change added nothing of a named kind. No test of it could be watched failing, so the tests
 step routed it here instead (live-run row 184). The reviewer judges each one against the diff. It
 writes `absenceVerdicts` in its findings file, beside the findings and the catalog notes. The three
-words are met, unmet and unknown. `findings` records one row per clause, and one `absence-clauses`
-check over them all. That check reads unmet when one clause reads unmet, unknown when one reads
-unknown, and met when every one reads met. It reads not-needed when no order routed a clause. The
-verdict rules then apply as they do to every other check, so a clause nobody could judge fails the
-review. Do not judge a clause yourself and do not send one back: the reviewer reads the diff, and
-this conversation does not.
+words are met, unmet and unknown. Each verdict also says, as `testable` yes or no, whether a test
+could have watched the clause fail. `findings` records one row per clause, and one `absence-clauses`
+check over them all. That check reads unmet when one clause reads unmet or testable yes. It reads
+unknown when one reads unknown or gave no testable answer, and met when every one reads met and
+testable no. It reads not-needed when no order routed a clause. The verdict rules then apply as they
+do to every other check. So a clause nobody could judge fails the review, and so does a clause a
+test could have proved. The summary prints one `absence(<order>)` line per clause. Name each one
+that reads testable yes to the person: it takes a test with a red run. Do not judge a clause
+yourself and do not send one back: the reviewer reads the diff, and this conversation does not.
 
 **Check 16 asks the catalog for nothing.** An agentic recipe is searched for by capability, and that
 search resolves no body, so there is no path to ask for. A recipe research never found was never a

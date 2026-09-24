@@ -194,20 +194,22 @@ ledger entry. Review's brief carries it to the architecture reviewer, which judg
 task's own diff. A clause routed this way is visible as owed, rather than untested in silence.
 
 **What makes a clause an absence.** It is a claim about what the change added, answered by reading
-the diff and nothing else. "No new Composer dependency" is one. "The form shows the repeat field"
-is not. Neither is "the saved date matches the one entered". Each of those is a claim about what
-the code does, and a test can watch it fail. A clause that merely holds the word `no` is not an
-absence either. "The form shows no legacy field" is a behaviour, so it takes a test. Judge the
-clause and not its wording, and route only what nothing can run.
+the diff and nothing else. "No new Composer dependency" is one. "The form shows the repeat field" is
+not. Neither is "the saved date matches the one entered". Each of those is a claim about what the
+code does, and a test can watch it fail. A clause that merely holds the word `no` is not an absence
+either. "The form shows no legacy field" is a behaviour, so it takes a test. Judge the clause and
+not its wording, and route only what nothing can run. Review asks the same question. The reviewer
+says whether a test could have watched each routed clause fail, and a yes fails the review.
 
 The freeze refuses the flag (exit 81) on two facts. The clause is not, verbatim, one of the order's
-frozen done-when entries. Or the clause carries no negation word at all. That second refusal is a
-floor and not the whole rule. A script cannot read meaning, so it catches a clause plainly
-asserting a presence and leaves the rest to the judgement above. **This route relaxes nothing
-else.** Every `--test` still needs its red run or its `--locks-in` reason (exit 33). An order that
-froze no test at all still refuses, at exit 29 or exit 74. A clause a test could have proved,
-routed here, is how the rule that every frozen test was watched failing gets worked around. So
-route narrowly, and name every routed clause when you report this step to the person.
+frozen done-when entries. Or the clause carries no negation word at all. A contraction such as
+doesn't counts, with a straight or a curly apostrophe. That second refusal is a floor and not the
+whole rule. A script cannot read meaning, so it catches a clause plainly asserting a presence and
+leaves the rest to the judgement above. **This route relaxes nothing else.** Every `--test` still
+needs its red run or its `--locks-in` reason (exit 33). An order that froze no test at all still
+refuses, at exit 29 or exit 74. A clause a test could have proved, routed here, is how the rule that
+every frozen test was watched failing gets worked around. So route narrowly, and name every routed
+clause when you report this step to the person.
 
 **A failure is read from the framework's own signal, never from the exit status.** Three of five
 frameworks exit zero when a filter selects nothing. Only an assertion that ran and did not hold is

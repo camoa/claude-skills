@@ -117,6 +117,16 @@ refused, and the whole findings file is refused with it. Never paraphrase a clau
 
 **A verdict with nothing to read beside it is read as unknown.** Every one carries a note.
 
+**Say whether a test could have watched the clause fail.** The tests step refuses only a clause with
+no negation word. "The form shows no legacy field" carries `no`, and a test can still watch it fail.
+You hold the done-when and the diff, so you answer it. Write `testable` on every verdict:
+
+- `yes`: a test could have watched the clause fail. It is a claim about what the code does, such as
+  what a page shows. A `yes` fails the review, and the person sees the clause named.
+- `no`: only the diff answers it, such as a dependency file the change leaves alone.
+
+A verdict with no `testable` is read as unknown, and that fails the review too.
+
 An `unmet` clause is also a finding under the lens that fits it where one does, and the two are not
 the same record. The verdict answers the clause; the finding cites a criterion or a non-goal.
 
@@ -131,7 +141,7 @@ Write the findings file at the path your dispatch names, in this shape:
 ], "catalogNotes": [ { "seen": "...", "where": "..." } ],
   "absenceVerdicts": [
   { "order": "wo8", "clause": "no new Composer dependency", "verdict": "met|unmet|unknown",
-    "note": "..." }
+    "testable": "yes|no", "note": "..." }
 ] }
 ```
 

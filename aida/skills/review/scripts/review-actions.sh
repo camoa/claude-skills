@@ -480,6 +480,9 @@ rw_print_summary() {
     + [ (.findings // []) | group_by(.lens)[] | line("lens(\(.[0].lens))"; "\(length) finding(s): \([ .[].id ] | join(", "))") ]
     + [ (.findings // []) | group_by(.disposition)[] | line("disposition(\(.[0].disposition))"; "\(length): \([ .[].id ] | join(", "))") ]
     + [ line("catalogNotes"; ((.catalogNotes // []) | length)) ]
+    # One line per routed clause. The check detail above is cut to one line, so a second clause
+    # could fall off it, and the person must see each clause a test could have covered.
+    + [ (.absences // [])[] | line("absence(\(.order))"; "\(.verdict) testable=\(.testable) | \(.clause | short)") ]
     + (if has("verdict") then
          [ line("failing"; ([ ((.checks // [])[] | select(.verdict == "unmet" or .verdict == "unknown") | .id),
                               ((.criteria // [])[] | select(.verdict == "unmet" or .verdict == "unanswered") | .id) ] | join(", "))),
@@ -1671,12 +1674,21 @@ RW_RESEARCH_FILES
   # Three readings become unknown, and none of them becomes met. A clause the reviewer left out. A
   # verdict outside the three words. A verdict with nothing to read beside it, the same rule
   # `tests-freeze` applies to a `--row`. An absence nobody judged is never a pass.
+  #
+  # The reviewer also says whether a test could have watched the clause fail. The freeze's word
+  # test is a floor: "the form shows no legacy field" carries `no`, routes, and a test could have
+  # proved it. The reviewer holds the done-when and the diff, so it is the role that can ask.
+  # `testable` is yes, no, or unknown when the reviewer gave neither word. A yes reads unmet: the
+  # route skipped a red run the clause could have had, and the reviewer answered, so it is no
+  # unknown. A missing answer reads unknown, by the rule above. Both fail the review at close.
   local absence_given absence_rows absence_unrouted absence_verdict absence_detail absence_hits
   local absence_twice
   absence_given="$(jq -c 'if ((.absenceVerdicts // []) | type) == "array"
     then [ (.absenceVerdicts // [])[]
            | {order: (.order // ""), clause: (.clause // ""),
-              verdict: (.verdict // ""), note: (.note // "")} ]
+              verdict: (.verdict // ""), note: (.note // ""),
+              testable: (if (.testable // "") == "yes" or (.testable // "") == "no"
+                         then .testable else "unknown" end)} ]
     else [] end' "$findings_path" 2>/dev/null)"
   [ -n "$absence_given" ] || absence_given='[]'
   absence_unrouted="$(jq -nr --argjson routed "$RW_ABSENCE_CLAUSES" --argjson given "$absence_given" '
@@ -1696,33 +1708,38 @@ RW_RESEARCH_FILES
     [ $routed[] | . as $r
       | ([ $given[] | select(.order == $r.order and .clause == $r.clause) ][0]) as $g
       | if $g == null
-          then ($r + {verdict: "unknown", note: "the reviewer returned no verdict on this clause."})
+          then ($r + {verdict: "unknown", note: "the reviewer returned no verdict on this clause.",
+                      testable: "unknown"})
         elif ((["met", "unmet", "unknown"]) | index($g.verdict)) == null
-          then ($r + {verdict: "unknown",
+          then ($r + {verdict: "unknown", testable: $g.testable,
                       note: ("the reviewer answered \"" + $g.verdict + "\", and the three words are met, unmet and unknown.")})
         elif $g.note == ""
-          then ($r + {verdict: "unknown",
+          then ($r + {verdict: "unknown", testable: $g.testable,
                       note: ("the reviewer answered " + $g.verdict + " and wrote nothing beside it; a verdict with nothing to read is not a verdict.")})
-        else ($r + {verdict: $g.verdict, note: $g.note}) end ]')"
+        else ($r + {verdict: $g.verdict, note: $g.note, testable: $g.testable}) end ]')"
   [ -n "$absence_rows" ] || die 3 "findings: could not pair the routed done-when clauses with the reviewer's verdicts."
   if [ "$(printf '%s' "$absence_rows" | jq 'length')" -eq 0 ]; then
     absence_verdict="not-needed"
     absence_detail="no order routed a done-when clause to review, so there was none to judge."
   else
-    absence_hits="$(printf '%s' "$absence_rows" | jq -r \
-      '[ .[] | select(.verdict == "unmet") | (.order + ": " + .clause) ] | join("; ")')"
+    absence_hits="$(printf '%s' "$absence_rows" | jq -r '
+      ([ .[] | select(.verdict == "unmet") | (.order + ": " + .clause) ] | join("; ")) as $broke
+      | ([ .[] | select(.testable == "yes") | (.order + ": " + .clause) ] | join("; ")) as $testable
+      | [ (if $broke != "" then "the diff broke these done-when clauses the tests step routed here: " + $broke + "." else empty end),
+          (if $testable != "" then "these were routed as absences, and a test could have watched fail: " + $testable + ". Each takes a test with a red run." else empty end) ]
+      | join(" ")')"
     if [ -n "$absence_hits" ]; then
       absence_verdict="unmet"
-      absence_detail="the diff broke these done-when clauses the tests step routed here: $absence_hits."
+      absence_detail="$absence_hits"
     else
       absence_hits="$(printf '%s' "$absence_rows" | jq -r \
-        '[ .[] | select(.verdict == "unknown") | (.order + ": " + .clause) ] | join("; ")')"
+        '[ .[] | select(.verdict == "unknown" or .testable == "unknown") | (.order + ": " + .clause) ] | join("; ")')"
       if [ -n "$absence_hits" ]; then
         absence_verdict="unknown"
-        absence_detail="nobody judged these done-when clauses the tests step routed here: $absence_hits."
+        absence_detail="nobody judged these done-when clauses the tests step routed here, or whether a test could have watched them fail: $absence_hits."
       else
         absence_verdict="met"
-        absence_detail="every done-when clause the tests step routed here reads met against the diff."
+        absence_detail="every done-when clause the tests step routed here reads met against the diff, and no test could have watched one fail."
       fi
     fi
   fi

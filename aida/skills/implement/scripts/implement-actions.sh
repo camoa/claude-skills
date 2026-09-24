@@ -4121,14 +4121,17 @@ do_tests_freeze() {
   # `denies` is a floor and not the whole rule: "the form shows no legacy field" carries `no` and a
   # test can watch it fail, so references/tests.md carries the judgement and this carries the
   # refusal a script can make. The word list is closed, so it reads the same clause the same way
-  # every time.
+  # every time. A word ending in n't is a negation too, so "doesn't" and "won't" deny. A curly
+  # apostrophe reads as a straight one first, because a clause pasted from a document carries it.
   local absence_sorted absence_json absence_unknown absence_asserts
   absence_sorted="$(printf '%s' "$absence_raw" | jq -c \
     --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" '
-    def denies: ascii_downcase | [scan("[a-z0-9]+")]
+    def denies: ascii_downcase | gsub("[\u2018\u2019]"; "\u0027")
+      | [scan("[a-z0-9]+(?:\u0027[a-z]+)?")]
       | any(.[]; . as $w
             | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without"]
-                | index($w)) != null));
+                | index($w)) != null)
+              or ($w | endswith("n\u0027t")));
     def known: . as $t | ($dw | index($t)) != null;
     . as $given
     | { routed: (reduce ($given[] | select(known) | select(denies)) as $t

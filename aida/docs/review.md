@@ -70,11 +70,13 @@ those survivors, so two of the contract checks are half script and half reviewer
 
 The same reviewer answers one more check, which exists only when the build sent it something. A
 done-when clause that asserts an absence says the change added nothing of a named kind. No second
-engine for one job. No new dependency. No static call to the container. No test of it can be
-watched failing, so the tests step froze none and routed the clause here instead. The reviewer
-reads each routed clause against the whole diff and answers met, unmet or unknown. One check
-covers them all, and it reads unknown when one clause reads unknown, so a clause nobody could
-judge fails the review. When no order routed a clause, the check reads not-needed and passes.
+engine for one job. No new dependency. No static call to the container. No test of it can be watched
+failing, so the tests step froze none and routed the clause here instead. The reviewer reads each
+routed clause against the whole diff and answers met, unmet or unknown. It also says whether a test
+could have watched the clause fail. A clause that could have had a test was routed around the rule
+that every test is watched failing. So that answer fails the review, and you see the clause named.
+One check covers them all, and it reads unknown when one clause reads unknown, so a clause nobody
+could judge fails the review. When no order routed a clause, the check reads not-needed and passes.
 
 **The surfaces.** Three checks run the end to end and visual harnesses when the project has them,
 and record [your walk](testing.md#what-a-failed-surface-does-to-the-verdict) of every surface.

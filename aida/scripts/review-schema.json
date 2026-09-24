@@ -147,14 +147,14 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/absenceRow" },
-      "description": "One row per done-when clause the tests step routed here, written by `findings` from the ledger's own list and the reviewer's verdicts. Such a clause asserts the change added nothing of a named kind, and no test of it can be watched failing, so the reviewer judges it against the diff instead (live-run row 184). The `absence-clauses` check reads these rows: unmet when one reads unmet, unknown when one reads unknown, met when every one reads met, and not-needed when no order routed a clause."
+      "description": "One row per done-when clause the tests step routed here, written by `findings` from the ledger's own list and the reviewer's verdicts. Such a clause asserts the change added nothing of a named kind, and no test of it can be watched failing, so the reviewer judges it against the diff instead (live-run row 184). The `absence-clauses` check reads these rows: unmet when one reads unmet or testable yes, unknown when one reads unknown or testable unknown, met when every one reads met and testable no, and not-needed when no order routed a clause. The review summary prints one line per row."
     }
   },
   "$defs": {
     "absenceRow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["order", "clause", "verdict", "note"],
+      "required": ["order", "clause", "verdict", "note", "testable"],
       "properties": {
         "order": {
           "type": "string",
@@ -175,6 +175,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Why this verdict, in the reviewer's own words, or this script's words when it read the answer as unknown."
+        },
+        "testable": {
+          "type": "string",
+          "enum": ["yes", "no", "unknown"],
+          "description": "Whether a test could have watched this clause fail, as the reviewer answered. `yes` means the clause was routed around a red run it could have had, and the `absence-clauses` check reads unmet. `unknown` means the reviewer gave neither word, and the check reads unknown."
         }
       }
     },
