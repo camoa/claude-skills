@@ -3916,23 +3916,6 @@ $raw
 TF_EOF
 }
 
-# Whether clause $1 carries a negation word, as a whole word and in any case. An absence clause
-# says the change added nothing of a named kind, and English says that with one of these words. The
-# list is closed, so this reads the same clause the same way every time. It is a floor and not the
-# whole rule: "the form shows no legacy field" carries `no` and a test can watch it fail, so
-# references/tests.md carries the judgement and this carries the refusal a script can make.
-tf_clause_denies() {
-  local w
-  while IFS= read -r w; do
-    case "$w" in
-      no|not|never|neither|nor|none|nothing|without) return 0 ;;
-    esac
-  done <<TF_EOF
-$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '\n')
-TF_EOF
-  return 1
-}
-
 # Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
 # recipe's own `## Test commands` rows are resolved: this step never carries a second, absolute
 # copy of a path that belongs to the repository, for the same reason baseline.json's own `scope`
@@ -4000,7 +3983,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
-  local support_raw="" absence_raw=""
+  local support_raw="" absence_raw="[]"
   local test_recipes="" unit_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4062,8 +4045,12 @@ do_tests_freeze() {
       --absence)
         [ "$#" -ge 2 ] || die 3 "tests-freeze: --absence needs one doneWhen clause of this order, verbatim"
         [ -n "$2" ] || die 3 "tests-freeze: --absence was given an empty clause."
-        absence_raw="$absence_raw$2
-"
+        # Collected as a JSON array and not as one value per line, the way every other repeatable
+        # flag here is. A doneWhen clause is prose design wrote, and nothing refuses a newline in
+        # one (scripts/check-design.sh). Split on newlines, such a clause would match no doneWhen
+        # entry and be refused for the wrong reason.
+        absence_raw="$(printf '%s' "$absence_raw" | jq -c --arg t "$2" '. + [$t]')"
+        [ -n "$absence_raw" ] || die 3 "tests-freeze: could not record the --absence clause."
         shift 2 ;;
       -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
       *)
@@ -4124,28 +4111,38 @@ do_tests_freeze() {
   # Second, a clause with no negation word, which asserts a presence and is proved by a test.
   # This route relaxes nothing else. Every --test still needs its red run or its --locks-in reason
   # (exit 33), and an order whose record would hold no row still refuses (exit 74).
-  local absence_json absence_clause absence_unknown="" absence_asserts=""
-  absence_json='[]'
-  while IFS= read -r absence_clause; do
-    [ -n "$absence_clause" ] || continue
-    if [ "$(printf '%s' "$UNIT_JSON" | jq -r --arg t "$absence_clause" \
-         '[ (.doneWhen // [])[] | select(. == $t) ] | length')" = "0" ]; then
-      absence_unknown="$absence_unknown$absence_clause; "
-      continue
-    fi
-    if ! tf_clause_denies "$absence_clause"; then
-      absence_asserts="$absence_asserts$absence_clause; "
-      continue
-    fi
-    absence_json="$(jq -nc --argjson have "$absence_json" --arg t "$absence_clause" \
-      'if ($have | index($t)) then $have else $have + [$t] end')"
-  done <<TF_EOF
-$absence_raw
-TF_EOF
+  #
+  # Sorted in one jq pass, and no clause is ever carried through a shell variable: a command
+  # substitution strips the trailing newlines of whatever it reads, and a doneWhen clause is prose
+  # nothing refuses a newline in. A clause the shell had reshaped would fail the verbatim match and
+  # be refused for a cause that is not the real one. Only the three lists come back out, and the two
+  # for the refusals are joined into a message and never matched on again.
+  #
+  # `denies` is a floor and not the whole rule: "the form shows no legacy field" carries `no` and a
+  # test can watch it fail, so references/tests.md carries the judgement and this carries the
+  # refusal a script can make. The word list is closed, so it reads the same clause the same way
+  # every time.
+  local absence_sorted absence_json absence_unknown absence_asserts
+  absence_sorted="$(printf '%s' "$absence_raw" | jq -c \
+    --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" '
+    def denies: ascii_downcase | [scan("[a-z0-9]+")]
+      | any(.[]; . as $w
+            | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without"]
+                | index($w)) != null));
+    def known: . as $t | ($dw | index($t)) != null;
+    . as $given
+    | { routed: (reduce ($given[] | select(known) | select(denies)) as $t
+                  ([]; if (index($t)) then . else . + [$t] end)),
+        unknown: [ $given[] | select(known | not) ],
+        asserts: [ $given[] | select(known) | select(denies | not) ] }')"
+  [ -n "$absence_sorted" ] || die 3 "tests-freeze: the --absence clauses could not be read."
+  absence_json="$(printf '%s' "$absence_sorted" | jq -c '.routed')"
+  absence_unknown="$(printf '%s' "$absence_sorted" | jq -r '.unknown | join("; ")')"
+  absence_asserts="$(printf '%s' "$absence_sorted" | jq -r '.asserts | join("; ")')"
   [ -z "$absence_unknown" ] \
-    || die 81 "tests-freeze: these --absence clauses are not, verbatim, a doneWhen entry of $unit_id: ${absence_unknown%; }. Review judges the clause design wrote, so the flag carries the order's own words. Read the doneWhen in implementation/snapshot.json and pass one of its entries."
+    || die 81 "tests-freeze: these --absence clauses are not, verbatim, a doneWhen entry of $unit_id: $absence_unknown. Review judges the clause design wrote, so the flag carries the order's own words. Read the doneWhen in implementation/snapshot.json and pass one of its entries."
   [ -z "$absence_asserts" ] \
-    || die 81 "tests-freeze: these --absence clauses carry no negation word, so each asserts a presence: ${absence_asserts%; }. An absence clause says the change added nothing of a named kind, and that is the only clause with no red run to watch. A clause asserting a presence is proved by a test that failed first."
+    || die 81 "tests-freeze: these --absence clauses carry no negation word, so each asserts a presence: $absence_asserts. An absence clause says the change added nothing of a named kind, and that is the only clause with no red run to watch. A clause asserting a presence is proved by a test that failed first."
 
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
   # Every guard below iterates a per-criterion list, so an order with none passes all of them and
@@ -4860,63 +4857,33 @@ TF_OWN_COMMITS
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
   # The freeze commits (below), so freezing wo1, then wo2, then wo1 again finds HEAD moved by wo2's
   # commit. The same rows are the same freeze; different rows under a moved HEAD are the case 35
-  # exists for, tests changed under a record nobody re-took.
+  # exists for, tests changed under a record nobody re-took. The same rows leave nothing to commit
+  # and nothing to write, so this run says so and stops below, once the ledger carries what this
+  # call judged and routed. A judgement and a routed clause are not in the rows compared here, so a
+  # re-run that changes one of them and no test used to stop with the ledger saying what it said
+  # before. A routed clause that never reaches the ledger never reaches review.
+  local tf_unchanged_at=""
   if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ] && [ "$existing_commit" != "$tf_retake_commit" ]; then
     local existing_rows new_rows
     existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
     new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
-    if [ "$existing_rows" = "$new_rows" ]; then
-      echo "TESTS-FREEZE: unchanged (already frozen at commit $existing_commit with the same tests)"
-      printf '%s\n' "$record_file"
-      exit 0
-    fi
-    die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
+    [ "$existing_rows" = "$new_rows" ] \
+      || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
+    tf_unchanged_at="$existing_commit"
   fi
-
-  # --- the test files go into a commit before anything is measured against them --------------------
-  # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
-  # slice's implementer starts"). Without this, the implementer is the role that commits the tests
-  # it is measured against, and the record names a commit the tests are not in (live-run row 62).
-  # Only the frozen paths are taken, through a pathspec, so work beside them stays where it is, and
-  # the line at the end says what was left. The helper dies before the record is written when the
-  # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
-  # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
-  # The support files ride in the same commit as the tests, so they are the author's in the
-  # history and never land in the implementer's range (live-run row 90).
-  local frozen_rel_paths tree_left
-  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
-    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
-  if [ -n "$frozen_rel_paths" ]; then
-    set --
-    while IFS= read -r p; do
-      [ -n "$p" ] && set -- "$@" "$p"
-    done <<TF_EOF
-$frozen_rel_paths
-TF_EOF
-    if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
-      recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
-        "Freeze the tests of $unit_id through the implement skill: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
-        "$frozen_rel_paths"
-      current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
-      [ -n "$current_commit" ] \
-        || die 3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
-    fi
-  fi
-  tree_left="$(git -C "$codepath" status --porcelain)"
-  [ -z "$tree_left" ] \
-    || printf 'tests-freeze: the tests are committed or unchanged, and other uncommitted changes remain in %s: %s\n' "$codepath" "$(printf '%s' "$tree_left" | tr '\n' ' ')" >&2
 
   # --- the checkpoint's verdict goes into the ledger, one judgement per order per criterion --------
-  # Written before the record below, and on both paths through it, because a second freeze at the
-  # same commit with the same tests writes no record and must still carry the judgement a person or
-  # a checker just made. A judgement this order already left is replaced rather than added to: one
-  # order judges one criterion once, and two entries under one unit would count that row twice.
+  # Written before the record below, and on every path that reaches an exit, because a second freeze
+  # with the same tests writes no record and must still carry the judgement a person or a checker
+  # just made. A judgement this order already left is replaced rather than added to: one order
+  # judges one criterion once, and two entries under one unit would count that row twice.
   #
   # The clauses routed to review ride here too, on the order's own entry. This runs whatever the
   # rows counted, because the routed list is replaced on every freeze: a re-freeze that drops a
   # clause must not leave it owed to review, and an order with no row at all can still route one.
   # The freeze already refuses a missing ledger at its last step, so requiring one here is no new
-  # refusal.
+  # refusal. It runs after exit 35 and before the commit below, so a refused freeze writes nothing
+  # and every freeze that returns 0 has written this first.
   local ledger_file_now ledger_doc_now ledger_with_judgements
   ledger_file_now="$IMPL_DIR/ledger.json"
   [ -f "$ledger_file_now" ] \
@@ -4951,6 +4918,45 @@ TF_EOF
   write_atomic "$ledger_file_now" "$ledger_with_judgements"
   printf 'absenceClauses: %s (routed to review, on %s'"'"'s ledger entry)\n' \
     "$(printf '%s' "$absence_json" | jq 'length')" "$unit_id"
+
+  if [ -n "$tf_unchanged_at" ]; then
+    echo "TESTS-FREEZE: unchanged (already frozen at commit $tf_unchanged_at with the same tests)"
+    printf '%s\n' "$record_file"
+    exit 0
+  fi
+
+  # --- the test files go into a commit before anything is measured against them --------------------
+  # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
+  # slice's implementer starts"). Without this, the implementer is the role that commits the tests
+  # it is measured against, and the record names a commit the tests are not in (live-run row 62).
+  # Only the frozen paths are taken, through a pathspec, so work beside them stays where it is, and
+  # the line at the end says what was left. The helper dies before the record is written when the
+  # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
+  # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
+  # The support files ride in the same commit as the tests, so they are the author's in the
+  # history and never land in the implementer's range (live-run row 90).
+  local frozen_rel_paths tree_left
+  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
+    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  if [ -n "$frozen_rel_paths" ]; then
+    set --
+    while IFS= read -r p; do
+      [ -n "$p" ] && set -- "$@" "$p"
+    done <<TF_EOF
+$frozen_rel_paths
+TF_EOF
+    if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
+      recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
+        "Freeze the tests of $unit_id through the implement skill: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
+        "$frozen_rel_paths"
+      current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
+      [ -n "$current_commit" ] \
+        || die 3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
+    fi
+  fi
+  tree_left="$(git -C "$codepath" status --porcelain)"
+  [ -z "$tree_left" ] \
+    || printf 'tests-freeze: the tests are committed or unchanged, and other uncommitted changes remain in %s: %s\n' "$codepath" "$(printf '%s' "$tree_left" | tr '\n' ' ')" >&2
 
   # The recipe each red was read against, per framework, so the record says what the freeze read
   # and a later reader can compare it with what preconditions.json holds now (live-run row 99).
