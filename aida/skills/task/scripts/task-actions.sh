@@ -1267,10 +1267,18 @@ run_recipe_capture() {
 # exit 4 stay inside. Reads RECIPE, preconditions, file_list, files_dir, tokens_dir, task_json
 # and CODE_PATH from do_environment.
 environment_check() {
-  local sub="$1" wt="$2" outfile="$3" result="" failed=0 name branch base
+  local sub="$1" wt="$2" outfile="$3" result="" failed=0 branch base
   recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
   [ -n "$outfile" ] || outfile="$(mktemp)" || die3 "environment: could not create a temporary file"
   : >"$outfile"
+  # Any exit before the files are kept removes them: an interrupt, a TERM, a refusal or a failing
+  # line. zsh runs a function's EXIT trap when the function returns, and bash runs it when the
+  # script exits, so every return below clears the three traps first. A shell waiting for the
+  # check runs the TERM trap once the check ends.
+  RF_WRITTEN_PATHS=""
+  trap 'environment_remove_written; [ "$sub" = up ] || rm -f "$outfile"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   if [ "$sub" = up ]; then
     recipe_files_write environment "$file_list" "$wt" "$files_dir"
     printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
@@ -1279,11 +1287,6 @@ environment_check() {
   fi
   if [ -n "$preconditions" ]; then
     result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || failed=1
-  fi
-  if [ "$failed" -eq 1 ] || [ "$sub" = show ]; then
-    printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
-      [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
-    done
   fi
   if [ "$failed" -eq 1 ]; then
     cat "$outfile" >&2
@@ -1298,7 +1301,19 @@ environment_check() {
     rm -f "$outfile"; rm -rf "$tokens_dir" "$files_dir"
     exit 3
   fi
-  if [ "$sub" = show ]; then rm -f "$outfile"; else [ -z "$result" ] || printf '%s\n' "$result"; fi
+  if [ "$sub" = show ]; then environment_remove_written; rm -f "$outfile"; fi
+  trap - EXIT INT TERM
+  [ "$sub" = show ] || [ -z "$result" ] || printf '%s\n' "$result"
+}
+
+# Removes the files environment_check wrote in this run, and each folder the removal emptied. The
+# paths are relative to the worktree, where the caller stands.
+environment_remove_written() {
+  local name
+  printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
+    [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
+  done
+  return 0
 }
 
 do_environment() {
