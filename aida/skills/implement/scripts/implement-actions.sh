@@ -9175,33 +9175,31 @@ RS_ARCHIVES
   printf '%s' "$out"
 }
 
-# The commits of the orders the newest restart named that HEAD still holds, the same shape, or []
+# The commits of the orders any restart named that HEAD still holds, the same shape, or []
 # when no restart happened or nothing of it is left. $1 the task folder, $2 the code repository,
 # $3 an order id to keep alone, or empty for every order, $4 the ledger document. Read by `start`
 # after a restart and by `tests-brief`, so the test author is told the tree holds a partial build
 # of the order, and by `tests-freeze` to check a --locks-in commit.
-# The record says which orders restarted; the commits come from rs_order_commits, the rule
+# Each record says which orders restarted; the commits come from rs_order_commits, the rule
 # `restart` itself applies. This replayed the record's own `commits` array, which is written once
 # and never recomputed, so a restart from before that rule was complete named one commit where the
 # branch held four (live-run row 182). The record's array is still read, inside rs_order_commits,
 # for the commits of a retake the restart cleared out of the ledger.
+# Every restart record is read, not the newest alone. A later restart of another order leaves an
+# earlier one's commits on the branch, and its line and its commit: route must survive. An order
+# restarted twice is named by two records and asked for once: rs_order_commits already reads
+# every folder and record either restart wrote, and `start` prints one line per order.
 rs_restarted_commits_in_head() {
-  local task="$1" codepath="$2" only="$3" ledger="$4" newest="" one out='[]'
+  local task="$1" codepath="$2" only="$3" ledger="$4" one out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
-    if [ -z "$newest" ] || [ "$one" -nt "$newest" ]; then newest="$one"; fi
-  done <<RS_FOUND
-$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null)
-RS_FOUND
-  if [ -n "$newest" ]; then
-    while IFS= read -r one; do
-      [ -n "$one" ] || continue
-      out="$(jq -cn --argjson have "$out" \
-        --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" '$have + $more')"
-    done <<RS_ORDERS
-$(jq -r --arg only "$only" '(.ordersHaltedForDrift // [])[] | select($only == "" or . == $only)' "$newest" 2>/dev/null)
+    out="$(jq -cn --argjson have "$out" \
+      --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" '$have + $more')"
+  done <<RS_ORDERS
+$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
+  -exec jq -r --arg only "$only" '(.ordersHaltedForDrift // [])[] | select($only == "" or . == $only)' {} ';' \
+  2>/dev/null | LC_ALL=C sort -u)
 RS_ORDERS
-  fi
   printf '%s' "$out"
 }
 
