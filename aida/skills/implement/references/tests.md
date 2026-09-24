@@ -6,15 +6,23 @@ depends on is finished.
 The tests are the reference the whole build is measured against. Everything below exists to keep
 that reference outside the thing it judges.
 
+## Read what this order needs
+
+Read this order's `order(<id>)` line from `read`. Its `roles=` list names every role this step and
+the build dispatch for the order. Its `lookups=` list names every catalog point this step asks.
+One function decides both lists from the proof kind: `br_order_needs` in `scripts/lib/proof.sh`.
+Do not work them out from the kind here. `dispatch-open` refuses a role the list lacks (exit 102).
+
 ## Resolve the recipes for this step
 
-Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup twice, for each
-framework the project declares. Each message names the point as `point: <phase>`, then each
-framework, then the project folder. Name the role, and pass the lookup's answer in its own word:
-SKILL.md holds both rules.
+Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once per point in
+`lookups=`, for each framework the project declares. Each message names the point as
+`point: <phase>`, then each framework, then the project folder. Name the role, and pass the
+lookup's answer in its own word: SKILL.md holds both rules.
 
-**`point: test-authoring`.** This answers where a test file goes, which levels exist and when
-each is right, what a test may not do in this framework, and how a criterion id attaches to a test.
+**`point: test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
+which levels exist and when each is right, what a test may not do in this framework, and how a
+criterion id attaches to a test. Only the test author and the row-checker of a test read it.
 
 **`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
@@ -33,12 +41,15 @@ frozen test reads the record and never the catalog, because a lookup in a write 
 that can fail open, and a pattern that changed during a build would change what is protected
 halfway through it.
 
-## An order whose proof is `gate`, `record` or `observe` has no test author
+## An order with no `test-author` in its roles
 
-Read the order's `proof` from the frozen snapshot first. `gate` means its deliverable is
-exported configuration, and a test that reads the YAML back cannot fail for the right reason.
-Skip `tests-brief`, dispatch nobody, and put no row to anyone. Go straight to the freeze below
-with no `--test`, and a `--checklist` for each criterion a person verifies. The build runs the
+Such an order skips `tests-brief` and the test author. Its `roles=` says whether a row-checker
+judges it. The freeze flags still follow the proof kind, so read the order's `proof` from the
+frozen snapshot for them.
+
+`gate` means its deliverable is exported configuration, and a test that reads the YAML back cannot
+fail for the right reason. Put no row to anyone. Go straight to the freeze below with no `--test`,
+and a `--checklist` for each criterion a person verifies. The build runs the
 implement recipe's `## Configuration gate` lines as the order's own check, and `close` judges
 its owned machine criterion from that check. The behavioural proof lives with the tests of the
 order that consumes what it configures. Every other order takes the steps below. An order with
@@ -46,9 +57,9 @@ no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` lin
 `update --proof gate` is the way onto the gate.
 
 `record` means its deliverable is a document in the project folder, and nothing runs a document.
-Skip `tests-brief` and dispatch no test author. Its done-when rows are its checkpoint. Put them
-to the `row-checker`, or to the person, the way the checkpoint below puts a test's rows. The
-question is whether each row names something a reader can confirm from the deliverable alone.
+Its done-when rows are its checkpoint. Put them to the `row-checker`, or to the person, the way
+the checkpoint below puts a test's rows. The question is whether each row names something a reader
+can confirm from the deliverable alone.
 Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
@@ -57,9 +68,8 @@ An order that freezes no test file leaves the build's `frozen-tests` row undecla
 hashed nothing. So it says the row did not apply, rather than that a hash matched.
 
 `observe` means its deliverable is what a page shows, and a model judges that after the build.
-Skip `tests-brief` and dispatch no test author. Put no row to anyone: there is nothing to judge
-before the page exists. Freeze with no `--test` and no `--row`, and a `--checklist` for each
-criterion a person verifies. The build step opens the order's surfaces in a browser after the
+Put no row to anyone: there is nothing to judge before the page exists. Freeze with no `--test`
+and no `--row`, and a `--checklist` for each criterion a person verifies. The build step opens the order's surfaces in a browser after the
 implementer returns, and reads that record as the order's own check, `observed`. `close`
 writes `model` on the criteria the order owns.
 
@@ -220,7 +230,8 @@ nothing looks like success and is the dangerous one.
 
 **When the author returns, run the coding-standards row over the new test files.** Take the
 command from the check recipe `references/preconditions.md` resolved, with `{paths}` as the test
-paths the author returned, and run it here. Send any finding back to the author before the
+paths the author returned, and run it here. When the row lists `extensions`, pass only the test
+files that end in one of them. When none is left, the row does not apply: say so, and run nothing. Send any finding back to the author before the
 freeze. No script action runs one recipe row on its own, so this conversation runs the command.
 This is the one place the tests' own standards are judged. The build step leaves the frozen tests
 out of its tool rows, because the implementer may not write them.

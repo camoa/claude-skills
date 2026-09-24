@@ -19,10 +19,18 @@ row and every mutation survivor. It holds the findings implementation ruled defe
 `playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
 `absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 
-The call prints three things: the brief's own path, the path the findings go to at
-`review/findings.json`, and the counts. Read neither file into this conversation, per SKILL.md.
+The call prints the brief's own path, the path the findings go to at `review/findings.json`, and
+the counts. Read neither file into this conversation, per SKILL.md. Its `reviewer:` line says
+whether to dispatch the reviewer.
 
 ## Dispatch the architecture reviewer
+
+**Dispatch only on `reviewer: dispatch`.** On `reviewer: skip`, no order commits in the code
+repository, and no order routed a done-when clause here. The diff then holds nothing the task
+produced, and every lens would read undeclared. So skip the dispatch, and run `findings` below with
+no `--findings`. The record keeps the reason under `reviewerSkipped`, and the summary prints it.
+Tell the person that reason in one line. A routed clause keeps the dispatch, because it still needs
+a judge.
 
 **Dispatch `architecture-reviewer`**, on opus, with the message SKILL.md names: the role, the run
 mode, the brief's path, and the findings path. A critic runs at the top model whatever it judges.
@@ -81,7 +89,8 @@ Run:
   --findings <path to the reviewer's findings file>
 ```
 It refuses at exit 51 when the code path moved, or its tree went dirty, since `checks` ran. A file
-the role left behind is caught there, rather than read as a finding.
+the role left behind is caught there, rather than read as a finding. It refuses at exit 3 with no
+`--findings`, unless `brief` printed `reviewer: skip`.
 
 It records checks 2, 9 to 12 and 16, and every finding. It lowers checks 3 and 4 where their lens
 raised a finding. It records one row per routed done-when clause, and one more check for them all.

@@ -143,6 +143,11 @@
       "items": { "$ref": "#/$defs/catalogNote" },
       "description": "What this review saw about the catalog, one line each: a guide the code contradicts, a recipe whose command no longer runs, a pattern the framework wants and no guide names. Review writes nothing to the catalog. A person decides whether a note becomes a proposal, and `close` names the count so the evidence is not lost in silence."
     },
+    "reviewerSkipped": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why `findings` ran with no dispatch of the architecture reviewer, in one line a person reads. Present only when no order commits in the code repository and no order routed a done-when clause to review, so the reviewer had nothing to judge. Absent when the reviewer ran."
+    },
     "absences": {
       "type": "array",
       "default": [],

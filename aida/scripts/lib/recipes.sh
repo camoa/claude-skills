@@ -44,6 +44,7 @@
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>]   runs one resolved command
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
+#   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
 #   pc_unquote <text>                         the text with one layer of matching outer quotes removed
 #   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
 #   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
@@ -969,6 +970,14 @@ br_filter_extensions() {
   jq -cn --argjson paths "$1" --argjson exts "$2" '
     [ $paths[] as $f | select([ $exts[] as $e | select($f | endswith($e)) ] | length > 0) | $f ]
   '
+}
+
+# True when the argv array $1 holds a token br_run_resolved expands from the file list: `{paths}`,
+# `{file}` or `{dirs}`. Such a row reads the caller's files, so an empty list is a row that does not
+# apply, never a run over the tool's own default scope. The build once left `{dirs}` out of this
+# test, so a row over directories ran whole and read met.
+br_argv_takes_paths() {
+  printf '%s' "$1" | jq -e 'any(.[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1
 }
 
 # Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the

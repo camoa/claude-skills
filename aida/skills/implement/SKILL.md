@@ -38,8 +38,8 @@ This prints summary lines, one `key: value` each:
 - the task's own run mode for this stage, from `task.json`;
 - the snapshot's path and hash, the ledger's path, and whether a preconditions record and a
   finished record exist;
-- one `order(...)` line per work order: its last step, its halt reason, its counters and its review
-  state;
+- one `order(...)` line per work order: its last step, its halt reason, its counters, its review
+  state, and the `roles=` and `lookups=` its proof kind needs;
 - the criteria counted by row state;
 - a `next:` line naming the step the table below would choose.
 

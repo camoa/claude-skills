@@ -631,6 +631,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order's own, which `tests-brief` already put in the brief under `treeHolds`. After a rebase
 #      it also names each recorded commit with no copy here that can be cited, and why. A reason
 #      with no `commit:` prefix is prose, names the existing code, and never reaches this check.
+# 102  `dispatch-open` was given a role the order's proof kind does not need: a test author on an
+#      order that freezes no test, or a row-checker on one that freezes no row. br_order_needs in
+#      scripts/lib/proof.sh decides, and `read` prints its answer on the order's line.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -1121,6 +1124,24 @@ im_retake_pending() {
   printf '%s' "$answer"
 }
 
+# What each order's proof kind needs, from br_order_needs, as one JSON object keyed by order id.
+# `read` prints the value on the order's line, so the tests step reads the roles and the lookups
+# there and never re-derives them from the kind. $1 the snapshot document, or empty.
+im_order_needs_json() {
+  local count i one acc='{}'
+  [ -n "$1" ] || { printf '{}'; return 0; }
+  count="$(printf '%s' "$1" | jq '(.workOrders // []) | length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$1" | jq -c --argjson i "$i" '.workOrders[$i]')"
+    br_order_needs "$one"
+    acc="$(printf '%s' "$acc" | jq -c --arg id "$(printf '%s' "$one" | jq -r '.id')" \
+      --arg v "roles=$BR_ORDER_ROLES lookups=$BR_ORDER_LOOKUPS" '. + {($id): $v}')"
+    i=$((i + 1))
+  done
+  printf '%s' "$acc"
+}
+
 # The next step, derived the way SKILL.md's routing table reads the ledger, so `read`, `start` and
 # every record action print the same answer from the same facts. $1 the ledger document, or empty
 # when none is readable; $2 the snapshot document, or empty; $3 the implementation folder, for the
@@ -1418,7 +1439,9 @@ do_read() {
   criteria_line="none"
   judged_line="0"
   if [ "$ledger_readable" = "true" ]; then
-    orders_json="$(jq -c --argjson reviews "$reviews_json" '
+    local needs_json='{}'
+    [ "$snap_readable" = "true" ] && needs_json="$(im_order_needs_json "$(jq -c '.' "$SNAPSHOT_FILE" 2>/dev/null)")"
+    orders_json="$(jq -c --argjson reviews "$reviews_json" --argjson needs "$needs_json" '
       ($reviews | map({(.unit): .}) | add // {}) as $rv
       | [ (.orders // [])[] | . as $o
           | {id: .id,
@@ -1426,7 +1449,8 @@ do_read() {
              halt: ("halt: " + (.haltedBecause // "none")),
              attempts: ("attempts=" + ((.attemptsUsed // 0) | tostring)),
              rounds: ("rounds=" + ((.roundsUsed // 0) | tostring)),
-             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end)} ]' \
+             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end),
+             needs: ($needs[$o.id] // "unknown: no readable snapshot names this order")} ]' \
       "$LEDGER_FILE")"
     criteria_line="$(printf '%s' "$ledger_summary" | jq -r \
       '(.criteriaByRowState // {}) | to_entries | map("\(.key)=\(.value)") | join(" ") | if . == "" then "none" else . end')"
@@ -2731,7 +2755,7 @@ bl_tool_result() {
   exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
 
   has_paths=false
-  printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
+  br_argv_takes_paths "$argv_json" && has_paths=true
   scoped_json="$paths_json"
   if [ -n "$exts_json" ]; then
     scoped_json="$(br_filter_extensions "$paths_json" "$exts_json")"
@@ -5357,7 +5381,7 @@ br_tool_check() {
   exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
 
   has_paths=false
-  printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
+  br_argv_takes_paths "$argv_json" && has_paths=true
   owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
   owned_count="$(printf '%s' "$owned_json" | jq 'length')"
   # The tools judge the files the builder may write. A frozen test is owned, so the diff may touch
@@ -9493,6 +9517,19 @@ do_restart() {
 # removes it, safe to call when none is open. Two tasks of one project each hold their own.
 # ------------------------------------------------------------------------------------------------
 
+# Exit 102. A role whose need a proof kind decides, dispatched on an order whose kind does not need
+# it, would judge nothing: a test author on an order that freezes no test, or a row-checker on one
+# with no row. br_order_needs decides; this reads it. $1 the bare role, $2 the order id. SNAPSHOT_DOC
+# is loaded.
+im_refuse_unneeded_role() {
+  case " $BR_KIND_ROLES " in *" $1 "*) ;; *) return 0 ;; esac
+  br_order_needs "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$2" '[ .workOrders[] | select(.id == $u) ][0]')"
+  case " $BR_ORDER_ROLES " in
+    *" $1 "*) ;;
+    *) die 102 "dispatch-open: $2 is proved by its $(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$2" '[ .workOrders[] | select(.id == $u) ][0].proof // "tests"'), so it needs only these roles: $BR_ORDER_ROLES. A $1 here would have nothing to judge. Read the roles on the order's line in \`read\`." ;;
+  esac
+}
+
 do_dispatch_open() {
   local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw=""
   while [ "$#" -gt 0 ]; do
@@ -9599,6 +9636,7 @@ do_dispatch_open() {
       '[ .workOrders[]? | select(.id == $u) ] | length')"
     [ "$unit_present" = "0" ] \
       && die 22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
+    im_refuse_unneeded_role "$role_bare" "$unit_id"
   fi
 
   # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause
