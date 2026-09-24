@@ -1475,21 +1475,29 @@ do_close() {
   # runs before the commit below, so one commit carries the record and the evidence it names. The
   # design folder is the committed place the stage already writes: `design-render.sh` puts
   # `design/<id>.md` there beside every order. A work order id can never take this name.
+  #
+  # An unfinished critique moves too, under an `unfinished-` prefix (gap row 190). It is no more
+  # reproducible than a finished one, and it is the only copy of what that critic wrote before it
+  # stopped. The close does not count it: it is not evidence the close judged, and a findings total
+  # read from it would be invented. The prefix keeps it out of the `design-critique-*.md` pattern,
+  # so the count loop below skips it and the design skill still routes a bare `close` to the
+  # critique step when no finished file is there.
   local crit_file crit_dest
   while IFS= read -r crit_file; do
     [ -n "$crit_file" ] || continue
-    crit_dest="$DESIGN_DIR/$(basename -- "$crit_file")"
     if critique_findings_of "$crit_file" >/dev/null; then
-      # A directory at the destination takes the move inside itself, and `mv` exits 0. The count
-      # loop below then reads one file fewer. The record names fewer files than the close carried,
-      # with a total nothing on disk adds up to. Nothing in AIDA makes such a directory, so this
-      # needs a hand. It is still the one shape where the record and the disk disagree in silence.
-      [ ! -e "$crit_dest" ] || [ -f "$crit_dest" ] \
-        || die3 "close: $crit_dest is not a file, so the critique $crit_file cannot move there. Remove it and close again"
-      mv -f -- "$crit_file" "$crit_dest" || die3 "close: could not move $crit_file to $crit_dest"
+      crit_dest="$DESIGN_DIR/$(basename -- "$crit_file")"
     else
-      printf 'close: %s has no findings line, so its critic did not finish; it stays under records and is not counted\n' "$crit_file" >&2
+      crit_dest="$DESIGN_DIR/unfinished-$(basename -- "$crit_file")"
+      printf 'close: %s has no findings line, so its critic did not finish; it moves to %s and is not counted\n' "$crit_file" "$crit_dest" >&2
     fi
+    # A directory at the destination takes the move inside itself, and `mv` exits 0. The count
+    # loop below then reads one file fewer. The record names fewer files than the close carried,
+    # with a total nothing on disk adds up to. Nothing in AIDA makes such a directory, so this
+    # needs a hand. It is still the one shape where the record and the disk disagree in silence.
+    [ ! -e "$crit_dest" ] || [ -f "$crit_dest" ] \
+      || die3 "close: $crit_dest is not a file, so the critique $crit_file cannot move there. Remove it and close again"
+    mv -f -- "$crit_file" "$crit_dest" || die3 "close: could not move $crit_file to $crit_dest"
   done < <(find "$TASK_PATH/records" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
 
   # The critique files this close carries: their paths, and the total of their `findings: N` last

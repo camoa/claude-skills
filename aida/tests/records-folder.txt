@@ -18,27 +18,32 @@
 # here, and on a name here that nothing references.
 # A segment that varies reads as <>: ${TOOL}, <stage> and * all normalize to it.
 #
-# What the spec reads. The source text of every script under scripts/, skills/ and hooks/, and of
-# every agent and skill body. It strips the quotes first, so a split literal still reads as one
-# path. It follows a variable one file assigned a path ending in /records. It refuses a file name
-# built at run time, and a cd into a records folder, because it can read neither.
+# What the spec reads as a write. The source text of every script under scripts/, skills/ and
+# hooks/, every agent body and skill body, every template, every eval file, and the schemas under
+# scripts/. It strips the quotes first, so a split literal still reads as one path. It follows a
+# variable one file assigned a path ending in /records, up to the line that assigns that variable
+# another path. It reads the -name pattern of a find whose path ends in /records, which is how the
+# design close names the critique files it moves. It reads a name ending in / as a subfolder. It
+# refuses a file name built at run time, and a cd into a records folder, because it can read
+# neither.
 #
-# What it cannot see, in four shapes. One: a records folder passed as an argument and not
-# assigned, as in `write_into "$d/records" "$n"`. `mkdir -p "$d/records"` is that same shape and
-# is correct, so a rule here needs a command list that goes stale. Two: templates/, evals/, docs/
-# and the schemas under scripts/ are outside the scan, and three schemas name records paths today.
-# Three: a subfolder named with no file after it. Four: a variable name one file reuses for
-# another path. The spec reads those names too, so it reports more than it should, never less.
-# Five, and it is the same blind spot: an agent given its output path by its dispatch.
-# agents/architecture-reviewer.md writes its findings file at the path the dispatch names. This
-# spec would not see a dispatch that named a records path. Nor would a count of the agents that
-# name one in their own body.
+# An agent given its output path by its dispatch is read through the dispatch. Every dispatch site
+# is a skill body, a skill reference or a skill script, and the scan holds all three.
+#
+# The spec reads every page under docs/ too, and a docs page is not a write. It is prose for a
+# person. A name a docs page gives must be on this list, and a docs page alone never keeps a line
+# here alive. So a line naming a record nothing writes any more still fails, even while a docs
+# page still names it.
+#
+# What it cannot see, in one shape. A records folder passed as an argument and not assigned, as in
+# `write_into "$d/records" "$n"`. `mkdir -p "$d/records"` is that same shape and is correct, so a
+# rule here needs a command list that goes stale.
 #
 check-project.json | scripts/check-project.sh | every project check writes it, and a pickup writes it too
 check-task.json | scripts/check-task.sh | every task check writes it, and `task start` ends by running one
 compacted.json | hooks/pre-compact.sh | every automatic compaction writes it, and hooks/session-start.sh names it once and removes it
 design-check.json | skills/design/scripts/design-actions.sh, action `check` | the action runs scripts/check-design.sh into it again
-design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again. A finished one moves to design/ at the close
+design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again. The close moves every one into design/, an unfinished one under an unfinished- prefix
 <>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again
 design-distill.json | the distiller agent | design close dispatches the distiller again
 environment-down.txt | skills/task/scripts/task-actions.sh, action `environment down` | the action runs the tear-down lines again

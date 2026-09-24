@@ -252,7 +252,10 @@ when implementation would build the wrong thing or could not start, and a concer
 They never repeat what the check counted, and a clean report names what it compared. A lens whose
 file never arrives is dispatched once more. If it fails again, the close leaves it out and says so.
 The project ignores `records/`, so the close moves each finished file into `design/` and commits
-it. A file whose critic never finished is not evidence, and it stays where the critic left it.
+it. A file whose critic never finished moves there too, named `unfinished-design-critique-<lens>.md`.
+The close does not count it, because it is not evidence the close judged. It is committed because
+it is the only copy of what that critic wrote before it stopped, and a second dispatch answers
+differently.
 
 You answer each finding, because a critic that can block trains the builder to write for the
 critic. Interactively, design shows the findings grouped by order, and each takes one answer:

@@ -11,9 +11,18 @@
 #
 # How it reads a write. It strips the quotes from a line first, so `"$d"/records/"x.json"` reads
 # as one path. It follows a variable assigned a path ending in /records, and reads every name
-# written through that variable. Each file is read twice, so an assignment below its use still
-# counts. It refuses a file name built at run time, because it cannot know that name. It refuses
-# a script that changes directory into a records folder, for the same reason.
+# written through that variable, up to the line that assigns that variable another path. A use
+# above every assignment still counts, because each file is read twice. It reads the -name pattern
+# of a find whose path ends in /records. It reads a name ending in / as a subfolder. It refuses a
+# file name built at run time, because it cannot know that name. It refuses a script that changes
+# directory into a records folder, for the same reason.
+#
+# What it reads. Every script under scripts/, skills/ and hooks/, every agent body and skill body,
+# every template, every eval file, and the schemas under scripts/. A records path in one of those
+# is a write. It reads every page under docs/ as well, and those are different: a docs page is
+# prose for a person, not an instruction a model runs. A name a docs page gives must be on the
+# list, and a docs page alone never keeps a list line alive. Only a write does. So a line naming a
+# record nothing writes any more still fails, even while a docs page still names it.
 # What it still cannot see is named in tests/records-folder.txt's header.
 # Usage: records-folder-spec.sh [<list file>]. bash 3.2+ and zsh.
 # The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
@@ -26,12 +35,18 @@ PLUGIN="$(dirname "$HERE")"
 LIST="${1:-$HERE/records-folder.txt}"
 [ -f "$LIST" ] || { printf 'no list at %s\n' "$LIST"; exit 1; }
 FAIL=0
-RAW="$(mktemp)"; FOUND="$(mktemp)"; KEYS="$(mktemp)"; CDS="$(mktemp)"; AT="$(mktemp)"
-trap 'rm -f "$RAW" "$FOUND" "$KEYS" "$CDS" "$AT"' EXIT
+RAW="$(mktemp)"; NAMES="$(mktemp)"; FOUND="$(mktemp)"; REFS="$(mktemp)"
+KEYS="$(mktemp)"; CDS="$(mktemp)"; AT="$(mktemp)"
+trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
 
-(cd "$PLUGIN" && { find scripts skills hooks -name '*.sh'; find agents skills -name '*.md'; } | sort) \
-  | while IFS= read -r f; do
-      awk -v F="$f" '
+# W is a file whose records path is a write. P is a docs page, whose records path is a mention.
+(cd "$PLUGIN" && {
+   { find scripts skills hooks -name '*.sh'; find agents skills -name '*.md'
+     find scripts -name '*.json'; find templates evals -type f; } | sort -u | sed 's|^|W |'
+   find docs -name '*.md' | sort | sed 's|^|P |'
+ }) | while IFS=' ' read -r kind f; do
+      awk -v F="$f" -v KIND="$kind" '
+        BEGIN { TAG = (KIND == "P") ? "P" : "N" }
         function unquote(s) { gsub(/[\047"]/, "", s); return s }
         function emit(line, prefix,   p, s, n) {
           s = line
@@ -40,33 +55,52 @@ trap 'rm -f "$RAW" "$FOUND" "$KEYS" "$CDS" "$AT"' EXIT
             if (match(s, /^[A-Za-z0-9_.\/$%{}<>*+@~-]+/)) {
               n = substr(s, 1, RLENGTH)
               if (n == "*") continue
-              if (n ~ /[$%]/ && n !~ /\./) printf "R\t%s\t%s:%d\n", n, F, FNR
-              else printf "N\t%s\n", n
+              if (n ~ /[$%]/ && n !~ /\./) { if (TAG == "N") printf "R\t%s\t%s:%d\n", n, F, FNR }
+              else printf "%s\t%s\n", TAG, n
             }
           }
         }
+        # True when the nearest assignment above line ln gave v a records folder. A use above every
+        # assignment is true as well, because a function body can sit above the variable it reads.
+        function follows(v, ln,   n, i, parts, best, flag, c, l) {
+          n = split(at[v], parts, " "); best = -1; flag = 1
+          for (i = 1; i <= n; i++) {
+            c = index(parts[i], ":")
+            l = substr(parts[i], 1, c - 1) + 0
+            if (l <= ln && l > best) { best = l; flag = (substr(parts[i], c + 1) == "1") }
+          }
+          return flag
+        }
         FNR == NR {
           s = unquote($0)
-          while (match(s, /[A-Za-z_][A-Za-z0-9_]*=[^ \t;|&()]*\/records([ \t;|&)]|$)/)) {
-            seg = substr(s, RSTART, RLENGTH); eq = index(seg, "=")
-            holds[substr(seg, 1, eq - 1)] = 1
+          while (match(s, /[A-Za-z_][A-Za-z0-9_]*=[^ \t;|&()]*([ \t;|&)]|$)/)) {
+            seg = substr(s, RSTART, RLENGTH)
             s = substr(s, RSTART + RLENGTH)
+            sub(/[ \t;|&)]$/, "", seg)
+            eq = index(seg, "="); v = substr(seg, 1, eq - 1)
+            if (substr(seg, eq + 1) ~ /\/records$/) { holds[v] = 1; at[v] = at[v] " " FNR ":1" }
+            else at[v] = at[v] " " FNR ":0"
           }
           next
         }
         {
           line = unquote($0)
-          if (line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, FNR
+          if (TAG == "N" && line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, FNR
           emit(line, "records/")
-          for (v in holds) { emit(line, "$" v "/"); emit(line, "${" v "}/") }
+          if (TAG == "N" && line ~ /(^|[ \t(])find[ \t]+[^ \t]*\/records([ \t]|$)/) emit(line, "-name ")
+          for (v in holds) {
+            if (follows(v, FNR)) { emit(line, "$" v "/"); emit(line, "${" v "}/") }
+          }
         }' "$PLUGIN/$f" "$PLUGIN/$f"
     done >"$RAW"
 
-awk -F'\t' '$1 == "N" { print $2 }' "$RAW" \
+awk -F'\t' '$1 == "N" || $1 == "P" { print $1 "\t" $2 }' "$RAW" \
   | sed -e 's/[.,;:)]*$//' \
         -e 's/\${[A-Za-z_][A-Za-z0-9_]*}/<>/g' -e 's/\$[A-Za-z_][A-Za-z0-9_]*/<>/g' \
         -e 's/<[A-Za-z_][A-Za-z0-9_-]*>/<>/g' -e 's/%[A-Za-z]/<>/g' -e 's/\*/<>/g' \
-  | grep '\.' | sort -u >"$FOUND"
+  | grep -E '\.|/$' | sort -u >"$NAMES"
+cut -f2 "$NAMES" | sort -u >"$FOUND"
+awk -F'\t' '$1 == "N" { print $2 }' "$NAMES" | sort -u >"$REFS"
 sed -e 's/#.*//' -e 's/|.*//' -e 's/[[:space:]]//g' "$LIST" | grep . | sort -u >"$KEYS"
 
 awk -F'\t' '$1 == "C" { print $2 }' "$RAW" | sort -u >"$CDS"
@@ -81,7 +115,7 @@ while IFS= read -r where; do
   printf 'the file name is built at run time: %s\n' "$where"; FAIL=1
 done <"$AT"
 while IFS= read -r name; do
-  grep -Fxq "$name" "$FOUND" || { printf 'listed, not referenced: records/%s\n' "$name"; FAIL=1; }
+  grep -Fxq "$name" "$REFS" || { printf 'listed, not referenced: records/%s\n' "$name"; FAIL=1; }
 done <"$KEYS"
 while IFS='|' read -r name producer again; do
   case "$name" in ''|'#'*) continue ;; esac

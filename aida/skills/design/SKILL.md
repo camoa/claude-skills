@@ -50,7 +50,8 @@ skill. Stop; there is nowhere to write.
 An invocation line whose first word is `close` is the person's yes on the design. The task is
 the word after it, or the active one. Go straight to "Close the design" below. When no
 `design-critique-*.md` exists yet, under `records/` or under `design/`, run "Critique the design"
-first. An earlier close moved the files into `design/`, so look in both.
+first. An earlier close moved the files into `design/`, so look in both. A name that begins
+`unfinished-` is a critique that stopped, and it counts as no critique here.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -571,7 +572,9 @@ dispatch replies.
 
 The close moves each finished file into `<task_folder>/design/` and commits it with the record.
 A critic goes on writing into `records/`, which the project ignores: a critique is a working file
-until the close decides it is evidence. An unfinished file stays under `records/`.
+until the close decides it is evidence. The close moves an unfinished file there too, under the
+name `unfinished-design-critique-<lens>.md`, and leaves it out of the count. It is the only copy
+of what that critic wrote before it stopped.
 
 A person reads the findings, because a critic that can block trains the builder to write for the
 critic. The critic decides nothing about closing, and neither does the count.
