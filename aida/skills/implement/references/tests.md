@@ -91,7 +91,8 @@ It reads the frozen copy and never the live files. It writes exactly eight thing
 A ninth, `treeHolds`, only after a restart left this order's earlier commits on the branch.
 It holds those commits and two sentences. The tree holds a partial build of this unit, so a
 test that passes on arrival is suspect. And the author may give one of the build or fix commits
-to `--locks-in`, below. The summary prints the commits on a `treeHolds:` line.
+to `--locks-in`, below, written `commit:<id>`. The summary prints the commits on a
+`treeHolds:` line.
 
 A tenth, `retake`, only while a `test-wrong` ruling is still unanswered by a freeze. It holds
 the ruled finding, the criterion it names, its evidence, its severity, and the file and lines it
@@ -176,9 +177,11 @@ deleted quietly and never weakened into failing.
 hold this order's earlier build, so a test of its done-when arrives green. The code that satisfies
 it is the order's own, which the author may not read, and no interface record of this order exists
 yet. So the author gives `--locks-in` one of the build or fix commits the brief carries under
-`treeHolds`. The freeze checks the commit is this order's own and is on the branch, and refuses
-anything else (exit 101). The author reads no source. It names a commit the brief already printed.
-This is honest because a person chose to carry that code rather than reset the branch.
+`treeHolds`, written `commit:<id>`. The prefix is what marks a commit, so a reason without it
+stays prose whatever it looks like. The freeze checks the commit is this order's own and is on the
+branch, and refuses anything else (exit 101). The author reads no source. It names a commit the
+brief already printed. This is honest because a person chose to carry that code rather than reset
+the branch.
 
 **A failure is read from the framework's own signal, never from the exit status.** Three of five
 frameworks exit zero when a filter selects nothing. Only an assertion that ran and did not hold is
@@ -264,7 +267,8 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
   --red <test name>=<path to a file holding what the run printed> \
   --test-recipe <framework>=<path to the test-execution recipe> \
   --implement-recipe <framework>=<path to the implement recipe> \
-  --locks-in <test name>=<one sentence naming the existing code that satisfies it, or a commit id> \
+  --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
+  --locks-in <test name>=commit:<id of this order's own build or fix commit> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
@@ -303,9 +307,10 @@ list). A test that names neither a criterion this order serves or owns nor this 
 (exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold
 no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
-place. A test with neither refuses (exit 33). A `--locks-in` reason that is hex and nothing else
-is read as a commit id. It must be one of this order's own build or fix commits on the branch,
-and anything else refuses (exit 101). A reason carrying a space is prose and names the code.
+place. A test with neither refuses (exit 33). A `--locks-in` reason written `commit:<id>` must
+name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,
+is shorter than seven characters, or is not this order's own refuses (exit 101). A reason with no
+`commit:` prefix is prose and names the existing code.
 It reads each `--red` file against the markers the
 test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
 A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a

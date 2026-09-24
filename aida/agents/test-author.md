@@ -88,11 +88,11 @@ Report any test that passed on arrival, and say why you think it did. Do not wea
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
 and both are worth more than a green line. Correct it once. If it is still green because code
 that already exists satisfies it, return a `locks-in` reason for it: one sentence naming that
-code. The test then locks that behaviour in. When the brief holds `treeHolds`, a test of this
-unit's own work is satisfied by this unit's earlier build. You may not read that build. So return
-one of the build or fix commits the brief lists there as the `locks-in` reason, in place of the
-sentence. Read no source to decide it. If you can name neither existing code nor such a commit,
-report it as green on arrival.
+code. The test then locks that behaviour in. When the brief holds `treeHolds`, this unit's earlier
+build is what makes a test of its own work pass. You may not read that build. So return one of the
+build or fix commits the brief lists there, written `commit:<id>`, as the `locks-in` reason. The
+prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
+decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
 
 Return one row per test: the path, the test's name, and the criterion its name carries. The row
 also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test

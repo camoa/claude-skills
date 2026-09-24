@@ -41,7 +41,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
-#                            [--locks-in <test name>=<reason or commit id>]...
+#                            [--locks-in <test name>=<reason or commit:<id>>]...
 #                            [--support <path relative to codePath>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
@@ -620,10 +620,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      frozen test or support file, and a path no open finding's fixScope names.
 #
 # The code the commit form of a locks-in reason added (live-run row 183).
-# 101  `tests-freeze` was given a `--locks-in` reason shaped like a commit id that is not one of
-#      this order's own build or fix commits on the branch. The message names the commit and
-#      lists the ones that are, which `tests-brief` already put in the brief under `treeHolds`.
-#      A reason carrying a space is prose, names the existing code, and never reaches this check.
+# 101  `tests-freeze` was given a `--locks-in` reason written `commit:<id>` whose id is not
+#      hexadecimal, is shorter than seven characters, or is not one of this order's own build or
+#      fix commits on the branch. The message names the id and lists the commits that are this
+#      order's own, which `tests-brief` already put in the brief under `treeHolds`. A reason with
+#      no `commit:` prefix is prose, names the existing code, and never reaches this check.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -772,7 +773,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--checklist <criterion id>=<verification text>]...
                             [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
-                            [--locks-in <test name>=<reason or commit id>]...
+                            [--locks-in <test name>=<reason or commit:<id>>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
                             [--interface <path to the record the builder wrote>]
@@ -3624,7 +3625,7 @@ do_tests_brief() {
     if length == 0 then null
     else {commits: map({kind, commit}),
           note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect",
-          greenOnArrival: "A test of this unit that arrives green may be satisfied by one of the build or fix commits above. Name that commit as the --locks-in reason. Read no source to decide it."} end')"
+          greenOnArrival: "A test of this unit that arrives green may pass because of one of the build or fix commits above. Give that commit as the --locks-in reason, written commit:<id>. Read no source to decide it."} end')"
 
   # A tenth thing, only while a retake is still unanswered: a person ruled one frozen test wrong
   # at `verify-record`, and `retake-tests` sent the order back to this step (live-run row 142).
@@ -3909,15 +3910,6 @@ $raw
 TF_EOF
 }
 
-# Prints `commit` when $1 is a commit id and `prose` when it is a sentence. A commit id is hex and
-# nothing else, seven characters or more; a reason in prose carries a space, so the two never meet.
-tf_locks_in_shape() {
-  case "$1" in
-    *[!0-9a-f]*) printf 'prose'; return 0 ;;
-  esac
-  if [ "${#1}" -ge 7 ]; then printf 'commit'; else printf 'prose'; fi
-}
-
 # Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
 # recipe's own `## Test commands` rows are resolved: this step never carries a second, absolute
 # copy of a path that belongs to the repository, for the same reason baseline.json's own `scope`
@@ -4034,7 +4026,7 @@ do_tests_freeze() {
 "
         shift 2 ;;
       --locks-in)
-        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it, or the commit of this order's own build that does>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>, or <test name>=commit:<id> naming this order's own build"
         locks_raw="$locks_raw$2
 "
         shift 2 ;;
@@ -4660,39 +4652,51 @@ TF_EOF
     echo "TESTS-FREEZE: $unit_id creates a unit: $unit_file matches $unit_file_glob under ## Unit declaration in $unit_file_recipe. A red holding only the harness marker is accepted for it, because nothing can fail an assertion before the unit exists."
   fi
 
-  # --- 101: a --locks-in reason that is a commit names one of this order's own commits ------------
+  # --- 101: a --locks-in reason written commit:<id> names one of this order's own commits --------
   # A test of the order's own done-when that arrives green has no code the author may cite: the
   # code is this order's earlier build, which a restart left in the tree, and the author reads no
   # production source (live-run row 183). So the reason may be a commit instead. `tests-brief`
   # prints this order's own build and fix commits under `treeHolds`, and the author names one of
   # them. The same reader answers here, so the freeze accepts exactly what the brief offered, and
-  # a commit of another order or one git no longer holds refuses. A shorter form than the brief
-  # printed still matches, because `start`'s own line prints seven characters.
-  local tf_lock_total tf_lock_i tf_lock_reason tf_lock_name tf_lock_hit tf_own_commits tf_own_loaded tf_own_c
+  # a commit of another order or one git no longer holds refuses.
+  # The `commit:` prefix is what marks a commit, and a reason without it is prose whatever it looks
+  # like. Reading a bare hex word as an id would refuse a prose reason nobody meant as one. The id
+  # may be shorter than the brief printed, because `start`'s own line prints seven characters.
+  local tf_lock_total tf_lock_i tf_lock_reason tf_lock_id tf_lock_name tf_lock_hit
+  local tf_own_commits tf_own_loaded tf_own_c
   tf_lock_total="$(printf '%s' "$locks_json" | jq 'length')"
   tf_own_commits=""
   tf_own_loaded=false
   tf_lock_i=0
   while [ "$tf_lock_i" -lt "$tf_lock_total" ]; do
     tf_lock_reason="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].reason')"
-    if [ "$(tf_locks_in_shape "$tf_lock_reason")" = "commit" ]; then
-      if [ "$tf_own_loaded" = "false" ]; then
-        tf_own_commits="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger" \
-          | jq -r '.[] | select(.kind == "build" or .kind == "fix") | .commit')"
-        tf_own_loaded=true
-      fi
-      tf_lock_name="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].name')"
-      tf_lock_hit=""
-      while IFS= read -r tf_own_c; do
-        [ -n "$tf_own_c" ] || continue
-        [ "${tf_own_c:0:${#tf_lock_reason}}" = "$tf_lock_reason" ] || continue
-        tf_lock_hit="$tf_own_c"
-      done <<TF_OWN_COMMITS
+    case "$tf_lock_reason" in
+      commit:*) ;;
+      *) tf_lock_i=$((tf_lock_i + 1)); continue ;;
+    esac
+    tf_lock_id="${tf_lock_reason#commit:}"
+    tf_lock_name="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].name')"
+    case "$tf_lock_id" in
+      ""|*[!0-9a-f]*)
+        die 101 "tests-freeze: --locks-in for $tf_lock_name reads commit:$tf_lock_id, and a commit id is hexadecimal and nothing else. Write commit:<id> with one of $unit_id's own build or fix commits, or drop the commit: prefix and name the existing code in a sentence." ;;
+    esac
+    [ "${#tf_lock_id}" -ge 7 ] \
+      || die 101 "tests-freeze: --locks-in for $tf_lock_name reads commit:$tf_lock_id, which is shorter than seven characters and names no commit on its own. Read the whole id from treeHolds in the tests brief."
+    if [ "$tf_own_loaded" = "false" ]; then
+      tf_own_commits="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger" \
+        | jq -r '.[] | select(.kind == "build" or .kind == "fix") | .commit')"
+      tf_own_loaded=true
+    fi
+    tf_lock_hit=""
+    while IFS= read -r tf_own_c; do
+      [ -n "$tf_own_c" ] || continue
+      [ "${tf_own_c:0:${#tf_lock_id}}" = "$tf_lock_id" ] || continue
+      tf_lock_hit="$tf_own_c"
+    done <<TF_OWN_COMMITS
 $tf_own_commits
 TF_OWN_COMMITS
-      [ -n "$tf_lock_hit" ] \
-        || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_reason, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; else printf 'none, so no restart left this order a build here'; fi). Read them from treeHolds in the tests brief. A reason in prose names the existing code instead."
-    fi
+    [ -n "$tf_lock_hit" ] \
+      || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_id, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; else printf 'none, so no restart left this order a build here'; fi). Read them from treeHolds in the tests brief. A reason with no commit: prefix names the existing code instead."
     tf_lock_i=$((tf_lock_i + 1))
   done
 
@@ -9047,6 +9051,16 @@ RS_PRIOR
   done <<RS_ARCHIVES
 $(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null | sort)
 RS_ARCHIVES
+  # The blocks above read the records wherever they sit, and a restart moves them, so one order's
+  # commits came out in one order before a restart and another after. They are sorted into the
+  # order the branch holds them, oldest first, so `restart` and `start` print one list and a
+  # person can check it against git log.
+  if [ "$(printf '%s' "$out" | jq 'length')" -gt 0 ]; then
+    out="$(jq -cn --argjson have "$out" --argjson order "$(git -C "$codepath" rev-list --reverse --topo-order HEAD 2>/dev/null \
+      | grep -F -x -f <(printf '%s' "$out" | jq -r '.[].commit') \
+      | jq -R -s 'split("\n") | map(select(length > 0))')" \
+      '[ $order[] as $c | $have[] | select(.commit == $c) ]')"
+  fi
   printf '%s' "$out"
 }
 
