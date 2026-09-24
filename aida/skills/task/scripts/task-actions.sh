@@ -526,12 +526,10 @@ TA_CHILDREN
   done
   [ -z "$moved" ] || add_children "$new_task_dir/task.json" "$moved"
 
-  # The move leaves a deletion behind at the old path, and staging tasks/<id> alone cannot see it.
-  git -C "$project_path" add -A -- "$old_folder" >/dev/null 2>&1
-
   # The commit stages this task's folder, each moved child's, and the parent's when this was a
-  # left child, never tasks/ whole.
-  set --
+  # left child, never tasks/ whole. The move leaves a deletion behind at the old path, and the
+  # commit takes its pathspecs alone, so the old folder is one of them.
+  set -- "$old_folder"
   [ -z "$origin_parent" ] || set -- "tasks/$origin_parent"
   while IFS= read -r child_id; do
     [ -n "$child_id" ] && set -- "$@" "tasks/$child_id"
@@ -558,7 +556,13 @@ TA_MOVED
 # start has not run, or the person's no was never recorded (live run, row 118: a `start`
 # reached through scope's init never offered). Unattended it says the offer waits, and nothing
 # is written. $1 the task.json path.
+# A marker means the offer was answered and the bring-up did not finish. A person resuming the
+# task is told so here, because nothing else on this path names a site that never came up.
 environment_offer_line() {
+  if [ "$(jq -r '.environment.state // empty' "$1" 2>/dev/null)" = "coming-up" ]; then
+    echo "environment: coming-up, the bring-up did not finish. Run task environment $(jq -r '.id' "$1") down."
+    return 0
+  fi
   [ "$(jq -r '.environment | type' "$1" 2>/dev/null)" != "object" ] || return 0
   if [ "$RUN_MODE" = "autonomous" ]; then
     echo "environment: none, the site offer waits for a person"
@@ -1185,6 +1189,13 @@ do_save() {
 # reads the recipe path and the keys from that record, so it takes no recipe flag.
 # ------------------------------------------------------------------------------------------------
 
+# The line `up` writes into records/environment-up.txt above the address command, and `down` reads
+# the address keys under. Only `up` knows which command is the address command, so it says so here
+# rather than leaving `down` to recognise a line. The run's own `startedAt`, the one in the marker,
+# follows this text on the line. It is not a `+ <command>` line and not a `key: value` line, and a
+# command's own output does not carry this run's timestamp, so nothing else in the file matches it.
+ENV_ADDRESS_MARK="--- the address command,"
+
 # The tab-separated `<name><TAB><value>` list every `{name}` is filled from, the shape cr_lookup
 # reads. `codePath` heads it; the tokens and the address keys follow.
 TOKENS=""
@@ -1227,16 +1238,161 @@ fill_line_or_refuse() {
 # are read from. Both streams are appended to $3, standard error after standard output, so the
 # record holds them and the caller reads a clean value. Returns the command's exit status. A line
 # refused by refuse_if_unsafe, holding no command, or still holding a `{name}` exits 3.
+# A caller that quotes a line of this record counts two past the length it held before the call:
+# the command's own line, then its first line of output. Both refusals here fire when the command
+# printed nothing, so the record's last line is that command, never output.
 run_recipe_capture() {
   local line="$1" dir="$2" outfile="$3" capture="$4" err_file result tab; tab="$(printf '\t')"
   line="$(fill_tokens "$line")"
   refuse_if_unsafe environment "$RECIPE" "$line" || exit 3
   err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
   printf '+ %s\n' "$line"
+  # The filled line, above the output it produced, the same shape run_recipe_line writes. The
+  # record holds a token's output, and the recipe's unfilled line does not say what produced it.
+  printf '+ %s\n' "$line" >>"$outfile"
   result="$(br_run_resolved "$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')" "$dir" "$capture" '[]' "" "$err_file")"
   cat "$capture" "$err_file" >>"$outfile"; rm -f "$err_file"
   case "$result" in RAN*) return "${result#*"$tab"}" ;; esac
   die3 "environment: the line holds no command, or a token nothing fills: ${result#*"$tab"}. The tokens are {codePath}, the ## Tokens names and the address keys"
+}
+
+# What environment_cleanup removes when `show` or `up` stops before it keeps them. They are
+# globals, because zsh runs an EXIT trap after the locals of the function that set it are gone.
+# ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
+# keeps it. ENV_TREE: the worktree the recipe files go into. ENV_HEAD: its commit before the write.
+# ENV_DIRS: the folders this run made there for them. RF_WRITTEN_PATHS, from
+# scripts/lib/recipes.sh, holds the files it wrote.
+ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
+
+# Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
+# written this run, then each folder made for them, then the output file and every temporary path.
+# It removes no folder that was there before. A file whose content in HEAD differs from its content
+# in ENV_HEAD was committed by this run, so it stays, with its folders. The repository decides
+# this, not a flag set after the commit, so an interrupt inside a commit hook keeps it too. $1 is `quiet` on show's pass, which expects the
+# removal, and `report` elsewhere, where it says what it removed. It names each path it could not
+# remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
+environment_cleanup() {
+  local p left="" gone="" staged="" kept=""
+  if [ -n "$ENV_TREE" ]; then
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if git -C "$ENV_TREE" cat-file -e "HEAD:$p" 2>/dev/null \
+        && [ "$(git -C "$ENV_TREE" rev-parse -q --verify "HEAD:$p")" != "$(git -C "$ENV_TREE" rev-parse -q --verify "$ENV_HEAD:$p" 2>/dev/null)" ]; then
+        kept="$kept $p"; continue
+      fi
+      # A failed commit leaves the file staged. Reset takes its index entry back to HEAD, which
+      # holds none for a file this run wrote because it was absent.
+      if git -C "$ENV_TREE" ls-files --cached --error-unmatch -- "$p" >/dev/null 2>&1; then
+        git -C "$ENV_TREE" reset -q -- "$p" >/dev/null 2>&1 && staged="$staged $p"
+      fi
+      rm -f "$ENV_TREE/$p" 2>/dev/null
+      if [ -e "$ENV_TREE/$p" ]; then left="$left $p"; else gone="$gone $p"; fi
+    done <<ENV_CLEAN_FILES
+$RF_WRITTEN_PATHS
+ENV_CLEAN_FILES
+    while IFS= read -r p; do
+      [ -n "$p" ] && [ -z "$kept" ] || continue
+      rmdir "$ENV_TREE/$p" 2>/dev/null || [ ! -d "$ENV_TREE/$p" ] || left="$left $p/"
+    done <<ENV_CLEAN_DIRS
+$ENV_DIRS
+ENV_CLEAN_DIRS
+  fi
+  if [ "${1:-report}" != quiet ]; then
+    [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2
+    [ -z "$staged" ] || printf 'environment: and took them out of the index again:%s\n' "$staged" >&2
+    [ -z "$kept" ] || printf 'environment: the commit %s holds the files this run wrote, so they stay:%s\n' \
+      "$(git -C "$ENV_TREE" rev-parse --short HEAD)" "$kept" >&2
+  fi
+  [ -z "$ENV_OUT" ] || rm -f "$ENV_OUT"
+  while IFS= read -r p; do
+    [ -z "$p" ] || rm -rf "$p"
+  done <<ENV_CLEAN_TMP
+$ENV_TMP
+ENV_CLEAN_TMP
+  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
+  [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
+}
+
+# Prints, deepest first, each folder under the worktree $1 that the `## Files` list needs and that
+# does not exist yet. A folder is listed once, and after every folder inside it.
+environment_new_dirs() {
+  local n rel dir tab; tab="$(printf '\t')"
+  while IFS="$tab" read -r n rel; do
+    [ -n "$n" ] || continue
+    dir="$(dirname -- "$rel")"
+    while [ "$dir" != "." ] && [ "$dir" != "/" ] && [ ! -d "$1/$dir" ]; do
+      printf '%s\n' "$dir"; dir="$(dirname -- "$dir")"
+    done
+  done <<ENV_NEW_DIRS | LC_ALL=C sort -ru
+$file_list
+ENV_NEW_DIRS
+}
+
+# The lines a failing check prints after its output. A remedy may say to commit, and the worktree
+# reads its own branch only. A commit on the branch it was cut from reaches it only through a merge,
+# and nothing else says so. $1 is the worktree.
+environment_branch_lines() {
+  local branch base now
+  branch="$(git -C "$1" symbolic-ref -q --short HEAD 2>/dev/null)"
+  if [ -z "$branch" ]; then
+    printf 'environment: the worktree %s is on no branch, so a commit reaches it only when that commit is checked out there.\n' "$1"
+    return 0
+  fi
+  printf "environment: where the remedy says to commit, a commit on %s reaches this worktree now, and review reads it in the task's diff.\n" "$branch"
+  base="$(jq -r '.worktree.base // empty' "$task_json" 2>/dev/null)"
+  case "$base" in commit:*)
+    printf 'environment: this worktree was cut from commit %s, on no branch. A commit elsewhere reaches this worktree only after it is merged into %s.\n' \
+      "${base#commit:}" "$branch"
+    return 0 ;;
+  esac
+  if [ -n "$base" ]; then
+    printf 'environment: this worktree was cut from %s. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
+      "$base" "$base" "$base" "$branch"
+    return 0
+  fi
+  now="$(git -C "$CODE_PATH" symbolic-ref -q --short HEAD 2>/dev/null)"
+  if [ -n "$now" ]; then
+    printf 'environment: task.json records no branch this worktree was cut from, so this names the branch %s is on now. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
+      "$CODE_PATH" "$now" "$now" "$branch"
+  else
+    printf 'environment: task.json records no branch this worktree was cut from, and %s is on no branch. A commit elsewhere reaches this worktree only after it is merged into %s.\n' \
+      "$CODE_PATH" "$branch"
+  fi
+}
+
+# Writes the absent `## Files` blocks into the worktree $2 and runs each `## Preconditions` line
+# there, with the output in $3. The files come first, because the check is a script the recipe
+# ships. $1 is up or show. `show` passes "" for $3 to use a temporary file, and removes the files
+# after a pass, so it leaves the tree as it found it. `up` keeps them for its commit, and clears
+# the cleanup state once that commit is made. A line that runs and fails exits 3 with its output
+# and the branch lines. A line refused before it runs, for a token nothing fills or a shell
+# character, exits 3 without them, as `up` always has: `show` predicts `up`. The EXIT trap then
+# removes what this run wrote. The loop runs in a command substitution, so its `status:` summary
+# stays inside. Reads RECIPE, preconditions, file_list, files_dir and task_json from do_environment.
+environment_check() {
+  local sub="$1" wt="$2" outfile="$3" result="" rc=0
+  recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
+  if [ -z "$outfile" ]; then outfile="$(mktemp)" || die3 "environment: could not create a temporary file"; fi
+  ENV_OUT="$outfile"; ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
+  : >"$outfile"
+  ENV_DIRS="$(environment_new_dirs "$wt")"
+  if [ "$sub" = up ]; then
+    recipe_files_write environment "$file_list" "$wt" "$files_dir"
+    printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+  else
+    recipe_files_write environment "$file_list" "$wt" "$files_dir" >/dev/null
+  fi
+  if [ -n "$preconditions" ]; then
+    result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    cat "$outfile" >&2
+    # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line was refused unrun.
+    [ "$rc" -ne 4 ] || environment_branch_lines "$wt" >&2
+    exit 3
+  fi
+  if [ "$sub" = show ]; then environment_cleanup quiet || exit 3; return 0; fi
+  [ -z "$result" ] || printf '%s\n' "$result"
 }
 
 do_environment() {
@@ -1275,7 +1431,7 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down|not-applicable) ;; *) die3 "environment: the action is show, up, down or not-applicable, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile
+  local task_dir task_json wt outfile addr_mark
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
@@ -1301,12 +1457,38 @@ do_environment() {
 
   if [ "$sub" = "down" ]; then
     [ "$#" -eq 0 ] || die3 "environment: down reads the recipe the record names and takes no flag, got: $1"
-    RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")"
+    # A record this cannot read is not a record saying nothing was up. Without this test jq's
+    # failure reads as an absent recipe, and a person hears that no site is up while it still is.
+    RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")" \
+      || die3 "environment: could not read $task_json. Nothing was torn down"
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
-    # The address keys the record kept, so `{worktreeProject}` reaches the tear-down.
-    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt") | "\(.key)\t\(.value)"' "$task_json")"
+    # The address keys the record kept, so `{worktreeProject}` reaches the tear-down. The marker's
+    # own fields name no token, so they are left out with the three the up shape owns.
+    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt" and .key != "state" and .key != "startedAt") | "\(.key)\t\(.value)"' "$task_json")
+"
+    # A marker with no address holds none of those keys either, and a tear-down line may need one.
+    # `up` marked the address command in records/environment-up.txt, with the line above, so the
+    # keys are the output under the last mark and nothing else in the file. No mark means the
+    # address command never ran, and then nothing is taken. The mark carries the marker's own
+    # `startedAt`, and the command line under it is skipped: the block is what that command
+    # printed, up to the next command.
+    addr_mark="$(jq -r --arg m "$ENV_ADDRESS_MARK" 'if (.environment.address // "") == "" and (.environment.startedAt // "") != "" then $m + " " + .environment.startedAt else "" end' "$task_json")"
+    if [ -n "$addr_mark" ] && [ -f "$task_dir/records/environment-up.txt" ]; then
+      TOKENS="$TOKENS$(awk -v m="$addr_mark" '
+          $0 == m { out = ""; seen = 1; plus = 0; next }
+          seen == 0 { next }
+          /^\+ / { plus = plus + 1; if (plus > 1) seen = 0; next }
+          { out = out $0 "\n" }
+          END { printf "%s", out }' "$task_dir/records/environment-up.txt" \
+        | sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' | grep -v '^address'"$tab")
+"
+    fi
     wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
+    # task_worktree runs in a command substitution, so its own die3 ends that subshell alone and
+    # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
+    # caller stood. The refusal it already printed is above this one.
+    [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
     cd "$wt" || die3 "environment: could not enter $wt"
     run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
@@ -1323,18 +1505,27 @@ do_environment() {
   # shellcheck disable=SC2034
   FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$project_path/project.json")"
   cr_resolve_recipe "$@"
-  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list
+  local preconditions bring_up address tear_down tokens_dir token_list name value result capture keys root kind setup files_dir file_list before up_lines
   preconditions="$(sh_blocks_under "$RECIPE" Preconditions)"
   bring_up="$(sh_blocks_under "$RECIPE" "Bring up")"
   address="$(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')"
   tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
   # The token blocks carry the token's name as the fence's second word, the shape `## Files`
   # already reads: one file per block, named by its order, and a `<n><TAB><name>` line each.
+  # From here to the end of show or up, any exit runs environment_cleanup: a refusal, an
+  # interrupt or a TERM. A shell waiting on a command runs the INT or TERM trap when it ends. zsh
+  # runs a function's EXIT trap when that function returns, so each normal end clears the traps.
+  trap 'environment_cleanup report' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   tokens_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  ENV_TMP="$tokens_dir"
   token_list="$(recipe_files_into "$RECIPE" Tokens "$tokens_dir")"
   # The `## Files` blocks, written before the tokens run: the shipped recipe's first token runs a
   # script the recipe itself declares, which a fresh worktree holds only once a commit carried it.
   files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  ENV_TMP="$ENV_TMP
+$files_dir"
   file_list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
   printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
   [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
@@ -1351,60 +1542,99 @@ TA_TOKEN_LIST
     printf 'TEAR DOWN:\n'; fill_tokens "$tear_down" | sed 's/^/  /'; printf '\n'
     printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
     printf 'FILES:\n'; printf '%s\n' "$file_list" | cut -f2 | sed 's/^./  &/'
-    rm -rf "$tokens_dir" "$files_dir"; return 0
+    rm -rf "$tokens_dir"
+    # The check runs here too, so a site that cannot come up is never offered. The path is read
+    # from the record, because task_worktree makes a missing tree again, and show writes nothing.
+    wt="$(jq -r '.worktree.path // empty' "$task_json")"
+    if [ -z "$preconditions" ]; then
+      printf 'precondition check: none, the recipe has no precondition line\n'
+    elif [ -z "$wt" ] || [ ! -d "$wt" ]; then
+      printf 'precondition check: not run, the worktree %s is not on disk. up makes it again and runs the check there\n' "${wt:-none recorded}"
+    else
+      cd "$wt" || die3 "environment: could not enter $wt"
+      environment_check show "$wt" ""
+      printf 'precondition check: passed in %s\n' "$wt"
+    fi
+    environment_cleanup quiet || exit 3
+    trap - EXIT INT TERM
+    return 0
   fi
   cr_require_person up "a person approved the site coming up"
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
+  # Same reason as the down branch above: an empty path here means task_worktree already refused
+  # inside its own subshell. Without this test `cd ""` changes nothing and the bring-up lines run
+  # in the caller's directory, which is any tree at all.
+  [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
-  recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
-  : >"$outfile"
-  recipe_files_write environment "$file_list" "$wt" "$files_dir"; rm -rf "$files_dir"
-  printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
-  # The preconditions run after the files are written, because the check is a script the recipe
-  # ships, and before the commit, so a refused site leaves no commit. The loop runs in a command
-  # substitution: its `status:` summary and its exit 4 stay inside, and the refusal here is 3
-  # with the output on stderr, the written files removed, and the output file gone.
-  if [ -n "$preconditions" ]; then
-    result="$(run_recipe_lines up "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || {
-      cat "$outfile" >&2
-      printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
-        [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
-      done
-      rm -f "$outfile"; rm -rf "$tokens_dir"
-      exit 3
-    }
-    printf '%s\n' "$result"
-  fi
+  environment_check up "$wt" "$outfile"; rm -rf "$files_dir"
   # Only the written files are staged and committed. A person's uncommitted or staged work beside
   # them is never taken into this commit and never refuses it.
   [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
     "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
+  # The files and the output file are kept from here. A failed commit above ran the EXIT trap first.
+  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"
+  ENV_TMP="$ENV_TMP
+$capture"
   while IFS="$tab" read -r n name; do
     [ -n "$n" ] || continue
+    before="$(wc -l <"$outfile" | tr -d '[:space:]')"
     run_recipe_capture "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")" "$wt" "$outfile" "$capture"; result=$?
     value="$(head -n 1 "$capture")"
-    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
     TOKENS="$TOKENS$name$tab$value
 "
   done <<TA_TOKEN_LIST
 $token_list
 TA_TOKEN_LIST
   rm -rf "$tokens_dir"
-  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" before)" "$outfile" "environment: up" fill_line_or_refuse
+  # The record names the site before the site exists. Every later reader finds a site through
+  # .environment, so a failure between a bring-up line and the record would leave one running that
+  # nothing can find. The marker names the recipe, which is all `down` needs to tear the site
+  # down. It keeps whatever the record held, so a second `up` over a site that is already up does
+  # not drop that site's address while the bring-up runs again. A failure then leaves the person
+  # where they were before they ran `up`. The person's `not-applicable` reason is the one field
+  # dropped, because `up` is the answer that replaces it.
+  local marker_doc marker_at
+  marker_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
+    '.environment = ((.environment // {}) | del(.["not-applicable"]))
+       + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
+  [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
+  write_atomic "$task_json" "$marker_doc"
+  printf 'environment: coming-up\n'
+  # bring_up_half refuses when it cannot make its temporary file, and inside a command
+  # substitution that refusal ends the subshell alone. An empty half runs no bring-up line, so it
+  # is read into a variable first and the code re-raised.
+  up_lines="$(bring_up_half "$RECIPE" before)" || exit $?
+  run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
+  # The mark above the address command, so `down` reads that command's keys and no other output in
+  # this record. It goes in before the line count below, which `first:` quotes from.
+  printf '%s %s\n' "$ENV_ADDRESS_MARK" "$marker_at" >>"$outfile"
+  before="$(wc -l <"$outfile" | tr -d '[:space:]')"
   run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
   value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
-  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$(wc -l <"$outfile" | tr -d '[:space:]')"; exit 4; }
+  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
   keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"
   TOKENS="$TOKENS$keys
 "
   root="$(cr_lookup "$keys" root)"
   [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
     || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
-  run_recipe_lines up "$RECIPE" "$(bring_up_half "$RECIPE" after)" "$outfile" "environment: up" fill_line_or_refuse
+  # The record completes as soon as the address answers, so the marker covers the bring-up alone.
+  # The root check above runs first, because a site in another tree is never recorded as this
+  # task's. Its marker stays instead, and `down` tears that site down from the recipe it names.
+  local up_doc
+  up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
+    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
+  [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value. $task_json could not be written. The marker this run wrote before the bring-up still names $RECIPE. Run task environment $id down to tear this site down. It fills a tear-down token from the address command's lines in $outfile"
+  write_atomic "$task_json" "$up_doc"
+  up_lines="$(bring_up_half "$RECIPE" after)" || exit $?
+  run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
   # The harness in the worktree: a setup recipe's `## Install` is declared safe to run twice, and
   # it is where npm lives. Without its path the site is still up, and the install is the person's
   # next step.
@@ -1417,11 +1647,9 @@ TA_TOKEN_LIST
     # paths are the recipe's to know, and a commit of everything would sweep other work in.
     [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
   done
-  write_atomic "$task_json" "$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
-    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
   commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+  environment_cleanup quiet; trap - EXIT INT TERM
   printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
 }
 
@@ -1439,7 +1667,10 @@ prune_list() {
   local project_path="$1" merged="$2" tab d row id wt branch env yes_no; tab="$(printf '\t')"
   find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r d; do
     row="$(jq -r 'select(.state == "complete" and .worktree != null)
-      | [.id, .worktree.path, .worktree.branch, (if .environment.address == null then "no" else "yes" end)] | @tsv' \
+      | [.id, .worktree.path, .worktree.branch,
+         (if .environment.address != null then "yes"
+          elif .environment.state == "coming-up" then "coming-up"
+          else "no" end)] | @tsv' \
       "$d/task.json" 2>/dev/null)"
     [ -n "$row" ] || continue
     IFS="$tab" read -r id wt branch env <<TA_ROW
@@ -1492,7 +1723,10 @@ do_prune() {
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
     [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
-    state="$(jq -r '.state // "?"' "$task_json")"
+    # A record this cannot read names no state, and the refusal below would then print an empty
+    # word where the state belongs. It says what happened instead.
+    state="$(jq -r '.state // "?"' "$task_json")" \
+      || die3 "prune: could not read $task_json. Nothing was removed"
     [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
     [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
   done <<TA_IDS

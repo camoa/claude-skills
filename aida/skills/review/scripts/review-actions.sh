@@ -23,7 +23,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--lookup-failed <framework>=<reason>]...
 #                                            [--value <name>=<value>]...
 #   review-actions.sh brief    <task_folder>          writes <task>/review/brief.json
-#   review-actions.sh findings <task_folder> --findings <path the reviewer wrote>
+#   review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
 #   review-actions.sh surfaces <task_folder> [--walked <surface id>]...
 #                                            [--accept-baseline <surface id>]...
 #                                            [--value <name>=<value>]...
@@ -67,7 +67,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  14  the project's own project.json exists and is not valid JSON.
 #  15  the recorded codePath does not exist on disk.
 #  51  the code path moved, or went dirty, since `checks` ran.
-#  52  the findings file could not be read as a findings file.
+#  52  the findings file could not be read as a findings file, or it answers a done-when clause no
+#      order routed to review.
 #  61  the code repository's tree is dirty.
 #  62  a step ran out of order, and what it depends on recorded nothing.
 #  63  the previous record could not be archived, so the write was refused.
@@ -146,9 +147,12 @@ die() { printf 'review-actions: %s\n' "$2" >&2; exit "$1"; }
 # One refusal function, one exit code as its first argument. The table above is the only place a
 # number gets a meaning, and nothing here mints one that table does not carry.
 
-# task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
+# task-helpers.sh takes these three from its caller, so a refusal still says which script refused.
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die1() { die 1 "$1"; }
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die3() { die 3 "$1"; }
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { die 79 "$1"; }
 
 for lib_name in "$RECORDS_HASH_LIB" "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB" "$SURFACES_LIB" "$PATHS_LIB" "$PROOF_LIB"; do
@@ -185,7 +189,7 @@ usage: review-actions.sh read     <task_folder>
                                   [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                                   [--value <name>=<value>]...
        review-actions.sh brief    <task_folder>
-       review-actions.sh findings <task_folder> --findings <path the reviewer wrote>
+       review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
        review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
@@ -426,6 +430,38 @@ $list
 RW_TEST_FILES
 }
 
+# Every doneWhen clause the tests step routed to review, as one JSON array of {order, clause}. The
+# ledger is the one producer: `tests-freeze --absence` writes absenceClauses on the order's own
+# entry and replaces the list on every freeze (ledger-schema.json). Such a clause asserts that the
+# change added nothing of a named kind, so no test of it can be watched failing, and the task's own
+# diff is where it is answered (live-run row 184). Sets RW_ABSENCE_CLAUSES. $1 the action.
+RW_ABSENCE_CLAUSES="[]"
+rw_load_absence_clauses() {
+  local who="$1"
+  case "$(json_file_state "$LEDGER_FILE")" in
+    missing)
+      die 62 "$who: $LEDGER_FILE not found, and this step reads the done-when clauses the tests step routed to review from it. Implementation writes the ledger at its first step, so a finished build has one." ;;
+    unreadable)
+      die 3 "$who: $LEDGER_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again." ;;
+  esac
+  RW_ABSENCE_CLAUSES="$(jq -c '[ (.orders // [])[] | . as $o | (.absenceClauses // [])[]
+    | {order: $o.id, clause: .} ]' "$LEDGER_FILE")"
+  [ -n "$RW_ABSENCE_CLAUSES" ] \
+    || die 3 "$who: the routed done-when clauses in $LEDGER_FILE could not be read."
+}
+
+# Why the architecture reviewer is not dispatched, or nothing when it is. Every lens reads the
+# task's diff in the code repository. When no order commits there, that diff holds nothing the task
+# produced, and every lens reads undeclared whatever the reviewer returns (live-run row 154). So an
+# opus dispatch would judge nothing. A routed done-when clause is the exception: it still needs a
+# judge, so the dispatch stays. Reads RW_COMMITS_IN_CODE and RW_ABSENCE_CLAUSES, so it runs after
+# rw_require_frozen and rw_load_absence_clauses.
+rw_reviewer_skip_reason() {
+  [ "$RW_COMMITS_IN_CODE" = "no" ] || return 0
+  [ "$(printf '%s' "$RW_ABSENCE_CLAUSES" | jq 'length')" = "0" ] || return 0
+  printf 'No order commits in the code repository, and no order routed a done-when clause here. So the architecture reviewer had nothing to judge.'
+}
+
 # ------------------------------------------------------------------------------------------------
 # `read`: what is already there, and nothing written.
 # ------------------------------------------------------------------------------------------------
@@ -456,6 +492,10 @@ rw_print_summary() {
     + [ (.findings // []) | group_by(.lens)[] | line("lens(\(.[0].lens))"; "\(length) finding(s): \([ .[].id ] | join(", "))") ]
     + [ (.findings // []) | group_by(.disposition)[] | line("disposition(\(.[0].disposition))"; "\(length): \([ .[].id ] | join(", "))") ]
     + [ line("catalogNotes"; ((.catalogNotes // []) | length)) ]
+    + (if has("reviewerSkipped") then [ line("reviewerSkipped"; .reviewerSkipped) ] else [] end)
+    # One line per routed clause. The check detail above is cut to one line, so a second clause
+    # could fall off it, and the person must see each clause a test could have covered.
+    + [ (.absences // [])[] | line("absence(\(.order))"; "\(.verdict) testable=\(.testable // "unknown") | \(.clause | short)") ]
     + (if has("verdict") then
          [ line("failing"; ([ ((.checks // [])[] | select(.verdict == "unmet" or .verdict == "unknown") | .id),
                               ((.criteria // [])[] | select(.verdict == "unmet" or .verdict == "unanswered") | .id) ] | join(", "))),
@@ -598,6 +638,42 @@ rw_check_row() {
     + (if $absent     == "" then {} else {absent: true} end)
     + (if $newLineCount == 0 then {} else {newLines: $newLines, newLineCount: $newLineCount} end)
     + (if $failureLine == "" then {} else {failureLine: $failureLine} end)'
+}
+
+# The absence-clauses check row, read off the absence rows alone. $1 the rows. `findings` writes it
+# from the rows it just paired, and `close` writes it again from the rows the record holds. A row
+# stored before `testable` existed then reads unknown, rather than passing on the check written
+# beside it. Unmet when a clause reads unmet or testable yes, unknown when one reads unknown or
+# testable unknown, met when every one reads met and testable no, not-needed when there is none.
+rw_absence_check_row() {
+  local rows verdict detail hits
+  rows="$(printf '%s' "$1" | jq -c 'map(.testable = (.testable // "unknown"))')"
+  if [ "$(printf '%s' "$rows" | jq 'length')" -eq 0 ]; then
+    verdict="not-needed"
+    detail="no order routed a done-when clause to review, so there was none to judge."
+  else
+    hits="$(printf '%s' "$rows" | jq -r '
+      ([ .[] | select(.verdict == "unmet") | (.order + ": " + .clause) ] | join("; ")) as $broke
+      | ([ .[] | select(.testable == "yes") | (.order + ": " + .clause) ] | join("; ")) as $testable
+      | [ (if $broke != "" then "the diff broke these done-when clauses the tests step routed here: " + $broke + "." else empty end),
+          (if $testable != "" then "these were routed as absences, and a test could have watched fail: " + $testable + ". Each takes a test with a red run." else empty end) ]
+      | join(" ")')"
+    if [ -n "$hits" ]; then
+      verdict="unmet"
+      detail="$hits"
+    else
+      hits="$(printf '%s' "$rows" | jq -r \
+        '[ .[] | select(.verdict == "unknown" or .testable == "unknown") | (.order + ": " + .clause) ] | join("; ")')"
+      if [ -n "$hits" ]; then
+        verdict="unknown"
+        detail="nobody judged these done-when clauses the tests step routed here, or whether a test could have watched them fail: $hits."
+      else
+        verdict="met"
+        detail="every done-when clause the tests step routed here reads met against the diff, and no test could have watched one fail."
+      fi
+    fi
+  fi
+  rw_check_row "absence-clauses" "$verdict" "$detail"
 }
 
 # The worst of two verdicts, through the library's own ranking, so nothing here carries a second
@@ -831,7 +907,7 @@ rw_run_mutation() {
     # run paid for and a pass that proves nothing (live-run row 167). The tool rows answer this
     # same question above, and this row answers it the same way.
     has_paths=false
-    printf '%s' "$row" | jq -e 'any(.argv[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1 && has_paths=true
+    br_argv_takes_paths "$(printf '%s' "$row" | jq -c '.argv')" && has_paths=true
     if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
       if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
         combined="$(rw_worse "$combined" "undeclared")"
@@ -958,7 +1034,7 @@ rw_tool_row_check() {
   signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
   exts="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
   has_paths=false
-  printf '%s' "$argv" | jq -e 'any(.[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1 && has_paths=true
+  br_argv_takes_paths "$argv" && has_paths=true
   scoped="$RW_CHANGED_JSON"
   [ -z "$exts" ] || scoped="$(br_filter_extensions "$RW_CHANGED_JSON" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
@@ -1388,6 +1464,7 @@ do_brief() {
   rv_load_codepath "brief"
   rw_load_record "brief"
   rw_require_step "brief" "$CHECK_SERVES" "checks"
+  rw_load_absence_clauses "brief"
 
   local research_json list one doc brief_json
   research_json='[]'
@@ -1425,6 +1502,7 @@ RW_SOURCES
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
     --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
+    --argjson absenceClauses "$RW_ABSENCE_CLAUSES" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
     $record[0] as $record
     | {task: $task,
@@ -1439,6 +1517,7 @@ RW_SOURCES
      criteria: [ ($alignment.criteria // [])[] | {id, text, verification, verifiedBy} ],
      nonGoals: ($alignment.nonGoals // []),
      workOrders: ($snap.workOrders // []),
+     absenceClauses: $absenceClauses,
      research: $research,
      deferredFindings: ($finished.deferred // []),
      checks: [ ($record.checks // [])[]
@@ -1462,13 +1541,22 @@ RW_SOURCES
       line("criteria"; (.criteria | length)),
       line("nonGoals"; (.nonGoals | length)),
       line("workOrders"; (.workOrders | length)),
+      line("absenceClauses"; (.absenceClauses | length)),
       line("lenses"; (.lenses | join(" "))),
       line("playbooksPath"; (.playbooksPath // "none: records/playbooks.json is absent")),
       line("researchFiles"; (.research | length)),
       line("researchPaths(onDisk)"; ([ .research[].findings[] | select(.onDisk) ] | length)),
       line("researchPaths(notOnDisk)"; ([ .research[].findings[] | select(.onDisk | not) ] | length)),
       line("deferredFindings"; (.deferredFindings | length)) ] | .[]'
-  echo "BRIEF: give the reviewer $BRIEF_FILE, and tell it to write its findings to $FINDINGS_TARGET and nowhere else." >&2
+  local skip_reason
+  skip_reason="$(rw_reviewer_skip_reason)"
+  if [ -n "$skip_reason" ]; then
+    printf 'reviewer: skip | %s\n' "$skip_reason"
+    echo "BRIEF: do not dispatch the reviewer. Run findings with no --findings; the record keeps the reason." >&2
+  else
+    printf 'reviewer: dispatch\n'
+    echo "BRIEF: give the reviewer $BRIEF_FILE, and tell it to write its findings to $FINDINGS_TARGET and nowhere else." >&2
+  fi
   exit 0
 }
 
@@ -1506,7 +1594,6 @@ do_findings() {
     esac
   done
   [ -n "$task_arg" ]      || die 3 "findings: a task folder is required"
-  [ -n "$findings_path" ] || die 3 "findings: --findings is required. An absent findings file is never a clean review."
 
   rw_paths "findings" "$task_arg"
   rw_require_finished "findings"
@@ -1516,10 +1603,20 @@ do_findings() {
   rw_load_record "findings"
   rw_require_step "findings" "$CHECK_SERVES" "checks"
   rw_refuse_moved_code "findings" "clean"
+  rw_load_absence_clauses "findings"
+  # A findings file given is read, even where the dispatch could be skipped. With none, the skip
+  # reason is the one thing that stands in for it.
+  local skip_reason=""
+  [ -n "$findings_path" ] || skip_reason="$(rw_reviewer_skip_reason)"
+  [ -n "$findings_path" ] || [ -n "$skip_reason" ] \
+    || die 3 "findings: --findings is required. An absent findings file is never a clean review."
 
   local raw count i one lens cid linked disposition built findings_json alignment
-  rv_read_findings_array "$findings_path" "findings" "findings"
-  raw="$RV_FINDINGS_ARRAY"
+  raw='[]'
+  if [ -n "$findings_path" ]; then
+    rv_read_findings_array "$findings_path" "findings" "findings"
+    raw="$RV_FINDINGS_ARRAY"
+  fi
   alignment="$(rw_alignment)"
   findings_json='[]'
   count="$(printf '%s' "$raw" | jq 'length')"
@@ -1633,21 +1730,77 @@ RW_RESEARCH_FILES
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
   done
+  # --- the done-when clauses the tests step routed here, one verdict each ------------------------
+  # Such a clause asserts the change added nothing of a named kind, and no test of it can be watched
+  # failing, so the reviewer judges it against the diff (live-run row 184). The verdicts ride in the
+  # findings file beside catalogNotes, and they land here as one row per routed clause and one check
+  # row, so the verdict rules already applied at close decide what an unjudged clause does.
+  #
+  # Three readings become unknown, and none of them becomes met. A clause the reviewer left out. A
+  # verdict outside the three words. A verdict with nothing to read beside it, the same rule
+  # `tests-freeze` applies to a `--row`. An absence nobody judged is never a pass.
+  #
+  # The reviewer also says whether a test could have watched the clause fail. The freeze's word
+  # test is a floor: "the form shows no legacy field" carries `no`, routes, and a test could have
+  # proved it. The reviewer holds the done-when and the diff, so it is the role that can ask.
+  # `testable` is yes, no, or unknown when the reviewer gave neither word. A yes reads unmet: the
+  # route skipped a red run the clause could have had, and the reviewer answered, so it is no
+  # unknown. A missing answer reads unknown, by the rule above. Both fail the review at close.
+  local absence_given='' absence_rows absence_unrouted absence_twice
+  [ -z "$findings_path" ] || absence_given="$(jq -c 'if ((.absenceVerdicts // []) | type) == "array"
+    then [ (.absenceVerdicts // [])[]
+           | {order: (.order // ""), clause: (.clause // ""),
+              verdict: (.verdict // ""), note: (.note // ""),
+              testable: (if (.testable // "") == "yes" or (.testable // "") == "no"
+                         then .testable else "unknown" end)} ]
+    else [] end' "$findings_path" 2>/dev/null)"
+  [ -n "$absence_given" ] || absence_given='[]'
+  absence_unrouted="$(jq -nr --argjson routed "$RW_ABSENCE_CLAUSES" --argjson given "$absence_given" '
+    [ $given[] | . as $g
+      | select(([ $routed[] | select(.order == $g.order and .clause == $g.clause) ] | length) == 0)
+      | (.order + ": " + .clause) ] | unique | join("; ")')"
+  [ -z "$absence_unrouted" ] \
+    || die 52 "findings: $findings_path answers a done-when clause no order routed to review: $absence_unrouted. The reviewer answers the clauses the brief carries under absenceClauses, verbatim, and it invents none. A verdict on a clause nobody routed answers a question nobody asked."
+  # Two verdicts for one clause are two answers nothing can tell apart, and the pairing below reads
+  # only the first. This is the rule the findings list already gets for two findings under one id.
+  absence_twice="$(printf '%s' "$absence_given" | jq -r '
+    [ group_by([.order, .clause])[] | select(length > 1) | .[0] | (.order + ": " + .clause) ]
+    | join("; ")')"
+  [ -z "$absence_twice" ] \
+    || die 52 "findings: $findings_path answers these done-when clauses more than once: $absence_twice. One clause takes one verdict. A clause answered unmet would otherwise pass on the strength of a met written beside it."
+  absence_rows="$(jq -nc --argjson routed "$RW_ABSENCE_CLAUSES" --argjson given "$absence_given" '
+    [ $routed[] | . as $r
+      | ([ $given[] | select(.order == $r.order and .clause == $r.clause) ][0]) as $g
+      | if $g == null
+          then ($r + {verdict: "unknown", note: "the reviewer returned no verdict on this clause.",
+                      testable: "unknown"})
+        elif ((["met", "unmet", "unknown"]) | index($g.verdict)) == null
+          then ($r + {verdict: "unknown", testable: $g.testable,
+                      note: ("the reviewer answered \"" + $g.verdict + "\", and the three words are met, unmet and unknown.")})
+        elif $g.note == ""
+          then ($r + {verdict: "unknown", testable: $g.testable,
+                      note: ("the reviewer answered " + $g.verdict + " and wrote nothing beside it; a verdict with nothing to read is not a verdict.")})
+        else ($r + {verdict: $g.verdict, note: $g.note, testable: $g.testable}) end ]')"
+  [ -n "$absence_rows" ] || die 3 "findings: could not pair the routed done-when clauses with the reviewer's verdicts."
+  rw_absence_check_row "$absence_rows" >>"$rows_file"
+
   # The reviewer adds a catalog note the same way the script does: a guide the code contradicts, a
   # recipe whose command no longer runs, a pattern the framework wants and no guide names. Review
   # writes nothing to the catalog, so a note is kept as evidence and named at close. A findings file
   # with no such key adds none, which is the ordinary case.
-  local reviewer_notes
-  reviewer_notes="$(jq -c 'if ((.catalogNotes // []) | type) == "array"
+  local reviewer_notes=''
+  [ -z "$findings_path" ] || reviewer_notes="$(jq -c 'if ((.catalogNotes // []) | type) == "array"
     then [ (.catalogNotes // [])[] | select((.seen // "") != "" and (.where // "") != "")
            | {seen: .seen, where: .where} ]
     else [] end' "$findings_path" 2>/dev/null)"
   [ -n "$reviewer_notes" ] || reviewer_notes='[]'
   updated="$(jq -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
-    --argjson notes "$reviewer_notes" '
+    --argjson notes "$reviewer_notes" --argjson absences "$absence_rows" --arg skip "$skip_reason" '
     . as $rows
     | $record[0]
+    | (if $skip == "" then del(.reviewerSkipped) else .reviewerSkipped = $skip end)
     | .findings = $findings
+    | .absences = $absences
     | .catalogNotes = ((.catalogNotes // []) + $notes)
     | .checks = ((.checks | map(. as $c | select(([ $rows[] | .id ] | index($c.id)) == null))) + $rows)' "$rows_file")"
   rm -f "$rows_file"
@@ -1685,7 +1838,7 @@ RW_RESEARCH_FILES
 
   rw_write_record "findings" "$updated"
   rw_print_summary "$updated" "findings"
-  printf 'findingsRead: %s\n' "$findings_path"
+  printf 'findingsRead: %s\n' "${findings_path:-none, the reviewer was not dispatched}"
   local follow_up high_security
   follow_up="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up") | .id ] | join(", ")')"
   high_security="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up" and .severity == "high") | .id ] | join(", ")')"
@@ -2299,6 +2452,14 @@ RW_ROWS
     | .criteria = $criteria
     | .checks = ([$one] + (.checks | map(select(.id != "every-criterion"))))')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
+  # The absence check is read again off the rows the record holds, so a row stored before
+  # `testable` existed reads unknown here rather than passing on the check `findings` wrote.
+  if [ "$(printf '%s' "$updated" | jq 'has("absences")')" = "true" ]; then
+    updated="$(printf '%s' "$updated" | jq -c \
+      --argjson row "$(rw_absence_check_row "$(printf '%s' "$updated" | jq -c '.absences')")" '
+      .checks = [ .checks[] | if .id == "absence-clauses" then $row else . end ]')"
+    [ -n "$updated" ] || die 3 "close: could not read the absence check again off the record's rows."
+  fi
 
   # The verdict rules. A check reading unmet fails, a check reading unknown fails, met and
   # undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the
@@ -2383,6 +2544,10 @@ do_audit() {
         elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
         elif $id == "test-and-mutation" then
           (if ($r.mutation | has("output")) then "ran" elif $v == "unknown" then "could-not-look" else "read" end)
+        # The routed done-when clauses are answered by the reviewer, so a verdict on them is one it
+        # returned. not-needed is no order routing a clause, and unknown is a clause nobody judged.
+        elif $id == "absence-clauses" then
+          (if $v == "not-needed" then "off" elif $v == "unknown" then "could-not-look" else "ran" end)
         elif ($id | endswith("-accept")) then "off"
         # A check no order asked for was turned off by the design, not missed by a reader. Without
         # this arm the suite row of a task built from document orders read could-not-look, which

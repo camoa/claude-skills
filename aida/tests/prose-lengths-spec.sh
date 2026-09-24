@@ -4,7 +4,10 @@
 # file, and fails naming each file that grew past its record, with both numbers. Growth is a
 # deliberate edit of that record in the same commit. Shrinking passes. A file with no record fails,
 # so a new reference never escapes. A record with no file fails, so a stale line never hides one.
-# Usage: prose-lengths-spec.sh [<record file>]. Run by scripts/run-tests.sh. bash 3.2+ and zsh.
+# Usage: prose-lengths-spec.sh [<record file>]. bash 3.2+ and zsh.
+# The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
+# from the plugin's own scripts/. It finds a spec through git ls-files, so an untracked spec
+# never runs.
 set -uo pipefail
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 HERE="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"

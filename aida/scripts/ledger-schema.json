@@ -158,6 +158,15 @@
           },
           "description": "The checkpoint's verdict on the tests that prove this order's own doneWhen rather than a criterion: the `--row` keyed by the order's id, written by `tests-freeze` and replaced on every freeze of this order. Present only when the order froze such a test. A supporting order serves criteria it cannot observe, so its tests are judged against its doneWhen text instead of a verify clause (live-run row 59). Counted with the criterion judgements in every rowsJudgedByModel, so a model's reading here is listed for a person to judge again like any other."
         },
+        "absenceClauses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The doneWhen clauses of this order that assert an absence, each verbatim, written by `tests-freeze --absence` and replaced on every freeze of this order. Present only when the freeze routed at least one. Such a clause cannot be watched failing: the tree is already in the state it asserts, and making a test of it fail means adding the very thing the clause forbids (live-run row 184). It is answered at review instead, where the architecture reviewer judges it against the task's own diff. The list is what makes the route visible: a clause here is owed a verdict, and a clause nobody routed is owed a test."
+        },
         "retakes": {
           "type": "array",
           "items": {

@@ -147,6 +147,10 @@ safety grounds. A code path or a name another project already holds. A project f
 own folder as the code path. A project file with fields missing is registered instead, and the
 check tells you which fields to fill.
 
+A pickup that registered the folder reports success, even when the check then names missing
+fields. The fields are the next step, not a failed pickup, so the findings are reported and the
+pickup stands.
+
 Picking up a version 5 folder refuses on the same name test, which is new. That pickup takes the
 folder name as the project name, so two version 5 folders in different places can carry one name.
 Rename the folder you are picking up, then point switch at it again.
@@ -189,10 +193,26 @@ express, and says which it did: whether the project folder is a git repository a
 whether it holds work that was never committed. Either finding is a fact worth seeing before
 you start a new stage on top of it; neither is repaired automatically.
 
+The tests for a repeated name and a repeated code path read the spellings AIDA's own list holds.
+A trailing slash is ignored and nothing else, so two spellings of one directory read as two
+projects. The report says so on every run, whether or not it found a repeat.
+
 Repair means running the one step that produces a flagged field again. It is never the
 whole creation interview, and never a guess, and it never overwrites a value already
 present, so running the check twice in a row changes nothing. Checking is cheap, so it
 always runs; repairing is not, so it is only ever offered.
+
+A field the shape once declared and then retired has no step that produces it. The report lists
+it apart, under "Retired fields", and names `/aida:project drop-retired <name>` as the repair.
+That action removes exactly the retired fields and nothing else. Nothing is migrated for you: the
+check keeps failing until you run it.
+
+The check also reads your code repository's `CLAUDE.md`, which may still hold the task rule
+version 5 wrote. That rule names commands that no longer exist. Every report then says so and
+offers the rewrite. The offer stays open until you accept or decline it. After a decline, the
+report still states the fact and offers nothing. A block whose end marker is missing is never
+rewritten or removed, because the text below it may be yours. The report names the line to fix
+by hand.
 
 A second check answers a different question. `/aida:project check-machine` reports whether this
 machine can reach a task's worktree at all. It reads the Claude Code version, the plugin version,
@@ -226,6 +246,10 @@ again, with one exception. A project folder outside the projects base is not in 
 `/aida:project switch "<project folder>"` brings it back instead, and the dropped row held the
 only copy of that path. The unregister output names which case it is, and prints the path.
 
+The rebuild skips a folder whose project file carries a name, or a code path, it has already
+listed, and says which folder it skipped. Two projects can share neither value. Change that value
+in one of the two project files, then rebuild again.
+
 ## Cleaning up
 
 **AIDA never removes a project folder.** Cleanup stops at unregistering and uninstalling,
@@ -236,9 +260,9 @@ Deleting a project's entry never touches your code, and unregistering never touc
 project folder either.
 
 Uninstalling removes only AIDA's own instructions: the marker-delimited task-rule block, when
-one was installed. It never touches tests, test configuration, or any tooling. A harness AIDA
-scaffolded, once it lands, belongs to the code the same way a linter does, and removing it
-would be deleting your tests rather than tidying up after AIDA.
+one was installed or version 5 left one. It never touches tests, test configuration, or any
+tooling. A harness AIDA scaffolded, once it lands, belongs to the code the same way a linter
+does, and removing it would be deleting your tests rather than tidying up after AIDA.
 
 The session-start hook ships with the plugin, so nothing installs it into your repository and
 uninstalling leaves it alone. What it prints is on

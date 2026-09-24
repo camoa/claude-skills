@@ -162,6 +162,29 @@ and the author can name the existing code that satisfies it: frozen, with that r
 for the reviewer. Still green with nothing to name: reported by name, and the step stops. Failed:
 frozen with its red run. A green test is never deleted quietly and never weakened into failing.
 
+A test of the unit's own work has a fifth thing to name. After a restart or a retake the branch can
+still hold this unit's earlier build, and that build is what satisfies the test. The author may not
+read it, and no interface record of this unit exists yet. So the author names one of the unit's own
+build or fix commits, which the brief carries, written `commit:<id>`. The prefix is what marks a
+commit, so a reason without it stays prose. The freeze records that commit as the reason. It refuses
+a commit of another unit, and one the branch does not hold. The author reads no source.
+
+A done-when clause that asserts an absence is answered at review instead. Such a clause says the
+change added nothing of a named kind. No second engine for one job. No new dependency. No static
+call to the container. No test of it can be watched failing. The tree is already in the state the
+clause asserts, and making the test fail means adding the thing the clause forbids. The freeze
+routes the clause rather than freezing a test for it. It records the clause on the order's ledger
+entry. Review carries it to the architecture reviewer, which judges it against the task's whole
+diff. So the clause is visible as owed rather than untested in silence, and the author no longer
+chooses between an unprovable test and none.
+
+The route is narrow on purpose. The freeze refuses a clause the order's done-when does not hold word
+for word. It refuses a clause with no negation word in it at all. A contraction such as doesn't
+counts as one. Every other test still needs the run that failed, and an order that froze no test at
+all still refuses. A clause a test could have proved, routed this way, is how the rule that every
+frozen test was watched failing gets worked around. So the reviewer also says whether a test could
+have watched each routed clause fail, and a yes fails the review.
+
 When the author returns, the coding-standards tool runs over the new test files, and a finding
 goes back to the author before the freeze. This is the one place the tests' own standards are
 judged, because the build step leaves the frozen tests out of its tool checks.
@@ -219,8 +242,15 @@ A work order whose deliverable is exported configuration, a Drupal view or a con
 `gate` as its proof kind; design created it that way. No test author is dispatched and no row goes
 to the checker, because a test that reads the YAML back cannot fail for the right reason. The
 order freezes with no test, and with a checklist line for each criterion a person verifies. Its
-build runs the implement recipe's configuration gate lines instead, in the task's worktree. Every
-line exiting zero is met; the first line that does not is named, with its output. The check reads
+build runs the order's own `verify` commands first, in the task's worktree. Design copied them
+from the recipe that covers the order, or wrote them from research's findings. They prove the
+site the build left. The implement recipe's configuration gate lines run after them, and prove
+the export imports onto the seed. The worse answer stands. An order with no commands runs the
+gate lines alone. Every line passing is met;
+the first line that does not is named, with its output. A line passes on exit 0, or on what its
+standard output must hold when the source says so. A command from research runs only when you
+approved it at the design close. A placeholder given several `--value`
+entries runs its command once per value. The check reads
 unknown when the task has no running site recorded, so bring the environment up first. The proof
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.
@@ -262,7 +292,7 @@ a configuration gate, the look waits for the recipe's restore or rebuild step, s
 rewound the site. It judges each done-when row against what renders and
 saves a screenshot per surface and viewport under the task folder. It also judges the
 verification clause of each machine criterion the order owns as its own row, since rows may say
-less. It writes an observed record
+less. Each check in the order's `verify` list is a row of its own too. It writes an observed record
 with one row per sentence, surface and viewport, and the build reads that record as the order's
 own check. Every row met is met; one unmet row stops the attempt the way a failing test does.
 The judge on the record is a model. When the order closes, its criteria are recorded as judged
@@ -301,7 +331,10 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
    the configuration gate instead, on a document order the done-when judgement, and on a page
-   order the observed record.
+   order the observed record. On every order but a configuration order, the order's own
+   `verify` commands then run in this slot, from the code worktree. The slot is met only when
+   its own answer and every command are. So a coverage report is checked against a re-run of
+   the command it names.
 2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
    recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
    stage runs that row once.
@@ -351,6 +384,10 @@ the tier of the work it judges. It is given the criteria and non-goals, the diff
 frozen tests, the eight check results, and both interface texts. It is given the builder's
 report too, as claims and never as proof, so a reason in it never lowers a finding's severity. It
 writes its findings and nothing else; a probe file left in the code is a refusal.
+
+The reviewer also judges each check in the order's `verify` list. Design carried those from the
+recipe or the research that covers the order. A check that does not hold is a finding. When
+the source is one this project did not accept, the finding says so.
 
 When the interface check read unknown, nothing is asked, in either mode. AIDA says in one line
 that no named element of the interface could be counted. The reviewer reads the declared
@@ -466,14 +503,19 @@ design has closed again, the next run takes the wider order in place and keeps i
 attempts. The orders that depend on it are left alone. A removed owned file, or any other
 change, halts as above.
 
-A restart moves records, not commits. The halted order's frozen tests and its build attempts
-are still on the branch. A test author sent against them could write a test that passes at
-once. So the restart lists those commits, and says one of two things about the tree. When
-nothing later depends on them, it names the commit to take the branch back to. That is a hard
-reset, and you run it. When other commits sit after them, they are carried, and the unit's own
-code stays in the tree, so its next tests cannot go red. Either way the
-next run names them while they are still there. The test author's brief then says the tree
-holds a partial build of the unit. A test green on arrival is reported, never taken as proof.
+A restart moves records, not commits. The halted order's frozen tests and its build attempts are
+still on the branch. A test author sent against them could write a test that passes at once. So the
+restart lists those commits, and says one of two things about the tree. When nothing later depends
+on them, it names the commit to take the branch back to. That is a hard reset, and you run it. When
+other commits sit after them, they are carried. The unit's own code stays in the tree, so its next
+tests cannot go red. Either way the next run names the unit's build and fix commits while they are
+there. It stops once the unit is built again. A retake names them the same way, because it keeps the
+build and corrects only the test. They come in the order the branch holds them, oldest first. They
+are worked out again each time, from the unit's own records, wherever a retake or an earlier restart
+moved them. After a rebase, each is found again by its change and its author, date and subject. One
+whose diff the rebase changed is named as not found, with the reason, and cannot be cited. The test
+author's brief then carries those commits and says the tree holds the unit's earlier code. A test
+green on arrival is never taken as proof.
 
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a

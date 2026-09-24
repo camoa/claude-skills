@@ -4,6 +4,176 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.25] - 2026-09-24
+
+Twenty-three rows, and one design change the owner asked for while it
+closed. Nine rows were opened by beta.24 itself, while it closed other
+rows. Nine more were found while this release closed those, and five came from
+a live run on the day it closed. Every row is closed. One closes through a
+proposal to the guide catalog, because no AIDA action edits a catalog recipe.
+The work also turned up five live defects nobody had written a row for.
+
+### Added
+- `aida/tests/records-folder-spec.sh`, with a list naming every file a task's
+  `records/` folder may hold, its producer, and what makes it again. The
+  compaction refusal skips that folder and nothing checked what landed there.
+  The spec's first run corrected the set from thirteen to sixteen. It follows a
+  variable, so a path assembled at run time is refused by name and line rather
+  than passed in silence. (row 176)
+- `aida/tests/shadowed-functions-spec.sh`. A script that defines a function
+  whose name a sourced library already holds silently overrides it for that
+  whole script, and every test still passes. beta.24 shipped one instance and
+  caught it only after the commit. It reads four declaration forms, two of
+  which the tree already uses. (row 179)
+- `aida/tests/swallowed-refusals-spec.sh`, with a list of the sites where a
+  refusal inside a command substitution is safe, and the reason for each. A
+  `die` inside `$( )` ends only that subshell. (row 186)
+- Every spec header names the test runner from the repository root. The runner
+  lives at the marketplace root and the plugin has its own `scripts/` folder, so
+  the old wording read as plugin-relative. Three readers across two releases
+  concluded the file was missing. The headers also say the runner finds a spec
+  through `git ls-files`, so an untracked spec never runs. (row 186)
+
+- `tests-freeze --absence <clause>` routes a done-when clause that asserts an
+  absence to review. A test of an absence cannot be watched failing, so the
+  clause needs a reviewer rather than a red run. The clause must be verbatim in
+  the order's done-when and carry a negation word. A word ending in `n't` and
+  the word `cannot` count, with straight or curly apostrophes. The architecture
+  reviewer gives each routed clause a verdict. It also says whether a test
+  could have watched the clause fail. Review's `absence-clauses` check fails an
+  unjudged clause, and fails one a test could have covered. The review summary
+  prints one line per clause. (row 184)
+- `drop-retired <name>` in the project skill. The schema now lists retired
+  fields, and the check names this action when a project file holds one. It
+  removes exactly those fields and commits. (row 192)
+- `aida/scripts/lib/project-findings.sh` holds the version 5 task-rule markers
+  and their detection once. The check, the project actions and the
+  session-start hook all read it. (row 191)
+
+- A work order can carry its own proof, in a `verify` list. When a catalog
+  recipe covers the order, its verifier's commands become checks that run, and
+  its prose items become checks the reviewer judges. No command is ever made
+  from prose. When no recipe covers it, research's best-practice findings can
+  become checks too. Each cites its source and is marked not binding. A
+  command from research runs only after a person approves it at the design
+  close, and never in an unattended run.
+- `br_order_needs` in `scripts/lib/proof.sh` decides which roles and catalog
+  lookups an order needs, in one place. The per-order reviewer, the row
+  checker on a record order, and every top-tier critic are never cut.
+### Fixed
+- A failed write never empties a record. The guard went into `write_atomic`
+  itself rather than the seven call sites the row named. The same shape sits at
+  about ninety more sites across six skills. A per-site test does not stop the
+  next new action, which is how this one was found. All 86 callers were traced
+  and none can legitimately pass empty content. Before it, an unreadable record
+  made `save` exit 0, print success, and truncate a 226-byte record to one
+  byte. (row 173)
+- A refusal reaches the caller that asked for it. Of 54 command substitutions
+  calling a function that can refuse, fourteen tested neither the exit code nor
+  the value. Five of those were live defects. One swallowed the refusal
+  that stops a stage action running outside its task's worktree. The action
+  carried on and printed a second message that was false. One dropped a
+  criterion out of the record a person signs off. One let a framework whose
+  entry could not be recorded read as met, which is a failed write becoming a
+  passing condition. Two ran a site's bring-up lines from whatever directory
+  the caller stood in. (rows 173, 186)
+- The registry rebuild tests a name and a code path before it writes a row. It
+  was the fourth door past a test three other routes share. Two rows on one code
+  path make the directory lookup answer with whichever was written first, and
+  nothing reported it. The rebuild reads the folders outside the base first, so
+  a skip falls where a later rebuild can undo it. (row 178)
+- A pickup that registered a folder reports success. It returned the project
+  checker's exit code, which is never 0 on a folder no producer has filled.
+  (row 177)
+- The design close commits the critique it cites. The record named three paths
+  in an ignored folder, so a committed record cited evidence the repository
+  never held. Three critics write those files at opus, so a second dispatch
+  answers differently and re-running is not a recovery. (row 176)
+- A tool run's record says what produced its output. Arguments a caller typed
+  reached no file, so after a compaction the record held output nobody could
+  account for. The skill documents the form that supplies them, and the two
+  actions that used to drop it now refuse it. (row 176)
+- The compaction refusal's stated reason. beta.24 said every file in that folder
+  is derived and its producer runs again. That is false for four records written
+  by a model, and for two more whose inputs do not survive. One comes from the
+  clock at the instant an automatic compaction fired. One holds output whose
+  command arguments reached no file. The claim that carries the skip has two halves. No
+  file there carries a person's answer. And none is the only copy of anything a
+  person still needs. (row 176)
+- The project checker sees a duplicate code path, and says it compares the
+  spellings the registry holds rather than resolving them. (rows 178, 187)
+- A branch in the task checker is gone. It was unreachable from the day it was
+  written, and so is the header sentence that made it look necessary. (row 174)
+- The design critic no longer reports a path the close moves. (row 189)
+
+- A resume line reads the branch, not a record. `start`'s `partialBuild:` line
+  finds an order's freeze commits by their subject on the branch. It reads every
+  restart record, not only the newest one. It covers every retaken order, and
+  it lists only the build and fix commits a test author can cite. An order that
+  was built again since its halt gets no line. (rows 182, 183)
+- A still-green test can cite a commit. `--locks-in <test>=commit:<id>` names
+  one of the order's own build or fix commits, and any other id is refused.
+  After `start --rebased-onto`, a commit is followed onto the new branch by its
+  change, author, author date and subject. (row 183)
+- A site the record can always find. `environment up` writes a marker before
+  the first bring-up line, so `down` can tear down a site that failed halfway.
+  `down` reads only the keys under the last bring-up. (row 185)
+- The records-folder spec reads four more shapes. The one it cannot read is
+  stated in its list header, where a person adding a record meets it. (row 188)
+- A critique whose lens did not finish is kept. The design close moves it into
+  `design/` as `unfinished-design-critique-<lens>.md` and leaves it uncounted.
+  (row 190)
+- A version 5 task rule is named on every project check, not only at pickup.
+  The session start names it too, before any stage runs. The rewrite offer stays
+  open until it is accepted or declined. A block with no end marker is never
+  rewritten or removed; every route names the line to fix. A file holding both
+  blocks keeps one version 6 block. `uninstall` removes a version 5 block. (row
+  191)
+- A project action commits only the files it wrote. Before, a commit took
+  anything the person had already staged. (row 192)
+- Task create asks the catalog one question per dispatch. It asked for two
+  recipes at once, so the visual-regression setup recipe was never looked up.
+  (row 193)
+- `environment show` runs the recipe's precondition checks before the site is
+  offered. `show` and `up` share one block for this. A failing check names the
+  task branch, and the branch the worktree was cut from, which is now recorded.
+  It also says a commit on that base branch arrives only after a merge. An
+  interrupted or failed run leaves the tree and the index as they were. (row
+  194)
+
+- Design chooses how an order is proved from what the order produces. Code a
+  test can pin is proved by tests. Tools that change state get a gate. A
+  document or analysis is proved as a record. What a person or a browser sees
+  gets a look. Before, any machine-checked criterion pointed to tests, so a
+  dependency update got an invented test.
+- A gate order runs its own checks first, then the framework's configuration
+  gate when the recipe has one. The worse result stands. All check lines go
+  through one runner. A placeholder given several values runs once per value.
+- The architecture reviewer is not dispatched when no order commits code and
+  no absence clause is routed. The review record says why.
+- The test-authoring lookup runs only for orders proved by tests or by a
+  record. It ran for every order.
+- A check command gets only the files its `extensions:` key names. A folder
+  row with no matching file ran over the whole tree and passed. A row left
+  with no file now reads as not applicable.
+### Checks
+Sixty fixtures, 5,346 rows, pass under bash and under zsh on the merged
+branch, every run exit 0. The repository's specs pass. Four older fixtures
+expected behaviour this release changed on purpose, and now expect the new. Each
+build had a fresh checker over its artifacts.
+
+### Known limits
+- A rebase that changes a build commit's diff, through a conflict, loses the
+  link to that commit. The resume line and the refusal name it as not found and
+  say why. A person decides whether the green test stands.
+- A reviewer can answer that a routed absence clause could not have been
+  tested when it could. The route rests on the reviewer's answer.
+- A Drupal project whose docroot is the repository root cannot bring its site
+  up until the catalog recipe reads the project row safely. The ask is filed
+  with the guide catalog. (row 195)
+- A command written from research runs only with a person's approval, so an
+  unattended run judges it instead of running it.
+
 ## [6.0.0-beta.24] - 2026-09-23
 
 Fifteen rows, every one left open by beta.23. Most were a record page and the

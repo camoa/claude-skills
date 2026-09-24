@@ -78,9 +78,10 @@
       "required": ["path", "branch"],
       "properties": {
         "path": { "type": "string", "minLength": 1 },
-        "branch": { "type": "string", "minLength": 1 }
+        "branch": { "type": "string", "minLength": 1 },
+        "base": { "type": "string", "minLength": 1 }
       },
-      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<slug of the code folder>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
+      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<slug of the code folder>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`. `base` is what task_worktree cut `branch` from, written by every cut over any base the record held: the branch the code checkout was on, or `commit:<sha>` for a detached HEAD, which `environment` prints as a commit on no branch. A tree made again from a branch that exists keeps the base the record held. A task cut before this field has none, and `environment` then names the branch the code path is on now and says so."
     },
     "environment": {
       "type": "object",
@@ -89,9 +90,11 @@
         "address": { "type": "string", "minLength": 1 },
         "recipe": { "type": "string", "minLength": 1 },
         "upAt": { "type": "string", "minLength": 1 },
-        "not-applicable": { "type": "string", "minLength": 1 }
+        "not-applicable": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "enum": ["coming-up"] },
+        "startedAt": { "type": "string", "minLength": 1 }
       },
-      "description": "The worktree's own site, in one of two shapes. While a site is up it holds `address`, `recipe` and `upAt`, all three. They are the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Every other `key: value` line the address command printed is kept here as a string field, so `down` can fill it into the tear-down as `{key}`. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one. Or `not-applicable` alone: the person's reason this task needs no site, written by `task environment not-applicable`, so nothing offers again. `up` replaces it. Absent means the offer has not been answered, and `start` says so."
+      "description": "The worktree's own site, in one of three shapes. While a site is up it holds `address`, `recipe` and `upAt`, all three. They are the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Every other `key: value` line the address command printed is kept here as a string field, so `down` can fill it into the tear-down as `{key}`. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one. Or the marker `up` writes before the first bring-up line: `state` is `coming-up`, `recipe` is the recipe being run, and `startedAt` is when. The marker names the site before the site exists, so a failure between the bring-up and the record leaves a site `down` can still find. It keeps every other field the record held, except a `not-applicable` reason, so a second `up` over a site that is already up does not drop that site's address while its bring-up runs again. A marker with no address is no site to use, and a reader of `address` behaves as it does with the key absent. A marker with one names the site the earlier run recorded, which is where that reader stood before this `up` ran. `up` replaces the marker with the shape above once the address command answers. A marker on disk means a bring-up did not finish: run `task environment <id> down`. Or `not-applicable` alone: the person's reason this task needs no site, written by `task environment not-applicable`, so nothing offers again. `up` replaces it. Absent means the offer has not been answered, and `start` says so."
     },
     "savedAt": {
       "type": "string",

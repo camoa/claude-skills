@@ -41,7 +41,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
-#                            [--locks-in <test name>=<reason>]...
+#                            [--locks-in <test name>=<reason or commit:<id>>]...
 #                            [--support <path relative to codePath>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
@@ -496,6 +496,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and the file is then accepted as `harness-new-unit`. The same exit when no
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
+#  81  `tests-freeze` was given an --absence the order cannot route to review. Two facts, one
+#      refusal, because both say the same thing: the flag names something that is not an absence
+#      clause of this order. The clause is not, verbatim, one of the order's frozen `doneWhen`
+#      entries; or it carries no negation word, which makes it a clause asserting a presence, and a
+#      presence is proved by a test that was watched failing (live-run row 184).
 #  84  the assembled checks do not count what the record schema requires: eight at `build-record`
 #      (build-record-schema.json) and seven at `fix-record` (fix-record-schema.json). A record
 #      that lost one would read complete while it is not. The message names the absent check.
@@ -619,6 +624,17 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      grant it. Nothing is written. Three argument faults stay exit 3: a path already owned, a
 #      frozen test or support file, and a path no open finding's fixScope names.
 #
+# The code the commit form of a locks-in reason added (live-run row 183).
+# 101  `tests-freeze` was given a `--locks-in` reason written `commit:<id>` whose id is not
+#      hexadecimal, is shorter than seven characters, or is not one of this order's own build or
+#      fix commits on the branch. The message names the id and lists the commits that are this
+#      order's own, which `tests-brief` already put in the brief under `treeHolds`. After a rebase
+#      it also names each recorded commit with no copy here that can be cited, and why. A reason
+#      with no `commit:` prefix is prose, names the existing code, and never reaches this check.
+# 102  `dispatch-open` was given a role the order's proof kind does not need: a test author on an
+#      order that freezes no test, or a row-checker on one that freezes no row. br_order_needs in
+#      scripts/lib/proof.sh decides, and `read` prints its answer on the order's line.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -681,7 +697,7 @@ die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
 # One refusal function, one exit code as its first argument. The exit-code table above is the
 # only place a number gets a meaning, and nothing here mints one that table does not carry.
 
-# task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
+# task-helpers.sh takes these three from its caller, so a refusal still says which script refused.
 die1() { die 1 "$1"; }
 die3() { die 3 "$1"; }
 die79() { die 79 "$1"; }
@@ -766,7 +782,8 @@ usage: implement-actions.sh read  <task_folder>
                             [--checklist <criterion id>=<verification text>]...
                             [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
-                            [--locks-in <test name>=<reason>]...
+                            [--locks-in <test name>=<reason or commit:<id>>]...
+                            [--absence <a doneWhen clause of this order, verbatim>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
                             [--interface <path to the record the builder wrote>]
@@ -1107,6 +1124,24 @@ im_retake_pending() {
   printf '%s' "$answer"
 }
 
+# What each order's proof kind needs, from br_order_needs, as one JSON object keyed by order id.
+# `read` prints the value on the order's line, so the tests step reads the roles and the lookups
+# there and never re-derives them from the kind. $1 the snapshot document, or empty.
+im_order_needs_json() {
+  local count i one acc='{}'
+  [ -n "$1" ] || { printf '{}'; return 0; }
+  count="$(printf '%s' "$1" | jq '(.workOrders // []) | length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$1" | jq -c --argjson i "$i" '.workOrders[$i]')"
+    br_order_needs "$one"
+    acc="$(printf '%s' "$acc" | jq -c --arg id "$(printf '%s' "$one" | jq -r '.id')" \
+      --arg v "roles=$BR_ORDER_ROLES lookups=$BR_ORDER_LOOKUPS" '. + {($id): $v}')"
+    i=$((i + 1))
+  done
+  printf '%s' "$acc"
+}
+
 # The next step, derived the way SKILL.md's routing table reads the ledger, so `read`, `start` and
 # every record action print the same answer from the same facts. $1 the ledger document, or empty
 # when none is readable; $2 the snapshot document, or empty; $3 the implementation folder, for the
@@ -1404,7 +1439,9 @@ do_read() {
   criteria_line="none"
   judged_line="0"
   if [ "$ledger_readable" = "true" ]; then
-    orders_json="$(jq -c --argjson reviews "$reviews_json" '
+    local needs_json='{}'
+    [ "$snap_readable" = "true" ] && needs_json="$(im_order_needs_json "$(jq -c '.' "$SNAPSHOT_FILE" 2>/dev/null)")"
+    orders_json="$(jq -c --argjson reviews "$reviews_json" --argjson needs "$needs_json" '
       ($reviews | map({(.unit): .}) | add // {}) as $rv
       | [ (.orders // [])[] | . as $o
           | {id: .id,
@@ -1412,7 +1449,8 @@ do_read() {
              halt: ("halt: " + (.haltedBecause // "none")),
              attempts: ("attempts=" + ((.attemptsUsed // 0) | tostring)),
              rounds: ("rounds=" + ((.roundsUsed // 0) | tostring)),
-             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end)} ]' \
+             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end),
+             needs: ($needs[$o.id] // "unknown: no readable snapshot names this order")} ]' \
       "$LEDGER_FILE")"
     criteria_line="$(printf '%s' "$ledger_summary" | jq -r \
       '(.criteriaByRowState // {}) | to_entries | map("\(.key)=\(.value)") | join(" ") | if . == "" then "none" else . end')"
@@ -2146,13 +2184,14 @@ do_start() {
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
-  # After a restart, the halted orders' commits may still be on the branch; one line per order
-  # names them while they are. Not a refusal: the person may have chosen to carry them
-  # (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  # After a restart or a retake, the order's own build and fix commits may still be on the branch;
+  # one line per order names them while they are. Not a refusal: the person may have chosen to
+  # carry them (live-run row 94). The line is dropped when there is none, the way `removed:` is.
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
-    st_partial_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$code_path" "" | jq -c '
-      group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind))})')"
+    st_partial_json="$(rs_carried_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
+      group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind
+        + (if has("missing") then " not found on this branch: " + .missing else "" end)))})')"
   fi
   im_print_summary "start" "$(jq -n \
     --arg task "$TASK_PATH" --arg codePath "$code_path" \
@@ -2716,7 +2755,7 @@ bl_tool_result() {
   exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
 
   has_paths=false
-  printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
+  br_argv_takes_paths "$argv_json" && has_paths=true
   scoped_json="$paths_json"
   if [ -n "$exts_json" ]; then
     scoped_json="$(br_filter_extensions "$paths_json" "$exts_json")"
@@ -2809,7 +2848,7 @@ bl_tool_result() {
 # The step. Every framework the project declares must be answered for, because the build runs in
 # one repository that is all of them at once.
 do_preconditions() {
-  local task_folder="" project_folder codepath
+  local task_folder="" project_folder codepath resolve_rc
   local recipes="" failures="" values="" check_recipes="" fw
   local implement_lookups="" im_answer im_lookup im_path im_resolved im_blocked im_freeze
   local im_notgiven im_by_tests im_unlooked im_advice
@@ -2871,6 +2910,8 @@ do_preconditions() {
   done
 
   task_folder="$(resolve_task_folder "$task_folder" "preconditions")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   # Every other action calls the folder TASK_PATH, and the shared loaders read that name.
   TASK_PATH="$task_folder"
 
@@ -2961,7 +3002,11 @@ do_preconditions() {
         section_state="not-needed"
         fw_verdict="not-needed"
       else
-        section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")"
+        # pc_parse_recipe refuses through pc_flush_entry when an entry cannot be recorded, and that
+        # die ends the substitution's subshell alone. An empty section_state falls to the `*` arm
+        # below and reads as met, so the code is re-raised here. This loop's own `done || exit $?`
+        # carries it out of the pipeline.
+        section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")" || exit $?
         case "$section_state" in
           undeclared)     fw_verdict="undeclared" ;;
           declared-empty) fw_verdict="undeclared" ;;
@@ -3203,9 +3248,17 @@ EOF
           # The three tools run over the baseline scope, the same union of every order's ownedFiles
           # recorded above. A caller that passed no flag for one of them leaves it undeclared, with
           # the reason this record has always carried.
+          # bl_tool_result runs in a command substitution, so a die inside it ends that subshell
+          # alone and leaves nothing here. Each value is tested where it lands, because a helper
+          # around the call would hold the same die in the same subshell. Without these three the
+          # jq below fails on an empty --argjson, and write_atomic then refuses naming the
+          # baseline file, which tells a person the wrong thing about what went wrong.
           cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$task_folder/implementation")"
+          [ -n "$cs_json" ] || die 3 "preconditions: the coding-standards run produced no result. No baseline was written"
           sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$task_folder/implementation")"
+          [ -n "$sa_json" ] || die 3 "preconditions: the static-analysis run produced no result. No baseline was written"
           sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")"
+          [ -n "$sec_json" ] || die 3 "preconditions: the security run produced no result. No baseline was written"
 
           baseline_json="$(jq -n \
             --arg takenAt "$today" --arg commit "$ledger_started_from" \
@@ -3319,7 +3372,7 @@ EOF
 # own findings as pre-existing. references/preconditions.md records the gap. Every refusal
 # runs before the one write, so a refused call leaves the record as it was.
 do_recipe_refresh() {
-  local task_folder="" recipes="" fw rp line from kind
+  local task_folder="" recipes="" fw rp line from kind resolve_rc
   local record_file record_doc today refreshed=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3342,6 +3395,8 @@ do_recipe_refresh() {
   [ -n "$recipes" ] || die 3 "recipe-refresh: nothing to refresh; pass --recipe <framework>=<path>"
 
   task_folder="$(resolve_task_folder "$task_folder" "recipe-refresh")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   TASK_PATH="$task_folder"
   IMPL_DIR="$task_folder/implementation"
   require_started_build "recipe-refresh"
@@ -3593,15 +3648,20 @@ do_tests_brief() {
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
 
-  # A ninth thing, only after a restart left this order's commits on the branch: the tree holds
-  # a partial build of the order, so a test that passes on arrival is suspect, and the author is
-  # told rather than left to find it (live-run row 94).
+  # A ninth thing, only after a restart or a retake left this order's build and fix commits on the
+  # branch: a test that passes on arrival is suspect, and the author is told rather than left to
+  # find it (live-run row 94).
   local tree_holds_json
   rv_load_codepath "tests-brief"
-  tree_holds_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" | jq -c '
+  tree_holds_json="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$ledger_doc" | jq -c '
     if length == 0 then null
-    else {commits: map({kind, commit}),
-          note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect"} end')"
+    else {commits: [ .[] | select(has("missing") | not) | {kind, commit} ],
+          note: "the tree holds these build and fix commits of this unit from an earlier attempt, which a restart or a retake sent back to the tests step, so a test that passes on arrival is suspect",
+          greenOnArrival: "A test of this unit that arrives green may pass because of one of the build or fix commits above. Give that commit as the --locks-in reason, written commit:<id>. Read no source to decide it."}
+      + (if any(.[]; has("missing")) then
+          {notFound: [ .[] | select(has("missing")) | {kind, commit, why: .missing} ],
+           notFoundNote: "A rebase left no copy of these commits on the branch that can be cited. If a test arrives green on this code, report the test green on arrival and name that commit. A person decides."}
+         else {} end) end')"
 
   # A tenth thing, only while a retake is still unanswered: a person ruled one frozen test wrong
   # at `verify-record`, and `retake-tests` sent the order back to this step (live-run row 142).
@@ -3953,7 +4013,7 @@ tf_frozen_tests_of() {
 
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
-  local support_raw=""
+  local support_raw="" absence_raw="[]"
   local test_recipes="" unit_recipes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4002,7 +4062,7 @@ do_tests_freeze() {
 "
         shift 2 ;;
       --locks-in)
-        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>, or <test name>=commit:<id> naming this order's own build"
         locks_raw="$locks_raw$2
 "
         shift 2 ;;
@@ -4011,6 +4071,16 @@ do_tests_freeze() {
         [ -n "$2" ] || die 3 "tests-freeze: --support was given an empty path."
         support_raw="$support_raw$2
 "
+        shift 2 ;;
+      --absence)
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --absence needs one doneWhen clause of this order, verbatim"
+        [ -n "$2" ] || die 3 "tests-freeze: --absence was given an empty clause."
+        # Collected as a JSON array and not as one value per line, the way every other repeatable
+        # flag here is. A doneWhen clause is prose design wrote, and nothing refuses a newline in
+        # one (scripts/check-design.sh). Split on newlines, such a clause would match no doneWhen
+        # entry and be refused for the wrong reason.
+        absence_raw="$(printf '%s' "$absence_raw" | jq -c --arg t "$2" '. + [$t]')"
+        [ -n "$absence_raw" ] || die 3 "tests-freeze: could not record the --absence clause."
         shift 2 ;;
       -*) die 3 "tests-freeze: unrecognized argument: $1" ;;
       *)
@@ -4057,6 +4127,56 @@ do_tests_freeze() {
   if [ "$BR_ORDER_SLOT" = "observed" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
   fi
+
+  # --- 81: an --absence routes one doneWhen clause to review, because no test can prove it --------
+  # A done-when clause that asserts an absence cannot be watched failing. The tree is already in the
+  # state the clause asserts, and making a test of it fail means adding the very thing the clause
+  # forbids (live-run row 184). Such a clause is answered where it can be: at review, against the
+  # task's own diff. The clause is recorded on the ledger, so a clause routed this way is visible
+  # rather than silently untested.
+  #
+  # Two facts refuse, and they share one code because both say the flag names something that is not
+  # an absence clause of this order. First, a clause the order's frozen doneWhen does not hold
+  # verbatim: review judges the words design wrote, never a paraphrase the freeze was handed.
+  # Second, a clause with no negation word, which asserts a presence and is proved by a test.
+  # This route relaxes nothing else. Every --test still needs its red run or its --locks-in reason
+  # (exit 33), and an order whose record would hold no row still refuses (exit 74).
+  #
+  # Sorted in one jq pass, and no clause is ever carried through a shell variable: a command
+  # substitution strips the trailing newlines of whatever it reads, and a doneWhen clause is prose
+  # nothing refuses a newline in. A clause the shell had reshaped would fail the verbatim match and
+  # be refused for a cause that is not the real one. Only the three lists come back out, and the two
+  # for the refusals are joined into a message and never matched on again.
+  #
+  # `denies` is a floor and not the whole rule: "the form shows no legacy field" carries `no` and a
+  # test can watch it fail, so references/tests.md carries the judgement and this carries the
+  # refusal a script can make. The word list is closed, so it reads the same clause the same way
+  # every time. A word ending in n't after a letter is a negation too, so "doesn't" and "won't"
+  # deny and a bare "n't" does not. U+2018, U+2019 and U+02BC read as a straight apostrophe first,
+  # because a clause pasted from a document or typed on a phone carries one of them.
+  local absence_sorted absence_json absence_unknown absence_asserts
+  absence_sorted="$(printf '%s' "$absence_raw" | jq -c \
+    --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" '
+    def denies: ascii_downcase | gsub("[\u2018\u2019\u02bc]"; "\u0027")
+      | [scan("[a-z0-9]+(?:\u0027[a-z]+)?")]
+      | any(.[]; . as $w
+            | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without", "cannot"]
+                | index($w)) != null)
+              or ($w | test("[a-z]n\u0027t$")));
+    def known: . as $t | ($dw | index($t)) != null;
+    . as $given
+    | { routed: (reduce ($given[] | select(known) | select(denies)) as $t
+                  ([]; if (index($t)) then . else . + [$t] end)),
+        unknown: [ $given[] | select(known | not) ],
+        asserts: [ $given[] | select(known) | select(denies | not) ] }')"
+  [ -n "$absence_sorted" ] || die 3 "tests-freeze: the --absence clauses could not be read."
+  absence_json="$(printf '%s' "$absence_sorted" | jq -c '.routed')"
+  absence_unknown="$(printf '%s' "$absence_sorted" | jq -r '.unknown | join("; ")')"
+  absence_asserts="$(printf '%s' "$absence_sorted" | jq -r '.asserts | join("; ")')"
+  [ -z "$absence_unknown" ] \
+    || die 81 "tests-freeze: these --absence clauses are not, verbatim, a doneWhen entry of $unit_id: $absence_unknown. Review judges the clause design wrote, so the flag carries the order's own words. Read the doneWhen in implementation/snapshot.json and pass one of its entries."
+  [ -z "$absence_asserts" ] \
+    || die 81 "tests-freeze: these --absence clauses carry no negation word, so each asserts a presence: $absence_asserts. An absence clause says the change added nothing of a named kind, and that is the only clause with no red run to watch. A clause asserting a presence is proved by a test that failed first."
 
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
   # Every guard below iterates a per-criterion list, so an order with none passes all of them and
@@ -4628,6 +4748,55 @@ TF_EOF
     echo "TESTS-FREEZE: $unit_id creates a unit: $unit_file matches $unit_file_glob under ## Unit declaration in $unit_file_recipe. A red holding only the harness marker is accepted for it, because nothing can fail an assertion before the unit exists."
   fi
 
+  # --- 101: a --locks-in reason written commit:<id> names one of this order's own commits --------
+  # A test of the order's own done-when that arrives green has no code the author may cite: the
+  # code is this order's earlier build, which a restart or a retake left in the tree, and the author
+  # reads no production source (live-run row 183). So the reason may be a commit instead. `tests-brief`
+  # prints this order's own build and fix commits under `treeHolds`, and the author names one of
+  # them. The same reader answers here, so the freeze accepts exactly what the brief offered, and
+  # a commit of another order or one git no longer holds refuses.
+  # The `commit:` prefix is what marks a commit, and a reason without it is prose whatever it looks
+  # like. Reading a bare hex word as an id would refuse a prose reason nobody meant as one. The id
+  # may be shorter than the brief printed, because `start`'s own line prints seven characters.
+  local tf_lock_total tf_lock_i tf_lock_reason tf_lock_id tf_lock_name tf_lock_hit
+  local tf_own_commits tf_own_loaded tf_own_c tf_carried tf_lost=""
+  tf_lock_total="$(printf '%s' "$locks_json" | jq 'length')"
+  tf_own_commits=""
+  tf_own_loaded=false
+  tf_lock_i=0
+  while [ "$tf_lock_i" -lt "$tf_lock_total" ]; do
+    tf_lock_reason="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].reason')"
+    case "$tf_lock_reason" in
+      commit:*) ;;
+      *) tf_lock_i=$((tf_lock_i + 1)); continue ;;
+    esac
+    tf_lock_id="${tf_lock_reason#commit:}"
+    tf_lock_name="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].name')"
+    case "$tf_lock_id" in
+      ""|*[!0-9a-f]*)
+        die 101 "tests-freeze: --locks-in for $tf_lock_name reads commit:$tf_lock_id, and a commit id is hexadecimal and nothing else. Write commit:<id> with one of $unit_id's own build or fix commits, or drop the commit: prefix and name the existing code in a sentence." ;;
+    esac
+    [ "${#tf_lock_id}" -ge 7 ] \
+      || die 101 "tests-freeze: --locks-in for $tf_lock_name reads commit:$tf_lock_id, which is shorter than seven characters and names no commit on its own. Read the whole id from treeHolds in the tests brief."
+    if [ "$tf_own_loaded" = "false" ]; then
+      tf_carried="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger")"
+      tf_own_commits="$(printf '%s' "$tf_carried" | jq -r '.[] | select(has("missing") | not) | .commit')"
+      tf_lost="$(printf '%s' "$tf_carried" | jq -r '[ .[] | select(has("missing")) | .commit + " " + .kind + ": " + .missing ] | join("; ")')"
+      tf_own_loaded=true
+    fi
+    tf_lock_hit=""
+    while IFS= read -r tf_own_c; do
+      [ -n "$tf_own_c" ] || continue
+      [ "${tf_own_c:0:${#tf_lock_id}}" = "$tf_lock_id" ] || continue
+      tf_lock_hit="$tf_own_c"
+    done <<TF_OWN_COMMITS
+$tf_own_commits
+TF_OWN_COMMITS
+    [ -n "$tf_lock_hit" ] \
+      || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_id, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; elif [ -n "$tf_lost" ]; then printf 'none that can be cited'; else printf 'none, so no restart or retake left this order a build here'; fi). Read them from treeHolds in the tests brief.$(if [ -n "$tf_lost" ]; then printf ' These were not found on this branch after the rebase: %s. None of them can be cited. If the test arrives green on that code, report the test green on arrival and name that commit. A person decides.' "$tf_lost"; fi) A reason with no commit: prefix names the existing code instead."
+    tf_lock_i=$((tf_lock_i + 1))
+  done
+
   # --- 33: every declared test needs a --red, or a --locks-in naming the existing code it locks in --
   local missing_red
   missing_red="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" --argjson locks "$locks_json" '
@@ -4724,16 +4893,20 @@ TF_EOF
   # The freeze commits (below), so freezing wo1, then wo2, then wo1 again finds HEAD moved by wo2's
   # commit. The same rows are the same freeze; different rows under a moved HEAD are the case 35
   # exists for, tests changed under a record nobody re-took.
+  #
+  # The same rows leave the frozen paths already in HEAD, so the commit below finds nothing to
+  # commit. This run therefore sets a word here and returns after the ledger write, rather than
+  # returning here. A judgement and a routed clause are in none of the rows compared here. So a
+  # re-run that changes one of them and no test used to stop here and write nothing, and a routed
+  # clause that never reaches the ledger never reaches review.
+  local tf_unchanged_at=""
   if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ] && [ "$existing_commit" != "$tf_retake_commit" ]; then
     local existing_rows new_rows
     existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
     new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
-    if [ "$existing_rows" = "$new_rows" ]; then
-      echo "TESTS-FREEZE: unchanged (already frozen at commit $existing_commit with the same tests)"
-      printf '%s\n' "$record_file"
-      exit 0
-    fi
-    die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
+    [ "$existing_rows" = "$new_rows" ] \
+      || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
+    tf_unchanged_at="$existing_commit"
   fi
 
   # --- the test files go into a commit before anything is measured against them --------------------
@@ -4770,40 +4943,60 @@ TF_EOF
     || printf 'tests-freeze: the tests are committed or unchanged, and other uncommitted changes remain in %s: %s\n' "$codepath" "$(printf '%s' "$tree_left" | tr '\n' ' ')" >&2
 
   # --- the checkpoint's verdict goes into the ledger, one judgement per order per criterion --------
-  # Written before the record below, and on both paths through it, because a second freeze at the
-  # same commit with the same tests writes no record and must still carry the judgement a person or
-  # a checker just made. A judgement this order already left is replaced rather than added to: one
-  # order judges one criterion once, and two entries under one unit would count that row twice.
-  local judgement_count ledger_file_now ledger_doc_now ledger_with_judgements
-  judgement_count="$(printf '%s' "$rows_meta_json" | jq 'length')"
-  if [ "$judgement_count" -gt 0 ]; then
-    ledger_file_now="$IMPL_DIR/ledger.json"
-    [ -f "$ledger_file_now" ] \
-      || die 3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
-    ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
-    [ -n "$ledger_doc_now" ] \
-      || die 3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
-    # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
-    # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
-    # criterion judgement this order already left is replaced rather than added to.
-    ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
-      --arg unit "$unit_id" --argjson rows "$rows_meta_json" '
-      ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
-      | .criteria = ((.criteria // []) | map(
-        . as $c
-        | ([ $rows[] | select(.criterion == $c.id) ][0]) as $r
-        | if $r == null then $c
-          else ($c + {judgements: (
-                  (($c.judgements // []) | map(select(.unit != $unit)))
-                  + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
-          end))
-      | .orders = ((.orders // []) | map(
-        if .id != $unit then .
-        elif $dw == null then del(.doneWhenJudgement)
-        else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end))')"
-    [ -n "$ledger_with_judgements" ] \
-      || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
-    write_atomic "$ledger_file_now" "$ledger_with_judgements"
+  # Written before the record below, and on every path that reaches an exit, because a second freeze
+  # with the same tests writes no record and must still carry the judgement a person or a checker
+  # just made. A judgement this order already left is replaced rather than added to: one order
+  # judges one criterion once, and two entries under one unit would count that row twice.
+  #
+  # The clauses routed to review ride here too, on the order's own entry. This runs whatever the
+  # rows counted, because the routed list is replaced on every freeze: a re-freeze that drops a
+  # clause must not leave it owed to review, and an order with no row at all can still route one.
+  # The freeze already refuses a missing ledger at its last step, so requiring one here is no new
+  # refusal.
+  #
+  # It runs after the commit above, and every return that follows it has written it. A commit that
+  # fails refuses before this, so the ledger keeps what the live frozen record was taken with. A
+  # write before the commit destroyed those values on a re-freeze whose commit failed, and that
+  # freeze refused with two routed clauses already gone from the ledger (check ev).
+  local ledger_file_now ledger_doc_now ledger_with_judgements
+  ledger_file_now="$IMPL_DIR/ledger.json"
+  [ -f "$ledger_file_now" ] \
+    || die 3 "tests-freeze: $ledger_file_now is missing, though start writes it. Run start again."
+  ledger_doc_now="$(jq -c '.' "$ledger_file_now" 2>/dev/null)"
+  [ -n "$ledger_doc_now" ] \
+    || die 3 "tests-freeze: $ledger_file_now exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
+  # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
+  # criterion judgement this order already left is replaced rather than added to. The routed
+  # clauses are replaced the same way, and removed when this freeze routed none.
+  ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
+    --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" '
+    ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
+    | .criteria = ((.criteria // []) | map(
+      . as $c
+      | ([ $rows[] | select(.criterion == $c.id) ][0]) as $r
+      | if $r == null then $c
+        else ($c + {judgements: (
+                (($c.judgements // []) | map(select(.unit != $unit)))
+                + [{unit: $unit, verdict: $r.verdict, judgedBy: $r.judgedBy, note: $r.note}])})
+        end))
+    | .orders = ((.orders // []) | map(
+      if .id != $unit then .
+      else ((if $dw == null then del(.doneWhenJudgement)
+             else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end)
+            | (if ($absences | length) == 0 then del(.absenceClauses)
+               else .absenceClauses = $absences end))
+      end))')"
+  [ -n "$ledger_with_judgements" ] \
+    || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
+  write_atomic "$ledger_file_now" "$ledger_with_judgements"
+  printf 'absenceClauses: %s (routed to review, on %s'"'"'s ledger entry)\n' \
+    "$(printf '%s' "$absence_json" | jq 'length')" "$unit_id"
+
+  if [ -n "$tf_unchanged_at" ]; then
+    echo "TESTS-FREEZE: unchanged (already frozen at commit $tf_unchanged_at with the same tests)"
+    printf '%s\n' "$record_file"
+    exit 0
   fi
 
   # The recipe each red was read against, per framework, so the record says what the freeze read
@@ -4977,7 +5170,7 @@ do_build_brief() {
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
     '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
       doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // ""),
-      proof: (.proof // "tests")}')"
+      proof: (.proof // "tests"), verify: (.verify // [])}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
   tests_out="$(printf '%s' "$tests_doc" | jq -c \
@@ -5188,7 +5381,7 @@ br_tool_check() {
   exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
 
   has_paths=false
-  printf '%s' "$argv_json" | jq -e 'any(.[]; . == "{paths}" or . == "{file}")' >/dev/null 2>&1 && has_paths=true
+  br_argv_takes_paths "$argv_json" && has_paths=true
   owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
   owned_count="$(printf '%s' "$owned_json" | jq 'length')"
   # The tools judge the files the builder may write. A frozen test is owned, so the diff may touch
@@ -5539,25 +5732,150 @@ br_test_check() {
   rm -f "$runs_file"
 }
 
+# The run entries of the order's `verify` list that may run, as a JSON array of {run, pass}, and
+# the sources they cite, into BRV_RUNS and BRV_CITES. A binding entry came from a recipe this
+# project accepts and runs. An entry that is not binding was written by a model from research, and
+# runs only when a person approved it at the design close. Without that stamp it never runs,
+# attended or not: the reviewer judges it as a check. Reads BRC_UNIT_JSON.
+BRV_RUNS="[]"; BRV_CITES=""
+br_verify_runs() {
+  local keep='[ (.verify // [])[] | select(has("run") and (.binding != false or has("approved"))) ]'
+  BRV_RUNS="$(printf '%s' "$BRC_UNIT_JSON" | jq -c "$keep | map({run, pass})")"
+  BRV_CITES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | join(\", \")")"
+}
+
+# Runs a list of lines through the one gate runner, the `## Configuration gate` block's and a work
+# order's own `verify` lines alike. $1 a JSON array of {run, pass}, $2 the source a refusal names,
+# $3 the folder every line runs from, $4 the file that receives each command line and its output,
+# $5 the words a refusal ends on.
+# Each line is refused on a shell character, split on spaces and run as argv through
+# br_run_resolved, so `{paths}` expands to this order's owned files and every other token comes
+# from --value. A name given several --value rows runs its line once per value, in the order
+# given: each run puts that value's row first, where cr_lookup finds it, so the one filler fills
+# it. Only the first such name in a line multiplies it; any other token takes its first value.
+# The first run that fails stops the list. A non-zero exit fails a run whatever its pass says.
+# `stdout empty` and `stdout contains <text>` then read standard output alone, because a status
+# command writes its message to standard error and exits 0 either way. It sets BRL_VERDICT,
+# empty when every line passed, else unmet or unknown; BRL_WHY, the reason in words; BRL_RC, the
+# last exit code or empty; BRL_N, how many lines ran; and BRL_LINE, the last line.
+BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
+br_run_lines() {
+  local lines_json="$1" source="$2" dir="$3" outfile="$4" refused="$5"
+  local count i pass literal argv_json result kind payload owned_json run_out run_err
+  local tok multi_name="" multi_values="" value values shown tab
+  tab="$(printf '\t')"
+  BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
+  owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  run_err="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  count="$(printf '%s' "$lines_json" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    BRL_LINE="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].run')"
+    pass="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].pass // "exit 0"')"
+    i=$((i + 1)); BRL_N="$i"
+    refuse_if_unsafe "$BRC_WHO" "$source" "$BRL_LINE" || die 3 "$BRC_WHO: $refused"
+    argv_json="$(printf '%s' "$BRL_LINE" | jq -Rc 'split(" ") | map(select(. != ""))')"
+    multi_name=""; multi_values=""
+    while IFS= read -r tok; do
+      case "$tok" in ''|paths|file|dirs) continue ;; esac
+      values="$(printf '%s\n' "$BRC_VALUES" | awk -F "$tab" -v n="$tok" '$1 == n { sub(/^[^\t]*\t/, ""); print }')"
+      if [ "$(printf '%s\n' "$values" | grep -c .)" -gt 1 ]; then multi_name="$tok"; multi_values="$values"; break; fi
+    done <<BR_RUN_TOKENS
+$(printf '%s' "$argv_json" | jq -r '.[] | select(test("^[{][^{}]+[}]$")) | .[1:-1]')
+BR_RUN_TOKENS
+    while IFS= read -r value; do
+      if [ -n "$multi_name" ]; then
+        values="$multi_name$tab$value
+$BRC_VALUES"; shown=" [{$multi_name}=$value]"
+      else
+        values="$BRC_VALUES"; shown=""
+      fi
+      printf '+ %s%s\n' "$BRL_LINE" "$shown" >>"$outfile"
+      case "$pass" in
+        stdout*) result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$values" "$run_err")" ;;
+        *)       result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$values")" ;;
+      esac
+      cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
+      kind="$(printf '%s' "$result" | cut -f1)"
+      payload="$(printf '%s' "$result" | cut -f2-)"
+      if [ "$kind" = "UNRESOLVED" ]; then
+        BRL_VERDICT="unknown"; BRL_RC=""
+        BRL_WHY="the token {$payload} in gate line $i ($BRL_LINE) has no supplied value; pass --value $payload=<value>."
+        break
+      fi
+      BRL_RC="$payload"
+      if [ "$BRL_RC" != "0" ]; then
+        BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE$shown) exited $BRL_RC"
+        break
+      fi
+      case "$pass" in
+        'exit 0') ;;
+        'stdout empty')
+          if grep -q '[^[:space:]]' "$run_out"; then
+            BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE$shown) exited 0 and printed to standard output, and its pass is stdout empty"
+            break
+          fi ;;
+        'stdout contains '?*)
+          literal="$(pc_unquote "${pass#stdout contains }")"
+          if ! pc_output_holds "$run_out" "$literal"; then
+            BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE$shown) exited 0, and its standard output does not hold $literal"
+            break
+          fi ;;
+        *)
+          BRL_VERDICT="unknown"; BRL_WHY="gate line $i ($BRL_LINE) names a pass this runner does not read: $pass"
+          break ;;
+      esac
+    done <<BR_RUN_VALUES
+${multi_values:-one}
+BR_RUN_VALUES
+    [ -z "$BRL_VERDICT" ] || break
+  done
+  rm -f "$run_out" "$run_err"
+}
+
 # The configuration check, in the order-tests slot of an order whose proof is gate (live-run row
-# 65). Its deliverable is exported configuration, which no test of its own can prove, so the
-# implement recipe's `## Configuration gate` lines are its check: every line exit 0 is met; the
-# first line that does not is unmet, named with its exit and its output; unknown when nothing
-# could run, and the detail says which. The lines are read by the same block reader the tool and
-# environment skills use, refused on a shell character the same way, split on spaces and run as
-# argv from the worktree through br_run_resolved, so `{paths}` expands to this order's owned files
-# and every other token comes from --value. The first line restores the snapshot the environment's
-# bring-up took, so a task with no environment recorded reads unknown before any line runs. Two
-# recipes each carrying the block are two answers to one question, exit 72. Prints the check object.
+# 65). Its deliverable is exported configuration, which no test of its own can prove. Two lists
+# prove it, in one slot. The order's own `verify` run lines run first: design copied them from
+# the recipe that covers the order, or wrote them from research's findings. They prove the site
+# the build left. The implement recipe's `## Configuration gate` lines run after them, when the
+# recipe carries the block: they prove the export imports onto the seed. The worse verdict
+# stands. An order with no lines runs the block alone, and then reads unknown without an
+# --implement-recipe or without the block. An order with lines runs them alone in either case,
+# and the detail says the block did not run. Every line passing is met; the first line that
+# does not is named, with its exit and its output. Both lists run through br_run_lines from the
+# worktree. The first block line restores the snapshot the environment's bring-up took, so a task
+# with no environment recorded reads unknown before any line runs. Two recipes each carrying the
+# block are two answers to one question, exit 72. Prints the check object.
 br_gate_check() {
-  local verdict="" detail="" rc="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
-  local line n=0 argv_json result kind payload owned_json run_out
+  local verdict="" detail="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
+  local own_json cites own_verdict="" own_detail="" gate_verdict="" gate_detail="" rc="" lines_json
+  br_verify_runs; own_json="$BRV_RUNS"; cites="$BRV_CITES"
   if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
-    verdict="unknown"
     detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
-  elif [ -z "$BRC_GATE_RECIPES" ]; then
-    verdict="unknown"
-    detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."
+    # The marker task environment up writes before its bring-up. A site may be half up, so the
+    # bring-up is not the next step here; the tear-down is. The verdict is unknown either way.
+    [ "$(jq -r '.environment.state // empty' "$TASK_PATH/task.json" 2>/dev/null)" != "coming-up" ] \
+      || detail="task.json holds the marker task environment up writes before its bring-up, so a site may be half up and no snapshot exists. Run task environment $(jq -r '.id // "<task-id>"' "$TASK_PATH/task.json" 2>/dev/null) down first. Then bring the environment up and record the attempt again."
+    jq -n --arg detail "$detail" '{id: "configuration-gate", verdict: "unknown", detail: $detail}'
+    return 0
+  fi
+  outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  if [ "$own_json" != "[]" ]; then
+    br_run_lines "$own_json" "$cites" "$BRC_CODEPATH" "$outfile" "the verify line above, from $cites, is refused."
+    own_verdict="${BRL_VERDICT:-met}"; rc="$BRL_RC"
+    case "$own_verdict" in
+      met) own_detail="every verify line of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') ($BRL_N of them) passed, from $cites." ;;
+      *)   own_detail="$BRL_WHY, from $cites. Every verify line before it passed." ;;
+    esac
+  fi
+  if [ -z "$BRC_GATE_RECIPES" ]; then
+    if [ "$own_json" = "[]" ]; then
+      gate_verdict="unknown"
+      gate_detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."
+    else
+      gate_detail="No --implement-recipe was passed, so no ## Configuration gate ran after them."
+    fi
   else
     while IFS="$(printf '\t')" read -r fw rp; do
       [ -n "$fw" ] || continue
@@ -5571,51 +5889,67 @@ br_gate_check() {
 $BRC_GATE_RECIPES
 BR_GATE
     if [ -z "$gate_recipe" ]; then
-      verdict="unknown"
-      detail="the implement recipe carries no ## Configuration gate block, so nothing here can prove exported configuration: $(printf '%s' "$BRC_GATE_RECIPES" | cut -f2 | paste -s -d ' ' -). The recipe lacks it."
+      if [ "$own_json" = "[]" ]; then
+        gate_verdict="unknown"
+        gate_detail="the implement recipe carries no ## Configuration gate block, so nothing here can prove exported configuration: $(printf '%s' "$BRC_GATE_RECIPES" | cut -f2 | paste -s -d ' ' -). The recipe lacks it."
+      else
+        gate_detail="The implement recipe carries no ## Configuration gate block, so none ran after them."
+      fi
     else
-      owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
-      outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-      run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-      while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        n=$((n + 1))
-        refuse_if_unsafe "$BRC_WHO" "$gate_recipe" "$line" || die 3 "$BRC_WHO: the ## Configuration gate line above is refused."
-        printf '+ %s\n' "$line" >>"$outfile"
-        argv_json="$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')"
-        result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$run_out" "$owned_json" "$BRC_VALUES")"
-        cat "$run_out" >>"$outfile"
-        kind="$(printf '%s' "$result" | cut -f1)"
-        payload="$(printf '%s' "$result" | cut -f2-)"
-        if [ "$kind" = "UNRESOLVED" ]; then
-          verdict="unknown"; rc=""
-          detail="the token {$payload} in gate line $n ($line) has no supplied value; pass --value $payload=<value>."
-          break
-        fi
-        rc="$payload"
-        if [ "$rc" != "0" ]; then
-          verdict="unmet"
-          detail="gate line $n ($line) exited $rc on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0."
-          break
-        fi
-      done <<BR_GATE_LINES
-$gate_lines
-BR_GATE_LINES
-      if [ -z "$verdict" ]; then
-        verdict="met"
-        detail="every ## Configuration gate line ($n of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output."
-      fi
-      if [ -n "$rc" ]; then
-        jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
-          '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
-        rm -f "$outfile" "$run_out"
-        return 0
-      fi
-      rm -f "$outfile" "$run_out"
+      lines_json="$(printf '%s\n' "$gate_lines" | jq -Rc '[ ., inputs ] | map(select(. != "") | {run: ., pass: "exit 0"})')"
+      br_run_lines "$lines_json" "$gate_recipe" "$BRC_CODEPATH" "$outfile" "the ## Configuration gate line above is refused."
+      gate_verdict="${BRL_VERDICT:-met}"
+      # The exit code the check carries is the first failing list's, else the last that ran.
+      [ -z "$BRL_RC" ] || [ "$own_verdict" = "unmet" ] || rc="$BRL_RC"
+      case "$gate_verdict" in
+        met)   gate_detail="every ## Configuration gate line ($BRL_N of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output." ;;
+        unmet) gate_detail="$BRL_WHY on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0." ;;
+        *)     gate_detail="$BRL_WHY" ;;
+      esac
     fi
   fi
-  jq -n --arg verdict "$verdict" --arg detail "$detail" \
-    '{id: "configuration-gate", verdict: $verdict, detail: $detail}'
+  verdict="$(br_worst_verdict "$(jq -nc --arg a "$own_verdict" --arg b "$gate_verdict" '[ $a, $b ] | map(select(. != ""))')")"
+  detail="$own_detail${own_detail:+${gate_detail:+ }}$gate_detail"
+  if [ -n "$rc" ]; then
+    jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
+      '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
+  else
+    jq -n --arg verdict "$verdict" --arg detail "$detail" \
+      '{id: "configuration-gate", verdict: $verdict, detail: $detail}'
+  fi
+  rm -f "$outfile"
+}
+
+# Runs the order's own `verify` run lines inside the first deciding check of an order whose proof
+# is not gate, after that check's own answer. $1 the file that holds the check object. A gate
+# order ran its lines as the check itself, and an order with none passes the object through. The
+# lines run from the code worktree, because a record order's range lives in the project folder
+# and a re-run of what the document reports belongs to the code. The check is met only when its
+# own answer and every line are: the worse verdict stands, the detail gains one sentence naming
+# the source, and the output gains the lines' output. Prints the check object.
+br_verify_fold() {
+  local own_json cites outfile verdict
+  br_verify_runs; own_json="$BRV_RUNS"
+  br_order_facts "$BRC_UNIT_JSON"
+  if [ "$own_json" = "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
+    cat "$1"
+    return 0
+  fi
+  cites="$BRV_CITES"
+  outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  br_run_lines "$own_json" "$cites" "${RV_CODEPATH:-$BRC_CODEPATH}" "$outfile" "the verify line above, from $cites, is refused."
+  verdict="$(br_worst_verdict "$(jq -c --arg v "${BRL_VERDICT:-met}" '[.verdict, $v]' "$1")")"
+  # The exit code follows the verdict that stands: the lines' own when they failed, the check's
+  # own when it failed, and the lines' when both passed and the check ran no command.
+  jq --arg v "$verdict" --arg lv "${BRL_VERDICT:-met}" --arg rc "$BRL_RC" --rawfile out "$outfile" \
+     --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them) passed, from %s.' "$BRL_N" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
+    .verdict = $v | .detail = (.detail + " " + $add)
+    | .output = (if (.output // "") == "" then $out else .output + "\n" + $out end)
+    | if $rc == "" then .
+      elif $lv == "unmet" then .exitCode = ($rc | tonumber)
+      elif (has("exitCode") | not) and $v == "met" then .exitCode = ($rc | tonumber)
+      else . end' "$1"
+  rm -f "$outfile"
 }
 
 # The done-when check, in the order-tests slot of an order whose proof is record (nyc defect 17).
@@ -5719,13 +6053,19 @@ br_seven_checks() {
   local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
+  # The slot's own answer goes to a file first, never through a `$(...)`, so a refusal inside it
+  # still ends the script. The order's own verify lines then run inside that same slot.
+  local slot_file
+  slot_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   br_order_facts "$BRC_UNIT_JSON"
   case "$BR_ORDER_SLOT" in
-    configuration-gate) br_gate_check >>"$parts_file" ;;
-    done-when)          br_record_check >>"$parts_file" ;;
-    observed)           br_observed_check >>"$parts_file" ;;
-    *)                  br_test_check "order-tests" "orderTests" "order-tests" >>"$parts_file" ;;
+    configuration-gate) br_gate_check >"$slot_file" ;;
+    done-when)          br_record_check >"$slot_file" ;;
+    observed)           br_observed_check >"$slot_file" ;;
+    *)                  br_test_check "order-tests" "orderTests" "order-tests" >"$slot_file" ;;
   esac
+  br_verify_fold "$slot_file" >>"$parts_file"
+  rm -f "$slot_file"
   if [ "$BR_ORDER_OWNS_CODE" = "no" ]; then
     for rc_id in suite-regression coding-standards static-analysis security; do
       jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
@@ -6061,8 +6401,13 @@ br_require_observed() {
   # tell, so the look judges the clause itself (live-run row 115).
   clauses_json="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson owned "$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')" '
       [ .[] | select(.verifiedBy == "machine" and ((.id as $i | $owned | index($i)) != null)) | {id, clause: .verification} ]')"
+  # A verify check of kind live-site is a sentence the order holds too: design carried it from the
+  # source that covers the order, and the look judges it as a row of its own. Only that kind needs
+  # a served site, so only it is something a page can show. A config-assert reads configuration,
+  # and a self-fixture seeds and removes its own data. The reviewer judges those, and a check
+  # with no kind.
   bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" --argjson clauses "$clauses_json" --arg unit_id "$unit_id" '
-      ($unit.doneWhen // []) as $held
+      (($unit.doneWhen // []) + [ ($unit.verify // [])[] | select(.kind == "live-site") | .check // empty ]) as $held
       | [ .rows[] | .criterion as $c | .doneWhen as $d
           | if $c != null then
               (([ $clauses[] | select(.id == $c) ][0]) as $k
@@ -6071,11 +6416,11 @@ br_require_observed() {
                  else empty end)
             elif ($held | index($d)) != null then empty
             else (([ $clauses[] | select(.clause == $d) ][0]) as $k
-                  | if $k == null then "\"" + $d + "\" is neither a done-when row nor an owned criterion\u0027s clause"
+                  | if $k == null then "\"" + $d + "\" is neither a done-when row, a live-site verify check, nor an owned criterion\u0027s clause"
                     else "\"" + $d + "\" is the verification clause of " + $k.id + " and carries no criterion" end)
             end ] | unique | join(" | ")' "$observed")"
   [ -z "$bad_done_when" ] \
-    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
+    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows or live-site verify checks, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
   # Every row the order owes: each done-when row and each owned machine criterion's clause, at
   # each surface the order names, at each viewport the surface file declares. The file is the
   # one review's surface step reads, at surfaces.registryPath in the project record, joined to
@@ -6095,12 +6440,13 @@ br_require_observed() {
   missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" --argjson clauses "$clauses_json" '
       [ .rows[] | (.criterion // "") + "\u001f" + .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
       | ([ ($unit.doneWhen // [])[] | {criterion: "", sentence: ., kind: "a done-when row"} ]
+         + [ ($unit.verify // [])[] | select(.kind == "live-site") | .check // empty | {criterion: "", sentence: ., kind: "a verify check"} ]
          + [ $clauses[] | {criterion: .id, sentence: .clause, kind: ("the verification clause of " + .id)} ]) as $owed
       | [ $owed[] as $o | ($unit.surfaces // [])[] as $s | $viewports[] as $v
           | select(($have | index($o.criterion + "\u001f" + $o.sentence + "\u001f" + $s + "\u001f" + $v)) == null)
           | "\"" + $o.sentence + "\" at " + $s + " at " + $v + ", " + $o.kind ][0] // ""' "$observed")"
   [ -z "$missing_row" ] \
-    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
+    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows, its live-site verify checks and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
 }
 
 # One image field of the observed record, on every row. Each path is on disk and lies under its
@@ -8888,6 +9234,39 @@ do_retake_tests() {
   exit 0
 }
 
+# rs_on_branch <codepath> <commit> <table>: prints the commit when HEAD holds it. Otherwise, after a
+# rebase, prints the commit on this branch that is its rebased copy, or `?` and why none is. Prints
+# nothing when HEAD does not hold it and <table> is empty: no rebase happened, so the commit is
+# simply gone, as a reset leaves it. <table> is rs_order_commits' list of the span's commits.
+# A rebase gives every commit a new id, and the records keep the old ones. The copy keeps the
+# change, so its stable patch id matches, and it keeps the author, the author date and the subject.
+# Both must match. A patch id alone is not enough: a revert of the copy and a revert of that revert
+# carry the same patch id, as can another order's identical change. Neither keeps the author date
+# and the subject. Of several matches, the oldest is taken, and that is the one tie left: the same
+# change by the same author in the same second, which nothing in the records can tell apart.
+# When the author, date and subject match and the patch id does not, the rebase changed the diff,
+# most often by resolving a conflict. The copy is then named but not taken: its code is no longer
+# what the order built, so a person decides. The old object stays readable while the reflog holds
+# it, thirty days by default. The subject alone is no link: the build and fix steps write none of
+# their own, so many commits share one.
+rs_on_branch() {
+  local pid who
+  if git -C "$1" merge-base --is-ancestor "$2" HEAD >/dev/null 2>&1; then printf '%s' "$2"; return 0; fi
+  [ -n "$3" ] || return 0
+  who="$(git -C "$1" log -1 --format='%at %ae %s' "$2" 2>/dev/null)"
+  if [ -z "$who" ]; then
+    printf '?%s' "the old commit is gone from the repository, so nothing links it to this branch"
+    return 0
+  fi
+  pid="$(git -C "$1" show --no-color "$2" 2>/dev/null | git patch-id --stable 2>/dev/null | cut -d' ' -f1)"
+  printf '%s' "$3" | jq -r --arg pid "$pid" --arg who "$who" '
+    ([ .[] | select(.who == $who) ]) as $same
+    | ([ $same[] | select(.pid == $pid) ][0].commit) as $copy
+    | if $pid != "" and $copy != null then $copy
+      elif ($same | length) > 0 then "?its diff changed in the rebase; " + ($same[0].commit[0:7]) + " carries its author, date and subject"
+      else "?no commit on this branch carries its change with its author, date and subject, so the rebase dropped it or rewrote it" end'
+}
+
 # The commits one order's records name that HEAD still holds, as a JSON array of
 # {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
 # ledger document.
@@ -8904,12 +9283,47 @@ do_retake_tests() {
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
 # both are read, and an order's own commits are never counted as later ones (live-run row 144).
+# A record can be moved, cleared or written in a shape an older version wrote. The branch cannot.
+# So the freezes are read from the branch, by the subject `tests-freeze` writes above, over the
+# range the ledger's `startedFrom` opens. That range bounds the search to this task, because two
+# tasks on one repository both hold an order called wo1. The records still offer their freeze
+# commits, for the one case the range cannot cover: `start --rebased-onto` rewrites `startedFrom`,
+# and a freeze made before the rewrite then sits outside it.
+# The build and fix steps write no subject of their own. `agents/implementer.md` asks for "a
+# one-line message naming this unit" and `agents/fixer.md` for one "naming this round", so the
+# words are the model's and no check may rest on them. Those two kinds stay record-read, and the
+# folders a record may sit in are found by their own names. That is the plugin's own naming and
+# not a guess: `retake-tests` writes `retaken-<order>-<n>/` and `restart` writes
+# `implementation-<date>-<commit>/`.
+# Without this the live task restarted on beta.22 answered one commit against four on the branch:
+# the superseded freeze was in no record at all, and the build and fix records sat in a retake
+# folder the restart's own ledger reset had stopped naming (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
-  local out='[]' c range file kind dir files
+  local out='[]' c old range file kind dir files started span table="" lost=""
+  # `git log --grep` reads the whole message, so it only narrows the candidates; the subject test
+  # below decides. HEAD alone when the ledger holds no usable startedFrom, which no ledger this
+  # stage writes does: the field is required, and the wider search still answers this order.
+  started="$(printf '%s' "$ledger" | jq -r '.startedFrom // empty' 2>/dev/null)"
+  span=HEAD
+  if [ -n "$started" ] && git -C "$codepath" merge-base --is-ancestor "$started" HEAD >/dev/null 2>&1; then
+    span="$started..HEAD"
+  fi
+  # `start --rebased-onto` keeps each rewritten start under startedFromBefore, so a ledger holding
+  # one is a branch whose ids may have moved since the records were written. The table lists the
+  # span's commits oldest first, each with its stable patch id and its author, date and subject,
+  # for rs_on_branch. A commit with no diff has no patch id and is listed with an empty one.
+  if [ "$(printf '%s' "$ledger" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
+    table="$(git -C "$codepath" log --reverse --no-color -p "$span" 2>/dev/null | git patch-id --stable 2>/dev/null \
+      | jq -Rsc --arg who "$(git -C "$codepath" log --reverse --format='%H %at %ae %s' "$span" 2>/dev/null)" '
+        ([ split("\n")[] | select(length > 0) | split(" ") | {key: .[1], value: .[0]} ] | from_entries) as $pid
+        | [ $who | split("\n")[] | select(length > 0)
+            | {commit: .[0:40], pid: ($pid[.[0:40]] // ""), who: .[41:]} ]')"
+  fi
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+    c="$(rs_on_branch "$codepath" "$c" "$table")"
+    case "$c" in ""|"?"*) continue ;; esac
     case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
       "Freeze the tests of $one_id through the implement skill:"*) ;;
       *) continue ;;
@@ -8917,12 +9331,19 @@ rs_order_commits() {
     out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '
       if any(.[]; .commit == $c) then . else . + [{order: $id, kind: "freeze", commit: $c, range: $c}] end')"
   done <<RS_FREEZES
-$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
+$(git -C "$codepath" log --reverse --format=%H --fixed-strings \
+  --grep="Freeze the tests of $one_id through the implement skill:" "$span" 2>/dev/null
+jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
+find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/tests-$one_id.json" \
+  -exec jq -r '.commit // empty' {} ';' 2>/dev/null
 printf '%s' "$ledger" | jq -r --arg id "$one_id" \
   '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty' 2>/dev/null)
 RS_FREEZES
-  # Each retake folder comes from the ledger entry's own `movedTo`, never from a guessed folder
-  # name. A folder or a record a person removed holds nothing, which is not fatal.
+  # Every folder a build or fix record of this order can sit in: the top of the implementation
+  # folder, the retake folders under it, the folders an earlier restart wrote, and the retake
+  # folders inside those. Found by name, and the ledger's `movedTo` is read too because it is the
+  # one place a retake folder a person renamed is still named. A folder or a record a person
+  # removed holds nothing, which is not fatal.
   files="$impl/build-$one_id.json
 $(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
   while IFS= read -r dir; do
@@ -8932,7 +9353,10 @@ $dir/build-$one_id.json
 $(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
   done <<RS_RETAKEN
 $(printf '%s' "$ledger" | jq -r --arg id "$one_id" \
-  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .movedTo // empty' 2>/dev/null)
+  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .movedTo // empty' 2>/dev/null
+find "$impl" -mindepth 1 -maxdepth 1 -type d -name "retaken-$one_id-*" 2>/dev/null | sort
+find "$task" -mindepth 1 -maxdepth 1 -type d -name "implementation-*" 2>/dev/null | sort
+find "$task" -mindepth 2 -maxdepth 2 -type d -path "*/implementation-*/retaken-$one_id-*" 2>/dev/null | sort)
 RS_RETAKEN
   while IFS= read -r file; do
     [ -f "$file" ] || continue
@@ -8941,7 +9365,13 @@ RS_RETAKEN
     case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
     while IFS= read -r c; do
       [ -n "$c" ] || continue
-      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      old="$c"
+      c="$(rs_on_branch "$codepath" "$c" "$table")"
+      case "$c" in
+        "") continue ;;
+        "?"*) lost="$lost$kind	$old	${c#?}
+"; continue ;;
+      esac
       out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
         if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
     done <<RS_RANGE
@@ -8957,40 +9387,88 @@ RS_FILES
     [ -f "$file" ] || continue
     while IFS= read -r c; do
       [ -n "$c" ] || continue
-      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
-      out="$(jq -c --arg c "$c" --argjson have "$out" '
-        ([ (.commits // [])[] | select(.commit == $c) ] | .[0]) as $e
-        | if $e == null or ($have | any(.[]; .commit == $c)) then $have else $have + [$e] end' "$file")"
+      old="$c"
+      c="$(rs_on_branch "$codepath" "$c" "$table")"
+      case "$c" in
+        "") continue ;;
+        "?"*)
+          kind="$(jq -r --arg old "$old" '[ (.commits // [])[] | select(.commit == $old) ][0].kind // "build"' "$file")"
+          [ "$kind" = "freeze" ] || lost="$lost$kind	$old	${c#?}
+"
+          continue ;;
+      esac
+      out="$(jq -c --arg old "$old" --arg c "$c" --argjson have "$out" '
+        ([ (.commits // [])[] | select(.commit == $old) ] | .[0]) as $e
+        | if $e == null or ($have | any(.[]; .commit == $c)) then $have else $have + [$e | .commit = $c] end' "$file")"
     done <<RS_PRIOR
 $(jq -r --arg id "$one_id" '(.commits // [])[] | select(.order == $id) | .commit' "$file" 2>/dev/null)
 RS_PRIOR
   done <<RS_ARCHIVES
 $(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null | sort)
 RS_ARCHIVES
+  # The blocks above read the records wherever they sit, and a restart moves them, so one order's
+  # commits came out in one order before a restart and another after. They are sorted into the
+  # order the branch holds them, oldest first, so `restart` and `start` print one list and a
+  # person can check it against git log.
+  if [ "$(printf '%s' "$out" | jq 'length')" -gt 0 ]; then
+    out="$(jq -cn --argjson have "$out" --argjson order "$(git -C "$codepath" rev-list --reverse --topo-order HEAD 2>/dev/null \
+      | grep -F -x -f <(printf '%s' "$out" | jq -r '.[].commit') \
+      | jq -R -s 'split("\n") | map(select(length > 0))')" \
+      '[ $order[] as $c | $have[] | select(.commit == $c) ]')"
+  fi
+  # A commit the records name that a rebase left with no copy here comes last, marked `missing`
+  # with the reason, so every reader can say what it could not find. `restart` skips these.
+  if [ -n "$lost" ]; then
+    out="$(printf '%s' "$lost" | jq -Rsc --arg id "$one_id" --argjson have "$out" '
+      $have + ([ split("\n")[] | select(length > 0) | split("\t")
+                 | {order: $id, kind: .[0], commit: .[1], range: .[1], missing: .[2]} ]
+               | unique_by(.commit)
+               | map(. as $l | select(($have | any(.[]; .commit == $l.commit)) | not)))')"
+  fi
   printf '%s' "$out"
 }
 
-# The commits the newest restart record names that HEAD still holds, the same shape, or [] when
-# no restart happened or nothing of it is left. $1 the task folder, $2 the code repository, $3 an
-# order id to keep alone, or empty for every order. Read by `start` after a restart and by
-# `tests-brief`, so the test author is told the tree holds a partial build of the order.
-rs_restarted_commits_in_head() {
-  local task="$1" codepath="$2" only="$3" newest="" one out='[]' c
+# The build and fix commits HEAD still holds of every order a restart or a retake sent back to the
+# tests step, as rs_order_commits shapes them, or [] when there is none. $1 the task folder, $2 the
+# code repository, $3 an order id to keep alone, or empty for every order, $4 the ledger document.
+# `start` prints them as the partialBuild line, `tests-brief` carries them under treeHolds, and
+# `tests-freeze` checks a commit: reason against them. One list for all three, so the line offers
+# exactly what the freeze accepts.
+#
+# Which orders. Every restart record names the orders it halted, and every one is read, not the
+# newest alone: a later restart of another order leaves an earlier one's commits on the branch. An
+# order restarted twice is asked for once, because rs_order_commits already reads every folder and
+# record either restart wrote. A retake needs no restart: the ledger entry's `retakes` names it. Its
+# corrected test can arrive green on the order's own build as surely as after a restart, so it takes
+# the same route.
+#
+# Which commits. A build or a fix commit only, since those are what a commit: reason may cite. A
+# freeze holds tests, and no reader of this list acts on one: the test author reads no source, and
+# `restart` computes its reset commit from rs_order_commits, which keeps every freeze.
+#
+# When. An order rebuilt since it was sent back is left out. `restart` resets the entry to not
+# started and `retake-tests` to tests-frozen, so a build step on the entry came later. Rebuilt means
+# code-written or any step after it, closed included. A freeze alone is not a rebuild. The ledger
+# decides and not the commit order, because a rebase rewrites every id and the ledger survives it.
+# An order the ledger does not hold, or a ledger nothing could read, keeps its line.
+rs_carried_commits_in_head() {
+  local task="$1" codepath="$2" only="$3" ledger="$4" one out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
-    if [ -z "$newest" ] || [ "$one" -nt "$newest" ]; then newest="$one"; fi
-  done <<RS_FOUND
-$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null)
-RS_FOUND
-  if [ -n "$newest" ]; then
-    while IFS= read -r c; do
-      [ -n "$c" ] || continue
-      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
-      out="$(jq -c --arg c "$c" --argjson have "$out" '$have + [ (.commits // [])[] | select(.commit == $c) ]' "$newest")"
-    done <<RS_COMMITS
-$(jq -r --arg only "$only" '(.commits // [])[] | select($only == "" or .order == $only) | .commit' "$newest" 2>/dev/null)
-RS_COMMITS
-  fi
+    case "$(printf '%s' "$ledger" | jq -r --arg id "$one" \
+      '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // "none"' 2>/dev/null)" in
+      ""|none|tests-frozen) ;;
+      *) continue ;;
+    esac
+    out="$(jq -cn --argjson have "$out" \
+      --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" \
+      '$have + [ $more[] | select(.kind != "freeze") ]')"
+  done <<RS_ORDERS
+$({ find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
+    -exec jq -r '(.ordersHaltedForDrift // [])[]' {} ';'
+  printf '%s' "$ledger" | jq -r '(.orders // [])[] | select((.retakes // []) | length > 0) | .id'
+} 2>/dev/null | { if [ -n "$only" ]; then grep -Fx -- "$only"; else cat; fi; } | LC_ALL=C sort -u)
+RS_ORDERS
   printf '%s' "$out"
 }
 
@@ -9086,7 +9564,8 @@ do_restart() {
   local commits_json tree_json one_id earliest parent span_count own_count
   commits_json='[]'
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
-    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" '$have + $more')"
+    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" \
+      '$have + [ $more[] | select(has("missing") | not) ]')"
   done
   tree_json='null'
   if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then
@@ -9186,6 +9665,19 @@ do_restart() {
 # dispatch. dispatch-open refuses to overwrite one already there (exit 37). dispatch-close
 # removes it, safe to call when none is open. Two tasks of one project each hold their own.
 # ------------------------------------------------------------------------------------------------
+
+# Exit 102. br_order_needs decides which roles a proof kind needs, and this reads its answer. A
+# role the kind does not need would judge nothing. Examples are a test author on an order that
+# freezes no test, and a row-checker on one with no row. $1 the bare role, $2 the order id.
+# SNAPSHOT_DOC is loaded.
+im_refuse_unneeded_role() {
+  case " $BR_KIND_ROLES " in *" $1 "*) ;; *) return 0 ;; esac
+  br_order_needs "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$2" '[ .workOrders[] | select(.id == $u) ][0]')"
+  case " $BR_ORDER_ROLES " in
+    *" $1 "*) ;;
+    *) die 102 "dispatch-open: $2 is proved by its $(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$2" '[ .workOrders[] | select(.id == $u) ][0].proof // "tests"'), so it needs only these roles: $BR_ORDER_ROLES. A $1 here would have nothing to judge. Read the roles on the order's line in \`read\`." ;;
+  esac
+}
 
 do_dispatch_open() {
   local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw=""
@@ -9293,6 +9785,7 @@ do_dispatch_open() {
       '[ .workOrders[]? | select(.id == $u) ] | length')"
     [ "$unit_present" = "0" ] \
       && die 22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
+    im_refuse_unneeded_role "$role_bare" "$unit_id"
   fi
 
   # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause

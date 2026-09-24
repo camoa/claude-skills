@@ -185,7 +185,7 @@ render_text_list() {
   if [ "$TESTS_TYPE" != "array" ]; then
     printf 'The tests field could not be read: it is present but is a %s, not a list. This is not the same as no tests recorded; run check-design.sh against this task before this file is used.\n\n' "$TESTS_TYPE"
   elif [ "$(jq -r '.proof // "tests"' "$WO_FILE")" = "gate" ]; then
-    printf 'None. This order is proved by the `## Configuration gate` lines of the implement recipe, every line exit 0. The tests of the order that consumes what it configures prove the behaviour.\n\n'
+    printf 'None. This order is proved by its own verify run lines, then the `## Configuration gate` lines of the implement recipe. The tests of the order that consumes what it configures prove the behaviour.\n\n'
   elif [ "$(jq '(.tests // []) | length' "$WO_FILE")" -eq 0 ]; then
     printf 'None recorded.\n\n'
   else
@@ -212,6 +212,19 @@ render_text_list() {
   fi
 
   render_text_list "doneWhen" "Done when"
+
+  # Written by design-actions.sh verify alone, so the shape is its; an order with none shows no
+  # section. A source this project did not accept is said on every line it holds.
+  if [ "$(jq -r '(.verify // []) | if type == "array" then length else 0 end' "$WO_FILE")" -gt 0 ]; then
+    printf '## Verify\n\n'
+    jq -r '.verify[] | "- " + (if has("run") then "Run `" + .run + "`, pass on " + (.pass // "exit 0") else "Judge: " + (.check // "") end)
+      + (if has("kind") then ", kind " + .kind else "" end)
+      + ". Source: " + (.cites // "none") + (if .binding == false then ", not binding" else "" end)
+      + (if has("run") and .binding == false then (if has("approved") then ", approved by a person on " + .approved.on
+                                                  else ", not approved, so it never runs and the reviewer judges it" end) else "" end)
+      + "."' "$WO_FILE"
+    printf '\n'
+  fi
 
   printf '## Reasoning\n\n'
   REASONING="$(jq -r 'if (.reasoning? | type) == "string" and (.reasoning | length) > 0 then .reasoning else "" end' "$WO_FILE")"

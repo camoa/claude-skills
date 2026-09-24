@@ -4,7 +4,7 @@
 # scope-actions.sh, research-actions.sh and design-actions.sh each carried their own copy of these
 # four. One implementation, not three copies drifting apart, the same reason schema-check.sh exists.
 #
-# The caller defines die1, die2, die3 and die4 before it sources this file, each with its own
+# The caller defines die1, die2, die3, die4 and die79 before it sources this file, each with its own
 # script name in the message, so a refusal still says which script refused, and PLUGIN_ROOT, so
 # this library can find the task script. Those are the only things this library takes from its
 # caller rather than owning.
@@ -157,8 +157,16 @@ is_blank() {
 # Writes $2 (assumed already-valid JSON text) to $1 through a temporary file in the target's own
 # directory, then renames over the target. The rename stays inside one filesystem, and a failure
 # partway through never leaves a half-written file at $1.
+#
+# This refuses content with nothing in it, and leaves the target the bytes it had. Almost every
+# caller builds $2 in a jq command substitution. A jq that cannot read its input exits non-zero
+# and prints nothing, so the substitution yields an empty string. Without this test the rename
+# puts an empty file over a record the task still needs, and the caller still exits 0. The test
+# lives here, once, rather than at each call site, so a caller added later cannot reproduce the
+# defect by hand (live-run row 173).
 write_atomic() {
   local target="$1" content="$2" dir tmp
+  is_blank "$content" && die3 "refused to write $target: the content had nothing in it. Nothing was written"
   dir="$(dirname -- "$target")"
   tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
     || die3 "could not create a temporary file in $dir"
@@ -360,7 +368,7 @@ task_stage() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule parent
+  local found rule parent base_branch
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -405,13 +413,19 @@ task_worktree() {
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   git -C "$code" worktree prune 2>/dev/null
+  # What the tree is cut from, written whenever this call cuts the branch, over any base the record
+  # held. A detached HEAD is `commit:<sha>`: git forbids `:` in a branch name, so the two never
+  # meet. A tree made again from a branch that exists keeps the base the record held.
+  base_branch=""
   if git -C "$code" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
     said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" || die3 "$who: git worktree add failed: $said"
   else
+    base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" || die3 "$who: git worktree add failed: $said"
   fi
   wt="$(cd "$wt" && pwd -P)"
-  write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" '.worktree = {path: $p, branch: $b}' "$task_json")"
+  write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" --arg base "$base_branch" \
+    '.worktree = ((.worktree // {}) + {path: $p, branch: $b} + (if $base == "" then {} else {base: $base} end))' "$task_json")"
   printf '%s' "$wt"
 }
 

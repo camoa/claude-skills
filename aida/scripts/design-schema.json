@@ -128,7 +128,7 @@
       "type": "string",
       "enum": ["tests", "gate", "record", "observe"],
       "default": "tests",
-      "description": "What proves this order built what it says. `tests`, the default and what an order written before this field existed reads as: the tests it declares, frozen before the code is written. `gate`, for a unit whose deliverable is exported configuration: it declares no test (check-design.sh refuses one), no test author is dispatched, and its build runs the `## Configuration gate` lines of the framework's implement recipe as its own check, every line exit 0. Its owned machine criteria are judged by that check at close. Such a unit is sized around the operation and owns every file the operation rewrites; the behavioural proof lives with the order that consumes what it configures (live-run rows 65 and 66, audit/14-live-run-gaps.md). TDD is about code, not configuration: a test that reads YAML back restates the file and cannot fail for the right reason. `record`, for a unit whose deliverable is a document (a record, a deliverable, a note). Every owned file lies under the project folder, in a folder the project commits, the task folder's deliverables/ by default (live-run row 127). design-actions.sh sets this value itself at add-owned-file when that becomes true on an order carrying no proof field. create writes the field only when --proof was passed, so a proof set by hand, tests included, stays. It declares no test and needs at least one doneWhen row; check-design.sh refuses either way. It also refuses an owned file outside the project folder or under a path the project ignores. Its build lands no commit in the code repository: the range, the owned-files check and the reviewer's diff read the project folder's history instead, the suite and the tool rows read undeclared, and the order-tests slot holds the done-when judgement the checkpoint recorded. `close` writes its owned machine criteria as judged by whoever judged that row, person or model, never gate (nyc defect 17). `observe`, for a unit whose deliverable is what a page shows: it declares no test, names at least one surface and has at least one doneWhen row (check-design.sh refuses each). Nothing is frozen for it. After the implementer returns, the orchestrator opens each of its surfaces at each viewport with the browser tool and judges each doneWhen row against what renders, saving a screenshot per surface and viewport and an observed record the build reads through `build-record --observed` as the order's own check, `observed`. `close` writes its owned machine criteria as judged by `model`, and completion puts each such criterion to the person to accept (live-run row 104)."
+      "description": "What proves this order built what it says. `tests`, the default and what an order written before this field existed reads as: the tests it declares, frozen before the code is written. `gate`, for a unit whose deliverable is exported configuration: it declares no test (check-design.sh refuses one), no test author is dispatched, and its build runs its own `verify` run lines, then the `## Configuration gate` lines of the framework's implement recipe, in one check where the worse verdict stands, each line passing its `pass`. Its owned machine criteria are judged by that check at close. Such a unit is sized around the operation and owns every file the operation rewrites; the behavioural proof lives with the order that consumes what it configures (live-run rows 65 and 66, audit/14-live-run-gaps.md). TDD is about code, not configuration: a test that reads YAML back restates the file and cannot fail for the right reason. `record`, for a unit whose deliverable is a document (a record, a deliverable, a note). Every owned file lies under the project folder, in a folder the project commits, the task folder's deliverables/ by default (live-run row 127). design-actions.sh sets this value itself at add-owned-file when that becomes true on an order carrying no proof field. create writes the field only when --proof was passed, so a proof set by hand, tests included, stays. It declares no test and needs at least one doneWhen row; check-design.sh refuses either way. It also refuses an owned file outside the project folder or under a path the project ignores. Its build lands no commit in the code repository: the range, the owned-files check and the reviewer's diff read the project folder's history instead, the suite and the tool rows read undeclared, and the order-tests slot holds the done-when judgement the checkpoint recorded. `close` writes its owned machine criteria as judged by whoever judged that row, person or model, never gate (nyc defect 17). `observe`, for a unit whose deliverable is what a page shows: it declares no test, names at least one surface and has at least one doneWhen row (check-design.sh refuses each). Nothing is frozen for it. After the implementer returns, the orchestrator opens each of its surfaces at each viewport with the browser tool and judges each doneWhen row against what renders, saving a screenshot per surface and viewport and an observed record the build reads through `build-record --observed` as the order's own check, `observed`. `close` writes its owned machine criteria as judged by `model`, and completion puts each such criterion to the person to accept (live-run row 104)."
     },
     "reuses": {
       "type": "array",
@@ -137,6 +137,14 @@
         "$ref": "#/$defs/reuse"
       },
       "description": "The existing things this order's build and tests call, one entry per reuse disposition, written by design-actions.sh's `dispose` beside the outcome it puts in `reasoning`. Optional: an order disposed before this field has none, and an order that reuses nothing has none. The tests brief carries this list whole. The test author may not open production source, and a reused module belongs to no work order (live-run row 69)."
+    },
+    "verify": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/verifyEntry"
+      },
+      "description": "How this order's own proof is verified, taken from the knowledge that covers it. Optional: an order no recipe and no research finding covers has none. design-actions.sh's `verify` is its one writer. `--recipe` replaces the list with the covering agentic recipe's `## Verifier`: one `run` entry per entry of its `verifier:` block, and one `check` entry per numbered item of its prose. `--run` and `--check` add one entry from a research finding, never binding. Such a run entry runs only once a person approved it at the design close; until then the reviewer judges it as a check. A `run` entry runs through the same runner as a `## Configuration gate` line: argv, never a shell, and a line carrying a shell character is refused. On a `gate` order the run entries run first, and the implement recipe's `## Configuration gate` lines after them, in one check. On every other order they run inside the order's first deciding check, after its own, from the code worktree, and the check is met only when both are. A `check` entry is judged by a model: by the reviewer on every order, and by the look as a row of its own on an `observe` order when its kind is `live-site`. The build brief and the review brief carry the list whole."
     }
   },
   "$defs": {
@@ -178,6 +186,106 @@
           "description": "What this test observes, specific enough that whoever writes it does not have to ask what was meant (ideal/design.md, 'Why the order names the tests at all')."
         }
       }
+    },
+    "verifyEntry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run",
+            "pass",
+            "cites",
+            "binding"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The entry's own id in the recipe's `verifier:` block, when it came from one. It names the line in the check's detail."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "config-assert",
+                "live-site",
+                "self-fixture"
+              ],
+              "description": "The kind the source states, from the dev-guides Verifier block: `config-assert` reads configuration, `live-site` needs a served site, `self-fixture` seeds and removes its own data. Absent when the source states none. On an `observe` order only a `live-site` check is a row the look owes, because only that kind is something a page shows."
+            },
+            "run": {
+              "type": "string",
+              "minLength": 1,
+              "description": "One command, split on spaces and run as argv from the worktree, never through a shell. A `{name}` token is filled from the build's `--value name=...`, as a `## Configuration gate` token is."
+            },
+            "pass": {
+              "type": "string",
+              "pattern": "^(exit 0|stdout empty|stdout contains .+)$",
+              "description": "What passing means, in the three forms the dev-guides Verifier block allows: `exit 0`, `stdout empty`, or `stdout contains <literal>`. A non-zero exit fails the line whatever this says."
+            },
+            "cites": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Where the line came from: the covering recipe's path, or the source a research finding named."
+            },
+            "binding": {
+              "type": "boolean",
+              "description": "True when the source is one this project accepted: a recipe from a catalog or a folder the project configured. False for a research finding, and for a recipe research marked as not accepted. A person sees each order holding a false entry before the design closes."
+            },
+            "approved": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "by": {
+                  "type": "string",
+                  "enum": [
+                    "person"
+                  ]
+                },
+                "on": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                }
+              },
+              "description": "Present only on an entry that is not binding, once a person approved the command at the design close: `design-actions.sh close --approve-runs`, attended alone, stamps it before the hash. A model wrote such a command from research, so without this stamp it never runs. The build hands it to the reviewer as a check instead."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "check",
+            "cites",
+            "binding"
+          ],
+          "properties": {
+            "check": {
+              "type": "string",
+              "minLength": 1,
+              "description": "One sentence a model judges against what the order built: a numbered item of the recipe's prose, verbatim, or a check a research finding states. Never turned into a command."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "config-assert",
+                "live-site",
+                "self-fixture"
+              ],
+              "description": "The kind the source states, from the dev-guides Verifier block: `config-assert` reads configuration, `live-site` needs a served site, `self-fixture` seeds and removes its own data. Absent when the source states none. On an `observe` order only a `live-site` check is a row the look owes, because only that kind is something a page shows."
+            },
+            "cites": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Where the check came from, the same as a run entry's."
+            },
+            "binding": {
+              "type": "boolean",
+              "description": "The same as a run entry's."
+            }
+          }
+        }
+      ]
     }
   }
 }

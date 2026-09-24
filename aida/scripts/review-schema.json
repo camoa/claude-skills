@@ -71,7 +71,7 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/check" },
-      "description": "One row per check, in the order the actions record them. The sixteen checks carry the ids every-criterion, non-goals, serves-a-criterion, test-and-mutation, coding-standards, static-analysis, security, suite, solid, dry, architecture-fit, guides, e2e, visual-regression, visual-parity and framework-practices. The catalog's check block declares five rows: coding-standards, static-analysis, security, duplication and design-metrics. The last two are recorded here under their own ids whenever a recipe commands them, so the list runs past sixteen on such a framework. The block is a floor, not the list, and every row it declares is run and recorded here (ideal/review.md, 'The check commands block is not fixed at three rows')."
+      "description": "One row per check, in the order the actions record them. The sixteen checks carry the ids every-criterion, non-goals, serves-a-criterion, test-and-mutation, coding-standards, static-analysis, security, suite, solid, dry, architecture-fit, guides, e2e, visual-regression, visual-parity and framework-practices. `findings` writes one more, absence-clauses, whenever it runs: the done-when clauses the tests step routed here, which no test could prove. The catalog's check block declares five rows: coding-standards, static-analysis, security, duplication and design-metrics. The last two are recorded here under their own ids whenever a recipe commands them, so the list runs past sixteen on such a framework. The block is a floor, not the list, and every row it declares is run and recorded here (ideal/review.md, 'The check commands block is not fixed at three rows')."
     },
     "criteria": {
       "type": "array",
@@ -142,9 +142,52 @@
       "default": [],
       "items": { "$ref": "#/$defs/catalogNote" },
       "description": "What this review saw about the catalog, one line each: a guide the code contradicts, a recipe whose command no longer runs, a pattern the framework wants and no guide names. Review writes nothing to the catalog. A person decides whether a note becomes a proposal, and `close` names the count so the evidence is not lost in silence."
+    },
+    "reviewerSkipped": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why `findings` ran with no dispatch of the architecture reviewer, in one line a person reads. It is present when no order commits in the code repository and no order routed a done-when clause to review. The reviewer then had nothing to judge. It is absent when the reviewer ran."
+    },
+    "absences": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/absenceRow" },
+      "description": "One row per done-when clause the tests step routed here, written by `findings` from the ledger's own list and the reviewer's verdicts. Such a clause asserts the change added nothing of a named kind, and no test of it can be watched failing, so the reviewer judges it against the diff instead (live-run row 184). The `absence-clauses` check reads these rows: unmet when one reads unmet or testable yes, unknown when one reads unknown or testable unknown, met when every one reads met and testable no, and not-needed when no order routed a clause. The review summary prints one line per row."
     }
   },
   "$defs": {
+    "absenceRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "clause", "verdict", "note", "testable"],
+      "properties": {
+        "order": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The work order whose done-when holds this clause, as the ledger names it."
+        },
+        "clause": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The clause itself, verbatim, as design wrote it and as `tests-freeze --absence` routed it. Joined on, never paraphrased."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["met", "unmet", "unknown"],
+          "description": "What the reviewer read against the diff. `met`, the change added nothing the clause forbids. `unmet`, it did. `unknown`, the reviewer could not tell, returned no verdict on this clause, answered outside the three words, or answered with nothing to read beside it. An absence nobody judged is never a pass."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this verdict, in the reviewer's own words, or this script's words when it read the answer as unknown."
+        },
+        "testable": {
+          "type": "string",
+          "enum": ["yes", "no", "unknown"],
+          "description": "Whether a test could have watched this clause fail, as the reviewer answered. `yes` means the clause was routed around a red run it could have had, and the `absence-clauses` check reads unmet. `unknown` means the reviewer gave neither word, and the check reads unknown."
+        }
+      }
+    },
     "recipeRow": {
       "type": "object",
       "additionalProperties": false,

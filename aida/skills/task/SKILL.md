@@ -84,18 +84,25 @@ Print the path and say so. Go on to step 5 either way.
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
 site, so a review or a baseline taken there would capture the served checkout instead. Dispatch
-`catalog-identifier` once with the line `point: worktree-environment`, then every framework the
-project records and the project folder. Those are the same words the surfaces skill uses for its
-points. When the project record has `surfaces.e2e.enabled` or
-`surfaces.visualRegression.enabled`, name `e2e-setup` or `visual-regression` in the same
-dispatch, so `up` can install that harness in the tree. Pass the answer as
-`--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one flag per framework,
-and each setup recipe as `--setup-recipe <kind>=<path>`, where the kind is `e2e` or
-`visual-regression`, then run `environment <name> show`.
+`catalog-identifier` once per point, as the surfaces skill does. The role reads one `point:` line
+per message, and it reads any other word as a framework. The first dispatch has the line
+`point: worktree-environment`, then every framework the project records and the project folder.
+When the project record has `surfaces.e2e.enabled`, dispatch the role again with
+`point: e2e-setup` and the same other lines. When it has `surfaces.visualRegression.enabled`,
+dispatch it again with `point: visual-regression`. `up` then installs that harness in the tree.
+Pass the worktree-environment answer as `--recipe <framework>=<path>` or
+`--lookup-failed <framework>=<word>`, one flag per framework. Pass each setup recipe as
+`--setup-recipe <kind>=<path>`, where the kind is `e2e` or `visual-regression`. A setup lookup
+that returns no path gives no flag, and `up` says that harness is not installed. Then run
+`environment <name> show`.
 The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script refuses any other.
 `not-applicable` from `show` means no framework has a recipe: record it with
 `environment <name> not-applicable -- <that reason>`, and say once that this worktree has files
-and no site. Otherwise, interactive: show the commands and the prose, and ask once whether to
+and no site. `show` runs the precondition checks and exits 3 when one fails. A failing check
+means the site cannot come up, so make no offer. Show the check's output and the remedy it names.
+When the remedy says to commit, give the `environment:` lines that name the branches. Record
+nothing, so the offer comes again at `start`. Otherwise, interactive: show the commands and the
+prose, and ask once whether to
 bring the site up now. A yes runs `environment <name> up` with the same flags. A no is recorded
 too, with the person's reason, through the same `not-applicable` call, so nothing offers again.
 Say `up` with the same flags still brings it up later. Autonomous: never bring it up, record
@@ -116,39 +123,64 @@ and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the 
 `not-applicable` writes `environment` as the reason alone, and commits. It is a person's answer,
 so it refuses unattended at 70. `up` replaces it; `down` with it recorded says nothing was up.
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
-the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs nothing.
-It prints the paths of the `## Files` blocks, the files `up` writes, and one `precondition:`
-line per `## Preconditions` command `up` runs.
+the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs none of
+them. It prints the paths of the `## Files` blocks, the files `up` writes, and one
+`precondition:` line per `## Preconditions` command `up` runs.
+`show` runs each `## Preconditions` line the way `up` does, with the same code. It removes the
+files it wrote for the check, so it commits nothing and leaves the tree as it found it. A failing
+check exits 3 and prints what `up` prints. A worktree not on disk prints
+`precondition check: not run`, because only `up` makes a tree again.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
 says what `up` would do.
 
-`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with the
-output in `records/environment-up.txt`, in this order. First it writes each `## Files` block
-absent from the worktree. A file present with other content refuses at 3. Then it runs each
+`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with each
+command as it ran and that command's own output in `records/environment-up.txt`, in this order,
+and one line in that record marking the address command, so `down` can find that command's output
+later.
+First it writes each `## Files` block absent from the worktree. A file present with other content
+refuses at 3. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
 failing line stops at 3, prints its output, removes the files this run wrote, and commits
-nothing. Then it commits the written files alone, so other changed or staged work is never
+nothing. When a line ran and failed, it also names the task branch and the branch the worktree
+was cut from. An older task names the branch the code path is on now, and says so. A failed
+commit, or an interrupt before the commit, also removes the written files, their index entries
+and the output file, and says so. Then it commits the written files alone, so other changed or staged work is never
 taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
-prints nothing or fails refuses at 4 by the token's name. Then the bring-up lines before the
-`## Address` heading. Then the address command, whose output is `key: value` lines. `address:`
-is required, and every other key is a token for the later lines and for the tear-down. A `root:`
+prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
+`environment`: `state: coming-up`, the recipe, and the time. The record names the site before the
+site exists, so a failure during the bring-up leaves a site `down` can still find. The marker
+keeps every other field the record held, so a second `up` over a site that is up does not drop
+that site's address while the bring-up runs again. Then the
+bring-up lines before the
+`## Address` heading. Then one line marking the address command in the record, so `down` can find
+that command's output later. Then the address command, whose output is `key: value` lines.
+`address:` is required, and every other key is a token for the later lines and for the
+tear-down. A `root:`
 line that is not the worktree stops at 3 before the later lines: the environment resolved to
-another tree. Then the bring-up lines after the heading. Then, for each surfaces kind the
+another tree, and the marker stays for `down`. Then it completes the record, in place of the
+marker: the address, the recipe, when, and the other address keys. Then the bring-up lines after
+the heading. Then, for each surfaces kind the
 project has on, the `## Install` lines of the setup recipe given as `--setup-recipe`. It
 commits nothing after that; what the install left uncommitted is named and stays for the task's
 own commit. With no path for a kind it says so and goes on, and the
 harness is the person's next step. A line still holding an unfilled `{token}` stops at 3 and
 names it. A failing line stops at 4 with a `first:` line. Show that line; do not bring the site
-up by hand. It records `environment` in `task.json`: the address, the recipe, when, and the
-other address keys. It prints `address:`. Running it twice is safe: the recipe promises every
-step runs again cleanly.
+up by hand. Any refusal after the marker leaves the marker, so run `down` before `up` again.
+It prints `environment: coming-up`, then `address:`. Running it twice is safe: the recipe
+promises every step runs again cleanly.
 
-`down` runs the tear-down lines, output to `records/environment-down.txt`, and removes
+`down` runs the tear-down lines, each one and its output to `records/environment-down.txt`, and removes
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
-nothing up it says so and exits 0. Run it before the worktree is removed, or the framework keeps
-an orphaned registry entry; the completion body names it when a site is up. Review and `baseline`
-read `environment.address` before asking for a base URL.
+nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
+finished record, so a site that was coming up is torn down the same way. A marker with no address
+key holds none of the other address keys either. `up` marks the address command in
+`records/environment-up.txt` before it runs it. `down` fills a tear-down token from the output
+under that mark, and from nothing else in that file. No mark means the address command never ran,
+so `down` reads nothing there. A token nothing fills stops it at 3 and names that token.
+Run it before the worktree is removed, or the framework keeps
+an orphaned registry entry; the completion body names it when a site is up or coming up. Review
+and `baseline` read `environment.address` before asking for a base URL.
 
 ## `prune [<task-id>]...`
 
@@ -162,7 +194,8 @@ it may remove.
 ```
 **1. List.** With no id the script prints one `id:` line per complete task that records a
 worktree. The line holds the path, the branch, and whether the branch is merged into the code
-path's current branch. It also says whether the tree is on disk and whether a site is up.
+path's current branch. It also says whether the tree is on disk and whether a site is up,
+which reads `coming-up` for a tree whose bring-up did not finish.
 `prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole action.
 Say once that a tree goes only on a person's yes, and stop. The script refuses an id unattended
 at 70.
@@ -232,6 +265,9 @@ the one thing to repair now, before the stage writes anything.
 When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
 person by hand, or a stage's script through scope's `init`. A stage's script passes that line
 through. Unattended, the line says the offer waits for a person, and nothing is recorded.
+
+When the output holds `environment: coming-up`, a bring-up did not finish and a site may be
+running. Run `environment <task-id> down` before any stage runs. Then offer the bring-up again.
 
 ## `complete <task-id>`
 

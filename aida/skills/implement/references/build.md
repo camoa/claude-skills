@@ -15,7 +15,9 @@ This recipe carries the rules applied while code is written. The implementer ope
 the path. Do not read the body here.
 
 Do not give the test-authoring recipe to the implementer. It chooses a level and names a test, and
-this reader may do neither. Pass its path to `dispatch-open` as `--deny-read`.
+this reader may do neither. When the tests step resolved its path, pass that path to
+`dispatch-open` as `--deny-read`. An order whose `lookups=` holds no `test-authoring` resolved
+none, so pass nothing then.
 
 Read the `test-execution` and `review` recipe paths from the records preconditions already wrote,
 instead of asking the navigator again. `implementation/preconditions.json` holds the
@@ -167,8 +169,9 @@ snapshot, the site holds only the seed's content. It stays so until the recipe's
 rebuild step has run, and the look waits for that step. A note on a row judged against stale
 content is a lie.
 
-Judge each of the order's done-when rows against what renders. A row that says the page is as
-it was is judged against the before image of that surface and viewport. Also judge the
+Judge each of the order's done-when rows against what renders, and each `check` entry of its
+`verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is judged against the before
+image of that surface and viewport. Also judge the
 `verification` clause of each machine criterion the order owns, as a row of its own beside the
 done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
 the clause, and no script can compare the two, so the look judges the clause itself. Such a row
@@ -189,8 +192,8 @@ Then write `<task_folder>/implementation/observed-<order id>.json`:
               "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
               "before": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
-Every done-when row and every owned clause goes in, at every surface and viewport, and
-`build-record` refuses a record missing one (exit 97). The verdict is what the page
+Every done-when row, every live-site verify check and every owned clause goes in, at every
+surface and viewport, and `build-record` refuses a record missing one (exit 97). The verdict is what the page
 showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
 for such an order and no row was judged before the build, so this look is its check. The judge
 on the record is a model. Completion puts each such criterion to the person.
@@ -324,16 +327,23 @@ at `code-written` otherwise. The summary has `build-record`'s shape plus a `rech
 This step runs all eight deciding checks. The record holds every one.
 
 - **order-tests.** Do this order's own frozen tests pass. On an order whose proof is `gate` this
-  slot is `configuration-gate` instead. Does every `## Configuration gate` line of the
-  implement recipe exit 0, run in the worktree. The first line that does not is named, with its
-  output. It reads unknown when the task records no environment, when no `--implement-recipe`
-  was passed, or when that recipe carries no such block. The detail says which. A line 2 that
-  printed `There are no changes to import` is a finding for the reviewer, not for this check.
+  slot is `configuration-gate` instead. Does every line pass, run in the worktree. The order's
+  own `verify` run entries run first, then the `## Configuration gate` lines of the implement
+  recipe. The worse verdict stands. The first line that does not pass is named, with its
+  output. A placeholder given several `--value` entries runs its line once per value. It reads
+  unknown when the task records no environment. An order with no verify lines also reads
+  unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
+  An order with verify lines runs them alone then, and the detail says the block did not run.
+  A verify line that is not binding runs only when the person approved it at the design close.
+  A line 2 that printed `There are no changes to import` is a finding for the reviewer, not
+  for this check.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
   above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
-  the way a failing test does.
+  the way a failing test does. On every kind but `gate`, the order's own `verify` run entries
+  then run in this slot, from the code worktree. The slot is met only when its own answer and
+  every line are. The detail names the source.
 - **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
   recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
   that row once at the final commit. On a Drupal project the row is ten minutes per run. On a

@@ -1,7 +1,7 @@
 ---
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -244,12 +244,8 @@ repair. Interactive: offer it once, in one line, and on yes run
 It makes the folder a repository, commits the files already there, and runs the check again.
 Autonomous: name the repair and continue.
 
-`TASK_RULE: version 5` after `PICKED UP:` means the code repository's `CLAUDE.md` holds the
-task rule version 5 wrote, which names `/ai-dev-assistant:` commands that no longer exist.
-Interactive: after the `git-init` offer, offer once to rewrite it, in one line. Yes runs the
-`task-rule` section below, which replaces that block in place. No records the refusal with
-`task-rule "<name>" --decline`, the same as create's step 6. The block stays as it is.
-Autonomous: say the offer is waiting and continue, as at create.
+The check's report may carry a `Task rule: version 5` line. Make that offer after the `git-init`
+offer, as "Reading the check's report" below says.
 
 `switch <path>` on a folder holding a `project.json` registers that folder again. This is the way
 back after `unregister`. It is the only way back for a folder outside the projects base.
@@ -429,6 +425,18 @@ It writes the id under that framework, commits the change, and runs the check.
 `unsubscribe-playbook` takes the same three arguments and removes the id, with no such check.
 Show the whole output.
 
+## `drop-retired <name-or-path>`
+
+This is the repair the check names for a retired field. The project schema once declared that
+field and then retired it, so no producer can run again. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh drop-retired "<target>"
+```
+It removes each field the schema lists as retired, and nothing else. It commits the change and
+runs the check. `UNCHANGED` means the file held none. A field that is undeclared and not retired
+stays, and the check keeps naming it. Show the whole output. It changes only AIDA's own project
+file, so it does the same thing in both modes.
+
 ## `unregister <name-or-path>`
 
 Run:
@@ -466,10 +474,15 @@ run:
 ```
 Refuses when the project has no code path. It refuses too when the code path names a directory
 that does not exist yet. Either way there is no repository to write into. Say so and stop. Do
-not ask again later in the same turn.
+not ask again later in the same turn. Exit 3 names a line in `CLAUDE.md` that opens a block no
+end marker closes. Nothing was written. Show that message and stop.
 
-`--remove` takes the block back out and leaves the rest of the file untouched. It refuses the
-same way on an autonomous run:
+A file that already holds a version 6 block keeps that one block, refreshed in place. Any version
+5 block in the same file is removed, so the file never holds two task rules.
+
+`--remove` takes every block of either version back out and leaves the rest of the file
+untouched. It refuses the same way on an autonomous run, and at exit 3 on a block with no end
+marker:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule-remove "<target>"
 ```
@@ -483,7 +496,7 @@ nothing. Say that the cleanup waits for a person, and continue. On yes, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> uninstall "<target>"
 ```
-Removes the task-rule block when one was installed.
+Removes the task-rule block when one was installed, or when version 5 left one.
 
 ## `rebuild-registry [projectsHome]`
 
@@ -498,7 +511,10 @@ built-in `~/.claude/aida/projects` when no project was ever created. It reads ev
 the registry names outside that base too, so a version 5 pickup survives the rebuild. Replaces the
 whole registry with what it found.
 Each folder it keeps from outside the base, and each one it drops because the project file is
-gone, gets a line on stderr. Show those lines.
+gone, gets a line on stderr. A folder whose project file carries a name, or a code path, the
+rebuild already wrote gets one too, and that folder is skipped. Two rows cannot share either
+value. Show those lines, and name the repair each one names: change that value in one of the two
+project files, then rebuild again.
 `declinedOffers` and `directoryChoices` cannot be recovered this way and start empty again; say so
 plainly rather than letting it pass unremarked.
 
@@ -534,9 +550,34 @@ Read its exit code to decide what happens next, never its text alone:
 | 1 | A project-file field is missing or the wrong shape. | Name each missing field and its producer as the report printed them. Also name any repair the report printed beside them, such as `git init` for a folder that is not a git repository. One exit code carries only the highest condition, so a lower one shows only in the text. |
 | 2 | The code path does not exist on disk. | Right after `create`, this is expected; say so and move on. Elsewhere, only the project's owner can say where the code went, and nothing here fixes it. Say that plainly and stop. |
 | 3 | The check itself could not run. | Show the error text and stop. |
-| 4 | The registry disagrees with the project file, has no row for it, or two rows share a name. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above; a shared name needs a person to rename one project. |
+| 4 | The registry disagrees with the project file, has no row for it, or two rows share a name or a code path. | The project file is authoritative; say what the report found and that nothing was changed. A missing or wrong row can be fixed with `rebuild-registry` above. A shared name or a shared code path needs a person. They change that value in one of the two project files, then rebuild. |
 | 5 | The code path names a refused location: a system root, the home directory, or anything above it. | Say why it was refused. Right after `create` or `set-code-path`, the script has already undone the change; elsewhere, ask for a corrected code path. |
 | 6 | The project folder is not yet a git repository, or holds uncommitted work. | Say which. Not a git repository yet only happens on a project that predates this check; running `git init` there is the repair, and this skill does not do it silently. Uncommitted work is worth showing before starting anything else on top of it. |
+
+One route does not pass that code on. A `switch` that picked a folder up exits 0, because it
+registered the folder and that was its job. A folder it registers has fields no producer has
+filled yet, so the check is never 0 there. Read the report it printed for the findings. Name each
+missing field and its producer, as the table above says.
+
+A retired field comes under "Retired fields", with exit 1. The report names `drop-retired` as its
+repair. Interactive: offer it once, in one line, and on yes run `drop-retired` above. Autonomous:
+name the repair and continue. Never edit the project file by hand.
+
+A `Task rule: version 5` line can come with any exit code. The code repository's `CLAUDE.md` holds
+the task rule version 5 wrote, which names `/ai-dev-assistant:` commands that no longer exist.
+The check names it on every run until a person answers, so the offer stays open. Interactive:
+offer once in this invocation to rewrite it, in one line. Yes runs the `task-rule` section above,
+which replaces that block in place. No records the refusal with `task-rule "<name>" --decline`,
+the same as create's step 6. Autonomous: say the offer is waiting and continue, as at create. A
+line that says a decline is recorded is not an offer. Name the fact and do not ask.
+
+A line that says no end marker follows the block is not an offer either. The text below the
+marker may be the person's own, so the rewrite and the removal both refuse at exit 3. Name the
+line the report gives, and say the person fixes it by hand. Then the offer comes back.
+
+Exit 3 and exit 5 still come through a pickup. Three says the check could not run, so there are
+no findings to read. Five says the code path names a refused location. Both rows above apply as
+written.
 
 The check never asks a question, in either mode. When the run is autonomous and a non-zero exit
 code came back, the report already says `Autonomous run: ... Recorded, not performed.`; this

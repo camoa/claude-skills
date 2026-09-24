@@ -104,9 +104,12 @@ die() { printf 'completion-actions: %s\n' "$2" >&2; exit "$1"; }
 # One refusal function, one exit code as its first argument. The table above is the only place a
 # number gets a meaning, and nothing here mints one that table does not carry.
 
-# task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
+# task-helpers.sh takes these three from its caller, so a refusal still says which script refused.
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die1() { die 1 "$1"; }
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die3() { die 3 "$1"; }
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { die 79 "$1"; }
 
 for lib_name in "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do
@@ -232,7 +235,7 @@ CP_FINDINGS
 # Sets CP_OBSERVED to [{criterion, order, record, rows: [{doneWhen, surface, viewport,
 # screenshot, before, verdict, note}]}]. $1 the action.
 cp_load_observed() {
-  local who="$1" rows_out one cid wo observed_file observed_state observed_doc tab
+  local who="$1" rows_out one cid wo observed_file observed_state observed_doc observed_rc tab
   CP_OBSERVED="[]"
   [ "$(json_file_state "$SNAPSHOT_FILE")" = "ok" ] || return 0
   rows_out="$(mktemp)" || die 3 "$who: could not create a temporary file"
@@ -243,7 +246,12 @@ cp_load_observed() {
     cid="${one%%"$tab"*}"; wo="${one#*"$tab"}"
     observed_file="$TASK_PATH/implementation/observed-$wo.json"
     observed_state="$(json_file_state "$observed_file")"
+    # cp_record_doc refuses an unreadable record, and it runs in a command substitution, so that
+    # refusal ends the subshell alone. Untested, the jq below fails on an empty --argjson, writes
+    # no row, and this criterion then leaves the observed list without a word said.
     observed_doc="$(cp_record_doc "$who" "$observed_file" "observed record")"
+    observed_rc=$?
+    [ "$observed_rc" -eq 0 ] || exit "$observed_rc"
     jq -nc --arg cid "$cid" --arg wo "$wo" --arg state "$observed_state" --argjson doc "$observed_doc" \
       '{criterion: $cid, order: $wo, record: $state, rows: (($doc // {}).rows // [])}' >>"$rows_out"
   done <<CP_OBSERVE
@@ -268,7 +276,10 @@ cp_load() {
   CP_RECORD_STATE="$(json_file_state "$RECORD_FILE")"
   CP_ALIGNMENT_DOC="$(cp_record_doc "$who" "$ALIGNMENT_FILE" "contract")"
   CP_FINISHED_DOC="$(cp_record_doc "$who" "$FINISHED_FILE" "build record")"
-  CP_REVIEW_DOC="$(cp_record_doc "$who" "$REVIEW_FILE" "review record")"
+  # The other two reach cp_render_body alone, which tests the body it built. This one also reaches
+  # cp_load_follow_ups, where an empty value is a follow-up list with nothing in it. A caller that
+  # asked for the follow-ups would be told there are none. So the code is re-raised here.
+  CP_REVIEW_DOC="$(cp_record_doc "$who" "$REVIEW_FILE" "review record")" || exit $?
   # Four words, because a review that never ran, one that did not close, and one that failed are
   # three different facts. Only `passed` closes the task with nothing asked.
   case "$CP_REVIEW_STATE" in
@@ -476,13 +487,17 @@ cp_render_body() {
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         # A task page promises the tear-down here (live-run row 150). The old line printed for
         # every worktree. It told a task with no site to prune, and a task with a live site
-        # nothing. A site is up only while `environment.address` is there. Both `not-applicable`
-        # and an absent key mean no site.
+        # nothing. A recipe in `environment` means a site to tear down: the record holds one while
+        # a site is up, and the marker holds one while a site is coming up. Both `not-applicable`
+        # and an absent key name no recipe and no site.
         + (if ($taskDoc.worktree // null) == null then [] else
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
-            + (if ($taskDoc.environment.address // null) == null
+            + (if ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
-               else ["The site of this task is up. Run `task environment " + $task + " down` before the worktree is removed, or the framework keeps an orphaned registry entry.",
+               else [(if ($taskDoc.environment.address // null) == null
+                      then "A site of this task is coming up: the record holds the marker `up` writes before the bring-up, and no address."
+                      else "The site of this task is up." end)
+                     + " Run `task environment " + $task + " down` before the worktree is removed, or the framework keeps an orphaned registry entry.",
                      "After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end) end))
     + section("Review audit";
         if $review == null then ["no review record; nothing was checked"]

@@ -38,8 +38,8 @@ This prints summary lines, one `key: value` each:
 - the task's own run mode for this stage, from `task.json`;
 - the snapshot's path and hash, the ledger's path, and whether a preconditions record and a
   finished record exist;
-- one `order(...)` line per work order: its last step, its halt reason, its counters and its review
-  state;
+- one `order(...)` line per work order: its last step, its halt reason, its counters, its review
+  state, and the `roles=` and `lookups=` its proof kind needs;
 - the criteria counted by row state;
 - a `next:` line naming the step the table below would choose.
 
@@ -166,6 +166,8 @@ about the framework. Pass the one that happened, in its own word.
 **A test green on its first run has four outcomes.** Wrong test: corrected once. Still green, and
 the author names the existing code that satisfies it: frozen, and the reason recorded. Still
 green with nothing to name: reported, and the step stops. Failed: frozen with its red run.
+For a test of the order's own work the author names a commit in place of code, written
+`commit:<id>`. It is one of this order's build or fix commits, which the brief carries.
 `references/tests.md` holds the flags.
 
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to

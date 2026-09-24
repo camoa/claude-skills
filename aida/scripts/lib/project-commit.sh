@@ -10,9 +10,10 @@
 #
 #   commit_project <folder> <subject> <why> <principle> <ruled out> <task> <stage> [<pathspec>...]
 #     Commits the folder as aida: everything in it, or only the pathspecs when any are given.
-#     That is how task-actions.sh commits one task folder alone. Returns 1 before any git call
-#     when the folder is not a repository, 0 when there was nothing to commit, else git's own
-#     status.
+#     That is how task-actions.sh commits one task folder alone. The commit takes the pathspecs
+#     alone, never the whole index, so a change a person staged stays staged. Returns 1 before
+#     any git call when the folder is not a repository, 0 when there was nothing to commit, else
+#     git's own status.
 #
 # Portability: bash 3.2+ and zsh. This file is a library. Source it; do not run it.
 if [ -n "${ZSH_VERSION:-}" ]; then
@@ -62,13 +63,13 @@ commit_project() {
   # error. The caller says the write was not committed. A version 5 pickup is such a folder.
   git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || { rm -f "$msg_file"; return 1; }
   git -C "$project_path" add -A -- "$@"
-  if git -C "$project_path" diff --cached --quiet 2>/dev/null; then
+  if git -C "$project_path" diff --cached --quiet -- "$@" 2>/dev/null; then
     rm -f "$msg_file"
     return 0
   fi
   git -C "$project_path" \
     -c user.email="aida@localhost" -c user.name="aida" \
-    commit -q -F "$msg_file"
+    commit -q -F "$msg_file" -- "$@"
   local rc=$?
   rm -f "$msg_file"
   return $rc

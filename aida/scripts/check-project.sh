@@ -26,6 +26,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/project-schema.json: the project field list, as data
 #   <plugin root>/scripts/registry-schema.json: the registry field list, as data
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
+#   <plugin root>/scripts/lib/project-findings.sh: the retired fields and the version 5 task rule
 #   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json): the registry, if it exists
 #   whether the directory named by project.json's codePath still exists
 #   $HOME, to apply the code-path safety rules
@@ -44,9 +45,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 #   0  Every check below passed: project.json matches its schema and its codePath directory
 #      exists; codePath is not a refused location; the registry holds a row for this project
-#      that agrees with it, and no two registry rows share a name; the project folder is a
+#      that agrees with it, and no two registry rows share a name or a code path; the folder is a
 #      git repository with no uncommitted work. Nothing more is said.
-#   1  One or more fields are missing from project.json, present with the wrong shape, or
+#   1  One or more fields are missing from project.json, present with the wrong shape, retired
+#      from the schema (its `retired` list; `drop-retired` is the repair), or
 #      fail one of the two cross-field checks project-schema.json's own descriptions
 #      promise (a schema checks one field at a time, never two fields against each other):
 #      a playbookSubscriptions key naming a framework this project never declared, or a
@@ -64,8 +66,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      above, a failure of the check itself, reported to stderr, never confused with a
 #      finding about the project.
 #   4  The registry disagrees with this project, has no row for it, or holds two rows sharing
-#      one name. The project file is authoritative in every case; this script reports the
-#      disagreement and picks no winner.
+#      one name or one code path. The project file is authoritative in every case; this script
+#      reports the disagreement and picks no winner. The code-path test compares the spellings
+#      the registry holds, so two spellings of one directory are not seen as one. Resolving them
+#      would mean reading every row's directory off disk, in a script whose job is to read
+#      records. The rebuild canonicalises both sides instead, so no route writes a second
+#      spelling. A registry written before that, or edited by hand, can still hold one.
 #   5  codePath names a refused location: a system root, the home directory itself, or a path
 #      above the home directory. Ported from version 5's set-code-path safety filter.
 #   6  The project folder is not yet a git repository, or it is one with uncommitted work in
@@ -83,9 +89,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     path, `projects[2].path`. Seven keyword families are still not evaluated: `minimum`,
 #     `maximum`, `maxItems`, `uniqueItems`, `const`, `minProperties`, `propertyNames`, and
 #     `required` anywhere below the root. No line in this report claims that they were. A rule
-#     about two entries together was never a schema question, which is why the
-#     no-two-rows-share-a-name test below exists as its own, separate step, the same as the
-#     three project-level cross-field tests in step 4b below;
+#     about two entries together was never a schema question, which is why the tests below that
+#     no two rows share a name and no two share a code path exist as their own, separate steps,
+#     the same as the three project-level cross-field tests in step 4b below;
 #   - `description`, shown verbatim as the repair guidance for a field this script finds
 #     missing or the wrong shape, since neither schema carries a separate short "producer"
 #     string.
@@ -196,10 +202,13 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 PROJECT_SCHEMA_FILE="$PLUGIN_ROOT/scripts/project-schema.json"
 REGISTRY_SCHEMA_FILE="$PLUGIN_ROOT/scripts/registry-schema.json"
 SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
+FINDINGS_LIB="$PLUGIN_ROOT/scripts/lib/project-findings.sh"
 
 [ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
+# shellcheck source=/dev/null
+source "$FINDINGS_LIB" 2>/dev/null || die3 "the findings library failed to load: $FINDINGS_LIB"
 
 [ -f "$PROJECT_SCHEMA_FILE" ] || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE not found"
 jq empty "$PROJECT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE is not valid JSON"
@@ -242,9 +251,16 @@ COMPARE_JSON="$(schema_check_compare "$PROJECT_SCHEMA_FILE" "$PROJECT_FILE")" \
   || die3 "the project field-list comparison itself failed to run. Check $PROJECT_SCHEMA_FILE for a malformed entry"
 
 MISSING_JSON="$(echo "$COMPARE_JSON" | jq -c '.missing')"
-UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c '.unreadable')"
 MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
-UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
+# A field the schema retired is still refused, and reported apart from a shape fault. It has no
+# producer to run again, so its repair is the one action that drops it (project-schema.json,
+# `retired`). The comparison stays generic; the split happens here, by name.
+RETIRED_JSON="$(pf_retired_fields "$PROJECT_SCHEMA_FILE" "$PROJECT_FILE")" \
+  || die3 "the retired fields could not be read. Check $PROJECT_SCHEMA_FILE for a malformed retired entry"
+RETIRED_COUNT="$(echo "$RETIRED_JSON" | jq 'length')"
+UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c --argjson r "$RETIRED_JSON" \
+  '[ .unreadable[] | select(.field as $f | ($r | map(.field) | index($f)) == null) ]')"
+UNREADABLE_COUNT="$(echo "$UNREADABLE_JSON" | jq 'length')"
 FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
 # Fields, never faults: the comparison reads every level, so twenty refused elements in one list
 # would subtract twenty from a count of top-level fields and print a number below zero.
@@ -485,6 +501,37 @@ fi
 DUPLICATE_NAME_COUNT="$(printf '%s' "$DUPLICATE_NAMES_JSON" | jq 'length')"
 
 # ---------------------------------------------------------------------------
+# 8b. The same test one field over: no two rows share a code path. A directory
+#     resolves to one project, so two rows on one code path make that lookup
+#     answer with whichever row was written first, and nothing else reports it.
+#     A trailing slash is stripped, and nothing else. The comparison is between
+#     the spellings the registry holds. So a symbolic link, a relative path or a
+#     second name for one directory reads as two projects, and the report says
+#     so. A row with no code path, or a non-string one, is left out of this
+#     test, and the note says how many.
+# ---------------------------------------------------------------------------
+
+DUPLICATE_CODEPATHS_JSON='[]'
+DUPLICATE_CODEPATH_TEST_NOTE="ran: compared every row's codePath in $REGISTRY_PATH"
+
+if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
+  DUPLICATE_CODEPATH_TEST_NOTE="skipped: the registry file is corrupt"
+else
+  DUPLICATE_CODEPATHS_JSON="$(printf '%s' "$REGISTRY_JSON" | jq -c '
+    [ .projects[]? | select((.codePath? // null) != null and (.codePath | type) == "string" and (.codePath | length) > 0) ]
+    | group_by(.codePath | sub("/+$"; ""))
+    | map(select(length > 1) | {codePath: (.[0].codePath | sub("/+$"; "")), count: length, paths: (map(.path // null))})
+  ')"
+  UNPATHED_ROW_COUNT="$(printf '%s' "$REGISTRY_JSON" | jq '
+    [ .projects[]? | select((.codePath? // null) == null or (.codePath | type) != "string" or (.codePath | length) == 0) ] | length
+  ')"
+  if [ "${UNPATHED_ROW_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+    DUPLICATE_CODEPATH_TEST_NOTE="ran: compared every row carrying a codePath in $REGISTRY_PATH; $UNPATHED_ROW_COUNT row(s) with none were left out of this test"
+  fi
+fi
+DUPLICATE_CODEPATH_COUNT="$(printf '%s' "$DUPLICATE_CODEPATHS_JSON" | jq 'length')"
+
+# ---------------------------------------------------------------------------
 # 9. Does the registry hold a row for this project, and does it agree with
 #    project.json? The project file is authoritative; this step reports a
 #    disagreement, it never resolves one.
@@ -612,7 +659,8 @@ if [ "$CODEPATH_EXISTS_JSON" = "true" ] \
    && [ "$SAFETY_VERDICT" != "refused-system-root" ] && [ "$SAFETY_VERDICT" != "refused-home" ] \
    && [ "$SAFETY_VERDICT" != "refused-above-home" ] \
    && [ "${REGISTRY_MISMATCH_COUNT:-0}" -eq 0 ] \
-   && [ "${MISSING_COUNT:-0}" -eq 0 ] && [ "${UNREADABLE_COUNT:-0}" -eq 0 ]; then
+   && [ "${MISSING_COUNT:-0}" -eq 0 ] && [ "${UNREADABLE_COUNT:-0}" -eq 0 ] \
+   && [ "${RETIRED_COUNT:-0}" -eq 0 ]; then
   READY_JSON="true"
   READY_REASON="codePath exists, is not a refused location, frameworks is set, and the registry row agrees with the project file"
 else
@@ -630,6 +678,7 @@ else
   # otherwise. Two answers to one question, and a person acts on the readable one.
   [ "${MISSING_COUNT:-0}" -gt 0 ] && reasons+=("$MISSING_COUNT required field(s) missing")
   [ "${UNREADABLE_COUNT:-0}" -gt 0 ] && reasons+=("$UNREADABLE_COUNT field(s) not well-formed")
+  [ "${RETIRED_COUNT:-0}" -gt 0 ] && reasons+=("$RETIRED_COUNT retired field(s) present")
   READY_REASON="$(IFS='; '; echo "${reasons[*]}")"
 fi
 
@@ -643,11 +692,12 @@ case "$SAFETY_VERDICT" in
   *)
     if [ "$CODEPATH_EXISTS_JSON" = "false" ]; then
       EXIT_CODE=2
-    elif [ "$MISSING_COUNT" -gt 0 ] || [ "$UNREADABLE_COUNT" -gt 0 ] || [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
+    elif [ "$MISSING_COUNT" -gt 0 ] || [ "$UNREADABLE_COUNT" -gt 0 ] || [ "$RETIRED_COUNT" -gt 0 ] \
+         || [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
       EXIT_CODE=1
     elif [ "$REG_MISSING_COUNT" -gt 0 ] || [ "$REG_UNREADABLE_COUNT" -gt 0 ] \
          || [ "$REGISTRY_ROW_FOUND" = "false" ] || [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ] \
-         || [ "$DUPLICATE_NAME_COUNT" -gt 0 ]; then
+         || [ "$DUPLICATE_NAME_COUNT" -gt 0 ] || [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ]; then
       EXIT_CODE=4
     elif [ "$GIT_IS_REPO" = "false" ] || [ "$GIT_HAS_UNCOMMITTED" = "true" ]; then
       EXIT_CODE=6
@@ -668,6 +718,8 @@ fi
 # ---------------------------------------------------------------------------
 
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+# The name a repair line gives an action, which takes a project's name.
+REPAIR_NAME="$(echo "$NAME_VALUE_JSON" | jq -r 'if type == "string" then . else "<name>" end')"
 
 echo "Project: $PROJECT_PATH"
 echo "Checked: $TIMESTAMP"
@@ -710,6 +762,12 @@ else
 fi
 echo
 
+if [ "$RETIRED_COUNT" -gt 0 ]; then
+  echo "Retired fields (the schema no longer declares them, and nothing reads them):"
+  echo "$RETIRED_JSON" | jq -r --arg n "$REPAIR_NAME" '.[] | "  - " + .field + ": " + .detail + "\n      Repair: drop-retired " + $n + " removes it."'
+  echo
+fi
+
 echo "Cross-field checks: $CROSS_FIELD_TEST_NOTE"
 if [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
   echo "$CROSS_FIELD_ISSUES_JSON" | jq -r '.[] | "  - " + .field + ": " + .reason + ".\n      " + .detail'
@@ -733,6 +791,12 @@ else
   if [ "$DUPLICATE_NAME_COUNT" -gt 0 ]; then
     echo "    Duplicate names found:"
     echo "$DUPLICATE_NAMES_JSON" | jq -r '.[] | "      - \"" + .name + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
+  fi
+  echo "  No two registry rows share a code path. $DUPLICATE_CODEPATH_TEST_NOTE"
+  echo "    The test compares the spellings the registry holds, so two spellings of one directory are not seen as one."
+  if [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ]; then
+    echo "    Duplicate code paths found. The directory resolves to one of these rows and nothing says which:"
+    echo "$DUPLICATE_CODEPATHS_JSON" | jq -r '.[] | "      - \"" + .codePath + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
   fi
   echo "  Registry row for this project: $REGISTRY_ROW_NOTE"
   if [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ]; then
@@ -767,6 +831,25 @@ if [ "$GIT_IS_REPO" = "true" ]; then
 fi
 echo
 
+# Version 5 wrote a task rule into the code path's CLAUDE.md that names commands which no longer
+# exist. It is named on every run, so the rewrite stays offered until a person answers it. A
+# recorded decline stops the offer and keeps the fact. No exit code moves: the project file is not
+# at fault. project-actions.sh task-rule replaces the block.
+TASK_RULE_V5="none"
+[ "$CODEPATH_EXISTS_JSON" = "true" ] && TASK_RULE_V5="$(pf_task_rule_v5 "$CODEPATH_VALUE" "$PROJECT_FILE")"
+if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
+  echo "Task rule: version 5, in ${CODEPATH_VALUE%/}/CLAUDE.md. It names /ai-dev-assistant: commands that no longer exist."
+  if [ "${TASK_RULE_V5%% *}" = "malformed" ]; then
+    echo "  Line ${TASK_RULE_V5#* } opens the block, and no end marker follows it, so nothing rewrites or removes it."
+    echo "  Fix it by hand: add $TASK_RULE_V5_END where the block ends, or delete the block."
+  elif [ "$TASK_RULE_V5" = "declined" ]; then
+    echo "  A decline is recorded, so this is not offered again. task-rule $REPAIR_NAME still rewrites it."
+  else
+    echo "  Repair: task-rule $REPAIR_NAME rewrites it in place. task-rule $REPAIR_NAME --decline keeps it and records the answer."
+  fi
+  echo
+fi
+
 echo "Ready for work: $READY_JSON"
 [ "$READY_JSON" = "false" ] && echo "  $READY_REASON"
 
@@ -789,6 +872,7 @@ jq -n \
   --argjson codePath "$CODEPATH_VALUE_JSON" \
   --argjson missingFields "$MISSING_JSON" \
   --argjson unreadableFields "$UNREADABLE_JSON" \
+  --argjson retiredFields "$RETIRED_JSON" \
   --argjson crossFieldIssues "$CROSS_FIELD_ISSUES_JSON" \
   --argjson codePathExists "$CODEPATH_EXISTS_JSON" \
   --arg codePathSafety "$SAFETY_VERDICT" \
@@ -798,6 +882,7 @@ jq -n \
   --argjson registryMissingFields "$REG_MISSING_JSON" \
   --argjson registryUnreadableFields "$REG_UNREADABLE_JSON" \
   --argjson duplicateRegistryNames "$DUPLICATE_NAMES_JSON" \
+  --argjson duplicateRegistryCodePaths "$DUPLICATE_CODEPATHS_JSON" \
   --argjson registryRowFound "$REGISTRY_ROW_FOUND" \
   --arg registryRowMatchedBy "$REGISTRY_ROW_MATCHED_BY" \
   --argjson registryMismatches "$REGISTRY_MISMATCHES_JSON" \
@@ -816,6 +901,7 @@ jq -n \
     codePathSafety: {verdict: $codePathSafety, detail: $codePathSafetyDetail},
     missingFields: $missingFields,
     unreadableFields: $unreadableFields,
+    retiredFields: $retiredFields,
     crossFieldIssues: $crossFieldIssues,
     ignoredFiles: $ignoredFiles,
     registry: {
@@ -823,6 +909,7 @@ jq -n \
       missingFields: $registryMissingFields,
       unreadableFields: $registryUnreadableFields,
       duplicateNames: $duplicateRegistryNames,
+      duplicateCodePaths: $duplicateRegistryCodePaths,
       rowFound: $registryRowFound,
       rowMatchedBy: $registryRowMatchedBy,
       mismatches: $registryMismatches

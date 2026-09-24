@@ -74,7 +74,9 @@ so implementation never asks the same question again.
 
 No stage runs the tool skill on its own. The build's precondition check names a condition that
 is unmet and who owns it, and `/aida:tool run <tool>` answers it. You can type that yourself, and
-Claude can invoke it. A command that is not found is the signal to install. `/aida:tool install
+Claude can invoke it. Anything you want passed to the tool that run goes after `--`. The record
+it writes opens with the command as it ran, arguments and all, so it says what produced its
+output. A command that is not found is the signal to install. `/aida:tool install
 <tool>` follows the recipe's steps after you have seen them, and it refuses when nobody is
 present, because an install changes your project. The skill knows no tool's name and no
 framework's habits.

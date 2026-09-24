@@ -27,6 +27,7 @@
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`
+#   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
 #
 # Portability: bash 3.2+ and zsh. Every `case` pattern below is a literal word, never a variable.
@@ -65,6 +66,36 @@ BR_ORDER_FACTS_JQ='
       elif $p == "observe" then {slot: "observed",           range: "code",    ownsCode: true}
       else                      {slot: "order-tests",        range: "code",    ownsCode: true}
       end;'
+
+# The roles one order's proof kind dispatches, and the catalog points its tests step asks. $1 one
+# work order document. Sets two space-separated lists. It reads the slot br_order_facts sets, so a
+# fifth kind is still one edit above. `read` prints both on the order's line, the tests step reads
+# them there, and dispatch-open refuses a role in BR_KIND_ROLES that the order's list lacks.
+#
+# A fixer is not listed: an open finding decides it, not a kind. `point: implement` is on every
+# kind, because the tests step takes the oracle globs from it and a gate order runs its
+# `## Configuration gate`. The test author and the row-checker read `point: test-authoring`.
+# The row-checker takes the recipe path on every dispatch (agents/row-checker.md), a record
+# order's done-when row included, so a `record` order asks for it too.
+#
+# Three rules keep roles on these lists. Do not cut them to save a dispatch.
+# - The per-order reviewer is on every kind. A passing check says the order met its own check;
+#   only the reviewer reads the diff against the contract.
+# - The row-checker stays on a `record` order. Its done-when row is that order's only check, so
+#   without the checker nothing judges the deliverable before the build.
+# - No top-tier critic leaves because an order is small. A small diff can still break a criterion,
+#   and a missed defect costs the same whatever the size.
+BR_KIND_ROLES="test-author row-checker implementer reviewer"
+BR_ORDER_ROLES=""; BR_ORDER_LOOKUPS=""
+# shellcheck disable=SC2034 # read by the sourcing script
+br_order_needs() {
+  br_order_facts "$1"
+  case "$BR_ORDER_SLOT" in
+    order-tests) BR_ORDER_ROLES="test-author row-checker implementer reviewer"; BR_ORDER_LOOKUPS="test-authoring implement" ;;
+    done-when)   BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="test-authoring implement" ;;
+    *)           BR_ORDER_ROLES="implementer reviewer";                         BR_ORDER_LOOKUPS="implement" ;;
+  esac
+}
 
 # What the frozen snapshot's proof kinds mean for a check that is about to answer. $1 the snapshot
 # document. Prints two words separated by a tab: whether any order commits in the code repository,

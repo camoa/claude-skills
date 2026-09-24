@@ -46,14 +46,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 #      runMode absent counts as passing here, never as a missing field: task-schema.json's own
 #      description says a task that never asked for autonomous leaves it unwritten forever, "and
-#      nothing at creation writes it." schema-check.sh reports every schema property absent from
-#      the file as missing, with no way to mark one field's absence as the expected shape rather
-#      than a gap; deciding what a finding means for the exit code is this script's own call to
-#      make, per schema-check.sh's own header ("it does not decide an exit code"), so this is
-#      that call, not a change to either frozen file. runMode's absence is still shown under
-#      "Missing fields" below, since nothing here is dropped silently; it is only left out of
-#      what raises the exit code.
-#   1  One or more fields other than runMode are missing from task.json, or a field of any name
+#      nothing at creation writes it." Nothing here has to arrange that. schema_check_compare
+#      builds its `missing` list from the schema's own `required` array, and that array names
+#      schemaVersion, id, state, parent and children alone. A runMode this script never sees in
+#      that list is a runMode it can never subtract from the count. A runMode present with a
+#      value the enum refuses is a different fact. It lands in `unreadable` and it does raise
+#      the exit code, which is the right answer.
+#   1  One or more fields are missing from task.json, or a field of any name
 #      is present with the wrong shape. Each is named, on stdout, with the text that would
 #      produce it. Nothing is repaired; a repair is proposed. A missing or malformed id, state,
 #      parent or children field also stops the matching family check from running; the report
@@ -204,13 +203,7 @@ FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
 # would subtract twenty from a count of top-level fields and print a number below zero.
 WELL_FORMED_COUNT="$(echo "$COMPARE_JSON" | jq '.wellFormedCount')"
 
-# runMode absent is the normal, safe state for a task that never asked for autonomous
-# (task-schema.json's own description; foundations.md, Run mode). It is still shown below under
-# "Missing fields", exactly as schema_check_compare reported it; it is only left out of the count
-# that decides the exit code, a caller-owned policy schema-check.sh leaves open by design.
-RUNMODE_MISSING="$(schema_check_field_named_in "$MISSING_JSON" "runMode")"
 SCHEMA_ISSUE_COUNT=$((MISSING_COUNT + UNREADABLE_COUNT))
-[ "$RUNMODE_MISSING" = "true" ] && SCHEMA_ISSUE_COUNT=$((SCHEMA_ISSUE_COUNT - 1))
 
 field_ok() {
   # $1 = field name. Prints "true" when that field is named in neither missing nor unreadable.
@@ -395,9 +388,6 @@ if [ "$MISSING_COUNT" -gt 0 ]; then
   echo "$MISSING_JSON" | jq -r '.[] | "  - " + .field + ": not set.\n      " + .detail'
 else
   echo "No missing fields."
-fi
-if [ "$RUNMODE_MISSING" = "true" ]; then
-  echo "  runMode absent does not count toward this check's own exit code: see the header comment."
 fi
 echo
 

@@ -15,6 +15,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh        (sourced, never executed)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the version 5 markers and the
+#                                                          retired fields)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -108,6 +110,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh agentic-source <projectFolder> <framework>
        project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
+       project-actions.sh drop-retired <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] unregister <name-or-codePath>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
        project-actions.sh [--run-mode <interactive|autonomous>] task-rule-remove <name-or-codePath>
@@ -128,6 +131,8 @@ source "$REGISTRY_LIB"
 source "$COMMIT_LIB"
 # shellcheck source=/dev/null
 source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -234,9 +239,14 @@ resolve_row_by_project_path() {
 # derived value, never something to commit (foundations.md, State). The unanchored pattern
 # covers a task's own records folder too: a task check writes one per task.
 # hooks/pre-compact.sh skips this folder for the same reason, so it never sees a stage that writes
-# only here. Research's playbooks step already does. That is safe on two counts: nobody answers
-# anything in it, and each record it writes has a producer that runs again. So a record must never
-# live only here when it carries a person's answer, or when nothing can produce it again.
+# only here. Research's playbooks step already does. That is safe for the reason every file here
+# must satisfy. No file here carries a person's answer, and no file here is the only copy of
+# anything a person still needs. A record that cannot be made again is either consumed in the next
+# window, or it is output a person already saw on stdout.
+# The same file does not always come back. Four of these records are written by an agent, so a
+# second dispatch returns a different document. tests/records-folder.txt names every file this
+# folder may hold and what makes each one. tests/records-folder-spec.sh fails on a name outside
+# that list, and the list's header names what the spec cannot see.
 write_project_gitignore() {
   cat > "$1/.gitignore" <<'EOF'
 *
@@ -524,10 +534,6 @@ register_v5_folder() {
   write_project_file "$folder" "$code_path" "$name" "$fw_json" \
     || die3 "the registry row was written, but $folder/project.json could not be. Run rebuild-registry after fixing the folder."
   echo "PICKED UP: ${folder}"
-  # Version 5 wrote a task rule naming its own commands. Printed so the skill offers the rewrite
-  # once; task-rule replaces a block between the version 5 markers.
-  [ -f "$code_path/CLAUDE.md" ] && grep -qF "$TASK_RULE_V5_BEGIN" "$code_path/CLAUDE.md" 2>/dev/null \
-    && echo "TASK_RULE: version 5"
   # The tasks the folder already holds, in version 5's own place, one line each, so the skill
   # can name them and the step that moves one. Folder names only; nothing inside them is read.
   local legacy
@@ -590,6 +596,7 @@ register_v6_folder() {
 
 do_switch() {
   local target="${1:?switch: a name or a code path is required}" match project_path cwd
+  local registered=0 rc
   match="$(resolve_target "$target")"
   # A project that is still registered, named by its own folder path. resolve_target reads a name
   # and a code path, so it misses that address. The version 6 pickup below would then refuse on
@@ -601,9 +608,11 @@ do_switch() {
   # every folder the second branch takes. A folder holding both files is a version 5 pickup that
   # already ran: its project file is the truth, and the version 5 branch would overwrite it.
   if [ -z "$match" ] && register_v5_folder "$target"; then
+    registered=1
     target="$(basename -- "$(canon_path "$target")")"
     match="$(resolve_target "$target")"
   elif [ -z "$match" ] && register_v6_folder "$target"; then
+    registered=1
     target="$PICKED_UP_NAME"
     match="$(resolve_target "$target")"
   fi
@@ -630,7 +639,19 @@ do_switch() {
   echo "PROJECT: ${project_path}"
   project_line "$match"
   echo "project-file: ${project_path}/project.json"
-  run_check "$project_path"
+  run_check "$project_path"; rc=$?
+  # An exit code says whether the action did its job. A pickup wrote the registry row, so it did.
+  # Both pickups register a folder whose fields no producer has filled yet, and the check is then
+  # never 0. Returning what it returned reported a failure over work that succeeded. The findings
+  # still reach the person: the report is printed above, and the check wrote its own record.
+  # Two codes pass through a pickup all the same. Exit 3 says the check could not run, so there
+  # are no findings to read, and exit 5 says the code path names a refused location. The version 6
+  # pickup refuses on both before it registers anything; the version 5 branch reaches them here.
+  case "$rc" in
+    3|5) return "$rc" ;;
+  esac
+  [ "$registered" -eq 0 ] || return 0
+  return "$rc"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1025,6 +1046,37 @@ do_subscription() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# drop-retired: the repair the check names for a field the schema retired
+# ------------------------------------------------------------------------------------------------
+
+# A retired field has no producer to run again, so dropping it is its one repair. This drops
+# exactly the names project-schema.json lists under `retired`. A field that is undeclared and not
+# retired may be a person's own, so it stays and the check keeps naming it. Only AIDA's own
+# project file changes, so this runs in both modes.
+do_drop_retired() {
+  local target="${1:?drop-retired: a name or a code path is required}" match project_path retired present subject
+  match="$(resolve_target "$target")"
+  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  retired="$(pf_retired_fields "${PLUGIN_ROOT}/scripts/project-schema.json" "$project_path/project.json")" \
+    || die3 "drop-retired: $project_path/project.json could not be read"
+  present="$(printf '%s' "$retired" | jq -r 'map(.field) | join(" ")')"
+  if [ -z "$present" ]; then
+    echo "UNCHANGED: $project_path/project.json holds no retired field."
+  else
+    write_project_field "$project_path" "could not drop the retired fields from $project_path/project.json" \
+      --argjson r "$retired" 'delpaths($r | map([.field]))'
+    subject="Drop the retired field $present"
+    case "$present" in *" "*) subject="Drop the retired fields $present" ;; esac
+    commit_project "$project_path" "$subject" "the project schema retired it, and nothing reads it" \
+      "" "" "project" "retired" project.json \
+      || printf 'project-actions: the retired fields were dropped but not committed.\n' >&2
+    echo "DROPPED: $present"
+  fi
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
 # unregister: drops the row, leaves both folders untouched
 # ------------------------------------------------------------------------------------------------
 
@@ -1069,8 +1121,17 @@ TASK_RULE_BEGIN="<!-- task-rule:begin -->"
 TASK_RULE_END="<!-- task-rule:end -->"
 # Version 5's own markers. The write path replaces a block between them and the remove path takes
 # one out, so a picked-up repository never holds two blocks. --decline looks only for this version's.
-TASK_RULE_V5_BEGIN="<!-- ai-dev-assistant:task-rule:begin -->"
-TASK_RULE_V5_END="<!-- ai-dev-assistant:task-rule:end -->"
+# TASK_RULE_V5_BEGIN and TASK_RULE_V5_END come from scripts/lib/project-findings.sh.
+
+# Stops the script when a block in $1, between the markers $2 and $3, opens and never closes. The
+# text below that marker may be the person's own, so neither the rewrite nor the removal runs
+# blind. The detection is scripts/lib/project-findings.sh's, the same one the check reports.
+refuse_open_block() {
+  local lines
+  lines="$(pf_block_lines "$1" "$2" "$3")"
+  [ "${lines#* }" != "0" ] \
+    || die3 "$1: line ${lines%% *} holds $2 and no end marker follows it. Nothing was changed. Add $3 where that block ends, or delete the block by hand, then run this again."
+}
 
 task_rule_block() {
   local project_name="$1"
@@ -1155,6 +1216,8 @@ do_task_rule() {
   }
 
   claude_md="${code_path%/}/CLAUDE.md"
+  refuse_open_block "$claude_md" "$TASK_RULE_V5_BEGIN" "$TASK_RULE_V5_END"
+  refuse_open_block "$claude_md" "$TASK_RULE_BEGIN" "$TASK_RULE_END"
   present="false"
   [ -f "$claude_md" ] && grep -qF -e "$TASK_RULE_BEGIN" -e "$TASK_RULE_V5_BEGIN" "$claude_md" 2>/dev/null && present="true"
 
@@ -1177,7 +1240,7 @@ do_task_rule() {
     block_file="$(mktemp)"
     task_rule_block "$project_name" > "$block_file"
     awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v vb="$TASK_RULE_V5_BEGIN" -v ve="$TASK_RULE_V5_END" -v bf="$block_file" '
-      index($0,b) || index($0,vb){ while ((getline line < bf) > 0) print line; close(bf); skip=1; next }
+      index($0,b) || index($0,vb){ if (!done) { while ((getline line < bf) > 0) print line; close(bf); done=1 } skip=1; next }
       index($0,e) || index($0,ve){ skip=0; next }
       !skip{print}
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
@@ -1222,22 +1285,19 @@ do_task_rule_remove() {
 
   local claude_md="${code_path%/}/CLAUDE.md"
   if [ -f "$claude_md" ] && grep -qF -e "$TASK_RULE_BEGIN" -e "$TASK_RULE_V5_BEGIN" "$claude_md" 2>/dev/null; then
+    refuse_open_block "$claude_md" "$TASK_RULE_V5_BEGIN" "$TASK_RULE_V5_END"
+    refuse_open_block "$claude_md" "$TASK_RULE_BEGIN" "$TASK_RULE_END"
     local tmp
     tmp="$(mktemp)"
+    # Every block of either kind goes, with the one blank line above it. A blank line is held
+    # back until the next line shows whether a block follows it.
     awk -v b="$TASK_RULE_BEGIN" -v e="$TASK_RULE_END" -v vb="$TASK_RULE_V5_BEGIN" -v ve="$TASK_RULE_V5_END" '
-      { lines[NR] = $0 }
-      END {
-        for (i = 1; i <= NR; i++) {
-          if (index(lines[i], b) || index(lines[i], vb)) bi = i
-          if (index(lines[i], e) || index(lines[i], ve)) ei = i
-        }
-        if (bi == 0) { for (i = 1; i <= NR; i++) print lines[i]; exit }
-        if (ei == 0) ei = bi
-        start = bi
-        if (bi > 1 && lines[bi-1] == "") start = bi - 1
-        for (i = 1; i < start; i++) print lines[i]
-        for (i = ei + 1; i <= NR; i++) print lines[i]
-      }
+      index($0,b) || index($0,vb) { held = 0; skip = 1; next }
+      skip { if (index($0,e) || index($0,ve)) skip = 0; next }
+      { if (held) print ""; held = 0 }
+      $0 == "" { held = 1; next }
+      { print }
+      END { if (held) print "" }
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
       rm -f "$tmp"
       echo "REFUSED: rewriting ${claude_md} failed. The task rule was not removed." >&2
@@ -1268,9 +1328,13 @@ do_uninstall() {
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
-  local task_rule_state
+  local task_rule_state code_path
   task_rule_state="$(jq -r '.taskRule' "$project_path/project.json" 2>/dev/null)"
-  if [ "$task_rule_state" != "null" ] && [ -n "$task_rule_state" ]; then
+  code_path="$(printf '%s' "$match" | jq -r '.codePath')"
+  # A version 5 block is AIDA's own instruction too. A project picked up before the offer existed
+  # holds one with taskRule still null, and the remove path takes that block out as well.
+  if { [ "$task_rule_state" != "null" ] && [ -n "$task_rule_state" ]; } \
+     || [ -n "$(pf_task_rule_v5 "$code_path" "$project_path/project.json")" ]; then
     do_task_rule_remove "$target"
   else
     echo "TASK RULE: not offered for this project; nothing to remove."
@@ -1496,6 +1560,7 @@ case "$action" in
   agentic-source) do_agentic_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;
+  drop-retired) do_drop_retired "$@" ;;
   unregister) do_unregister "$@" ;;
   task-rule) do_task_rule "$@" ;;
   task-rule-remove) do_task_rule_remove "$@" ;;

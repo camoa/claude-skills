@@ -1,0 +1,72 @@
+# What a records/ folder may hold: <name> | <its producer> | <what makes it again>.
+# A project folder and a task folder each have one. Two things are true of every file here.
+# No file here carries a person's answer. And no file here is the only copy of anything a person
+# still needs. That pair is why hooks/pre-compact.sh may skip the folder. A record failing either
+# one does not belong here.
+#
+# Not every record can be made again. compacted.json is written from the clock at the instant an
+# automatic compaction fired, and nothing can cause one on demand. It passes because
+# hooks/session-start.sh consumes it in the next window and removes it. A record that cannot be
+# made again is either consumed like that, or it is output a person already saw on stdout.
+#
+# It is not that the same file comes back. Four of these are written by an agent and not by a
+# script: design-critique-<>.md, <>-distill.json, research-split.json and playbooks-catalog.json.
+# A second dispatch reads the same inputs and returns a different document. The catalog also needs
+# the guide service reachable. An entry naming an agent in column two is one of these four.
+#
+# tests/records-folder-spec.sh reads this list. It fails on a name under records/ that is not
+# here, and on a name here that nothing references.
+# A segment that varies reads as <>: ${TOOL}, <stage> and * all normalize to it.
+#
+# What the spec reads as a write. Every file under scripts/, skills/, hooks/, agents/, templates/,
+# evals/ and .claude-plugin/. It joins a backslash continuation first, so a path split over two
+# lines reads as one path. It strips the quotes next, so a split literal reads as one path too.
+# It reads every name after records/, a name with no dot included, so a subfolder counts too.
+# It follows a variable one file assigned a path ending in /records, with or without a trailing
+# slash. It reads the -name pattern of a find over a records folder, named outright or through
+# such a variable. That is how the design close names the critique files it moves. It refuses a
+# file name built at run time, and a cd into a records folder, because it can read neither.
+#
+# An agent given its output path by its dispatch is read through the dispatch. Every dispatch site
+# is a skill body, a skill reference or a skill script, and the scan holds all three.
+#
+# The spec reads the pages a person reads too: docs/, README.md and CHANGELOG.md. A page is not a
+# write. It is prose for a person, and no model runs it. A name a page gives must be on this list,
+# and a page alone never keeps a line here alive. So a line naming a record nothing writes any more
+# still fails, even while a page still names it. The way out of that failure is to edit the page.
+#
+# What it cannot see, in three shapes, and each makes it read less than it should.
+#
+# One: a records folder passed as an argument and not assigned, as in
+# `write_into "$d/records" "$n"`. `mkdir -p "$d/records"` is that same shape and is correct, so a
+# rule here needs a command list that goes stale.
+#
+# Two: a records folder a variable takes from a command substitution, as in `d="$(records_dir)"`.
+# The path is in what the command returns, and the spec would have to run it to learn that. Name
+# the folder in the assignment instead, and the spec reads every write through the variable.
+#
+# Three: a use of a variable after the file's last records assignment, where a nearer line gave
+# that variable another path. The spec stops following there. It is a real write only when a loop
+# or a call order puts the records path back, which nothing here does.
+#
+check-project.json | scripts/check-project.sh | every project check writes it, and a pickup writes it too
+check-task.json | scripts/check-task.sh | every task check writes it, and `task start` ends by running one
+compacted.json | hooks/pre-compact.sh | every automatic compaction writes it, and hooks/session-start.sh names it once and removes it
+design-check.json | skills/design/scripts/design-actions.sh, action `check` | the action runs scripts/check-design.sh into it again
+design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again. The close moves every one into design/, an unfinished one under an unfinished- prefix
+<>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again
+design-distill.json | the distiller agent | design close dispatches the distiller again
+environment-down.txt | skills/task/scripts/task-actions.sh, action `environment down` | the action runs the tear-down lines again
+environment-up.txt | skills/task/scripts/task-actions.sh, action `environment up` | the action runs the bring-up lines again
+playbooks-catalog.json | the playbook-loader agent | the research skill dispatches the loader again
+playbooks.json | skills/playbooks/scripts/playbook-actions.sh, action `load` | the action reads the catalog record again
+playbooks.md | skills/playbooks/scripts/playbook-actions.sh, action `load` | the action renders it from playbooks.json again
+research-check.json | skills/research/scripts/research-actions.sh, action `check` | the action runs scripts/check-research.sh into it again
+research-distill.json | the distiller agent | research close dispatches the distiller again
+research-split.json | the split-advisor agent | the research skill dispatches the advisor again after the coverage check
+scope-distill.json | the distiller agent | scope close dispatches the distiller again
+surfaces-<>-install.txt | skills/surfaces/scripts/surfaces-actions.sh, action `install` | the action runs the install steps again
+surfaces-baseline.txt | skills/surfaces/scripts/surfaces-actions.sh, action `baseline` | the action runs the accept command again
+tool-<>-<>.txt | skills/tool/scripts/tool-actions.sh | the action runs the tool command again
+tool-<>-install.txt | skills/tool/scripts/tool-actions.sh, action `install` | the action runs the install command again
+tool-<>-run.txt | skills/tool/scripts/tool-actions.sh, action `run` | the action runs the tool command again

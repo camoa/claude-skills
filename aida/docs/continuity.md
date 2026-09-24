@@ -43,6 +43,11 @@ Before your first turn, a session-start hook prints a short block. Standing insi
 code, or in a folder you once chose a project from, it says:
 
 - which project owns this directory;
+- one line when your code repository's `CLAUDE.md` still holds the task rule version 5 wrote and
+  you have not answered the rewrite offer. It tells the session not to follow that block, and
+  names `/aida:project` as where the offer is;
+- one line when the project file holds a field the project schema retired, naming
+  `/aida:project drop-retired <name>` as the repair;
 - the task in progress, its id and its stage, and the newest saved note with its date and path;
 - one line when the last session was compacted automatically, below;
 - the run mode, when the task runs autonomously;

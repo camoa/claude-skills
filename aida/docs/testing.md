@@ -145,16 +145,31 @@ comes when the task is created, if that window entered the worktree. It comes ag
 task starts, whichever stage starts it, while the task records no answer. `/aida:next` writes
 nothing and offers nothing. A no is recorded with your reason, so nothing asks again.
 `/aida:task environment <task-id> up` still brings it up later, and `show` in place of `up`
-prints what it would run without running it.
+prints the commands `up` would run.
 
 `show` lists the files the recipe writes, the preconditions it checks, and the commands it runs.
-A failing precondition stops the step with the script's message and leaves nothing behind. A
+`show` runs the precondition checks too, so a site that cannot come up is never offered. It
+leaves the worktree as it found it and commits nothing. A failing precondition stops the step
+with the script's message and leaves nothing behind. When that message says to commit, AIDA
+names the branches. A commit on the task's own branch reaches the worktree at once, and review
+reads it as part of the task. A commit on the branch the worktree was cut from reaches the
+worktree only after you merge it into the task's branch. A
 site that resolved to a tree other than the worktree stops it too, because a capture of the
 wrong tree is worse than none. With a kind on, the harness is installed in the tree as well. On
 success you see one address line. The address is recorded in the task, and review and the
 baseline step read it instead of asking.
 
-`/aida:task environment <task-id> down` tears the site down and clears the address. Do it before
+The task records the site before the site exists. Before the first bring-up command runs, AIDA
+writes a marker naming the recipe and the time. A bring-up that fails leaves that marker, so the
+tear-down can still find what is running. A marker on a task with no site carries no address, so
+nothing reads it as a site that is up. On a task whose site is already up, the marker keeps that
+address, so a bring-up you run again and that fails leaves you where you were. The full record
+replaces the marker as soon as the address answers. A task that starts with a marker on it says
+so, and asks you to tear the site down first.
+
+`/aida:task environment <task-id> down` tears the site down and clears the address. It works from
+a marker too, and reads the values the tear-down needs from the output of the bring-up's own
+address command. A value it cannot find stops it, and it names what is missing. Do it before
 the worktree is removed, or the framework keeps an orphaned entry. `/aida:task prune`, which
 removes the worktrees of complete tasks, tears the site down first for the same reason.
 

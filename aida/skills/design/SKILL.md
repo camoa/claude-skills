@@ -49,7 +49,9 @@ skill. Stop; there is nowhere to write.
 
 An invocation line whose first word is `close` is the person's yes on the design. The task is
 the word after it, or the active one. Go straight to "Close the design" below. When no
-`records/design-critique-*.md` exists yet, run "Critique the design" first.
+`design-critique-*.md` exists yet, under `records/` or under `design/`, run "Critique the design"
+first. An earlier close moved the files into `design/`, so look in both. A name that begins
+`unfinished-` is a critique that stopped, and it counts as no critique here.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -112,8 +114,9 @@ address for each; open it through the navigator the same way, and read a project
 directly. A tooling recipe has no navigator mode yet. Fetch its body from the address research
 recorded, check its sha256 against the catalog line, and store it by hand. Record it below the
 same way. That stands until the navigator's `tooling --name` mode exists. One agentic recipe
-covering the work means the decision is already made: follow it. Two: read both, pick the one
-that fits, say why, and build from that one alone. None: architect from the findings and from
+covering the work means the decision is already made: follow it. Its `## Verifier` becomes the
+proof of each order it covers, as "Carry the proof from its source" says. Two: read both, pick
+the one that fits, say why, and build from that one alone. None: architect from the findings and from
 this project's own conventions; this is where design quality shows.
 
 Record each body as it is read, once the navigator has given its path on disk:
@@ -169,8 +172,9 @@ AIDA cannot know on its own:
 - What kinds of thing a work order can be about here. In Drupal a module, a service, a plugin, a
   theme, a component, a configuration entity. This is what an order is sized around.
 - What is built with configuration rather than code. A view or a content type is a work order
-  with no code in it. It states no test. Its proof is the implement recipe's
-  `## Configuration gate` lines, so it is created with `--proof gate`. The recipe's sizing rule decides what it owns.
+  with no code in it. It states no test. It is created with `--proof gate`. Its proof is its own
+  verify lines, then the implement recipe's `## Configuration gate` lines. The recipe's sizing
+  rule decides what it owns.
 - What is a document rather than code or configuration: a dependency review, a report, a note.
   Such an order owns files under the project folder, in a folder the project commits, the task
   folder's `deliverables/` by default. A report may land beside earlier reports elsewhere in
@@ -197,11 +201,22 @@ AIDA cannot know on its own:
   feature, so the feature is reachable without its UI.
 - What order the framework forces, where it forces one.
 
-**The proof follows the criteria, and `tests` is the default.** The contract already says what
-would settle each criterion, in its `verification` clause and its `verifiedBy` value. `create` and
-`update` print `impliedProof:`, what the owned criteria imply, beside the proof the order declares.
-The default is `tests` because a wrongly tested configuration order wastes one build, and a wrongly
-untested code order ships unproven.
+**The proof follows what the order produces.** Ask what the order leaves behind when it is done,
+and pick the kind from that answer:
+
+- Code that a test can pin: `tests`.
+- Tools run that change state, such as a dependency update, a database update or a
+  configuration export: `gate`. Nothing new exists for a test to pin, and a test written for it
+  only restates a file.
+- A document or an analysis, such as a report or a review: `record`.
+- Something only a person or a browser can see: `observe`.
+
+A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
+tests, the gate lines, the checks on the record, or the look. `create` and `update` print
+`impliedProof:` beside the proof the order declares. It says `record` when every owned file lies
+under the project folder, and `any kind` for a machine-verified criterion. What the order
+produces decides. When the product is truly unclear, `tests` stays the default. A wrongly
+tested configuration order wastes one build, and a wrongly untested code order ships unproven.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
 `reasoning` of every order in this pass. Do not invent a kind of unit and do not guess at a
@@ -459,6 +474,51 @@ flags are refused together.
 When `--proof` becomes `gate`, `record` or `observe`, `update` prints `stillNamesATest:` naming
 each of `interface`, `reasoning` and `diffBudget` that still names a test file.
 
+## Carry the proof from its source
+
+The knowledge that covers an order says how to verify it. Carry that onto the order, in the
+form its kind takes. A `run` entry is one command a script runs. A `check` entry is one sentence
+a model judges. Every entry cites its source and says whether it is binding.
+
+**An agentic recipe covers the order.** Copy its `## Verifier`:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
+  --id <woId> --recipe "<the recipe body's path on disk>" [--not-binding]
+```
+The script copies each entry of the `verifier:` block as a run entry, with its `pass` and its
+`kind`. It copies
+each numbered item of the prose as a check entry, verbatim. It reads nothing else, and it never
+turns a sentence into a command. Today's recipes hold prose only, so they give checks. Pass
+`--not-binding` when research said the source is not one this project accepted.
+
+**No recipe covers it, and research found how to verify it.** Add one entry per finding:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
+  --id <woId> --run "<one command>" [--pass "<exit 0 | stdout empty | stdout contains <text>>"] \
+  [--kind <config-assert|live-site|self-fixture>] --cite "<the source research recorded>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
+  --id <woId> --check "<one sentence to judge>" [--kind <config-assert|live-site|self-fixture>] \
+  --cite "<the source research recorded>"
+```
+Write a `--run` only when the source gives the command. Prefer a command whenever it does. A
+source that describes a result in words gives a `--check`. Such an entry is never binding.
+Give `--kind live-site` when the check needs a served site; the source says so or it does not.
+A research `--run` never runs until a person approves it at the close. Without that, the
+reviewer judges it as a check.
+`--clear` empties the list, and `--recipe` replaces it.
+
+A run line is argv, never a shell, so the script refuses a shell character. It also refuses a
+pass outside the three forms. Read the refusal and write the entry again, or leave it out and
+say why in the `reasoning`.
+
+What each kind does with the entries:
+
+- `gate`: the run entries run first, then the `## Configuration gate`. The worse verdict stands.
+- `tests`, `record` and `observe`: the run entries run in the order's first deciding check,
+  after its own answer, from the code worktree. The check is met only when both are.
+- Every kind: the reviewer judges each check entry. On an `observe` order the look also judges
+  each `live-site` check as a row of its own, because only that kind shows on a page.
+
 ## Serving a criterion is not completing it
 
 The decidable half is what the check below counts: an owner exists, is exactly one, and declares
@@ -500,6 +560,13 @@ zero it adds one `open:` line naming what is open. The report holds:
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
+
+`check` also prints `verifyNotBinding:`, the orders holding an entry that is not binding.
+Interactive: before the close, show each such order's entries with their sources. Say that the
+source is not one this project accepted. The person keeps each entry, drops it with `--clear`,
+or asks for another source. A kept run entry runs only when the person also approves it: pass
+`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the line and the rendered order carry it to a person
+later.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
@@ -568,6 +635,12 @@ its `findings:` line, means that lens was not read. Dispatch it again, once. If 
 say so and go on: the close leaves that file out and names it. Read the three files, never the
 dispatch replies.
 
+The close moves each finished file into `<task_folder>/design/` and commits it with the record.
+A critic goes on writing into `records/`, which the project ignores: a critique is a working file
+until the close decides it is evidence. The close moves an unfinished file there too, under the
+name `unfinished-design-critique-<lens>.md`, and leaves it out of the count. It is the only copy
+of what that critic wrote before it stopped.
+
 A person reads the findings, because a critic that can block trains the builder to write for the
 critic. The critic decides nothing about closing, and neither does the count.
 
@@ -585,8 +658,8 @@ person takes, never a question this skill asks. Scope learned this from a run th
 yes on the whole contract after each of five corrections.
 
 **Autonomous:** ask nothing and change nothing. The findings stay in the three files, and the
-close below records their paths and the count, so a person sees them later. Say once, at the
-end of this run, that the critique's findings were recorded and not judged.
+close below commits them and records their paths and the count, so a person sees them later. Say
+once, at the end of this run, that the critique's findings were recorded and not judged.
 
 ## Close the design
 
@@ -597,7 +670,7 @@ those words to the call below. Autonomous, nobody says so: run it once the check
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>" \
-  [--critique-outcome "<one line>"]...
+  [--critique-outcome "<one line>"]... [--approve-runs]
 ```
 Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
 `close` refuses with neither, and a later close restates the verdict rather than carrying it over.
@@ -613,8 +686,8 @@ The record is committed when the stage closes: `close` commits the task folder, 
 edits above commit nothing. Closing records what design closed on: a hash over the contract and every work order, the run mode,
 and who was present. Pass the run mode you settled at the start. An interactive close records
 `person`, an autonomous one records `nobody`, and implementation reads which. It also records the
-critique files under `records/`, their finding count and the outcome line. So a person sees what
-was read and answered before closing.
+critique files it moved into `design/`, their finding count and the outcome line. So a person sees
+later what was read and answered before closing, and can open the files the record names.
 
 A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
 Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and

@@ -44,6 +44,7 @@
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>]   runs one resolved command
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
+#   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
 #   pc_unquote <text>                         the text with one layer of matching outer quotes removed
 #   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
 #   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
@@ -68,7 +69,8 @@
 #   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
 #   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
 #   recipe_files_into <recipe> <heading> <dir>  one file per fenced block; prints <n><TAB><path>
-#   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a shell
+#   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a
+#                                               shell; writes the command, then its output, to <out>
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
@@ -970,6 +972,14 @@ br_filter_extensions() {
   '
 }
 
+# True when the argv array $1 holds `{paths}`, `{file}` or `{dirs}`. br_run_resolved expands each
+# of them from the file list. Such a row reads the caller's files. An empty list is then a row
+# that does not apply, never a run over the tool's own default scope. The build once left `{dirs}`
+# out of this test, so a row over directories ran whole and read met.
+br_argv_takes_paths() {
+  printf '%s' "$1" | jq -e 'any(.[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1
+}
+
 # Strips one layer of matching outer quotes. A recipe writes its expected string quoted, so the
 # value can carry quotes of its own, and the outer pair belongs to the document rather than to the
 # string being looked for.
@@ -1443,6 +1453,10 @@ run_recipe_line() {
   shift 4
   refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
   printf '+ %s\n' "$line"
+  # The record says what ran, above the output that run produced. The extra arguments come from
+  # the conversation, so the recipe line alone does not account for the output, and after a
+  # compaction nothing does. One line per command, so a block of commands reads in order.
+  { printf '+ %s' "$line"; [ "$#" -eq 0 ] || printf ' %s' "$@"; printf '\n'; } >>"$outfile"
   (
     if [ -n "${ZSH_VERSION:-}" ]; then
       setopt SH_WORD_SPLIT 2>/dev/null
@@ -1481,7 +1495,9 @@ run_recipe_lines() {
     before="$(wc -l <"$outfile" | tr -d '[:space:]')"
     run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
     printf '%s step failed: %s\n' "$label" "$line" >&2
-    recipe_output_summary 4 "$outfile" "$((before + 1))"; exit 4
+    # Two past the count: the command's own line, then its first line of output, which is what
+    # `first:` quotes.
+    recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4
   done <<RL_STEPS
 $steps
 RL_STEPS
