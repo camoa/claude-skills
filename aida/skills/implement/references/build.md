@@ -170,7 +170,7 @@ rebuild step has run, and the look waits for that step. A note on a row judged a
 content is a lie.
 
 Judge each of the order's done-when rows against what renders, and each `check` entry of its
-`verify` list the same way. A row that says the page is as it was is judged against the before
+`verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is judged against the before
 image of that surface and viewport. Also judge the
 `verification` clause of each machine criterion the order owns, as a row of its own beside the
 done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
@@ -192,9 +192,8 @@ Then write `<task_folder>/implementation/observed-<order id>.json`:
               "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
               "before": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
-Every done-when row, every verify check and every owned clause goes in, at every surface and
-viewport, and
-`build-record` refuses a record missing one (exit 97). The verdict is what the page
+Every done-when row, every live-site verify check and every owned clause goes in, at every
+surface and viewport, and `build-record` refuses a record missing one (exit 97). The verdict is what the page
 showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
 for such an order and no row was judged before the build, so this look is its check. The judge
 on the record is a model. Completion puts each such criterion to the person.
@@ -331,9 +330,13 @@ This step runs all eight deciding checks. The record holds every one.
   slot is `configuration-gate` instead. Does every line pass, run in the worktree. The order's
   own `verify` run entries run first, then the `## Configuration gate` lines of the implement
   recipe. The worse verdict stands. The first line that does not pass is named, with its
-  output. A placeholder given several `--value` entries runs its line once per value. It reads unknown when the task records no environment, when no `--implement-recipe`
-  was passed, or when that recipe carries no such block. The detail says which. A line 2 that
-  printed `There are no changes to import` is a finding for the reviewer, not for this check.
+  output. A placeholder given several `--value` entries runs its line once per value. It reads
+  unknown when the task records no environment. An order with no verify lines also reads
+  unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
+  An order with verify lines runs them alone then, and the detail says the block did not run.
+  A verify line that is not binding runs only when the person approved it at the design close.
+  A line 2 that printed `There are no changes to import` is a finding for the reviewer, not
+  for this check.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote

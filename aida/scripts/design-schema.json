@@ -144,7 +144,7 @@
       "items": {
         "$ref": "#/$defs/verifyEntry"
       },
-      "description": "How this order's own proof is verified, taken from the knowledge that covers it. Optional: an order no recipe and no research finding covers has none. design-actions.sh's `verify` is its one writer. `--recipe` replaces the list with the covering agentic recipe's `## Verifier`: one `run` entry per entry of its `verifier:` block, and one `check` entry per numbered item of its prose. `--run` and `--check` add one entry from a research finding, never binding. A `run` entry runs through the same runner as a `## Configuration gate` line: argv, never a shell, and a line carrying a shell character is refused. On a `gate` order the run entries run first, and the implement recipe's `## Configuration gate` lines after them, in one check. On every other order they run inside the order's first deciding check, after its own, from the code worktree, and the check is met only when both are. A `check` entry is judged by a model: by the reviewer on every order, and by the look as a row of its own on an `observe` order. The build brief and the review brief carry the list whole."
+      "description": "How this order's own proof is verified, taken from the knowledge that covers it. Optional: an order no recipe and no research finding covers has none. design-actions.sh's `verify` is its one writer. `--recipe` replaces the list with the covering agentic recipe's `## Verifier`: one `run` entry per entry of its `verifier:` block, and one `check` entry per numbered item of its prose. `--run` and `--check` add one entry from a research finding, never binding. Such a run entry runs only once a person approved it at the design close; until then the reviewer judges it as a check. A `run` entry runs through the same runner as a `## Configuration gate` line: argv, never a shell, and a line carrying a shell character is refused. On a `gate` order the run entries run first, and the implement recipe's `## Configuration gate` lines after them, in one check. On every other order they run inside the order's first deciding check, after its own, from the code worktree, and the check is met only when both are. A `check` entry is judged by a model: by the reviewer on every order, and by the look as a row of its own on an `observe` order when its kind is `live-site`. The build brief and the review brief carry the list whole."
     }
   },
   "$defs": {
@@ -204,6 +204,15 @@
               "minLength": 1,
               "description": "The entry's own id in the recipe's `verifier:` block, when it came from one. It names the line in the check's detail."
             },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "config-assert",
+                "live-site",
+                "self-fixture"
+              ],
+              "description": "The kind the source states, from the dev-guides Verifier block: `config-assert` reads configuration, `live-site` needs a served site, `self-fixture` seeds and removes its own data. Absent when the source states none. On an `observe` order only a `live-site` check is a row the look owes, because only that kind is something a page shows."
+            },
             "run": {
               "type": "string",
               "minLength": 1,
@@ -222,6 +231,23 @@
             "binding": {
               "type": "boolean",
               "description": "True when the source is one this project accepted: a recipe from a catalog or a folder the project configured. False for a research finding, and for a recipe research marked as not accepted. A person sees each order holding a false entry before the design closes."
+            },
+            "approved": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "by": {
+                  "type": "string",
+                  "enum": [
+                    "person"
+                  ]
+                },
+                "on": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                }
+              },
+              "description": "Present only on an entry that is not binding, once a person approved the command at the design close: `design-actions.sh close --approve-runs`, attended alone, stamps it before the hash. A model wrote such a command from research, so without this stamp it never runs. The build hands it to the reviewer as a check instead."
             }
           }
         },
@@ -238,6 +264,15 @@
               "type": "string",
               "minLength": 1,
               "description": "One sentence a model judges against what the order built: a numbered item of the recipe's prose, verbatim, or a check a research finding states. Never turned into a command."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "config-assert",
+                "live-site",
+                "self-fixture"
+              ],
+              "description": "The kind the source states, from the dev-guides Verifier block: `config-assert` reads configuration, `live-site` needs a served site, `self-fixture` seeds and removes its own data. Absent when the source states none. On an `observe` order only a `live-site` check is a row the look owes, because only that kind is something a page shows."
             },
             "cites": {
               "type": "string",

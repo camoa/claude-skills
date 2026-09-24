@@ -52,7 +52,8 @@ have none.
 
 **Judge the order's own proof.** The order record's `verify` list holds what design carried from
 the source that covers the order. Each `run` entry already ran in the first check. Read its
-output there. Judge each `check` entry against the diff, the document or the gate output. A
+output there. A `run` entry with `binding: false` and no `approved` never ran: judge it as a
+check, from what the diff shows. Judge each `check` entry against the diff, the document or the gate output. A
 check that does not hold is a finding linked to the order. When its `binding` is false, say in
 the evidence that this project did not accept the source.
 

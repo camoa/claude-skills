@@ -80,14 +80,15 @@ recipes hold prose only, so they give checks.
 
 When no recipe covers the order, research's findings on how reputable sources verify the work
 give the entries. Each one cites its source and is marked as not binding, because this project
-never accepted that source. The design check names every order holding such an entry. Before
+never accepted that source. A command from research never runs unless you approve it at the
+close. Unapproved, the reviewer judges it as a check instead. The design check names every order holding such an entry. Before
 you close the design, you see those entries with their sources.
 
 A command runs through the same runner as the configuration gate: arguments, never a shell. On
 a `gate` order the commands run first and the configuration gate after them, and the worse
 answer stands. On every other order they run inside the order's first
 check, after its own answer, and the check is met only when both are. The reviewer judges each
-check. On an `observe` order the look judges each one too.
+check. On an `observe` order the look also judges each check that needs a served site.
 
 Design records each guide body as it opens it: the path, a hash of the body, the date, and the
 name research gave it. The record is `design-guides-read.json` in the task folder, one entry per

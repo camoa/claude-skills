@@ -49,14 +49,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
-#   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] --cite <source>
-#   design-actions.sh verify         <task_folder> --id <woId> --check <text> --cite <source>
+#   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
+#   design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --clear
 #   design-actions.sh render     <task_folder> --id <woId>
 #   design-actions.sh check      <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
 #                        --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe \
-#                        [--critique-outcome <text>]...
+#                        [--critique-outcome <text>]... [--approve-runs]
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
@@ -159,8 +159,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      --critique-outcome with no finished critique file to record it beside, or unattended; or
 #      `close` found something that is not a file where a critique file has to move; or `verify`
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
-#      entry with no run or no pass, a pass outside the three forms, a run line carrying a shell
-#      character, or a --run or --check with no --cite.
+#      entry with no run or no pass, a pass or a kind outside its three forms, a run line carrying
+#      a shell character, or a --run or --check with no --cite; or `close` was given
+#      --approve-runs unattended.
 #   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
@@ -263,14 +264,14 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh merge          <task_folder> --into <woId> --from <woId>
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
-       design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] --cite <source>
-       design-actions.sh verify         <task_folder> --id <woId> --check <text> --cite <source>
+       design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
+       design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --clear
        design-actions.sh render         <task_folder> --id <woId>
        design-actions.sh check          <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> close <task_folder> \
                                          --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text> | --no-recipe \
-                                         [--critique-outcome <text>]...
+                                         [--critique-outcome <text>]... [--approve-runs]
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
@@ -1179,8 +1180,8 @@ do_remove_owned_file() {
 # ------------------------------------------------------------------------------------------------
 # verify: writes the order's own proof from the knowledge that covers it, the `verify` list, and
 # is that field's one writer. `--recipe` replaces the list with the covering agentic recipe's
-# `## Verifier`. Each entry of its `verifier:` block becomes a run entry with its `id`, `run` and
-# `pass`, the shape the dev-guides proposal asks every recipe to use. Each numbered item of the
+# `## Verifier`. Each entry of its `verifier:` block becomes a run entry with its `id`, `kind`,
+# `run` and `pass`, in any key order, the shape the dev-guides proposal asks every recipe to use. Each numbered item of the
 # section's prose becomes a check entry, verbatim, wrapped lines joined: today's nine recipes hold
 # only prose. A paragraph is not a check, and no command is ever made from prose. Every entry
 # cites the recipe and is binding, unless --not-binding says research marked the source as one
@@ -1218,22 +1219,32 @@ verify_pass_ok() {
   esac
 }
 
+# One kind of the three the dev-guides Verifier block allows, or none. $1 the action, $2 the value.
+verify_kind_ok() {
+  case "$2" in
+    ''|config-assert|live-site|self-fixture) ;;
+    *) die3 "$1: a kind is config-assert, live-site or self-fixture, got: $2" ;;
+  esac
+}
+
 # The entry held between lines of the `verifier:` block, the way PC_* holds a precondition.
-VF_ID=""; VF_RUN=""; VF_PASS=""; VF_ENTRIES='[]'
+VF_ID=""; VF_KIND=""; VF_RUN=""; VF_PASS=""; VF_ENTRIES='[]'
 # Appends the held entry to VF_ENTRIES and clears it. $1 the recipe.
 verify_flush_entry() {
-  [ -n "$VF_ID$VF_RUN$VF_PASS" ] || return 0
+  [ -n "$VF_ID$VF_KIND$VF_RUN$VF_PASS" ] || return 0
   [ -n "$VF_RUN" ] || die3 "verify: the verifier: entry ${VF_ID:-with no id} in $1 holds no run"
   [ -n "$VF_PASS" ] || die3 "verify: the verifier: entry ${VF_ID:-with no id} in $1 holds no pass. Nothing here guesses what passing means"
   verify_pass_ok "verify" "$VF_PASS"
+  verify_kind_ok "verify" "$VF_KIND"
   refuse_if_unsafe "design-actions" "$1" "$VF_RUN" || die3 "verify: the run line above is refused"
-  VF_ENTRIES="$(printf '%s' "$VF_ENTRIES" | jq -c --arg id "$VF_ID" --arg run "$VF_RUN" --arg pass "$VF_PASS" \
-    '. + [ (if $id == "" then {} else {id: $id} end) + {run: $run, pass: $pass} ]')"
-  VF_ID=""; VF_RUN=""; VF_PASS=""
+  VF_ENTRIES="$(printf '%s' "$VF_ENTRIES" | jq -c --arg id "$VF_ID" --arg kind "$VF_KIND" --arg run "$VF_RUN" --arg pass "$VF_PASS" \
+    '. + [ (if $id == "" then {} else {id: $id} end) + (if $kind == "" then {} else {kind: $kind} end)
+           + {run: $run, pass: $pass} ]')"
+  VF_ID=""; VF_KIND=""; VF_RUN=""; VF_PASS=""
 }
 
 do_verify() {
-  local id="" recipe="" run="" check="" cite="" pass="" binding=true clear=false modes=0
+  local id="" recipe="" run="" check="" cite="" pass="" kind="" binding=true clear=false modes=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)     need_value "verify" "--id" "$#" "${2:-}"; id="$2"; shift 2 ;;
@@ -1242,6 +1253,7 @@ do_verify() {
       --check)  need_value "verify" "--check" "$#" "${2:-}"; check="$2"; modes=$((modes + 1)); shift 2 ;;
       --cite)   need_value "verify" "--cite" "$#" "${2:-}"; cite="$2"; shift 2 ;;
       --pass)   need_value "verify" "--pass" "$#" "${2:-}"; pass="$2"; shift 2 ;;
+      --kind)   need_value "verify" "--kind" "$#" "${2:-}"; kind="$2"; shift 2 ;;
       --not-binding) binding=false; shift ;;
       --clear)  clear=true; modes=$((modes + 1)); shift ;;
       *) die3 "verify: unrecognized argument: $1" ;;
@@ -1250,6 +1262,8 @@ do_verify() {
   require_wo_id_arg "verify" "$id"
   [ "$modes" -eq 1 ] || die3 "verify: pass exactly one of --recipe, --run, --check or --clear"
   [ -z "$pass" ] || [ -n "$run" ] || die3 "verify: --pass belongs to --run"
+  [ -z "$kind" ] || [ -n "$run$check" ] || die3 "verify: --kind belongs to --run and --check. A recipe's entries carry their own"
+  verify_kind_ok "verify" "$kind"
   [ "$binding" = "true" ] || [ -n "$recipe" ] || die3 "verify: --not-binding belongs to --recipe. A research line is never binding"
   if [ -n "$run$check" ]; then
     is_blank "$cite" && die3 "verify: --cite is required with --run and --check: every line names the source it came from"
@@ -1272,13 +1286,19 @@ do_verify() {
     local block_file state line trimmed item
     block_file="$(mktemp)" || die3 "verify: could not create a temporary file"
     state="$(recipe_block_into "$recipe" "Verifier" "verifier" "$block_file")"
-    VF_ID=""; VF_RUN=""; VF_PASS=""; VF_ENTRIES='[]'
+    VF_ID=""; VF_KIND=""; VF_RUN=""; VF_PASS=""; VF_ENTRIES='[]'
     if [ "$state" = "ok" ]; then
+      # An entry opens at a line beginning with a dash, whatever key that line holds, so the keys
+      # may come in any order.
       while IFS= read -r line; do
         case "$line" in ''|[[:space:]-]*) ;; *) break ;; esac
         trimmed="$(pc_trim "$line")"
         case "$trimmed" in
-          '- id:'*) verify_flush_entry "$recipe"; VF_ID="$(pc_trim "${trimmed#- id:}")" ;;
+          '- '*) verify_flush_entry "$recipe"; trimmed="$(pc_trim "${trimmed#- }")" ;;
+        esac
+        case "$trimmed" in
+          'id:'*)   VF_ID="$(pc_trim "${trimmed#id:}")" ;;
+          'kind:'*) VF_KIND="$(pc_trim "${trimmed#kind:}")" ;;
           'run:'*)  VF_RUN="$(pc_unquote "$(pc_trim "${trimmed#run:}")")" ;;
           'pass:'*) VF_PASS="$(pc_unquote "$(pc_trim "${trimmed#pass:}")")" ;;
         esac
@@ -1306,6 +1326,7 @@ do_verify() {
     else
       entry="$(jq -nc --arg k "$check" --arg c "$cite" '{check: $k, cites: $c, binding: false}')"
     fi
+    [ -z "$kind" ] || entry="$(printf '%s' "$entry" | jq -c --arg k "$kind" '. + {kind: $k}')"
     doc="$(printf '%s' "$doc" | jq --argjson e "$entry" '
       .verify = ([ (.verify // [])[] | select(((.run // .check) == ($e.run // $e.check)) | not) ] + [$e])')"
     source_name="$cite"
@@ -1550,13 +1571,17 @@ do_check() {
 do_close() {
   [ -n "$RUN_MODE" ] \
     || die3 "close: --run-mode is required. The close record says who was present, and that is never assumed"
-  local fit="" fit_path="" fit_reason="" no_recipe=false fit_json="" outcome=""
+  local fit="" fit_path="" fit_reason="" no_recipe=false fit_json="" outcome="" approve_runs=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --recipe-fit)    need_value "close" "--recipe-fit" "$#" "${2:-}";    fit="$2"; shift 2 ;;
       --recipe-path)   need_value "close" "--recipe-path" "$#" "${2:-}";   fit_path="$2"; shift 2 ;;
       --recipe-reason) need_value "close" "--recipe-reason" "$#" "${2:-}"; fit_reason="$2"; shift 2 ;;
       --no-recipe)     no_recipe=true; shift ;;
+      --approve-runs)
+        [ "$RUN_MODE" != "autonomous" ] \
+          || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it"
+        approve_runs=true; shift ;;
       --critique-outcome)
         need_value "close" "--critique-outcome" "$#" "${2:-}"
         is_blank "$2" && die3 "close: --critique-outcome must not be blank"
@@ -1627,6 +1652,25 @@ do_close() {
       die3 "close: check-design.sh exited with an unexpected code $check_rc"
       ;;
   esac
+
+  # A run line that is not binding was written by a model from research, and only a person stands
+  # between it and the worktree. The person approves such lines at this close, the design's
+  # approval, and the stamp lands on each entry before the hash covers it. A line with no stamp
+  # never runs: the build hands it to the reviewer as a check.
+  local wo_file approved_count=0 n_approved
+  if [ "$approve_runs" = true ]; then
+    while IFS= read -r wo_file; do
+      [ -n "$wo_file" ] || continue
+      n_approved="$(jq '[ (.verify // [])[] | select(has("run") and .binding == false and (has("approved") | not)) ] | length' "$wo_file")"
+      [ "$n_approved" -gt 0 ] || continue
+      write_atomic "$wo_file" "$(jq --arg d "$(date -u +%Y-%m-%d)" \
+        '.verify = [ .verify[] | if has("run") and .binding == false and (has("approved") | not)
+                                 then .approved = {by: "person", on: $d} else . end ]' "$wo_file")"
+      render_wo "$(jq -r '.id' "$wo_file")" >/dev/null
+      approved_count=$((approved_count + n_approved))
+    done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
+    echo "approvedRuns: $approved_count"
+  fi
 
   local hash
   hash="$(records_hash_for "$TASK_PATH")" \

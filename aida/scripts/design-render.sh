@@ -218,7 +218,11 @@ render_text_list() {
   if [ "$(jq -r '(.verify // []) | if type == "array" then length else 0 end' "$WO_FILE")" -gt 0 ]; then
     printf '## Verify\n\n'
     jq -r '.verify[] | "- " + (if has("run") then "Run `" + .run + "`, pass on " + (.pass // "exit 0") else "Judge: " + (.check // "") end)
-      + ". Source: " + (.cites // "none") + (if .binding == false then ", not binding" else "" end) + "."' "$WO_FILE"
+      + (if has("kind") then ", kind " + .kind else "" end)
+      + ". Source: " + (.cites // "none") + (if .binding == false then ", not binding" else "" end)
+      + (if has("run") and .binding == false then (if has("approved") then ", approved by a person on " + .approved.on
+                                                  else ", not approved, so it never runs and the reviewer judges it" end) else "" end)
+      + "."' "$WO_FILE"
     printf '\n'
   fi
 

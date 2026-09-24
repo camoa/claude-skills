@@ -485,7 +485,8 @@ a model judges. Every entry cites its source and says whether it is binding.
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
   --id <woId> --recipe "<the recipe body's path on disk>" [--not-binding]
 ```
-The script copies each entry of the `verifier:` block as a run entry, with its `pass`. It copies
+The script copies each entry of the `verifier:` block as a run entry, with its `pass` and its
+`kind`. It copies
 each numbered item of the prose as a check entry, verbatim. It reads nothing else, and it never
 turns a sentence into a command. Today's recipes hold prose only, so they give checks. Pass
 `--not-binding` when research said the source is not one this project accepted.
@@ -494,12 +495,16 @@ turns a sentence into a command. Today's recipes hold prose only, so they give c
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
   --id <woId> --run "<one command>" [--pass "<exit 0 | stdout empty | stdout contains <text>>"] \
-  --cite "<the source research recorded>"
+  [--kind <config-assert|live-site|self-fixture>] --cite "<the source research recorded>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
-  --id <woId> --check "<one sentence to judge>" --cite "<the source research recorded>"
+  --id <woId> --check "<one sentence to judge>" [--kind <config-assert|live-site|self-fixture>] \
+  --cite "<the source research recorded>"
 ```
 Write a `--run` only when the source gives the command. Prefer a command whenever it does. A
 source that describes a result in words gives a `--check`. Such an entry is never binding.
+Give `--kind live-site` when the check needs a served site; the source says so or it does not.
+A research `--run` never runs until a person approves it at the close. Without that, the
+reviewer judges it as a check.
 `--clear` empties the list, and `--recipe` replaces it.
 
 A run line is argv, never a shell, so the script refuses a shell character. It also refuses a
@@ -512,7 +517,7 @@ What each kind does with the entries:
 - `tests`, `record` and `observe`: the run entries run in the order's first deciding check,
   after its own answer, from the code worktree. The check is met only when both are.
 - Every kind: the reviewer judges each check entry. On an `observe` order the look also judges
-  each one as a row of its own.
+  each `live-site` check as a row of its own, because only that kind shows on a page.
 
 ## Serving a criterion is not completing it
 
@@ -559,7 +564,8 @@ zero it adds one `open:` line naming what is open. The report holds:
 `check` also prints `verifyNotBinding:`, the orders holding an entry that is not binding.
 Interactive: before the close, show each such order's entries with their sources. Say that the
 source is not one this project accepted. The person keeps each entry, drops it with `--clear`,
-or asks for another source. Autonomous: the line and the rendered order carry it to a person
+or asks for another source. A kept run entry runs only when the person also approves it: pass
+`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the line and the rendered order carry it to a person
 later.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
@@ -664,7 +670,7 @@ those words to the call below. Autonomous, nobody says so: run it once the check
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   close "<task_folder>" --recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason "<one sentence>" \
-  [--critique-outcome "<one line>"]...
+  [--critique-outcome "<one line>"]... [--approve-runs]
 ```
 Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
 `close` refuses with neither, and a later close restates the verdict rather than carrying it over.

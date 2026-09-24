@@ -5732,9 +5732,22 @@ br_test_check() {
   rm -f "$runs_file"
 }
 
+# The run entries of the order's `verify` list that may run, as a JSON array of {run, pass}, and
+# the sources they cite, into BRV_RUNS and BRV_CITES. A binding entry came from a recipe this
+# project accepts and runs. An entry that is not binding was written by a model from research, and
+# runs only when a person approved it at the design close. Without that stamp it never runs,
+# attended or not: the reviewer judges it as a check. Reads BRC_UNIT_JSON.
+BRV_RUNS="[]"; BRV_CITES=""
+br_verify_runs() {
+  local keep='[ (.verify // [])[] | select(has("run") and (.binding != false or has("approved"))) ]'
+  BRV_RUNS="$(printf '%s' "$BRC_UNIT_JSON" | jq -c "$keep | map({run, pass})")"
+  BRV_CITES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | join(\", \")")"
+}
+
 # Runs a list of lines through the one gate runner, the `## Configuration gate` block's and a work
 # order's own `verify` lines alike. $1 a JSON array of {run, pass}, $2 the source a refusal names,
-# $3 the folder every line runs from, $4 the file that receives each command line and its output.
+# $3 the folder every line runs from, $4 the file that receives each command line and its output,
+# $5 the words a refusal ends on.
 # Each line is refused on a shell character, split on spaces and run as argv through
 # br_run_resolved, so `{paths}` expands to this order's owned files and every other token comes
 # from --value. A name given several --value rows runs its line once per value, in the order
@@ -5747,7 +5760,7 @@ br_test_check() {
 # last exit code or empty; BRL_N, how many lines ran; and BRL_LINE, the last line.
 BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
 br_run_lines() {
-  local lines_json="$1" source="$2" dir="$3" outfile="$4"
+  local lines_json="$1" source="$2" dir="$3" outfile="$4" refused="$5"
   local count i pass literal argv_json result kind payload owned_json run_out run_err
   local tok multi_name="" multi_values="" value values shown tab
   tab="$(printf '\t')"
@@ -5761,7 +5774,7 @@ br_run_lines() {
     BRL_LINE="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].run')"
     pass="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].pass // "exit 0"')"
     i=$((i + 1)); BRL_N="$i"
-    refuse_if_unsafe "$BRC_WHO" "$source" "$BRL_LINE" || die 3 "$BRC_WHO: the gate line above is refused."
+    refuse_if_unsafe "$BRC_WHO" "$source" "$BRL_LINE" || die 3 "$BRC_WHO: $refused"
     argv_json="$(printf '%s' "$BRL_LINE" | jq -Rc 'split(" ") | map(select(. != ""))')"
     multi_name=""; multi_values=""
     while IFS= read -r tok; do
@@ -5837,8 +5850,7 @@ BR_RUN_VALUES
 br_gate_check() {
   local verdict="" detail="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
   local own_json cites own_verdict="" own_detail="" gate_verdict="" gate_detail="" rc="" lines_json
-  own_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '[ (.verify // [])[] | select(has("run")) | {run, pass} ]')"
-  cites="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '[ (.verify // [])[] | select(has("run")) | .cites ] | unique | join(", ")')"
+  br_verify_runs; own_json="$BRV_RUNS"; cites="$BRV_CITES"
   if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
     detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
     # The marker task environment up writes before its bring-up. A site may be half up, so the
@@ -5850,7 +5862,7 @@ br_gate_check() {
   fi
   outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   if [ "$own_json" != "[]" ]; then
-    br_run_lines "$own_json" "$cites" "$BRC_CODEPATH" "$outfile"
+    br_run_lines "$own_json" "$cites" "$BRC_CODEPATH" "$outfile" "the verify line above, from $cites, is refused."
     own_verdict="${BRL_VERDICT:-met}"; rc="$BRL_RC"
     case "$own_verdict" in
       met) own_detail="every verify line of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') ($BRL_N of them) passed, from $cites." ;;
@@ -5885,7 +5897,7 @@ BR_GATE
       fi
     else
       lines_json="$(printf '%s\n' "$gate_lines" | jq -Rc '[ ., inputs ] | map(select(. != "") | {run: ., pass: "exit 0"})')"
-      br_run_lines "$lines_json" "$gate_recipe" "$BRC_CODEPATH" "$outfile"
+      br_run_lines "$lines_json" "$gate_recipe" "$BRC_CODEPATH" "$outfile" "the ## Configuration gate line above is refused."
       gate_verdict="${BRL_VERDICT:-met}"
       # The exit code the check carries is the first failing list's, else the last that ran.
       [ -z "$BRL_RC" ] || [ "$own_verdict" = "unmet" ] || rc="$BRL_RC"
@@ -5917,21 +5929,26 @@ BR_GATE
 # the source, and the output gains the lines' output. Prints the check object.
 br_verify_fold() {
   local own_json cites outfile verdict
-  own_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '[ (.verify // [])[] | select(has("run")) | {run, pass} ]')"
+  br_verify_runs; own_json="$BRV_RUNS"
   br_order_facts "$BRC_UNIT_JSON"
   if [ "$own_json" = "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
     cat "$1"
     return 0
   fi
-  cites="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '[ (.verify // [])[] | select(has("run")) | .cites ] | unique | join(", ")')"
+  cites="$BRV_CITES"
   outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-  br_run_lines "$own_json" "$cites" "${RV_CODEPATH:-$BRC_CODEPATH}" "$outfile"
+  br_run_lines "$own_json" "$cites" "${RV_CODEPATH:-$BRC_CODEPATH}" "$outfile" "the verify line above, from $cites, is refused."
   verdict="$(br_worst_verdict "$(jq -c --arg v "${BRL_VERDICT:-met}" '[.verdict, $v]' "$1")")"
-  jq --arg v "$verdict" --arg rc "$BRL_RC" --rawfile out "$outfile" \
+  # The exit code follows the verdict that stands: the lines' own when they failed, the check's
+  # own when it failed, and the lines' when both passed and the check ran no command.
+  jq --arg v "$verdict" --arg lv "${BRL_VERDICT:-met}" --arg rc "$BRL_RC" --rawfile out "$outfile" \
      --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them) passed, from %s.' "$BRL_N" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
     .verdict = $v | .detail = (.detail + " " + $add)
     | .output = (if (.output // "") == "" then $out else .output + "\n" + $out end)
-    | if $rc == "" then . elif (has("exitCode") | not) or $v == "unmet" then .exitCode = ($rc | tonumber) else . end' "$1"
+    | if $rc == "" then .
+      elif $lv == "unmet" then .exitCode = ($rc | tonumber)
+      elif (has("exitCode") | not) and $v == "met" then .exitCode = ($rc | tonumber)
+      else . end' "$1"
   rm -f "$outfile"
 }
 
@@ -6384,10 +6401,13 @@ br_require_observed() {
   # tell, so the look judges the clause itself (live-run row 115).
   clauses_json="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson owned "$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')" '
       [ .[] | select(.verifiedBy == "machine" and ((.id as $i | $owned | index($i)) != null)) | {id, clause: .verification} ]')"
-  # A verify check is a sentence the order holds too: design carried it from the source that covers
-  # the order, and the look judges it as a row of its own.
+  # A verify check of kind live-site is a sentence the order holds too: design carried it from the
+  # source that covers the order, and the look judges it as a row of its own. Only that kind needs
+  # a served site, so only it is something a page can show. A config-assert reads configuration,
+  # and a self-fixture seeds and removes its own data. The reviewer judges those, and a check
+  # with no kind.
   bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" --argjson clauses "$clauses_json" --arg unit_id "$unit_id" '
-      (($unit.doneWhen // []) + [ ($unit.verify // [])[] | .check // empty ]) as $held
+      (($unit.doneWhen // []) + [ ($unit.verify // [])[] | select(.kind == "live-site") | .check // empty ]) as $held
       | [ .rows[] | .criterion as $c | .doneWhen as $d
           | if $c != null then
               (([ $clauses[] | select(.id == $c) ][0]) as $k
@@ -6396,11 +6416,11 @@ br_require_observed() {
                  else empty end)
             elif ($held | index($d)) != null then empty
             else (([ $clauses[] | select(.clause == $d) ][0]) as $k
-                  | if $k == null then "\"" + $d + "\" is neither a done-when row, a verify check, nor an owned criterion\u0027s clause"
+                  | if $k == null then "\"" + $d + "\" is neither a done-when row, a live-site verify check, nor an owned criterion\u0027s clause"
                     else "\"" + $d + "\" is the verification clause of " + $k.id + " and carries no criterion" end)
             end ] | unique | join(" | ")' "$observed")"
   [ -z "$bad_done_when" ] \
-    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows or verify checks, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
+    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows or live-site verify checks, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
   # Every row the order owes: each done-when row and each owned machine criterion's clause, at
   # each surface the order names, at each viewport the surface file declares. The file is the
   # one review's surface step reads, at surfaces.registryPath in the project record, joined to
@@ -6420,13 +6440,13 @@ br_require_observed() {
   missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" --argjson clauses "$clauses_json" '
       [ .rows[] | (.criterion // "") + "\u001f" + .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
       | ([ ($unit.doneWhen // [])[] | {criterion: "", sentence: ., kind: "a done-when row"} ]
-         + [ ($unit.verify // [])[] | .check // empty | {criterion: "", sentence: ., kind: "a verify check"} ]
+         + [ ($unit.verify // [])[] | select(.kind == "live-site") | .check // empty | {criterion: "", sentence: ., kind: "a verify check"} ]
          + [ $clauses[] | {criterion: .id, sentence: .clause, kind: ("the verification clause of " + .id)} ]) as $owed
       | [ $owed[] as $o | ($unit.surfaces // [])[] as $s | $viewports[] as $v
           | select(($have | index($o.criterion + "\u001f" + $o.sentence + "\u001f" + $s + "\u001f" + $v)) == null)
           | "\"" + $o.sentence + "\" at " + $s + " at " + $v + ", " + $o.kind ][0] // ""' "$observed")"
   [ -z "$missing_row" ] \
-    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows, its verify checks and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
+    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows, its live-site verify checks and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
 }
 
 # One image field of the observed record, on every row. Each path is on disk and lies under its
