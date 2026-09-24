@@ -123,7 +123,9 @@ A recipe with no bring-up block, or no address block, exits 3 from `show` too, s
 says what `up` would do.
 
 `up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with each
-command as it ran and that command's own output in `records/environment-up.txt`, in this order.
+command as it ran and that command's own output in `records/environment-up.txt`, in this order,
+and one line in that record marking the address command, so `down` can find that command's output
+later.
 First it writes each `## Files` block absent from the worktree. A file present with other content
 refuses at 3. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
@@ -139,7 +141,8 @@ that site's address while the bring-up runs again. Then the
 bring-up lines before the
 `## Address` heading. Then one line marking the address command in the record, so `down` can find
 that command's output later. Then the address command, whose output is `key: value` lines.
-`address:` is required, and every other key is a token for the later lines and for the tear-down. A `root:`
+`address:` is required, and every other key is a token for the later lines and for the
+tear-down. A `root:`
 line that is not the worktree stops at 3 before the later lines: the environment resolved to
 another tree, and the marker stays for `down`. Then it completes the record, in place of the
 marker: the address, the recipe, when, and the other address keys. Then the bring-up lines after
