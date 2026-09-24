@@ -242,8 +242,11 @@ A work order whose deliverable is exported configuration, a Drupal view or a con
 `gate` as its proof kind; design created it that way. No test author is dispatched and no row goes
 to the checker, because a test that reads the YAML back cannot fail for the right reason. The
 order freezes with no test, and with a checklist line for each criterion a person verifies. Its
-build runs the implement recipe's configuration gate lines instead, in the task's worktree. Every
-line exiting zero is met; the first line that does not is named, with its output. The check reads
+build runs the order's own `verify` commands instead, in the task's worktree. Design copied them
+from the recipe that covers the order, or wrote them from research's findings. An order with
+none runs the implement recipe's configuration gate lines, as before. Every line passing is met;
+the first line that does not is named, with its output. A line passes on exit 0, or on what its
+standard output must hold when the source says so. The check reads
 unknown when the task has no running site recorded, so bring the environment up first. The proof
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.
@@ -285,7 +288,7 @@ a configuration gate, the look waits for the recipe's restore or rebuild step, s
 rewound the site. It judges each done-when row against what renders and
 saves a screenshot per surface and viewport under the task folder. It also judges the
 verification clause of each machine criterion the order owns as its own row, since rows may say
-less. It writes an observed record
+less. Each check in the order's `verify` list is a row of its own too. It writes an observed record
 with one row per sentence, surface and viewport, and the build reads that record as the order's
 own check. Every row met is met; one unmet row stops the attempt the way a failing test does.
 The judge on the record is a model. When the order closes, its criteria are recorded as judged
@@ -324,7 +327,10 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 
 1. **order-tests.** Do this order's own frozen tests pass. On a configuration order this slot is
    the configuration gate instead, on a document order the done-when judgement, and on a page
-   order the observed record.
+   order the observed record. On every order but a configuration order, the order's own
+   `verify` commands then run in this slot, from the code worktree. The slot is met only when
+   its own answer and every command are. So a coverage report is checked against a re-run of
+   the command it names.
 2. **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
    recipe costs `end-of-task` does not run here: the check reads deferred, and finishing the
    stage runs that row once.
@@ -374,6 +380,10 @@ the tier of the work it judges. It is given the criteria and non-goals, the diff
 frozen tests, the eight check results, and both interface texts. It is given the builder's
 report too, as claims and never as proof, so a reason in it never lowers a finding's severity. It
 writes its findings and nothing else; a probe file left in the code is a refusal.
+
+The reviewer also judges each check in the order's `verify` list. Design carried those from the
+recipe or the research that covers the order. A check that does not hold is a finding. When
+the source is one this project did not accept, the finding says so.
 
 When the interface check read unknown, nothing is asked, in either mode. AIDA says in one line
 that no named element of the interface could be counted. The reviewer reads the declared

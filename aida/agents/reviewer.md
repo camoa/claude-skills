@@ -50,6 +50,12 @@ findings to the path the brief gives, in this shape:
 Use `{ "findings": [] }` when you find nothing. `information` is optional: leave it out when you
 have none.
 
+**Judge the order's own proof.** The order record's `verify` list holds what design carried from
+the source that covers the order. Each `run` entry already ran in the first check. Read its
+output there. Judge each `check` entry against the diff, the document or the gate output. A
+check that does not hold is a finding linked to the order. When its `binding` is false, say in
+the evidence that this project did not accept the source.
+
 **Information for the person goes in `information`, one item each.** A fact the person or the
 next order needs that cites no criterion the diff fails is not a finding. A frozen base class built
 against a schema the site does not have. A function that returns one result per occurrence, so

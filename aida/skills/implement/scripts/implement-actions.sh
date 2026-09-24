@@ -5170,7 +5170,7 @@ do_build_brief() {
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
     '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
       doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // ""),
-      proof: (.proof // "tests")}')"
+      proof: (.proof // "tests"), verify: (.verify // [])}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
   tests_out="$(printf '%s' "$tests_doc" | jq -c \
@@ -5732,19 +5732,86 @@ br_test_check() {
   rm -f "$runs_file"
 }
 
+# Runs a list of lines through the one gate runner, the `## Configuration gate` block's and a work
+# order's own `verify` lines alike. $1 a JSON array of {run, pass}, $2 the source a refusal names,
+# $3 the folder every line runs from, $4 the file that receives each command line and its output.
+# Each line is refused on a shell character, split on spaces and run as argv through
+# br_run_resolved, so `{paths}` expands to this order's owned files and every other token comes
+# from --value. The first line that fails stops the list. A non-zero exit fails a line whatever
+# its pass says. `stdout empty` and `stdout contains <text>` then read standard output alone,
+# because a status command writes its message to standard error and exits 0 either way. It sets
+# BRL_VERDICT, empty when every line passed, else unmet or unknown; BRL_WHY, the reason in words;
+# BRL_RC, the last exit code or empty; BRL_N, how many lines ran; and BRL_LINE, the last line.
+BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
+br_run_lines() {
+  local lines_json="$1" source="$2" dir="$3" outfile="$4"
+  local count i pass literal argv_json result kind payload owned_json run_out run_err
+  BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
+  owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  run_err="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  count="$(printf '%s' "$lines_json" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    BRL_LINE="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].run')"
+    pass="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].pass // "exit 0"')"
+    i=$((i + 1)); BRL_N="$i"
+    refuse_if_unsafe "$BRC_WHO" "$source" "$BRL_LINE" || die 3 "$BRC_WHO: the gate line above is refused."
+    printf '+ %s\n' "$BRL_LINE" >>"$outfile"
+    argv_json="$(printf '%s' "$BRL_LINE" | jq -Rc 'split(" ") | map(select(. != ""))')"
+    case "$pass" in
+      stdout*) result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$BRC_VALUES" "$run_err")" ;;
+      *)       result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$BRC_VALUES")" ;;
+    esac
+    cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
+    kind="$(printf '%s' "$result" | cut -f1)"
+    payload="$(printf '%s' "$result" | cut -f2-)"
+    if [ "$kind" = "UNRESOLVED" ]; then
+      BRL_VERDICT="unknown"; BRL_RC=""
+      BRL_WHY="the token {$payload} in gate line $i ($BRL_LINE) has no supplied value; pass --value $payload=<value>."
+      break
+    fi
+    BRL_RC="$payload"
+    if [ "$BRL_RC" != "0" ]; then
+      BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE) exited $BRL_RC"
+      break
+    fi
+    case "$pass" in
+      'exit 0') ;;
+      'stdout empty')
+        if grep -q '[^[:space:]]' "$run_out"; then
+          BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE) exited 0 and printed to standard output, and its pass is stdout empty"
+          break
+        fi ;;
+      'stdout contains '?*)
+        literal="$(pc_unquote "${pass#stdout contains }")"
+        if ! pc_output_holds "$run_out" "$literal"; then
+          BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE) exited 0, and its standard output does not hold $literal"
+          break
+        fi ;;
+      *)
+        BRL_VERDICT="unknown"; BRL_WHY="gate line $i ($BRL_LINE) names a pass this runner does not read: $pass"
+        break ;;
+    esac
+  done
+  rm -f "$run_out" "$run_err"
+}
+
 # The configuration check, in the order-tests slot of an order whose proof is gate (live-run row
-# 65). Its deliverable is exported configuration, which no test of its own can prove, so the
-# implement recipe's `## Configuration gate` lines are its check: every line exit 0 is met; the
+# 65). Its deliverable is exported configuration, which no test of its own can prove. So the
+# order's own `verify` run lines are its check when it carries any: design copied them from the
+# recipe that covers it, or wrote them from research's findings. Otherwise the implement
+# recipe's `## Configuration gate` lines are, every line exit 0. Every line passing is met; the
 # first line that does not is unmet, named with its exit and its output; unknown when nothing
-# could run, and the detail says which. The lines are read by the same block reader the tool and
-# environment skills use, refused on a shell character the same way, split on spaces and run as
-# argv from the worktree through br_run_resolved, so `{paths}` expands to this order's owned files
-# and every other token comes from --value. The first line restores the snapshot the environment's
-# bring-up took, so a task with no environment recorded reads unknown before any line runs. Two
-# recipes each carrying the block are two answers to one question, exit 72. Prints the check object.
+# could run, and the detail says which. Both lists run through br_run_lines from the worktree.
+# The first recipe line restores the snapshot the environment's bring-up took, so a task with no
+# environment recorded reads unknown before any line runs, whichever list it holds. Two recipes
+# each carrying the block are two answers to one question, exit 72. Prints the check object.
 br_gate_check() {
-  local verdict="" detail="" rc="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
-  local line n=0 argv_json result kind payload owned_json run_out
+  local verdict="" detail="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
+  local own_json lines_json cites
+  own_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '[ (.verify // [])[] | select(has("run")) | {run, pass} ]')"
+  cites="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '[ (.verify // [])[] | select(has("run")) | .cites ] | unique | join(", ")')"
   if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
     verdict="unknown"
     detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
@@ -5752,6 +5819,8 @@ br_gate_check() {
     # bring-up is not the next step here; the tear-down is. The verdict is unknown either way.
     [ "$(jq -r '.environment.state // empty' "$TASK_PATH/task.json" 2>/dev/null)" != "coming-up" ] \
       || detail="task.json holds the marker task environment up writes before its bring-up, so a site may be half up and no snapshot exists. Run task environment $(jq -r '.id // "<task-id>"' "$TASK_PATH/task.json" 2>/dev/null) down first. Then bring the environment up and record the attempt again."
+  elif [ "$own_json" != "[]" ]; then
+    gate_fw="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"; gate_recipe="$cites"; lines_json="$own_json"
   elif [ -z "$BRC_GATE_RECIPES" ]; then
     verdict="unknown"
     detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."
@@ -5771,48 +5840,62 @@ BR_GATE
       verdict="unknown"
       detail="the implement recipe carries no ## Configuration gate block, so nothing here can prove exported configuration: $(printf '%s' "$BRC_GATE_RECIPES" | cut -f2 | paste -s -d ' ' -). The recipe lacks it."
     else
-      owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
-      outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-      run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-      while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        n=$((n + 1))
-        refuse_if_unsafe "$BRC_WHO" "$gate_recipe" "$line" || die 3 "$BRC_WHO: the ## Configuration gate line above is refused."
-        printf '+ %s\n' "$line" >>"$outfile"
-        argv_json="$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')"
-        result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$run_out" "$owned_json" "$BRC_VALUES")"
-        cat "$run_out" >>"$outfile"
-        kind="$(printf '%s' "$result" | cut -f1)"
-        payload="$(printf '%s' "$result" | cut -f2-)"
-        if [ "$kind" = "UNRESOLVED" ]; then
-          verdict="unknown"; rc=""
-          detail="the token {$payload} in gate line $n ($line) has no supplied value; pass --value $payload=<value>."
-          break
-        fi
-        rc="$payload"
-        if [ "$rc" != "0" ]; then
-          verdict="unmet"
-          detail="gate line $n ($line) exited $rc on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0."
-          break
-        fi
-      done <<BR_GATE_LINES
-$gate_lines
-BR_GATE_LINES
-      if [ -z "$verdict" ]; then
-        verdict="met"
-        detail="every ## Configuration gate line ($n of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output."
-      fi
-      if [ -n "$rc" ]; then
-        jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
-          '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
-        rm -f "$outfile" "$run_out"
-        return 0
-      fi
-      rm -f "$outfile" "$run_out"
+      lines_json="$(printf '%s\n' "$gate_lines" | jq -Rc '[ ., inputs ] | map(select(. != "") | {run: ., pass: "exit 0"})')"
     fi
+  fi
+  if [ -z "$verdict" ]; then
+    outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+    br_run_lines "$lines_json" "$gate_recipe" "$BRC_CODEPATH" "$outfile"
+    verdict="${BRL_VERDICT:-met}"
+    if [ "$own_json" != "[]" ]; then
+      case "$verdict" in
+        met) detail="every verify line of $gate_fw ($BRL_N of them) passed, from $gate_recipe. The implement recipe's ## Configuration gate did not run: the order carries its own lines." ;;
+        *)   detail="$BRL_WHY, from $gate_recipe. Every line before it passed." ;;
+      esac
+    else
+      case "$verdict" in
+        met)   detail="every ## Configuration gate line ($BRL_N of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output." ;;
+        unmet) detail="$BRL_WHY on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0." ;;
+        *)     detail="$BRL_WHY" ;;
+      esac
+    fi
+    if [ -n "$BRL_RC" ]; then
+      jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$BRL_RC" --rawfile out "$outfile" \
+        '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
+      rm -f "$outfile"
+      return 0
+    fi
+    rm -f "$outfile"
   fi
   jq -n --arg verdict "$verdict" --arg detail "$detail" \
     '{id: "configuration-gate", verdict: $verdict, detail: $detail}'
+}
+
+# Runs the order's own `verify` run lines inside the first deciding check of an order whose proof
+# is not gate, after that check's own answer. $1 the file that holds the check object. A gate
+# order ran its lines as the check itself, and an order with none passes the object through. The
+# lines run from the code worktree, because a record order's range lives in the project folder
+# and a re-run of what the document reports belongs to the code. The check is met only when its
+# own answer and every line are: the worse verdict stands, the detail gains one sentence naming
+# the source, and the output gains the lines' output. Prints the check object.
+br_verify_fold() {
+  local own_json cites outfile verdict
+  own_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '[ (.verify // [])[] | select(has("run")) | {run, pass} ]')"
+  br_order_facts "$BRC_UNIT_JSON"
+  if [ "$own_json" = "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
+    cat "$1"
+    return 0
+  fi
+  cites="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '[ (.verify // [])[] | select(has("run")) | .cites ] | unique | join(", ")')"
+  outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
+  br_run_lines "$own_json" "$cites" "${RV_CODEPATH:-$BRC_CODEPATH}" "$outfile"
+  verdict="$(br_worst_verdict "$(jq -c --arg v "${BRL_VERDICT:-met}" '[.verdict, $v]' "$1")")"
+  jq --arg v "$verdict" --arg rc "$BRL_RC" --rawfile out "$outfile" \
+     --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them) passed, from %s.' "$BRL_N" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
+    .verdict = $v | .detail = (.detail + " " + $add)
+    | .output = (if (.output // "") == "" then $out else .output + "\n" + $out end)
+    | if $rc == "" then . elif (has("exitCode") | not) or $v == "unmet" then .exitCode = ($rc | tonumber) else . end' "$1"
+  rm -f "$outfile"
 }
 
 # The done-when check, in the order-tests slot of an order whose proof is record (nyc defect 17).
@@ -5916,13 +5999,19 @@ br_seven_checks() {
   local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
+  # The slot's own answer goes to a file first, never through a `$(...)`, so a refusal inside it
+  # still ends the script. The order's own verify lines then run inside that same slot.
+  local slot_file
+  slot_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   br_order_facts "$BRC_UNIT_JSON"
   case "$BR_ORDER_SLOT" in
-    configuration-gate) br_gate_check >>"$parts_file" ;;
-    done-when)          br_record_check >>"$parts_file" ;;
-    observed)           br_observed_check >>"$parts_file" ;;
-    *)                  br_test_check "order-tests" "orderTests" "order-tests" >>"$parts_file" ;;
+    configuration-gate) br_gate_check >"$slot_file" ;;
+    done-when)          br_record_check >"$slot_file" ;;
+    observed)           br_observed_check >"$slot_file" ;;
+    *)                  br_test_check "order-tests" "orderTests" "order-tests" >"$slot_file" ;;
   esac
+  br_verify_fold "$slot_file" >>"$parts_file"
+  rm -f "$slot_file"
   if [ "$BR_ORDER_OWNS_CODE" = "no" ]; then
     for rc_id in suite-regression coding-standards static-analysis security; do
       jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
@@ -6258,8 +6347,10 @@ br_require_observed() {
   # tell, so the look judges the clause itself (live-run row 115).
   clauses_json="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson owned "$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')" '
       [ .[] | select(.verifiedBy == "machine" and ((.id as $i | $owned | index($i)) != null)) | {id, clause: .verification} ]')"
+  # A verify check is a sentence the order holds too: design carried it from the source that covers
+  # the order, and the look judges it as a row of its own.
   bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" --argjson clauses "$clauses_json" --arg unit_id "$unit_id" '
-      ($unit.doneWhen // []) as $held
+      (($unit.doneWhen // []) + [ ($unit.verify // [])[] | .check // empty ]) as $held
       | [ .rows[] | .criterion as $c | .doneWhen as $d
           | if $c != null then
               (([ $clauses[] | select(.id == $c) ][0]) as $k
@@ -6268,11 +6359,11 @@ br_require_observed() {
                  else empty end)
             elif ($held | index($d)) != null then empty
             else (([ $clauses[] | select(.clause == $d) ][0]) as $k
-                  | if $k == null then "\"" + $d + "\" is neither a done-when row nor an owned criterion\u0027s clause"
+                  | if $k == null then "\"" + $d + "\" is neither a done-when row, a verify check, nor an owned criterion\u0027s clause"
                     else "\"" + $d + "\" is the verification clause of " + $k.id + " and carries no criterion" end)
             end ] | unique | join(" | ")' "$observed")"
   [ -z "$bad_done_when" ] \
-    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
+    || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows or verify checks, verbatim, or the verification clause of a machine criterion it owns, verbatim, with criterion: <id>."
   # Every row the order owes: each done-when row and each owned machine criterion's clause, at
   # each surface the order names, at each viewport the surface file declares. The file is the
   # one review's surface step reads, at surfaces.registryPath in the project record, joined to
@@ -6292,12 +6383,13 @@ br_require_observed() {
   missing_row="$(jq -r --argjson unit "$UNIT_JSON" --argjson viewports "$SF_VIEWPORTS" --argjson clauses "$clauses_json" '
       [ .rows[] | (.criterion // "") + "\u001f" + .doneWhen + "\u001f" + .surface + "\u001f" + .viewport ] as $have
       | ([ ($unit.doneWhen // [])[] | {criterion: "", sentence: ., kind: "a done-when row"} ]
+         + [ ($unit.verify // [])[] | .check // empty | {criterion: "", sentence: ., kind: "a verify check"} ]
          + [ $clauses[] | {criterion: .id, sentence: .clause, kind: ("the verification clause of " + .id)} ]) as $owed
       | [ $owed[] as $o | ($unit.surfaces // [])[] as $s | $viewports[] as $v
           | select(($have | index($o.criterion + "\u001f" + $o.sentence + "\u001f" + $s + "\u001f" + $v)) == null)
           | "\"" + $o.sentence + "\" at " + $s + " at " + $v + ", " + $o.kind ][0] // ""' "$observed")"
   [ -z "$missing_row" ] \
-    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
+    || die 97 "$who: the observed record for $unit_id has no row for $missing_row. The order owes one row per sentence, per surface it names, per viewport in $surface_file. The sentences are its done-when rows, its verify checks and the verification clause of each machine criterion it owns. A look not taken is not a met; take it and add the row."
 }
 
 # One image field of the observed record, on every row. Each path is on disk and lies under its

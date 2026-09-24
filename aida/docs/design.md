@@ -45,7 +45,8 @@ on record the way every other design write is.
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
 | diff budget | How much change the order should take, in plain words |
-| proof | `tests`, the default. `gate` for a configuration order. `record` for a document in the task folder. `observe` for what a page shows |
+| proof | `tests` for code a test can pin. `gate` for tools run that change state, such as configuration. `record` for a document. `observe` for what a page shows |
+| verify | The order's own proof, from the recipe or the research that covers it: commands a script runs and checks a model judges, each citing its source |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
 several orders. A shared thing, such as one base class serving two criteria, is built once
@@ -67,6 +68,25 @@ Design reads every research finding and the plays research loaded. A finding tha
 was found is still an answer. Design then opens the guides and recipes research named without
 reading. One recipe covering the work means the decision is made and design follows it. Two, and
 design reads both and picks the fit.
+
+## Where an order's proof comes from
+
+The knowledge that covers an order says how to verify it, and design carries that onto the
+order as its `verify` list. When an agentic recipe covers the order, design copies the recipe's
+`## Verifier`. Each entry of its `verifier:` block becomes a command, with what passing means:
+exit 0, empty standard output, or standard output holding a text. Each numbered item of its
+prose becomes a check, word for word. Design never turns a sentence into a command. Today's
+recipes hold prose only, so they give checks.
+
+When no recipe covers the order, research's findings on how reputable sources verify the work
+give the entries. Each one cites its source and is marked as not binding, because this project
+never accepted that source. The design check names every order holding such an entry. Before
+you close the design, you see those entries with their sources.
+
+A command runs through the same runner as the configuration gate: arguments, never a shell. On
+a `gate` order the commands are the gate. On every other order they run inside the order's first
+check, after its own answer, and the check is met only when both are. The reviewer judges each
+check. On an `observe` order the look judges each one too.
 
 Design records each guide body as it opens it: the path, a hash of the body, the date, and the
 name research gave it. The record is `design-guides-read.json` in the task folder, one entry per
@@ -143,8 +163,10 @@ so the check compares declarations only.
 An order whose deliverable is exported configuration, such as a view or a content type, writes no
 test. TDD is about code, not configuration: a test that reads the exported file back restates
 the file and cannot fail for the right reason. Such an order carries `proof: gate`. Its proof is
-the configuration gate of your framework's implement recipe, a block of commands the build runs,
-every line exiting clean. The behavioural proof lives with the order that consumes the result.
+its own `verify` commands when it carries any. Otherwise it is the configuration gate of your
+framework's implement recipe, a block of commands the build runs, every line exiting clean. The
+behavioural proof lives with the order that consumes the result. An order that runs tools to
+change state is a `gate` order too, such as a dependency update or a database update.
 
 A configuration order is sized around the operation and owns every file that operation rewrites.
 Deleting a field owns each display that lists it. An order that owns the field's files alone and
@@ -169,12 +191,18 @@ own check. The judge on the record is a model, never a person, and completion pu
 criterion to you to accept. The design check refuses an `observe` order that declares a test,
 names no surface, or has no done-when row.
 
+Design picks the proof from what the order produces. Code that a test can pin gets `tests`.
+Tools run that change state get `gate`. A document or an analysis gets `record`, and what only a
+person or a browser can see gets `observe`. A machine-verified criterion does not mean a test,
+because every kind proves one in its own way.
+
 Creating an order and updating one both print `impliedProof:`, beside the proof the order
-declares. It says `tests` when the order owns a machine-verified criterion, and `not tests` when it
-owns criteria and none of them is machine-verified. It never chooses among the gate, the record and
-the observation, because nothing in the contract tells those three apart. An order owning nothing
-implies nothing, and the line says so. The default is `tests` because a wrongly tested
-configuration order wastes one build, and a wrongly untested code order ships unproven.
+declares. It says `record` when every file the order owns lies under the project folder. It says
+`any kind` when the order owns a machine-verified criterion, since what the order produces
+decides. It says `not tests` when the order owns criteria and none of them is machine-verified.
+An order owning nothing implies nothing, and the line says so. When the product is truly
+unclear, `tests` stays the default. A wrongly tested configuration order wastes one build, and a
+wrongly untested code order ships unproven.
 
 An order that changes a page or a screen names it from the project's surface file,
 `.visual-review/surfaces.json`. When no

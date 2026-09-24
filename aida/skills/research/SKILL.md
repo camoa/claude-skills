@@ -192,7 +192,9 @@ Typical search subjects, named by what they read, not by a fixed roster:
   the finding says so.
 - **What reputable sources recommend.** A current, dated source, never the model's own recall
   stated as fact. A memory of "the right way to do this" is a lead: confirm it with one search,
-  or record that nothing confirmed it.
+  or record that nothing confirmed it. Ask also how those sources verify the result: the command
+  they run, and what a pass prints. Record the command verbatim, with its source. Design turns
+  it into the order's own proof.
 - **An assumption that needs checking.** Named because a mechanism the task leans on might have
   changed. Checking it has three outcomes, not one: true, false, or could not be settled. All
   three finish the check and all three are worth recording; a false assumption is one of the
