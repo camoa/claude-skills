@@ -95,11 +95,11 @@ injected dependency, or a try-catch around everything, is a finding.
 
 ## The done-when clauses routed to you
 
-A done-when clause that asserts an absence says the change added nothing of a named kind: no second
-engine for one job, no new dependency, no static call to the container. No test of such a clause can
+A done-when clause that asserts an absence says the change added nothing of a named kind. No second
+engine for one job. No new dependency. No static call to the container. No test of such a clause can
 be watched failing. The tree is already in the state the clause asserts, and making the test fail
-means adding the very thing the clause forbids. So the tests step froze no test for it and routed it
-here, where the diff answers it.
+means adding what the clause forbids. So the tests step froze no test for it. It routed the clause
+here instead, where the diff answers it.
 
 Judge each clause in `absenceClauses` against the diff, and write one verdict per clause. Read the
 whole diff for it, not one hunk: a clause about what the change added is answered by everything it

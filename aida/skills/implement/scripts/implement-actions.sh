@@ -4857,11 +4857,13 @@ TF_OWN_COMMITS
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
   # The freeze commits (below), so freezing wo1, then wo2, then wo1 again finds HEAD moved by wo2's
   # commit. The same rows are the same freeze; different rows under a moved HEAD are the case 35
-  # exists for, tests changed under a record nobody re-took. The same rows leave nothing to commit
-  # and nothing to write, so this run says so and stops below, once the ledger carries what this
-  # call judged and routed. A judgement and a routed clause are not in the rows compared here, so a
-  # re-run that changes one of them and no test used to stop with the ledger saying what it said
-  # before. A routed clause that never reaches the ledger never reaches review.
+  # exists for, tests changed under a record nobody re-took.
+  #
+  # The same rows leave the frozen paths already in HEAD, so the commit below finds nothing to
+  # commit. This run therefore sets a word here and returns after the ledger write, rather than
+  # returning here. A judgement and a routed clause are in none of the rows compared here. So a
+  # re-run that changes one of them and no test used to stop here and write nothing, and a routed
+  # clause that never reaches the ledger never reaches review.
   local tf_unchanged_at=""
   if [ -f "$record_file" ] && [ "$existing_commit" != "$current_commit" ] && [ "$existing_commit" != "$tf_retake_commit" ]; then
     local existing_rows new_rows
@@ -4871,6 +4873,39 @@ TF_OWN_COMMITS
       || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
     tf_unchanged_at="$existing_commit"
   fi
+
+  # --- the test files go into a commit before anything is measured against them --------------------
+  # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
+  # slice's implementer starts"). Without this, the implementer is the role that commits the tests
+  # it is measured against, and the record names a commit the tests are not in (live-run row 62).
+  # Only the frozen paths are taken, through a pathspec, so work beside them stays where it is, and
+  # the line at the end says what was left. The helper dies before the record is written when the
+  # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
+  # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
+  # The support files ride in the same commit as the tests, so they are the author's in the
+  # history and never land in the implementer's range (live-run row 90).
+  local frozen_rel_paths tree_left
+  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
+    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  if [ -n "$frozen_rel_paths" ]; then
+    set --
+    while IFS= read -r p; do
+      [ -n "$p" ] && set -- "$@" "$p"
+    done <<TF_EOF
+$frozen_rel_paths
+TF_EOF
+    if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
+      recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
+        "Freeze the tests of $unit_id through the implement skill: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
+        "$frozen_rel_paths"
+      current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
+      [ -n "$current_commit" ] \
+        || die 3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
+    fi
+  fi
+  tree_left="$(git -C "$codepath" status --porcelain)"
+  [ -z "$tree_left" ] \
+    || printf 'tests-freeze: the tests are committed or unchanged, and other uncommitted changes remain in %s: %s\n' "$codepath" "$(printf '%s' "$tree_left" | tr '\n' ' ')" >&2
 
   # --- the checkpoint's verdict goes into the ledger, one judgement per order per criterion --------
   # Written before the record below, and on every path that reaches an exit, because a second freeze
@@ -4882,8 +4917,12 @@ TF_OWN_COMMITS
   # rows counted, because the routed list is replaced on every freeze: a re-freeze that drops a
   # clause must not leave it owed to review, and an order with no row at all can still route one.
   # The freeze already refuses a missing ledger at its last step, so requiring one here is no new
-  # refusal. It runs after exit 35 and before the commit below, so a refused freeze writes nothing
-  # and every freeze that returns 0 has written this first.
+  # refusal.
+  #
+  # It runs after the commit above, and every return that follows it has written it. A commit that
+  # fails refuses before this, so the ledger keeps what the live frozen record was taken with. A
+  # write before the commit destroyed those values on a re-freeze whose commit failed, and that
+  # freeze refused with two routed clauses already gone from the ledger (check ev).
   local ledger_file_now ledger_doc_now ledger_with_judgements
   ledger_file_now="$IMPL_DIR/ledger.json"
   [ -f "$ledger_file_now" ] \
@@ -4924,39 +4963,6 @@ TF_OWN_COMMITS
     printf '%s\n' "$record_file"
     exit 0
   fi
-
-  # --- the test files go into a commit before anything is measured against them --------------------
-  # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
-  # slice's implementer starts"). Without this, the implementer is the role that commits the tests
-  # it is measured against, and the record names a commit the tests are not in (live-run row 62).
-  # Only the frozen paths are taken, through a pathspec, so work beside them stays where it is, and
-  # the line at the end says what was left. The helper dies before the record is written when the
-  # commit fails, so a record never names a commit that did not happen. Paths already in HEAD carry
-  # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
-  # The support files ride in the same commit as the tests, so they are the author's in the
-  # history and never land in the implementer's range (live-run row 90).
-  local frozen_rel_paths tree_left
-  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
-    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
-  if [ -n "$frozen_rel_paths" ]; then
-    set --
-    while IFS= read -r p; do
-      [ -n "$p" ] && set -- "$@" "$p"
-    done <<TF_EOF
-$frozen_rel_paths
-TF_EOF
-    if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
-      recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
-        "Freeze the tests of $unit_id through the implement skill: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
-        "$frozen_rel_paths"
-      current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
-      [ -n "$current_commit" ] \
-        || die 3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
-    fi
-  fi
-  tree_left="$(git -C "$codepath" status --porcelain)"
-  [ -z "$tree_left" ] \
-    || printf 'tests-freeze: the tests are committed or unchanged, and other uncommitted changes remain in %s: %s\n' "$codepath" "$(printf '%s' "$tree_left" | tr '\n' ' ')" >&2
 
   # The recipe each red was read against, per framework, so the record says what the freeze read
   # and a later reader can compare it with what preconditions.json holds now (live-run row 99).

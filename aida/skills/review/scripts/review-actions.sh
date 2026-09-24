@@ -1669,6 +1669,7 @@ RW_RESEARCH_FILES
   # verdict outside the three words. A verdict with nothing to read beside it, the same rule
   # `tests-freeze` applies to a `--row`. An absence nobody judged is never a pass.
   local absence_given absence_rows absence_unrouted absence_verdict absence_detail absence_hits
+  local absence_twice
   absence_given="$(jq -c 'if ((.absenceVerdicts // []) | type) == "array"
     then [ (.absenceVerdicts // [])[]
            | {order: (.order // ""), clause: (.clause // ""),
@@ -1681,6 +1682,13 @@ RW_RESEARCH_FILES
       | (.order + ": " + .clause) ] | unique | join("; ")')"
   [ -z "$absence_unrouted" ] \
     || die 52 "findings: $findings_path answers a done-when clause no order routed to review: $absence_unrouted. The reviewer answers the clauses the brief carries under absenceClauses, verbatim, and it invents none. A verdict on a clause nobody routed answers a question nobody asked."
+  # Two verdicts for one clause are two answers nothing can tell apart, and the pairing below reads
+  # only the first. This is the rule the findings list already gets for two findings under one id.
+  absence_twice="$(printf '%s' "$absence_given" | jq -r '
+    [ group_by([.order, .clause])[] | select(length > 1) | .[0] | (.order + ": " + .clause) ]
+    | join("; ")')"
+  [ -z "$absence_twice" ] \
+    || die 52 "findings: $findings_path answers these done-when clauses more than once: $absence_twice. One clause takes one verdict. A clause answered unmet would otherwise pass on the strength of a met written beside it."
   absence_rows="$(jq -nc --argjson routed "$RW_ABSENCE_CLAUSES" --argjson given "$absence_given" '
     [ $routed[] | . as $r
       | ([ $given[] | select(.order == $r.order and .clause == $r.clause) ][0]) as $g

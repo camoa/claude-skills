@@ -170,19 +170,19 @@ so a reason without it stays prose. The freeze records that commit as the reason
 commit of another unit, and one the branch does not hold. The author reads no source.
 
 A done-when clause that asserts an absence is answered at review instead. Such a clause says the
-change added nothing of a named kind: no second engine for one job, no new dependency, no static
-call to the container. No test of it can be watched failing, because the tree is already in the
-state the clause asserts, and making the test fail means adding the thing the clause forbids. The
-freeze routes the clause rather than freezing a test for it. It records the clause on the order's
-ledger entry, review carries it to the architecture reviewer, and that reviewer judges it against
-the task's whole diff. So the clause is visible as owed rather than untested in silence, and the
-author no longer chooses between an unprovable test and none.
+change added nothing of a named kind. No second engine for one job. No new dependency. No static
+call to the container. No test of it can be watched failing. The tree is already in the state the
+clause asserts, and making the test fail means adding the thing the clause forbids. The freeze
+routes the clause rather than freezing a test for it. It records the clause on the order's ledger
+entry. Review carries it to the architecture reviewer, which judges it against the task's whole
+diff. So the clause is visible as owed rather than untested in silence, and the author no longer
+chooses between an unprovable test and none.
 
 The route is narrow on purpose. The freeze refuses a clause the order's done-when does not hold
 word for word, and a clause with no negation word in it at all. Every other test still needs the
-run that failed, and an order whose record would hold no row at all still refuses. A clause a test
-could have proved, routed this way, is how the rule that every frozen test was watched failing
-gets worked around.
+run that failed, and an order that froze no test at all still refuses. A clause a test could have
+proved, routed this way, is how the rule that every frozen test was watched failing gets worked
+around.
 
 When the author returns, the coding-standards tool runs over the new test files, and a finding
 goes back to the author before the freeze. This is the one place the tests' own standards are
