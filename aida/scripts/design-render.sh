@@ -185,7 +185,7 @@ render_text_list() {
   if [ "$TESTS_TYPE" != "array" ]; then
     printf 'The tests field could not be read: it is present but is a %s, not a list. This is not the same as no tests recorded; run check-design.sh against this task before this file is used.\n\n' "$TESTS_TYPE"
   elif [ "$(jq -r '.proof // "tests"' "$WO_FILE")" = "gate" ]; then
-    printf 'None. This order is proved by its own verify run lines when it carries any, and by the `## Configuration gate` lines of the implement recipe otherwise. The tests of the order that consumes what it configures prove the behaviour.\n\n'
+    printf 'None. This order is proved by its own verify run lines, then the `## Configuration gate` lines of the implement recipe. The tests of the order that consumes what it configures prove the behaviour.\n\n'
   elif [ "$(jq '(.tests // []) | length' "$WO_FILE")" -eq 0 ]; then
     printf 'None recorded.\n\n'
   else

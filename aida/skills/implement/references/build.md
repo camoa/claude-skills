@@ -328,10 +328,10 @@ at `code-written` otherwise. The summary has `build-record`'s shape plus a `rech
 This step runs all eight deciding checks. The record holds every one.
 
 - **order-tests.** Do this order's own frozen tests pass. On an order whose proof is `gate` this
-  slot is `configuration-gate` instead. Does every line pass, run in the worktree. The lines
-  are the order's own `verify` run entries when it carries any, and the `## Configuration gate`
-  lines of the implement recipe otherwise. The first line that does not pass is named, with its
-  output. It reads unknown when the task records no environment, when no `--implement-recipe`
+  slot is `configuration-gate` instead. Does every line pass, run in the worktree. The order's
+  own `verify` run entries run first, then the `## Configuration gate` lines of the implement
+  recipe. The worse verdict stands. The first line that does not pass is named, with its
+  output. A placeholder given several `--value` entries runs its line once per value. It reads unknown when the task records no environment, when no `--implement-recipe`
   was passed, or when that recipe carries no such block. The detail says which. A line 2 that
   printed `There are no changes to import` is a finding for the reviewer, not for this check.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the

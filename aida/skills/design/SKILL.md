@@ -173,8 +173,8 @@ AIDA cannot know on its own:
   theme, a component, a configuration entity. This is what an order is sized around.
 - What is built with configuration rather than code. A view or a content type is a work order
   with no code in it. It states no test. It is created with `--proof gate`. Its proof is its own
-  verify lines, or the implement recipe's `## Configuration gate` lines when it has none. The
-  recipe's sizing rule decides what it owns.
+  verify lines, then the implement recipe's `## Configuration gate` lines. The recipe's sizing
+  rule decides what it owns.
 - What is a document rather than code or configuration: a dependency review, a report, a note.
   Such an order owns files under the project folder, in a folder the project commits, the task
   folder's `deliverables/` by default. A report may land beside earlier reports elsewhere in
@@ -508,7 +508,7 @@ say why in the `reasoning`.
 
 What each kind does with the entries:
 
-- `gate`: the run entries are its gate. They run in place of the `## Configuration gate`.
+- `gate`: the run entries run first, then the `## Configuration gate`. The worse verdict stands.
 - `tests`, `record` and `observe`: the run entries run in the order's first deciding check,
   after its own answer, from the code worktree. The check is met only when both are.
 - Every kind: the reviewer judges each check entry. On an `observe` order the look also judges

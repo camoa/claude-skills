@@ -242,11 +242,14 @@ A work order whose deliverable is exported configuration, a Drupal view or a con
 `gate` as its proof kind; design created it that way. No test author is dispatched and no row goes
 to the checker, because a test that reads the YAML back cannot fail for the right reason. The
 order freezes with no test, and with a checklist line for each criterion a person verifies. Its
-build runs the order's own `verify` commands instead, in the task's worktree. Design copied them
-from the recipe that covers the order, or wrote them from research's findings. An order with
-none runs the implement recipe's configuration gate lines, as before. Every line passing is met;
+build runs the order's own `verify` commands first, in the task's worktree. Design copied them
+from the recipe that covers the order, or wrote them from research's findings. They prove the
+site the build left. The implement recipe's configuration gate lines run after them, and prove
+the export imports onto the seed. The worse answer stands. An order with no commands runs the
+gate lines alone. Every line passing is met;
 the first line that does not is named, with its output. A line passes on exit 0, or on what its
-standard output must hold when the source says so. The check reads
+standard output must hold when the source says so. A placeholder given several `--value`
+entries runs its command once per value. The check reads
 unknown when the task has no running site recorded, so bring the environment up first. The proof
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.

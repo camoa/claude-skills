@@ -84,7 +84,8 @@ never accepted that source. The design check names every order holding such an e
 you close the design, you see those entries with their sources.
 
 A command runs through the same runner as the configuration gate: arguments, never a shell. On
-a `gate` order the commands are the gate. On every other order they run inside the order's first
+a `gate` order the commands run first and the configuration gate after them, and the worse
+answer stands. On every other order they run inside the order's first
 check, after its own answer, and the check is met only when both are. The reviewer judges each
 check. On an `observe` order the look judges each one too.
 
@@ -163,8 +164,9 @@ so the check compares declarations only.
 An order whose deliverable is exported configuration, such as a view or a content type, writes no
 test. TDD is about code, not configuration: a test that reads the exported file back restates
 the file and cannot fail for the right reason. Such an order carries `proof: gate`. Its proof is
-its own `verify` commands when it carries any. Otherwise it is the configuration gate of your
-framework's implement recipe, a block of commands the build runs, every line exiting clean. The
+its own `verify` commands, then the configuration gate of your framework's implement recipe, a
+block of commands the build runs, every line exiting clean. An order with no commands runs the
+gate alone. The
 behavioural proof lives with the order that consumes the result. An order that runs tools to
 change state is a `gate` order too, such as a dependency update or a database update.
 
