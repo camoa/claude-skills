@@ -104,9 +104,12 @@ die() { printf 'completion-actions: %s\n' "$2" >&2; exit "$1"; }
 # One refusal function, one exit code as its first argument. The table above is the only place a
 # number gets a meaning, and nothing here mints one that table does not carry.
 
-# task-helpers.sh takes these two from its caller, so a refusal still says which script refused.
+# task-helpers.sh takes these three from its caller, so a refusal still says which script refused.
+# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
 die1() { die 1 "$1"; }
+# shellcheck disable=SC2329 # called by resolve_task_folder and write_atomic in scripts/lib/task-helpers.sh
 die3() { die 3 "$1"; }
+# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
 die79() { die 79 "$1"; }
 
 for lib_name in "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do

@@ -4,7 +4,7 @@
 # scope-actions.sh, research-actions.sh and design-actions.sh each carried their own copy of these
 # four. One implementation, not three copies drifting apart, the same reason schema-check.sh exists.
 #
-# The caller defines die1, die2, die3 and die4 before it sources this file, each with its own
+# The caller defines die1, die2, die3, die4 and die79 before it sources this file, each with its own
 # script name in the message, so a refusal still says which script refused, and PLUGIN_ROOT, so
 # this library can find the task script. Those are the only things this library takes from its
 # caller rather than owning.
