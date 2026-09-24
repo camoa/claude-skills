@@ -526,12 +526,10 @@ TA_CHILDREN
   done
   [ -z "$moved" ] || add_children "$new_task_dir/task.json" "$moved"
 
-  # The move leaves a deletion behind at the old path, and staging tasks/<id> alone cannot see it.
-  git -C "$project_path" add -A -- "$old_folder" >/dev/null 2>&1
-
   # The commit stages this task's folder, each moved child's, and the parent's when this was a
-  # left child, never tasks/ whole.
-  set --
+  # left child, never tasks/ whole. The move leaves a deletion behind at the old path, and the
+  # commit takes its pathspecs alone, so the old folder is one of them.
+  set -- "$old_folder"
   [ -z "$origin_parent" ] || set -- "tasks/$origin_parent"
   while IFS= read -r child_id; do
     [ -n "$child_id" ] && set -- "$@" "tasks/$child_id"
