@@ -48,20 +48,20 @@ segment is no longer halted and resumes at its own step. An order carrying anoth
 halted for that one. The ledger records each clearing under `haltsCleared`, with the halt text as
 it stood. Tell the person which orders cleared, and which are still halted and why.
 
-After a restart, a `partialBuild(<order>):` line names each restarted order whose commits are
-still on the branch, with the commits and their kinds. It prints only while one is there. It
-stops once the order is built again: its ledger entry reads code-written or later. It is
-not a refusal: the person may have chosen to carry them. Tell the person the tree still holds
-that order's earlier tests and code, and that its test author will be told so.
+After a restart or a retake, a `partialBuild(<order>):` line can name an order sent back to its
+tests step. It names the order while its build or fix commits are still on the branch. It lists
+those commits with their kinds, and they are exactly what a `commit:` reason may cite. It prints
+only while one is there. It stops once the order is built again: its ledger entry reads code-written
+or later. It is not a refusal: the person may have chosen to carry them. Tell the person the tree
+still holds that order's earlier code, and that its test author will be told so.
 
-The line is read from the branch each time it prints, by the rule the restart applies. Every
-restart record the task holds says which orders started over, not the newest alone. An order two
-restarts named gets one line. Each freeze commit is read from the branch itself, by the subject the
-freeze writes. Each build and fix commit is read from the order's own records, in every folder a
-retake or an earlier restart moved them to. So a task restarted under an older version reads
-correctly now, and the line agrees with the tree it describes. The commits are in the order the
-branch holds them, oldest first. That is the order the restart printed, so a person can read one
-list against the other.
+The line is read from the branch each time it prints. Every restart record the task holds says which
+orders started over, not the newest alone. The ledger names every retaken order. An order named
+twice gets one line. Each build and fix commit is read from the order's own records, in every folder
+a retake or an earlier restart moved them to. After `start --rebased-onto`, a commit the rebase
+rewrote is found again by its change. So the line agrees with the tree it describes. The commits are
+in the order the branch holds them, oldest first. The restart's own list also names the freezes,
+because its reset needs them. The line leaves them out, since no reader acts on one.
 
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
 snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason

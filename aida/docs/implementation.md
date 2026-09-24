@@ -162,12 +162,12 @@ and the author can name the existing code that satisfies it: frozen, with that r
 for the reviewer. Still green with nothing to name: reported by name, and the step stops. Failed:
 frozen with its red run. A green test is never deleted quietly and never weakened into failing.
 
-A test of the unit's own work has a fifth thing to name. After a restart the branch can still hold
-this unit's earlier build, and that build is what satisfies the test. The author may not read it,
-and no interface record of this unit exists yet. So the author names one of the unit's own build
-or fix commits, which the brief carries, written `commit:<id>`. The prefix is what marks a commit,
-so a reason without it stays prose. The freeze records that commit as the reason. It refuses a
-commit of another unit, and one the branch does not hold. The author reads no source.
+A test of the unit's own work has a fifth thing to name. After a restart or a retake the branch can
+still hold this unit's earlier build, and that build is what satisfies the test. The author may not
+read it, and no interface record of this unit exists yet. So the author names one of the unit's own
+build or fix commits, which the brief carries, written `commit:<id>`. The prefix is what marks a
+commit, so a reason without it stays prose. The freeze records that commit as the reason. It refuses
+a commit of another unit, and one the branch does not hold. The author reads no source.
 
 A done-when clause that asserts an absence is answered at review instead. Such a clause says the
 change added nothing of a named kind. No second engine for one job. No new dependency. No static
@@ -489,20 +489,18 @@ design has closed again, the next run takes the wider order in place and keeps i
 attempts. The orders that depend on it are left alone. A removed owned file, or any other
 change, halts as above.
 
-A restart moves records, not commits. The halted order's frozen tests and its build attempts
-are still on the branch. A test author sent against them could write a test that passes at
-once. So the restart lists those commits, and says one of two things about the tree. When
-nothing later depends on them, it names the commit to take the branch back to. That is a hard
-reset, and you run it. When other commits sit after them, they are carried, and the unit's own
-code stays in the tree, so its next tests cannot go red. Either way the
-next run names them while they are still there and the unit is not yet built again. It names them
-in the order the branch holds them, oldest first,
-which is the order the restart printed. It works them out again each time, rather than replaying
-the list the restart wrote. A freeze commit comes from the branch, by the subject the freeze
-writes on it. A build or fix commit comes from the unit's own record, wherever a retake or an
-earlier restart moved it. So a task restarted under an older version reads correctly now. The test
-author's brief then says the tree holds a partial build of the unit, and carries the commits. A
-test green on arrival is never taken as proof.
+A restart moves records, not commits. The halted order's frozen tests and its build attempts are
+still on the branch. A test author sent against them could write a test that passes at once. So the
+restart lists those commits, and says one of two things about the tree. When nothing later depends
+on them, it names the commit to take the branch back to. That is a hard reset, and you run it. When
+other commits sit after them, they are carried. The unit's own code stays in the tree, so its next
+tests cannot go red. Either way the next run names the unit's build and fix commits while they are
+there. It stops once the unit is built again. A retake names them the same way, because it keeps the
+build and corrects only the test. They come in the order the branch holds them, oldest first. They
+are worked out again each time, from the unit's own records, wherever a retake or an earlier restart
+moved them. After a rebase, each is found again by its change. The test author's brief then carries
+those commits and says the tree holds the unit's earlier code. A test green on arrival is never
+taken as proof.
 
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a

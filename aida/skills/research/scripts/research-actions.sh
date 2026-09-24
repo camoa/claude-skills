@@ -150,12 +150,12 @@ CHECK_RESEARCH_SCRIPT="${PLUGIN_ROOT}/scripts/check-research.sh"
 
 command -v jq >/dev/null 2>&1 || { printf 'research-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
-# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'research-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'research-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'research-actions: %s\n' "$1" >&2; exit 4; }
-# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'research-actions: %s\n' "$1" >&2; exit 79; }
 
 usage() {

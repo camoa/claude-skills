@@ -2159,12 +2159,12 @@ do_start() {
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
-  # After a restart, the halted orders' commits may still be on the branch; one line per order
-  # names them while they are. Not a refusal: the person may have chosen to carry them
-  # (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  # After a restart or a retake, the order's own build and fix commits may still be on the branch;
+  # one line per order names them while they are. Not a refusal: the person may have chosen to
+  # carry them (live-run row 94). The line is dropped when there is none, the way `removed:` is.
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
-    st_partial_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
+    st_partial_json="$(rs_carried_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
       group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind))})')"
   fi
   im_print_summary "start" "$(jq -n \
@@ -3622,15 +3622,15 @@ do_tests_brief() {
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
 
-  # A ninth thing, only after a restart left this order's commits on the branch: the tree holds
-  # a partial build of the order, so a test that passes on arrival is suspect, and the author is
-  # told rather than left to find it (live-run row 94).
+  # A ninth thing, only after a restart or a retake left this order's build and fix commits on the
+  # branch: a test that passes on arrival is suspect, and the author is told rather than left to
+  # find it (live-run row 94).
   local tree_holds_json
   rv_load_codepath "tests-brief"
-  tree_holds_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$ledger_doc" | jq -c '
+  tree_holds_json="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$ledger_doc" | jq -c '
     if length == 0 then null
     else {commits: map({kind, commit}),
-          note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect",
+          note: "the tree holds these build and fix commits of this unit from an earlier attempt, which a restart or a retake sent back to the tests step, so a test that passes on arrival is suspect",
           greenOnArrival: "A test of this unit that arrives green may pass because of one of the build or fix commits above. Give that commit as the --locks-in reason, written commit:<id>. Read no source to decide it."} end')"
 
   # A tenth thing, only while a retake is still unanswered: a person ruled one frozen test wrong
@@ -4749,8 +4749,8 @@ TF_EOF
     [ "${#tf_lock_id}" -ge 7 ] \
       || die 101 "tests-freeze: --locks-in for $tf_lock_name reads commit:$tf_lock_id, which is shorter than seven characters and names no commit on its own. Read the whole id from treeHolds in the tests brief."
     if [ "$tf_own_loaded" = "false" ]; then
-      tf_own_commits="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger" \
-        | jq -r '.[] | select(.kind == "build" or .kind == "fix") | .commit')"
+      tf_own_commits="$(rs_carried_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger" \
+        | jq -r '.[].commit')"
       tf_own_loaded=true
     fi
     tf_lock_hit=""
@@ -4762,7 +4762,7 @@ TF_EOF
 $tf_own_commits
 TF_OWN_COMMITS
     [ -n "$tf_lock_hit" ] \
-      || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_id, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; else printf 'none, so no restart left this order a build here'; fi). Read them from treeHolds in the tests brief. A reason with no commit: prefix names the existing code instead."
+      || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_id, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; else printf 'none, so no restart or retake left this order a build here'; fi). Read them from treeHolds in the tests brief. A reason with no commit: prefix names the existing code instead."
     tf_lock_i=$((tf_lock_i + 1))
   done
 
@@ -9054,6 +9054,23 @@ do_retake_tests() {
   exit 0
 }
 
+# rs_on_branch <codepath> <commit> <table>: prints the commit when HEAD holds it. Otherwise prints
+# the commit on this branch that carries the same change, found in <table>, or nothing. <table> is
+# `git patch-id --stable` over the task's span, filled only after `start --rebased-onto`. A rebase
+# gives every commit a new id, and the records keep the old ones. So a commit: reason naming the
+# rebased build was refused. A clean replay keeps the diff, so the stable patch id matches. The old
+# object stays readable while the reflog holds it, thirty days by default. A replay whose conflict
+# changed the diff, or an old object git pruned, names nothing, as before this rule. The subject is
+# no link: the build and fix steps write none of their own.
+rs_on_branch() {
+  local pid
+  if git -C "$1" merge-base --is-ancestor "$2" HEAD >/dev/null 2>&1; then printf '%s' "$2"; return 0; fi
+  [ -n "$3" ] || return 0
+  pid="$(git -C "$1" show --no-color "$2" 2>/dev/null | git patch-id --stable 2>/dev/null | cut -d' ' -f1)"
+  [ -n "$pid" ] || return 0
+  printf '%s\n' "$3" | awk -v p="$pid" '$1 == p { printf "%s", $2; exit }'
+}
+
 # The commits one order's records name that HEAD still holds, as a JSON array of
 # {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
 # ledger document.
@@ -9087,7 +9104,7 @@ do_retake_tests() {
 # folder the restart's own ledger reset had stopped naming (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
-  local out='[]' c range file kind dir files started span
+  local out='[]' c old range file kind dir files started span pids=""
   # `git log --grep` reads the whole message, so it only narrows the candidates; the subject test
   # below decides. HEAD alone when the ledger holds no usable startedFrom, which no ledger this
   # stage writes does: the field is required, and the wider search still answers this order.
@@ -9096,9 +9113,15 @@ rs_order_commits() {
   if [ -n "$started" ] && git -C "$codepath" merge-base --is-ancestor "$started" HEAD >/dev/null 2>&1; then
     span="$started..HEAD"
   fi
+  # `start --rebased-onto` keeps each rewritten start under startedFromBefore, so a ledger holding
+  # one is a branch whose ids may have moved since the records were written.
+  if [ "$(printf '%s' "$ledger" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
+    pids="$(git -C "$codepath" log --no-color -p "$span" 2>/dev/null | git patch-id --stable 2>/dev/null)"
+  fi
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+    c="$(rs_on_branch "$codepath" "$c" "$pids")"
+    [ -n "$c" ] || continue
     case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
       "Freeze the tests of $one_id through the implement skill:"*) ;;
       *) continue ;;
@@ -9140,7 +9163,8 @@ RS_RETAKEN
     case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
     while IFS= read -r c; do
       [ -n "$c" ] || continue
-      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
+      c="$(rs_on_branch "$codepath" "$c" "$pids")"
+      [ -n "$c" ] || continue
       out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
         if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
     done <<RS_RANGE
@@ -9156,10 +9180,12 @@ RS_FILES
     [ -f "$file" ] || continue
     while IFS= read -r c; do
       [ -n "$c" ] || continue
-      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
-      out="$(jq -c --arg c "$c" --argjson have "$out" '
-        ([ (.commits // [])[] | select(.commit == $c) ] | .[0]) as $e
-        | if $e == null or ($have | any(.[]; .commit == $c)) then $have else $have + [$e] end' "$file")"
+      old="$c"
+      c="$(rs_on_branch "$codepath" "$c" "$pids")"
+      [ -n "$c" ] || continue
+      out="$(jq -c --arg old "$old" --arg c "$c" --argjson have "$out" '
+        ([ (.commits // [])[] | select(.commit == $old) ] | .[0]) as $e
+        | if $e == null or ($have | any(.[]; .commit == $c)) then $have else $have + [$e | .commit = $c] end' "$file")"
     done <<RS_PRIOR
 $(jq -r --arg id "$one_id" '(.commits // [])[] | select(.order == $id) | .commit' "$file" 2>/dev/null)
 RS_PRIOR
@@ -9179,28 +9205,30 @@ RS_ARCHIVES
   printf '%s' "$out"
 }
 
-# The commits of the orders any restart named that HEAD still holds, the same shape, or []
-# when no restart happened or nothing of it is left. $1 the task folder, $2 the code repository,
-# $3 an order id to keep alone, or empty for every order, $4 the ledger document. Read by `start`
-# after a restart and by `tests-brief`, so the test author is told the tree holds a partial build
-# of the order, and by `tests-freeze` to check a --locks-in commit.
-# Each record says which orders restarted; the commits come from rs_order_commits, the rule
-# `restart` itself applies. This replayed the record's own `commits` array, which is written once
-# and never recomputed, so a restart from before that rule was complete named one commit where the
-# branch held four (live-run row 182). The record's array is still read, inside rs_order_commits,
-# for the commits of a retake the restart cleared out of the ledger.
-# Every restart record is read, not the newest alone. A later restart of another order leaves an
-# earlier one's commits on the branch, and its line and its commit: route must survive. An order
-# restarted twice is named by two records and asked for once: rs_order_commits already reads
-# every folder and record either restart wrote, and `start` prints one line per order.
-# An order rebuilt since its halt is left out. `restart` resets the order's ledger entry to not
-# started when it halts it, so a build step on that entry happened after its newest halt, whatever
-# restart of another order came later. Rebuilt means the entry reads code-written or any step
-# after it, closed included. A freeze alone is not a rebuild: the old build is all the tree holds
-# of the order, and a retake returns the order to that state. A commit order was not used: a
-# rebase rewrites the record's headCommit, and the ledger survives it. An order the ledger does
-# not hold, or a ledger nothing could read, keeps its line.
-rs_restarted_commits_in_head() {
+# The build and fix commits HEAD still holds of every order a restart or a retake sent back to the
+# tests step, as rs_order_commits shapes them, or [] when there is none. $1 the task folder, $2 the
+# code repository, $3 an order id to keep alone, or empty for every order, $4 the ledger document.
+# `start` prints them as the partialBuild line, `tests-brief` carries them under treeHolds, and
+# `tests-freeze` checks a commit: reason against them. One list for all three, so the line offers
+# exactly what the freeze accepts.
+#
+# Which orders. Every restart record names the orders it halted, and every one is read, not the
+# newest alone: a later restart of another order leaves an earlier one's commits on the branch. An
+# order restarted twice is asked for once, because rs_order_commits already reads every folder and
+# record either restart wrote. A retake needs no restart: the ledger entry's `retakes` names it. Its
+# corrected test can arrive green on the order's own build as surely as after a restart, so it takes
+# the same route.
+#
+# Which commits. A build or a fix commit only, since those are what a commit: reason may cite. A
+# freeze holds tests, and no reader of this list acts on one: the test author reads no source, and
+# `restart` computes its reset commit from rs_order_commits, which keeps every freeze.
+#
+# When. An order rebuilt since it was sent back is left out. `restart` resets the entry to not
+# started and `retake-tests` to tests-frozen, so a build step on the entry came later. Rebuilt means
+# code-written or any step after it, closed included. A freeze alone is not a rebuild. The ledger
+# decides and not the commit order, because a rebase rewrites every id and the ledger survives it.
+# An order the ledger does not hold, or a ledger nothing could read, keeps its line.
+rs_carried_commits_in_head() {
   local task="$1" codepath="$2" only="$3" ledger="$4" one out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
@@ -9210,11 +9238,13 @@ rs_restarted_commits_in_head() {
       *) continue ;;
     esac
     out="$(jq -cn --argjson have "$out" \
-      --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" '$have + $more')"
+      --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" \
+      '$have + [ $more[] | select(.kind != "freeze") ]')"
   done <<RS_ORDERS
-$(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
-  -exec jq -r --arg only "$only" '(.ordersHaltedForDrift // [])[] | select($only == "" or . == $only)' {} ';' \
-  2>/dev/null | LC_ALL=C sort -u)
+$({ find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
+    -exec jq -r '(.ordersHaltedForDrift // [])[]' {} ';'
+  printf '%s' "$ledger" | jq -r '(.orders // [])[] | select((.retakes // []) | length > 0) | .id'
+} 2>/dev/null | { if [ -n "$only" ]; then grep -Fx -- "$only"; else cat; fi; } | LC_ALL=C sort -u)
 RS_ORDERS
   printf '%s' "$out"
 }

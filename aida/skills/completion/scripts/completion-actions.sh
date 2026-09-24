@@ -105,13 +105,11 @@ die() { printf 'completion-actions: %s\n' "$2" >&2; exit "$1"; }
 # number gets a meaning, and nothing here mints one that table does not carry.
 
 # task-helpers.sh takes these three from its caller, so a refusal still says which script refused.
-# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die1() { die 1 "$1"; }
-# die3 is called by resolve_task_folder, write_atomic, mark_task_in_progress, commit_task_change
-# and task_worktree, all in scripts/lib/task-helpers.sh.
-# shellcheck disable=SC2329 # called by the task-helpers.sh functions named above
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die3() { die 3 "$1"; }
-# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { die 79 "$1"; }
 
 for lib_name in "$TASK_HELPERS_LIB" "$SCHEMA_CHECK_LIB" "$RECIPES_LIB"; do

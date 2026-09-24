@@ -88,11 +88,10 @@ It reads the frozen copy and never the live files. It writes exactly eight thing
   summary says the author has no runner to read;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
-A ninth, `treeHolds`, only after a restart left this order's earlier commits on the branch.
-It holds those commits and two sentences. The tree holds a partial build of this unit, so a
-test that passes on arrival is suspect. And the author may give one of the build or fix commits
-to `--locks-in`, below, written `commit:<id>`. The summary prints the commits on a
-`treeHolds:` line.
+A ninth, `treeHolds`, only after a restart or a retake left this order's build or fix commits on the
+branch. It holds those commits and two sentences. The tree holds this unit's own earlier code, so a
+test that passes on arrival is suspect. And the author may give one of those commits to
+`--locks-in`, below, written `commit:<id>`. The summary prints the commits on a `treeHolds:` line.
 
 A tenth, `retake`, only while a `test-wrong` ruling is still unanswered by a freeze. It holds
 the ruled finding, the criterion it names, its evidence, its severity, and the file and lines it
@@ -173,15 +172,15 @@ in, and the reason is recorded with `--locks-in`. Still green with no existing c
 reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
 deleted quietly and never weakened into failing.
 
-**A test of the order's own work names a commit, not code.** After a restart the tree can still
-hold this order's earlier build, so a test of its done-when arrives green. The code that satisfies
-it is the order's own, which the author may not read, and no interface record of this order exists
-yet. So the author gives `--locks-in` one of the build or fix commits the brief carries under
-`treeHolds`, written `commit:<id>`. The prefix is what marks a commit, so a reason without it
+**A test of the order's own work names a commit, not code.** After a restart or a retake the tree
+can still hold this order's earlier build, so a test of its done-when arrives green. The code that
+satisfies it is the order's own, which the author may not read, and no interface record of this
+order exists yet. So the author gives `--locks-in` one of the build or fix commits the brief carries
+under `treeHolds`, written `commit:<id>`. The prefix is what marks a commit, so a reason without it
 stays prose whatever it looks like. The freeze checks the commit is this order's own and is on the
 branch, and refuses anything else (exit 101). The author reads no source. It names a commit the
-brief already printed. This is honest because a person chose to carry that code rather than reset
-the branch.
+brief already printed. This is honest. The code is on the branch for one of two reasons. A person
+chose to carry it, or a retake kept the build and corrected only the test.
 
 **A done-when clause that asserts an absence gets no test, and goes to review.** Such a clause says
 the change added nothing of a named kind. No second engine for one job. No new dependency. No

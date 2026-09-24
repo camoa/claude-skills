@@ -214,14 +214,14 @@ fi
 
 command -v jq >/dev/null 2>&1 || { printf 'design-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
-# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die1() { printf 'design-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'design-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'design-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
 die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
-# shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
