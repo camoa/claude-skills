@@ -1479,8 +1479,8 @@ do_close() {
   # An unfinished critique moves too, under an `unfinished-` prefix (gap row 190). It is no more
   # reproducible than a finished one, and it is the only copy of what that critic wrote before it
   # stopped. The close does not count it: it is not evidence the close judged, and a findings total
-  # read from it would be invented. The prefix keeps it out of the `design-critique-*.md` pattern,
-  # so the count loop below skips it and the design skill still routes a bare `close` to the
+  # read from it would be invented. The prefix keeps it out of the `design-critique-*.md` pattern.
+  # So the count loop below skips it. And the design skill still routes a bare `close` to the
   # critique step when no finished file is there.
   local crit_file crit_dest
   while IFS= read -r crit_file; do

@@ -10,19 +10,23 @@
 # Growth is a deliberate edit of the list, in the same commit.
 #
 # How it reads a write. It strips the quotes from a line first, so `"$d"/records/"x.json"` reads
-# as one path. It follows a variable assigned a path ending in /records, and reads every name
-# written through that variable, up to the line that assigns that variable another path. A use
-# above every assignment still counts, because each file is read twice. It reads the -name pattern
-# of a find whose path ends in /records. It reads a name ending in / as a subfolder. It refuses a
-# file name built at run time, because it cannot know that name. It refuses a script that changes
-# directory into a records folder, for the same reason.
+# as one path. It reads every name after records/, whether or not the name holds a dot, so a
+# subfolder counts too. It follows a variable assigned a path ending in /records, and reads every
+# name written through that variable. It reads the -name pattern of a find over a records folder,
+# named outright or through such a variable. It refuses a file name built at run time, because it
+# cannot know that name. It refuses a script that changes directory into a records folder, for the
+# same reason.
 #
-# What it reads. Every script under scripts/, skills/ and hooks/, every agent body and skill body,
-# every template, every eval file, and the schemas under scripts/. A records path in one of those
-# is a write. It reads every page under docs/ as well, and those are different: a docs page is
-# prose for a person, not an instruction a model runs. A name a docs page gives must be on the
-# list, and a docs page alone never keeps a list line alive. Only a write does. So a line naming a
-# record nothing writes any more still fails, even while a docs page still names it.
+# Following a variable stops at the line that gives that variable another path. Two orderings do
+# not stop it. A use above every assignment counts, because each file is read twice. And a use
+# above a records assignment counts, because a function body sits above the globals it reads.
+#
+# What it reads. Every file under scripts/, skills/, hooks/, agents/, templates/, evals/ and
+# .claude-plugin/. A records path in one of those is a write. It reads the pages a person reads as
+# well: docs/, README.md and CHANGELOG.md. Those are different. A page is prose for a person, and
+# no model runs it. A name a page gives must be on the list, and a page alone never keeps a list
+# line alive. Only a write does. So a line naming a record nothing writes any more still fails,
+# even while a page still names it.
 # What it still cannot see is named in tests/records-folder.txt's header.
 # Usage: records-folder-spec.sh [<list file>]. bash 3.2+ and zsh.
 # The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
@@ -39,11 +43,10 @@ RAW="$(mktemp)"; NAMES="$(mktemp)"; FOUND="$(mktemp)"; REFS="$(mktemp)"
 KEYS="$(mktemp)"; CDS="$(mktemp)"; AT="$(mktemp)"
 trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
 
-# W is a file whose records path is a write. P is a docs page, whose records path is a mention.
+# W is a file whose records path is a write. P is a page a person reads, where it is a mention.
 (cd "$PLUGIN" && {
-   { find scripts skills hooks -name '*.sh'; find agents skills -name '*.md'
-     find scripts -name '*.json'; find templates evals -type f; } | sort -u | sed 's|^|W |'
-   find docs -name '*.md' | sort | sed 's|^|P |'
+   find scripts skills hooks agents templates evals .claude-plugin -type f | sort | sed 's|^|W |'
+   { find docs -type f; find . -maxdepth 1 -type f | sed 's|^\./||'; } | sort | sed 's|^|P |'
  }) | while IFS=' ' read -r kind f; do
       awk -v F="$f" -v KIND="$kind" '
         BEGIN { TAG = (KIND == "P") ? "P" : "N" }
@@ -60,16 +63,19 @@ trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
             }
           }
         }
-        # True when the nearest assignment above line ln gave v a records folder. A use above every
-        # assignment is true as well, because a function body can sit above the variable it reads.
-        function follows(v, ln,   n, i, parts, best, flag, c, l) {
-          n = split(at[v], parts, " "); best = -1; flag = 1
+        # True when the nearest assignment above line ln gave v a records folder, and true as well
+        # when a records assignment sits below ln. A function body sits above the globals it reads,
+        # so a use above the records assignment is a real write. Losing one costs the check; naming
+        # one path too many costs a person a minute.
+        function follows(v, ln,   n, i, parts, best, flag, below, c, l) {
+          n = split(at[v], parts, " "); best = -1; flag = 1; below = 0
           for (i = 1; i <= n; i++) {
             c = index(parts[i], ":")
             l = substr(parts[i], 1, c - 1) + 0
-            if (l <= ln && l > best) { best = l; flag = (substr(parts[i], c + 1) == "1") }
+            if (l <= ln) { if (l > best) { best = l; flag = (substr(parts[i], c + 1) == "1") } }
+            else if (substr(parts[i], c + 1) == "1") below = 1
           }
-          return flag
+          return (flag || below)
         }
         FNR == NR {
           s = unquote($0)
@@ -87,7 +93,12 @@ trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
           line = unquote($0)
           if (TAG == "N" && line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, FNR
           emit(line, "records/")
-          if (TAG == "N" && line ~ /(^|[ \t(])find[ \t]+[^ \t]*\/records([ \t]|$)/) emit(line, "-name ")
+          if (TAG == "N" && match(line, /(^|[ \t(])find[ \t]+[^ \t]+/)) {
+            fp = substr(line, RSTART, RLENGTH); sub(/^.*find[ \t]+/, "", fp)
+            fv = fp; sub(/^\$\{?/, "", fv); sub(/\}$/, "", fv)
+            if (fp ~ /\/records$/) emit(line, "-name ")
+            else if ((fv in holds) && follows(fv, FNR)) emit(line, "-name ")
+          }
           for (v in holds) {
             if (follows(v, FNR)) { emit(line, "$" v "/"); emit(line, "${" v "}/") }
           }
@@ -98,7 +109,8 @@ awk -F'\t' '$1 == "N" || $1 == "P" { print $1 "\t" $2 }' "$RAW" \
   | sed -e 's/[.,;:)]*$//' \
         -e 's/\${[A-Za-z_][A-Za-z0-9_]*}/<>/g' -e 's/\$[A-Za-z_][A-Za-z0-9_]*/<>/g' \
         -e 's/<[A-Za-z_][A-Za-z0-9_-]*>/<>/g' -e 's/%[A-Za-z]/<>/g' -e 's/\*/<>/g' \
-  | grep -E '\.|/$' | sort -u >"$NAMES"
+        -e 's/}*$//' \
+  | awk -F'\t' '$2 != ""' | sort -u >"$NAMES"
 cut -f2 "$NAMES" | sort -u >"$FOUND"
 awk -F'\t' '$1 == "N" { print $2 }' "$NAMES" | sort -u >"$REFS"
 sed -e 's/#.*//' -e 's/|.*//' -e 's/[[:space:]]//g' "$LIST" | grep . | sort -u >"$KEYS"

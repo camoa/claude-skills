@@ -18,26 +18,31 @@
 # here, and on a name here that nothing references.
 # A segment that varies reads as <>: ${TOOL}, <stage> and * all normalize to it.
 #
-# What the spec reads as a write. The source text of every script under scripts/, skills/ and
-# hooks/, every agent body and skill body, every template, every eval file, and the schemas under
-# scripts/. It strips the quotes first, so a split literal still reads as one path. It follows a
-# variable one file assigned a path ending in /records, up to the line that assigns that variable
-# another path. It reads the -name pattern of a find whose path ends in /records, which is how the
-# design close names the critique files it moves. It reads a name ending in / as a subfolder. It
-# refuses a file name built at run time, and a cd into a records folder, because it can read
-# neither.
+# What the spec reads as a write. Every file under scripts/, skills/, hooks/, agents/, templates/,
+# evals/ and .claude-plugin/. It strips the quotes first, so a split literal still reads as one
+# path. It reads every name after records/, a name with no dot included, so a subfolder counts too.
+# It follows a variable one file assigned a path ending in /records. It reads the -name pattern of
+# a find over a records folder, named outright or through such a variable. That is how the design
+# close names the critique files it moves. It refuses a file name built at run time, and a cd into
+# a records folder, because it can read neither.
 #
 # An agent given its output path by its dispatch is read through the dispatch. Every dispatch site
 # is a skill body, a skill reference or a skill script, and the scan holds all three.
 #
-# The spec reads every page under docs/ too, and a docs page is not a write. It is prose for a
-# person. A name a docs page gives must be on this list, and a docs page alone never keeps a line
-# here alive. So a line naming a record nothing writes any more still fails, even while a docs
-# page still names it.
+# The spec reads the pages a person reads too: docs/, README.md and CHANGELOG.md. A page is not a
+# write. It is prose for a person, and no model runs it. A name a page gives must be on this list,
+# and a page alone never keeps a line here alive. So a line naming a record nothing writes any more
+# still fails, even while a page still names it. The way out of that failure is to edit the page.
 #
-# What it cannot see, in one shape. A records folder passed as an argument and not assigned, as in
+# What it cannot see, in two shapes, and both make it read less than it should.
+#
+# One: a records folder passed as an argument and not assigned, as in
 # `write_into "$d/records" "$n"`. `mkdir -p "$d/records"` is that same shape and is correct, so a
 # rule here needs a command list that goes stale.
+#
+# Two: a use of a variable after the file's last records assignment, where a nearer line gave that
+# variable another path. The spec stops following there. It is a real write only when a loop or a
+# call order puts the records path back, which nothing here does.
 #
 check-project.json | scripts/check-project.sh | every project check writes it, and a pickup writes it too
 check-task.json | scripts/check-task.sh | every task check writes it, and `task start` ends by running one
