@@ -4,6 +4,92 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.25] - 2026-09-23
+
+Nine rows, every one opened by beta.24 itself. None came from the live run.
+Each was something a builder or a checker found while closing something else,
+and this release was asked to leave nothing behind. Five builds. The work
+turned up five live defects nobody had written a row for, four of them found
+by a spec written to catch their class.
+
+### Added
+- `aida/tests/records-folder-spec.sh`, with a list naming every file a task's
+  `records/` folder may hold, its producer, and what makes it again. The
+  compaction refusal skips that folder and nothing checked what landed there.
+  The spec's first run corrected the set from thirteen to sixteen. It follows a
+  variable, so a path assembled at run time is refused by name and line rather
+  than passed in silence. (row 176)
+- `aida/tests/shadowed-functions-spec.sh`. A script that defines a function
+  whose name a sourced library already holds silently overrides it for that
+  whole script, and every test still passes. beta.24 shipped one instance and
+  caught it only after the commit. It reads four declaration forms, two of
+  which the tree already uses. (row 179)
+- `aida/tests/swallowed-refusals-spec.sh`, with a list of the sites where a
+  refusal inside a command substitution is safe, and the reason for each. A
+  `die` inside `$( )` ends only that subshell. (row 186)
+- Every spec header names the test runner from the repository root. The runner
+  lives at the marketplace root and the plugin has its own `scripts/` folder, so
+  the old wording read as plugin-relative. Three readers across two releases
+  concluded the file was missing. The headers also say the runner finds a spec
+  through `git ls-files`, so an untracked spec never runs. (row 186)
+
+### Fixed
+- A failed write never empties a record. The guard went into `write_atomic`
+  itself rather than the seven call sites the row named. The same shape sits at
+  about ninety more sites across six skills. A per-site test does not stop the
+  next new action, which is how this one was found. All 86 callers were traced
+  and none can legitimately pass empty content. Before it, an unreadable record
+  made `save` exit 0, print success, and truncate a 226-byte record to one
+  byte. (row 173)
+- A refusal reaches the caller that asked for it. Of 54 command substitutions
+  calling a function that can refuse, fourteen tested neither the exit code nor
+  the value. Five of those were live defects. One swallowed the refusal
+  that stops a stage action running outside its task's worktree. The action
+  carried on and printed a second message that was false. One dropped a
+  criterion out of the record a person signs off. One let a framework whose
+  entry could not be recorded read as met, which is a failed write becoming a
+  passing condition. Two ran a site's bring-up lines from whatever directory
+  the caller stood in. (rows 173, 186)
+- The registry rebuild tests a name and a code path before it writes a row. It
+  was the fourth door past a test three other routes share. Two rows on one code
+  path make the directory lookup answer with whichever was written first, and
+  nothing reported it. The rebuild reads the folders outside the base first, so
+  a skip falls where a later rebuild can undo it. (row 178)
+- A pickup that registered a folder reports success. It returned the project
+  checker's exit code, which is never 0 on a folder no producer has filled.
+  (row 177)
+- The design close commits the critique it cites. The record named three paths
+  in an ignored folder, so a committed record cited evidence the repository
+  never held. Three critics write those files at opus, so a second dispatch
+  answers differently and re-running is not a recovery. (row 176)
+- A tool run's record says what produced its output. Arguments a caller typed
+  reached no file, so after a compaction the record held output nobody could
+  account for. The skill documents the form that supplies them, and the two
+  actions that used to drop it now refuse it. (row 176)
+- The compaction refusal's stated reason. beta.24 said every file in that folder
+  is derived and its producer runs again. That is false for four records written
+  by a model, and for two more whose inputs do not survive. One comes from the
+  clock at the instant an automatic compaction fired. One holds output whose
+  command arguments reached no file. The claim that carries the skip has two halves. No
+  file there carries a person's answer. And none is the only copy of anything a
+  person still needs. (row 176)
+- The project checker sees a duplicate code path, and says it compares the
+  spellings the registry holds rather than resolving them. (rows 178, 187)
+- A branch in the task checker is gone. It was unreachable from the day it was
+  written, and so is the header sentence that made it look necessary. (row 174)
+- The design critic no longer reports a path the close moves. (row 189)
+
+### Checks
+Fifty-one fixtures, 4,040 rows, pass under bash and under zsh, every run exit 0,
+on the merged branch with the version bumped. All six specs pass. Shellcheck at warning level is clean
+over every script this release changed. Each of the five builds had a fresh
+checker over the artifacts and one fix round; two checks failed and were fixed.
+
+The habit that paid: a checker that reproduces rather than reads. Every one of
+the five live defects above was shown by running the unchanged code. Two of them
+refuted a previous build's written reasoning about why a site was safe. A
+reason has to hold on every path into a site, not the path that found it.
+
 ## [6.0.0-beta.24] - 2026-09-23
 
 Fifteen rows, every one left open by beta.23. Most were a record page and the
