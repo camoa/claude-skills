@@ -368,7 +368,7 @@ task_stage() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule parent
+  local found rule parent base_branch
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -413,13 +413,18 @@ task_worktree() {
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   git -C "$code" worktree prune 2>/dev/null
+  # The branch the tree is cut from, recorded only when this call cuts the branch. A tree made again
+  # from a branch that exists keeps the base the record held, and a detached HEAD records none.
+  base_branch=""
   if git -C "$code" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
     said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" || die3 "$who: git worktree add failed: $said"
   else
+    base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)"
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" || die3 "$who: git worktree add failed: $said"
   fi
   wt="$(cd "$wt" && pwd -P)"
-  write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" '.worktree = {path: $p, branch: $b}' "$task_json")"
+  write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" --arg base "$base_branch" \
+    '.worktree = ((.worktree // {}) + {path: $p, branch: $b} + (if $base == "" then {} else {base: $base} end))' "$task_json")"
   printf '%s' "$wt"
 }
 

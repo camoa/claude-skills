@@ -151,8 +151,8 @@ prints the commands `up` would run.
 `show` runs the precondition checks too, so a site that cannot come up is never offered. It
 leaves the worktree as it found it and commits nothing. A failing precondition stops the step
 with the script's message and leaves nothing behind. When that message says to commit, AIDA
-names two branches. A commit on the task's own branch reaches the worktree at once, and review
-reads it as part of the task. A commit on the branch the main checkout is on reaches the
+names the branches. A commit on the task's own branch reaches the worktree at once, and review
+reads it as part of the task. A commit on the branch the worktree was cut from reaches the
 worktree only after you merge it into the task's branch. A
 site that resolved to a tree other than the worktree stops it too, because a capture of the
 wrong tree is worse than none. With a kind on, the harness is installed in the tree as well. On

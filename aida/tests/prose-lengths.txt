@@ -35,6 +35,6 @@ skills/review/references/surfaces.md 80
 skills/scope/SKILL.md 414
 skills/surfaces/SKILL.md 127
 skills/surfaces/references/discover.md 57
-skills/task/SKILL.md 387
+skills/task/SKILL.md 389
 skills/tool/SKILL.md 136
 skills/tool/references/reading-a-recipe.md 53

@@ -78,9 +78,10 @@
       "required": ["path", "branch"],
       "properties": {
         "path": { "type": "string", "minLength": 1 },
-        "branch": { "type": "string", "minLength": 1 }
+        "branch": { "type": "string", "minLength": 1 },
+        "base": { "type": "string", "minLength": 1 }
       },
-      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<slug of the code folder>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`."
+      "description": "The git worktree this task builds in, and the branch checked out there: a sibling of the code path, `<parent of codePath>/<slug of the code folder>-<id>`, on `feature/<id>`, the path in its resolved form. A tree nested under the code path is invisible to a tool that registers projects by folder, and DDEV hands it to the parent project. Written once by task_worktree in scripts/lib/task-helpers.sh, at creation or at the first stage action that needs the code. That later write is how a task made before this field existed gets one. Every stage action but read refuses from any directory outside this path. Absent means no tree has been made yet, and a reader prints `none`. `base` is the branch the code checkout was on when task_worktree cut `branch`, written only by that cut. A tree made again from a branch that exists keeps the base the record held. A cut from a detached HEAD, or a task cut before this field, has none, and `environment` then names the branch the code path is on now and says so."
     },
     "environment": {
       "type": "object",

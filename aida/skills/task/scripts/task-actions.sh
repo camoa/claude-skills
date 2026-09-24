@@ -1258,27 +1258,112 @@ run_recipe_capture() {
   die3 "environment: the line holds no command, or a token nothing fills: ${result#*"$tab"}. The tokens are {codePath}, the ## Tokens names and the address keys"
 }
 
+# What environment_cleanup removes when `show` or `up` stops before it keeps them. They are
+# globals, because zsh runs an EXIT trap after the locals of the function that set it are gone.
+# ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
+# keeps it. ENV_TREE: the worktree the recipe files go into. ENV_DIRS: the folders this run made
+# there for them. RF_WRITTEN_PATHS, from scripts/lib/recipes.sh, holds the files it wrote.
+ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_DIRS=""
+
+# Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
+# written this run, then each folder made for them, then the output file and every temporary path.
+# It removes no folder that was there before. $1 is `quiet` on show's pass, which expects the
+# removal, and `report` elsewhere, where it says what it removed. It names each path it could not
+# remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
+environment_cleanup() {
+  local p left="" gone="" staged=""
+  if [ -n "$ENV_TREE" ]; then
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      # A failed commit leaves the file staged. Reset takes its index entry back to HEAD, which
+      # holds none for a file this run wrote because it was absent.
+      if git -C "$ENV_TREE" ls-files --cached --error-unmatch -- "$p" >/dev/null 2>&1; then
+        git -C "$ENV_TREE" reset -q -- "$p" >/dev/null 2>&1 && staged="$staged $p"
+      fi
+      rm -f "$ENV_TREE/$p" 2>/dev/null
+      if [ -e "$ENV_TREE/$p" ]; then left="$left $p"; else gone="$gone $p"; fi
+    done <<ENV_CLEAN_FILES
+$RF_WRITTEN_PATHS
+ENV_CLEAN_FILES
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      rmdir "$ENV_TREE/$p" 2>/dev/null || [ ! -d "$ENV_TREE/$p" ] || left="$left $p/"
+    done <<ENV_CLEAN_DIRS
+$ENV_DIRS
+ENV_CLEAN_DIRS
+  fi
+  if [ "${1:-report}" != quiet ]; then
+    [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2
+    [ -z "$staged" ] || printf 'environment: and took them out of the index again:%s\n' "$staged" >&2
+  fi
+  [ -z "$ENV_OUT" ] || rm -f "$ENV_OUT"
+  while IFS= read -r p; do
+    [ -z "$p" ] || rm -rf "$p"
+  done <<ENV_CLEAN_TMP
+$ENV_TMP
+ENV_CLEAN_TMP
+  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""
+  [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
+}
+
+# Prints, deepest first, each folder under the worktree $1 that the `## Files` list needs and that
+# does not exist yet. A folder is listed once, and after every folder inside it.
+environment_new_dirs() {
+  local n rel dir tab; tab="$(printf '\t')"
+  while IFS="$tab" read -r n rel; do
+    [ -n "$n" ] || continue
+    dir="$(dirname -- "$rel")"
+    while [ "$dir" != "." ] && [ "$dir" != "/" ] && [ ! -d "$1/$dir" ]; do
+      printf '%s\n' "$dir"; dir="$(dirname -- "$dir")"
+    done
+  done <<ENV_NEW_DIRS | LC_ALL=C sort -ru
+$file_list
+ENV_NEW_DIRS
+}
+
+# The lines a failing check prints after its output. A remedy may say to commit, and the worktree
+# reads its own branch only. A commit on the branch it was cut from reaches it only through a merge,
+# and nothing else says so. $1 is the worktree.
+environment_branch_lines() {
+  local branch base now
+  branch="$(git -C "$1" symbolic-ref -q --short HEAD 2>/dev/null)"
+  if [ -z "$branch" ]; then
+    printf 'environment: the worktree %s is on no branch, so a commit reaches it only when that commit is checked out there.\n' "$1"
+    return 0
+  fi
+  printf "environment: where the remedy says to commit, a commit on %s reaches this worktree now, and review reads it in the task's diff.\n" "$branch"
+  base="$(jq -r '.worktree.base // empty' "$task_json" 2>/dev/null)"
+  if [ -n "$base" ]; then
+    printf 'environment: this worktree was cut from %s. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
+      "$base" "$base" "$base" "$branch"
+    return 0
+  fi
+  now="$(git -C "$CODE_PATH" symbolic-ref -q --short HEAD 2>/dev/null)"
+  if [ -n "$now" ]; then
+    printf 'environment: task.json records no branch this worktree was cut from, so this names the branch %s is on now. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
+      "$CODE_PATH" "$now" "$now" "$branch"
+  else
+    printf 'environment: task.json records no branch this worktree was cut from, and %s is on no branch. A commit elsewhere reaches this worktree only after it is merged into %s.\n' \
+      "$CODE_PATH" "$branch"
+  fi
+}
+
 # Writes the absent `## Files` blocks into the worktree $2 and runs each `## Preconditions` line
 # there, with the output in $3. The files come first, because the check is a script the recipe
-# ships. $1 is up or show. `up` keeps the written files for its commit. `show` removes them after
-# the check, so it leaves the tree as it found it, and it passes "" for $3 to use a temporary file.
-# A failing line exits 3. It prints the output and the branches a commit can land on, and removes
-# the written files. The loop runs in a command substitution, so its `status:` summary and its
-# exit 4 stay inside. Reads RECIPE, preconditions, file_list, files_dir, tokens_dir, task_json
-# and CODE_PATH from do_environment.
+# ships. $1 is up or show. `show` passes "" for $3 to use a temporary file, and removes the files
+# after a pass, so it leaves the tree as it found it. `up` keeps them for its commit, and clears
+# the cleanup state once that commit is made. A line that runs and fails exits 3 with its output
+# and the branch lines. A line refused before it runs, for a token nothing fills or a shell
+# character, exits 3 without them, as `up` always has: `show` predicts `up`. The EXIT trap then
+# removes what this run wrote. The loop runs in a command substitution, so its `status:` summary
+# stays inside. Reads RECIPE, preconditions, file_list, files_dir and task_json from do_environment.
 environment_check() {
-  local sub="$1" wt="$2" outfile="$3" result="" failed=0 branch base
+  local sub="$1" wt="$2" outfile="$3" result="" rc=0
   recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
-  [ -n "$outfile" ] || outfile="$(mktemp)" || die3 "environment: could not create a temporary file"
+  if [ -z "$outfile" ]; then outfile="$(mktemp)" || die3 "environment: could not create a temporary file"; fi
+  ENV_OUT="$outfile"; ENV_TREE="$wt"
   : >"$outfile"
-  # Any exit before the files are kept removes them: an interrupt, a TERM, a refusal or a failing
-  # line. zsh runs a function's EXIT trap when the function returns, and bash runs it when the
-  # script exits, so every return below clears the three traps first. A shell waiting for the
-  # check runs the TERM trap once the check ends.
-  RF_WRITTEN_PATHS=""
-  trap 'environment_remove_written; [ "$sub" = up ] || rm -f "$outfile"' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  ENV_DIRS="$(environment_new_dirs "$wt")"
   if [ "$sub" = up ]; then
     recipe_files_write environment "$file_list" "$wt" "$files_dir"
     printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
@@ -1286,34 +1371,16 @@ environment_check() {
     recipe_files_write environment "$file_list" "$wt" "$files_dir" >/dev/null
   fi
   if [ -n "$preconditions" ]; then
-    result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || failed=1
+    result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || rc=$?
   fi
-  if [ "$failed" -eq 1 ]; then
+  if [ "$rc" -ne 0 ]; then
     cat "$outfile" >&2
-    # A remedy may say to commit, and the worktree reads one branch only. A commit on the branch
-    # the code path is on reaches it only through a merge, and nothing else says so.
-    branch="$(jq -r '.worktree.branch // empty' "$task_json")"
-    base="$(git -C "$CODE_PATH" symbolic-ref -q --short HEAD 2>/dev/null)"
-    printf "environment: where the remedy says to commit, a commit on %s reaches this worktree now, and review reads it in the task's diff.\n" "$branch" >&2
-    [ -z "$base" ] || [ "$base" = "$branch" ] \
-      || printf 'environment: %s is on %s. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
-        "$CODE_PATH" "$base" "$base" "$base" "$branch" >&2
-    rm -f "$outfile"; rm -rf "$tokens_dir" "$files_dir"
+    # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line was refused unrun.
+    [ "$rc" -ne 4 ] || environment_branch_lines "$wt" >&2
     exit 3
   fi
-  if [ "$sub" = show ]; then environment_remove_written; rm -f "$outfile"; fi
-  trap - EXIT INT TERM
-  [ "$sub" = show ] || [ -z "$result" ] || printf '%s\n' "$result"
-}
-
-# Removes the files environment_check wrote in this run, and each folder the removal emptied. The
-# paths are relative to the worktree, where the caller stands.
-environment_remove_written() {
-  local name
-  printf '%s\n' "$RF_WRITTEN_PATHS" | while IFS= read -r name; do
-    [ -n "$name" ] && rm -f "$name" && rmdir -p "$(dirname "$name")" 2>/dev/null
-  done
-  return 0
+  if [ "$sub" = show ]; then environment_cleanup quiet || exit 3; return 0; fi
+  [ -z "$result" ] || printf '%s\n' "$result"
 }
 
 do_environment() {
@@ -1433,11 +1500,20 @@ do_environment() {
   tear_down="$(sh_blocks_under "$RECIPE" "Tear down")"
   # The token blocks carry the token's name as the fence's second word, the shape `## Files`
   # already reads: one file per block, named by its order, and a `<n><TAB><name>` line each.
+  # From here to the end of show or up, any exit runs environment_cleanup: a refusal, an
+  # interrupt or a TERM. A shell waiting on a command runs the INT or TERM trap when it ends. zsh
+  # runs a function's EXIT trap when that function returns, so each normal end clears the traps.
+  trap 'environment_cleanup report' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   tokens_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  ENV_TMP="$tokens_dir"
   token_list="$(recipe_files_into "$RECIPE" Tokens "$tokens_dir")"
   # The `## Files` blocks, written before the tokens run: the shipped recipe's first token runs a
   # script the recipe itself declares, which a fresh worktree holds only once a commit carried it.
   files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+  ENV_TMP="$ENV_TMP
+$files_dir"
   file_list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
   printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
   [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
@@ -1467,7 +1543,9 @@ TA_TOKEN_LIST
       environment_check show "$wt" ""
       printf 'precondition check: passed in %s\n' "$wt"
     fi
-    rm -rf "$files_dir"; return 0
+    environment_cleanup quiet || exit 3
+    trap - EXIT INT TERM
+    return 0
   fi
   cr_require_person up "a person approved the site coming up"
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
@@ -1482,9 +1560,13 @@ TA_TOKEN_LIST
   # them is never taken into this commit and never refuses it.
   [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
     "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
+  # The files and the output file are kept from here. A failed commit above ran the EXIT trap first.
+  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"
+  ENV_TMP="$ENV_TMP
+$capture"
   while IFS="$tab" read -r n name; do
     [ -n "$n" ] || continue
     before="$(wc -l <"$outfile" | tr -d '[:space:]')"
@@ -1555,6 +1637,7 @@ TA_TOKEN_LIST
   done
   commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+  environment_cleanup quiet; trap - EXIT INT TERM
   printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
 }
 

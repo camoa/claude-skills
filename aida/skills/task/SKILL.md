@@ -100,7 +100,7 @@ The word is `no-recipe`, `listing-unreachable` or `fetch-failed`; the script ref
 `environment <name> not-applicable -- <that reason>`, and say once that this worktree has files
 and no site. `show` runs the precondition checks and exits 3 when one fails. A failing check
 means the site cannot come up, so make no offer. Show the check's output and the remedy it names.
-When the remedy says to commit, give the two `environment:` lines that name the branches. Record
+When the remedy says to commit, give the `environment:` lines that name the branches. Record
 nothing, so the offer comes again at `start`. Otherwise, interactive: show the commands and the
 prose, and ask once whether to
 bring the site up now. A yes runs `environment <name> up` with the same flags. A no is recorded
@@ -141,8 +141,10 @@ First it writes each `## Files` block absent from the worktree. A file present w
 refuses at 3. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
 failing line stops at 3, prints its output, removes the files this run wrote, and commits
-nothing. It also prints two lines that name the task branch and the branch of the code path.
-Then it commits the written files alone, so other changed or staged work is never
+nothing. When a line ran and failed, it also names the task branch and the branch the worktree
+was cut from. An older task names the branch the code path is on now, and says so. A failed
+commit, or an interrupt before the commit, also removes the written files, their index entries
+and the output file, and says so. Then it commits the written files alone, so other changed or staged work is never
 taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
