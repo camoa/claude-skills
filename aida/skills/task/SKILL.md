@@ -137,8 +137,9 @@ site exists, so a failure during the bring-up leaves a site `down` can still fin
 keeps every other field the record held, so a second `up` over a site that is up does not drop
 that site's address while the bring-up runs again. Then the
 bring-up lines before the
-`## Address` heading. Then the address command, whose output is `key: value` lines. `address:`
-is required, and every other key is a token for the later lines and for the tear-down. A `root:`
+`## Address` heading. Then one line marking the address command in the record, so `down` can find
+that command's output later. Then the address command, whose output is `key: value` lines.
+`address:` is required, and every other key is a token for the later lines and for the tear-down. A `root:`
 line that is not the worktree stops at 3 before the later lines: the environment resolved to
 another tree, and the marker stays for `down`. Then it completes the record, in place of the
 marker: the address, the recipe, when, and the other address keys. Then the bring-up lines after
@@ -156,9 +157,10 @@ promises every step runs again cleanly.
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
 nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
 finished record, so a site that was coming up is torn down the same way. A marker with no address
-key holds none of the other address keys either. So `down` fills a tear-down token from the lines
-under the address command's own `+` line in `records/environment-up.txt`, and from nothing else in
-that file. A token nothing fills stops it at 3 and names that token.
+key holds none of the other address keys either. `up` marks the address command in
+`records/environment-up.txt` before it runs it. `down` fills a tear-down token from the output
+under that mark, and from nothing else in that file. No mark means the address command never ran,
+so `down` reads nothing there. A token nothing fills stops it at 3 and names that token.
 Run it before the worktree is removed, or the framework keeps
 an orphaned registry entry; the completion body names it when a site is up or coming up. Review
 and `baseline` read `environment.address` before asking for a base URL.

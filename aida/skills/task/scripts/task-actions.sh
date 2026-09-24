@@ -1191,6 +1191,13 @@ do_save() {
 # reads the recipe path and the keys from that record, so it takes no recipe flag.
 # ------------------------------------------------------------------------------------------------
 
+# The line `up` writes into records/environment-up.txt above the address command, and `down` reads
+# the address keys under. Only `up` knows which command is the address command, so it says so here
+# rather than leaving `down` to recognise a line. The run's own `startedAt`, the one in the marker,
+# follows this text on the line. It is not a `+ <command>` line and not a `key: value` line, and a
+# command's own output does not carry this run's timestamp, so nothing else in the file matches it.
+ENV_ADDRESS_MARK="--- the address command,"
+
 # The tab-separated `<name><TAB><value>` list every `{name}` is filled from, the shape cr_lookup
 # reads. `codePath` heads it; the tokens and the address keys follow.
 TOKENS=""
@@ -1324,21 +1331,18 @@ do_environment() {
     TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt" and .key != "state" and .key != "startedAt") | "\(.key)\t\(.value)"' "$task_json")
 "
     # A marker with no address holds none of those keys either, and a tear-down line may need one.
-    # `up` wrote each command as `+ <command>` above that command's own output, in
-    # records/environment-up.txt. So the address command's keys are the lines under its own `+`
-    # line, and only those: a bring-up command that printed a `key: value` line of its own is a
-    # different command and is never read. No such `+` line means the address never ran, and then
-    # nothing is taken. The line is matched by the part of the recipe's address command before its
-    # first token, because `down` cannot fill a token the address itself was to provide.
-    if [ -z "$(jq -r '.environment.address // empty' "$task_json")" ] && [ -f "$task_dir/records/environment-up.txt" ]; then
-      addr_mark="$(fill_tokens "+ $(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')")"
-      addr_mark="${addr_mark%%\{*}"
-      # `+ ` alone is a recipe with no address command, or one whose first word is a token. Either
-      # way the mark matches every command, so nothing is taken.
-      [ "$addr_mark" = "+ " ] || TOKENS="$TOKENS$(awk -v m="$addr_mark" '
-          index($0, m) == 1 { out = ""; under = 1; next }
-          /^\+ / { under = 0; next }
-          under { out = out $0 "\n" }
+    # `up` marked the address command in records/environment-up.txt, with the line above, so the
+    # keys are the output under the last mark and nothing else in the file. No mark means the
+    # address command never ran, and then nothing is taken. The mark carries the marker's own
+    # `startedAt`, and the command line under it is skipped: the block is what that command
+    # printed, up to the next command.
+    addr_mark="$(jq -r --arg m "$ENV_ADDRESS_MARK" 'if (.environment.address // "") == "" and (.environment.startedAt // "") != "" then $m + " " + .environment.startedAt else "" end' "$task_json")"
+    if [ -n "$addr_mark" ] && [ -f "$task_dir/records/environment-up.txt" ]; then
+      TOKENS="$TOKENS$(awk -v m="$addr_mark" '
+          $0 == m { out = ""; seen = 1; plus = 0; next }
+          seen == 0 { next }
+          /^\+ / { plus = plus + 1; if (plus > 1) seen = 0; next }
+          { out = out $0 "\n" }
           END { printf "%s", out }' "$task_dir/records/environment-up.txt" \
         | sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' | grep -v '^address'"$tab")
 "
@@ -1447,8 +1451,9 @@ TA_TOKEN_LIST
   # not drop that site's address while the bring-up runs again. A failure then leaves the person
   # where they were before they ran `up`. The person's `not-applicable` reason is the one field
   # dropped, because `up` is the answer that replaces it.
-  local marker_doc
-  marker_doc="$(jq --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  local marker_doc marker_at
+  marker_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
     '.environment = ((.environment // {}) | del(.["not-applicable"]))
        + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
   [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
@@ -1459,6 +1464,9 @@ TA_TOKEN_LIST
   # is read into a variable first and the code re-raised.
   up_lines="$(bring_up_half "$RECIPE" before)" || exit $?
   run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
+  # The mark above the address command, so `down` reads that command's keys and no other output in
+  # this record. It goes in before the line count below, which `first:` quotes from.
+  printf '%s %s\n' "$ENV_ADDRESS_MARK" "$marker_at" >>"$outfile"
   before="$(wc -l <"$outfile" | tr -d '[:space:]')"
   run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
   value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
