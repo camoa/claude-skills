@@ -26,6 +26,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/project-schema.json: the project field list, as data
 #   <plugin root>/scripts/registry-schema.json: the registry field list, as data
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
+#   <plugin root>/scripts/lib/project-findings.sh: the retired fields and the version 5 task rule
 #   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json): the registry, if it exists
 #   whether the directory named by project.json's codePath still exists
 #   $HOME, to apply the code-path safety rules
@@ -201,10 +202,13 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 PROJECT_SCHEMA_FILE="$PLUGIN_ROOT/scripts/project-schema.json"
 REGISTRY_SCHEMA_FILE="$PLUGIN_ROOT/scripts/registry-schema.json"
 SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
+FINDINGS_LIB="$PLUGIN_ROOT/scripts/lib/project-findings.sh"
 
 [ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
+# shellcheck source=/dev/null
+source "$FINDINGS_LIB" 2>/dev/null || die3 "the findings library failed to load: $FINDINGS_LIB"
 
 [ -f "$PROJECT_SCHEMA_FILE" ] || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE not found"
 jq empty "$PROJECT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE is not valid JSON"
@@ -251,15 +255,12 @@ MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
 # A field the schema retired is still refused, and reported apart from a shape fault. It has no
 # producer to run again, so its repair is the one action that drops it (project-schema.json,
 # `retired`). The comparison stays generic; the split happens here, by name.
-SPLIT_JSON="$(echo "$COMPARE_JSON" | jq -c --slurpfile s "$PROJECT_SCHEMA_FILE" '
-  ($s[0].retired // {}) as $r
-  | { retired: [ .unreadable[] | .field as $f | select($r | has($f)) | {field: $f, detail: $r[$f]} ],
-      unreadable: [ .unreadable[] | .field as $f | select(($r | has($f)) | not) ] }')" \
-  || die3 "the retired-field split itself failed to run. Check $PROJECT_SCHEMA_FILE for a malformed retired entry"
-RETIRED_JSON="$(echo "$SPLIT_JSON" | jq -c '.retired')"
-RETIRED_COUNT="$(echo "$SPLIT_JSON" | jq '.retired | length')"
-UNREADABLE_JSON="$(echo "$SPLIT_JSON" | jq -c '.unreadable')"
-UNREADABLE_COUNT="$(echo "$SPLIT_JSON" | jq '.unreadable | length')"
+RETIRED_JSON="$(pf_retired_fields "$PROJECT_SCHEMA_FILE" "$PROJECT_FILE")" \
+  || die3 "the retired fields could not be read. Check $PROJECT_SCHEMA_FILE for a malformed retired entry"
+RETIRED_COUNT="$(echo "$RETIRED_JSON" | jq 'length')"
+UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c --argjson r "$RETIRED_JSON" \
+  '[ .unreadable[] | select(.field as $f | ($r | map(.field) | index($f)) == null) ]')"
+UNREADABLE_COUNT="$(echo "$UNREADABLE_JSON" | jq 'length')"
 FIELD_COUNT="$(echo "$COMPARE_JSON" | jq '.fieldCount')"
 # Fields, never faults: the comparison reads every level, so twenty refused elements in one list
 # would subtract twenty from a count of top-level fields and print a number below zero.
@@ -833,13 +834,12 @@ echo
 # Version 5 wrote a task rule into the code path's CLAUDE.md that names commands which no longer
 # exist. It is named on every run, so the rewrite stays offered until a person answers it. A
 # recorded decline stops the offer and keeps the fact. No exit code moves: the project file is not
-# at fault. project-actions.sh task-rule replaces the block this marker opens.
-TASK_RULE_V5_BEGIN="<!-- ai-dev-assistant:task-rule:begin -->"
-if [ "$CODEPATH_EXISTS_JSON" = "true" ] \
-   && grep -qF "$TASK_RULE_V5_BEGIN" "${CODEPATH_VALUE%/}/CLAUDE.md" 2>/dev/null; then
+# at fault. project-actions.sh task-rule replaces the block.
+TASK_RULE_V5="none"
+[ "$CODEPATH_EXISTS_JSON" = "true" ] && TASK_RULE_V5="$(pf_task_rule_v5 "$CODEPATH_VALUE" "$PROJECT_FILE")"
+if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
   echo "Task rule: version 5, in ${CODEPATH_VALUE%/}/CLAUDE.md. It names /ai-dev-assistant: commands that no longer exist."
-  if jq -e '(.taskRule | type) == "object" and .taskRule.offered == true and .taskRule.accepted == false' \
-       "$PROJECT_FILE" >/dev/null 2>&1; then
+  if [ "$TASK_RULE_V5" = "declined" ]; then
     echo "  A decline is recorded, so this is not offered again. task-rule $REPAIR_NAME still rewrites it."
   else
     echo "  Repair: task-rule $REPAIR_NAME rewrites it in place. task-rule $REPAIR_NAME --decline keeps it and records the answer."

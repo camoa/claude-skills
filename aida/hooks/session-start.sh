@@ -25,6 +25,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Depends on, shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh (sourced, never executed)
 #   ${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh (executed, for the task lines)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the check's own two findings)
 #
 # What this script does not do: it does not clear a per-workspace session file the way
 # version 5's hook did. That file was a second, independent directory-to-project mapping
@@ -109,6 +110,27 @@ if [ -n "$MATCH" ]; then
 
   echo "This directory belongs to the **${PROJECT_NAME}** project."
   echo ""
+
+  # Two findings of the project check that cannot wait for /aida:project. A stale version 5 task
+  # rule is an instruction the session follows before any check runs (live-run row 191). The
+  # detection is the check's own, from the library. Silent when neither is found, or when the
+  # library or the project file cannot be read: the check says why.
+  # shellcheck source=/dev/null
+  if source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh" 2>/dev/null; then
+    FILE_CODE="$(jq -r '.codePath // empty' "$PROJECT_PATH/project.json" 2>/dev/null)"
+    FOUND=""
+    if [ -n "$FILE_CODE" ] && [ "$(pf_task_rule_v5 "$FILE_CODE" "$PROJECT_PATH/project.json")" = "open" ]; then
+      echo "Task rule: the version 5 block in ${FILE_CODE%/}/CLAUDE.md is stale. Do not follow it; its /ai-dev-assistant: commands no longer exist. \`/aida:project\` offers the rewrite."
+      FOUND="yes"
+    fi
+    RETIRED="$(pf_retired_fields "${PLUGIN_ROOT}/scripts/project-schema.json" "$PROJECT_PATH/project.json" \
+      | jq -r 'map(.field) | join(", ")' 2>/dev/null)"
+    if [ -n "$RETIRED" ]; then
+      echo "Project file: retired field ${RETIRED}. \`/aida:project drop-retired ${PROJECT_NAME}\` removes it."
+      FOUND="yes"
+    fi
+    [ -z "$FOUND" ] || echo ""
+  fi
 
   # The task in progress, and where it stands. The stage is derived from the records in the task
   # folder every time, never stored: task_stage in scripts/lib/task-helpers.sh is the one copy of

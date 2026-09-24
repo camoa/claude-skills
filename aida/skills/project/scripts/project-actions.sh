@@ -15,6 +15,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh        (sourced, never executed)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-commit.sh  (sourced, for commit_project)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the version 5 markers and the
+#                                                          retired fields)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -129,6 +131,8 @@ source "$REGISTRY_LIB"
 source "$COMMIT_LIB"
 # shellcheck source=/dev/null
 source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -1050,19 +1054,18 @@ do_subscription() {
 # retired may be a person's own, so it stays and the check keeps naming it. Only AIDA's own
 # project file changes, so this runs in both modes.
 do_drop_retired() {
-  local target="${1:?drop-retired: a name or a code path is required}" match project_path present subject
-  local schema="${PLUGIN_ROOT}/scripts/project-schema.json"
+  local target="${1:?drop-retired: a name or a code path is required}" match project_path retired present subject
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
-  present="$(jq -r --slurpfile s "$schema" \
-    '[keys_unsorted[] as $k | select(($s[0].retired // {}) | has($k)) | $k] | join(" ")' \
-    "$project_path/project.json")" || die3 "drop-retired: $project_path/project.json could not be read"
+  retired="$(pf_retired_fields "${PLUGIN_ROOT}/scripts/project-schema.json" "$project_path/project.json")" \
+    || die3 "drop-retired: $project_path/project.json could not be read"
+  present="$(printf '%s' "$retired" | jq -r 'map(.field) | join(" ")')"
   if [ -z "$present" ]; then
     echo "UNCHANGED: $project_path/project.json holds no retired field."
   else
     write_project_field "$project_path" "could not drop the retired fields from $project_path/project.json" \
-      --slurpfile s "$schema" 'with_entries(.key as $k | select(($s[0].retired // {}) | has($k) | not))'
+      --argjson r "$retired" 'delpaths($r | map([.field]))'
     subject="Drop the retired field $present"
     case "$present" in *" "*) subject="Drop the retired fields $present" ;; esac
     commit_project "$project_path" "$subject" "the project schema retired it, and nothing reads it" \
@@ -1118,9 +1121,7 @@ TASK_RULE_BEGIN="<!-- task-rule:begin -->"
 TASK_RULE_END="<!-- task-rule:end -->"
 # Version 5's own markers. The write path replaces a block between them and the remove path takes
 # one out, so a picked-up repository never holds two blocks. --decline looks only for this version's.
-# check-project.sh holds the begin marker too, and names the block on every run.
-TASK_RULE_V5_BEGIN="<!-- ai-dev-assistant:task-rule:begin -->"
-TASK_RULE_V5_END="<!-- ai-dev-assistant:task-rule:end -->"
+# TASK_RULE_V5_BEGIN and TASK_RULE_V5_END come from scripts/lib/project-findings.sh.
 
 task_rule_block() {
   local project_name="$1"
@@ -1324,7 +1325,7 @@ do_uninstall() {
   # A version 5 block is AIDA's own instruction too. A project picked up before the offer existed
   # holds one with taskRule still null, and the remove path takes that block out as well.
   if { [ "$task_rule_state" != "null" ] && [ -n "$task_rule_state" ]; } \
-     || grep -qF "$TASK_RULE_V5_BEGIN" "${code_path%/}/CLAUDE.md" 2>/dev/null; then
+     || [ -n "$(pf_task_rule_v5 "$code_path" "$project_path/project.json")" ]; then
     do_task_rule_remove "$target"
   else
     echo "TASK RULE: not offered for this project; nothing to remove."
