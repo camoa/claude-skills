@@ -6,7 +6,8 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.25] - 2026-09-24
 
-Twenty-three rows. Nine were opened by beta.24 itself, while it closed other
+Twenty-three rows, and one design change the owner asked for while it
+closed. Nine rows were opened by beta.24 itself, while it closed other
 rows. Nine more were found while this release closed those, and five came from
 a live run on the day it closed. Every row is closed. One closes through a
 proposal to the guide catalog, because no AIDA action edits a catalog recipe.
@@ -49,6 +50,16 @@ The work also turned up five live defects nobody had written a row for.
   and their detection once. The check, the project actions and the
   session-start hook all read it. (row 191)
 
+- A work order can carry its own proof, in a `verify` list. When a catalog
+  recipe covers the order, its verifier's commands become checks that run, and
+  its prose items become checks the reviewer judges. No command is ever made
+  from prose. When no recipe covers it, research's best-practice findings can
+  become checks too. Each cites its source and is marked not binding. A
+  command from research runs only after a person approves it at the design
+  close, and never in an unattended run.
+- `br_order_needs` in `scripts/lib/proof.sh` decides which roles and catalog
+  lookups an order needs, in one place. The per-order reviewer, the row
+  checker on a record order, and every top-tier critic are never cut.
 ### Fixed
 - A failed write never empties a record. The guard went into `write_atomic`
   itself rather than the seven call sites the row named. The same shape sits at
@@ -130,10 +141,25 @@ The work also turned up five live defects nobody had written a row for.
   interrupted or failed run leaves the tree and the index as they were. (row
   194)
 
+- Design chooses how an order is proved from what the order produces. Code a
+  test can pin is proved by tests. Tools that change state get a gate. A
+  document or analysis is proved as a record. What a person or a browser sees
+  gets a look. Before, any machine-checked criterion pointed to tests, so a
+  dependency update got an invented test.
+- A gate order runs its own checks first, then the framework's configuration
+  gate when the recipe has one. The worse result stands. All check lines go
+  through one runner. A placeholder given several values runs once per value.
+- The architecture reviewer is not dispatched when no order commits code and
+  no absence clause is routed. The review record says why.
+- The test-authoring lookup runs only for orders proved by tests or by a
+  record. It ran for every order.
+- A check command gets only the files its `extensions:` key names. A folder
+  row with no matching file ran over the whole tree and passed. A row left
+  with no file now reads as not applicable.
 ### Checks
-Fifty-eight fixtures, 5,174 rows, pass under bash and under zsh on the merged
-branch, every run exit 0. The repository's specs pass. Two older fixtures
-expected freeze commits in the resume line, and now expect the new list. Each
+Sixty fixtures, 5,346 rows, pass under bash and under zsh on the merged
+branch, every run exit 0. The repository's specs pass. Four older fixtures
+expected behaviour this release changed on purpose, and now expect the new. Each
 build had a fresh checker over its artifacts.
 
 ### Known limits
@@ -145,6 +171,8 @@ build had a fresh checker over its artifacts.
 - A Drupal project whose docroot is the repository root cannot bring its site
   up until the catalog recipe reads the project row safely. The ask is filed
   with the guide catalog. (row 195)
+- A command written from research runs only with a person's approval, so an
+  unattended run judges it instead of running it.
 
 ## [6.0.0-beta.24] - 2026-09-23
 
