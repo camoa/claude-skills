@@ -8980,13 +8980,32 @@ do_retake_tests() {
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
 # both are read, and an order's own commits are never counted as later ones (live-run row 144).
-# The restart folders are found on disk and the retake folders from the ledger, because a restart
-# clears the ledger entry it moved. The freeze, build and fix records each folder holds are read
-# the same way as the ones at the top, so this answers from the branch however old the folder is
-# (live-run row 182).
+# A record can be moved, cleared or written in a shape an older version wrote. The branch cannot.
+# So the freezes are read from the branch, by the subject `tests-freeze` writes above, over the
+# range the ledger's `startedFrom` opens. That range bounds the search to this task, because two
+# tasks on one repository both hold an order called wo1. The records still offer their freeze
+# commits, for the one case the range cannot cover: `start --rebased-onto` rewrites `startedFrom`,
+# and a freeze made before the rewrite then sits outside it.
+# The build and fix steps write no subject of their own. `agents/implementer.md` asks for "a
+# one-line message naming this unit" and `agents/fixer.md` for one "naming this round", so the
+# words are the model's and no check may rest on them. Those two kinds stay record-read, and the
+# folders a record may sit in are found by their own names. That is the plugin's own naming and
+# not a guess: `retake-tests` writes `retaken-<order>-<n>/` and `restart` writes
+# `implementation-<date>-<commit>/`.
+# Without this the live task restarted on beta.22 answered one commit against four on the branch:
+# the superseded freeze was in no record at all, and the build and fix records sat in a retake
+# folder the restart's own ledger reset had stopped naming (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
-  local out='[]' c range file kind dir files
+  local out='[]' c range file kind dir files started span
+  # `git log --grep` reads the whole message, so it only narrows the candidates; the subject test
+  # below decides. HEAD alone when the ledger holds no usable startedFrom, which no ledger this
+  # stage writes does: the field is required, and the wider search still answers this order.
+  started="$(printf '%s' "$ledger" | jq -r '.startedFrom // empty' 2>/dev/null)"
+  span=HEAD
+  if [ -n "$started" ] && git -C "$codepath" merge-base --is-ancestor "$started" HEAD >/dev/null 2>&1; then
+    span="$started..HEAD"
+  fi
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
@@ -8997,15 +9016,19 @@ rs_order_commits() {
     out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '
       if any(.[]; .commit == $c) then . else . + [{order: $id, kind: "freeze", commit: $c, range: $c}] end')"
   done <<RS_FREEZES
-$(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
+$(git -C "$codepath" log --reverse --format=%H --fixed-strings \
+  --grep="Freeze the tests of $one_id through the implement skill:" "$span" 2>/dev/null
+jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
 find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/tests-$one_id.json" \
   -exec jq -r '.commit // empty' {} ';' 2>/dev/null
 printf '%s' "$ledger" | jq -r --arg id "$one_id" \
   '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty' 2>/dev/null)
 RS_FREEZES
-  # Each retake folder comes from the ledger entry's own `movedTo`, never from a guessed folder
-  # name. Each restart folder is found on disk, because the restart cleared the ledger entry that
-  # would name it. A folder or a record a person removed holds nothing, which is not fatal.
+  # Every folder a build or fix record of this order can sit in: the top of the implementation
+  # folder, the retake folders under it, the folders an earlier restart wrote, and the retake
+  # folders inside those. Found by name, and the ledger's `movedTo` is read too because it is the
+  # one place a retake folder a person renamed is still named. A folder or a record a person
+  # removed holds nothing, which is not fatal.
   files="$impl/build-$one_id.json
 $(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
   while IFS= read -r dir; do
@@ -9016,7 +9039,9 @@ $(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | s
   done <<RS_RETAKEN
 $(printf '%s' "$ledger" | jq -r --arg id "$one_id" \
   '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .movedTo // empty' 2>/dev/null
-find "$task" -mindepth 1 -maxdepth 1 -type d -name "implementation-*" 2>/dev/null | sort)
+find "$impl" -mindepth 1 -maxdepth 1 -type d -name "retaken-$one_id-*" 2>/dev/null | sort
+find "$task" -mindepth 1 -maxdepth 1 -type d -name "implementation-*" 2>/dev/null | sort
+find "$task" -mindepth 2 -maxdepth 2 -type d -path "*/implementation-*/retaken-$one_id-*" 2>/dev/null | sort)
 RS_RETAKEN
   while IFS= read -r file; do
     [ -f "$file" ] || continue
