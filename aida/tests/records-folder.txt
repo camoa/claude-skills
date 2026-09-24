@@ -19,12 +19,13 @@
 # A segment that varies reads as <>: ${TOOL}, <stage> and * all normalize to it.
 #
 # What the spec reads as a write. Every file under scripts/, skills/, hooks/, agents/, templates/,
-# evals/ and .claude-plugin/. It strips the quotes first, so a split literal still reads as one
-# path. It reads every name after records/, a name with no dot included, so a subfolder counts too.
-# It follows a variable one file assigned a path ending in /records. It reads the -name pattern of
-# a find over a records folder, named outright or through such a variable. That is how the design
-# close names the critique files it moves. It refuses a file name built at run time, and a cd into
-# a records folder, because it can read neither.
+# evals/ and .claude-plugin/. It joins a backslash continuation first, so a path split over two
+# lines reads as one path. It strips the quotes next, so a split literal reads as one path too.
+# It reads every name after records/, a name with no dot included, so a subfolder counts too.
+# It follows a variable one file assigned a path ending in /records, with or without a trailing
+# slash. It reads the -name pattern of a find over a records folder, named outright or through
+# such a variable. That is how the design close names the critique files it moves. It refuses a
+# file name built at run time, and a cd into a records folder, because it can read neither.
 #
 # An agent given its output path by its dispatch is read through the dispatch. Every dispatch site
 # is a skill body, a skill reference or a skill script, and the scan holds all three.
@@ -34,15 +35,19 @@
 # and a page alone never keeps a line here alive. So a line naming a record nothing writes any more
 # still fails, even while a page still names it. The way out of that failure is to edit the page.
 #
-# What it cannot see, in two shapes, and both make it read less than it should.
+# What it cannot see, in three shapes, and each makes it read less than it should.
 #
 # One: a records folder passed as an argument and not assigned, as in
 # `write_into "$d/records" "$n"`. `mkdir -p "$d/records"` is that same shape and is correct, so a
 # rule here needs a command list that goes stale.
 #
-# Two: a use of a variable after the file's last records assignment, where a nearer line gave that
-# variable another path. The spec stops following there. It is a real write only when a loop or a
-# call order puts the records path back, which nothing here does.
+# Two: a records folder a variable takes from a command substitution, as in `d="$(records_dir)"`.
+# The path is in what the command returns, and the spec would have to run it to learn that. Name
+# the folder in the assignment instead, and the spec reads every write through the variable.
+#
+# Three: a use of a variable after the file's last records assignment, where a nearer line gave
+# that variable another path. The spec stops following there. It is a real write only when a loop
+# or a call order puts the records path back, which nothing here does.
 #
 check-project.json | scripts/check-project.sh | every project check writes it, and a pickup writes it too
 check-task.json | scripts/check-task.sh | every task check writes it, and `task start` ends by running one

@@ -9,13 +9,14 @@
 # references, so a stale line cannot hide a live one. It fails on a line with an empty column.
 # Growth is a deliberate edit of the list, in the same commit.
 #
-# How it reads a write. It strips the quotes from a line first, so `"$d"/records/"x.json"` reads
-# as one path. It reads every name after records/, whether or not the name holds a dot, so a
-# subfolder counts too. It follows a variable assigned a path ending in /records, and reads every
-# name written through that variable. It reads the -name pattern of a find over a records folder,
-# named outright or through such a variable. It refuses a file name built at run time, because it
-# cannot know that name. It refuses a script that changes directory into a records folder, for the
-# same reason.
+# How it reads a write. It joins a backslash continuation first, so a path split over two lines
+# reads as one path. It strips the quotes next, so `"$d"/records/"x.json"` reads as one path too.
+# It reads every name after records/, whether or not the name holds a dot, so a subfolder counts.
+# It follows a variable assigned a path ending in /records, with or without a trailing slash, and
+# reads every name written through that variable. It reads the -name pattern of a find over a
+# records folder, named outright or through such a variable. It refuses a file name built at run
+# time, because it cannot know that name. It refuses a script that changes directory into a records
+# folder, for the same reason.
 #
 # Following a variable stops at the line that gives that variable another path. Two orderings do
 # not stop it. A use above every assignment counts, because each file is read twice. And a use
@@ -57,11 +58,23 @@ trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
             s = substr(s, p + length(prefix))
             if (match(s, /^[A-Za-z0-9_.\/$%{}<>*+@~-]+/)) {
               n = substr(s, 1, RLENGTH)
-              if (n == "*") continue
-              if (n ~ /[$%]/ && n !~ /\./) { if (TAG == "N") printf "R\t%s\t%s:%d\n", n, F, FNR }
+              sub(/^\/+/, "", n)
+              if (n == "" || n == "*") continue
+              if (n ~ /[$%]/ && n !~ /\./) { if (TAG == "N") printf "R\t%s\t%s:%d\n", n, F, LNO }
               else printf "%s\t%s\n", TAG, n
             }
           }
+        }
+        # One logical line, so a path a backslash continuation splits still reads as one path.
+        # A continued path carries no leading space, because the space would be part of the path.
+        function joined(   s, nxt) {
+          s = $0
+          while (s ~ /\\$/) {
+            sub(/\\$/, "", s)
+            if ((getline nxt) <= 0) break
+            s = s nxt
+          }
+          return s
         }
         # True when the nearest assignment above line ln gave v a records folder, and true as well
         # when a records assignment sits below ln. A function body sits above the globals it reads,
@@ -77,30 +90,36 @@ trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
           }
           return (flag || below)
         }
+        { LNO = FNR; raw = joined() }
         FNR == NR {
-          s = unquote($0)
+          s = unquote(raw)
           while (match(s, /[A-Za-z_][A-Za-z0-9_]*=[^ \t;|&()]*([ \t;|&)]|$)/)) {
             seg = substr(s, RSTART, RLENGTH)
             s = substr(s, RSTART + RLENGTH)
             sub(/[ \t;|&)]$/, "", seg)
-            eq = index(seg, "="); v = substr(seg, 1, eq - 1)
-            if (substr(seg, eq + 1) ~ /\/records$/) { holds[v] = 1; at[v] = at[v] " " FNR ":1" }
-            else at[v] = at[v] " " FNR ":0"
+            eq = index(seg, "="); v = substr(seg, 1, eq - 1); val = substr(seg, eq + 1)
+            if (val ~ /\/records\/?$/) {
+              holds[v] = 1; at[v] = at[v] " " LNO ":1"
+              if (val ~ /\/$/) slash[v] = 1
+            }
+            else at[v] = at[v] " " LNO ":0"
           }
           next
         }
         {
-          line = unquote($0)
-          if (TAG == "N" && line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, FNR
+          line = unquote(raw)
+          if (TAG == "N" && line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records\/?([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, LNO
           emit(line, "records/")
           if (TAG == "N" && match(line, /(^|[ \t(])find[ \t]+[^ \t]+/)) {
             fp = substr(line, RSTART, RLENGTH); sub(/^.*find[ \t]+/, "", fp)
             fv = fp; sub(/^\$\{?/, "", fv); sub(/\}$/, "", fv)
-            if (fp ~ /\/records$/) emit(line, "-name ")
-            else if ((fv in holds) && follows(fv, FNR)) emit(line, "-name ")
+            if (fp ~ /\/records\/?$/) emit(line, "-name ")
+            else if ((fv in holds) && follows(fv, LNO)) emit(line, "-name ")
           }
           for (v in holds) {
-            if (follows(v, FNR)) { emit(line, "$" v "/"); emit(line, "${" v "}/") }
+            if (!follows(v, LNO)) continue
+            emit(line, "$" v "/"); emit(line, "${" v "}/")
+            if (v in slash) emit(line, "${" v "}")
           }
         }' "$PLUGIN/$f" "$PLUGIN/$f"
     done >"$RAW"
