@@ -31,7 +31,7 @@ the units it depends on, and what their reviewers recorded for the person under
 thing this unit builds on. Test against that interface text. Do not open the reused source to
 read its shape; the brief is where design put it. Read the brief first. When it holds
 `treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
-is suspect: report it by name, as below, and never take it as proof.
+is suspect: never take it as proof, and answer it the way the green-on-arrival rule below says.
 
 When the brief holds `retake`, this is a correction and not a first run: a person ruled one
 frozen test wrong. Correct the tests that finding names. Leave every other frozen row alone.
@@ -88,8 +88,11 @@ Report any test that passed on arrival, and say why you think it did. Do not wea
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
 and both are worth more than a green line. Correct it once. If it is still green because code
 that already exists satisfies it, return a `locks-in` reason for it: one sentence naming that
-code. The test then locks that behaviour in. If you can name no such code, report it as green on
-arrival.
+code. The test then locks that behaviour in. When the brief holds `treeHolds`, a test of this
+unit's own work is satisfied by this unit's earlier build. You may not read that build. So return
+one of the build or fix commits the brief lists there as the `locks-in` reason, in place of the
+sentence. Read no source to decide it. If you can name neither existing code nor such a commit,
+report it as green on arrival.
 
 Return one row per test: the path, the test's name, and the criterion its name carries. The row
 also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test

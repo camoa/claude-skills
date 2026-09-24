@@ -41,7 +41,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--checklist <criterion id>=<verification text>]...
 #                            [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
 #                            [--green-on-arrival <test name>=<reason>]...
-#                            [--locks-in <test name>=<reason>]...
+#                            [--locks-in <test name>=<reason or commit id>]...
 #                            [--support <path relative to codePath>]...
 #   implement-actions.sh build-brief  <task_folder> <unit_id>
 #   implement-actions.sh build-record <task_folder> <unit_id> \
@@ -619,6 +619,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      grant it. Nothing is written. Three argument faults stay exit 3: a path already owned, a
 #      frozen test or support file, and a path no open finding's fixScope names.
 #
+# The code the commit form of a locks-in reason added (live-run row 183).
+# 101  `tests-freeze` was given a `--locks-in` reason shaped like a commit id that is not one of
+#      this order's own build or fix commits on the branch. The message names the commit and
+#      lists the ones that are, which `tests-brief` already put in the brief under `treeHolds`.
+#      A reason carrying a space is prose, names the existing code, and never reaches this check.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -766,7 +772,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--checklist <criterion id>=<verification text>]...
                             [--row <criterion id> | <unit_id>=<confirmed|rejected>::<person|model>::<note>]...
                             [--green-on-arrival <test name>=<reason>]...
-                            [--locks-in <test name>=<reason>]...
+                            [--locks-in <test name>=<reason or commit id>]...
        implement-actions.sh build-brief  <task_folder> <unit_id>
        implement-actions.sh build-record <task_folder> <unit_id>
                             [--interface <path to the record the builder wrote>]
@@ -2151,7 +2157,7 @@ do_start() {
   # (live-run row 94). The line is dropped when there is none, the way `removed:` is.
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
-    st_partial_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$code_path" "" | jq -c '
+    st_partial_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
       group_by(.order) | map({order: .[0].order, commits: (map(.commit[0:7] + " " + .kind))})')"
   fi
   im_print_summary "start" "$(jq -n \
@@ -3614,10 +3620,11 @@ do_tests_brief() {
   # told rather than left to find it (live-run row 94).
   local tree_holds_json
   rv_load_codepath "tests-brief"
-  tree_holds_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" | jq -c '
+  tree_holds_json="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$ledger_doc" | jq -c '
     if length == 0 then null
     else {commits: map({kind, commit}),
-          note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect"} end')"
+          note: "the tree holds a partial build of this unit from before a restart, so a test that passes on arrival is suspect",
+          greenOnArrival: "A test of this unit that arrives green may be satisfied by one of the build or fix commits above. Name that commit as the --locks-in reason. Read no source to decide it."} end')"
 
   # A tenth thing, only while a retake is still unanswered: a person ruled one frozen test wrong
   # at `verify-record`, and `retake-tests` sent the order back to this step (live-run row 142).
@@ -3902,6 +3909,15 @@ $raw
 TF_EOF
 }
 
+# Prints `commit` when $1 is a commit id and `prose` when it is a sentence. A commit id is hex and
+# nothing else, seven characters or more; a reason in prose carries a space, so the two never meet.
+tf_locks_in_shape() {
+  case "$1" in
+    *[!0-9a-f]*) printf 'prose'; return 0 ;;
+  esac
+  if [ "${#1}" -ge 7 ]; then printf 'commit'; else printf 'prose'; fi
+}
+
 # Resolves --test path $1 against code root $2 (already canonical, no trailing slash), the way a
 # recipe's own `## Test commands` rows are resolved: this step never carries a second, absolute
 # copy of a path that belongs to the repository, for the same reason baseline.json's own `scope`
@@ -4018,7 +4034,7 @@ do_tests_freeze() {
 "
         shift 2 ;;
       --locks-in)
-        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it>"
+        [ "$#" -ge 2 ] || die 3 "tests-freeze: --locks-in needs <test name>=<the existing code that satisfies it, or the commit of this order's own build that does>"
         locks_raw="$locks_raw$2
 "
         shift 2 ;;
@@ -4643,6 +4659,42 @@ TF_EOF
   if printf '%s' "$reds_json" | jq -e 'any(.[]; .signal == "harness-new-unit")' >/dev/null; then
     echo "TESTS-FREEZE: $unit_id creates a unit: $unit_file matches $unit_file_glob under ## Unit declaration in $unit_file_recipe. A red holding only the harness marker is accepted for it, because nothing can fail an assertion before the unit exists."
   fi
+
+  # --- 101: a --locks-in reason that is a commit names one of this order's own commits ------------
+  # A test of the order's own done-when that arrives green has no code the author may cite: the
+  # code is this order's earlier build, which a restart left in the tree, and the author reads no
+  # production source (live-run row 183). So the reason may be a commit instead. `tests-brief`
+  # prints this order's own build and fix commits under `treeHolds`, and the author names one of
+  # them. The same reader answers here, so the freeze accepts exactly what the brief offered, and
+  # a commit of another order or one git no longer holds refuses. A shorter form than the brief
+  # printed still matches, because `start`'s own line prints seven characters.
+  local tf_lock_total tf_lock_i tf_lock_reason tf_lock_name tf_lock_hit tf_own_commits tf_own_loaded tf_own_c
+  tf_lock_total="$(printf '%s' "$locks_json" | jq 'length')"
+  tf_own_commits=""
+  tf_own_loaded=false
+  tf_lock_i=0
+  while [ "$tf_lock_i" -lt "$tf_lock_total" ]; do
+    tf_lock_reason="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].reason')"
+    if [ "$(tf_locks_in_shape "$tf_lock_reason")" = "commit" ]; then
+      if [ "$tf_own_loaded" = "false" ]; then
+        tf_own_commits="$(rs_restarted_commits_in_head "$TASK_PATH" "$RV_CODEPATH" "$unit_id" "$tf_prior_ledger" \
+          | jq -r '.[] | select(.kind == "build" or .kind == "fix") | .commit')"
+        tf_own_loaded=true
+      fi
+      tf_lock_name="$(printf '%s' "$locks_json" | jq -r --argjson i "$tf_lock_i" '.[$i].name')"
+      tf_lock_hit=""
+      while IFS= read -r tf_own_c; do
+        [ -n "$tf_own_c" ] || continue
+        [ "${tf_own_c:0:${#tf_lock_reason}}" = "$tf_lock_reason" ] || continue
+        tf_lock_hit="$tf_own_c"
+      done <<TF_OWN_COMMITS
+$tf_own_commits
+TF_OWN_COMMITS
+      [ -n "$tf_lock_hit" ] \
+        || die 101 "tests-freeze: --locks-in for $tf_lock_name gives the commit $tf_lock_reason, which is not one of $unit_id's own build or fix commits on this branch. Those commits are: $(if [ -n "$tf_own_commits" ]; then printf '%s' "$tf_own_commits" | tr '\n' ' '; else printf 'none, so no restart left this order a build here'; fi). Read them from treeHolds in the tests brief. A reason in prose names the existing code instead."
+    fi
+    tf_lock_i=$((tf_lock_i + 1))
+  done
 
   # --- 33: every declared test needs a --red, or a --locks-in naming the existing code it locks in --
   local missing_red
@@ -8924,6 +8976,10 @@ do_retake_tests() {
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
 # both are read, and an order's own commits are never counted as later ones (live-run row 144).
+# The restart folders are found on disk and the retake folders from the ledger, because a restart
+# clears the ledger entry it moved. The freeze, build and fix records each folder holds are read
+# the same way as the ones at the top, so this answers from the branch however old the folder is
+# (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
   local out='[]' c range file kind dir files
@@ -8938,11 +8994,14 @@ rs_order_commits() {
       if any(.[]; .commit == $c) then . else . + [{order: $id, kind: "freeze", commit: $c, range: $c}] end')"
   done <<RS_FREEZES
 $(jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
+find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/tests-$one_id.json" \
+  -exec jq -r '.commit // empty' {} ';' 2>/dev/null
 printf '%s' "$ledger" | jq -r --arg id "$one_id" \
   '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty' 2>/dev/null)
 RS_FREEZES
   # Each retake folder comes from the ledger entry's own `movedTo`, never from a guessed folder
-  # name. A folder or a record a person removed holds nothing, which is not fatal.
+  # name. Each restart folder is found on disk, because the restart cleared the ledger entry that
+  # would name it. A folder or a record a person removed holds nothing, which is not fatal.
   files="$impl/build-$one_id.json
 $(find "$impl" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
   while IFS= read -r dir; do
@@ -8952,7 +9011,8 @@ $dir/build-$one_id.json
 $(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$one_id-*.json" 2>/dev/null | sort)"
   done <<RS_RETAKEN
 $(printf '%s' "$ledger" | jq -r --arg id "$one_id" \
-  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .movedTo // empty' 2>/dev/null)
+  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .movedTo // empty' 2>/dev/null
+find "$task" -mindepth 1 -maxdepth 1 -type d -name "implementation-*" 2>/dev/null | sort)
 RS_RETAKEN
   while IFS= read -r file; do
     [ -f "$file" ] || continue
@@ -8990,12 +9050,18 @@ RS_ARCHIVES
   printf '%s' "$out"
 }
 
-# The commits the newest restart record names that HEAD still holds, the same shape, or [] when
-# no restart happened or nothing of it is left. $1 the task folder, $2 the code repository, $3 an
-# order id to keep alone, or empty for every order. Read by `start` after a restart and by
-# `tests-brief`, so the test author is told the tree holds a partial build of the order.
+# The commits of the orders the newest restart named that HEAD still holds, the same shape, or []
+# when no restart happened or nothing of it is left. $1 the task folder, $2 the code repository,
+# $3 an order id to keep alone, or empty for every order, $4 the ledger document. Read by `start`
+# after a restart and by `tests-brief`, so the test author is told the tree holds a partial build
+# of the order, and by `tests-freeze` to check a --locks-in commit.
+# The record says which orders restarted; the commits come from rs_order_commits, the rule
+# `restart` itself applies. This replayed the record's own `commits` array, which is written once
+# and never recomputed, so a restart from before that rule was complete named one commit where the
+# branch held four (live-run row 182). The record's array is still read, inside rs_order_commits,
+# for the commits of a retake the restart cleared out of the ledger.
 rs_restarted_commits_in_head() {
-  local task="$1" codepath="$2" only="$3" newest="" one out='[]' c
+  local task="$1" codepath="$2" only="$3" ledger="$4" newest="" one out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
     if [ -z "$newest" ] || [ "$one" -nt "$newest" ]; then newest="$one"; fi
@@ -9003,13 +9069,13 @@ rs_restarted_commits_in_head() {
 $(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null)
 RS_FOUND
   if [ -n "$newest" ]; then
-    while IFS= read -r c; do
-      [ -n "$c" ] || continue
-      git -C "$codepath" merge-base --is-ancestor "$c" HEAD >/dev/null 2>&1 || continue
-      out="$(jq -c --arg c "$c" --argjson have "$out" '$have + [ (.commits // [])[] | select(.commit == $c) ]' "$newest")"
-    done <<RS_COMMITS
-$(jq -r --arg only "$only" '(.commits // [])[] | select($only == "" or .order == $only) | .commit' "$newest" 2>/dev/null)
-RS_COMMITS
+    while IFS= read -r one; do
+      [ -n "$one" ] || continue
+      out="$(jq -cn --argjson have "$out" \
+        --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" '$have + $more')"
+    done <<RS_ORDERS
+$(jq -r --arg only "$only" '(.ordersHaltedForDrift // [])[] | select($only == "" or . == $only)' "$newest" 2>/dev/null)
+RS_ORDERS
   fi
   printf '%s' "$out"
 }

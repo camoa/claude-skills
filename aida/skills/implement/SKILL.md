@@ -166,7 +166,8 @@ about the framework. Pass the one that happened, in its own word.
 **A test green on its first run has four outcomes.** Wrong test: corrected once. Still green, and
 the author names the existing code that satisfies it: frozen, and the reason recorded. Still
 green with nothing to name: reported, and the step stops. Failed: frozen with its red run.
-`references/tests.md` holds the flags.
+For a test of the order's own work the author names a commit in place of code. It is one of this
+order's build or fix commits, which the brief carries. `references/tests.md` holds the flags.
 
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
 the action that takes it. `## Test commands` and `## Check commands` are parsed by the script, one

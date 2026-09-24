@@ -53,6 +53,11 @@ still on the branch, with the commits and their kinds. It prints only while one 
 not a refusal: the person may have chosen to carry them. Tell the person the tree still holds
 that order's earlier tests and code, and that its test author will be told so.
 
+The line is read from the branch each time it prints, by the rule the restart applies. The restart
+record says which orders started over. The commits come from the order's own records on disk. So a
+task restarted under an older version reads correctly now, and the line always agrees with the
+tree it describes.
+
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
 snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason
 naming the criterion, the same as a changed order file. An order serving none of the changed

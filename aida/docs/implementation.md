@@ -162,6 +162,12 @@ and the author can name the existing code that satisfies it: frozen, with that r
 for the reviewer. Still green with nothing to name: reported by name, and the step stops. Failed:
 frozen with its red run. A green test is never deleted quietly and never weakened into failing.
 
+A test of the unit's own work has a fifth thing to name. After a restart the branch can still hold
+this unit's earlier build, and that build is what satisfies the test. The author may not read it,
+and no interface record of this unit exists yet. So the author names one of the unit's own build
+or fix commits, which the brief carries. The freeze records that commit as the reason. It refuses
+a commit of another unit, and one the branch does not hold. The author reads no source.
+
 When the author returns, the coding-standards tool runs over the new test files, and a finding
 goes back to the author before the freeze. This is the one place the tests' own standards are
 judged, because the build step leaves the frozen tests out of its tool checks.
@@ -472,8 +478,10 @@ once. So the restart lists those commits, and says one of two things about the t
 nothing later depends on them, it names the commit to take the branch back to. That is a hard
 reset, and you run it. When other commits sit after them, they are carried, and the unit's own
 code stays in the tree, so its next tests cannot go red. Either way the
-next run names them while they are still there. The test author's brief then says the tree
-holds a partial build of the unit. A test green on arrival is reported, never taken as proof.
+next run names them while they are still there. It reads the branch each time, rather than the
+list the restart wrote, so a task restarted under an older version reads correctly now. The test
+author's brief then says the tree holds a partial build of the unit, and carries the commits. A
+test green on arrival is never taken as proof.
 
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
