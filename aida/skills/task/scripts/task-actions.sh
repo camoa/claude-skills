@@ -1261,20 +1261,27 @@ run_recipe_capture() {
 # What environment_cleanup removes when `show` or `up` stops before it keeps them. They are
 # globals, because zsh runs an EXIT trap after the locals of the function that set it are gone.
 # ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
-# keeps it. ENV_TREE: the worktree the recipe files go into. ENV_DIRS: the folders this run made
-# there for them. RF_WRITTEN_PATHS, from scripts/lib/recipes.sh, holds the files it wrote.
-ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_DIRS=""
+# keeps it. ENV_TREE: the worktree the recipe files go into. ENV_HEAD: its commit before the write.
+# ENV_DIRS: the folders this run made there for them. RF_WRITTEN_PATHS, from
+# scripts/lib/recipes.sh, holds the files it wrote.
+ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 
 # Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
 # written this run, then each folder made for them, then the output file and every temporary path.
-# It removes no folder that was there before. $1 is `quiet` on show's pass, which expects the
+# It removes no folder that was there before. A file whose content in HEAD differs from its content
+# in ENV_HEAD was committed by this run, so it stays, with its folders. The repository decides
+# this, not a flag set after the commit, so an interrupt inside a commit hook keeps it too. $1 is `quiet` on show's pass, which expects the
 # removal, and `report` elsewhere, where it says what it removed. It names each path it could not
 # remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
 environment_cleanup() {
-  local p left="" gone="" staged=""
+  local p left="" gone="" staged="" kept=""
   if [ -n "$ENV_TREE" ]; then
     while IFS= read -r p; do
       [ -n "$p" ] || continue
+      if git -C "$ENV_TREE" cat-file -e "HEAD:$p" 2>/dev/null \
+        && [ "$(git -C "$ENV_TREE" rev-parse -q --verify "HEAD:$p")" != "$(git -C "$ENV_TREE" rev-parse -q --verify "$ENV_HEAD:$p" 2>/dev/null)" ]; then
+        kept="$kept $p"; continue
+      fi
       # A failed commit leaves the file staged. Reset takes its index entry back to HEAD, which
       # holds none for a file this run wrote because it was absent.
       if git -C "$ENV_TREE" ls-files --cached --error-unmatch -- "$p" >/dev/null 2>&1; then
@@ -1286,7 +1293,7 @@ environment_cleanup() {
 $RF_WRITTEN_PATHS
 ENV_CLEAN_FILES
     while IFS= read -r p; do
-      [ -n "$p" ] || continue
+      [ -n "$p" ] && [ -z "$kept" ] || continue
       rmdir "$ENV_TREE/$p" 2>/dev/null || [ ! -d "$ENV_TREE/$p" ] || left="$left $p/"
     done <<ENV_CLEAN_DIRS
 $ENV_DIRS
@@ -1295,6 +1302,8 @@ ENV_CLEAN_DIRS
   if [ "${1:-report}" != quiet ]; then
     [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2
     [ -z "$staged" ] || printf 'environment: and took them out of the index again:%s\n' "$staged" >&2
+    [ -z "$kept" ] || printf 'environment: the commit %s holds the files this run wrote, so they stay:%s\n' \
+      "$(git -C "$ENV_TREE" rev-parse --short HEAD)" "$kept" >&2
   fi
   [ -z "$ENV_OUT" ] || rm -f "$ENV_OUT"
   while IFS= read -r p; do
@@ -1302,7 +1311,7 @@ ENV_CLEAN_DIRS
   done <<ENV_CLEAN_TMP
 $ENV_TMP
 ENV_CLEAN_TMP
-  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""
+  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
   [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
 }
 
@@ -1333,6 +1342,11 @@ environment_branch_lines() {
   fi
   printf "environment: where the remedy says to commit, a commit on %s reaches this worktree now, and review reads it in the task's diff.\n" "$branch"
   base="$(jq -r '.worktree.base // empty' "$task_json" 2>/dev/null)"
+  case "$base" in commit:*)
+    printf 'environment: this worktree was cut from commit %s, on no branch. A commit elsewhere reaches this worktree only after it is merged into %s.\n' \
+      "${base#commit:}" "$branch"
+    return 0 ;;
+  esac
   if [ -n "$base" ]; then
     printf 'environment: this worktree was cut from %s. A commit on %s reaches this worktree only after %s is merged into %s.\n' \
       "$base" "$base" "$base" "$branch"
@@ -1361,7 +1375,7 @@ environment_check() {
   local sub="$1" wt="$2" outfile="$3" result="" rc=0
   recipe_files_refuse_differing environment "$RECIPE" "$file_list" "$wt" "$files_dir"
   if [ -z "$outfile" ]; then outfile="$(mktemp)" || die3 "environment: could not create a temporary file"; fi
-  ENV_OUT="$outfile"; ENV_TREE="$wt"
+  ENV_OUT="$outfile"; ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
   : >"$outfile"
   ENV_DIRS="$(environment_new_dirs "$wt")"
   if [ "$sub" = up ]; then
