@@ -484,13 +484,17 @@ cp_render_body() {
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         # A task page promises the tear-down here (live-run row 150). The old line printed for
         # every worktree. It told a task with no site to prune, and a task with a live site
-        # nothing. A site is up only while `environment.address` is there. Both `not-applicable`
-        # and an absent key mean no site.
+        # nothing. A recipe in `environment` means a site to tear down: the record holds one while
+        # a site is up, and the marker holds one while a site is coming up. Both `not-applicable`
+        # and an absent key name no recipe and no site.
         + (if ($taskDoc.worktree // null) == null then [] else
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
-            + (if ($taskDoc.environment.address // null) == null
+            + (if ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
-               else ["The site of this task is up. Run `task environment " + $task + " down` before the worktree is removed, or the framework keeps an orphaned registry entry.",
+               else [(if ($taskDoc.environment.address // null) == null
+                      then "A site of this task is coming up: the record holds the marker `up` writes before the bring-up, and no address."
+                      else "The site of this task is up." end)
+                     + " Run `task environment " + $task + " down` before the worktree is removed, or the framework keeps an orphaned registry entry.",
                      "After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end) end))
     + section("Review audit";
         if $review == null then ["no review record; nothing was checked"]

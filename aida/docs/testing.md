@@ -154,7 +154,15 @@ wrong tree is worse than none. With a kind on, the harness is installed in the t
 success you see one address line. The address is recorded in the task, and review and the
 baseline step read it instead of asking.
 
-`/aida:task environment <task-id> down` tears the site down and clears the address. Do it before
+The task records the site before the site exists. Before the first bring-up command runs, AIDA
+writes a marker naming the recipe and the time. A bring-up that fails leaves that marker, so the
+tear-down can still find what is running. The marker carries no address, so nothing reads it as a
+site that is up. The full record replaces it as soon as the address answers. A task that starts
+with a marker on it says so, and asks you to tear the site down first.
+
+`/aida:task environment <task-id> down` tears the site down and clears the address. It works from
+a marker too, and reads the values the tear-down needs from the bring-up's own recorded output. A
+value it cannot find stops it, and it names what is missing. Do it before
 the worktree is removed, or the framework keeps an orphaned entry. `/aida:task prune`, which
 removes the worktrees of complete tasks, tears the site down first for the same reason.
 

@@ -558,7 +558,13 @@ TA_MOVED
 # start has not run, or the person's no was never recorded (live run, row 118: a `start`
 # reached through scope's init never offered). Unattended it says the offer waits, and nothing
 # is written. $1 the task.json path.
+# A marker means the offer was answered and the bring-up did not finish. A person resuming the
+# task is told so here, because nothing else on this path names a site that never came up.
 environment_offer_line() {
+  if [ "$(jq -r '.environment.state // empty' "$1" 2>/dev/null)" = "coming-up" ]; then
+    echo "environment: coming-up, the bring-up did not finish. Run task environment $(jq -r '.id' "$1") down."
+    return 0
+  fi
   [ "$(jq -r '.environment | type' "$1" 2>/dev/null)" != "object" ] || return 0
   if [ "$RUN_MODE" = "autonomous" ]; then
     echo "environment: none, the site offer waits for a person"
@@ -1313,8 +1319,20 @@ do_environment() {
       || die3 "environment: could not read $task_json. Nothing was torn down"
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
-    # The address keys the record kept, so `{worktreeProject}` reaches the tear-down.
-    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt") | "\(.key)\t\(.value)"' "$task_json")"
+    # The address keys the record kept, so `{worktreeProject}` reaches the tear-down. The marker's
+    # own fields name no token, so they are left out with the three the up shape owns.
+    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt" and .key != "state" and .key != "startedAt") | "\(.key)\t\(.value)"' "$task_json")
+"
+    # A marker holds no address, so it holds none of those keys either, and a tear-down line may
+    # need one. `up` wrote every command it ran and that command's own output to
+    # records/environment-up.txt. The lines after the last command there are the output of the
+    # command `up` stopped at, which is the address command whenever the run reached it.
+    if [ -z "$(jq -r '.environment.address // empty' "$task_json")" ] && [ -f "$task_dir/records/environment-up.txt" ]; then
+      TOKENS="$TOKENS$(awk '/^\+ /{ out = ""; next } { out = out $0 "\n" } END { printf "%s", out }' \
+        "$task_dir/records/environment-up.txt" \
+        | sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' | grep -v '^address'"$tab")
+"
+    fi
     wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-down.txt"
     # task_worktree runs in a command substitution, so its own die3 ends that subshell alone and
     # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
@@ -1412,6 +1430,16 @@ TA_TOKEN_LIST
 $token_list
 TA_TOKEN_LIST
   rm -rf "$tokens_dir"
+  # The record names the site before the site exists. Every later reader finds a site through
+  # .environment, so a failure between a bring-up line and the record would leave one running that
+  # nothing can find. The marker names the recipe, which is all `down` needs to tear the site
+  # down. It carries no address, so no reader takes it for a site that is up.
+  local marker_doc
+  marker_doc="$(jq --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.environment = {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
+  [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
+  write_atomic "$task_json" "$marker_doc"
+  printf 'environment: coming-up\n'
   # bring_up_half refuses when it cannot make its temporary file, and inside a command
   # substitution that refusal ends the subshell alone. An empty half runs no bring-up line, so it
   # is read into a variable first and the code re-raised.
@@ -1427,6 +1455,15 @@ TA_TOKEN_LIST
   root="$(cr_lookup "$keys" root)"
   [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
     || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
+  # The record completes as soon as the address answers, so the marker covers the bring-up alone.
+  # The root check above runs first, because a site in another tree is never recorded as this
+  # task's. Its marker stays instead, and `down` tears that site down from the recipe it names.
+  local up_doc
+  up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
+    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
+  [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value. $task_json could not be written. The marker this run wrote before the bring-up still names $RECIPE. Run task environment $id down to tear this site down. It fills a tear-down token from the address command's lines in $outfile"
+  write_atomic "$task_json" "$up_doc"
   up_lines="$(bring_up_half "$RECIPE" after)" || exit $?
   run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
   # The harness in the worktree: a setup recipe's `## Install` is declared safe to run twice, and
@@ -1441,17 +1478,6 @@ TA_TOKEN_LIST
     # paths are the recipe's to know, and a commit of everything would sweep other work in.
     [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
   done
-  # The site is already up when this write runs, and this beta does not reorder the two. So this
-  # site tests the record itself rather than leaving write_atomic to name the file alone. Nothing
-  # finds a site the record forgot: down, prune and the finish page all read .environment from
-  # here. The message therefore says what is running and how to stop it by hand. The address
-  # command's own lines are in $outfile, and a tear-down line may need them (fill_tokens).
-  local up_doc
-  up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
-    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
-  [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value, and $task_json could not be written. No record names that site, so task environment $id down cannot find it. Tear it down by hand: run the Tear down block of $RECIPE in $wt. The values that block may need are the address command's lines in $outfile"
-  write_atomic "$task_json" "$up_doc"
   commit_task_change "$project_path" "Bring up the site of ${id}" "a person approved it" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
   printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
@@ -1471,7 +1497,10 @@ prune_list() {
   local project_path="$1" merged="$2" tab d row id wt branch env yes_no; tab="$(printf '\t')"
   find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r d; do
     row="$(jq -r 'select(.state == "complete" and .worktree != null)
-      | [.id, .worktree.path, .worktree.branch, (if .environment.address == null then "no" else "yes" end)] | @tsv' \
+      | [.id, .worktree.path, .worktree.branch,
+         (if .environment.address != null then "yes"
+          elif .environment.state == "coming-up" then "coming-up"
+          else "no" end)] | @tsv' \
       "$d/task.json" 2>/dev/null)"
     [ -n "$row" ] || continue
     IFS="$tab" read -r id wt branch env <<TA_ROW

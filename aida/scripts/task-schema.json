@@ -89,9 +89,11 @@
         "address": { "type": "string", "minLength": 1 },
         "recipe": { "type": "string", "minLength": 1 },
         "upAt": { "type": "string", "minLength": 1 },
-        "not-applicable": { "type": "string", "minLength": 1 }
+        "not-applicable": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "enum": ["coming-up"] },
+        "startedAt": { "type": "string", "minLength": 1 }
       },
-      "description": "The worktree's own site, in one of two shapes. While a site is up it holds `address`, `recipe` and `upAt`, all three. They are the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Every other `key: value` line the address command printed is kept here as a string field, so `down` can fill it into the tear-down as `{key}`. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one. Or `not-applicable` alone: the person's reason this task needs no site, written by `task environment not-applicable`, so nothing offers again. `up` replaces it. Absent means the offer has not been answered, and `start` says so."
+      "description": "The worktree's own site, in one of three shapes. While a site is up it holds `address`, `recipe` and `upAt`, all three. They are the base address the recipe's address command printed, the path of the worktree-environment recipe that brought it up, and when. Every other `key: value` line the address command printed is kept here as a string field, so `down` can fill it into the tear-down as `{key}`. Written by `task environment up` and removed by `down`; review and baseline read the address instead of asking for one. Or the marker `up` writes before the first bring-up line: `state` is `coming-up`, `recipe` is the recipe being run, and `startedAt` is when. The marker names the site before the site exists, so a failure between the bring-up and the record leaves a site `down` can still find. `up` replaces the marker with the shape above once the address command answers. A marker on disk means a bring-up did not finish: run `task environment <id> down`. No reader may take a marker for a site that is up, because it carries no address. Or `not-applicable` alone: the person's reason this task needs no site, written by `task environment not-applicable`, so nothing offers again. `up` replaces it. Absent means the offer has not been answered, and `start` says so."
     },
     "savedAt": {
       "type": "string",
