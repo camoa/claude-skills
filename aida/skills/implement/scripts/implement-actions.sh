@@ -5571,6 +5571,10 @@ br_gate_check() {
   if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
     verdict="unknown"
     detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
+    # The marker task environment up writes before its bring-up. A site may be half up, so the
+    # bring-up is not the next step here; the tear-down is. The verdict is unknown either way.
+    [ "$(jq -r '.environment.state // empty' "$TASK_PATH/task.json" 2>/dev/null)" != "coming-up" ] \
+      || detail="task.json holds the marker task environment up writes before its bring-up, so a site may be half up and no snapshot exists. Run task environment $(jq -r '.id // "<task-id>"' "$TASK_PATH/task.json" 2>/dev/null) down first. Then bring the environment up and record the attempt again."
   elif [ -z "$BRC_GATE_RECIPES" ]; then
     verdict="unknown"
     detail="no --implement-recipe was passed, so the ## Configuration gate lines could not be read. Pass the implement recipe path the build step holds."

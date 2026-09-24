@@ -1287,7 +1287,7 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down|not-applicable) ;; *) die3 "environment: the action is show, up, down or not-applicable, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile
+  local task_dir task_json wt outfile addr_mark
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
@@ -1323,13 +1323,23 @@ do_environment() {
     # own fields name no token, so they are left out with the three the up shape owns.
     TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt" and .key != "state" and .key != "startedAt") | "\(.key)\t\(.value)"' "$task_json")
 "
-    # A marker holds no address, so it holds none of those keys either, and a tear-down line may
-    # need one. `up` wrote every command it ran and that command's own output to
-    # records/environment-up.txt. The lines after the last command there are the output of the
-    # command `up` stopped at, which is the address command whenever the run reached it.
+    # A marker with no address holds none of those keys either, and a tear-down line may need one.
+    # `up` wrote each command as `+ <command>` above that command's own output, in
+    # records/environment-up.txt. So the address command's keys are the lines under its own `+`
+    # line, and only those: a bring-up command that printed a `key: value` line of its own is a
+    # different command and is never read. No such `+` line means the address never ran, and then
+    # nothing is taken. The line is matched by the part of the recipe's address command before its
+    # first token, because `down` cannot fill a token the address itself was to provide.
     if [ -z "$(jq -r '.environment.address // empty' "$task_json")" ] && [ -f "$task_dir/records/environment-up.txt" ]; then
-      TOKENS="$TOKENS$(awk '/^\+ /{ out = ""; next } { out = out $0 "\n" } END { printf "%s", out }' \
-        "$task_dir/records/environment-up.txt" \
+      addr_mark="$(fill_tokens "+ $(sh_blocks_under "$RECIPE" Address | sed -n '/[^ ]/{p;q;}')")"
+      addr_mark="${addr_mark%%\{*}"
+      # `+ ` alone is a recipe with no address command, or one whose first word is a token. Either
+      # way the mark matches every command, so nothing is taken.
+      [ "$addr_mark" = "+ " ] || TOKENS="$TOKENS$(awk -v m="$addr_mark" '
+          index($0, m) == 1 { out = ""; under = 1; next }
+          /^\+ / { under = 0; next }
+          under { out = out $0 "\n" }
+          END { printf "%s", out }' "$task_dir/records/environment-up.txt" \
         | sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' | grep -v '^address'"$tab")
 "
     fi
@@ -1433,10 +1443,14 @@ TA_TOKEN_LIST
   # The record names the site before the site exists. Every later reader finds a site through
   # .environment, so a failure between a bring-up line and the record would leave one running that
   # nothing can find. The marker names the recipe, which is all `down` needs to tear the site
-  # down. It carries no address, so no reader takes it for a site that is up.
+  # down. It keeps whatever the record held, so a second `up` over a site that is already up does
+  # not drop that site's address while the bring-up runs again. A failure then leaves the person
+  # where they were before they ran `up`. The person's `not-applicable` reason is the one field
+  # dropped, because `up` is the answer that replaces it.
   local marker_doc
   marker_doc="$(jq --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '.environment = {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
+    '.environment = ((.environment // {}) | del(.["not-applicable"]))
+       + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
   [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
   write_atomic "$task_json" "$marker_doc"
   printf 'environment: coming-up\n'

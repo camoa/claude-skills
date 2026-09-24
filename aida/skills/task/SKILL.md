@@ -133,7 +133,9 @@ taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
 `environment`: `state: coming-up`, the recipe, and the time. The record names the site before the
-site exists, so a failure during the bring-up leaves a site `down` can still find. Then the
+site exists, so a failure during the bring-up leaves a site `down` can still find. The marker
+keeps every other field the record held, so a second `up` over a site that is up does not drop
+that site's address while the bring-up runs again. Then the
 bring-up lines before the
 `## Address` heading. Then the address command, whose output is `key: value` lines. `address:`
 is required, and every other key is a token for the later lines and for the tear-down. A `root:`
@@ -153,9 +155,10 @@ promises every step runs again cleanly.
 `down` runs the tear-down lines, each one and its output to `records/environment-down.txt`, and removes
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
 nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
-finished record, so a site that was coming up is torn down the same way. The marker holds no
-address key, so `down` fills a tear-down token from the address command's own lines in
-`records/environment-up.txt`. A token nothing fills stops it at 3 and names that token.
+finished record, so a site that was coming up is torn down the same way. A marker with no address
+key holds none of the other address keys either. So `down` fills a tear-down token from the lines
+under the address command's own `+` line in `records/environment-up.txt`, and from nothing else in
+that file. A token nothing fills stops it at 3 and names that token.
 Run it before the worktree is removed, or the framework keeps
 an orphaned registry entry; the completion body names it when a site is up or coming up. Review
 and `baseline` read `environment.address` before asking for a base URL.
