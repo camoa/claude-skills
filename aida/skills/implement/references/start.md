@@ -49,7 +49,8 @@ halted for that one. The ledger records each clearing under `haltsCleared`, with
 it stood. Tell the person which orders cleared, and which are still halted and why.
 
 After a restart, a `partialBuild(<order>):` line names each restarted order whose commits are
-still on the branch, with the commits and their kinds. It prints only while one is there. It is
+still on the branch, with the commits and their kinds. It prints only while one is there. It
+stops once the order is built again: its ledger entry reads code-written or later. It is
 not a refusal: the person may have chosen to carry them. Tell the person the tree still holds
 that order's earlier tests and code, and that its test author will be told so.
 

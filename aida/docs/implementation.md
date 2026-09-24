@@ -495,7 +495,8 @@ once. So the restart lists those commits, and says one of two things about the t
 nothing later depends on them, it names the commit to take the branch back to. That is a hard
 reset, and you run it. When other commits sit after them, they are carried, and the unit's own
 code stays in the tree, so its next tests cannot go red. Either way the
-next run names them while they are still there, in the order the branch holds them, oldest first,
+next run names them while they are still there and the unit is not yet built again. It names them
+in the order the branch holds them, oldest first,
 which is the order the restart printed. It works them out again each time, rather than replaying
 the list the restart wrote. A freeze commit comes from the branch, by the subject the freeze
 writes on it. A build or fix commit comes from the unit's own record, wherever a retake or an

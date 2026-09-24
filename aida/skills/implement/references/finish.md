@@ -159,7 +159,7 @@ and they are gone. That is a hard reset, which you run; this session cannot." Wh
 carry them, other commits sit after them. Say: "They stay. This unit's own code stays in the
 tree, so its next tests cannot go red. The next start names them, and the
 test author is told the tree holds a partial build." Either way the next `start` prints a
-`partialBuild` line while any of them is still on the branch.
+`partialBuild` line while any of them is still on the branch, until the unit is built again.
 
 ## Clear any other halt, once the person has acted on it
 

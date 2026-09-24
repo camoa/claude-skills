@@ -4121,17 +4121,18 @@ do_tests_freeze() {
   # `denies` is a floor and not the whole rule: "the form shows no legacy field" carries `no` and a
   # test can watch it fail, so references/tests.md carries the judgement and this carries the
   # refusal a script can make. The word list is closed, so it reads the same clause the same way
-  # every time. A word ending in n't is a negation too, so "doesn't" and "won't" deny. A curly
-  # apostrophe reads as a straight one first, because a clause pasted from a document carries it.
+  # every time. A word ending in n't after a letter is a negation too, so "doesn't" and "won't"
+  # deny and a bare "n't" does not. U+2018, U+2019 and U+02BC read as a straight apostrophe first,
+  # because a clause pasted from a document or typed on a phone carries one of them.
   local absence_sorted absence_json absence_unknown absence_asserts
   absence_sorted="$(printf '%s' "$absence_raw" | jq -c \
     --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" '
-    def denies: ascii_downcase | gsub("[\u2018\u2019]"; "\u0027")
+    def denies: ascii_downcase | gsub("[\u2018\u2019\u02bc]"; "\u0027")
       | [scan("[a-z0-9]+(?:\u0027[a-z]+)?")]
       | any(.[]; . as $w
-            | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without"]
+            | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without", "cannot"]
                 | index($w)) != null)
-              or ($w | endswith("n\u0027t")));
+              or ($w | test("[a-z]n\u0027t$")));
     def known: . as $t | ($dw | index($t)) != null;
     . as $given
     | { routed: (reduce ($given[] | select(known) | select(denies)) as $t
@@ -9192,10 +9193,22 @@ RS_ARCHIVES
 # earlier one's commits on the branch, and its line and its commit: route must survive. An order
 # restarted twice is named by two records and asked for once: rs_order_commits already reads
 # every folder and record either restart wrote, and `start` prints one line per order.
+# An order rebuilt since its halt is left out. `restart` resets the order's ledger entry to not
+# started when it halts it, so a build step on that entry happened after its newest halt, whatever
+# restart of another order came later. Rebuilt means the entry reads code-written or any step
+# after it, closed included. A freeze alone is not a rebuild: the old build is all the tree holds
+# of the order, and a retake returns the order to that state. A commit order was not used: a
+# rebase rewrites the record's headCommit, and the ledger survives it. An order the ledger does
+# not hold, or a ledger nothing could read, keeps its line.
 rs_restarted_commits_in_head() {
   local task="$1" codepath="$2" only="$3" ledger="$4" one out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
+    case "$(printf '%s' "$ledger" | jq -r --arg id "$one" \
+      '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // "none"' 2>/dev/null)" in
+      ""|none|tests-frozen) ;;
+      *) continue ;;
+    esac
     out="$(jq -cn --argjson have "$out" \
       --argjson more "$(rs_order_commits "$task" "$codepath" "$one" "$ledger")" '$have + $more')"
   done <<RS_ORDERS

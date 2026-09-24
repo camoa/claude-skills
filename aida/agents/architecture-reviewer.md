@@ -117,8 +117,9 @@ refused, and the whole findings file is refused with it. Never paraphrase a clau
 
 **A verdict with nothing to read beside it is read as unknown.** Every one carries a note.
 
-**Say whether a test could have watched the clause fail.** The tests step refuses only a clause with
-no negation word. "The form shows no legacy field" carries `no`, and a test can still watch it fail.
+**Say whether a test could have watched the clause fail.** The tests step refuses two clauses: one
+that is not, verbatim, in the order's done-when, and one with no negation word. It refuses nothing
+else. "The form shows no legacy field" carries `no`, and a test can still watch it fail.
 You hold the done-when and the diff, so you answer it. Write `testable` on every verdict:
 
 - `yes`: a test could have watched the clause fail. It is a claim about what the code does, such as

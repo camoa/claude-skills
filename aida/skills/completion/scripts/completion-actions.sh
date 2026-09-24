@@ -107,7 +107,9 @@ die() { printf 'completion-actions: %s\n' "$2" >&2; exit "$1"; }
 # task-helpers.sh takes these three from its caller, so a refusal still says which script refused.
 # shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
 die1() { die 1 "$1"; }
-# shellcheck disable=SC2329 # called by resolve_task_folder and write_atomic in scripts/lib/task-helpers.sh
+# die3 is called by resolve_task_folder, write_atomic, mark_task_in_progress, commit_task_change
+# and task_worktree, all in scripts/lib/task-helpers.sh.
+# shellcheck disable=SC2329 # called by the task-helpers.sh functions named above
 die3() { die 3 "$1"; }
 # shellcheck disable=SC2329 # called by resolve_task_folder in scripts/lib/task-helpers.sh
 die79() { die 79 "$1"; }
