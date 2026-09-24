@@ -22,7 +22,8 @@ lookup's answer in its own word: SKILL.md holds both rules.
 
 **`point: test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
 which levels exist and when each is right, what a test may not do in this framework, and how a
-criterion id attaches to a test. Only the test author and the row-checker of a test read it.
+criterion id attaches to a test. The test author and the row-checker read it, so an order
+whose roles hold neither skips it.
 
 **`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
@@ -69,9 +70,9 @@ hashed nothing. So it says the row did not apply, rather than that a hash matche
 
 `observe` means its deliverable is what a page shows, and a model judges that after the build.
 Put no row to anyone: there is nothing to judge before the page exists. Freeze with no `--test`
-and no `--row`, and a `--checklist` for each criterion a person verifies. The build step opens the order's surfaces in a browser after the
-implementer returns, and reads that record as the order's own check, `observed`. `close`
-writes `model` on the criteria the order owns.
+and no `--row`, and a `--checklist` for each criterion a person verifies. The build step opens
+the order's surfaces in a browser after the implementer returns. It reads that record as the
+order's own check, `observed`. `close` writes `model` on the criteria the order owns.
 
 ## Assemble what the test author may see
 
@@ -231,8 +232,8 @@ nothing looks like success and is the dangerous one.
 **When the author returns, run the coding-standards row over the new test files.** Take the
 command from the check recipe `references/preconditions.md` resolved, with `{paths}` as the test
 paths the author returned, and run it here. When the row lists `extensions`, pass only the test
-files that end in one of them. When none is left, the row does not apply: say so, and run nothing. Send any finding back to the author before the
-freeze. No script action runs one recipe row on its own, so this conversation runs the command.
+files that end in one of them. When none is left, the row does not apply: say so, and run
+nothing. Send any finding back to the author before the freeze. No script action runs one recipe row on its own, so this conversation runs the command.
 This is the one place the tests' own standards are judged. The build step leaves the frozen tests
 out of its tool rows, because the implementer may not write them.
 

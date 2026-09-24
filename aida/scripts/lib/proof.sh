@@ -74,8 +74,9 @@ BR_ORDER_FACTS_JQ='
 #
 # A fixer is not listed: an open finding decides it, not a kind. `point: implement` is on every
 # kind, because the tests step takes the oracle globs from it and a gate order runs its
-# `## Configuration gate`. The test author and the row-checker of a test read
-# `point: test-authoring`, so only a `tests` order asks for it.
+# `## Configuration gate`. The test author and the row-checker read `point: test-authoring`.
+# The row-checker takes the recipe path on every dispatch (agents/row-checker.md), a record
+# order's done-when row included, so a `record` order asks for it too.
 #
 # Three rules keep roles on these lists. Do not cut them to save a dispatch.
 # - The per-order reviewer is on every kind. A passing check says the order met its own check;
@@ -91,7 +92,7 @@ br_order_needs() {
   br_order_facts "$1"
   case "$BR_ORDER_SLOT" in
     order-tests) BR_ORDER_ROLES="test-author row-checker implementer reviewer"; BR_ORDER_LOOKUPS="test-authoring implement" ;;
-    done-when)   BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="implement" ;;
+    done-when)   BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="test-authoring implement" ;;
     *)           BR_ORDER_ROLES="implementer reviewer";                         BR_ORDER_LOOKUPS="implement" ;;
   esac
 }

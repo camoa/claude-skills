@@ -15,7 +15,9 @@ This recipe carries the rules applied while code is written. The implementer ope
 the path. Do not read the body here.
 
 Do not give the test-authoring recipe to the implementer. It chooses a level and names a test, and
-this reader may do neither. Pass its path to `dispatch-open` as `--deny-read`.
+this reader may do neither. When the tests step resolved its path, pass that path to
+`dispatch-open` as `--deny-read`. An order whose `lookups=` holds no `test-authoring` resolved
+none, so pass nothing then.
 
 Read the `test-execution` and `review` recipe paths from the records preconditions already wrote,
 instead of asking the navigator again. `implementation/preconditions.json` holds the

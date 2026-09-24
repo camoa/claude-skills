@@ -146,7 +146,7 @@
     "reviewerSkipped": {
       "type": "string",
       "minLength": 1,
-      "description": "Why `findings` ran with no dispatch of the architecture reviewer, in one line a person reads. Present only when no order commits in the code repository and no order routed a done-when clause to review, so the reviewer had nothing to judge. Absent when the reviewer ran."
+      "description": "Why `findings` ran with no dispatch of the architecture reviewer, in one line a person reads. It is present when no order commits in the code repository and no order routed a done-when clause to review. The reviewer then had nothing to judge. It is absent when the reviewer ran."
     },
     "absences": {
       "type": "array",

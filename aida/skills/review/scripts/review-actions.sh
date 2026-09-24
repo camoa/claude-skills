@@ -459,7 +459,7 @@ rw_load_absence_clauses() {
 rw_reviewer_skip_reason() {
   [ "$RW_COMMITS_IN_CODE" = "no" ] || return 0
   [ "$(printf '%s' "$RW_ABSENCE_CLAUSES" | jq 'length')" = "0" ] || return 0
-  printf 'no order in this task commits in the code repository, and no order routed a done-when clause here, so the architecture reviewer had nothing to judge and was not dispatched.'
+  printf 'No order commits in the code repository, and no order routed a done-when clause here. So the architecture reviewer had nothing to judge.'
 }
 
 # ------------------------------------------------------------------------------------------------

@@ -972,10 +972,10 @@ br_filter_extensions() {
   '
 }
 
-# True when the argv array $1 holds a token br_run_resolved expands from the file list: `{paths}`,
-# `{file}` or `{dirs}`. Such a row reads the caller's files, so an empty list is a row that does not
-# apply, never a run over the tool's own default scope. The build once left `{dirs}` out of this
-# test, so a row over directories ran whole and read met.
+# True when the argv array $1 holds `{paths}`, `{file}` or `{dirs}`. br_run_resolved expands each
+# of them from the file list. Such a row reads the caller's files. An empty list is then a row
+# that does not apply, never a run over the tool's own default scope. The build once left `{dirs}`
+# out of this test, so a row over directories ran whole and read met.
 br_argv_takes_paths() {
   printf '%s' "$1" | jq -e 'any(.[]; . == "{paths}" or . == "{file}" or . == "{dirs}")' >/dev/null 2>&1
 }

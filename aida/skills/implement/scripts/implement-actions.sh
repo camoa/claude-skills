@@ -9517,10 +9517,10 @@ do_restart() {
 # removes it, safe to call when none is open. Two tasks of one project each hold their own.
 # ------------------------------------------------------------------------------------------------
 
-# Exit 102. A role whose need a proof kind decides, dispatched on an order whose kind does not need
-# it, would judge nothing: a test author on an order that freezes no test, or a row-checker on one
-# with no row. br_order_needs decides; this reads it. $1 the bare role, $2 the order id. SNAPSHOT_DOC
-# is loaded.
+# Exit 102. br_order_needs decides which roles a proof kind needs, and this reads its answer. A
+# role the kind does not need would judge nothing. Examples are a test author on an order that
+# freezes no test, and a row-checker on one with no row. $1 the bare role, $2 the order id.
+# SNAPSHOT_DOC is loaded.
 im_refuse_unneeded_role() {
   case " $BR_KIND_ROLES " in *" $1 "*) ;; *) return 0 ;; esac
   br_order_needs "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$2" '[ .workOrders[] | select(.id == $u) ][0]')"
