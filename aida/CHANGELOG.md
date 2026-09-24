@@ -4,13 +4,13 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [6.0.0-beta.25] - 2026-09-23
+## [6.0.0-beta.25] - 2026-09-24
 
-Nine rows, every one opened by beta.24 itself. None came from the live run.
-Each was something a builder or a checker found while closing something else,
-and this release was asked to leave nothing behind. Five builds. The work
-turned up five live defects nobody had written a row for, four of them found
-by a spec written to catch their class.
+Twenty-three rows. Nine were opened by beta.24 itself, while it closed other
+rows. Nine more were found while this release closed those, and five came from
+a live run on the day it closed. Every row is closed. One closes through a
+proposal to the guide catalog, because no AIDA action edits a catalog recipe.
+The work also turned up five live defects nobody had written a row for.
 
 ### Added
 - `aida/tests/records-folder-spec.sh`, with a list naming every file a task's
@@ -32,6 +32,22 @@ by a spec written to catch their class.
   the old wording read as plugin-relative. Three readers across two releases
   concluded the file was missing. The headers also say the runner finds a spec
   through `git ls-files`, so an untracked spec never runs. (row 186)
+
+- `tests-freeze --absence <clause>` routes a done-when clause that asserts an
+  absence to review. A test of an absence cannot be watched failing, so the
+  clause needs a reviewer rather than a red run. The clause must be verbatim in
+  the order's done-when and carry a negation word. A word ending in `n't` and
+  the word `cannot` count, with straight or curly apostrophes. The architecture
+  reviewer gives each routed clause a verdict. It also says whether a test
+  could have watched the clause fail. Review's `absence-clauses` check fails an
+  unjudged clause, and fails one a test could have covered. The review summary
+  prints one line per clause. (row 184)
+- `drop-retired <name>` in the project skill. The schema now lists retired
+  fields, and the check names this action when a project file holds one. It
+  removes exactly those fields and commits. (row 192)
+- `aida/scripts/lib/project-findings.sh` holds the version 5 task-rule markers
+  and their detection once. The check, the project actions and the
+  session-start hook all read it. (row 191)
 
 ### Fixed
 - A failed write never empties a record. The guard went into `write_atomic`
@@ -79,16 +95,56 @@ by a spec written to catch their class.
   written, and so is the header sentence that made it look necessary. (row 174)
 - The design critic no longer reports a path the close moves. (row 189)
 
-### Checks
-Fifty-one fixtures, 4,040 rows, pass under bash and under zsh, every run exit 0,
-on the merged branch with the version bumped. All six specs pass. Shellcheck at warning level is clean
-over every script this release changed. Each of the five builds had a fresh
-checker over the artifacts and one fix round; two checks failed and were fixed.
+- A resume line reads the branch, not a record. `start`'s `partialBuild:` line
+  finds an order's freeze commits by their subject on the branch. It reads every
+  restart record, not only the newest one. It covers every retaken order, and
+  it lists only the build and fix commits a test author can cite. An order that
+  was built again since its halt gets no line. (rows 182, 183)
+- A still-green test can cite a commit. `--locks-in <test>=commit:<id>` names
+  one of the order's own build or fix commits, and any other id is refused.
+  After `start --rebased-onto`, a commit is followed onto the new branch by its
+  change, author, author date and subject. (row 183)
+- A site the record can always find. `environment up` writes a marker before
+  the first bring-up line, so `down` can tear down a site that failed halfway.
+  `down` reads only the keys under the last bring-up. (row 185)
+- The records-folder spec reads four more shapes. The one it cannot read is
+  stated in its list header, where a person adding a record meets it. (row 188)
+- A critique whose lens did not finish is kept. The design close moves it into
+  `design/` as `unfinished-design-critique-<lens>.md` and leaves it uncounted.
+  (row 190)
+- A version 5 task rule is named on every project check, not only at pickup.
+  The session start names it too, before any stage runs. The rewrite offer stays
+  open until it is accepted or declined. A block with no end marker is never
+  rewritten or removed; every route names the line to fix. A file holding both
+  blocks keeps one version 6 block. `uninstall` removes a version 5 block. (row
+  191)
+- A project action commits only the files it wrote. Before, a commit took
+  anything the person had already staged. (row 192)
+- Task create asks the catalog one question per dispatch. It asked for two
+  recipes at once, so the visual-regression setup recipe was never looked up.
+  (row 193)
+- `environment show` runs the recipe's precondition checks before the site is
+  offered. `show` and `up` share one block for this. A failing check names the
+  task branch, and the branch the worktree was cut from, which is now recorded.
+  It also says a commit on that base branch arrives only after a merge. An
+  interrupted or failed run leaves the tree and the index as they were. (row
+  194)
 
-The habit that paid: a checker that reproduces rather than reads. Every one of
-the five live defects above was shown by running the unchanged code. Two of them
-refuted a previous build's written reasoning about why a site was safe. A
-reason has to hold on every path into a site, not the path that found it.
+### Checks
+Fifty-eight fixtures, 5,174 rows, pass under bash and under zsh on the merged
+branch, every run exit 0. The repository's specs pass. Two older fixtures
+expected freeze commits in the resume line, and now expect the new list. Each
+build had a fresh checker over its artifacts.
+
+### Known limits
+- A rebase that changes a build commit's diff, through a conflict, loses the
+  link to that commit. The resume line and the refusal name it as not found and
+  say why. A person decides whether the green test stands.
+- A reviewer can answer that a routed absence clause could not have been
+  tested when it could. The route rests on the reviewer's answer.
+- A Drupal project whose docroot is the repository root cannot bring its site
+  up until the catalog recipe reads the project row safely. The ask is filed
+  with the guide catalog. (row 195)
 
 ## [6.0.0-beta.24] - 2026-09-23
 
