@@ -73,8 +73,8 @@ Then the install:
 
 - runs the recipe's install commands in order, so the framework's own tooling adds the
   dependencies;
-- writes each file the recipe names only when the file is absent, and refuses a present file with
-  different content rather than overwrite it;
+- writes each file the recipe names only when the file is absent, replaces a file an earlier
+  version of the recipe wrote, and refuses a present file with any other content;
 - writes `.visual-review/surfaces.json` with the recipe's viewports when the file is absent;
 - turns the kind on in the project file, `project.json`;
 - commits what it wrote, with the reason in the message.

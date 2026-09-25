@@ -44,8 +44,9 @@ than run. Write two steps instead of joining them with `&&`. Every step is safe 
 ## Files
 
 One fenced block per file the setup writes. The path, relative to the code tree, is the second
-word of the fence, after the language tag. The script writes each file only when absent, and
-refuses the whole install when a file exists with different content. Nothing is overwritten.
+word of the fence, after the language tag. The script writes each file only when absent. It
+replaces a file that holds the block of an earlier version of this recipe. It refuses the whole
+install when a file exists with any other content.
 
 Every file of one kind lives under that kind's own directory, `tests/e2e/` or `tests/visual/`,
 so the two recipes share no file, and each kind has its own config.

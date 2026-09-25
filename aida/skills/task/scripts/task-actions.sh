@@ -1271,18 +1271,21 @@ run_recipe_capture() {
 # ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
 # keeps it. ENV_TREE: the worktree the recipe files go into. ENV_HEAD: its commit before the write.
 # ENV_DIRS: the folders this run made there for them. RF_WRITTEN_PATHS, from
-# scripts/lib/recipes.sh, holds the files it wrote.
+# scripts/lib/recipes.sh, holds the files it wrote, and RF_REPLACED_PATHS the earlier versions it
+# replaced, which RF_SAVED_IN keeps until the temporary folders go.
 ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 
 # Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
-# written this run, then each folder made for them, then the output file and every temporary path.
+# written this run, and puts back the earlier version of each file it replaced. Then it removes
+# each folder made for them, then the output file and every temporary path.
 # It removes no folder that was there before. A file whose content in HEAD differs from its content
 # in ENV_HEAD was committed by this run, so it stays, with its folders. The repository decides
 # this, not a flag set after the commit, so an interrupt inside a commit hook keeps it too. $1 is `quiet` on show's pass, which expects the
 # removal, and `report` elsewhere, where it says what it removed. It names each path it could not
 # remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
 environment_cleanup() {
-  local p left="" gone="" staged="" kept=""
+  local p left="" gone="" back="" staged="" kept="" nl="
+"
   if [ -n "$ENV_TREE" ]; then
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -1291,14 +1294,20 @@ environment_cleanup() {
         kept="$kept $p"; continue
       fi
       # A failed commit leaves the file staged. Reset takes its index entry back to HEAD, which
-      # holds none for a file this run wrote because it was absent.
+      # holds none for a file this run wrote because it was absent, and the earlier version for a
+      # file it replaced.
       if git -C "$ENV_TREE" ls-files --cached --error-unmatch -- "$p" >/dev/null 2>&1; then
         git -C "$ENV_TREE" reset -q -- "$p" >/dev/null 2>&1 && staged="$staged $p"
       fi
+      case "$nl$RF_REPLACED_PATHS" in
+        *"$nl$p$nl"*)
+          if recipe_files_put_back "$ENV_TREE" "$RF_SAVED_IN" "$p"; then back="$back $p"; else left="$left $p"; fi
+          continue ;;
+      esac
       rm -f "$ENV_TREE/$p" 2>/dev/null
       if [ -e "$ENV_TREE/$p" ]; then left="$left $p"; else gone="$gone $p"; fi
     done <<ENV_CLEAN_FILES
-$RF_WRITTEN_PATHS
+$RF_WRITTEN_PATHS$RF_REPLACED_PATHS
 ENV_CLEAN_FILES
     while IFS= read -r p; do
       [ -n "$p" ] && [ -z "$kept" ] || continue
@@ -1309,6 +1318,7 @@ ENV_CLEAN_DIRS
   fi
   if [ "${1:-report}" != quiet ]; then
     [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2
+    [ -z "$back" ] || printf 'environment: put back the earlier version of the files this run replaced in %s:%s\n' "$ENV_TREE" "$back" >&2
     [ -z "$staged" ] || printf 'environment: and took them out of the index again:%s\n' "$staged" >&2
     [ -z "$kept" ] || printf 'environment: the commit %s holds the files this run wrote, so they stay:%s\n' \
       "$(git -C "$ENV_TREE" rev-parse --short HEAD)" "$kept" >&2
@@ -1319,23 +1329,8 @@ ENV_CLEAN_DIRS
   done <<ENV_CLEAN_TMP
 $ENV_TMP
 ENV_CLEAN_TMP
-  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
   [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
-}
-
-# Prints, deepest first, each folder under the worktree $1 that the `## Files` list needs and that
-# does not exist yet. A folder is listed once, and after every folder inside it.
-environment_new_dirs() {
-  local n rel dir tab; tab="$(printf '\t')"
-  while IFS="$tab" read -r n rel; do
-    [ -n "$n" ] || continue
-    dir="$(dirname -- "$rel")"
-    while [ "$dir" != "." ] && [ "$dir" != "/" ] && [ ! -d "$1/$dir" ]; do
-      printf '%s\n' "$dir"; dir="$(dirname -- "$dir")"
-    done
-  done <<ENV_NEW_DIRS | LC_ALL=C sort -ru
-$file_list
-ENV_NEW_DIRS
 }
 
 # The lines a failing check prints after its output. A remedy may say to commit, and the worktree
@@ -1370,10 +1365,11 @@ environment_branch_lines() {
   fi
 }
 
-# Writes the absent `## Files` blocks into the worktree $2 and runs each `## Preconditions` line
-# there, with the output in $3. The files come first, because the check is a script the recipe
-# ships. $1 is up or show. `show` passes "" for $3 to use a temporary file, and removes the files
-# after a pass, so it leaves the tree as it found it. `up` keeps them for its commit, and clears
+# Writes the absent `## Files` blocks into the worktree $2, replaces a file that holds an earlier
+# version's block, and runs each `## Preconditions` line there, with the output in $3. The files
+# come first, because the check is a script the recipe ships. $1 is up or show. `show` passes ""
+# for $3 to use a temporary file. After a pass it removes the files and puts back the earlier
+# versions, so it leaves the tree as it found it. `up` keeps them for its commit, and clears
 # the cleanup state once that commit is made. A line that runs and fails exits 3 with its output
 # and the branch lines. A line refused before it runs, for a token nothing fills or a shell
 # character, exits 3 without them, as `up` always has: `show` predicts `up`. The EXIT trap then
@@ -1385,10 +1381,10 @@ environment_check() {
   if [ -z "$outfile" ]; then outfile="$(mktemp)" || die3 "environment: could not create a temporary file"; fi
   ENV_OUT="$outfile"; ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
   : >"$outfile"
-  ENV_DIRS="$(environment_new_dirs "$wt")"
+  ENV_DIRS="$(recipe_files_new_dirs "$wt" "$file_list")"
   if [ "$sub" = up ]; then
     recipe_files_write environment "$file_list" "$wt" "$files_dir"
-    printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+    printf 'files: %s written, %s replaced, %s kept\n' "$RF_WRITTEN" "$RF_REPLACED" "$RF_KEPT"
   else
     recipe_files_write environment "$file_list" "$wt" "$files_dir" >/dev/null
   fi
@@ -1577,13 +1573,15 @@ TA_TOKEN_LIST
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
-  environment_check up "$wt" "$outfile"; rm -rf "$files_dir"
-  # Only the written files are staged and committed. A person's uncommitted or staged work beside
-  # them is never taken into this commit and never refuses it.
-  [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
+  # The folder of blocks stays until environment_cleanup removes it, because it keeps the earlier
+  # versions a failed commit below puts back.
+  environment_check up "$wt" "$outfile"
+  # Only the written and replaced files are staged and committed. A person's uncommitted or staged
+  # work beside them is never taken into this commit and never refuses it.
+  [ "$((RF_WRITTEN + RF_REPLACED))" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
     "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
   # The files and the output file are kept from here. A failed commit above ran the EXIT trap first.
-  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"

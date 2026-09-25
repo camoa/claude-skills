@@ -179,8 +179,8 @@ do_show_or_install() {
   esac
   write_atomic "$SURFACE_FILE" "$doc"
   write_project_field '.registryPath = $sf | .'"$KEY"'.enabled = true'
-  printf 'INSTALLED: %s per %s\nfiles: %s written, %s kept\nsurface-file: %s\nproject-file: %s\n' \
-    "$KIND" "$RECIPE" "$RF_WRITTEN" "$RF_KEPT" "$SURFACE_FILE" "$PROJECT_FILE"
+  printf 'INSTALLED: %s per %s\nfiles: %s written, %s replaced, %s kept\nsurface-file: %s\nproject-file: %s\n' \
+    "$KIND" "$RECIPE" "$RF_WRITTEN" "$RF_REPLACED" "$RF_KEPT" "$SURFACE_FILE" "$PROJECT_FILE"
   recipe_commit_if_changed "$TREE" "$ACTION" "install wrote nothing new" "New $KIND surfaces setup, installed through the surfaces skill"
   recipe_output_summary 0 "$OUTFILE" 1
 }

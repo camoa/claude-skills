@@ -285,7 +285,23 @@ compared against the baseline it ran against, and a changed recipe makes that co
 no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
-`references/preconditions.md` does. Pass `--nothing-ran <literal substring>` only when the
+`references/preconditions.md` does. A placeholder is a whole token, never part of one. It has
+these forms:
+- `{a.b}` is the Input contract field at that dotted path. Pass `--value a.b=<value>`. For a
+  list of scalars, pass one `--value a.b=<item>` per item, and the line runs once per item.
+  Only the first such name in a line makes it run more than once.
+- `{a.b:json}` is the whole value of the field as one JSON token. Pass
+  `--value 'a.b:json=<JSON text>'`. For an absent field pass nothing, and the token is `null`.
+- `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them.
+
+A `{a.b}` placeholder with no value reads unknown.
+
+Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
+the worktree, because a line can run a script the recipe ships. After the lines, it removes those
+files, so the tree stays clean. A file that holds the block of an earlier version of the recipe
+is replaced for the run, then put back. Any other file with different content refuses at 3.
+
+Pass `--nothing-ran <literal substring>` only when the
 framework's own recipe names no `silent_pass` marker of its own; where it does, the script reads
 that marker and this flag is not read.
 

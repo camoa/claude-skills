@@ -71,7 +71,7 @@ reason in the message, the way `baseline` does. It commits the project record to
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran, or `not-applicable`: no framework has a recipe. | Nothing more for this kind. Name `templates/process-recipe-setup.md` in this plugin as the shape a catalog recipe follows. |
-| 3 | A recipe with no install block, a refused command, a file present with different content, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
+| 3 | A recipe with no install block, a refused command, a file present with content no version of the recipe declares, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
 | 4 | A step failed. | The `first:` line quotes its first line of output. Show it; do not install by hand. |
 | 61 | The tree is dirty. | Say which paths. Commit or move them aside, then run install again. |
 | 72 | Two frameworks each carry a recipe. | Say which two, and stop. |

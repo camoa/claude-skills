@@ -127,7 +127,8 @@ the token, bring-up, address and tear-down commands with `{codePath}` filled, an
 them. It prints the paths of the `## Files` blocks, the files `up` writes, and one
 `precondition:` line per `## Preconditions` command `up` runs.
 `show` runs each `## Preconditions` line the way `up` does, with the same code. It removes the
-files it wrote for the check, so it commits nothing and leaves the tree as it found it. A failing
+files it wrote for the check and puts back the ones it replaced. So it commits nothing and leaves
+the tree as it found it. A failing
 check exits 3 and prints what `up` prints. A worktree not on disk prints
 `precondition check: not run`, because only `up` makes a tree again.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
@@ -137,15 +138,16 @@ says what `up` would do.
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,
 and one line in that record marking the address command, so `down` can find that command's output
 later.
-First it writes each `## Files` block absent from the worktree. A file present with other content
-refuses at 3. Then it runs each
+First it writes each `## Files` block absent from the worktree. A file that holds the block of an
+earlier version of the recipe is replaced. Any other file with other content refuses at 3. The
+earlier versions are the ones the navigator store holds, so nothing is fetched. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
-failing line stops at 3, prints its output, removes the files this run wrote, and commits
-nothing. When a line ran and failed, it also names the task branch and the branch the worktree
+failing line stops at 3, prints its output, removes the files this run wrote, puts back the ones
+it replaced, and commits nothing. When a line ran and failed, it also names the task branch and the branch the worktree
 was cut from. An older task names the branch the code path is on now, and says so. A failed
 commit, or an interrupt before the commit, also removes the written files, their index entries
-and the output file, and says so. Then it commits the written files alone, so other changed or staged work is never
-taken in. Then
+and the output file, and says so. Then it commits the written and replaced files alone, so other changed or staged work is
+never taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
 `environment`: `state: coming-up`, the recipe, and the time. The record names the site before the

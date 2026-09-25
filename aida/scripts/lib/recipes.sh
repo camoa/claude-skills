@@ -74,8 +74,15 @@
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
-#   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file
-#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files; sets RF_WRITTEN, RF_KEPT, RF_WRITTEN_PATHS
+#   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
+#   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
+#   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
+#                                             sets RF_EARLIER
+#   recipe_files_new_dirs <tree> <list>       the folders the list needs that the tree lacks, deepest first
+#   recipe_files_write <who> <list> <tree> <dir>  writes the absent files and replaces the earlier
+#                                             versions; sets RF_WRITTEN, RF_KEPT, RF_REPLACED,
+#                                             RF_WRITTEN_PATHS, RF_REPLACED_PATHS, RF_SAVED_IN
+#   recipe_files_put_back <tree> <saved> <paths>  copies each replaced file back from the saved folder
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
 #
 # What this library takes from its caller, and never defines itself:
@@ -896,7 +903,8 @@ tf_path_matches_catalog_glob() {
 # Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
 # array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry, and
 # that `{dirs}` expands to one token per directory holding one. $5 is
-# the tab-separated `--value` list every other single-placeholder token is read from. $6, when
+# the tab-separated `--value` list every other single-placeholder token is read from. A name that
+# ends in `:json` and has no value reads JSON null. $6, when
 # given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
 #
 # Prints one of three tab-separated results and never dies:
@@ -938,6 +946,8 @@ br_run_resolved() {
       '{'*'}')
         name="${tok#\{}"; name="${name%\}}"
         tok="$(cr_lookup "$values" "$name")"
+        # `{a.b:json}` is a field's whole value as one JSON token, so an absent field is JSON null.
+        case "$name" in *:json) tok="${tok:-null}" ;; esac
         if [ -z "$tok" ]; then
           printf 'UNRESOLVED\t%s' "$name"
           return 0
@@ -1506,40 +1516,121 @@ RL_STEPS
 # The prose under the H2 $2 of the recipe $1, indented, the way show prints it.
 recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/d; s/^/  /'; }
 
+# The name: field of the frontmatter of the recipe $1, or empty when it has none.
+recipe_name_of() {
+  awk 'NR == 1 && !/^---[ \t\r]*$/ { exit } NR > 1 && /^---[ \t\r]*$/ { exit }
+       NR > 1 && /^name:/ { sub(/^name:[ \t]*/, ""); sub(/[ \t\r]+$/, ""); print; exit }' "$1"
+}
+
+# True when the file $3 holds the block for the path $2 of an earlier version of the recipe $1.
+# The navigator store keeps every recipe body it served, one file per version, in one folder
+# (dev-guides-navigator, references/store-contract.md). So an earlier version is a file beside $1
+# that is older than $1 and carries the same name. Nothing is fetched: a version this machine
+# never served is unknown, and its file is refused as a person's edit would be.
+recipe_file_is_earlier() {
+  local name other dir list n rel k=0 found=1 tab; tab="$(printf '\t')"
+  name="$(recipe_name_of "$1")"
+  [ -n "$name" ] || return 1
+  dir="$(mktemp -d)" || return 1
+  for other in "$(dirname -- "$1")"/*; do
+    [ -f "$other" ] && [ "$other" -ot "$1" ] && [ "$(recipe_name_of "$other")" = "$name" ] || continue
+    k=$((k + 1)); mkdir "$dir/$k" || break
+    list="$(recipe_files_into "$other" Files "$dir/$k")"
+    while IFS="$tab" read -r n rel; do
+      [ -n "$n" ] && [ "$rel" = "$2" ] && cmp -s "$dir/$k/$n" "$3" && { found=0; break; }
+    done <<RF_EARLIER_LIST
+$list
+RF_EARLIER_LIST
+    [ "$found" -ne 0 ] || break
+  done
+  rm -rf "$dir"
+  return "$found"
+}
+
+# Set by the two functions below, and read by the callers' cleanup, which may run before either.
+RF_EARLIER=""; RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_SAVED_IN=""
+
 # Refuses at 3 a file the recipe $2 declares that sits in $4 with other content, or that names a
 # path outside the tree. $1 the action, $3 the `<n><TAB><path>` list recipe_files_into printed,
 # $5 the folder it wrote the blocks to. Every file is checked before anything runs or is written,
-# so a differing file stops the whole action.
+# so a differing file stops the whole action. A file that holds an earlier version's block is not
+# refused: a project that committed that version would otherwise refuse every later one (gap row
+# 200). Its path goes into RF_EARLIER, one per line, for recipe_files_write to replace.
 recipe_files_refuse_differing() {
   local who="$1" recipe="$2" list="$3" tree="$4" files_dir="$5" n rel target tab; tab="$(printf '\t')"
+  RF_EARLIER=""
   while IFS="$tab" read -r n rel; do
     [ -n "$n" ] || continue
     case "$rel" in /*|*../*|*/..) die 3 "$who: $recipe names a file outside the tree: $rel" ;; esac
     target="$tree/$rel"
-    [ ! -f "$target" ] || cmp -s "$files_dir/$n" "$target" \
-      || die 3 "$who: $target exists with different content from the $rel block in $recipe. Nothing is overwritten; move the file aside or change the recipe."
+    [ ! -f "$target" ] || cmp -s "$files_dir/$n" "$target" && continue
+    recipe_file_is_earlier "$recipe" "$rel" "$target" \
+      || die 3 "$who: $target exists with different content from the $rel block in $recipe, and from every earlier version of it this machine holds. Nothing is overwritten; move the file aside or change the recipe."
+    RF_EARLIER="$RF_EARLIER$rel
+"
   done <<RF_FILES
 $list
 RF_FILES
 }
 
+# Prints, deepest first, each folder under the tree $1 that the `<n><TAB><path>` list $2 needs and
+# that does not exist yet. A folder is listed once, and after every folder inside it.
+recipe_files_new_dirs() {
+  local n rel dir tab; tab="$(printf '\t')"
+  while IFS="$tab" read -r n rel; do
+    [ -n "$n" ] || continue
+    dir="$(dirname -- "$rel")"
+    while [ "$dir" != "." ] && [ "$dir" != "/" ] && [ ! -d "$1/$dir" ]; do
+      printf '%s\n' "$dir"; dir="$(dirname -- "$dir")"
+    done
+  done <<RF_NEW_DIRS | LC_ALL=C sort -ru
+$2
+RF_NEW_DIRS
+}
+
 # Writes each file of the list $2 that is absent from $3, from the folder $4, printing `file:` per
-# write, and counts into RF_WRITTEN and RF_KEPT. $1 the action. A file that exists is kept as it is.
-# RF_WRITTEN_PATHS holds the written paths relative to $3, one per line, so a caller that refuses
-# after the write can remove those and no other.
+# write, and counts into RF_WRITTEN and RF_KEPT. $1 the action. A file that exists is kept as it is,
+# unless recipe_files_refuse_differing put it in RF_EARLIER. Such a file is copied to RF_SAVED_IN,
+# $4/was, under its own path, then replaced, and counted into RF_REPLACED.
+# RF_WRITTEN_PATHS and RF_REPLACED_PATHS hold the paths relative to $3, one per line, so a caller
+# that refuses after the write can remove the written ones and put the replaced ones back.
 recipe_files_write() {
-  local who="$1" list="$2" tree="$3" files_dir="$4" n rel target tab; tab="$(printf '\t')"
-  RF_WRITTEN=0; RF_KEPT=0; RF_WRITTEN_PATHS=""
+  local who="$1" list="$2" tree="$3" files_dir="$4" n rel target tab nl; tab="$(printf '\t')"; nl="
+"
+  RF_WRITTEN=0; RF_KEPT=0; RF_REPLACED=0; RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_SAVED_IN="$files_dir/was"
   while IFS="$tab" read -r n rel; do
     [ -n "$n" ] || continue
     target="$tree/$rel"
-    if [ -f "$target" ]; then RF_KEPT=$((RF_KEPT + 1)); continue; fi
+    if [ -f "$target" ]; then
+      case "$nl$RF_EARLIER" in
+        *"$nl$rel$nl"*)
+        mkdir -p "$(dirname -- "$RF_SAVED_IN/$rel")" && cp "$target" "$RF_SAVED_IN/$rel" \
+          && cp "$files_dir/$n" "$target" || die 3 "$who: could not replace $target"
+        RF_REPLACED=$((RF_REPLACED + 1)); RF_REPLACED_PATHS="$RF_REPLACED_PATHS$rel
+"; printf 'file: %s, replacing an earlier version of the recipe\n' "$target" ;;
+        *) RF_KEPT=$((RF_KEPT + 1)) ;;
+      esac
+      continue
+    fi
     mkdir -p "$(dirname -- "$target")" && cp "$files_dir/$n" "$target" || die 3 "$who: could not write $target"
     RF_WRITTEN=$((RF_WRITTEN + 1)); RF_WRITTEN_PATHS="$RF_WRITTEN_PATHS$rel
 "; printf 'file: %s\n' "$target"
   done <<RF_FILES
 $list
 RF_FILES
+}
+
+# Copies each of the paths $3, one per line, back into the tree $1 from the saved folder $2, which
+# recipe_files_write named RF_SAVED_IN. Returns 1 when a copy fails, after trying every path.
+recipe_files_put_back() {
+  local rel rc=0
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    cp "$2/$rel" "$1/$rel" 2>/dev/null || rc=1
+  done <<RF_PUT_BACK
+$3
+RF_PUT_BACK
+  return "$rc"
 }
 
 # Commits everything the action wrote in the tree $1, printing `committed: <sha>`; prints

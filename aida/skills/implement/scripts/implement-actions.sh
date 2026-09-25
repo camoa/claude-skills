@@ -5753,15 +5753,78 @@ br_test_check() {
 }
 
 # The run entries of the order's `verify` list that may run, as a JSON array of {run, pass}, and
-# the sources they cite, into BRV_RUNS and BRV_CITES. A binding entry came from a recipe this
-# project accepts and runs. An entry that is not binding was written by a model from research, and
-# runs only when a person approved it at the design close. Without that stamp it never runs,
+# the sources they cite, into BRV_RUNS and BRV_CITES, and one per line into BRV_SOURCES. A binding
+# entry came from a recipe this project accepts and runs. An entry that is not binding was
+# written by a model from research, and runs only when a person approved it at the design close. Without that stamp it never runs,
 # attended or not: the reviewer judges it as a check. Reads BRC_UNIT_JSON.
-BRV_RUNS="[]"; BRV_CITES=""
+BRV_RUNS="[]"; BRV_CITES=""; BRV_SOURCES=""
 br_verify_runs() {
   local keep='[ (.verify // [])[] | select(has("run") and (.binding != false or has("approved"))) ]'
   BRV_RUNS="$(printf '%s' "$BRC_UNIT_JSON" | jq -c "$keep | map({run, pass})")"
   BRV_CITES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | join(\", \")")"
+  BRV_SOURCES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | .[]")"
+}
+
+# What br_verify_files_remove takes out of the tree after the verify lines ran. They are globals,
+# because it is also the EXIT trap, and zsh runs that trap after the locals are gone. BRV_TREE:
+# the tree the files went into. BRV_FILES_DIR: the temporary folder of blocks and saved files.
+# BRV_WRITTEN and BRV_REPLACED: the paths written and replaced. BRV_DIRS: the folders made for them.
+BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
+
+# Removes each file the verify lines' recipes wrote, puts back each earlier version they replaced,
+# then removes the folders made for them and the temporary folder. It is safe to run twice. A path
+# it could not take out is named, and the tree is then not what it was.
+br_verify_files_remove() {
+  local p left=""
+  if [ -n "$BRV_TREE" ]; then
+    recipe_files_put_back "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_REPLACED" || left=" the replaced files"
+    while IFS= read -r p; do
+      [ -z "$p" ] || rm -f "$BRV_TREE/$p" 2>/dev/null
+      [ -z "$p" ] || [ ! -e "$BRV_TREE/$p" ] || left="$left $p"
+    done <<BRV_CLEAN_FILES
+$BRV_WRITTEN
+BRV_CLEAN_FILES
+    while IFS= read -r p; do
+      [ -z "$p" ] || rmdir "$BRV_TREE/$p" 2>/dev/null || [ ! -d "$BRV_TREE/$p" ] || left="$left $p/"
+    done <<BRV_CLEAN_DIRS
+$(printf '%s' "$BRV_DIRS" | LC_ALL=C sort -ru)
+BRV_CLEAN_DIRS
+  fi
+  [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
+  [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
+  BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
+}
+
+# Runs the order's own verify lines through br_run_lines from the folder $1, output into $2. A line
+# may run a script its recipe ships in `## Files` (gap row 198). So the `## Files` blocks of every
+# recipe the lines cite are written into $1 first, under the rule the environment uses: an absent
+# file is written, an earlier version is replaced, and any other differing file refuses at 3.
+# br_verify_files_remove then takes them out again on every exit, a refusal or an interrupt
+# included. Nothing written persists, so the clean-tree rule and `git worktree remove` see the
+# tree as the order left it. A cited source that is not a file, or that has no `## Files`, writes
+# nothing. Reads BRV_RUNS, BRV_CITES and BRV_SOURCES.
+br_run_verify_lines() {
+  local dir="$1" outfile="$2" recipe list
+  trap 'br_verify_files_remove' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  BRV_TREE="$dir"
+  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
+  while IFS= read -r recipe; do
+    [ -n "$recipe" ] && [ -f "$recipe" ] || continue
+    list="$(recipe_files_into "$recipe" Files "$BRV_FILES_DIR")"
+    [ -n "$list" ] || continue
+    recipe_files_refuse_differing "$BRC_WHO" "$recipe" "$list" "$dir" "$BRV_FILES_DIR"
+    BRV_DIRS="$BRV_DIRS$(recipe_files_new_dirs "$dir" "$list")
+"
+    recipe_files_write "$BRC_WHO" "$list" "$dir" "$BRV_FILES_DIR" >/dev/null
+    BRV_WRITTEN="$BRV_WRITTEN$RF_WRITTEN_PATHS"; BRV_REPLACED="$BRV_REPLACED$RF_REPLACED_PATHS"
+  done <<BRV_RECIPES
+$BRV_SOURCES
+BRV_RECIPES
+  br_run_lines "$BRV_RUNS" "$BRV_CITES" "$dir" "$outfile" "the verify line above, from $BRV_CITES, is refused."
+  br_verify_files_remove
+  trap - EXIT INT TERM
 }
 
 # Runs a list of lines through the one gate runner, the `## Configuration gate` block's and a work
@@ -5882,7 +5945,7 @@ br_gate_check() {
   fi
   outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   if [ "$own_json" != "[]" ]; then
-    br_run_lines "$own_json" "$cites" "$BRC_CODEPATH" "$outfile" "the verify line above, from $cites, is refused."
+    br_run_verify_lines "$BRC_CODEPATH" "$outfile"
     own_verdict="${BRL_VERDICT:-met}"; rc="$BRL_RC"
     case "$own_verdict" in
       met) own_detail="every verify line of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') ($BRL_N of them) passed, from $cites." ;;
@@ -5957,7 +6020,7 @@ br_verify_fold() {
   fi
   cites="$BRV_CITES"
   outfile="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
-  br_run_lines "$own_json" "$cites" "${RV_CODEPATH:-$BRC_CODEPATH}" "$outfile" "the verify line above, from $cites, is refused."
+  br_run_verify_lines "${RV_CODEPATH:-$BRC_CODEPATH}" "$outfile"
   verdict="$(br_worst_verdict "$(jq -c --arg v "${BRL_VERDICT:-met}" '[.verdict, $v]' "$1")")"
   # The exit code follows the verdict that stands: the lines' own when they failed, the check's
   # own when it failed, and the lines' when both passed and the check ran no command.
