@@ -112,13 +112,12 @@ by its id in that order's `reasoning`.
 
 Research named these without opening them, so design is the first read. Research recorded an
 address for each; open it through the navigator the same way, and read a project's own source
-directly. A tooling recipe has no navigator mode yet. Fetch its body from the address research
-recorded, check its sha256 against the catalog line, and store it by hand. Record it below the
-same way. That stands until the navigator's `tooling --name` mode exists. One agentic recipe
-covering the work means the decision is already made: follow it. Its `## Verifier` becomes the
-proof of each order it covers, as "Carry the proof from its source" says. Two: read both, pick
-the one that fits, say why, and build from that one alone. None: architect from the findings and from
-this project's own conventions; this is where design quality shows.
+directly. Open a tooling recipe with the navigator's `tooling --name` mode, by the name research
+recorded. One agentic recipe covering the work means the decision is already made: follow it.
+Its `## Verifier` becomes the proof of each order it covers, as "Carry the proof from its source"
+says. Two: read both, pick the one that fits, say why, and build from that one alone. None:
+architect from the findings and from this project's own conventions; this is where design
+quality shows.
 
 Record each body as it is read, once the navigator has given its path on disk:
 ```
