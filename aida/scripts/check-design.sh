@@ -28,6 +28,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order whose proof is observe declares no test either, names at least one surface, and
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
+#   - a work order whose proof is confirm declares no test either, and has at least one done-when
+#     row: its task has no automated tests, and a person confirms each row at review (gap row 196);
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
@@ -117,7 +119,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and that declares a test, an order whose proof is record and that declares a test, owns a
 #      file outside the project folder or under an ignored path, or has no done-when row, an
 #      order whose proof is observe and
-#      that declares a test, names no surface or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
+#      that declares a test, names no surface or has no done-when row, an order whose proof is
+#      confirm and that declares a test or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
 #      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
@@ -163,9 +166,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
-#                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record and observe orders
+#                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record, observe and confirm orders
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
-#                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record and observe orders
+#                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
@@ -600,8 +603,9 @@ else
   # answers that per file, the way design-actions.sh asks it at add-owned-file. An order whose
   # proof is observe owes no test and needs a done-when row on the same two rules. A model
   # judges each row against what its surfaces render after the build (live-run row 104), so it
-  # needs a surface as well. The two shared rules keep the record lists, with the proof on each
-  # entry.
+  # needs a surface as well. An order whose proof is confirm owes no test and needs a done-when
+  # row on the same two rules: a person confirms each row at review (gap row 196). The two shared
+  # rules keep the record lists, with the proof on each entry.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
     | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests")
@@ -612,7 +616,7 @@ else
     [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
   ')"
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.slot == "done-when" or .slot == "observed") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
+    [ $orders[] | select(.slot == "done-when" or .slot == "observed" or .slot == "confirm-at-review") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
   RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
@@ -629,7 +633,7 @@ else
     $orders[] | .id as $id | select(.range == "project") | (.ownedFiles // [])[]
       | select(startswith($p)) | [$id, .] | @tsv')
   RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.slot == "done-when" or .slot == "observed") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
+    [ $orders[] | select(.slot == "done-when" or .slot == "observed" or .slot == "confirm-at-review") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "observed") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
@@ -639,7 +643,7 @@ else
   # owning a machine-verified criterion declares a test. This one asks whether an order left at the
   # default proof owns one at all. The finding is the disagreement itself, so a declared test is
   # not part of it: an order owning only person-verified criteria is not a test order whether it
-  # declared a test or not. Only a `tests` order is asked. A gate, record or observe order
+  # declared a test or not. Only a `tests` order is asked. A gate, record, observe or confirm order
   # declaring a test is already named on its own list, with its own repair. An order owning nothing
   # is not asked either, because its owned criteria imply no proof at all, so nothing disagrees
   # with the proof it declares. A supporting order that builds shared code is exactly that case.

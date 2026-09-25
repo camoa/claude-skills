@@ -210,12 +210,18 @@ and pick the kind from that answer:
   only restates a file.
 - A document or an analysis, such as a report or a review: `record`.
 - Something only a person or a browser can see: `observe`.
+- Code, on a task whose contract says it has no automated tests: `confirm`. Nothing runs a
+  test. The implementer builds it, one reviewer reads the diff, and the person confirms each
+  done-when row at review. `add-owned-file` sets this value itself on such a task, on an order
+  created with no `--proof` whose first file is code. The person may pick another kind with
+  `update --proof`.
 
 A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
-tests, the gate lines, the checks on the record, or the look. `create` and `update` print
-`impliedProof:` beside the proof the order declares. It says `record` when every owned file lies
-under the project folder, and `any kind` for a machine-verified criterion. What the order
-produces decides. When the product is truly unclear, `tests` stays the default. A wrongly
+tests, the gate lines, the checks on the record, the look, or the person's confirmation.
+`create` and `update` print `impliedProof:` beside the proof the order declares. It says
+`record` when every owned file lies under the project folder, and `any kind` for a
+machine-verified criterion. What the order produces decides. When the product is truly unclear,
+`tests` stays the default, on a task that has tests. A wrongly
 tested configuration order wastes one build, and a wrongly untested code order ships unproven.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
@@ -407,7 +413,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--proof <tests|gate|record|observe>] [--surface <id>]...
+  [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -447,11 +453,12 @@ closed again on the live files. Nothing halts when nothing else on the order cha
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. Three orders are the exception. One created
+here; the check below refuses an order that skips this. Four orders are the exception. One created
 with `--proof gate` declares no test, and the configuration check judges its owned machine
 criterion at build time. One whose proof is `record` declares no test either, and its done-when
 rows, judged at the checkpoint, stand in for the test. One whose proof is `observe` declares no
-test, and a model judges its done-when rows against its surfaces after the build. A criterion
+test, and a model judges its done-when rows against its surfaces after the build. One whose proof
+is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
 whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
 A test is what a test author writes as a file, red before the code and green after it. The
@@ -466,13 +473,14 @@ To change a scalar or an id list on an order already created, `update` takes the
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
   [--interface <text>] [--reasoning <text>] [--append-reasoning <text>] [--diff-budget <text>] \
-  [--proof <tests|gate|record|observe>] [--surface <id>]...
+  [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 `--reasoning` replaces the whole field, the paragraphs `dispose` wrote included. To keep them,
 pass `--append-reasoning`: it adds the text as a new paragraph after a blank line. The two
 flags are refused together.
-When `--proof` becomes `gate`, `record` or `observe`, `update` prints `stillNamesATest:` naming
-each of `interface`, `reasoning` and `diffBudget` that still names a test file.
+When `--proof` becomes `gate`, `record`, `observe` or `confirm`, `update` prints
+`stillNamesATest:` naming each of `interface`, `reasoning` and `diffBudget` that still names a
+test file.
 
 ## Carry the proof from its source
 
@@ -516,6 +524,8 @@ What each kind does with the entries:
 - `gate`: the run entries run first, then the `## Configuration gate`. The worse verdict stands.
 - `tests`, `record` and `observe`: the run entries run in the order's first deciding check,
   after its own answer, from the code worktree. The check is met only when both are.
+- `confirm`: the run entries run the same way. A failing entry stops the build. A passing one
+  leaves the check waiting for the person.
 - Every kind: the reviewer judges each check entry. On an `observe` order the look also judges
   each `live-site` check as a row of its own, because only that kind shows on a page.
 
@@ -550,12 +560,13 @@ zero it adds one `open:` line naming what is open. The report holds:
   than one work order;
 - every work order serving no criterion;
 - every work order that owns a machine-verified criterion and declares no test, unless its proof
-  is `gate`, `record` or `observe`;
+  is `gate`, `record`, `observe` or `confirm`;
 - every work order whose proof is `gate` and that declares a test;
 - every work order whose proof is `record` and that declares a test, owns a file outside the
   project folder or under a path the project ignores, or has no done-when row;
 - every work order whose proof is `observe` and that declares a test, names no surface, or has
   no done-when row;
+- every work order whose proof is `confirm` and that declares a test, or has no done-when row;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -570,9 +581,9 @@ later.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
-those orders open, because which of the other three proofs fits is a judgment. Either the order
+those orders open, because which of the other proofs fits is a judgment. Either the order
 owns a machine-verified criterion after all, which `update --criteria-owned` sets. Or its proof is
-one of the other three, which `update --proof` sets. Read the `verification` clause of each
+one of the others, which `update --proof` sets. Read the `verification` clause of each
 criterion the order owns, and ask what would settle it.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
@@ -596,6 +607,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - an `observe` order declaring a test needs a `remove-test` call for it. One naming no
     surface needs `update --surface <id>`. One with no done-when row needs an `add-done-when`
     call;
+  - a `confirm` order declaring a test needs a `remove-test` call for it, or `--proof tests` if
+    the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
+    row is a sentence the person confirms at review, so write it as one thing they can check;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The

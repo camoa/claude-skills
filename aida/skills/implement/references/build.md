@@ -341,14 +341,20 @@ This step runs all eight deciding checks. The record holds every one.
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
   above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
-  the way a failing test does. On every kind but `gate`, the order's own `verify` run entries
+  the way a failing test does.
+  On an order whose proof is `confirm` this slot is `confirm-at-review`. It reads deferred. The task has
+  no automated tests, so nothing runs, and the person confirms the order's done-when rows at
+  review. Deferred passes here, in this slot alone. On every kind but `gate`, the order's own
+  `verify` run entries
   then run in this slot, from the code worktree. The slot is met only when its own answer and
   every line are. The detail names the source.
 - **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
   recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
   that row once at the final commit. On a Drupal project the row is ten minutes per run. On a
   `record` order it reads undeclared, and so do the three tool checks. A document in the task
-  folder is nothing a suite or a tool reads, and the detail names the proof kind.
+  folder is nothing a suite or a tool reads, and the detail names the proof kind. On a `confirm`
+  order it reads undeclared too, because the task has no automated tests. The three tool checks
+  run on it as on any code order.
 - **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
   have.
 - **static-analysis.** Does static analysis raise anything the baseline did not already have.

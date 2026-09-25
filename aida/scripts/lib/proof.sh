@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # proof.sh: what one work order's proof kind means for a check about to answer.
 #
-# A work order carries one proof kind: `tests`, `gate`, `record` or `observe`. No check wants the
+# A work order carries one proof kind: `tests`, `gate`, `record`, `observe` or `confirm`. No check wants the
 # kind itself. Every site that reads `.proof` turns it into one of three questions about the
 # order (gap row 170). The first asks which of the eight deciding checks takes its first slot.
 # The second asks which repository holds its range. The third asks whether it owns a file in the
@@ -38,8 +38,8 @@
 # `set -u` never reads one unset, and reset at the top of the function.
 #
 # BR_ORDER_SLOT is the check that takes the first of the eight deciding checks: `order-tests`,
-# `configuration-gate`, `done-when` or `observed`. An order freezes and runs a test exactly when
-# its slot is `order-tests`, so that question needs no field of its own.
+# `configuration-gate`, `done-when`, `observed` or `confirm-at-review`. An order freezes and runs
+# a test exactly when its slot is `order-tests`, so that question needs no field of its own.
 # BR_ORDER_RANGE is `code` or `project`, the repository the order's range lives in.
 # BR_ORDER_OWNS_CODE is `yes` or `no`, whether the order owns a file in the code path.
 BR_ORDER_SLOT=""; BR_ORDER_RANGE=""; BR_ORDER_OWNS_CODE=""
@@ -52,6 +52,7 @@ br_order_facts() {
     gate)    BR_ORDER_SLOT="configuration-gate"; BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
     record)  BR_ORDER_SLOT="done-when";          BR_ORDER_RANGE="project"; BR_ORDER_OWNS_CODE="no"  ;;
     observe) BR_ORDER_SLOT="observed";           BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
+    confirm) BR_ORDER_SLOT="confirm-at-review";  BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
     *)       BR_ORDER_SLOT="order-tests";        BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
   esac
 }
@@ -64,6 +65,7 @@ BR_ORDER_FACTS_JQ='
     | if   $p == "gate"    then {slot: "configuration-gate", range: "code",    ownsCode: true}
       elif $p == "record"  then {slot: "done-when",          range: "project", ownsCode: false}
       elif $p == "observe" then {slot: "observed",           range: "code",    ownsCode: true}
+      elif $p == "confirm" then {slot: "confirm-at-review",  range: "code",    ownsCode: true}
       else                      {slot: "order-tests",        range: "code",    ownsCode: true}
       end;'
 

@@ -25,6 +25,10 @@
       "type": "string",
       "description": "The observable outcome, in a person's words. A plain string for the same reason `goal` is one: nothing cites it and nothing counts it."
     },
+    "automatedTests": {
+      "type": "boolean",
+      "description": "Whether this task has automated tests. The person answers it in scope, and signs it with the rest of the contract. It is per task, never per project, because one project can hold tasks of both kinds. false means the task has none: design gives each code order the proof `confirm`, implementation sends only the implementer and the reviewer and runs no test, and review puts each such order's done-when sentences to the person (gap row 196). Absent means nobody answered, and every reader takes it as true. scope-actions.sh's `set-tests` is its one writer. Research may change the answer, and it does so through that same action."
+    },
     "criteria": {
       "type": "array",
       "default": [],

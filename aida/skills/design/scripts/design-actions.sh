@@ -30,13 +30,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --title <text> [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh update     <task_folder> \
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
 #                        [--append-reasoning <text>] \
-#                        [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
+#                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
 #   design-actions.sh add-done-when  <task_folder> \
@@ -246,14 +246,14 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh update         <task_folder> --id <woId> [--title <text>] \
                                          [--criteria-served <id[,id...]>] \
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
                                          [--append-reasoning <text>] \
-                                         [--diff-budget <text>] [--proof <tests|gate|record|observe>] [--surface <id>]...
+                                         [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
@@ -452,6 +452,9 @@ implied_proof_line() {
 # One line naming everything a check report left open, for `check` and `close` alike.
 open_summary_of() {
   printf '%s' "$1" | jq -r '
+      def prover(p): if p == "observe" then "proved by a model looking through a browser"
+                     elif p == "confirm" then "confirmed by a person"
+                     else "proved by its record" end;
       [
         ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
         ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
@@ -459,9 +462,9 @@ open_summary_of() {
         ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
         ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
         ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
-        ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a model looking through a browser" else "its record" end) + " and declares a test"),
+        ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is " + prover(.proof) + " and declares a test"),
         ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
-        ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a model looking through a browser" else "its record" end) + " and has no done-when row"),
+        ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
@@ -669,10 +672,12 @@ next_wo_id() {
 # in the code repository (nyc defect 17); add-owned-file below marks it `record` on its own. A unit
 # whose deliverable is what a page shows is proved by a model's look through a browser at each of
 # its surfaces, judged against its done-when rows after the build (live-run row 104): `observe`.
+# A code unit of a task with no automated tests is built with no test, and a person confirms its
+# done-when rows at review (gap row 196): `confirm`. add-owned-file below marks it on its own.
 proof_word_ok() {
   case "$2" in
-    tests|gate|record|observe) ;;
-    *) die3 "$1: --proof takes tests, gate, record or observe, got: $2" ;;
+    tests|gate|record|observe|confirm) ;;
+    *) die3 "$1: --proof takes tests, gate, record, observe or confirm, got: $2" ;;
   esac
 }
 
@@ -941,11 +946,16 @@ do_add_owned_file() {
   # here, where the files arrive, and only on an order with no proof field. `create` writes one
   # only when --proof was passed, so a proof design set by hand stays, `tests` included. A code
   # file added later leaves `record` in place, and the design check names it; `update --proof
-  # tests` is the repair.
+  # tests` is the repair. On a task whose contract says it has no automated tests, an order with
+  # no proof field that owns a code file is a code order with no test to write. So its proof is
+  # `confirm` (gap row 196), marked the same way and at the same moment.
   local inferred
-  inferred="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" \
-    'if (has("proof") | not) and ((.ownedFiles // []) | all(startswith($t))) then "record" else "" end')"
-  [ "$inferred" != "record" ] || doc="$(printf '%s' "$doc" | jq '.proof = "record"')"
+  inferred="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" --arg tests "$(automated_tests "$TASK_PATH")" '
+    if has("proof") then ""
+    elif (.ownedFiles // []) | all(startswith($t)) then "record"
+    elif $tests == "no" then "confirm"
+    else "" end')"
+  [ -z "$inferred" ] || doc="$(printf '%s' "$doc" | jq --arg p "$inferred" '.proof = $p')"
   # A record order's range is the project folder's history, so a file the project ignores can
   # never land in it: build-record would refuse the empty range (exit 71) on every attempt. The
   # project ignores records/ at every depth, the folder of derived check output. git finds the
@@ -958,6 +968,7 @@ do_add_owned_file() {
     die3 "add-owned-file: the project ignores $path_val, so a commit can never hold it and a record order owning it can never be recorded. records/ is derived check output the project keeps out of history. Put the deliverable in a folder the project commits, such as $TASK_PATH/deliverables/."
   fi
   [ "$inferred" != "record" ] || echo "proof-set: record, because every owned file of $id lies under the project folder"
+  [ "$inferred" != "confirm" ] || echo "proof-set: confirm, because the task has no automated tests, so a person confirms $id's done-when rows at review"
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   wo_summary "$doc"

@@ -19,6 +19,8 @@
 #                                         or unknown when that file cannot be read
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, else interactive
+#   automated_tests <folder>              prints yes, no or not-asked: the contract's answer to
+#                                         whether the task has automated tests
 #   mark_task_in_progress <folder> <why> <stage>
 #                                         moves the task to in_progress once, before a first write
 #   commit_task_change <project> <subject> <why> <principle> <ruled out> <task> <stage> [<folder>...]
@@ -217,6 +219,18 @@ task_run_mode() {
   [ -z "$unknown" ] \
     || printf 'task-helpers: %s/task.json names a run-mode stage that matches no stage: %s. The six are scope, research, design, implement, review and completion. A name outside them reads interactive for ever. Repair it with `task set-run-mode`.\n' "$1" "$unknown" >&2
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
+}
+
+# The contract's answer to whether this task has automated tests (alignment-schema.json,
+# automatedTests). Prints `no` only when the field is false. `not-asked` when it is absent or the
+# contract cannot be read, which every reader takes as a task with tests. Scope, research and
+# design each read the answer, so the reading lives here once. $1 the canonical task folder.
+automated_tests() {
+  local answer
+  answer="$(jq -r 'if has("automatedTests") | not then "not-asked" elif .automatedTests then "yes" else "no" end' \
+    "$1/alignment.json" 2>/dev/null)"
+  [ -n "$answer" ] || answer="not-asked"
+  printf '%s' "$answer"
 }
 
 # Moves the task to in_progress the first time a stage writes into it (skills/task/SKILL.md,

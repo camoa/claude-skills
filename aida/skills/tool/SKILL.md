@@ -63,10 +63,19 @@ Exit 4 means the tool's own command returned an error. Read the `first:` line, a
 `output:` when that line is not enough. Two cases, and they look different.
 
 The tool is missing, which reads as a command that was not found. Install it, below, then run it
-again.
+again. One exception: a test runner, for a task with no automated tests. See "A task with no
+automated tests" below.
 
 The tool ran and reported a real failure, such as a failing test or an analysis finding. That is an
 answer, not a fault. Report what it said. Do not install anything and do not run it again.
+
+## A task with no automated tests
+
+A task can say it has no automated tests. Its contract, `alignment.json` in the task folder,
+then holds `automatedTests: false`. Read it for the active task before any install. When it is
+false and the tool runs tests, such as `phpunit`, `pytest` or `playwright`, do not install it and
+do not offer to. Say that the task has no automated tests, and name `/aida:scope` as the place to
+change that. A tool that runs no test, such as a coding standards checker, installs as below.
 
 ## Install a tool
 

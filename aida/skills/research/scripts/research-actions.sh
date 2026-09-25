@@ -261,6 +261,7 @@ do_read() {
   echo "criteria: $(printf '%s' "$criteria_json" | jq -r '[.[].id] | join(" ")')"
   echo "criteria-by-designer: $(printf '%s' "$criteria_json" | jq -r '[.[] | select(.author == "designer") | .id] | join(" ")')"
   echo "decided-without-a-person: $decided"
+  echo "automated-tests: $(automated_tests "$TASK_PATH")"
   echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
   echo "recipes-declined: $(jq -r '(.recipesDeclined // []) | if length == 0 then "none" else join(" ") end' "$TASK_PATH/task.json" 2>/dev/null)"
 

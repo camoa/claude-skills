@@ -74,6 +74,11 @@ and no `--row`, and a `--checklist` for each criterion a person verifies. The bu
 the order's surfaces in a browser after the implementer returns. It reads that record as the
 order's own check, `observed`. `close` writes `model` on the criteria the order owns.
 
+`confirm` means the task has no automated tests. Put no row to anyone, and dispatch no test
+author. Freeze with no `--test` and no `--row`, and a `--checklist` for each criterion a person
+verifies. The build's own check, `confirm-at-review`, reads deferred. `finish` turns each done-when row
+into a checklist row, and the person confirms the criteria the order owns at review.
+
 ## Assemble what the test author may see
 
 Run:

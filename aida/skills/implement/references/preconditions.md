@@ -50,7 +50,8 @@ nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` r
 undeclared, with a reason saying no check recipe was resolved.
 
 **A task whose orders are all proved by their records runs no test, so it needs no harness.**
-When every order in the snapshot has `proof: record`, the script records each framework's
+The same holds for an order a person confirms, whose task has no automated tests. When every
+order in the snapshot has `proof: record` or `proof: confirm`, the script records each framework's
 conditions and its smoke row as `not-needed`, with the reason, and runs neither. The verdict is
 `not-needed` and the build goes on. The recipe is still resolved and recorded, because the freeze
 reads its path. The baseline runs no suite and records `not-needed` per framework there too. The

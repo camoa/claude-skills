@@ -3,7 +3,7 @@ name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh decline-recipe *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh decline-recipe *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh set-tests *), Agent, EnterWorktree
 ---
 
 # Research
@@ -23,10 +23,11 @@ not a finding, and the model's own recall is never the answer, only a lead worth
 one search.
 
 Every write below goes through `research-actions.sh`, or `playbook-actions.sh` for the playbook
-load, or the task skill's `decline-recipe` for a declined recipe. All three are named in this
-skill's own grant, so they run without asking, and so does the
-project skill's `recipe-source` lookup. Any other Bash command still asks for approval.
-Dispatching an agent needs no approval either; it is also named in this skill's own grant.
+load, or the task skill's `decline-recipe` for a declined recipe, or scope's `set-tests` for the
+automated tests answer. All four are named in this skill's own grant, so they run without asking,
+and so does the project skill's `recipe-source` lookup. Any other Bash command still asks for
+approval. Dispatching an agent needs no approval either; it is also named in this skill's own
+grant.
 
 **The dispatch message is the role, the run mode and the inputs.** Name the role on the Agent
 call. The message itself is one line per item: the run mode, `interactive` or `autonomous`, then
@@ -45,8 +46,9 @@ A mode that names stages in brackets, such as `autonomous (implement)`, covers t
 when the list names `research`; otherwise this stage is interactive.
 
 Research never blocks on this choice the way scope does. The run mode changes what this skill
-asks at two points below: a recipe fit of `false` or `unsure`, and a missing process recipe. The
-split step and the close differ too, and each says so where it stands. Everything else runs the
+asks at three points below: a recipe fit of `false` or `unsure`, a missing process recipe, and a
+test runner found for a task with no automated tests. The split step and the close differ too,
+and each says so where it stands. Everything else runs the
 same way in both modes.
 
 ## Find the task
@@ -69,7 +71,9 @@ This prints summary lines. `contract:` says present or absent and `contract-file
 file. `criteria:` lists the ids, and `criteria-by-designer:` lists the ids no person ever
 approved. `worktree:` names the task's own git worktree, where the code is read and the spike
 runs. `none` means the code path, as for a task made before every task had one.
-`recipes-declined:` names each framework a person declined a recipe for, or `none`. One `search:`
+`automated-tests:` is the contract's answer to whether this task has automated tests: `yes`, `no`
+or `not-asked`. `recipes-declined:` names each framework a person declined a recipe for, or
+`none`. One `search:`
 line names each research file already on disk with its finding count.
 Read the criteria's text from the contract file.
 
@@ -209,6 +213,10 @@ Typical search subjects, named by what they read, not by a fixed roster:
   ran and what it printed. Delete the folder before the coverage check closes research. The
   check refuses (exit 6) while it exists, so nothing throwaway ships. Carry the idea forward,
   never the code: design authors it fresh.
+
+When `automated-tests:` reads `no`, the search inside this project asks one more thing. Is there a
+test runner that covers the changed code? Name it in the searcher's words, with its
+configuration file as the source. Serve the finding to the criteria the changed code serves.
 
 How many searches run is set by what these criteria actually need. A task with three criteria
 that all rest on the same library may need one search, not three. The search inside this project
@@ -385,6 +393,18 @@ If a search shows a criterion is too vague to check against (research.md's open 
 criterion that gives no bound), do not invent a bound. Say so, name the scope skill, and move on
 to what can be checked.
 
+## Check the automated tests answer
+
+Do this before the coverage check, so its commit carries any change. It applies only when
+`automated-tests:` reads `no` and a finding names a test runner that covers the changed code.
+Interactive: say the runner and its source in one line. Ask one question: keep "no automated
+tests", or change it to yes. On a change, run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
+  set-tests "<task_folder>" --automated yes
+```
+Autonomous: keep the answer, and say the runner in one line. A person decides at the next window.
+
 ## Run the coverage check
 
 Once every planned search has been dispatched and recorded, run:
@@ -516,9 +536,9 @@ record, so a stage cannot run out of order. That is why this chain is safe.
 
 Research decides nothing about the problem, so there is nothing for a person to approve. It never
 asks permission to look something up, and every finding carries its source, so a wrong finding is
-checkable afterward by anyone. The questions it asks are the two above and the split, and the
-split comes after its own work is done. Autonomous mode runs every step the same way, apart from
-those three and the close. At a recipe that does not fit, or a missing recipe, it takes the noted
+checkable afterward by anyone. The questions it asks are the two above, the automated tests
+answer, and the split. The split comes after its own work is done. Autonomous mode runs every step
+the same way, apart from those four and the close. At each of the first three, it takes the noted
 branch instead of asking.
 
 ## What this skill never does

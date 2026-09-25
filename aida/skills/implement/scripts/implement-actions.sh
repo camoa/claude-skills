@@ -2931,14 +2931,15 @@ do_preconditions() {
 
   # A task whose every order is proved by its record writes no test and runs none, so the test
   # harness is not needed. Its conditions and its smoke row are recorded `not-needed` and never
-  # run, and the baseline runs no suite (live-run row 136). Any other proof needs the harness. A
-  # `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
+  # run, and the baseline runs no suite (live-run row 136). An order a person confirms runs no
+  # test either: its task has no automated tests (gap row 196). Any other proof needs the harness.
+  # A `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
   # An `observe` order's build runs the suite against the baseline. The recipe is still
   # resolved and recorded, because the freeze and finish read its path.
   harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
     [ (.workOrders // [])[] | orderFacts.slot ]
-    | if length > 0 and all(. == "done-when") then "no" else "yes" end')"
-  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record, so no test is written or run"
+    | if length > 0 and all(. == "done-when" or . == "confirm-at-review") then "no" else "yes" end')"
+  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record or confirm, so no test is written or run"
 
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
   # framework that can never answer is named now rather than at the first build-record. An order
@@ -4112,7 +4113,9 @@ do_tests_freeze() {
   # order whose proof is record freezes no test either: its deliverable is a document in the task
   # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17). An order whose
   # proof is observe freezes no test and no row: a model judges its done-when rows against its
-  # surfaces after the build, so there is nothing to judge here (live-run row 104).
+  # surfaces after the build, so there is nothing to judge here (live-run row 104). An order whose
+  # proof is confirm freezes no test and no row either: its task has no automated tests, and a
+  # person confirms its done-when rows at review (gap row 196).
   # The frozen record carries the proof word itself, below, because a record holds the value. The
   # refusals and the guards read the check that takes this order's proof slot.
   local tf_proof
@@ -4126,6 +4129,9 @@ do_tests_freeze() {
   fi
   if [ "$BR_ORDER_SLOT" = "observed" ] && [ -n "$test_raw" ]; then
     die 3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
+  fi
+  if [ "$BR_ORDER_SLOT" = "confirm-at-review" ] && [ -n "$test_raw" ]; then
+    die 3 "tests-freeze: $unit_id is confirmed by a person and takes no --test. Its task has no automated tests; a person confirms its done-when rows at review."
   fi
 
   # --- 81: an --absence routes one doneWhen clause to review, because no test can prove it --------
@@ -5976,6 +5982,16 @@ br_record_check() {
     + (if $judgedBy == "" then {} else {judgedBy: $judgedBy} end)'
 }
 
+# The confirm-at-review check, in the order-tests slot of an order whose proof is confirm (gap row
+# 196). The task has no automated tests, so nothing here can judge the order's own work. The check
+# reads deferred: `finish` hands the order's done-when rows to review as checklist rows, and the
+# person answers there. The floor accepts deferred in this slot alone. Prints the check object.
+br_confirm_check() {
+  jq -n --arg unit "$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')" \
+    '{id: "confirm-at-review", verdict: "deferred",
+      detail: ($unit + " is confirmed by a person: its task has no automated tests, so no test ran. The person confirms its done-when rows at review.")}'
+}
+
 # The observed check, in the order-tests slot of an order whose proof is observe (live-run row
 # 104). Its deliverable is what a page shows, which no test of its own proves, so the check reads
 # the record the orchestrator wrote after looking at each surface at each viewport through a
@@ -6047,8 +6063,9 @@ br_aida_writes_in_project() {
 # is gate the first slot holds configuration-gate instead, and on one whose proof is record it
 # holds done-when, with the suite and the three tool rows undeclared: a document in the task
 # folder is nothing a suite or a tool reads (nyc defect 17). On one whose proof is observe it
-# holds observed, and the rest run as they do for a code order (live-run row 104). Prints the
-# JSON array.
+# holds observed, and the rest run as they do for a code order (live-run row 104). On one whose
+# proof is confirm it holds confirm-at-review, the suite reads undeclared, and the three tool rows
+# run (gap row 196). Prints the JSON array.
 br_seven_checks() {
   local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
@@ -6062,6 +6079,7 @@ br_seven_checks() {
     configuration-gate) br_gate_check >"$slot_file" ;;
     done-when)          br_record_check >"$slot_file" ;;
     observed)           br_observed_check >"$slot_file" ;;
+    confirm-at-review)  br_confirm_check >"$slot_file" ;;
     *)                  br_test_check "order-tests" "orderTests" "order-tests" >"$slot_file" ;;
   esac
   br_verify_fold "$slot_file" >>"$parts_file"
@@ -6072,7 +6090,11 @@ br_seven_checks() {
         '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
     done
   else
-    br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
+    if [ "$BR_ORDER_SLOT" = "confirm-at-review" ]; then
+      jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is confirmed by a person: its task has no automated tests, so no suite runs."}' >>"$parts_file"
+    else
+      br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
+    fi
     br_tool_check "coding-standards" "codingStandards" "coding-standards" >>"$parts_file"
     br_tool_check "static-analysis"  "staticAnalysis"  "static-analysis"  >>"$parts_file"
     br_tool_check "security"         "security"        "security"         >>"$parts_file"
@@ -6208,6 +6230,8 @@ br_executed_count() {
 # one that says this order's own code does what its tests ask, so undeclared or unknown there is an
 # order nothing executed. configuration-gate is the same floor for an order whose proof is gate,
 # done-when for one whose proof is record, and observed for one whose proof is observe.
+# confirm-at-review, for one whose proof is confirm, passes the floor at deferred: its task has no
+# automated tests, and the person answers at review (gap row 196).
 # Undeclared on every other check still continues, which is the rule step two already applies to
 # a precondition a recipe declared nothing for. Deferred continues the same way: the suite row
 # is `finish`'s to run, and its answer lands there (nyc defect 18).
@@ -6215,7 +6239,8 @@ br_checks_pass() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     (all(.[]; .verdict == "met" or .verdict == "undeclared" or .verdict == "deferred"
               or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
-    and (any(.[]; (.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict == "met"))'
+    and (any(.[]; ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict == "met")
+                  or (.id == "confirm-at-review" and .verdict == "deferred")))'
 }
 
 # The first check that stopped the order in $1, in the recorded order, with $2 the exempt id as
@@ -6224,7 +6249,8 @@ br_first_stopper() {
   printf '%s' "$1" | jq -r --arg exempt "$2" '
     [ .[] | select(.verdict == "unmet"
                    or (.verdict == "unknown" and ($exempt == "" or .id != $exempt))
-                   or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")) ]
+                   or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
+                   or (.id == "confirm-at-review" and .verdict != "deferred")) ]
     | .[0] // {id:"none",verdict:"",detail:""}
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
 }
@@ -6237,7 +6263,8 @@ br_first_stopper() {
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
-                 or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met"))
+                 or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
+                 or (.id == "confirm-at-review" and .verdict != "deferred"))
     | .id ];
 def outside_tools: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security"));
 '
@@ -6294,7 +6321,7 @@ br_require_check_count() {
     | ([ "order-tests", "suite-regression", "coding-standards", "static-analysis", "security",
          "owned-files", "frozen-tests" ] + (if $want == 8 then ["interface-record"] else [] end))
     | map(select(. as $id | ($have | index($id)) == null))
-    | map(if . == "order-tests" and (($have | index("configuration-gate")) != null or ($have | index("done-when")) != null or ($have | index("observed")) != null) then empty else . end)
+    | map(if . == "order-tests" and (($have | index("configuration-gate")) != null or ($have | index("done-when")) != null or ($have | index("observed")) != null or ($have | index("confirm-at-review")) != null) then empty else . end)
     | join(", ")' "$checks_file" 2>/dev/null)"
   rm -f "$checks_file"
   die 84 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written."
@@ -8577,6 +8604,8 @@ do_close() {
   # and a model's reading stays queued for a person the way every model row is (nyc defect 17).
   # An observe order is judged by `model`, which the observed check carries the same way: a
   # model looked at the page, and completion puts the look to a person (live-run row 104).
+  # A confirm order writes nothing here: its check reads deferred, never met, and the person
+  # answers its criteria at review (gap row 196).
   local slot_check slot_verdict slot_judge slot_detail
   br_order_facts "$RV_UNIT_JSON"
   slot_check="$BR_ORDER_SLOT"
@@ -8744,9 +8773,13 @@ do_finish() {
   # A criterion that is not confirmed stops the stage, and three different facts land here. The
   # refusal names which, and which action answers it: `restart` wants a drift halt, `grant-attempt`
   # answers a spent counter, `clear-halt` the rest, so a reader told only "not confirmed" has
-  # nothing to do next and no way to learn what.
-  unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" '
-      ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]) as $machine
+  # nothing to do next and no way to learn what. A criterion an order proved by confirm owns is
+  # not asked here: its task has no automated tests, and the person answers it at review from
+  # the checklist rows below (gap row 196).
+  unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" "$BR_ORDER_FACTS_JQ"'
+      ([ ($snap.workOrders // [])[] | select(orderFacts.slot == "confirm-at-review") | (.criteriaOwned // [])[] ]) as $confirmed
+      | ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id
+           | select(. as $i | $confirmed | index($i) | not) ]) as $machine
       | ([ ($snap.workOrders // [])[] | (.criteriaServed // [])[] , (.criteriaOwned // [])[] ]) as $served
       | [ ($ledger.criteria // [])[] | select((.id as $i | $machine | index($i)) != null)
           | select(.rowState != "confirmed")
@@ -8779,12 +8812,13 @@ do_finish() {
   # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
   # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
   # more than an argument or a reader can carry. A task whose every order is proved by its
-  # record ran no test and took no suite baseline. So the suite is recorded not-needed and never
-  # run, the same reading preconditions makes of the snapshot (live-run row 136).
+  # record, or confirmed by a person, ran no test and took no suite baseline. So the suite is
+  # recorded not-needed and never run, the same reading preconditions makes of the snapshot
+  # (live-run row 136, gap row 196).
   local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
   harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
     [ (.workOrders // [])[] | orderFacts.slot ]
-    | if length > 0 and all(. == "done-when") then "no" else "yes" end')"
+    | if length > 0 and all(. == "done-when" or . == "confirm-at-review") then "no" else "yes" end')"
   pre_file="$IMPL_DIR/preconditions.json"
   if [ "$harness_needed" = "no" ]; then
     :
@@ -8815,7 +8849,7 @@ FN_RECIPES
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
   if [ "$harness_needed" = "no" ]; then
     jq -nc '{id: "suite-regression", verdict: "not-needed",
-             detail: "the suite was not run: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken."}' >"$suite_file"
+             detail: "the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, so no test exists and no suite baseline was taken."}' >"$suite_file"
   else
     br_test_check "suite-regression" "suite" "suite" >"$suite_file"
   fi
@@ -8877,6 +8911,14 @@ FN_RECIPES
     fi
     oi=$((oi + 1))
   done
+  # An order proved by confirm froze no row, so its done-when rows are the checklist. One row per
+  # sentence, under each criterion the order owns, and the person answers that criterion at
+  # review's close (gap row 196).
+  checklists_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson have "$checklists_json" "$BR_ORDER_FACTS_JQ"'
+      $have + [ (.workOrders // [])[] | select(orderFacts.slot == "confirm-at-review") | . as $o
+                | ($o.criteriaOwned // [])[] as $cid | ($o.doneWhen // [])[]
+                | {criterion: $cid, unit: $o.id, checklist: .} ]')"
+  [ -n "$checklists_json" ] || die 3 "finish: could not add the done-when rows of the orders a person confirms."
 
   local task_id today record_json record_file
   task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"

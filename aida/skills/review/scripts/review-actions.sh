@@ -830,6 +830,10 @@ RW_CHANGED
 # wrote onto the ledger from the order's configuration-gate or done-when check. No test names such
 # a criterion either, and reading it as covered by nothing said "each was signed off on nothing"
 # about a criterion somebody had signed off (live-run row 167).
+#
+# A criterion owned by an order whose proof is confirm is covered by the checklist rows `finish`
+# wrote from that order's done-when rows. The task has no automated tests, and the person answers
+# the criterion from those rows at close (gap row 196).
 rw_check_coverage_verdict() {
   local criteria count i cid covered uncovered="" observed_owner judged_owner
   criteria="$(rw_alignment | jq -c '.criteria // []')"
@@ -846,6 +850,9 @@ rw_check_coverage_verdict() {
         [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
       [ -n "$observed_owner" ] \
         && covered="$(jq -r '((.rows // []) | length) > 0' "$IMPL_DIR/observed-$observed_owner.json" 2>/dev/null)"
+    fi
+    if [ "$covered" != "true" ]; then
+      covered="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" '[ (.checklists // [])[] | select(.criterion == $id) ] | length > 0')"
     fi
     if [ "$covered" != "true" ]; then
       judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
@@ -2341,8 +2348,12 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
-  local observe_owner observed_file
+  local observe_owner observed_file confirm_owned
   alignment="$(rw_alignment)"
+  # The criteria an order proved by confirm owns. The person answers each one with --row, the way
+  # a person-verified criterion is answered, from the checklist rows `finish` wrote (gap row 196).
+  confirm_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ"'
+    [ (.workOrders // [])[] | select(orderFacts.slot == "confirm-at-review") | (.criteriaOwned // [])[] ]')"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
   suite_verdict="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.checks // [])[] | select(.id == "suite") ][0].verdict // "unknown"')"
@@ -2360,7 +2371,8 @@ do_close() {
     # one is not, unanswered when the record is not there to read.
     observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
       [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
-    if [ "$kind" = "person" ]; then
+    if [ "$kind" = "person" ] \
+       || [ "$(printf '%s' "$confirm_owned" | jq --arg id "$cid" 'index($id) != null')" = "true" ]; then
       verdict="$(cr_lookup "$rows" "$cid")"
       if [ -n "$verdict" ]; then
         answered="person"
@@ -2416,15 +2428,16 @@ do_close() {
 
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
-  bad_rows="$(jq -Rrn --argjson c "$criteria" --rawfile given /dev/stdin '
+  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
+      | . as $id | select(($co | index($id)) == null)
+      | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
     | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id. A machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm owns it. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then

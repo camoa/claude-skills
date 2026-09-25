@@ -79,7 +79,8 @@ it writes opens with the command as it ran, arguments and all, so it says what p
 output. A command that is not found is the signal to install. `/aida:tool install
 <tool>` follows the recipe's steps after you have seen them, and it refuses when nobody is
 present, because an install changes your project. The skill knows no tool's name and no
-framework's habits.
+framework's habits. On a task whose contract says it has no automated tests, it does not install
+a test runner or offer to. The build of such a task runs no test, so it never asks for one.
 
 ## Does the recipe fit this task
 
