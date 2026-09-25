@@ -40,8 +40,8 @@
     },
     "runMode": {
       "type": "string",
-      "enum": ["autonomous"],
-      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it. Which stages the mode covers is `runModeStages`; every stage reads the pair through task_run_mode in scripts/lib/task-helpers.sh and never this field alone."
+      "enum": ["autonomous", "light"],
+      "description": "Present only when a person has asked for an autonomous run on this task; absent otherwise, which means interactive, the safe default (foundations.md, Run mode). There is no `\"interactive\"` value to write: the field's absence already means that, so nothing ever writes it back out. Version 5 declared this same field and nothing ever wrote it; here it stays absent until something explicitly sets it, and nothing at creation writes it. Which stages the mode covers is `runModeStages`; every stage reads the pair through task_run_mode in scripts/lib/task-helpers.sh and never this field alone. `light` is an autonomous run over every stage that skips named steps and logs each skip to COMPROMISES.md in the code repository (gap row 197). task_run_mode reads it as autonomous, and task_is_light is the one test of it. It takes no runModeStages."
     },
     "runModeStages": {
       "type": "array",

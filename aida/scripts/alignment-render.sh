@@ -141,6 +141,12 @@ trap 'rm -f "$TMP_FILE"' EXIT
   printf '# Scope: %s\n\n' "$TASK_LABEL"
   printf '## Goal\n\n%s\n\n' "$GOAL"
   printf '## Expected result\n\n%s\n\n' "$EXPECTED_RESULT"
+  # Printed only once scope asked. A contract written before the question existed says nothing,
+  # and every reader takes that as a task with tests.
+  case "$(jq -r 'if has("automatedTests") then (.automatedTests | tostring) else "" end' "$ALIGNMENT_FILE")" in
+    true)  printf '## Automated tests\n\nThis task has automated tests.\n\n' ;;
+    false) printf '## Automated tests\n\nThis task has no automated tests. Each code order is built and reviewed with no test, and a person confirms its done-when sentences at review.\n\n' ;;
+  esac
 
   printf '## Acceptance criteria\n\n'
   CRITERIA_TYPE="$(jq -r '(.criteria? // []) | type' "$ALIGNMENT_FILE")"

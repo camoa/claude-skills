@@ -783,8 +783,9 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched=""
+  local owned owned_count one matched gi glob unmatched="" light=false
   owned="$(rw_owned_files)"
+  task_is_light "$TASK_PATH" && light=true
   owned_count="$(printf '%s' "$owned" | jq 'length')"
   if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
     # No order commits in the code repository, so this range was never going to hold anything and
@@ -801,6 +802,8 @@ rw_check_serves() {
   matched=false; gi=0; glob=""
   while IFS= read -r one; do
     [ -n "$one" ] || continue
+    # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
+    [ "$light" = "true" ] && [ "$one" = "$COMPROMISES_FILE" ] && continue
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
@@ -830,6 +833,10 @@ RW_CHANGED
 # wrote onto the ledger from the order's configuration-gate or done-when check. No test names such
 # a criterion either, and reading it as covered by nothing said "each was signed off on nothing"
 # about a criterion somebody had signed off (live-run row 167).
+#
+# A criterion owned by an order whose proof is confirm is covered by the checklist rows `finish`
+# wrote from that order's done-when rows. The task has no automated tests, and the person answers
+# the criterion from those rows at close (gap row 196).
 rw_check_coverage_verdict() {
   local criteria count i cid covered uncovered="" observed_owner judged_owner
   criteria="$(rw_alignment | jq -c '.criteria // []')"
@@ -846,6 +853,9 @@ rw_check_coverage_verdict() {
         [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
       [ -n "$observed_owner" ] \
         && covered="$(jq -r '((.rows // []) | length) > 0' "$IMPL_DIR/observed-$observed_owner.json" 2>/dev/null)"
+    fi
+    if [ "$covered" != "true" ]; then
+      covered="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" '[ (.checklists // [])[] | select(.criterion == $id) ] | length > 0')"
     fi
     if [ "$covered" != "true" ]; then
       judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
@@ -2236,8 +2246,26 @@ do_surfaces() {
   parity_on="unavailable"
   [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
     && parity_on="on"
-  rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
-  rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  # A light task is done only when the script that walks the demo path passes, so review fails
+  # one with no enabled critical end to end surface to run (gap row 197).
+  local path_scripts=none
+  if task_is_light "$TASK_PATH"; then
+    path_scripts=0
+    [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
+      || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
+  fi
+  if [ "$path_scripts" = "0" ]; then
+    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface." >>"$checks_file"
+  else
+    rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  fi
+  # A light task runs no visual regression. Implementation's start logged the skip, because a
+  # commit here would move the code under this review (gap row 197).
+  if [ "$vr_on" = "on" ] && task_is_light "$TASK_PATH"; then
+    rw_check_row "$CHECK_VR" "undeclared" "a light run skips visual regression, so review ran nothing for it. COMPROMISES.md in the code repository records the skip." >>"$checks_file"
+  else
+    rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  fi
   rw_surface_kind "$CHECK_PARITY" "visual-parity" "visual-parity" "$parity_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
   rw_surface_extra_rows "$checks_file" "e2e e2e-preflight visual-regression visual-parity$RW_ACCEPTED_ROWS"
 
@@ -2341,8 +2369,13 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
-  local observe_owner observed_file
+  local observe_owner observed_file confirm_owned
   alignment="$(rw_alignment)"
+  # The criteria an order proved by confirm puts to the person, confirmCriteria in
+  # scripts/lib/proof.sh. The person answers each one with --row, the way a person-verified
+  # criterion is answered, from the checklist rows `finish` wrote (gap row 196).
+  confirm_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ"'
+    [ (.workOrders // [])[] | confirmCriteria[] ] | unique')"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
   suite_verdict="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.checks // [])[] | select(.id == "suite") ][0].verdict // "unknown"')"
@@ -2360,7 +2393,8 @@ do_close() {
     # one is not, unanswered when the record is not there to read.
     observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
       [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
-    if [ "$kind" = "person" ]; then
+    if [ "$kind" = "person" ] \
+       || [ "$(printf '%s' "$confirm_owned" | jq --arg id "$cid" 'index($id) != null')" = "true" ]; then
       verdict="$(cr_lookup "$rows" "$cid")"
       if [ -n "$verdict" ]; then
         answered="person"
@@ -2416,15 +2450,16 @@ do_close() {
 
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
-  bad_rows="$(jq -Rrn --argjson c "$criteria" --rawfile given /dev/stdin '
+  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
+      | . as $id | select(($co | index($id)) == null)
+      | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
     | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id. A machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm puts it to a person. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then

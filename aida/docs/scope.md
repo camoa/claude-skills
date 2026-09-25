@@ -14,12 +14,19 @@ A project must be active first, and the task must already exist; scope creates n
 
 ## What the contract holds
 
-The contract has four parts. You approve all four together, as one document.
+The contract has five parts. You approve all five together, as one document.
 
 - **The goal.** One plain sentence, in your words, saying what the task is for.
 - **The expected result.** One plain sentence saying what is true when the task is done.
+- **Whether the task has automated tests.** Yes or no, for this task alone. A project can hold
+  tasks of both kinds.
 - **The acceptance criteria.** One line each, described below.
 - **The non-goals.** What the task will not do, one line each.
+
+A task with no automated tests is built with no test. Each code order has one builder and one
+reviewer, and nothing installs or runs a test runner. You confirm each order's done-when
+sentences at the review you already sign. Research checks the answer: when it finds a test runner
+that covers the changed code, it names it before design, and you keep or change the answer then.
 
 An acceptance criterion is an outcome you can see when the task is done. It reads like a user
 story: "An admin can download the user list as CSV." It is written from outside the code. It
@@ -94,6 +101,8 @@ or correct.
 - **The non-goal probes.** After the draft, scope raises the things next to the goal that nobody
   mentioned. It asks whether each is in or out. Out becomes a non-goal. In becomes a criterion.
   These are asked on their own because they are the part people skip.
+- **Whether the task has automated tests.** Asked on every task. The recommended answer is yes,
+  unless you or the task said there are none.
 - **The test setup offer**, described below, only when the goal names something a person sees.
 
 One question is blank on purpose. When genuinely nothing is on the table, scope asks what should

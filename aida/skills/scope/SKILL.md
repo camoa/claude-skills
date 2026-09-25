@@ -22,10 +22,10 @@ run without asking. Any other Bash command still asks for approval.
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
-`autonomous`: act autonomously through this whole invocation, passing `--run-mode autonomous` on
-every call below that writes. Anything else, including no active task: act interactively, the
-safe default, and pass `--run-mode interactive` (or nothing; that is the same default) on every
-call below that writes. Decide this once, at the start. `read` needs no run mode: it changes
+`autonomous` or `light`: act autonomously through this whole invocation, passing
+`--run-mode autonomous` on every call below that writes. Anything else, including no active
+task: act interactively, the safe default, and pass `--run-mode interactive` (or nothing; that
+is the same default) on every call below that writes. Decide this once, at the start. `read` needs no run mode: it changes
 nothing. A mode that names stages in brackets, such as `autonomous (implement)`, covers this
 stage only when the list names `scope`; otherwise this stage is interactive.
 
@@ -133,6 +133,7 @@ is asked once each:
 
 - A gap the draft could not fill: no goal anywhere, or a criterion with no observable outcome.
 - The non-goal probes, asked on their own because they are the part people skip.
+- Whether the task has automated tests, under "Automated tests", asked once on every task.
 - The surfaces offer under "Tests and checks", which is asked once and only where the goal names
   something a person sees.
 
@@ -239,6 +240,24 @@ On "in", it becomes a criterion instead: go back to the criterion flow above.
 ```
 to record that this run decided it. A non-goal carries no author field; only criteria do. So the
 id in that entry is the only mark a non-goal this run wrote itself carries.
+
+## Automated tests
+
+Ask once, on every task, whether this task has automated tests. The answer is per task, never per
+project. Recommend yes, unless the invocation line, `task.md` or the person says there are none.
+Say what a no changes. Each code order is built and reviewed with no test. The person confirms
+each order's done-when sentences at review. Write the answer:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
+  set-tests "<task_folder>" --automated <yes|no>
+```
+The answer is part of the contract, so `approve` signs it with the rest. Research checks it
+later, and the person may change it there.
+
+**Autonomous:** take the recommended answer, write it, and mark it with `record-decision`.
+
+**Light:** do not ask, and do not run `set-tests`. `init` wrote no on a light task and logged the
+skip. `set-tests` refuses yes there.
 
 ## Tests and checks
 
@@ -350,8 +369,9 @@ dispatch also ends before its first write, stop: interactive, put it to the pers
 Agent call's own error; autonomous, halt. The research and design pages refer to this rule.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
-`add-non-goal`, `update`, `remove` or `set-mechanism` again. A drafted line is `designer`, and
-stays so until the person approves the whole document, so a cancelled draft claims nobody's yes.
+`add-non-goal`, `update`, `remove`, `set-tests` or `set-mechanism` again. A drafted line is
+`designer`, and stays so until the person approves the whole document, so a cancelled draft
+claims nobody's yes.
 A correction is written only after the person (or, in the autonomous branch, the recommended
 answer) has actually given that one change.
 

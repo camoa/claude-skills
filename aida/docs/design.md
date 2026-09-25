@@ -45,7 +45,7 @@ on record the way every other design write is.
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
 | diff budget | How much change the order should take, in plain words |
-| proof | `tests` for code a test can pin. `gate` for tools run that change state, such as configuration. `record` for a document. `observe` for what a page shows |
+| proof | `tests` for code a test can pin. `gate` for tools run that change state, such as configuration. `record` for a document. `observe` for what a page shows. `confirm` for code on a task with no automated tests |
 | verify | The order's own proof, from the recipe or the research that covers it: commands a script runs and checks a model judges, each citing its source |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
@@ -194,9 +194,16 @@ own check. The judge on the record is a model, never a person, and completion pu
 criterion to you to accept. The design check refuses an `observe` order that declares a test,
 names no surface, or has no done-when row.
 
-Design picks the proof from what the order produces. Code that a test can pin gets `tests`.
-Tools run that change state get `gate`. A document or an analysis gets `record`, and what only a
-person or a browser can see gets `observe`. A machine-verified criterion does not mean a test,
+An order that builds code on a task with no automated tests writes no test either. It carries
+`proof: confirm`, and design sets that value itself when the order's first file is code, unless
+you set a proof by hand. It needs at least one done-when row. Each row is a sentence you confirm
+at review. The design check refuses a `confirm` order that declares a test or has no done-when
+row. It also refuses one on a task whose contract does not say it has no automated tests, such
+as a task whose answer changed to yes after design. The repair is `update --proof tests`.
+
+Design picks the proof from what the order produces. Code that a test can pin gets `tests`, or
+`confirm` on a task with no automated tests. Tools run that change state get `gate`. A document
+or an analysis gets `record`, and what only a person or a browser can see gets `observe`. A machine-verified criterion does not mean a test,
 because every kind proves one in its own way.
 
 Creating an order and updating one both print `impliedProof:`, beside the proof the order

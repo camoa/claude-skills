@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # proof.sh: what one work order's proof kind means for a check about to answer.
 #
-# A work order carries one proof kind: `tests`, `gate`, `record` or `observe`. No check wants the
+# A work order carries one proof kind: `tests`, `gate`, `record`, `observe` or `confirm`. No check wants the
 # kind itself. Every site that reads `.proof` turns it into one of three questions about the
 # order (gap row 170). The first asks which of the eight deciding checks takes its first slot.
 # The second asks which repository holds its range. The third asks whether it owns a file in the
@@ -26,7 +26,8 @@
 # Public:
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
-#   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`
+#   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
+#                                          and `confirmCriteria` beside it
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
 #
@@ -38,8 +39,8 @@
 # `set -u` never reads one unset, and reset at the top of the function.
 #
 # BR_ORDER_SLOT is the check that takes the first of the eight deciding checks: `order-tests`,
-# `configuration-gate`, `done-when` or `observed`. An order freezes and runs a test exactly when
-# its slot is `order-tests`, so that question needs no field of its own.
+# `configuration-gate`, `done-when`, `observed` or `confirm-at-review`. An order freezes and runs
+# a test exactly when its slot is `order-tests`, so that question needs no field of its own.
 # BR_ORDER_RANGE is `code` or `project`, the repository the order's range lives in.
 # BR_ORDER_OWNS_CODE is `yes` or `no`, whether the order owns a file in the code path.
 BR_ORDER_SLOT=""; BR_ORDER_RANGE=""; BR_ORDER_OWNS_CODE=""
@@ -52,20 +53,32 @@ br_order_facts() {
     gate)    BR_ORDER_SLOT="configuration-gate"; BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
     record)  BR_ORDER_SLOT="done-when";          BR_ORDER_RANGE="project"; BR_ORDER_OWNS_CODE="no"  ;;
     observe) BR_ORDER_SLOT="observed";           BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
+    confirm) BR_ORDER_SLOT="confirm-at-review";  BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
     *)       BR_ORDER_SLOT="order-tests";        BR_ORDER_RANGE="code";    BR_ORDER_OWNS_CODE="yes" ;;
   esac
 }
 
 # The same classification as a jq definition, for the sites that cannot call a function. A caller
 # prefixes this string to its own program and reads `orderFacts` with a work order as the input.
+#
+# `confirmCriteria`, also on one work order, lists the criteria the person answers for an order
+# proved by confirm (gap row 196): the ones it owns, or the ones it serves when it owns none. Every
+# other order lists none. finish writes the order's done-when rows under these criteria and does
+# not wait for their row state. review's close takes the person's answer on them. The three sites
+# read the one list, so a row a person sees is always a row the person can answer.
 BR_ORDER_FACTS_JQ='
   def orderFacts:
     (.proof // "tests") as $p
     | if   $p == "gate"    then {slot: "configuration-gate", range: "code",    ownsCode: true}
       elif $p == "record"  then {slot: "done-when",          range: "project", ownsCode: false}
       elif $p == "observe" then {slot: "observed",           range: "code",    ownsCode: true}
+      elif $p == "confirm" then {slot: "confirm-at-review",  range: "code",    ownsCode: true}
       else                      {slot: "order-tests",        range: "code",    ownsCode: true}
-      end;'
+      end;
+  def confirmCriteria:
+    if orderFacts.slot != "confirm-at-review" then []
+    elif ((.criteriaOwned // []) | length) > 0 then .criteriaOwned
+    else (.criteriaServed // []) end;'
 
 # The roles one order's proof kind dispatches, and the catalog points its tests step asks. $1 one
 # work order document. Sets two space-separated lists. It reads the slot br_order_facts sets, so a

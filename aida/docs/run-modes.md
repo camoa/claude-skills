@@ -4,8 +4,9 @@ A task runs in one of two modes. Interactive means you are present and AIDA asks
 Autonomous means nobody is present. AIDA then takes the recommended answer where one exists,
 records that it did, and stops at any step it cannot take without you. The mode can cover the
 whole task or only the stages you name. This page covers what each mode is and how you set it.
-It covers the one rule that governs an autonomous run and what differs in each stage. It ends
-with what to read when you come back to a run that happened without you.
+It covers the one rule that governs an autonomous run and what differs in each stage. It then
+covers light, an autonomous run that skips named steps and logs each one. It ends with what to
+read when you come back to a run that happened without you.
 
 ## The two modes
 
@@ -192,6 +193,42 @@ are not offered as plays, and the record says the offer was skipped. See
 Installing a tool or a test harness changes your repository, so it waits for a plain yes. With
 nobody there to give one, it halts. No surface is enabled and no baseline is written on an
 autonomous run. See [visual and end-to-end tests](testing.md).
+
+## Light
+
+Light is for a demo or a first version that has to exist fast, such as a hackathon build. It is
+an autonomous run over every stage, so everything above holds, and it skips named steps on top.
+Set it with `/aida:task set-run-mode <task-id> light`. It takes no `--stage`. Interactive and
+autonomous tasks are unchanged by it.
+
+A light task has no automated tests. Scope writes that answer itself, so each code order takes
+the proof a person confirms at review. What light skips:
+
+- **Research** searches this project and the catalog, and runs no outward search on the web.
+- **Design** runs no critique. The first work order, `wo1`, is the walking skeleton: a tiny
+  version that links the input, the logic and the output along the demo path. Every other order
+  comes after it, and the design check refuses one that does not.
+- **Implementation** writes no tests for each order and runs no checker over test rows. It gives
+  each order one fix round. An order with a finding still open after that round halts. The
+  implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
+- **Review** runs no visual regression.
+
+What light keeps: the code review of each order, and the project's own checks, including its
+security check. It also keeps one script that walks the demo path in a browser. That script is the project's end to
+end setup, for that one path. A person sets it up once with `/aida:surfaces e2e` and registers
+the demo path as one critical surface. Review then runs it every time, and so can you, after each
+change. Review fails a light task that has no such surface. `set-run-mode` says whether end to
+end is on.
+
+**The compromises log.** Each skip is written by the code that decides it, never from a model's
+memory. It goes to `COMPROMISES.md` at the top of the task's worktree, one row per skip, and is
+committed there, so it ships with the code. A row names the task, the stage, what was skipped and
+what a normal run would do. Each marked fake gets its own row when its order closes. The same
+step run twice logs once. A light run is done when the path script passes, the log is current,
+and nothing on the non-goals was built. A later normal task takes the log as its scope.
+
+AIDA keeps no budget clock. A budget set with `set-budget` still halts the build at its ceiling,
+because you set it.
 
 ## Coming back to an autonomous run
 

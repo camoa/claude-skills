@@ -1,7 +1,7 @@
 ---
 name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -20,7 +20,7 @@ the code folder). Resolve that first, with the project skill, before using anyth
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation, when one is already active.
-Found, and it says `autonomous`: act autonomously through this whole invocation, passing
+Found, and it says `autonomous` or `light`: act autonomously through this whole invocation, passing
 `--run-mode autonomous` on every call to the script below. Anything else, including no active
 task, such as the moment `create` itself runs: act interactively, the safe default. Decide this
 once, at the start. A mode that names stages in brackets covers this call only when it names the
@@ -127,7 +127,8 @@ the token, bring-up, address and tear-down commands with `{codePath}` filled, an
 them. It prints the paths of the `## Files` blocks, the files `up` writes, and one
 `precondition:` line per `## Preconditions` command `up` runs.
 `show` runs each `## Preconditions` line the way `up` does, with the same code. It removes the
-files it wrote for the check, so it commits nothing and leaves the tree as it found it. A failing
+files it wrote for the check and puts back the ones it replaced. So it commits nothing and leaves
+the tree as it found it. A failing
 check exits 3 and prints what `up` prints. A worktree not on disk prints
 `precondition check: not run`, because only `up` makes a tree again.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
@@ -137,15 +138,16 @@ says what `up` would do.
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,
 and one line in that record marking the address command, so `down` can find that command's output
 later.
-First it writes each `## Files` block absent from the worktree. A file present with other content
-refuses at 3. Then it runs each
+First it writes each `## Files` block absent from the worktree. A file that holds the block of an
+earlier version of the recipe is replaced. Any other file with other content refuses at 3. The
+earlier versions are the ones the navigator store holds, so nothing is fetched. Then it runs each
 `## Preconditions` line, after the files because the check is a script the recipe ships. A
-failing line stops at 3, prints its output, removes the files this run wrote, and commits
-nothing. When a line ran and failed, it also names the task branch and the branch the worktree
+failing line stops at 3, prints its output, removes the files this run wrote, puts back the ones
+it replaced, and commits nothing. When a line ran and failed, it also names the task branch and the branch the worktree
 was cut from. An older task names the branch the code path is on now, and says so. A failed
 commit, or an interrupt before the commit, also removes the written files, their index entries
-and the output file, and says so. Then it commits the written files alone, so other changed or staged work is never
-taken in. Then
+and the output file, and says so. Then it commits the written and replaced files alone, so other changed or staged work is
+never taken in. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
 `environment`: `state: coming-up`, the recipe, and the time. The record names the site before the
@@ -316,20 +318,26 @@ goal and any handed-down criteria into its `task.md`, makes each child's own wor
 stopped before writing anything: `NOT FOUND` says the named task does not exist, `REFUSED` says
 the two-level limit stopped it. Say which and stop. Show the whole output otherwise.
 
-## `set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...`
+## `set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]...`
 
-Run mode is written only when a person explicitly asks for an autonomous run on this task.
+Run mode is written only when a person explicitly asks for an autonomous or a light run on this task.
 Nothing above asks about it on its own, and nothing here proposes it either. Only call this when
 asked. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  set-run-mode --project "<projectPath>" "<task-id>" <autonomous|interactive> [--stage <stage>]...
+  set-run-mode --project "<projectPath>" "<task-id>" <autonomous|light|interactive> [--stage <stage>]...
 ```
 `autonomous` writes the field. `--stage`, repeatable, limits it to the stages named, one of
 `scope`, `research`, `design`, `implement`, `review`, `completion`. A person who asks for the build
 alone unattended passes `--stage implement`. No `--stage` covers every stage. `interactive`
 removes the field and the stages: there is no `"interactive"` value to write, since the field's
 absence already means that. Show the whole output.
+
+`light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
+Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
+whether end to end is on. Light keeps one script that walks the demo path in a browser, and review
+fails the task without it. When end to end is off, say that a person sets it up with
+`/aida:surfaces e2e` before the run.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 

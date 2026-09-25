@@ -43,20 +43,21 @@ Schema:
   "guides":          { "<topic>/<file.md>": "<sha256>" },
   "task_recipes":    { "<name>": "<sha8>" },
   "process_recipes": { "<phase>/<framework>/<url-slug>": "<sha8>" },
-  "playbooks":       { "<set-id>": "<sha256>" }
+  "playbooks":       { "<set-id>": "<sha256>" },
+  "tooling_recipes": { "<name>": "<sha8>" }
 }
 ```
 
 Example process-recipe key: `e2e-setup/drupal/e2e-setup-atk`. Example playbook key:
 `drupal/best-practices/camoa`, the set's topic path.
 
-- All four classes are plain footprints of what the project touched, a `"<key>": "<id>"`
+- All five classes are plain footprints of what the project touched, a `"<key>": "<id>"`
   string map. Nothing is pinned.
 - `guides` entries (guide-body caching — **active**) record `"<topic>/<file.md>": "<sha256>"`,
   where the sha256 comes from the topic's `guide-index.json` manifest
   (`https://camoa.github.io/dev-guides/<topic>/guide-index.json`, a `{ "<file.md>": "<sha256>" }`
   map over the raw markdown bytes). Written whenever a guide body is materialized.
-- `task_recipes` value is a plain JSON string (the sha8).
+- `task_recipes` value is a plain JSON string (the sha8). `tooling_recipes` is the same shape.
 - `process_recipes` value is a plain JSON string (the sha8) — identical in shape to
   `task_recipes`.
 - `playbooks` value is the sha256 of the set's `plays.json` bytes, computed by the navigator,
@@ -78,6 +79,7 @@ re-computation by the caller:
 |-------|-----|--------|
 | Task recipes | 8-char hex sha8 | `(sha:XXXXXXXX)` from the `agentic-recipes.txt` line |
 | Process recipes | 8-char hex sha8 | `(sha:XXXXXXXX)` from the `process-recipes.txt` line |
+| Tooling recipes | 8-char hex sha8 | `(sha:XXXXXXXX)` from the `tooling-recipes.txt` line |
 | Guide bodies | sha256 | per-topic `guide-index.json` manifest (`{ "<file.md>": "<sha256>" }`) |
 | Playbook sets | sha256 | computed over the fetched `plays.json` bytes; no published id exists |
 
@@ -88,7 +90,7 @@ always a valid argument to `blob-get`.
 
 ## 4. Freshness Policy
 
-All four classes share **one** policy: **auto-fresh**.
+All five classes share **one** policy: **auto-fresh**.
 
 | Class | Policy |
 |-------|--------|
@@ -96,6 +98,7 @@ All four classes share **one** policy: **auto-fresh**.
 | Task recipes (index + bodies) | Auto-fresh — same two-hash discipline |
 | Process recipes (index + bodies) | Auto-fresh — same two-hash discipline; nothing pinned |
 | Playbook sets (`plays.json`) | Auto-fresh: fetched on every call, no `.hash` sidecar exists; the blob store dedups |
+| Tooling recipes (index + bodies) | Auto-fresh: identify revalidates the index; the body re-fetches when its sha changes |
 
 **Guide-body freshness — fetch `guide-index.json` on use.** A guide body manifest is
 **not** gated by `llms.hash`. A body edit changes that file's sha256 in the topic's
@@ -116,7 +119,7 @@ recipes revalidate on use exactly like guides and task recipes.
 `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-store.sh` is the **only writer** of the
 shared store and the lockfile. No skill, agent, or hook writes directly to
 `~/.claude/dev-guides-store/` or edits `dev-guides.lock.json` — all mutations go
-through the kernel's subcommands (`revalidate`, `blob-put`, `lock-set`). The five lookup
+through the kernel's subcommands (`revalidate`, `blob-put`, `lock-set`). The six lookup
 modes run as one call each to `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh`, which
 calls the kernel for every store operation and writes nothing itself.
 

@@ -47,9 +47,9 @@
     },
     "proof": {
       "type": "string",
-      "enum": ["tests", "gate", "record", "observe"],
+      "enum": ["tests", "gate", "record", "observe", "confirm"],
       "default": "tests",
-      "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). `record` says the same for a unit whose deliverable is a document in the task folder: no test, `rows` empty unless a person-verified criterion adds a checklist, and the one row it owes, the done-when judgement from `--row <unit_id>=...`, sits on the ledger's order entry (nyc defect 17). `observe` says the unit froze no test and no row: a model judges its done-when rows against its surfaces after the build, and `rows` holds only the checklist rows of its person-verified criteria (live-run row 104). Absent on a record written before this field existed, which reads as tests."
+      "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). `record` says the same for a unit whose deliverable is a document in the task folder: no test, `rows` empty unless a person-verified criterion adds a checklist, and the one row it owes, the done-when judgement from `--row <unit_id>=...`, sits on the ledger's order entry (nyc defect 17). `observe` says the unit froze no test and no row: a model judges its done-when rows against its surfaces after the build, and `rows` holds only the checklist rows of its person-verified criteria (live-run row 104). `confirm` says the same for a code unit of a task with no automated tests: no test and no row, and a person confirms its done-when rows at review (gap row 196). Absent on a record written before this field existed, which reads as tests."
     },
     "retakenFrom": {
       "type": "object",

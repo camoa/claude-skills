@@ -100,7 +100,8 @@ becomes complete when you mark it complete, below. Starting a task also makes th
 site for its worktree, whichever stage started it, while the task records no answer. See
 [Visual and end-to-end tests](testing.md#the-site-the-surfaces-need).
 
-A run mode can sit beside the state, but only when you have asked for an autonomous run: nothing
+A run mode can sit beside the state, but only when you have asked for an autonomous or a light
+run: nothing
 writes that field on its own, and nothing writes an explicit interactive value either. A task
 that names no run mode is interactive, the safer assumption when nobody said otherwise.
 
@@ -152,9 +153,9 @@ as the project does.
   [Visual and end-to-end tests](testing.md#the-site-the-surfaces-need).
 - `/aida:task prune` removes the worktrees of complete tasks, one yes per worktree. See
   [Finishing a task](finishing.md#the-merge-and-what-comes-after).
-- `/aida:task set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...` sets the
-  task's run mode, for every stage or for the stages named. See
-  [Run modes](run-modes.md#setting-the-mode).
+- `/aida:task set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]...` sets
+  the task's run mode, for every stage or for the stages named. See
+  [Run modes](run-modes.md#setting-the-mode) and [light](run-modes.md#light).
 - `/aida:task set-budget <task-id> [--dispatches <n>] [--minutes <n>]` sets the ceiling on the
   task's build, in dispatches or in minutes or both. See
   [Run modes](run-modes.md#setting-the-mode).

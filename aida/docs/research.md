@@ -199,6 +199,11 @@ line, and acting on one is another recorded finding. It blocks nothing. A malfor
 record is renamed beside its original path, dated, and a fresh distiller runs with the rule it
 broke. A second malformed record stops for you.
 
+**A task with no automated tests.** When the contract says the task has none, the search in
+your own code also asks whether a test runner covers the changed code. When one does, research
+names it before design and asks once: keep "no automated tests", or change it to yes. An
+unattended run keeps the answer and names the runner for you to see later.
+
 ## What research shows at the close
 
 Research closes by showing what it found. This is a presentation, not a question: research asks

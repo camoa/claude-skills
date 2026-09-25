@@ -285,7 +285,24 @@ compared against the baseline it ran against, and a changed recipe makes that co
 no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
-`references/preconditions.md` does. Pass `--nothing-ran <literal substring>` only when the
+`references/preconditions.md` does. A placeholder is a whole token, never part of one. It has
+these forms:
+- `{a.b}` is the Input contract field at that dotted path. Pass `--value a.b=<value>`. For a
+  list of scalars, pass one `--value a.b=<item>` per item, and the line runs once per item.
+  Only the first such name in a line makes it run more than once.
+- `{a.b:json}` is the whole value of the field as one JSON token. Pass
+  `--value 'a.b:json=<JSON text>'`. Pass the JSON on one line. For an absent field pass
+  nothing, and the token is `null`.
+- `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them.
+
+A `{a.b}` placeholder with no value reads unknown.
+
+Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
+the worktree. A line can run a script the recipe ships. After the lines, it removes those
+files, so the tree stays clean. A file that holds the block of an earlier version of the recipe
+is replaced for the run, then put back. Any other file with different content refuses at 3.
+
+Pass `--nothing-ran <literal substring>` only when the
 framework's own recipe names no `silent_pass` marker of its own; where it does, the script reads
 that marker and this flag is not read.
 
@@ -341,14 +358,20 @@ This step runs all eight deciding checks. The record holds every one.
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
   above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
-  the way a failing test does. On every kind but `gate`, the order's own `verify` run entries
+  the way a failing test does.
+  On an order whose proof is `confirm` this slot is `confirm-at-review`. It reads deferred. The task has
+  no automated tests, so nothing runs, and the person confirms the order's done-when rows at
+  review. Deferred passes here, in this slot alone. On every kind but `gate`, the order's own
+  `verify` run entries
   then run in this slot, from the code worktree. The slot is met only when its own answer and
   every line are. The detail names the source.
 - **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
   recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
   that row once at the final commit. On a Drupal project the row is ten minutes per run. On a
   `record` order it reads undeclared, and so do the three tool checks. A document in the task
-  folder is nothing a suite or a tool reads, and the detail names the proof kind.
+  folder is nothing a suite or a tool reads, and the detail names the proof kind. On a `confirm`
+  order it reads undeclared too, because the task has no automated tests. The three tool checks
+  run on it as on any code order.
 - **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
   have.
 - **static-analysis.** Does static analysis raise anything the baseline did not already have.

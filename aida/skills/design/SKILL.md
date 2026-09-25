@@ -36,8 +36,8 @@ shape and lists its own paths.
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
-`autonomous`: act autonomously through this whole invocation. Anything else, including no active
-task: act interactively, the safe default. Decide this once, at the start.
+`autonomous` or `light`: act autonomously through this whole invocation. Anything else,
+including no active task: act interactively, the safe default. Decide this once, at the start.
 A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
 when the list names `design`; otherwise this stage is interactive.
 
@@ -51,7 +51,8 @@ An invocation line whose first word is `close` is the person's yes on the design
 the word after it, or the active one. Go straight to "Close the design" below. When no
 `design-critique-*.md` exists yet, under `records/` or under `design/`, run "Critique the design"
 first. An earlier close moved the files into `design/`, so look in both. A name that begins
-`unfinished-` is a critique that stopped, and it counts as no critique here.
+`unfinished-` is a critique that stopped, and it counts as no critique here. A light task runs no
+critique, so go straight to the close.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -111,13 +112,12 @@ by its id in that order's `reasoning`.
 
 Research named these without opening them, so design is the first read. Research recorded an
 address for each; open it through the navigator the same way, and read a project's own source
-directly. A tooling recipe has no navigator mode yet. Fetch its body from the address research
-recorded, check its sha256 against the catalog line, and store it by hand. Record it below the
-same way. That stands until the navigator's `tooling --name` mode exists. One agentic recipe
-covering the work means the decision is already made: follow it. Its `## Verifier` becomes the
-proof of each order it covers, as "Carry the proof from its source" says. Two: read both, pick
-the one that fits, say why, and build from that one alone. None: architect from the findings and from
-this project's own conventions; this is where design quality shows.
+directly. Open a tooling recipe with the navigator's `tooling --name` mode, by the name research
+recorded. One agentic recipe covering the work means the decision is already made: follow it.
+Its `## Verifier` becomes the proof of each order it covers, as "Carry the proof from its source"
+says. Two: read both, pick the one that fits, say why, and build from that one alone. None:
+architect from the findings and from this project's own conventions; this is where design
+quality shows.
 
 Record each body as it is read, once the navigator has given its path on disk:
 ```
@@ -210,12 +210,19 @@ and pick the kind from that answer:
   only restates a file.
 - A document or an analysis, such as a report or a review: `record`.
 - Something only a person or a browser can see: `observe`.
+- Code, on a task whose contract says it has no automated tests: `confirm`. Nothing runs a
+  test. The implementer builds it, one reviewer reads the diff, and the person confirms each
+  done-when row at review. `add-owned-file` sets this value itself on such a task, on an order
+  created with no `--proof` whose first file is code. The person may pick another kind with
+  `update --proof`.
 
 A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
-tests, the gate lines, the checks on the record, or the look. `create` and `update` print
-`impliedProof:` beside the proof the order declares. It says `record` when every owned file lies
-under the project folder, and `any kind` for a machine-verified criterion. What the order
-produces decides. When the product is truly unclear, `tests` stays the default. A wrongly
+tests, the gate lines, the checks on the record, the look, or the person's confirmation.
+`create` and `update` print `impliedProof:` beside the proof the order declares. It says
+`record` when every owned file lies under the project folder. On a task with no automated tests
+it says `confirm` for any other order. Otherwise it says `any kind` for a machine-verified
+criterion. What the order produces decides. When the product is truly unclear,
+`tests` stays the default, on a task that has tests. A wrongly
 tested configuration order wastes one build, and a wrongly untested code order ships unproven.
 
 **No recipe covers this framework:** say so, and write `written without framework input` into the
@@ -398,6 +405,12 @@ observable outcome a criterion describes, which one it owns. Most orders own non
 order owns each criterion; if two orders both seem to produce the same outcome, that is a sign the
 work is split wrong, not a sign both should claim it.
 
+**Light:** the first order, `wo1`, is the walking skeleton. It is a tiny version that links the
+input, the logic and the output end to end along the demo path. Every other order depends on it,
+directly or through its chain, and `check` refuses one that does not. When end to end is on,
+`wo1` also owns the script that walks the demo path in a browser, where the harness reads its
+tests. That script is the one test a light run keeps.
+
 Create it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh create "<task_folder>" \
@@ -407,7 +420,7 @@ Create it:
   [--interface "<what it exposes to what depends on it>"] \
   [--reasoning "<why, if this is a shared decision>"] \
   --diff-budget "<a plain-words signal, e.g. small: one class and its test>" \
-  [--proof <tests|gate|record|observe>] [--surface <id>]...
+  [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 This mints the next id and writes the file, and prints the id and the fields set. It never prints
 the record; read the file at the printed path when a field is needed. `dependsOn` may name a work order not yet created in
@@ -447,11 +460,12 @@ closed again on the live files. Nothing halts when nothing else on the order cha
   --id <woId> --description "<what this test must observe>"
 ```
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. Three orders are the exception. One created
+here; the check below refuses an order that skips this. Four orders are the exception. One created
 with `--proof gate` declares no test, and the configuration check judges its owned machine
 criterion at build time. One whose proof is `record` declares no test either, and its done-when
 rows, judged at the checkpoint, stand in for the test. One whose proof is `observe` declares no
-test, and a model judges its done-when rows against its surfaces after the build. A criterion
+test, and a model judges its done-when rows against its surfaces after the build. One whose proof
+is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
 whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
 A test is what a test author writes as a file, red before the code and green after it. The
@@ -466,13 +480,14 @@ To change a scalar or an id list on an order already created, `update` takes the
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
   [--interface <text>] [--reasoning <text>] [--append-reasoning <text>] [--diff-budget <text>] \
-  [--proof <tests|gate|record|observe>] [--surface <id>]...
+  [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 `--reasoning` replaces the whole field, the paragraphs `dispose` wrote included. To keep them,
 pass `--append-reasoning`: it adds the text as a new paragraph after a blank line. The two
 flags are refused together.
-When `--proof` becomes `gate`, `record` or `observe`, `update` prints `stillNamesATest:` naming
-each of `interface`, `reasoning` and `diffBudget` that still names a test file.
+When `--proof` becomes `gate`, `record`, `observe` or `confirm`, `update` prints
+`stillNamesATest:` naming each of `interface`, `reasoning` and `diffBudget` that still names a
+test file.
 
 ## Carry the proof from its source
 
@@ -516,6 +531,8 @@ What each kind does with the entries:
 - `gate`: the run entries run first, then the `## Configuration gate`. The worse verdict stands.
 - `tests`, `record` and `observe`: the run entries run in the order's first deciding check,
   after its own answer, from the code worktree. The check is met only when both are.
+- `confirm`: the run entries run the same way. A failing entry stops the build. A passing one
+  leaves the check waiting for the person.
 - Every kind: the reviewer judges each check entry. On an `observe` order the look also judges
   each `live-site` check as a row of its own, because only that kind shows on a page.
 
@@ -550,12 +567,15 @@ zero it adds one `open:` line naming what is open. The report holds:
   than one work order;
 - every work order serving no criterion;
 - every work order that owns a machine-verified criterion and declares no test, unless its proof
-  is `gate`, `record` or `observe`;
+  is `gate`, `record`, `observe` or `confirm`;
 - every work order whose proof is `gate` and that declares a test;
 - every work order whose proof is `record` and that declares a test, owns a file outside the
   project folder or under a path the project ignores, or has no done-when row;
 - every work order whose proof is `observe` and that declares a test, names no surface, or has
   no done-when row;
+- every work order whose proof is `confirm` and that declares a test, or has no done-when row;
+- every work order whose proof is `confirm` on a task whose contract does not say it has no
+  automated tests;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -570,9 +590,9 @@ later.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
-those orders open, because which of the other three proofs fits is a judgment. Either the order
+those orders open, because which of the other proofs fits is a judgment. Either the order
 owns a machine-verified criterion after all, which `update --criteria-owned` sets. Or its proof is
-one of the other three, which `update --proof` sets. Read the `verification` clause of each
+one of the others, which `update --proof` sets. Read the `verification` clause of each
 criterion the order owns, and ask what would settle it.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
@@ -596,6 +616,11 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - an `observe` order declaring a test needs a `remove-test` call for it. One naming no
     surface needs `update --surface <id>`. One with no done-when row needs an `add-done-when`
     call;
+  - a `confirm` order declaring a test needs a `remove-test` call for it, or `--proof tests` if
+    the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
+    row is a sentence the person confirms at review, so write it as one thing they can check. A
+    `confirm` order on a task whose contract does not say it has no automated tests needs
+    `update --proof tests` and its tests;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The
@@ -620,6 +645,9 @@ and tells the person to finish design, so leaving one open only moves the stop t
 expensive place.
 
 ## Critique the design
+
+`check` printed `critique: skipped, light run`: dispatch no critic, and go to the close. The check
+logged the skip.
 
 Once the check comes back clean, and before closing, have three readers who were not in this
 conversation read the orders. The check counted ids; it read no sentence. Dispatch

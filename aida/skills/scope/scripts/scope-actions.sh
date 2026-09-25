@@ -19,6 +19,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   scope-actions.sh [--run-mode <interactive|autonomous>] init           <task_folder>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] set-goal       <task_folder> \
 #                      --goal <text> [--expected-result <text>]
+#   scope-actions.sh [--run-mode <interactive|autonomous>] set-tests      <task_folder> \
+#                      --automated <yes|no>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] add            <task_folder> \
 #                      --text <text> --verification <text> --verified-by <machine|person> \
 #                      [--author <owner|designer>]
@@ -54,7 +56,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # not one this script repairs.
 #
 # alignment.json's top level carries schemaVersion, goal, expectedResult, criteria, nonGoals,
-# nextCriterionId, nextNonGoalId and decidedWithoutAPerson, and nothing else. An id, once minted,
+# nextCriterionId, nextNonGoalId and decidedWithoutAPerson, and nothing else, apart from two
+# optional fields: pluginVersion, stamped at the close, and automatedTests, which `set-tests`
+# writes, and `init` on a light task. An id, once minted,
 # must never be reused after its criterion or non-goal is removed (ideal/scope.md, "Why the id
 # exists"). The highest id ever issued, in each of the two id spaces, is kept as two integer
 # fields on this same file, nextCriterionId and nextNonGoalId, rather than in a second file: a
@@ -73,7 +77,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # it calls task-actions.sh start through mark_task_in_progress, and that commits. set-goal, add,
 # add-non-goal, update, remove, set-mechanism and record-decision are mid-conversation edits
 # inside one still-open contract, closer to a document being drafted than to a stage finishing,
-# so they commit nothing. The close is one action per branch, run last, after the contract is
+# so they commit nothing. set-tests commits nothing either. Research runs it before its own close,
+# which commits the task folder. The close is one action per branch, run last, after the contract is
 # frozen: `approve` when a person said the contract is right, `distill` in the autonomous branch
 # where nobody did. Both commit the task folder through commit_stage_close before they read the
 # sidecar; the goal is the commit's reason.
@@ -96,8 +101,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      match either id format, or that is already present when `add` tries to mint it; a given
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
-#      autonomous; a missing or unusable nextCriterionId or nextNonGoalId; the plugin root could
-#      not be resolved; or a write that failed.
+#      autonomous; a given --automated that is not yes or no, or yes on a light task; a missing
+#      or unusable nextCriterionId or nextNonGoalId; the plugin root could not be resolved; or a
+#      write that failed.
 #   4  a script this action calls ran and failed. `render`, and every action that writes
 #      alignment.json, call alignment-render.sh; that script's own stderr is the answer, printed
 #      here rather than duplicated. For `approve` and `distill`, the sidecar exists but fails
@@ -161,6 +167,7 @@ usage() {
 usage: scope-actions.sh read            <task_folder>
        scope-actions.sh init            <task_folder>
        scope-actions.sh set-goal        <task_folder> --goal <text> [--expected-result <text>]
+       scope-actions.sh set-tests       <task_folder> --automated <yes|no>
        scope-actions.sh add             <task_folder> --text <text> --verification <text> \
                                          --verified-by <machine|person> [--author <owner|designer>]
        scope-actions.sh add-non-goal    <task_folder> --text <text>
@@ -241,7 +248,8 @@ id_kind() {
 }
 
 # The one summary printer: the contract's path, whether the goal is set, the ids in each space,
-# and how many decisions an unattended run recorded. Never a text field.
+# how many decisions an unattended run recorded, and whether the task has automated tests. Never a
+# text field.
 contract_summary() {
   echo "contract-file: $ALIGNMENT_FILE"
   jq -r '
@@ -251,6 +259,7 @@ contract_summary() {
     "non-goals: " + ([(.nonGoals // [])[] | .id] | join(" ")),
     "decided-without-a-person: " + ((.decidedWithoutAPerson // []) | length | tostring)' \
     "$ALIGNMENT_FILE"
+  echo "automated-tests: $(automated_tests "$TASK_PATH")"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -295,6 +304,12 @@ do_init() {
   local empty
   empty="$(jq -n '{schemaVersion: 1, goal: "", expectedResult: "", criteria: [], nonGoals: [],
                    nextCriterionId: 1, nextNonGoalId: 1, decidedWithoutAPerson: []}')"
+  # A light task has no automated tests, so each code order takes the confirm proof (gap row 197).
+  if task_is_light "$TASK_PATH"; then
+    empty="$(printf '%s' "$empty" | jq '.automatedTests = false')"
+    log_compromise "$TASK_PATH" scope "tests for each work order, and the checker that confirms each test row" \
+      "write and freeze tests for each code order before its code, and have a checker confirm each row"
+  fi
   write_atomic "$ALIGNMENT_FILE" "$empty"
 
   echo "INITIALIZED: $ALIGNMENT_FILE"
@@ -337,6 +352,44 @@ do_set_goal() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
 
   echo "GOAL SET"
+  contract_summary
+  render_alignment
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# set-tests: records whether this task has automated tests, as the boolean automatedTests. The
+# person answers it here and signs it at `approve` (gap row 196). Research changes the answer
+# through this same action, so the field keeps one writer.
+# ------------------------------------------------------------------------------------------------
+
+do_set_tests() {
+  local automated=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --automated)
+        need_value "set-tests" "--automated" "$#" "${2:-}"
+        automated="$2"; shift 2 ;;
+      *) die3 "set-tests: unrecognized argument: $1" ;;
+    esac
+  done
+  local value
+  case "$automated" in
+    yes) value=true ;;
+    no)  value=false ;;
+    *) die3 "set-tests: --automated must be yes or no, got '${automated:-<nothing>}'" ;;
+  esac
+
+  require_alignment_exists "set-tests"
+  [ "$value" = "false" ] || ! task_is_light "$TASK_PATH" \
+    || die3 "set-tests: a light task has no automated tests. Set the task interactive or autonomous first"
+
+  local updated
+  updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \
+    || die3 "set-tests: could not update $ALIGNMENT_FILE"
+  write_atomic "$ALIGNMENT_FILE" "$updated"
+
+  echo "TESTS SET"
   contract_summary
   render_alignment
   exit 0
@@ -797,6 +850,7 @@ case "$ACTION" in
   read)             do_read             "$@" ;;
   init)             do_init             "$@" ;;
   set-goal)         do_set_goal         "$@" ;;
+  set-tests)        do_set_tests        "$@" ;;
   add)              do_add              "$@" ;;
   add-non-goal)     do_add_non_goal     "$@" ;;
   update)           do_update           "$@" ;;

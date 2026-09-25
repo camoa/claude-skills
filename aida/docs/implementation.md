@@ -87,8 +87,8 @@ And two frameworks whose review recipes each command the same tool, coding stand
 gives one question two answers, and AIDA refuses rather than choose. The same refusal returns at
 every later step that runs the tools. The way past is one check recipe for the task, or two tasks.
 
-A task whose every order is proved by its record runs no test. Its conditions and its smoke
-command are recorded as not needed and never run. No suite baseline is taken, and the build
+A task whose every order is proved by its record, or confirmed by you, runs no test. Its
+conditions and its smoke command are recorded as not needed and never run. No suite baseline is taken, and the build
 goes on. The review tools still run over any file an order owns under the code path. One order
 proved by a test, by a configuration gate or by a look at a page brings the whole harness back.
 That one order runs the suite.
@@ -298,6 +298,17 @@ own check. Every row met is met; one unmet row stops the attempt the way a faili
 The judge on the record is a model. When the order closes, its criteria are recorded as judged
 by a model. The count of rows a model judged includes them. Completion puts each such criterion
 to you to accept.
+
+## A code order on a task with no automated tests
+
+A work order that builds code on a task with no automated tests has `confirm` as its proof kind.
+No test author is dispatched and no row goes to the checker. The order freezes with no test.
+The implementer builds it and one reviewer reads the diff against the contract. The first of the
+eight checks reads deferred, because nothing here can judge the work, and it passes on that one
+answer. The suite reads undeclared. The coding standards, static analysis and security tools
+still run, where the project has them. When the task finishes, each done-when sentence becomes
+a checklist row under the criteria the order owns, or serves when it owns none. You answer those
+criteria at review.
 
 ## Writing the code
 

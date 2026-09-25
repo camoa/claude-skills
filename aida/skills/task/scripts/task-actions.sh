@@ -42,7 +42,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    --child <child-id> --goal <goal> [--criterion <text>]...
 #                    [--child <child-id> --goal <goal> [--criterion <text>]...]
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-run-mode --project <path> \
-#                    <task-id> <autonomous|interactive> [--stage <stage>]...
+#                    <task-id> <autonomous|light|interactive> [--stage <stage>]...
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-budget --project <path> \
 #                    <task-id> [--dispatches <n>] [--minutes <n>]
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
@@ -119,7 +119,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh split    --project <path> <parent-task-id>
                                  --child <child-id> --goal <goal> [--criterion <text>]...
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
-       task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
+       task-actions.sh set-run-mode --project <path> <task-id> <autonomous|light|interactive>
                                  [--stage <scope|research|design|implement|review|completion>]...
        task-actions.sh set-budget --project <path> <task-id> [--dispatches <n>] [--minutes <n>]
        task-actions.sh save     --project <path> <task-id> -- <text...>
@@ -882,10 +882,10 @@ do_split() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# set-run-mode: written only when a person asks for autonomous. Nothing here asks. `--stage`,
-# repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a person who
-# wants the build alone unattended keeps their hand on scope and review. No `--stage` covers
-# every stage, as before the field existed.
+# set-run-mode: written only when a person asks for autonomous or light. Nothing here asks.
+# `--stage`, repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a
+# person who wants the build alone unattended keeps their hand on scope and review. No `--stage`
+# covers every stage, as before the field existed.
 # ------------------------------------------------------------------------------------------------
 
 do_set_run_mode() {
@@ -916,11 +916,11 @@ do_set_run_mode() {
   project_path="$_resolved_project"
   [ -n "$id" ] || die3 "set-run-mode: a task id is required"
   case "$value" in
-    autonomous|interactive) : ;;
-    *) die3 "set-run-mode: must be autonomous or interactive, got: $value" ;;
+    autonomous|interactive|light) : ;;
+    *) die3 "set-run-mode: must be autonomous, light or interactive, got: $value" ;;
   esac
   [ "$value" = "autonomous" ] || [ "$stages_json" = "[]" ] \
-    || die3 "set-run-mode: --stage goes with autonomous only. interactive removes the mode and the stages together."
+    || die3 "set-run-mode: --stage goes with autonomous only. interactive removes the mode and the stages together, and light covers every stage."
 
   local task_dir task_json
   task_dir="$(task_dir_for "$project_path" "$id")"
@@ -929,11 +929,12 @@ do_set_run_mode() {
 
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
-  if [ "$value" = "autonomous" ]; then
+  if [ "$value" != "interactive" ]; then
     # An empty list is not written: absence already means every stage (task-schema.json,
-    # runModeStages), and a list from an earlier call is replaced, never merged.
-    jq --argjson stages "$stages_json" \
-      '.runMode = "autonomous" | if ($stages | length) > 0 then .runModeStages = $stages else del(.runModeStages) end' \
+    # runModeStages), and a list from an earlier call is replaced, never merged. Light takes no
+    # list, so it covers every stage.
+    jq --arg mode "$value" --argjson stages "$stages_json" \
+      '.runMode = $mode | if ($stages | length) > 0 then .runModeStages = $stages else del(.runModeStages) end' \
       "$task_json" > "$tmp" \
       || { rm -f "$tmp"; die3 "set-run-mode: could not read $task_json"; }
   else
@@ -957,6 +958,15 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}${stages_note}"
+  # Light keeps one script that walks the demo path in a browser. It is the project's end to end
+  # setup, which a person installs (gap row 197).
+  if [ "$value" = "light" ]; then
+    if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
+      echo "path-script: end to end is on. Review fails this task until the demo path is registered as one critical surface with /aida:surfaces."
+    else
+      echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
+    fi
+  fi
   task_summary "$task_json"
 }
 
@@ -1261,18 +1271,21 @@ run_recipe_capture() {
 # ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
 # keeps it. ENV_TREE: the worktree the recipe files go into. ENV_HEAD: its commit before the write.
 # ENV_DIRS: the folders this run made there for them. RF_WRITTEN_PATHS, from
-# scripts/lib/recipes.sh, holds the files it wrote.
+# scripts/lib/recipes.sh, holds the files it wrote, and RF_REPLACED_PATHS the earlier versions it
+# replaced, which RF_SAVED_IN keeps until the temporary folders go.
 ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 
 # Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
-# written this run, then each folder made for them, then the output file and every temporary path.
+# written this run, and puts back the earlier version of each file it replaced. Then it removes
+# each folder made for them, then the output file and every temporary path.
 # It removes no folder that was there before. A file whose content in HEAD differs from its content
 # in ENV_HEAD was committed by this run, so it stays, with its folders. The repository decides
 # this, not a flag set after the commit, so an interrupt inside a commit hook keeps it too. $1 is `quiet` on show's pass, which expects the
 # removal, and `report` elsewhere, where it says what it removed. It names each path it could not
 # remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
 environment_cleanup() {
-  local p left="" gone="" staged="" kept=""
+  local p left="" gone="" back="" staged="" kept="" written="" replaced="" dirs="" taken="" nl="
+"
   if [ -n "$ENV_TREE" ]; then
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -1281,24 +1294,26 @@ environment_cleanup() {
         kept="$kept $p"; continue
       fi
       # A failed commit leaves the file staged. Reset takes its index entry back to HEAD, which
-      # holds none for a file this run wrote because it was absent.
+      # holds none for a file this run wrote because it was absent, and the earlier version for a
+      # file it replaced.
       if git -C "$ENV_TREE" ls-files --cached --error-unmatch -- "$p" >/dev/null 2>&1; then
         git -C "$ENV_TREE" reset -q -- "$p" >/dev/null 2>&1 && staged="$staged $p"
       fi
-      rm -f "$ENV_TREE/$p" 2>/dev/null
-      if [ -e "$ENV_TREE/$p" ]; then left="$left $p"; else gone="$gone $p"; fi
+      case "$nl$RF_REPLACED_PATHS" in
+        *"$nl$p$nl"*) replaced="$replaced$p$nl" ;;
+        *) written="$written$p$nl" ;;
+      esac
     done <<ENV_CLEAN_FILES
-$RF_WRITTEN_PATHS
+$RF_WRITTEN_PATHS$RF_REPLACED_PATHS
 ENV_CLEAN_FILES
-    while IFS= read -r p; do
-      [ -n "$p" ] && [ -z "$kept" ] || continue
-      rmdir "$ENV_TREE/$p" 2>/dev/null || [ ! -d "$ENV_TREE/$p" ] || left="$left $p/"
-    done <<ENV_CLEAN_DIRS
-$ENV_DIRS
-ENV_CLEAN_DIRS
+    [ -n "$kept" ] || dirs="$ENV_DIRS"
+    taken="$(recipe_files_take_out "$ENV_TREE" "$RF_SAVED_IN" "$written" "$replaced" "$dirs")"
+    back="$(printf '%s\n' "$taken" | sed -n 1p)"; gone="$(printf '%s\n' "$taken" | sed -n 2p)"
+    left="$(printf '%s\n' "$taken" | sed -n 3p)"
   fi
   if [ "${1:-report}" != quiet ]; then
     [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2
+    [ -z "$back" ] || printf 'environment: put back the earlier version of the files this run replaced in %s:%s\n' "$ENV_TREE" "$back" >&2
     [ -z "$staged" ] || printf 'environment: and took them out of the index again:%s\n' "$staged" >&2
     [ -z "$kept" ] || printf 'environment: the commit %s holds the files this run wrote, so they stay:%s\n' \
       "$(git -C "$ENV_TREE" rev-parse --short HEAD)" "$kept" >&2
@@ -1309,23 +1324,8 @@ ENV_CLEAN_DIRS
   done <<ENV_CLEAN_TMP
 $ENV_TMP
 ENV_CLEAN_TMP
-  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
   [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
-}
-
-# Prints, deepest first, each folder under the worktree $1 that the `## Files` list needs and that
-# does not exist yet. A folder is listed once, and after every folder inside it.
-environment_new_dirs() {
-  local n rel dir tab; tab="$(printf '\t')"
-  while IFS="$tab" read -r n rel; do
-    [ -n "$n" ] || continue
-    dir="$(dirname -- "$rel")"
-    while [ "$dir" != "." ] && [ "$dir" != "/" ] && [ ! -d "$1/$dir" ]; do
-      printf '%s\n' "$dir"; dir="$(dirname -- "$dir")"
-    done
-  done <<ENV_NEW_DIRS | LC_ALL=C sort -ru
-$file_list
-ENV_NEW_DIRS
 }
 
 # The lines a failing check prints after its output. A remedy may say to commit, and the worktree
@@ -1360,10 +1360,11 @@ environment_branch_lines() {
   fi
 }
 
-# Writes the absent `## Files` blocks into the worktree $2 and runs each `## Preconditions` line
-# there, with the output in $3. The files come first, because the check is a script the recipe
-# ships. $1 is up or show. `show` passes "" for $3 to use a temporary file, and removes the files
-# after a pass, so it leaves the tree as it found it. `up` keeps them for its commit, and clears
+# Writes the absent `## Files` blocks into the worktree $2, replaces a file that holds an earlier
+# version's block, and runs each `## Preconditions` line there, with the output in $3. The files
+# come first, because the check is a script the recipe ships. $1 is up or show. `show` passes ""
+# for $3 to use a temporary file. After a pass it removes the files and puts back the earlier
+# versions, so it leaves the tree as it found it. `up` keeps them for its commit, and clears
 # the cleanup state once that commit is made. A line that runs and fails exits 3 with its output
 # and the branch lines. A line refused before it runs, for a token nothing fills or a shell
 # character, exits 3 without them, as `up` always has: `show` predicts `up`. The EXIT trap then
@@ -1375,10 +1376,10 @@ environment_check() {
   if [ -z "$outfile" ]; then outfile="$(mktemp)" || die3 "environment: could not create a temporary file"; fi
   ENV_OUT="$outfile"; ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
   : >"$outfile"
-  ENV_DIRS="$(environment_new_dirs "$wt")"
+  ENV_DIRS="$(recipe_files_new_dirs "$wt" "$file_list")"
   if [ "$sub" = up ]; then
     recipe_files_write environment "$file_list" "$wt" "$files_dir"
-    printf 'files: %s written, %s kept\n' "$RF_WRITTEN" "$RF_KEPT"
+    printf 'files: %s written, %s replaced, %s kept\n' "$RF_WRITTEN" "$RF_REPLACED" "$RF_KEPT"
   else
     recipe_files_write environment "$file_list" "$wt" "$files_dir" >/dev/null
   fi
@@ -1567,13 +1568,15 @@ TA_TOKEN_LIST
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
-  environment_check up "$wt" "$outfile"; rm -rf "$files_dir"
-  # Only the written files are staged and committed. A person's uncommitted or staged work beside
-  # them is never taken into this commit and never refuses it.
-  [ "$RF_WRITTEN" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
+  # The folder of blocks stays until environment_cleanup removes it, because it keeps the earlier
+  # versions a failed commit below puts back.
+  environment_check up "$wt" "$outfile"
+  # Only the written and replaced files are staged and committed. A person's uncommitted or staged
+  # work beside them is never taken into this commit and never refuses it.
+  [ "$((RF_WRITTEN + RF_REPLACED))" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
     "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
   # The files and the output file are kept from here. A failed commit above ran the EXIT trap first.
-  RF_WRITTEN_PATHS=""; ENV_DIRS=""; ENV_OUT=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"

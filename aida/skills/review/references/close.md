@@ -4,12 +4,15 @@ This step asks the one question a script cannot answer, decides check 1, and wri
 
 ## Ask the checklist rows, once
 
-`read` emits `checklists[]` whole, each row with the criterion it belongs to. Show each row
+`read` emits `checklists[]` whole, each row with the criterion it belongs to. A task with no
+automated tests adds a row for each done-when sentence of each order a person confirms. The
+row sits under each criterion that order owns, or serves when it owns none. Show each row
 **verbatim** from that output, and open no file yourself: this skill grants no Read rule, and a
 summary asks a different question than the row a person signed up to answer. Show every row in one
 pass, and ask for each one only once.
 
-The person answers met or unmet per row. Their answer becomes one flag below. Autonomous, there is
+The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
+below. Autonomous, there is
 nobody to ask: each such criterion reads unanswered, no row flag is accepted, and the task gets no
 sign off. A run with nobody present cannot sign off a task carrying one person verified criterion.
 
@@ -26,7 +29,8 @@ the row.
 
 ## Close
 
-Run, with one `--row` per criterion a person verified:
+Run, with one `--row` per criterion a person verified, and one per criterion that carries the
+done-when rows of an order proved by `confirm`:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet

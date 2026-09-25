@@ -28,6 +28,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order whose proof is observe declares no test either, names at least one surface, and
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
+#   - a work order whose proof is confirm declares no test either, and has at least one done-when
+#     row: its task has no automated tests, and a person confirms each row at review (gap row 196).
+#     Its task's contract says it has no automated tests. A contract answered yes after design, or
+#     a confirm set by hand on a task with tests, would build code with no test;
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
@@ -43,6 +47,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     through its own dependents (ideal/design.md, "An order that owns nothing is a supporting
 #     order": "it reaches a criterion through the orders that depend on it"); a chain that reaches
 #     no owner fails, and a chain that loops fails too;
+#   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
+#     dependsOn chain, so the skeleton is built first (gap row 197);
 #   - ownedFiles do not overlap between work orders, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
@@ -71,6 +77,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/design-guides-read-schema.json: the guides-read record's field list
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
+#   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -117,8 +124,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and that declares a test, an order whose proof is record and that declares a test, owns a
 #      file outside the project folder or under an ignored path, or has no done-when row, an
 #      order whose proof is observe and
-#      that declares a test, names no surface or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
-#      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
+#      that declares a test, names no surface or has no done-when row, an order whose proof is
+#      confirm and that declares a test, has no done-when row, or sits on a task whose contract
+#      does not say it has no automated tests, an order that owns nothing and reaches no owner, an
+#      order of a light task that does not come after wo1, a dependency cycle, two orders sharing
+#      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
+#      the JSON on stdout.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
 # otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -163,10 +174,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
-#                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record and observe orders
+#                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record, observe and confirm orders
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
-#                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record and observe orders
+#                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
+#                 confirmOrdersOnTaskWithTests: [ {id, path} ],
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
@@ -174,6 +186,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              unknownDependsOnIds: [ {path, id} ],
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
+#              ordersNotAfterSkeleton: [ id, ... ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
 #              globbedOwnedFiles: [ {id, path} ] },
 #     fileIssueCount, contentIssueCount,
@@ -255,6 +268,13 @@ source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHE
 [ -f "$PROOF_LIB" ] || die3 "cannot read the proof-kind library: $PROOF_LIB not found"
 # shellcheck source=/dev/null
 source "$PROOF_LIB" || die3 "the proof-kind library failed to load: $PROOF_LIB"
+
+# automated_tests, for the confirm-order list below. The one reader of the contract's answer.
+# task_is_light, for the skeleton list in the graph.
+TASK_HELPERS_LIB="$PLUGIN_ROOT/scripts/lib/task-helpers.sh"
+[ -f "$TASK_HELPERS_LIB" ] || die3 "cannot read the task-helper library: $TASK_HELPERS_LIB not found"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
 [ -f "$DESIGN_SCHEMA_FILE" ] || die3 "cannot read the design field list: $DESIGN_SCHEMA_FILE not found"
 jq empty "$DESIGN_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the design field list: $DESIGN_SCHEMA_FILE is not valid JSON"
@@ -553,6 +573,7 @@ RECORD_ORDERS_DECLARING_TESTS_JSON='[]'
 RECORD_ORDERS_OWNING_OUTSIDE_JSON='[]'
 RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON='[]'
 OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
+CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON='[]'
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
@@ -600,8 +621,9 @@ else
   # answers that per file, the way design-actions.sh asks it at add-owned-file. An order whose
   # proof is observe owes no test and needs a done-when row on the same two rules. A model
   # judges each row against what its surfaces render after the build (live-run row 104), so it
-  # needs a surface as well. The two shared rules keep the record lists, with the proof on each
-  # entry.
+  # needs a surface as well. An order whose proof is confirm owes no test and needs a done-when
+  # row on the same two rules: a person confirms each row at review (gap row 196). The two shared
+  # rules keep the record lists, with the proof on each entry.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
     | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests")
@@ -612,7 +634,7 @@ else
     [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
   ')"
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.slot == "done-when" or .slot == "observed") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
+    [ $orders[] | select(.slot == "done-when" or .slot == "observed" or .slot == "confirm-at-review") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
   RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
@@ -629,17 +651,23 @@ else
     $orders[] | .id as $id | select(.range == "project") | (.ownedFiles // [])[]
       | select(startswith($p)) | [$id, .] | @tsv')
   RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ $orders[] | select(.slot == "done-when" or .slot == "observed") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
+    [ $orders[] | select(.slot == "done-when" or .slot == "observed" or .slot == "confirm-at-review") | select(.doneWhenCount == 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "observed") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
+  ')"
+  # An order a person confirms is built with no test. That is only right on a task whose contract
+  # says it has no automated tests (gap row 196). The answer can move to yes after design, and a
+  # confirm can be set by hand on a task with tests. Either way the order needs a test.
+  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
+    [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | {id: .id, path: .path} ]
   ')"
 
   # The same question asked the other way (live-run row 145). The list above asks whether an order
   # owning a machine-verified criterion declares a test. This one asks whether an order left at the
   # default proof owns one at all. The finding is the disagreement itself, so a declared test is
   # not part of it: an order owning only person-verified criteria is not a test order whether it
-  # declared a test or not. Only a `tests` order is asked. A gate, record or observe order
+  # declared a test or not. Only a `tests` order is asked. A gate, record, observe or confirm order
   # declaring a test is already named on its own list, with its own repair. An order owning nothing
   # is not asked either, because its owned criteria imply no proof at all, so nothing disagrees
   # with the proof it declares. A supporting order that builds shared code is exactly that case.
@@ -683,7 +711,7 @@ else
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
-  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length)')"
+  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -726,6 +754,7 @@ CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + COVERAGE_ISSUE_COUNT + DUPLICATE_CO
 UNKNOWN_DEPENDS_ON_IDS_JSON='[]'
 DEPENDENCY_CYCLES_JSON='[]'
 ORPHAN_SUPPORT_ORDERS_JSON='[]'
+ORDERS_NOT_AFTER_SKELETON_JSON='[]'
 OVERLAPPING_OWNED_FILES_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
 GRAPH_ISSUE_COUNT=0
@@ -743,7 +772,11 @@ else
   # The graph algorithm below walks only edges between known ids; an id named in dependsOn but
   # matching no real work order is reported above and simply has no edge here, which is correct:
   # it points nowhere for a cycle or a reachability chain to walk through.
-  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" '
+  # A light task builds the walking skeleton first: every order but wo1 reaches wo1 through its
+  # dependsOn chain (gap row 197). Any other task leaves the list empty.
+  LIGHT_TASK=false
+  task_is_light "$TASK_PATH" && LIGHT_TASK=true
+  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" --argjson light "$LIGHT_TASK" '
     def reach($adj; $start):
       def go($frontier; $visited):
         if ($frontier | length) == 0 then $visited
@@ -767,11 +800,14 @@ else
         orphans: [ $orders[] | select((.criteriaOwned // []) | length == 0)
           | .id as $x
           | select( ( ([$x] + ($revClosure[$x] // [])) | any(. as $y | $owners | index($y) != null) ) | not )
-          | $x ]
+          | $x ],
+        notAfterSkeleton: (if $light then [ $ids[] | . as $x | select($x != "wo1")
+          | select(($fwdClosure[$x] // []) | index("wo1") == null) ] else [] end)
       }
   ')"
   DEPENDENCY_CYCLES_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.cycles')"
   ORPHAN_SUPPORT_ORDERS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.orphans')"
+  ORDERS_NOT_AFTER_SKELETON_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.notAfterSkeleton')"
 
   # Overlap on the declared strings only, never a glob intersection (ideal/design.md, "What a
   # work order holds"): two orders sharing one identical entry in ownedFiles.
@@ -806,7 +842,8 @@ else
   ORPHAN_COUNT="$(printf '%s' "$ORPHAN_SUPPORT_ORDERS_JSON" | jq 'length')"
   OVERLAP_COUNT="$(printf '%s' "$OVERLAPPING_OWNED_FILES_JSON" | jq 'length')"
   GLOBBED_COUNT="$(printf '%s' "$GLOBBED_OWNED_FILES_JSON" | jq 'length')"
-  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT))
+  SKELETON_COUNT="$(printf '%s' "$ORDERS_NOT_AFTER_SKELETON_JSON" | jq 'length')"
+  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT + SKELETON_COUNT))
   GRAPH_NOTE="ran: $(printf '%s' "$WORK_ORDERS_JSON" | jq 'length') work order(s) in the graph"
 fi
 
@@ -873,6 +910,7 @@ jq -n \
   --argjson recordOrdersOwningOutsideProjectFolder "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" \
   --argjson recordOrdersWithNoDoneWhen "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
+  --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
   --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
@@ -881,6 +919,7 @@ jq -n \
   --argjson unknownDependsOnIds "$UNKNOWN_DEPENDS_ON_IDS_JSON" \
   --argjson dependencyCycles "$DEPENDENCY_CYCLES_JSON" \
   --argjson orphanSupportOrders "$ORPHAN_SUPPORT_ORDERS_JSON" \
+  --argjson ordersNotAfterSkeleton "$ORDERS_NOT_AFTER_SKELETON_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
@@ -910,6 +949,7 @@ jq -n \
       recordOrdersOwningOutsideProjectFolder: $recordOrdersOwningOutsideProjectFolder,
       recordOrdersWithNoDoneWhen: $recordOrdersWithNoDoneWhen,
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
+      confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
       testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds
@@ -920,6 +960,7 @@ jq -n \
       unknownDependsOnIds: $unknownDependsOnIds,
       dependencyCycles: $dependencyCycles,
       orphanSupportOrders: $orphanSupportOrders,
+      ordersNotAfterSkeleton: $ordersNotAfterSkeleton,
       overlappingOwnedFiles: $overlappingOwnedFiles,
       globbedOwnedFiles: $globbedOwnedFiles
     },
