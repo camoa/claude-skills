@@ -51,7 +51,7 @@ Six independent routing modes over the published catalogs. The caller decides th
 | Guide search | `llms.txt` | An atomic, mechanics-level guide for one pattern or decision. |
 | Recipe search | `agentic-recipes.txt` | A prescriptive, goal-oriented sequence of guides and plays for one whole capability, plus a verifier. |
 | Process-recipe lookup | `process-recipes.txt` | The framework-specific method for one lifecycle phase, resolved by `(phase, framework)`. Invoked only by `ai-dev-assistant`, never during free task routing. |
-| Tooling lookup | `tooling-recipes.txt` | How to install and run one tool for one framework, resolved by recipe name. Invoked only by `aida`'s tool skill and design stage, never during free task routing. |
+| Tooling lookup | `tooling-recipes.txt` | How to install and run one tool for one framework, resolved by recipe name. Invoked only by `aida`'s design stage, never during free task routing. |
 
 A guide-search miss on a near-duplicate topic is the case the metadata exists to prevent:
 

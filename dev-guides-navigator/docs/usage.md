@@ -11,7 +11,7 @@ It is a routing and caching layer over a published catalog of guides, so an AI s
 - **Process-recipe lookup** (`process-recipes.txt`): resolved by `(phase, framework)`, called only by `ai-dev-assistant` at a lifecycle phase boundary, never during free task routing. It returns a store path to the body, not the body itself, so the caller reads the file rather than the body streaming into the conversation.
 - **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`): reports what covers a topic and opens nothing, for a caller that must name what exists without paying to read it.
 - **Playbook lookup** (`llms.txt`, then a topic's `plays.json`): resolved by playbook set id, called only by `ai-dev-assistant`, at research and when a project subscribes to a set. Like process-recipe lookup, it returns a store path and a report, never the body.
-- **Tooling lookup** (`tooling-recipes.txt`): resolved by recipe name, called only by `aida`'s tool skill and design stage, never during free task routing. It opens a tooling recipe the way recipe search opens an agentic one, and returns a store path, never the body.
+- **Tooling lookup** (`tooling-recipes.txt`): resolved by recipe name, called only by `aida`'s design stage, never during free task routing. It opens a tooling recipe the way recipe search opens an agentic one, and returns a store path, never the body.
 
 Each mode runs as one call to `scripts/dev-guides-lookup.sh <mode> [args]`, so the skill runs one plain command per step. A session isolated in a git worktree refuses a compound shell block it cannot prove stays inside the worktree. Every `ai-dev-assistant` stage runs in one. The script prints the mode's JSON report or a store path, never a body.
 

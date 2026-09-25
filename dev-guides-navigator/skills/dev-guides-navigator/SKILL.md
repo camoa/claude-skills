@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.14.0
+version: 0.15.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 disallowed-tools: WebFetch
 user-invocable: true
@@ -20,7 +20,7 @@ The navigator exposes **six independent routing modes** over the published catal
 - **Process-recipe lookup** (`process-recipes.txt`) — resolved by `ai-dev-assistant` at lifecycle phase boundaries, keyed by `(phase, framework)`. See **Process-Recipe Lookup** below. Never matched during free task routing.
 - **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`) — report what covers a topic, and open nothing. See **Identify** below.
 - **Playbook lookup** (`llms.txt`, then `<topic>/plays.json`): resolved by `ai-dev-assistant` at research, keyed by a playbook set id. See **Playbook Lookup** below. Never matched during free task routing.
-- **Tooling lookup** (`tooling-recipes.txt`): resolved by `aida`'s tool skill and design stage, keyed by name. See **Tooling Lookup** below. Never matched during free task routing.
+- **Tooling lookup** (`tooling-recipes.txt`): resolved by `aida`'s design stage, keyed by name. See **Tooling Lookup** below. Never matched during free task routing.
 
 **The six are two groups.** Guide search and recipe search resolve a body and apply it in place, because applying a guide means reading it. Process-recipe lookup, identify, playbook lookup and tooling lookup return a structured report and never stream a body. A caller that must name what exists without paying to read it wants the second group.
 
@@ -480,7 +480,7 @@ reads the file at `body_path`.
 
 ## Tooling Lookup
 
-**Invocation context:** `aida`'s tool skill and design stage call this mode with a tooling
+**Invocation context:** `aida`'s design stage calls this mode with a tooling
 recipe name that identify reported. It is never matched during free task routing. A tooling
 recipe says how to install and run one tool for one framework.
 

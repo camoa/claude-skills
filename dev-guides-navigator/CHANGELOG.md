@@ -7,14 +7,13 @@
   recipe the way `recipe --name` opens an agentic one. It resolves the name in the cached
   `tooling-recipes.txt`, serves or fetches the body by the line's sha8, and stores it through
   `blob-put`, which checks the sha. It prints `body_path:`. A miss prints the recipe mode's
-  `result: not-found` reasons. `aida`'s tool skill and design stage call it by name; it is
+  `result: not-found` reasons. `aida`'s design stage calls it by name; it is
   never matched during free task routing. Identify could name a tooling recipe but no mode
   could open one, so a caller fetched and stored the body by hand.
 
 ### Changed
 - `recipe --name` and `tooling --name` share one function, `body_by_name`, with the index and
-  the lockfile class as parameters. `recipe --name` now rebuilds the legacy compat shim after
-  every call, not only after a new fetch. The rebuild is idempotent.
+  the lockfile class as parameters.
 
 ### Notes
 - The `lock-set` class list gains `tooling_recipes`; nothing else in the kernel changed.
