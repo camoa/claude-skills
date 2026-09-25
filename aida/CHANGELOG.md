@@ -4,6 +4,61 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-beta.26] - 2026-09-25
+
+Two rows, both design changes the owner asked for. A task can say it has no
+automated tests, and a light run mode builds fast and logs what it skipped.
+
+### Added
+
+- Scope asks, once per task, whether the task has automated tests. The answer
+  is stored in `alignment.json` and signed with the scope record. Only
+  `scope-actions.sh set-tests` writes it. Research can reopen it.
+- A fifth proof kind, `confirm`. On a task with no automated tests, design
+  gives it to each code order. The order gets an implementer and a reviewer
+  only. The project's static checks still run, no suite runs, and no test
+  runner is installed. The person confirms each done-when sentence at review.
+- The design check refuses a `confirm` order on a task that has tests. The
+  repair is `update --proof tests`.
+- A light run mode, `set-run-mode <task> light`. It runs unattended on the
+  autonomous machinery. It skips the outward web search, the design critique,
+  tests for each order, visual regression, and fix rounds after the first.
+- Every light skip is written by the code that makes it to `COMPROMISES.md`
+  in the code repository. Each row names the stage, what was skipped, and what
+  a normal run would have done. A line marked `AIDA-FAKE:` is logged when its
+  order closes. A later normal task takes the log as its scope.
+- On a light task, the first work order is the walking skeleton, and every
+  other order depends on it.
+- On a light task, review fails until one critical end-to-end surface walks
+  the demo path. The remedy is `/aida:surfaces e2e`.
+
+### Unchanged
+
+- Interactive and autonomous tasks behave as before. Every light rule sits
+  behind one test, `task_is_light`. A task with tests keeps the `tests` proof.
+  The one visible change is the new scope question.
+- A ceiling set with `set-budget` still halts a light run.
+
+### Checks
+
+Sixty-two fixtures, 5,580 rows, pass under bash and under zsh on the merged
+branch, every run exit 0. The repository's specs pass. One older fixture
+expected a message this release changed on purpose, and now expects the new.
+
+### Known limits
+
+- A light task is never signed off unattended. Its confirmed criteria wait
+  for a person at review.
+- An order that halts when its one fix round's own checks fail, and then
+  closes with no second round, is refused at close. The halt after
+  verification was walked and resumes cleanly.
+- A light task with no order named `wo1` has every order flagged.
+- A halted order can log one skip twice, in two wordings.
+- The tool skill's check and research's search for a test runner are skill
+  text. No script enforces them.
+- Changing the answer to no automated tests after orders own files leaves
+  those orders on their proof until `update --proof`.
+
 ## [6.0.0-beta.25] - 2026-09-24
 
 Twenty-three rows, and one design change the owner asked for while it
