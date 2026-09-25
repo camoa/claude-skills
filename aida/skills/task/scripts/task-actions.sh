@@ -1284,7 +1284,7 @@ ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 # removal, and `report` elsewhere, where it says what it removed. It names each path it could not
 # remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
 environment_cleanup() {
-  local p left="" gone="" back="" staged="" kept="" written="" replaced="" dirs="" nl="
+  local p left="" gone="" back="" staged="" kept="" written="" replaced="" dirs="" taken="" nl="
 "
   if [ -n "$ENV_TREE" ]; then
     while IFS= read -r p; do
@@ -1307,8 +1307,9 @@ environment_cleanup() {
 $RF_WRITTEN_PATHS$RF_REPLACED_PATHS
 ENV_CLEAN_FILES
     [ -n "$kept" ] || dirs="$ENV_DIRS"
-    recipe_files_take_out "$ENV_TREE" "$RF_SAVED_IN" "$written" "$replaced" "$dirs"
-    gone="$RF_GONE"; back="$RF_BACK"; left="$RF_LEFT"
+    taken="$(recipe_files_take_out "$ENV_TREE" "$RF_SAVED_IN" "$written" "$replaced" "$dirs")"
+    back="$(printf '%s\n' "$taken" | sed -n 1p)"; gone="$(printf '%s\n' "$taken" | sed -n 2p)"
+    left="$(printf '%s\n' "$taken" | sed -n 3p)"
   fi
   if [ "${1:-report}" != quiet ]; then
     [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2

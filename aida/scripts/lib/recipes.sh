@@ -82,9 +82,8 @@
 #   recipe_files_write <who> <list> <tree> <dir>  writes the absent files and replaces the earlier
 #                                             versions; sets RF_WRITTEN, RF_KEPT, RF_REPLACED,
 #                                             RF_WRITTEN_PATHS, RF_REPLACED_PATHS, RF_SAVED_IN
-#   recipe_files_put_back <tree> <saved> <paths>  copies each replaced file back from the saved folder
-#   recipe_files_take_out <tree> <saved> <written> <replaced> <dirs>  removes, puts back and
-#                                             removes the empty folders; sets RF_GONE, RF_BACK, RF_LEFT
+#   recipe_files_take_out <tree> <saved> <written> <replaced> <dirs>  puts back, removes and
+#                                             removes the empty folders; prints what it did
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
 #
 # What this library takes from its caller, and never defines itself:
@@ -1550,7 +1549,7 @@ RF_EARLIER_LIST
 }
 
 # Set by the two functions below, and read by the callers' cleanup, which may run before either.
-RF_EARLIER=""; RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_SAVED_IN=""; RF_GONE=""; RF_BACK=""; RF_LEFT=""
+RF_EARLIER=""; RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_SAVED_IN=""
 
 # Refuses at 3 a file the recipe $2 declares that sits in $4 with other content, or that names a
 # path outside the tree. $1 the action, $3 the `<n><TAB><path>` list recipe_files_into printed,
@@ -1622,48 +1621,38 @@ $list
 RF_FILES
 }
 
-# Copies each of the paths $3, one per line, back into the tree $1 from the saved folder $2, which
-# recipe_files_write named RF_SAVED_IN. Returns 1 when a copy fails, after trying every path.
-recipe_files_put_back() {
-  local rel rc=0
-  while IFS= read -r rel; do
-    [ -n "$rel" ] || continue
-    cp "$2/$rel" "$1/$rel" 2>/dev/null || rc=1
-  done <<RF_PUT_BACK
-$3
-RF_PUT_BACK
-  return "$rc"
-}
-
 # Takes the recipe files a run wrote back out of the tree $1. It puts back each path of $4 from the
 # saved folder $2, removes each path of $3, then removes each folder of $5 that is empty, deepest
-# first. Each list holds one path per line, and a path may appear twice. Sets RF_BACK and RF_GONE
-# to the paths it put back and removed, and RF_LEFT to what is still there, each led by a space.
-# A caller that keeps a file passes neither it nor its folders.
+# first. Each list holds one path per line, and a path may appear twice. A caller that keeps a file
+# passes neither it nor its folders. It prints three lines: the paths it put back, the paths it
+# removed, and what is still there, each path led by a space.
+# Both callers run it from an EXIT trap, and inside `$(...)`. After an `exit` inside a function,
+# zsh ends the trap when any function the trap calls returns, so the caller reads the printed lines
+# and this function calls no other function.
 recipe_files_take_out() {
-  local p
-  RF_GONE=""; RF_BACK=""; RF_LEFT=""
+  local p back="" gone="" left=""
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    case "$RF_BACK $RF_LEFT " in *" $p "*) continue ;; esac
-    if recipe_files_put_back "$1" "$2" "$p"; then RF_BACK="$RF_BACK $p"; else RF_LEFT="$RF_LEFT $p"; fi
+    case "$back $left " in *" $p "*) continue ;; esac
+    if cp "$2/$p" "$1/$p" 2>/dev/null; then back="$back $p"; else left="$left $p"; fi
   done <<RF_TAKE_BACK
 $4
 RF_TAKE_BACK
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    case "$RF_GONE $RF_LEFT " in *" $p "*) continue ;; esac
+    case "$gone $left " in *" $p "*) continue ;; esac
     rm -f "$1/$p" 2>/dev/null
-    if [ -e "$1/$p" ]; then RF_LEFT="$RF_LEFT $p"; else RF_GONE="$RF_GONE $p"; fi
+    if [ -e "$1/$p" ]; then left="$left $p"; else gone="$gone $p"; fi
   done <<RF_TAKE_FILES
 $3
 RF_TAKE_FILES
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    rmdir "$1/$p" 2>/dev/null || [ ! -d "$1/$p" ] || RF_LEFT="$RF_LEFT $p/"
+    rmdir "$1/$p" 2>/dev/null || [ ! -d "$1/$p" ] || left="$left $p/"
   done <<RF_TAKE_DIRS
 $(printf '%s\n' "$5" | LC_ALL=C sort -ru)
 RF_TAKE_DIRS
+  printf '%s\n%s\n%s\n' "$back" "$gone" "$left"
 }
 
 # Commits everything the action wrote in the tree $1, printing `committed: <sha>`; prints

@@ -5778,10 +5778,11 @@ BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 # leaves that recipe's paths there alone. It is safe to run twice. A path it could not take out
 # is named, and the tree is then not what it was.
 br_verify_files_remove() {
+  local left=""
   if [ -n "$BRV_TREE" ]; then
-    recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
-      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS"
-    [ -z "$RF_LEFT" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$RF_LEFT" >&2
+    left="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS" | sed -n 3p)"
+    [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
   BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
