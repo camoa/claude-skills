@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dev-guides-lookup.sh — the navigator's five lookup modes, one script call each.
+# dev-guides-lookup.sh — the navigator's six lookup modes, one script call each.
 #
 # The skill body used to give each mode as an inline compound shell block. A
 # Claude Code session isolated in a git worktree refuses a compound command it
@@ -16,6 +16,7 @@
 #   dev-guides-lookup.sh process-recipe <phase> <framework>  # one JSON report
 #   dev-guides-lookup.sh identify <words...> [--framework <fw>]        # one JSON report
 #   dev-guides-lookup.sh playbook <set-id>                   # one JSON report
+#   dev-guides-lookup.sh tooling --name <name>               # a tooling recipe body's store path
 #
 # Output: `key: value` lines and paths, or the mode's JSON report. A guide or
 # recipe body is not printed; the caller reads the file at body_path. Two
@@ -51,6 +52,7 @@ Usage:
   dev-guides-lookup.sh process-recipe <phase> <framework>
   dev-guides-lookup.sh identify <words...> [--framework <fw>]
   dev-guides-lookup.sh playbook <set-id>
+  dev-guides-lookup.sh tooling --name <name>
 USAGE
   exit 2
 }
@@ -89,6 +91,51 @@ candidate_lines() {
       fi
     done
   done
+}
+
+# body_by_name <index-name> <lock-class> <name>: recipe search step 3, and the tooling
+# mode. Resolves <name> in the cached index, serves or fetches the body by the line's
+# sha8, and records the footprint under <lock-class>. Exit 2 on a fetch or store failure.
+body_by_name() {
+  INDEX_TEXT=$("$STORE_SH" index-content "$1") || {
+    printf 'result: not-found\n'
+    printf 'reason: no index cached\n'
+    return 0
+  }
+  MATCH_LINE=$(printf '%s\n' "$INDEX_TEXT" | grep -F -- "- ${3} [" | head -n 1)
+  if [ -z "$MATCH_LINE" ]; then
+    printf 'result: not-found\n'
+    printf 'reason: no recipe named %s; fall back to guide search\n' "$3"
+    return 0
+  fi
+  SHA8=$(printf '%s' "$MATCH_LINE" | sed 's/.*sha:\([^)]*\).*/\1/')
+  SITE_URL=$(printf '%s' "$MATCH_LINE" | awk -F' — ' '{print $NF}' | tr -d '\n\r')
+  printf 'name: %s\n' "$3"
+  printf 'sha: %s\n' "$SHA8"
+  if "$STORE_SH" blob-get "$SHA8" >/dev/null 2>&1; then
+    printf 'cached: true\n'
+    printf 'body_path: %s\n' "${STORE_ROOT}/blobs/${SHA8}"
+    return 0
+  fi
+  RAW_URL=$(raw_url_of "$SITE_URL") || {
+    printf 'result: not-found\n'
+    printf 'reason: refusing non-canonical body URL\n'
+    return 0
+  }
+  TMP=$(mktemp)
+  if ! curl -fsSL -o "$TMP" "$RAW_URL" 2>/dev/null; then
+    rm -f "$TMP"
+    printf 'status: error\n'
+    printf 'detail: could not fetch %s\n' "$RAW_URL"
+    exit 2
+  fi
+  "$STORE_SH" blob-put "$SHA8" "$TMP" >/dev/null || { rm -f "$TMP"; exit 2; }
+  rm -f "$TMP"
+  MEM_DIR=$(mem_dir)
+  mkdir -p "$MEM_DIR"
+  "$STORE_SH" lock-set "$MEM_DIR" "$2" "$3" "\"${SHA8}\"" >/dev/null
+  printf 'cached: false\n'
+  printf 'body_path: %s\n' "${STORE_ROOT}/blobs/${SHA8}"
 }
 
 CMD="${1:-}"
@@ -244,46 +291,18 @@ recipe)
   fi
 
   # Step 3: the body, downloaded once per content version.
-  INDEX_TEXT=$("$STORE_SH" index-content agentic-recipes) || {
-    printf 'result: not-found\n'
-    printf 'reason: no index cached\n'
-    exit 0
-  }
-  MATCH_LINE=$(printf '%s\n' "$INDEX_TEXT" | grep -F -- "- ${NAME} [" | head -n 1)
-  if [ -z "$MATCH_LINE" ]; then
-    printf 'result: not-found\n'
-    printf 'reason: no recipe named %s; fall back to guide search\n' "$NAME"
-    exit 0
-  fi
-  SHA8=$(printf '%s' "$MATCH_LINE" | sed 's/.*sha:\([^)]*\).*/\1/')
-  SITE_URL=$(printf '%s' "$MATCH_LINE" | awk -F' — ' '{print $NF}' | tr -d '\n\r')
-  printf 'name: %s\n' "$NAME"
-  printf 'sha: %s\n' "$SHA8"
-  if "$STORE_SH" blob-get "$SHA8" >/dev/null 2>&1; then
-    printf 'cached: true\n'
-    printf 'body_path: %s\n' "${STORE_ROOT}/blobs/${SHA8}"
-    exit 0
-  fi
-  RAW_URL=$(raw_url_of "$SITE_URL") || {
-    printf 'result: not-found\n'
-    printf 'reason: refusing non-canonical body URL\n'
-    exit 0
-  }
-  TMP=$(mktemp)
-  if ! curl -fsSL -o "$TMP" "$RAW_URL" 2>/dev/null; then
-    rm -f "$TMP"
-    printf 'status: error\n'
-    printf 'detail: could not fetch %s\n' "$RAW_URL"
-    exit 2
-  fi
-  "$STORE_SH" blob-put "$SHA8" "$TMP" >/dev/null || { rm -f "$TMP"; exit 2; }
-  rm -f "$TMP"
-  mkdir -p "$MEM_DIR"
-  "$STORE_SH" lock-set "$MEM_DIR" task_recipes "$NAME" "\"${SHA8}\"" >/dev/null
-  # Refresh the compat shim so the newly cached recipe is visible to recipe-loader.
+  body_by_name agentic-recipes task_recipes "$NAME"
+  # Refresh the compat shim so a newly cached recipe is visible to recipe-loader.
   "$STORE_SH" legacy-recipes-shim agentic-recipes task_recipes "$MEM_DIR" 2>/dev/null || true
-  printf 'cached: false\n'
-  printf 'body_path: %s\n' "${STORE_ROOT}/blobs/${SHA8}"
+  exit 0
+  ;;
+
+# ---------------------------------------------------------------------------
+# tooling --name <name>
+# ---------------------------------------------------------------------------
+tooling)
+  [ "${1:-}" = "--name" ] && [ -n "${2:-}" ] || usage
+  body_by_name tooling-recipes tooling_recipes "$2"
   exit 0
   ;;
 

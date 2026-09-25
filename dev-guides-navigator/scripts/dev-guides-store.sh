@@ -18,8 +18,9 @@
 #
 # Lockfile: <project-memory-dir>/dev-guides.lock.json
 #   { guides: {"topic/file": sha256}, task_recipes: {name: sha8},
-#     process_recipes: {"phase/fw/url-slug": sha8} }
-# All three classes are plain footprints of what a project touched; nothing is
+#     process_recipes: {"phase/fw/url-slug": sha8}, playbooks: {set-id: sha256},
+#     tooling_recipes: {name: sha8} }
+# Every class is a plain footprint of what a project touched; nothing is
 # pinned. process_recipes values are plain sha8 strings, exactly like task_recipes.
 #
 # Exit codes:
@@ -311,7 +312,7 @@ lock-read)
 
 # ---------------------------------------------------------------------------
 # lock-set <project-memory-dir> <class> <key> <value-json>
-# <class> must be one of: guides | task_recipes | process_recipes | playbooks
+# <class> must be one of: guides | task_recipes | process_recipes | playbooks | tooling_recipes
 # Merges .<class>[<key>] = <value-json> into the lockfile.
 # Preserves all other top-level keys. Malformed existing lockfile → {}.
 # Prints the updated lockfile (compact) and writes it. Exit 0 on success,
@@ -329,9 +330,9 @@ lock-set)
   LOCK_FILE="${MEM_DIR}/dev-guides.lock.json"
 
   case "$CLASS" in
-    guides|task_recipes|process_recipes|playbooks) ;;
+    guides|task_recipes|process_recipes|playbooks|tooling_recipes) ;;
     *)
-      printf 'dev-guides-store: invalid class "%s" — must be guides, task_recipes, process_recipes, or playbooks\n' \
+      printf 'dev-guides-store: invalid class "%s" — must be guides, task_recipes, process_recipes, playbooks, or tooling_recipes\n' \
         "$CLASS" >&2
       exit 2
       ;;
@@ -457,7 +458,7 @@ Subcommands:
   lock-read <project-memory-dir>
       Print project dev-guides.lock.json (compact); absent/malformed → {}.
   lock-set <project-memory-dir> <class> <key> <value-json>
-      Merge key into lockfile. <class>: guides | task_recipes | process_recipes
+      Merge key into lockfile. <class>: guides | task_recipes | process_recipes | playbooks | tooling_recipes
   legacy-recipes-shim <index-name> <class> <project-memory-dir>
       Rebuild the legacy dev-guides-recipes-cache.json from store+lockfile+blobs
       (compat shim for recipe-loader). Index absent → exit 3.

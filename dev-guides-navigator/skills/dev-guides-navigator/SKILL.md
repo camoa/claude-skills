@@ -11,17 +11,18 @@ user-invocable: true
 
 Route to the correct online guide and enforce guide application.
 
-## Five modes
+## Six modes
 
-The navigator exposes **five independent routing modes** over the published catalogs:
+The navigator exposes **six independent routing modes** over the published catalogs:
 
 - **Guide search** (`llms.txt`) — atomic, mechanics-level decision guides. The original flow. See **Core Workflow** below.
 - **Recipe search** (`agentic-recipes.txt`) — goal-oriented, prescriptive capability deliveries that sequence existing guides/plays end-to-end and carry a verifier. See **Recipe Search** below.
 - **Process-recipe lookup** (`process-recipes.txt`) — resolved by `ai-dev-assistant` at lifecycle phase boundaries, keyed by `(phase, framework)`. See **Process-Recipe Lookup** below. Never matched during free task routing.
 - **Identify** (`llms.txt`, `agentic-recipes.txt`, `tooling-recipes.txt`) — report what covers a topic, and open nothing. See **Identify** below.
 - **Playbook lookup** (`llms.txt`, then `<topic>/plays.json`): resolved by `ai-dev-assistant` at research, keyed by a playbook set id. See **Playbook Lookup** below. Never matched during free task routing.
+- **Tooling lookup** (`tooling-recipes.txt`): resolved by `aida`'s tool skill and design stage, keyed by name. See **Tooling Lookup** below. Never matched during free task routing.
 
-**The five are two groups.** Guide search and recipe search resolve a body and apply it in place, because applying a guide means reading it. Process-recipe lookup, identify and playbook lookup return a structured report and never stream a body. A caller that must name what exists without paying to read it wants the second group.
+**The six are two groups.** Guide search and recipe search resolve a body and apply it in place, because applying a guide means reading it. Process-recipe lookup, identify, playbook lookup and tooling lookup return a structured report and never stream a body. A caller that must name what exists without paying to read it wants the second group.
 
 The navigator does **not** hardcode an order. The **caller** owns ordering — typically recipe-search first (is there a prescriptive end-to-end recipe for this capability?), then guide-search (fall back to raw mechanics). Recipe search never fabricates a recipe: a miss cleanly defers to guide search. Process-recipe lookup is invoked only by `ai-dev-assistant`, not during free task routing.
 
@@ -476,6 +477,26 @@ sha256 as `sha`, and the array's length as `plays`.
 
 Only the JSON report is emitted. The body is never streamed into the conversation; the caller
 reads the file at `body_path`.
+
+## Tooling Lookup
+
+**Invocation context:** `aida`'s tool skill and design stage call this mode with a tooling
+recipe name that identify reported. It is never matched during free task routing. A tooling
+recipe says how to install and run one tool for one framework.
+
+- **Index:** `tooling-recipes.txt`, one line per recipe:
+  `- <name> [tool=<tool> framework=<framework>] (sha:<sha8>): <when-to-use> — <site-url>`.
+
+The whole lookup is one call:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-lookup.sh" tooling --name <name>
+```
+
+It runs recipe search step 3 against `tooling-recipes.txt`, with the same output lines, the same
+`result: not-found` reasons and the same SSRF guard. Two differences: it records the footprint
+under `tooling_recipes`, and it rebuilds no compat shim. It reads the cached index and does not
+revalidate it; identify revalidates it. Read the file at `body_path`; the body is never printed.
 
 ## Create-on-Miss (maintainer mode only)
 

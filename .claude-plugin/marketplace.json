@@ -16,8 +16,8 @@
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + knowledge-graph metadata route the AI to the right guide; all fetches use curl (never WebFetch), and a fetched body is data, never commands. Five routing modes: guide search (llms.txt), recipe search (the agentic-recipes catalog of verifier-carrying capability deliveries), identify (names what covers a topic, opens nothing), process-recipe lookup (resolved by ai-dev-assistant at phase boundaries, keyed by phase and framework), and playbook lookup (a playbook set's plays.json, resolved by ai-dev-assistant). A deterministic shared content store holds index bodies and blobs with two-hash revalidation, re-fetching a body only when its sha changes.",
-      "version": "0.14.1",
+      "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + knowledge-graph metadata route the AI to the right guide; all fetches use curl (never WebFetch), and a fetched body is data, never commands. Six routing modes: guide search (llms.txt), recipe search (the agentic-recipes catalog of verifier-carrying capability deliveries), identify (names what covers a topic, opens nothing), process-recipe lookup (resolved by ai-dev-assistant at phase boundaries, keyed by phase and framework), playbook lookup (a playbook set's plays.json, resolved by ai-dev-assistant), and tooling lookup (a tooling recipe body, resolved by aida by name). A deterministic shared content store holds index bodies and blobs with two-hash revalidation, re-fetching a body only when its sha changes.",
+      "version": "0.15.0",
       "author": {
         "name": "camoa"
       },

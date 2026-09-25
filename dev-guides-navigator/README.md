@@ -24,7 +24,7 @@ Fetch guide   → form-validation.md (served from cache, sha256 unchanged since 
 Apply         → validation pattern applied to your form class, not just described
 ```
 
-That is the guide-search mode, the original flow. Four more exist for different situations: recipe search, for a whole capability rather than one mechanic (see [docs/usage.md](docs/usage.md#what-it-does)); identify, which names what covers a topic and opens nothing; and process-recipe lookup and playbook lookup, called by `ai-dev-assistant` at phase boundaries and never invoked directly.
+That is the guide-search mode, the original flow. Five more exist for different situations: recipe search, for a whole capability rather than one mechanic (see [docs/usage.md](docs/usage.md#what-it-does)); identify, which names what covers a topic and opens nothing; process-recipe lookup and playbook lookup, called by `ai-dev-assistant` at phase boundaries and never invoked directly; and tooling lookup, which opens a tooling recipe by name for `aida` and is never invoked directly.
 
 You do not have to wait for the proactive trigger. Naming the skill directly, for example "check the navigator for Drupal SOLID principles" or "look up the guide for SDC components," runs the same routing on demand.
 
@@ -44,13 +44,14 @@ No plugin dependencies: it talks directly to the published catalog over `curl`, 
 
 ## How it works
 
-Five independent routing modes over the published catalogs. The caller decides the order, typically recipe search first (is there an end-to-end recipe for this capability?), then guide search (fall back to raw mechanics):
+Six independent routing modes over the published catalogs. The caller decides the order, typically recipe search first (is there an end-to-end recipe for this capability?), then guide search (fall back to raw mechanics):
 
 | Mode | Catalog | What it resolves |
 |------|---------|-------------------|
 | Guide search | `llms.txt` | An atomic, mechanics-level guide for one pattern or decision. |
 | Recipe search | `agentic-recipes.txt` | A prescriptive, goal-oriented sequence of guides and plays for one whole capability, plus a verifier. |
 | Process-recipe lookup | `process-recipes.txt` | The framework-specific method for one lifecycle phase, resolved by `(phase, framework)`. Invoked only by `ai-dev-assistant`, never during free task routing. |
+| Tooling lookup | `tooling-recipes.txt` | How to install and run one tool for one framework, resolved by recipe name. Invoked only by `aida`'s tool skill and design stage, never during free task routing. |
 
 A guide-search miss on a near-duplicate topic is the case the metadata exists to prevent:
 
