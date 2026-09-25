@@ -1284,7 +1284,7 @@ ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 # removal, and `report` elsewhere, where it says what it removed. It names each path it could not
 # remove and returns 1. It is the EXIT trap `show` and `up` set, and it is safe to run twice.
 environment_cleanup() {
-  local p left="" gone="" back="" staged="" kept="" nl="
+  local p left="" gone="" back="" staged="" kept="" written="" replaced="" dirs="" nl="
 "
   if [ -n "$ENV_TREE" ]; then
     while IFS= read -r p; do
@@ -1300,21 +1300,15 @@ environment_cleanup() {
         git -C "$ENV_TREE" reset -q -- "$p" >/dev/null 2>&1 && staged="$staged $p"
       fi
       case "$nl$RF_REPLACED_PATHS" in
-        *"$nl$p$nl"*)
-          if recipe_files_put_back "$ENV_TREE" "$RF_SAVED_IN" "$p"; then back="$back $p"; else left="$left $p"; fi
-          continue ;;
+        *"$nl$p$nl"*) replaced="$replaced$p$nl" ;;
+        *) written="$written$p$nl" ;;
       esac
-      rm -f "$ENV_TREE/$p" 2>/dev/null
-      if [ -e "$ENV_TREE/$p" ]; then left="$left $p"; else gone="$gone $p"; fi
     done <<ENV_CLEAN_FILES
 $RF_WRITTEN_PATHS$RF_REPLACED_PATHS
 ENV_CLEAN_FILES
-    while IFS= read -r p; do
-      [ -n "$p" ] && [ -z "$kept" ] || continue
-      rmdir "$ENV_TREE/$p" 2>/dev/null || [ ! -d "$ENV_TREE/$p" ] || left="$left $p/"
-    done <<ENV_CLEAN_DIRS
-$ENV_DIRS
-ENV_CLEAN_DIRS
+    [ -n "$kept" ] || dirs="$ENV_DIRS"
+    recipe_files_take_out "$ENV_TREE" "$RF_SAVED_IN" "$written" "$replaced" "$dirs"
+    gone="$RF_GONE"; back="$RF_BACK"; left="$RF_LEFT"
   fi
   if [ "${1:-report}" != quiet ]; then
     [ -z "$gone" ] || printf 'environment: removed the files this run wrote in %s:%s\n' "$ENV_TREE" "$gone" >&2

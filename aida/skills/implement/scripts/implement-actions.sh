@@ -5755,14 +5755,15 @@ br_test_check() {
 # The run entries of the order's `verify` list that may run, as a JSON array of {run, pass}, and
 # the sources they cite, into BRV_RUNS and BRV_CITES, and one per line into BRV_SOURCES. A binding
 # entry came from a recipe this project accepts and runs. An entry that is not binding was
-# written by a model from research, and runs only when a person approved it at the design close. Without that stamp it never runs,
-# attended or not: the reviewer judges it as a check. Reads BRC_UNIT_JSON.
+# written by a model from research, and runs only when a person approved it at the design close.
+# Without that stamp it never runs, attended or not: the reviewer judges it as a check. Reads
+# BRC_UNIT_JSON.
 BRV_RUNS="[]"; BRV_CITES=""; BRV_SOURCES=""
 br_verify_runs() {
   local keep='[ (.verify // [])[] | select(has("run") and (.binding != false or has("approved"))) ]'
   BRV_RUNS="$(printf '%s' "$BRC_UNIT_JSON" | jq -c "$keep | map({run, pass})")"
-  BRV_CITES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | join(\", \")")"
   BRV_SOURCES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | .[]")"
+  BRV_CITES="$(printf '%s\n' "$BRV_SOURCES" | awk 'NF { printf "%s%s", sep, $0; sep = ", " }')"
 }
 
 # What br_verify_files_remove takes out of the tree after the verify lines ran. They are globals,
@@ -5772,27 +5773,19 @@ br_verify_runs() {
 BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 
 # Removes each file the verify lines' recipes wrote, puts back each earlier version they replaced,
-# then removes the folders made for them and the temporary folder. It is safe to run twice. A path
-# it could not take out is named, and the tree is then not what it was.
+# then removes the folders made for them and the temporary folder. RF_WRITTEN_PATHS and
+# RF_REPLACED_PATHS are read too, because a refusal or an interrupt inside recipe_files_write
+# leaves that recipe's paths there alone. It is safe to run twice. A path it could not take out
+# is named, and the tree is then not what it was.
 br_verify_files_remove() {
-  local p left=""
   if [ -n "$BRV_TREE" ]; then
-    recipe_files_put_back "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_REPLACED" || left=" the replaced files"
-    while IFS= read -r p; do
-      [ -z "$p" ] || rm -f "$BRV_TREE/$p" 2>/dev/null
-      [ -z "$p" ] || [ ! -e "$BRV_TREE/$p" ] || left="$left $p"
-    done <<BRV_CLEAN_FILES
-$BRV_WRITTEN
-BRV_CLEAN_FILES
-    while IFS= read -r p; do
-      [ -z "$p" ] || rmdir "$BRV_TREE/$p" 2>/dev/null || [ ! -d "$BRV_TREE/$p" ] || left="$left $p/"
-    done <<BRV_CLEAN_DIRS
-$(printf '%s' "$BRV_DIRS" | LC_ALL=C sort -ru)
-BRV_CLEAN_DIRS
+    recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS"
+    [ -z "$RF_LEFT" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$RF_LEFT" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
-  [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""
 }
 
 # Runs the order's own verify lines through br_run_lines from the folder $1, output into $2. A line
@@ -5801,8 +5794,9 @@ BRV_CLEAN_DIRS
 # file is written, an earlier version is replaced, and any other differing file refuses at 3.
 # br_verify_files_remove then takes them out again on every exit, a refusal or an interrupt
 # included. Nothing written persists, so the clean-tree rule and `git worktree remove` see the
-# tree as the order left it. A cited source that is not a file, or that has no `## Files`, writes
-# nothing. Reads BRV_RUNS, BRV_CITES and BRV_SOURCES.
+# tree as the order left it. Only a cited file with a `## Verifier` section is a recipe here, so a
+# guide or a research record writes nothing, and a recipe with no `## Files` writes nothing either.
+# Reads BRV_RUNS, BRV_CITES and BRV_SOURCES.
 br_run_verify_lines() {
   local dir="$1" outfile="$2" recipe list
   trap 'br_verify_files_remove' EXIT
@@ -5811,7 +5805,7 @@ br_run_verify_lines() {
   BRV_TREE="$dir"
   BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
   while IFS= read -r recipe; do
-    [ -n "$recipe" ] && [ -f "$recipe" ] || continue
+    [ -n "$recipe" ] && [ -f "$recipe" ] && grep -q '^## Verifier' "$recipe" || continue
     list="$(recipe_files_into "$recipe" Files "$BRV_FILES_DIR")"
     [ -n "$list" ] || continue
     recipe_files_refuse_differing "$BRC_WHO" "$recipe" "$list" "$dir" "$BRV_FILES_DIR"

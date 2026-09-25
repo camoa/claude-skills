@@ -291,13 +291,14 @@ these forms:
   list of scalars, pass one `--value a.b=<item>` per item, and the line runs once per item.
   Only the first such name in a line makes it run more than once.
 - `{a.b:json}` is the whole value of the field as one JSON token. Pass
-  `--value 'a.b:json=<JSON text>'`. For an absent field pass nothing, and the token is `null`.
+  `--value 'a.b:json=<JSON text>'`. Pass the JSON on one line. For an absent field pass
+  nothing, and the token is `null`.
 - `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them.
 
 A `{a.b}` placeholder with no value reads unknown.
 
 Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
-the worktree, because a line can run a script the recipe ships. After the lines, it removes those
+the worktree. A line can run a script the recipe ships. After the lines, it removes those
 files, so the tree stays clean. A file that holds the block of an earlier version of the recipe
 is replaced for the run, then put back. Any other file with different content refuses at 3.
 
