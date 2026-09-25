@@ -6,9 +6,10 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.26] - 2026-09-25
 
-Two rows, both design changes the owner asked for, and the navigator's
-tooling mode. A task can say it has no automated tests, and a light run mode
-builds fast and logs what it skipped.
+Five rows and the navigator's tooling mode. A task can say it has no
+automated tests, and a light run mode builds fast and logs what it skipped.
+Three rows let the guide catalog convert its agentic recipes to a runnable
+verifier block.
 
 ### Added
 
@@ -34,6 +35,14 @@ builds fast and logs what it skipped.
   the demo path. The remedy is `/aida:surfaces e2e`.
 - Design opens a tooling recipe with the navigator's new `tooling --name`
   mode, in dev-guides-navigator 0.15.0. It no longer fetches the body by hand.
+- Before an order's verify lines run, AIDA writes the covering recipe's
+  `## Files` into the worktree, then removes them after the run. It removes
+  them on a refusal or an interrupt too. Only a source with a `## Verifier`
+  section writes files.
+- `{a.b:json}` with no value now reads JSON `null`. `build.md` documents every
+  placeholder form.
+- A recipe file that matches an earlier version of the same recipe, from the
+  navigator's store, is replaced. A file a person edited is still refused.
 
 ### Unchanged
 
@@ -44,9 +53,11 @@ builds fast and logs what it skipped.
 
 ### Checks
 
-Sixty-two fixtures, 5,580 rows, pass under bash and under zsh on the merged
+Sixty-three fixtures, 5,662 rows, pass under bash and under zsh on the merged
 branch, every run exit 0. The repository's specs pass. One older fixture
 expected a message this release changed on purpose, and now expects the new.
+The release run caught a zsh regression in the shared file cleanup, fixed
+before release.
 
 ### Known limits
 
@@ -61,6 +72,12 @@ expected a message this release changed on purpose, and now expects the new.
   text. No script enforces them.
 - Changing the answer to no automated tests after orders own files leaves
   those orders on their proof until `update --proof`.
+- An earlier recipe version is known only when this machine's navigator
+  served it. On a fresh machine, a committed old file is still refused.
+- A recipe that ships files and also checks `git status` sees its own files
+  during the run. No recipe does both today.
+- A failed surfaces install leaves a replaced file in place, as it left
+  written files before.
 
 ## [6.0.0-beta.25] - 2026-09-24
 
