@@ -318,8 +318,7 @@ the two-level limit stopped it. Say which and stop. Show the whole output otherw
 
 ## `set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]...`
 
-Run mode is written only when a person explicitly asks for an autonomous or a light run on this
-task.
+Run mode is written only when a person explicitly asks for an autonomous or a light run on this task.
 Nothing above asks about it on its own, and nothing here proposes it either. Only call this when
 asked. Run:
 ```
@@ -334,8 +333,9 @@ absence already means that. Show the whole output.
 
 `light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
 Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
-whether end to end is on. Light keeps one script that walks the demo path in a browser. When end
-to end is off, say that a person sets it up with `/aida:surfaces e2e` before the run.
+whether end to end is on. Light keeps one script that walks the demo path in a browser, and review
+fails the task without it. When end to end is off, say that a person sets it up with
+`/aida:surfaces e2e` before the run.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 

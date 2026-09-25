@@ -213,11 +213,12 @@ the proof a person confirms at review. What light skips:
   implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
 
-What light keeps: the code review of each order, the project's own checks, including its security
-check, and one script that walks the demo path in a browser. That script is the project's end to
+What light keeps: the code review of each order, and the project's own checks, including its
+security check. It also keeps one script that walks the demo path in a browser. That script is the project's end to
 end setup, for that one path. A person sets it up once with `/aida:surfaces e2e` and registers
 the demo path as one critical surface. Review then runs it every time, and so can you, after each
-change. `set-run-mode` says whether end to end is on.
+change. Review fails a light task that has no such surface. `set-run-mode` says whether end to
+end is on.
 
 **The compromises log.** Each skip is written by the code that decides it, never from a model's
 memory. It goes to `COMPROMISES.md` at the top of the task's worktree, one row per skip, and is

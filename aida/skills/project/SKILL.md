@@ -24,8 +24,8 @@ for approval.
 A task states its own run mode. This skill carries none of its own.
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
-`autonomous` or `light`: act autonomously through this whole invocation, passing
-`--run-mode autonomous` on every call to the scripts below. Anything else, including no active task: act interactively,
+`autonomous` or `light`: act autonomously through this whole invocation, passing `--run-mode autonomous`
+on every call to the scripts below. Anything else, including no active task: act interactively,
 the safe default. Decide this once, at the start, so nothing mid-flow has to ask again. A mode
 that names stages in brackets covers this call only when it names the stage this call runs
 inside.

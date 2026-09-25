@@ -962,9 +962,9 @@ do_set_run_mode() {
   # setup, which a person installs (gap row 197).
   if [ "$value" = "light" ]; then
     if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
-      echo "path-script: end to end is on. Register the demo path as one critical surface with /aida:surfaces if it is not there."
+      echo "path-script: end to end is on. Review fails this task until the demo path is registered as one critical surface with /aida:surfaces."
     else
-      echo "path-script: end to end is off. A person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
+      echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
     fi
   fi
   task_summary "$task_json"

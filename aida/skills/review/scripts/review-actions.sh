@@ -783,8 +783,9 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched=""
+  local owned owned_count one matched gi glob unmatched="" light=false
   owned="$(rw_owned_files)"
+  task_is_light "$TASK_PATH" && light=true
   owned_count="$(printf '%s' "$owned" | jq 'length')"
   if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
     # No order commits in the code repository, so this range was never going to hold anything and
@@ -801,6 +802,8 @@ rw_check_serves() {
   matched=false; gi=0; glob=""
   while IFS= read -r one; do
     [ -n "$one" ] || continue
+    # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
+    [ "$light" = "true" ] && [ "$one" = "$COMPROMISES_FILE" ] && continue
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
@@ -2243,7 +2246,19 @@ do_surfaces() {
   parity_on="unavailable"
   [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
     && parity_on="on"
-  rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  # A light task is done only when the script that walks the demo path passes, so review fails
+  # one with no enabled critical end to end surface to run (gap row 197).
+  local path_scripts=none
+  if task_is_light "$TASK_PATH"; then
+    path_scripts=0
+    [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
+      || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
+  fi
+  if [ "$path_scripts" = "0" ]; then
+    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface." >>"$checks_file"
+  else
+    rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  fi
   # A light task runs no visual regression. Implementation's start logged the skip, because a
   # commit here would move the code under this review (gap row 197).
   if [ "$vr_on" = "on" ] && task_is_light "$TASK_PATH"; then

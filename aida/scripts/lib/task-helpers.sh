@@ -240,13 +240,16 @@ task_is_light() {
 # not written again, so a step run twice logs once. The file alone is committed, because a stage
 # refuses a tree that is not clean. A commit that fails is said on stderr and does not stop the
 # stage. $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
+# COMPROMISES_FILE is the file's one name. The owned-files checks in implementation and review
+# set it aside on a light task, because no work order owns it.
+COMPROMISES_FILE="COMPROMISES.md"
 log_compromise() {
   local tree file row
   tree="$(jq -r '.worktree.path // empty' "$1/task.json" 2>/dev/null)"
   [ -n "$tree" ] && [ -d "$tree" ] || tree="$(
     command -v resolve_project_folder >/dev/null 2>&1 || . "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
     task_worktree "$1" "log-compromise")" || return 0
-  file="$tree/COMPROMISES.md"
+  file="$tree/$COMPROMISES_FILE"
   row="| $(basename -- "$1") | $2 | $(printf '%s' "$3" | sed 's/|/\\|/g') | $(printf '%s' "$4" | sed 's/|/\\|/g') |"
   [ -f "$file" ] && grep -qxF -- "$row" "$file" && return 0
   if [ ! -f "$file" ]; then
@@ -257,7 +260,7 @@ log_compromise() {
       || { printf 'task-helpers: could not write %s\n' "$file" >&2; return 0; }
   fi
   printf '%s\n' "$row" >>"$file"
-  { git -C "$tree" add -- COMPROMISES.md && git -C "$tree" commit -q -m "Log a light-run compromise: $2" -- COMPROMISES.md; } >/dev/null 2>&1 \
+  { git -C "$tree" add -- "$COMPROMISES_FILE" && git -C "$tree" commit -q -m "Log a light-run compromise: $2" -- "$COMPROMISES_FILE"; } >/dev/null 2>&1 \
     || printf 'task-helpers: %s was written and not committed. Commit it before the next step.\n' "$file" >&2
   printf 'compromise: %s: %s\n' "$2" "$3"
 }

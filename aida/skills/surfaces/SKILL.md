@@ -23,8 +23,8 @@ directory: say so, name the project skill, and stop.
 ## Determine the run mode
 
 Read the active task's run mode. A task that states none is interactive, and so is a call with no
-task active. Pass `--run-mode autonomous` on every call only when the task states it, or states
-`light`. Decide this once, at the start. A mode that names stages in brackets covers this call only when it names the
+task active. Pass `--run-mode autonomous` on every call only when the task states it, or states `light`. Decide this
+once, at the start. A mode that names stages in brackets covers this call only when it names the
 stage this call runs inside. Exit 70 means a person's answer was passed with nobody present.
 
 ## Read the state first

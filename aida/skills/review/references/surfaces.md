@@ -31,7 +31,8 @@ and the record says it was not offered.
 
 A light task runs no visual regression. Its check reads undeclared and names the light run, and
 implementation's start logged the skip. End to end runs as usual, because the script that walks
-the demo path is the one test a light run keeps.
+the demo path is the one test a light run keeps. With no enabled critical end to end surface, the
+check reads unmet and names `/aida:surfaces e2e`.
 
 Run:
 ```

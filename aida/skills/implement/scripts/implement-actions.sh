@@ -6117,7 +6117,8 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
-  local own_count allowed_hit=""
+  local own_count allowed_hit="" light=false
+  task_is_light "$TASK_PATH" && light=true
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
   diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
@@ -6128,6 +6129,8 @@ br_seven_checks() {
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
+    # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
+    [ "$light" = "true" ] && [ "$p" = "$COMPROMISES_FILE" ] && continue
     # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
