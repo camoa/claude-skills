@@ -6,8 +6,9 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.0-beta.26] - 2026-09-25
 
-Two rows, both design changes the owner asked for. A task can say it has no
-automated tests, and a light run mode builds fast and logs what it skipped.
+Two rows, both design changes the owner asked for, and the navigator's
+tooling mode. A task can say it has no automated tests, and a light run mode
+builds fast and logs what it skipped.
 
 ### Added
 
@@ -31,6 +32,8 @@ automated tests, and a light run mode builds fast and logs what it skipped.
   other order depends on it.
 - On a light task, review fails until one critical end-to-end surface walks
   the demo path. The remedy is `/aida:surfaces e2e`.
+- Design opens a tooling recipe with the navigator's new `tooling --name`
+  mode, in dev-guides-navigator 0.15.0. It no longer fetches the body by hand.
 
 ### Unchanged
 
