@@ -36,8 +36,8 @@ shape and lists its own paths.
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
-`autonomous`: act autonomously through this whole invocation. Anything else, including no active
-task: act interactively, the safe default. Decide this once, at the start.
+`autonomous` or `light`: act autonomously through this whole invocation. Anything else,
+including no active task: act interactively, the safe default. Decide this once, at the start.
 A mode that names stages in brackets, such as `autonomous (implement)`, covers this stage only
 when the list names `design`; otherwise this stage is interactive.
 
@@ -51,7 +51,8 @@ An invocation line whose first word is `close` is the person's yes on the design
 the word after it, or the active one. Go straight to "Close the design" below. When no
 `design-critique-*.md` exists yet, under `records/` or under `design/`, run "Critique the design"
 first. An earlier close moved the files into `design/`, so look in both. A name that begins
-`unfinished-` is a critique that stopped, and it counts as no critique here.
+`unfinished-` is a critique that stopped, and it counts as no critique here. A light task runs no
+critique, so go straight to the close.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -405,6 +406,12 @@ observable outcome a criterion describes, which one it owns. Most orders own non
 order owns each criterion; if two orders both seem to produce the same outcome, that is a sign the
 work is split wrong, not a sign both should claim it.
 
+**Light:** the first order, `wo1`, is the walking skeleton. It is a tiny version that links the
+input, the logic and the output end to end along the demo path. Every other order depends on it,
+directly or through its chain, and `check` refuses one that does not. When end to end is on,
+`wo1` also owns the script that walks the demo path in a browser, where the harness reads its
+tests. That script is the one test a light run keeps.
+
 Create it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh create "<task_folder>" \
@@ -639,6 +646,9 @@ and tells the person to finish design, so leaving one open only moves the stop t
 expensive place.
 
 ## Critique the design
+
+`check` printed `critique: skipped, light run`: dispatch no critic, and go to the close. The check
+logged the skip.
 
 Once the check comes back clean, and before closing, have three readers who were not in this
 conversation read the orders. The check counted ids; it read no sentence. Dispatch

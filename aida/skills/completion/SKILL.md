@@ -75,7 +75,8 @@ why the task closes without a passed review, and pass what they said.
 ## The run mode decides who answers
 
 The run mode is the task's own for the completion stage: `runMode` in `task.json`, absent
-meaning interactive. It is interactive too when `runModeStages` names stages without this one.
+meaning interactive. `light` reads as autonomous. It is interactive too when `runModeStages`
+names stages without this one.
 A person's answer is accepted only when a person is present.
 
 | Question | Interactive | Autonomous |

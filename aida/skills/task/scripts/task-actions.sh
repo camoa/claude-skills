@@ -42,7 +42,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    --child <child-id> --goal <goal> [--criterion <text>]...
 #                    [--child <child-id> --goal <goal> [--criterion <text>]...]
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-run-mode --project <path> \
-#                    <task-id> <autonomous|interactive> [--stage <stage>]...
+#                    <task-id> <autonomous|light|interactive> [--stage <stage>]...
 #   task-actions.sh [--run-mode <interactive|autonomous>] set-budget --project <path> \
 #                    <task-id> [--dispatches <n>] [--minutes <n>]
 #   task-actions.sh [--run-mode <interactive|autonomous>] save --project <path> <task-id> \
@@ -119,7 +119,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh split    --project <path> <parent-task-id>
                                  --child <child-id> --goal <goal> [--criterion <text>]...
                                  [--child <child-id> --goal <goal> [--criterion <text>]...]
-       task-actions.sh set-run-mode --project <path> <task-id> <autonomous|interactive>
+       task-actions.sh set-run-mode --project <path> <task-id> <autonomous|light|interactive>
                                  [--stage <scope|research|design|implement|review|completion>]...
        task-actions.sh set-budget --project <path> <task-id> [--dispatches <n>] [--minutes <n>]
        task-actions.sh save     --project <path> <task-id> -- <text...>
@@ -882,10 +882,10 @@ do_split() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# set-run-mode: written only when a person asks for autonomous. Nothing here asks. `--stage`,
-# repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a person who
-# wants the build alone unattended keeps their hand on scope and review. No `--stage` covers
-# every stage, as before the field existed.
+# set-run-mode: written only when a person asks for autonomous or light. Nothing here asks.
+# `--stage`, repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a
+# person who wants the build alone unattended keeps their hand on scope and review. No `--stage`
+# covers every stage, as before the field existed.
 # ------------------------------------------------------------------------------------------------
 
 do_set_run_mode() {
@@ -916,11 +916,11 @@ do_set_run_mode() {
   project_path="$_resolved_project"
   [ -n "$id" ] || die3 "set-run-mode: a task id is required"
   case "$value" in
-    autonomous|interactive) : ;;
-    *) die3 "set-run-mode: must be autonomous or interactive, got: $value" ;;
+    autonomous|interactive|light) : ;;
+    *) die3 "set-run-mode: must be autonomous, light or interactive, got: $value" ;;
   esac
   [ "$value" = "autonomous" ] || [ "$stages_json" = "[]" ] \
-    || die3 "set-run-mode: --stage goes with autonomous only. interactive removes the mode and the stages together."
+    || die3 "set-run-mode: --stage goes with autonomous only. interactive removes the mode and the stages together, and light covers every stage."
 
   local task_dir task_json
   task_dir="$(task_dir_for "$project_path" "$id")"
@@ -929,11 +929,12 @@ do_set_run_mode() {
 
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
-  if [ "$value" = "autonomous" ]; then
+  if [ "$value" != "interactive" ]; then
     # An empty list is not written: absence already means every stage (task-schema.json,
-    # runModeStages), and a list from an earlier call is replaced, never merged.
-    jq --argjson stages "$stages_json" \
-      '.runMode = "autonomous" | if ($stages | length) > 0 then .runModeStages = $stages else del(.runModeStages) end' \
+    # runModeStages), and a list from an earlier call is replaced, never merged. Light takes no
+    # list, so it covers every stage.
+    jq --arg mode "$value" --argjson stages "$stages_json" \
+      '.runMode = $mode | if ($stages | length) > 0 then .runModeStages = $stages else del(.runModeStages) end' \
       "$task_json" > "$tmp" \
       || { rm -f "$tmp"; die3 "set-run-mode: could not read $task_json"; }
   else
@@ -957,6 +958,15 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}${stages_note}"
+  # Light keeps one script that walks the demo path in a browser. It is the project's end to end
+  # setup, which a person installs (gap row 197).
+  if [ "$value" = "light" ]; then
+    if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
+      echo "path-script: end to end is on. Register the demo path as one critical surface with /aida:surfaces if it is not there."
+    else
+      echo "path-script: end to end is off. A person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
+    fi
+  fi
   task_summary "$task_json"
 }
 

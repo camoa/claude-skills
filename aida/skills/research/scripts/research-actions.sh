@@ -302,7 +302,8 @@ do_read() {
 # folder exists. Idempotent: running it again on a task already started changes nothing and is
 # not refused, unlike scope's `init`, because no aggregate file here could be overwritten by a
 # second call. Prints the ids of the criteria the conversation is answering for, and the
-# project's playbook subscriptions.
+# project's playbook subscriptions. On a light task it says the outward search is skipped, and
+# logs the skip.
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
@@ -323,6 +324,12 @@ do_start() {
   project_folder="$(resolve_project_folder "$TASK_PATH")" \
     && subs="$(jq -r '[(.playbookSubscriptions // {})[][]] | join(" ")' "$project_folder/project.json" 2>/dev/null)"
   echo "subscriptions: ${subs:-none}"
+  # A light task searches this project and the catalog, and not the web (gap row 197).
+  if task_is_light "$TASK_PATH"; then
+    echo "outward-search: skipped, light run"
+    log_compromise "$TASK_PATH" research "the outward search: prior art, recommendations and assumptions on the web" \
+      "dispatch one outward searcher per subject outside this project"
+  fi
   exit 0
 }
 

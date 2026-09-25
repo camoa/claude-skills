@@ -18,7 +18,11 @@
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
-#                                         covers the stage, else interactive
+#                                         covers the stage, or is light, else interactive
+#   task_is_light <folder>                true when the task's mode is light
+#   log_compromise <folder> <stage> <skipped> <normal>
+#                                         adds one row to COMPROMISES.md in the task's tree and
+#                                         commits that file alone
 #   automated_tests <folder>              prints yes, no or not-asked: the contract's answer to
 #                                         whether the task has automated tests
 #   mark_task_in_progress <folder> <why> <stage>
@@ -195,6 +199,8 @@ plugin_version() {
 # or names that stage; every other case is interactive, the safe assumption (foundations.md, Run
 # mode). This is the one reader of those two fields: a stage that read runMode alone would run a
 # stage the person kept for themselves without asking. An unreadable file answers interactive.
+# A light task reads autonomous for every stage, so it runs on the autonomous machinery (gap row
+# 197). What light skips on top of that is behind task_is_light.
 #
 # A name in runModeStages that is not one of the six matches no stage, so the mode reads
 # interactive for it for ever. That is the safe direction, and it discards what a person asked
@@ -207,7 +213,8 @@ plugin_version() {
 task_run_mode() {
   local read_out answer unknown
   read_out="$(jq -r --arg stage "$2" '
-      (if (.runMode // "") != "autonomous" then "interactive"
+      (if (.runMode // "") == "light" then "autonomous"
+       elif (.runMode // "") != "autonomous" then "interactive"
        elif ((.runModeStages // []) | length) == 0 then "autonomous"
        elif (.runModeStages | index($stage)) != null then "autonomous"
        else "interactive" end),
@@ -219,6 +226,40 @@ task_run_mode() {
   [ -z "$unknown" ] \
     || printf 'task-helpers: %s/task.json names a run-mode stage that matches no stage: %s. The six are scope, research, design, implement, review and completion. A name outside them reads interactive for ever. Repair it with `task set-run-mode`.\n' "$1" "$unknown" >&2
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
+}
+
+# True when the task's runMode is light (task-schema.json, runMode). Every light rule is behind
+# this one test, so an interactive or autonomous task never reaches one. $1 the task folder.
+task_is_light() {
+  [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
+}
+
+# One row of the compromises log, COMPROMISES.md at the top of the task's tree (gap row 197). The
+# code that decides a skip calls this, so the log never rests on a model's memory. The file ships
+# with the code, because a later normal task takes it as its scope. A row already in the file is
+# not written again, so a step run twice logs once. The file alone is committed, because a stage
+# refuses a tree that is not clean. A commit that fails is said on stderr and does not stop the
+# stage. $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
+log_compromise() {
+  local tree file row
+  tree="$(jq -r '.worktree.path // empty' "$1/task.json" 2>/dev/null)"
+  [ -n "$tree" ] && [ -d "$tree" ] || tree="$(
+    command -v resolve_project_folder >/dev/null 2>&1 || . "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
+    task_worktree "$1" "log-compromise")" || return 0
+  file="$tree/COMPROMISES.md"
+  row="| $(basename -- "$1") | $2 | $(printf '%s' "$3" | sed 's/|/\\|/g') | $(printf '%s' "$4" | sed 's/|/\\|/g') |"
+  [ -f "$file" ] && grep -qxF -- "$row" "$file" && return 0
+  if [ ! -f "$file" ]; then
+    printf '%s\n' "# Compromises" "" \
+      "A light run skipped each step below, or built a fake in its place. A later normal task takes" \
+      "this list as its scope. A fake is marked in the code with AIDA-FAKE." "" \
+      "| Task | Stage | Skipped | A normal run would |" "|---|---|---|---|" >"$file" \
+      || { printf 'task-helpers: could not write %s\n' "$file" >&2; return 0; }
+  fi
+  printf '%s\n' "$row" >>"$file"
+  { git -C "$tree" add -- COMPROMISES.md && git -C "$tree" commit -q -m "Log a light-run compromise: $2" -- COMPROMISES.md; } >/dev/null 2>&1 \
+    || printf 'task-helpers: %s was written and not committed. Commit it before the next step.\n' "$file" >&2
+  printf 'compromise: %s: %s\n' "$2" "$3"
 }
 
 # The contract's answer to whether this task has automated tests (alignment-schema.json,

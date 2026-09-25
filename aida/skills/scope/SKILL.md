@@ -22,10 +22,10 @@ run without asking. Any other Bash command still asks for approval.
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
-`autonomous`: act autonomously through this whole invocation, passing `--run-mode autonomous` on
-every call below that writes. Anything else, including no active task: act interactively, the
-safe default, and pass `--run-mode interactive` (or nothing; that is the same default) on every
-call below that writes. Decide this once, at the start. `read` needs no run mode: it changes
+`autonomous` or `light`: act autonomously through this whole invocation, passing
+`--run-mode autonomous` on every call below that writes. Anything else, including no active
+task: act interactively, the safe default, and pass `--run-mode interactive` (or nothing; that
+is the same default) on every call below that writes. Decide this once, at the start. `read` needs no run mode: it changes
 nothing. A mode that names stages in brackets, such as `autonomous (implement)`, covers this
 stage only when the list names `scope`; otherwise this stage is interactive.
 
@@ -255,6 +255,9 @@ The answer is part of the contract, so `approve` signs it with the rest. Researc
 later, and the person may change it there.
 
 **Autonomous:** take the recommended answer, write it, and mark it with `record-decision`.
+
+**Light:** do not ask, and do not run `set-tests`. `init` wrote no on a light task and logged the
+skip. `set-tests` refuses yes there.
 
 ## Tests and checks
 

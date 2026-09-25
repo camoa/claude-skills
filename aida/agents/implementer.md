@@ -51,6 +51,11 @@ play's `guide` names the catalog guide behind it. You cannot reach the catalog. 
 is not enough, name the play and its guide in your report. Name the ids of the plays you followed
 in your report.
 
+**On a light run, a fake needs the marker.** Only then does the brief hold `fakeMarker`. A fake
+is allowed off the demo path, where canned output stands in for real logic. Put a comment on the
+fake's line that starts with the marker. After the marker, say what is faked and what the real
+code needs. The close logs each marked line.
+
 You read the tests to know what to build. Reading and writing are two different permissions, and you
 have only the first.
 

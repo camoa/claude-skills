@@ -21,7 +21,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the file at the printed path. `check` writes check-design.sh's report to
 # <task_folder>/records/design-check.json and prints its status, its line count and that path.
 # records/ is where check-task.sh writes too, and the project's .gitignore keeps it out of history.
-# A report that changes on every run is a derived value and never something to commit.
+# A report that changes on every run is a derived value and never something to commit. A clean
+# `check` on a light task also prints `critique: skipped, light run` and logs the skip.
 #
 # Usage:
 #   design-actions.sh read       <task_folder>
@@ -474,6 +475,7 @@ open_summary_of() {
         ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person, and the contract does not say the task has no automated tests: update --proof tests"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
+        ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
         ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
         (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", ")))
@@ -1572,6 +1574,12 @@ do_check() {
     | paste -s -d ',' - | sed 's/,/, /g; s/^$/none/')"
   if [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
+  elif task_is_light "$TASK_PATH"; then
+    # A light task closes with no critique (gap row 197). The clean check is the last step
+    # before the critics, so the skip is decided here.
+    echo "critique: skipped, light run"
+    log_compromise "$TASK_PATH" design "the three design critics" \
+      "dispatch three critics, on the contract, on reuse and on buildability, and answer their findings before the close"
   fi
   exit "$verdict"
 }

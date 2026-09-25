@@ -57,8 +57,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # alignment.json's top level carries schemaVersion, goal, expectedResult, criteria, nonGoals,
 # nextCriterionId, nextNonGoalId and decidedWithoutAPerson, and nothing else, apart from two
-# optional fields: pluginVersion, stamped at the close, and automatedTests, which only `set-tests`
-# writes. An id, once minted,
+# optional fields: pluginVersion, stamped at the close, and automatedTests, which `set-tests`
+# writes, and `init` on a light task. An id, once minted,
 # must never be reused after its criterion or non-goal is removed (ideal/scope.md, "Why the id
 # exists"). The highest id ever issued, in each of the two id spaces, is kept as two integer
 # fields on this same file, nextCriterionId and nextNonGoalId, rather than in a second file: a
@@ -101,9 +101,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      match either id format, or that is already present when `add` tries to mint it; a given
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
-#      autonomous; a given --automated that is not yes or no; a missing or unusable
-#      nextCriterionId or nextNonGoalId; the plugin root could
-#      not be resolved; or a write that failed.
+#      autonomous; a given --automated that is not yes or no, or yes on a light task; a missing
+#      or unusable nextCriterionId or nextNonGoalId; the plugin root could not be resolved; or a
+#      write that failed.
 #   4  a script this action calls ran and failed. `render`, and every action that writes
 #      alignment.json, call alignment-render.sh; that script's own stderr is the answer, printed
 #      here rather than duplicated. For `approve` and `distill`, the sidecar exists but fails
@@ -304,6 +304,12 @@ do_init() {
   local empty
   empty="$(jq -n '{schemaVersion: 1, goal: "", expectedResult: "", criteria: [], nonGoals: [],
                    nextCriterionId: 1, nextNonGoalId: 1, decidedWithoutAPerson: []}')"
+  # A light task has no automated tests, so each code order takes the confirm proof (gap row 197).
+  if task_is_light "$TASK_PATH"; then
+    empty="$(printf '%s' "$empty" | jq '.automatedTests = false')"
+    log_compromise "$TASK_PATH" scope "tests for each work order, and the checker that confirms each test row" \
+      "write and freeze tests for each code order before its code, and have a checker confirm each row"
+  fi
   write_atomic "$ALIGNMENT_FILE" "$empty"
 
   echo "INITIALIZED: $ALIGNMENT_FILE"
@@ -375,6 +381,8 @@ do_set_tests() {
   esac
 
   require_alignment_exists "set-tests"
+  [ "$value" = "false" ] || ! task_is_light "$TASK_PATH" \
+    || die3 "set-tests: a light task has no automated tests. Set the task interactive or autonomous first"
 
   local updated
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \

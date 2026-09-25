@@ -761,6 +761,10 @@ attempts_allowed_for() {
 # read and changed in one place.
 FIX_ROUNDS_ALLOWED=2
 
+# A light task allows a fake off the demo path, marked in the code with this text. The build brief
+# names it, and `close` logs every added line that carries it (gap row 197).
+FAKE_MARKER="AIDA-FAKE:"
+
 usage() {
   cat <<'EOF' >&2
 usage: implement-actions.sh read  <task_folder>
@@ -1914,6 +1918,14 @@ do_start() {
       if [ -n "$msg" ]; then msg="$msg; and $overlap_text"; else msg="$overlap_text"; fi
     fi
     die 8 "start: the build order could not be derived from the frozen work orders: $msg"
+  fi
+
+  # A light task's review runs no visual regression (gap row 197). The log is written here, before
+  # the build's first commit is read, because review refuses a tree that moved after finish.
+  if task_is_light "$TASK_PATH" \
+    && [ "$(jq -r '.surfaces.visualRegression.enabled // false' "$(resolve_project_folder "$TASK_PATH")/project.json" 2>/dev/null)" = "true" ]; then
+    log_compromise "$TASK_PATH" review "visual regression" \
+      "run the visual regression surfaces at review and compare each one with its baseline"
   fi
 
   # --- step 11: capture the commit the build starts from -------------------------------------------
@@ -5229,11 +5241,13 @@ do_build_brief() {
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
         --arg beforeLookPath "$bb_before" \
+        --arg fakeMarker "$(! task_is_light "$TASK_PATH" || printf '%s' "$FAKE_MARKER")" \
     '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
-     + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)')"
+     + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)
+     + (if $fakeMarker == "" then {} else {fakeMarker: $fakeMarker} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   # headNow is printed because the caller passes it back as --started-at, and the report path
@@ -7018,6 +7032,8 @@ rv_load_state() {
 
   RV_RUN_MODE="$(printf '%s' "$RV_LEDGER_DOC" | jq -r '.runMode // "interactive"')"
   [ -n "$RV_RUN_MODE" ] || RV_RUN_MODE="interactive"
+  # A light task gets one fix round, and the halt after it logs the rounds it skipped.
+  ! task_is_light "$TASK_PATH" || FIX_ROUNDS_ALLOWED=1
 
   # Exit 49: a halted order refuses every step after the halt. The reason is the halt's own words,
   # so a reader never has to open the ledger to learn why the step stopped.
@@ -8065,7 +8081,17 @@ RV_SCOPE
     echo "FIX-RECORD: round $round_number of $unit_id left every finding open. It was stopped by $first_stopper" >&2
   fi
   [ -z "$halt_why" ] || echo "FIX-RECORD: $unit_id is halted. $halt_why" >&2
+  if [ "$all_met" != "true" ] && [ "$round_number" -ge "$FIX_ROUNDS_ALLOWED" ] && task_is_light "$TASK_PATH"; then
+    light_log_fix_rounds "$unit_id" "the round's checks" >&2
+  fi
   exit 0
+}
+
+# The compromises log row for the fix rounds a light task skips. The two halts at the one-round
+# cap, in fix-record and verify-record, both call it. $1 the order, $2 what was still open.
+light_log_fix_rounds() {
+  log_compromise "$TASK_PATH" implement "fix rounds after the first on $1, with $2 still open" \
+    "run a second fix round, then take a person's ruling on each finding still open"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -8347,6 +8373,8 @@ do_verify_record() {
     rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
       "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
     echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
+    ! task_is_light "$TASK_PATH" \
+      || light_log_fix_rounds "$unit_id" "$open_list" >&2
     die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
   fi
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
@@ -8675,6 +8703,23 @@ do_close() {
           end))')"
   [ -n "$new_ledger" ] || die 3 "close: deriving the row states for $unit_id failed."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
+
+  # Each fake a light build added is logged once the order is closed, so the log's own commit
+  # lands after the range this close recorded (gap row 197).
+  if task_is_light "$TASK_PATH"; then
+    local fake_file="" fake_line
+    while IFS= read -r fake_line; do
+      case "$fake_line" in
+        "+++ b/"*) fake_file="${fake_line#+++ b/}" ;;
+        "+"*"$FAKE_MARKER"*)
+          log_compromise "$TASK_PATH" implement \
+            "a fake in $fake_file, from $unit_id: $(printf '%s' "${fake_line#*"$FAKE_MARKER"}" | sed 's/^ *//')" \
+            "build the real code in place of the fake" ;;
+      esac
+    done <<CLOSE_FAKES
+$(git -C "$RV_RANGE_REPO" diff -U0 --no-renames "$started_at" "$head_now" 2>/dev/null)
+CLOSE_FAKES
+  fi
 
   # The model-judged count is over the whole ledger, not this order alone: it is what a person
   # returning to a finished run reads to list every row no person ever looked at.

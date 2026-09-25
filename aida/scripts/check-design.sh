@@ -47,6 +47,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     through its own dependents (ideal/design.md, "An order that owns nothing is a supporting
 #     order": "it reaches a criterion through the orders that depend on it"); a chain that reaches
 #     no owner fails, and a chain that loops fails too;
+#   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
+#     dependsOn chain, so the skeleton is built first (gap row 197);
 #   - ownedFiles do not overlap between work orders, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
@@ -75,7 +77,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/design-guides-read-schema.json: the guides-read record's field list
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
-#   <plugin root>/scripts/lib/task-helpers.sh: automated_tests, sourced, never run
+#   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -124,8 +126,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order whose proof is observe and
 #      that declares a test, names no surface or has no done-when row, an order whose proof is
 #      confirm and that declares a test, has no done-when row, or sits on a task whose contract
-#      does not say it has no automated tests, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
-#      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
+#      does not say it has no automated tests, an order that owns nothing and reaches no owner, an
+#      order of a light task that does not come after wo1, a dependency cycle, two orders sharing
+#      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
+#      the JSON on stdout.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
 # otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -182,6 +186,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              unknownDependsOnIds: [ {path, id} ],
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
+#              ordersNotAfterSkeleton: [ id, ... ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
 #              globbedOwnedFiles: [ {id, path} ] },
 #     fileIssueCount, contentIssueCount,
@@ -265,6 +270,7 @@ source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHE
 source "$PROOF_LIB" || die3 "the proof-kind library failed to load: $PROOF_LIB"
 
 # automated_tests, for the confirm-order list below. The one reader of the contract's answer.
+# task_is_light, for the skeleton list in the graph.
 TASK_HELPERS_LIB="$PLUGIN_ROOT/scripts/lib/task-helpers.sh"
 [ -f "$TASK_HELPERS_LIB" ] || die3 "cannot read the task-helper library: $TASK_HELPERS_LIB not found"
 # shellcheck source=/dev/null
@@ -748,6 +754,7 @@ CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + COVERAGE_ISSUE_COUNT + DUPLICATE_CO
 UNKNOWN_DEPENDS_ON_IDS_JSON='[]'
 DEPENDENCY_CYCLES_JSON='[]'
 ORPHAN_SUPPORT_ORDERS_JSON='[]'
+ORDERS_NOT_AFTER_SKELETON_JSON='[]'
 OVERLAPPING_OWNED_FILES_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
 GRAPH_ISSUE_COUNT=0
@@ -765,7 +772,11 @@ else
   # The graph algorithm below walks only edges between known ids; an id named in dependsOn but
   # matching no real work order is reported above and simply has no edge here, which is correct:
   # it points nowhere for a cycle or a reachability chain to walk through.
-  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" '
+  # A light task builds the walking skeleton first: every order but wo1 reaches wo1 through its
+  # dependsOn chain (gap row 197). Any other task leaves the list empty.
+  LIGHT_TASK=false
+  task_is_light "$TASK_PATH" && LIGHT_TASK=true
+  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" --argjson light "$LIGHT_TASK" '
     def reach($adj; $start):
       def go($frontier; $visited):
         if ($frontier | length) == 0 then $visited
@@ -789,11 +800,14 @@ else
         orphans: [ $orders[] | select((.criteriaOwned // []) | length == 0)
           | .id as $x
           | select( ( ([$x] + ($revClosure[$x] // [])) | any(. as $y | $owners | index($y) != null) ) | not )
-          | $x ]
+          | $x ],
+        notAfterSkeleton: (if $light then [ $ids[] | . as $x | select($x != "wo1")
+          | select(($fwdClosure[$x] // []) | index("wo1") == null) ] else [] end)
       }
   ')"
   DEPENDENCY_CYCLES_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.cycles')"
   ORPHAN_SUPPORT_ORDERS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.orphans')"
+  ORDERS_NOT_AFTER_SKELETON_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.notAfterSkeleton')"
 
   # Overlap on the declared strings only, never a glob intersection (ideal/design.md, "What a
   # work order holds"): two orders sharing one identical entry in ownedFiles.
@@ -828,7 +842,8 @@ else
   ORPHAN_COUNT="$(printf '%s' "$ORPHAN_SUPPORT_ORDERS_JSON" | jq 'length')"
   OVERLAP_COUNT="$(printf '%s' "$OVERLAPPING_OWNED_FILES_JSON" | jq 'length')"
   GLOBBED_COUNT="$(printf '%s' "$GLOBBED_OWNED_FILES_JSON" | jq 'length')"
-  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT))
+  SKELETON_COUNT="$(printf '%s' "$ORDERS_NOT_AFTER_SKELETON_JSON" | jq 'length')"
+  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT + SKELETON_COUNT))
   GRAPH_NOTE="ran: $(printf '%s' "$WORK_ORDERS_JSON" | jq 'length') work order(s) in the graph"
 fi
 
@@ -904,6 +919,7 @@ jq -n \
   --argjson unknownDependsOnIds "$UNKNOWN_DEPENDS_ON_IDS_JSON" \
   --argjson dependencyCycles "$DEPENDENCY_CYCLES_JSON" \
   --argjson orphanSupportOrders "$ORPHAN_SUPPORT_ORDERS_JSON" \
+  --argjson ordersNotAfterSkeleton "$ORDERS_NOT_AFTER_SKELETON_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
@@ -944,6 +960,7 @@ jq -n \
       unknownDependsOnIds: $unknownDependsOnIds,
       dependencyCycles: $dependencyCycles,
       orphanSupportOrders: $orphanSupportOrders,
+      ordersNotAfterSkeleton: $ordersNotAfterSkeleton,
       overlappingOwnedFiles: $overlappingOwnedFiles,
       globbedOwnedFiles: $globbedOwnedFiles
     },

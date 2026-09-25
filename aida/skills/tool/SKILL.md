@@ -21,8 +21,8 @@ Any other Bash command still asks for approval.
 ## Determine the run mode
 
 Read the active task's run mode. A task that states none is interactive, and so is a call with no
-task active. Pass `--run-mode autonomous` on every call only when the task states it. Decide this
-once, at the start. A mode that names stages in brackets covers this call only when it names the
+task active. Pass `--run-mode autonomous` on every call only when the task states it, or states
+`light`. Decide this once, at the start. A mode that names stages in brackets covers this call only when it names the
 stage this call runs inside.
 
 `install` is the one action that needs a person. The script refuses it at exit 70 on an

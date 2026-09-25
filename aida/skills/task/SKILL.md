@@ -1,7 +1,7 @@
 ---
 name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
-argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
+argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
 ---
@@ -20,7 +20,7 @@ the code folder). Resolve that first, with the project skill, before using anyth
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation, when one is already active.
-Found, and it says `autonomous`: act autonomously through this whole invocation, passing
+Found, and it says `autonomous` or `light`: act autonomously through this whole invocation, passing
 `--run-mode autonomous` on every call to the script below. Anything else, including no active
 task, such as the moment `create` itself runs: act interactively, the safe default. Decide this
 once, at the start. A mode that names stages in brackets covers this call only when it names the
@@ -316,20 +316,26 @@ goal and any handed-down criteria into its `task.md`, makes each child's own wor
 stopped before writing anything: `NOT FOUND` says the named task does not exist, `REFUSED` says
 the two-level limit stopped it. Say which and stop. Show the whole output otherwise.
 
-## `set-run-mode <task-id> <autonomous|interactive> [--stage <stage>]...`
+## `set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]...`
 
-Run mode is written only when a person explicitly asks for an autonomous run on this task.
+Run mode is written only when a person explicitly asks for an autonomous or a light run on this
+task.
 Nothing above asks about it on its own, and nothing here proposes it either. Only call this when
 asked. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  set-run-mode --project "<projectPath>" "<task-id>" <autonomous|interactive> [--stage <stage>]...
+  set-run-mode --project "<projectPath>" "<task-id>" <autonomous|light|interactive> [--stage <stage>]...
 ```
 `autonomous` writes the field. `--stage`, repeatable, limits it to the stages named, one of
 `scope`, `research`, `design`, `implement`, `review`, `completion`. A person who asks for the build
 alone unattended passes `--stage implement`. No `--stage` covers every stage. `interactive`
 removes the field and the stages: there is no `"interactive"` value to write, since the field's
 absence already means that. Show the whole output.
+
+`light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
+Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
+whether end to end is on. Light keeps one script that walks the demo path in a browser. When end
+to end is off, say that a person sets it up with `/aida:surfaces e2e` before the run.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 

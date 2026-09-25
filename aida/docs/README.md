@@ -16,7 +16,7 @@ not the internals of any one command: read a command's own description for that.
 | [Implementation](implementation.md) | Writing the code: test discipline, standards, and how a build runs. |
 | [Review](review.md) | The stage's blocking checks, and how they become one verdict. |
 | [Finishing a task](finishing.md) | The pull request, closing on a failed review, follow-ups, the merge and pruning. |
-| [Run modes](run-modes.md) | Interactive and autonomous, and what changes in each stage. |
+| [Run modes](run-modes.md) | Interactive, autonomous and light, and what changes in each stage. |
 | [Where content comes from](sources.md) | Guides, playbooks, and recipes, and using your own before the catalog. |
 | [Playbooks](playbooks.md) | The rules you want followed: four sources, one file format, capture at completion, and where the plays reach the roles. |
 | [Visual and end-to-end tests](testing.md) | The two optional test harnesses, and what review does with each. |

@@ -29,6 +29,10 @@ and the record says it was not offered.
 
 ## Run them
 
+A light task runs no visual regression. Its check reads undeclared and names the light run, and
+implementation's start logged the skip. End to end runs as usual, because the script that walks
+the demo path is the one test a light run keeps.
+
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh surfaces "<task_folder>"
