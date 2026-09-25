@@ -307,7 +307,8 @@ The implementer builds it and one reviewer reads the diff against the contract. 
 eight checks reads deferred, because nothing here can judge the work, and it passes on that one
 answer. The suite reads undeclared. The coding standards, static analysis and security tools
 still run, where the project has them. When the task finishes, each done-when sentence becomes
-a checklist row under the criteria the order owns, and you answer those criteria at review.
+a checklist row under the criteria the order owns, or serves when it owns none. You answer those
+criteria at review.
 
 ## Writing the code
 

@@ -410,7 +410,8 @@ wo_summary() {
 # One line naming the proof the order's owned criteria imply, printed beside the proof it declares
 # (live-run row 145). $1 is the work order document, $2 its id. An order whose every owned file
 # lies under the project folder produces a document, so it implies `record`, the rule
-# add-owned-file applies. Otherwise the line reads criteriaOwned alone. Every kind proves a
+# add-owned-file applies. On a task with no automated tests any other order implies `confirm`, the
+# same rule's other half. Otherwise the line reads criteriaOwned alone. Every kind proves a
 # machine-verified criterion in its own way, so owning one implies any kind: what the order
 # produces decides. The line said `tests` here once, and pushed a report or an update onto an
 # invented test. An order owning criteria of which none is machine-verified implies a proof
@@ -426,6 +427,10 @@ implied_proof_line() {
   if [ "$(printf '%s' "$1" | jq -r --arg t "$PROJECT_PATH/" \
         '((.ownedFiles // []) | length > 0) and ((.ownedFiles // []) | all(startswith($t)))')" = "true" ]; then
     echo "impliedProof: record, because every file $2 owns lies under the project folder"
+    return
+  fi
+  if [ "$(automated_tests "$TASK_PATH")" = "no" ]; then
+    echo "impliedProof: confirm, because the task has no automated tests, so a person confirms $2's done-when rows at review"
     return
   fi
   if [ "$(contract_ok)" != "true" ]; then
@@ -466,6 +471,7 @@ open_summary_of() {
         ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
         ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
+        ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person, and the contract does not say the task has no automated tests: update --proof tests"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),

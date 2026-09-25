@@ -219,8 +219,9 @@ and pick the kind from that answer:
 A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
 tests, the gate lines, the checks on the record, the look, or the person's confirmation.
 `create` and `update` print `impliedProof:` beside the proof the order declares. It says
-`record` when every owned file lies under the project folder, and `any kind` for a
-machine-verified criterion. What the order produces decides. When the product is truly unclear,
+`record` when every owned file lies under the project folder. On a task with no automated tests
+it says `confirm` for any other order. Otherwise it says `any kind` for a machine-verified
+criterion. What the order produces decides. When the product is truly unclear,
 `tests` stays the default, on a task that has tests. A wrongly
 tested configuration order wastes one build, and a wrongly untested code order ships unproven.
 
@@ -567,6 +568,8 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every work order whose proof is `observe` and that declares a test, names no surface, or has
   no done-when row;
 - every work order whose proof is `confirm` and that declares a test, or has no done-when row;
+- every work order whose proof is `confirm` on a task whose contract does not say it has no
+  automated tests;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file;
@@ -609,7 +612,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
     call;
   - a `confirm` order declaring a test needs a `remove-test` call for it, or `--proof tests` if
     the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
-    row is a sentence the person confirms at review, so write it as one thing they can check;
+    row is a sentence the person confirms at review, so write it as one thing they can check. A
+    `confirm` order on a task whose contract does not say it has no automated tests needs
+    `update --proof tests` and its tests;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The

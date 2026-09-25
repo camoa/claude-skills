@@ -198,7 +198,8 @@ An order that builds code on a task with no automated tests writes no test eithe
 `proof: confirm`, and design sets that value itself when the order's first file is code, unless
 you set a proof by hand. It needs at least one done-when row. Each row is a sentence you confirm
 at review. The design check refuses a `confirm` order that declares a test or has no done-when
-row.
+row. It also refuses one on a task whose contract does not say it has no automated tests, such
+as a task whose answer changed to yes after design. The repair is `update --proof tests`.
 
 Design picks the proof from what the order produces. Code that a test can pin gets `tests`, or
 `confirm` on a task with no automated tests. Tools run that change state get `gate`. A document

@@ -61,7 +61,7 @@
       "items": {
         "$ref": "#/$defs/criterionRow"
       },
-      "description": "One entry per criterion in the frozen contract. Every machine-verified one is confirmed, because `finish` refuses otherwise, apart from one an order proved by confirm owns. That one, and a person-verified one, stay not-judged here and are answered later, by a person reading the checklists below (gap row 196)."
+      "description": "One entry per criterion in the frozen contract. Every machine-verified one is confirmed, because `finish` refuses otherwise, apart from one that carries the done-when rows of an order proved by confirm: a criterion that order owns, or serves when it owns none. That one, and a person-verified one, stay not-judged here and are answered later, by a person reading the checklists below (gap row 196)."
     },
     "checklists": {
       "type": "array",
@@ -69,7 +69,7 @@
       "items": {
         "$ref": "#/$defs/checklistRow"
       },
-      "description": "What a person must look at, one entry per person-verified criterion per order serving it, copied from that order's own frozen test record rather than pointed at. The review stage reads this one file, and the frozen records are per order. An order proved by confirm adds one entry per done-when row under each criterion it owns, copied from the frozen work order (gap row 196)."
+      "description": "What a person must look at, one entry per person-verified criterion per order serving it, copied from that order's own frozen test record rather than pointed at. The review stage reads this one file, and the frozen records are per order. An order proved by confirm adds one entry per done-when row under each criterion it owns, or serves when it owns none, copied from the frozen work order (gap row 196)."
     },
     "deferred": {
       "type": "array",

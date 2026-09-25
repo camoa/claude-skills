@@ -26,7 +26,8 @@
 # Public:
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
-#   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`
+#   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
+#                                          and `confirmCriteria` beside it
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
 #
@@ -59,6 +60,12 @@ br_order_facts() {
 
 # The same classification as a jq definition, for the sites that cannot call a function. A caller
 # prefixes this string to its own program and reads `orderFacts` with a work order as the input.
+#
+# `confirmCriteria`, also on one work order, lists the criteria the person answers for an order
+# proved by confirm (gap row 196): the ones it owns, or the ones it serves when it owns none. Every
+# other order lists none. finish writes the order's done-when rows under these criteria and does
+# not wait for their row state. review's close takes the person's answer on them. The three sites
+# read the one list, so a row a person sees is always a row the person can answer.
 BR_ORDER_FACTS_JQ='
   def orderFacts:
     (.proof // "tests") as $p
@@ -67,7 +74,11 @@ BR_ORDER_FACTS_JQ='
       elif $p == "observe" then {slot: "observed",           range: "code",    ownsCode: true}
       elif $p == "confirm" then {slot: "confirm-at-review",  range: "code",    ownsCode: true}
       else                      {slot: "order-tests",        range: "code",    ownsCode: true}
-      end;'
+      end;
+  def confirmCriteria:
+    if orderFacts.slot != "confirm-at-review" then []
+    elif ((.criteriaOwned // []) | length) > 0 then .criteriaOwned
+    else (.criteriaServed // []) end;'
 
 # The roles one order's proof kind dispatches, and the catalog points its tests step asks. $1 one
 # work order document. Sets two space-separated lists. It reads the slot br_order_facts sets, so a

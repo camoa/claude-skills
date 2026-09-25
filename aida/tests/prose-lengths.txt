@@ -15,14 +15,14 @@ agents/row-checker.md 69
 agents/test-author.md 104
 skills/completion/SKILL.md 103
 skills/completion/references/close.md 116
-skills/design/SKILL.md 756
+skills/design/SKILL.md 761
 skills/implement/SKILL.md 220
 skills/implement/references/build.md 424
 skills/implement/references/finish.md 186
 skills/implement/references/preconditions.md 189
 skills/implement/references/review.md 383
 skills/implement/references/start.md 105
-skills/implement/references/tests.md 427
+skills/implement/references/tests.md 428
 skills/next/SKILL.md 192
 skills/playbooks/SKILL.md 96
 skills/project/SKILL.md 584

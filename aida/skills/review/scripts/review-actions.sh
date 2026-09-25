@@ -2350,10 +2350,11 @@ do_close() {
   local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
   local observe_owner observed_file confirm_owned
   alignment="$(rw_alignment)"
-  # The criteria an order proved by confirm owns. The person answers each one with --row, the way
-  # a person-verified criterion is answered, from the checklist rows `finish` wrote (gap row 196).
+  # The criteria an order proved by confirm puts to the person, confirmCriteria in
+  # scripts/lib/proof.sh. The person answers each one with --row, the way a person-verified
+  # criterion is answered, from the checklist rows `finish` wrote (gap row 196).
   confirm_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ"'
-    [ (.workOrders // [])[] | select(orderFacts.slot == "confirm-at-review") | (.criteriaOwned // [])[] ]')"
+    [ (.workOrders // [])[] | confirmCriteria[] ] | unique')"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
   suite_verdict="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.checks // [])[] | select(.id == "suite") ][0].verdict // "unknown"')"
@@ -2437,7 +2438,7 @@ $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm owns it. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm puts it to a person. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then

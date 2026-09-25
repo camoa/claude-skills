@@ -29,7 +29,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
 #   - a work order whose proof is confirm declares no test either, and has at least one done-when
-#     row: its task has no automated tests, and a person confirms each row at review (gap row 196);
+#     row: its task has no automated tests, and a person confirms each row at review (gap row 196).
+#     Its task's contract says it has no automated tests. A contract answered yes after design, or
+#     a confirm set by hand on a task with tests, would build code with no test;
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
@@ -73,6 +75,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/design-guides-read-schema.json: the guides-read record's field list
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
+#   <plugin root>/scripts/lib/task-helpers.sh: automated_tests, sourced, never run
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -120,7 +123,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      file outside the project folder or under an ignored path, or has no done-when row, an
 #      order whose proof is observe and
 #      that declares a test, names no surface or has no done-when row, an order whose proof is
-#      confirm and that declares a test or has no done-when row, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
+#      confirm and that declares a test, has no done-when row, or sits on a task whose contract
+#      does not say it has no automated tests, an order that owns nothing and reaches no owner, a dependency cycle, two orders sharing a declared owned file, or an id
 #      named anywhere that resolves to nothing. Each is named in the JSON on stdout.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
@@ -170,6 +174,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
+#                 confirmOrdersOnTaskWithTests: [ {id, path} ],
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
@@ -258,6 +263,12 @@ source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHE
 [ -f "$PROOF_LIB" ] || die3 "cannot read the proof-kind library: $PROOF_LIB not found"
 # shellcheck source=/dev/null
 source "$PROOF_LIB" || die3 "the proof-kind library failed to load: $PROOF_LIB"
+
+# automated_tests, for the confirm-order list below. The one reader of the contract's answer.
+TASK_HELPERS_LIB="$PLUGIN_ROOT/scripts/lib/task-helpers.sh"
+[ -f "$TASK_HELPERS_LIB" ] || die3 "cannot read the task-helper library: $TASK_HELPERS_LIB not found"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
 [ -f "$DESIGN_SCHEMA_FILE" ] || die3 "cannot read the design field list: $DESIGN_SCHEMA_FILE not found"
 jq empty "$DESIGN_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the design field list: $DESIGN_SCHEMA_FILE is not valid JSON"
@@ -556,6 +567,7 @@ RECORD_ORDERS_DECLARING_TESTS_JSON='[]'
 RECORD_ORDERS_OWNING_OUTSIDE_JSON='[]'
 RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON='[]'
 OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
+CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON='[]'
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
@@ -638,6 +650,12 @@ else
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "observed") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
   ')"
+  # An order a person confirms is built with no test. That is only right on a task whose contract
+  # says it has no automated tests (gap row 196). The answer can move to yes after design, and a
+  # confirm can be set by hand on a task with tests. Either way the order needs a test.
+  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
+    [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | {id: .id, path: .path} ]
+  ')"
 
   # The same question asked the other way (live-run row 145). The list above asks whether an order
   # owning a machine-verified criterion declares a test. This one asks whether an order left at the
@@ -687,7 +705,7 @@ else
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
-  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length)')"
+  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -877,6 +895,7 @@ jq -n \
   --argjson recordOrdersOwningOutsideProjectFolder "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" \
   --argjson recordOrdersWithNoDoneWhen "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
+  --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
   --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
@@ -914,6 +933,7 @@ jq -n \
       recordOrdersOwningOutsideProjectFolder: $recordOrdersOwningOutsideProjectFolder,
       recordOrdersWithNoDoneWhen: $recordOrdersWithNoDoneWhen,
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
+      confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
       testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds

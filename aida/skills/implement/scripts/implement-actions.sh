@@ -8773,11 +8773,11 @@ do_finish() {
   # A criterion that is not confirmed stops the stage, and three different facts land here. The
   # refusal names which, and which action answers it: `restart` wants a drift halt, `grant-attempt`
   # answers a spent counter, `clear-halt` the rest, so a reader told only "not confirmed" has
-  # nothing to do next and no way to learn what. A criterion an order proved by confirm owns is
-  # not asked here: its task has no automated tests, and the person answers it at review from
-  # the checklist rows below (gap row 196).
+  # nothing to do next and no way to learn what. A criterion an order proved by confirm puts to the
+  # person, confirmCriteria in scripts/lib/proof.sh, is not asked here: its task has no automated
+  # tests, and the person answers it at review from the checklist rows below (gap row 196).
   unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" "$BR_ORDER_FACTS_JQ"'
-      ([ ($snap.workOrders // [])[] | select(orderFacts.slot == "confirm-at-review") | (.criteriaOwned // [])[] ]) as $confirmed
+      ([ ($snap.workOrders // [])[] | confirmCriteria[] ]) as $confirmed
       | ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id
            | select(. as $i | $confirmed | index($i) | not) ]) as $machine
       | ([ ($snap.workOrders // [])[] | (.criteriaServed // [])[] , (.criteriaOwned // [])[] ]) as $served
@@ -8912,11 +8912,11 @@ FN_RECIPES
     oi=$((oi + 1))
   done
   # An order proved by confirm froze no row, so its done-when rows are the checklist. One row per
-  # sentence, under each criterion the order owns, and the person answers that criterion at
-  # review's close (gap row 196).
+  # sentence, under each criterion confirmCriteria names for the order, and the person answers
+  # that criterion at review's close (gap row 196).
   checklists_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson have "$checklists_json" "$BR_ORDER_FACTS_JQ"'
-      $have + [ (.workOrders // [])[] | select(orderFacts.slot == "confirm-at-review") | . as $o
-                | ($o.criteriaOwned // [])[] as $cid | ($o.doneWhen // [])[]
+      $have + [ (.workOrders // [])[] | . as $o
+                | confirmCriteria[] as $cid | ($o.doneWhen // [])[]
                 | {criterion: $cid, unit: $o.id, checklist: .} ]')"
   [ -n "$checklists_json" ] || die 3 "finish: could not add the done-when rows of the orders a person confirms."
 
