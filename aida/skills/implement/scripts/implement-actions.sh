@@ -496,6 +496,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and the file is then accepted as `harness-new-unit`. The same exit when no
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
+#      The same exit when two tests of one file have reds that print the same places in it: they
+#      failed on a shared precondition, not on their own assertions (live-run row 207).
 #  81  `tests-freeze` was given an --absence the order cannot route to review. Two facts, one
 #      refusal, because both say the same thing: the flag names something that is not an absence
 #      clause of this order. The clause is not, verbatim, one of the order's frozen `doneWhen`
@@ -4838,6 +4840,38 @@ TF_EOF
   if printf '%s' "$reds_json" | jq -e 'any(.[]; .signal == "harness-new-unit")' >/dev/null; then
     echo "TESTS-FREEZE: $unit_id creates a unit: $unit_file matches $unit_file_glob under ## Unit declaration in $unit_file_recipe. A red holding only the harness marker is accepted for it, because nothing can fail an assertion before the unit exists."
   fi
+
+  # --- 80: two tests that fail at one place failed on a shared precondition (live-run row 207) ----
+  # Ten tests opened with one guard that the service exists, and all ten reds stopped on that
+  # line. Each held an assertion marker, yet no test was watched failing on its own assertion. A
+  # red's place is every `<test file name>:<line>` its file prints, in order: the failing line and,
+  # through a helper, the test's own call line. Two tests of one file whose reds print the same
+  # places failed at one shared line, so that red counts for neither. Only the reds read on an
+  # assertion are compared, because every harness red of the order that creates the unit stops at
+  # one place by nature.
+  local places_tmp place_name place_rel place_path place_chain shared_places
+  places_tmp="$IMPL_DIR/.tests-freeze-places.$$"
+  : >"$places_tmp"
+  ri=0
+  while [ "$ri" -lt "$red_count" ]; do
+    place_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri] | select(.signal == "assertion" or .signal == "failure-line") | .name')"
+    place_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
+    ri=$((ri + 1))
+    [ -n "$place_name" ] || continue
+    place_rel="$(printf '%s' "$tests_json" | jq -r --arg n "$place_name" '[ .[] | select(.name == $n) ][0].relPath')"
+    place_chain="$(jq -n -r --rawfile text "$place_path" --arg b "${place_rel##*/}" '
+        [ $text | indices($b)[] as $i
+          | select($i == 0 or ($text[$i - 1:$i] | test("[A-Za-z0-9_.-]") | not))
+          | ($text[$i + ($b | length):$i + ($b | length) + 12] | capture("^:(?<n>[0-9]+)")) as $c
+          | "\($b):\($c.n)" ] | join(" then ")')"
+    [ -z "$place_chain" ] || printf '%s\t%s\t%s\n' "$place_rel" "$place_chain" "$place_name" >>"$places_tmp"
+  done
+  shared_places="$(jq -R -s -r '
+      split("\n") | map(select(length > 0) | split("\t")) | group_by(.[0] + "\t" + .[1])
+      | map(select(length > 1) | "\(.[0][1]) (\(map(.[2]) | join(", ")))") | join("; ")' "$places_tmp")"
+  rm -f "$places_tmp"
+  [ -z "$shared_places" ] \
+    || die 80 "tests-freeze: these tests' reds all stop at one place: $shared_places. A failure there is a shared precondition, such as a guard that the class or service exists, so it is a red for none of them. Nothing is frozen. Make each test reach its own assertion: write the guard so that it asserts nothing, for example a lookup that gives the empty value when the service is absent. Then run each test again."
 
   # --- 101: a --locks-in reason written commit:<id> names one of this order's own commits --------
   # A test of the order's own done-when that arrives green has no code the author may cite: the

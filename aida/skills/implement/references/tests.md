@@ -278,8 +278,12 @@ Close the dispatch record as soon as it returns, per SKILL.md.
 **A confirmed row is the checker's, in both modes.** It becomes
 `--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
-confirmed row to the person. The record says a model judged it, so a person can list those rows
-later and read any of them again.
+confirmed row to the person, except on an interactive run when another row of this order goes
+back to the test author. Then list this order's confirmed rows, each with the checker's note, and
+ask once whether any of them goes back too. The author rewrites this order's tests anyway, so a
+doubt costs nothing to act on now (live-run row 208). A confirmed row the person sends back becomes
+`--row <criterion id>=rejected::person::<the person's words>`. The record says a model judged every
+other confirmed row, so a person can list those rows later and read any of them again.
 
 **Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
 doubts that the new tests for one requirement prove what it asks. A model may not settle that
@@ -383,6 +387,18 @@ then freezes it as before, records `redSignal: unchecked` on the test, and says 
 line. Every other red carries the reading that accepted it. A freeze with a `--red`, no
 `--test-recipe` and no recipe on record refuses, because then no red can be read at all. A `--locks-in` reason is
 recorded beside the test, and the review brief says where it is.
+
+**Two tests that fail at one place have no red.** The freeze reads each red it accepted on an
+assertion for the places it prints: every `<test file name>:<line>`, in order. Two tests of one
+file whose reds print the same places failed at one shared line. That line is a precondition, such
+as a guard that the class or service exists, and the freeze refuses (exit 80). Ten tests that fail
+on one guard prove one fact ten times, and none was watched failing for its criterion (live-run row
+207). The repair is the test: each test reaches its own assertion. A guard may stay if it asserts
+nothing, for example a lookup that gives the empty value when the service is absent. The red is
+then taken against an empty result, so a test that an empty result passes arrives green. A red
+that prints no place in its test file is not compared, and neither is a harness red. This check is
+a floor. A guard written again at the top of each test fails at a different line each time, so
+the freeze cannot see it. The test author's own instructions forbid that guard.
 
 **Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
 confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the

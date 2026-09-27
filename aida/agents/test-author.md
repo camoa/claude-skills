@@ -84,6 +84,14 @@ a test fail: you may write no production file. When this order creates the modul
 erroring where the harness enables it is the expected red. The freeze records it as such; write no
 scaffold to get another.
 
+**Each test fails at its own assertion.** When two tests stop at the same line of the same file,
+neither has a red, and the freeze refuses both. A guard that asserts the class or service exists
+is such a line when the tests share it. So do not open a test with an assertion that the unit
+exists, not even one written again in each test. When the class may be absent, write a guard that
+asserts nothing. For example, a lookup gives the empty value when the service is absent, and the
+test's own assertion then fails. If that empty value makes a test pass, the test cannot tell the
+behaviour from its absence. Strengthen it: add a case that an empty result fails.
+
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
 and both are worth more than a green line. Correct it once. If it is still green because code
