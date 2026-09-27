@@ -249,8 +249,11 @@ out of its tool rows, because the implementer may not write them.
 
 Build one row per criterion the tests name: the criterion, its verification sentence, and the names
 of the tests that prove it. Build one more row when a test proves the order's done-when: the order
-id, its done-when text, and those tests. The rows carry names and not test code. The question is
-whether the tests named exercise the sentence beside them.
+id, its done-when text, and those tests. That row also names each criterion the order owns and
+the tests named for it. Add the checker's verdict on that criterion when an earlier round gave
+one. The author tests the done-when only where nothing the order owns covers it. So the checker
+needs the owned criteria to judge the done-when row (gap row 210). The rows carry names and not
+test code. The question is whether the tests named exercise the sentence beside them.
 
 **Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
 recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a

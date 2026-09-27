@@ -36,6 +36,11 @@ a verify clause, and answer the same question: if these tests pass, is the done-
 that serves a criterion it does not own freezes its tests this way. The thing that criterion
 observes is built by its owner later. Key your verdict by the order id.
 
+The done-when row also names the criteria the order owns, with their tests. It gives a verdict
+from an earlier round where one exists. Judge only the parts of the done-when that those tests
+leave uncovered. A part that an owned criterion's confirmed row covers needs no second test. That
+row is confirmed in this dispatch, or by the earlier verdict the done-when row names.
+
 For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. Reject when a test breaks a rule the recipe states. Reject when a
@@ -66,8 +71,7 @@ anywhere. Write it in this shape:
 The second entry is the done-when row, present only when the rows you were given carry one.
 
 You have no Bash tool. You cannot run anything. Reason from the recipe and the test file's text
-alone. You are not given another row's tests from this order, another order's rows, or the task's
-goal prose.
+alone. You are not given another order's rows, or the task's goal prose.
 
 Stop and say so, rather than guessing. Do this when a row names a test file that does not exist, or
 a verify clause too vague to answer against. Do this too when the recipe path does not open.
