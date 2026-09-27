@@ -9,7 +9,7 @@ All notable changes to this plugin are recorded here. The format follows
 The first release of version 6, after twenty-six betas. It replaces
 `ai-dev-assistant` in the marketplace. The betas ran live tasks on real
 projects, and every row those runs opened is closed. This release adds the
-last three.
+last six.
 
 ### Changed
 
@@ -19,6 +19,18 @@ last three.
   Unattended runs take each recommendation, as before.
 - The design pages no longer say that every recipe holds prose only. A recipe
   may carry a `verifier:` block, a prose list, or both, and design reads each.
+- Design no longer reads production source for a reuse decision. It sends
+  `internal-searcher`, in a new interface mode, once per candidate the order
+  calls, and records its return word for word as `--interface`. Design's
+  `read` prints the task's worktree, which that dispatch names.
+- A test recipe may declare `## Tokens`. Preconditions run them in the
+  worktree and record the values, and every later step fills them in any
+  row. The token runner is one copy, shared with the site bring-up. AIDA
+  holds no framework logic for it: the recipe computes each value.
+- A precondition verdict that is not met names the failing row and its
+  command on `next:`, and its first output line on its own `failedOutput:`
+  line. Tool install advice prints on `nextAdvice:`, only when a condition's
+  tool is absent.
 
 ### Fixed
 
@@ -31,10 +43,9 @@ last three.
 
 ### Checks
 
-Sixty-four fixtures, 5,662 rows, pass under bash and under zsh on the merged
-branch. The repository's specs pass. One run of the site-check fixture missed
-two interrupt rows under parallel load, because the signal landed after the
-command had finished. It passed 108 of 108 when run again on its own.
+Sixty-five fixtures, 5,728 rows, pass under bash and under zsh on the merged
+branch, every run exit 0. The repository's specs pass. Each build had a fresh
+checker.
 
 ### Known limits
 
@@ -42,6 +53,9 @@ command had finished. It passed 108 of 108 when run again on its own.
   one cheap to answer.
 - On an order that owns no file, a check row that holds a path reads unknown,
   and a verify line reads not applicable. Both stop the order from passing.
+- A token block is one command with no shell characters. The Drupal test
+  recipe finds its custom-code folder on disk until it ships a script.
+- An interrupt in the middle of a site token run can leave a temporary folder.
 
 ## [6.0.0-beta.26] - 2026-09-25
 
