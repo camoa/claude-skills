@@ -111,7 +111,7 @@ by its id in that order's `reasoning`.
 ## Read the guides and recipes research found
 
 Research named these without opening them, so design is the first read. Research recorded an
-address for each; open it through the navigator the same way, and read a project's own source
+address for each; open it through the navigator the same way, and read a project's own guide file
 directly. Open a tooling recipe with the navigator's `tooling --name` mode, by the name research
 recorded. One agentic recipe covering the work means the decision is already made: follow it.
 Its `## Verifier` becomes the proof of each order it covers, as "Carry the proof from its source"
@@ -269,15 +269,16 @@ research stated it, the cost dimensions compared, the verdict, and why:
 ```
 Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
 `--path` is where the reused thing lives, relative to the code repository: a file, or a
-configuration path when the candidate is not code. `--interface` is the text `internal-searcher`
-returns, word for word. Do not read the candidate's source here, and do not reword the return.
-The test author may not read the source either, and the tests brief carries this text in place
-of it. A dispose that omits both records no reuse.
+configuration path when the candidate is not code. When the return names several paths, give the
+file the order calls as `--path`. The other paths stay in the interface text. `--interface` is
+the text `internal-searcher` returns, word for word. Do not read the candidate's source here, and
+do not reword the return. The test author may not read the source either, and the tests brief
+carries this text in place of it. A dispose that omits both records no reuse.
 
-Before that dispose, dispatch `internal-searcher` once per candidate, with the message this file
-names. Its lines are the role, the run mode, the word `interface`, the candidate as research named
-it, the order file's path, the code path, and the project folder. The code path is the repository
-that `--path` is relative to.
+Before that dispose, dispatch `internal-searcher` once per candidate the order's build or tests
+will call, with the message this file names. Its lines are the role, the run mode and the word
+`interface`. Then come the candidate as research named it, the order file's path, the code path,
+and the project folder. The code path is the task's worktree, from the `worktree:` line.
 
 A decline takes no `--cost` and no `--path`: nothing is compared, and nothing is reused. Its
 `--why` names what was weighed. It stands in both modes, because a decline with a reason is a
