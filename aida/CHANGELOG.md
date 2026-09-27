@@ -9,7 +9,7 @@ All notable changes to this plugin are recorded here. The format follows
 The first release of version 6, after twenty-six betas. It replaces
 `ai-dev-assistant` in the marketplace. The betas ran live tasks on real
 projects, and every row those runs opened is closed. This release adds the
-last ten, and a harder guard against dangerous commands.
+last thirteen, and a harder guard against dangerous commands.
 
 ### Changed
 
@@ -51,6 +51,19 @@ last ten, and a harder guard against dangerous commands.
   owns, their tests, and the verdict that stands on each. The row checker
   judges only the parts those tests leave uncovered. A rejected owned row
   covers nothing, and a repaired owned row sends the done-when row back too.
+- A recipe's `requires_tooling` is read. Preconditions check each tool the
+  test recipe names, through the tool skill's new `require` action, and a
+  missing one goes to the install path before any recipe line runs. Review
+  checks its tools as advice and does not stop. A tool with no folder recipe
+  is looked up in the catalog through the navigator's `tooling --name`.
+  Absent means command not found, exit 127, only.
+- An environment recipe may declare `## Status`. Before an order's verify
+  lines run, AIDA runs it, and a site that is down stops the step at exit 103
+  in both run modes, naming `task environment <id> up`. No attempt is spent.
+  `task environment show` prints the status.
+- Role answer files are named `answers-<order>-attempt<n>.md` and
+  `answers-<order>-fix<n>.md`. Claude Code refuses a subagent's write to a file
+  named like a report.
 
 ### Fixed
 
@@ -63,7 +76,7 @@ last ten, and a harder guard against dangerous commands.
 
 ### Checks
 
-Sixty-eight fixtures, 5,772 rows, pass under bash and under zsh on the merged
+Seventy-one fixtures, 5,916 rows, pass under bash and under zsh on the merged
 branch, every run exit 0. The repository's specs pass. Each build had a fresh
 checker.
 
@@ -83,6 +96,10 @@ checker.
 - A guard written again at the top of each test fails at a different line, so
   the freeze cannot see it. Only the author's instructions forbid it.
 - Two sibling hooks split commands with a `sed` form that macOS does not read.
+- A tool whose check fails for another reason, such as a site that will not
+  start, reads present, and the later run fails where a person sees it.
+- The Drupal site recipe needs its `## Status` block from the catalog before
+  stopped Drupal sites are caught.
 
 ## [6.0.0-beta.26] - 2026-09-25
 
