@@ -62,6 +62,13 @@ Write this order's own tests against its `doneWhen` instead. For each criterion 
 person, write a checklist line, copying its verification sentence whole. A base class or a fixture
 you write beside the tests is a support file. The tests stand on it, and it is not a test.
 
+**An absence gets no test.** When the brief holds `absenceCandidates`, read each clause it names.
+A clause that asserts an absence says the change added nothing of a named kind. Write no test for
+it. Return it, verbatim, as an absence clause, and the freeze routes it to review. Never test an
+absence by reading the production source and searching it. That test cannot fail for the right
+reason: a comment fails it, and a call written another way passes it. A clause in that list that
+states a behaviour still takes a test.
+
 Choose the level from the recipe, not from habit. The recipe names the levels this framework has and
 what each one reaches.
 
@@ -107,8 +114,8 @@ decide it. If you can name neither existing code nor such a commit, report it as
 
 Return one row per test: the path, the test's name, and the criterion its name carries. The row
 also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test
-returns the order id in place of a criterion. Then each checklist line, the path of each support
-file you wrote or changed, and the list of anything that passed on arrival.
+returns the order id in place of a criterion. Then each checklist line, each absence clause, the
+path of each support file you wrote or changed, and the list of anything that passed on arrival.
 
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a

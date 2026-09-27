@@ -45,12 +45,30 @@
 #                                         the <codePath> repository, else <codePath>
 #   playbooks_record_path <folder>        prints the path of the playbook record research loads
 #   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
+#   DENIES_JQ                             a jq definition, `denies`, true when a string carries
+#                                         a negation word
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
 # and is_git_repo from scripts/lib/recipes.sh. Two callers, scope and design, do not source that
 # file, so resolve_task_folder sources it when the function is absent, the way task_worktree
 # sources playbooks.sh for pb_slug. Every caller resolves inside a command substitution, so that
 # source lands in a subshell and clobbers nothing. The refusal takes die79 from the caller.
+
+# Whether a done-when clause carries a negation word. Three readers ask it: design's check, the
+# tests brief and the freeze's --absence refusal. So they read one clause alike (gap row 209). The
+# word list is closed, so it reads the same clause the same way every time. A word ending in n't
+# after a letter is a negation too, so "doesn't" and "won't" deny and a bare "n't" does not.
+# U+2018, U+2019 and U+02BC read as a straight apostrophe first, because a clause pasted from a
+# document or typed on a phone carries one of them. A negation word is not an absence: "the form
+# shows no legacy field" denies and is a behaviour. Each reader treats this as a floor.
+# shellcheck disable=SC2034 # read by the sourcing script
+DENIES_JQ='
+  def denies: ascii_downcase | gsub("[\u2018\u2019\u02bc]"; "\u0027")
+    | [scan("[a-z0-9]+(?:\u0027[a-z]+)?")]
+    | any(.[]; . as $w
+          | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without", "cannot"]
+              | index($w)) != null)
+            or ($w | test("[a-z]n\u0027t$")));'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
 # task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree

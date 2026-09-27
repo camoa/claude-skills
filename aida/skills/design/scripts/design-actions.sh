@@ -1573,6 +1573,24 @@ do_check() {
   echo "verifyNotBinding: $(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do jq -r 'select(any((.verify // [])[]; .binding == false)) | .id' "$f" 2>/dev/null; done \
     | paste -s -d ',' - | sed 's/,/, /g; s/^$/none/')"
+  # The done-when rows that may join an absence to a behaviour (gap row 209). --absence routes a
+  # clause verbatim, so a joined row cannot go to review without a reopen. A script cannot parse a
+  # clause, so a negation word and an `and` is the whole test, and the line never blocks the close.
+  local joined
+  joined="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r "$DENIES_JQ"'
+        . as $wo
+        | [ (.doneWhen // []) | to_entries[] | select(.value | type == "string")
+            | select((.value | denies) and (.value | ascii_downcase | test("\\band\\b")))
+            | .key + 1 | tostring ]
+        | select(length > 0)
+        | $wo.id + (if length == 1 then " row " else " rows " end) + join(", ")' "$f" 2>/dev/null; done \
+    | paste -s -d ';' - | sed 's/;/; /g')"
+  if [ -n "$joined" ]; then
+    echo "absenceJoined: $joined | best effort: each row holds a negation word and an \"and\". Split a row that joins an absence to a behaviour into two rows"
+  else
+    echo "absenceJoined: none"
+  fi
   if [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then

@@ -3736,6 +3736,16 @@ do_tests_brief() {
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
 
+  # Another key, only when a done-when clause carries a negation word: the author decides what to
+  # test, and was never told an absence goes to review instead (gap row 209). A negation word is
+  # the floor a script can read, so the author still judges each clause by references/tests.md.
+  local absence_out
+  absence_out="$(printf '%s' "$UNIT_JSON" | jq -c "$DENIES_JQ"'
+    [ (.doneWhen // [])[] | select(type == "string" and denies) ]
+    | if length == 0 then null
+      else {clauses: .,
+            whatToDo: "Each clause here carries a negation word. Return one that asserts an absence, verbatim, and write no test for it. The freeze routes it to review with --absence. A clause that states a behaviour still takes a test."} end')"
+
   # A ninth thing, only after a restart or a retake left this order's build and fix commits on the
   # branch: a test that passes on arrival is suspect, and the author is told rather than left to
   # find it (live-run row 94).
@@ -3808,7 +3818,7 @@ do_tests_brief() {
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
-        --argjson retake "$retake_json" \
+        --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
         --arg testRecipePath "$test_recipe_path" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
@@ -3816,7 +3826,8 @@ do_tests_brief() {
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
       playbooksPath: $playbooksPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
-     | if $retake == null then . else .retake = $retake end')"
+     | if $retake == null then . else .retake = $retake end
+     | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -3835,8 +3846,10 @@ do_tests_brief() {
                  + (.retake.finding.rulingReason // "the ruling reason is not on record")
                  + " | correct the tests it names and leave the other frozen rows alone")
               else null end),
+     absenceCandidates: (if has("absenceCandidates") then (.absenceCandidates.clauses | length) else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
     | if .treeHolds == null then del(.treeHolds) else . end
+    | if .absenceCandidates == null then del(.absenceCandidates) else . end
     | if .retake == null then del(.retake) else . end')"
   exit 0
 }
@@ -4243,19 +4256,11 @@ do_tests_freeze() {
   #
   # `denies` is a floor and not the whole rule: "the form shows no legacy field" carries `no` and a
   # test can watch it fail, so references/tests.md carries the judgement and this carries the
-  # refusal a script can make. The word list is closed, so it reads the same clause the same way
-  # every time. A word ending in n't after a letter is a negation too, so "doesn't" and "won't"
-  # deny and a bare "n't" does not. U+2018, U+2019 and U+02BC read as a straight apostrophe first,
-  # because a clause pasted from a document or typed on a phone carries one of them.
+  # refusal a script can make. `denies` is DENIES_JQ, from scripts/lib/task-helpers.sh, which
+  # the tests brief reads too.
   local absence_sorted absence_json absence_unknown absence_asserts
   absence_sorted="$(printf '%s' "$absence_raw" | jq -c \
-    --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" '
-    def denies: ascii_downcase | gsub("[\u2018\u2019\u02bc]"; "\u0027")
-      | [scan("[a-z0-9]+(?:\u0027[a-z]+)?")]
-      | any(.[]; . as $w
-            | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without", "cannot"]
-                | index($w)) != null)
-              or ($w | test("[a-z]n\u0027t$")));
+    --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" "$DENIES_JQ"'
     def known: . as $t | ($dw | index($t)) != null;
     . as $given
     | { routed: (reduce ($given[] | select(known) | select(denies)) as $t

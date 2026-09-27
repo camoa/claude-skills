@@ -177,8 +177,8 @@ is checked before the build is measured against it, whether or not a person is p
 Resolving which recipe is this step's job; reading it is the role's. The recipe runs to well over
 a hundred lines per framework, and reading it into this conversation is the cost the dispatch
 exists to avoid. What the author returns is in its definition, and each item has a flag in the
-freeze below. The red-run file per test goes under `--red`, and each support file under
-`--support`.
+freeze below. The red-run file per test goes under `--red`, each support file under
+`--support`, and each absence clause under `--absence`.
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
@@ -211,6 +211,8 @@ the four outcomes above fits. The author is then left choosing between an unprov
 `--absence <the clause, verbatim>`, one flag per clause. The freeze records it on the order's
 ledger entry. Review's brief carries it to the architecture reviewer, which judges it against the
 task's own diff. A clause routed this way is visible as owed, rather than untested in silence.
+The tests brief names each done-when clause that holds a negation word, under `absenceCandidates`.
+So the author, who decides what to test, returns an absence verbatim and writes no test for it.
 
 **What makes a clause an absence.** It is a claim about what the change added, answered by reading
 the diff and nothing else. "No new Composer dependency" is one. "The form shows the repeat field" is

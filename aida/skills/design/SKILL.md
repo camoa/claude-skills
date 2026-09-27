@@ -464,6 +464,11 @@ closed again on the live files. Nothing halts when nothing else on the order cha
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
   --id <woId> --description "<what this test must observe>"
 ```
+Write an absence as a done-when row of its own. An absence says the change added nothing of a
+named kind, such as no new dependency or no static call to the container. No test can watch it
+fail, so the build routes it to review by its exact words. A row that joins it to a behaviour,
+such as "contains no static call and saves no entity", cannot be routed without a reopen.
+
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
 here; the check below refuses an order that skips this. Four orders are the exception. One created
 with `--proof gate` declares no test, and the configuration check judges its owned machine
@@ -599,6 +604,12 @@ those orders open, because which of the other proofs fits is a judgment. Either 
 owns a machine-verified criterion after all, which `update --criteria-owned` sets. Or its proof is
 one of the others, which `update --proof` sets. Read the `verification` clause of each
 criterion the order owns, and ask what would settle it.
+
+`check` also prints `absenceJoined:`, at every exit code. It names each done-when row that holds a
+negation word and the word `and`, by order and row number. This is best effort, because a script
+cannot parse a clause, and it never blocks the close. Read each row it names. When a row joins an
+absence to a behaviour, remove it with `remove-done-when`. Then add each clause with its own
+`add-done-when` call.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 
