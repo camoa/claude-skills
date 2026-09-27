@@ -181,20 +181,26 @@ You merge the pull request. AIDA never does, and never pushes: a hook refuses `g
 the session. You can open that gate on your own machine, for as long as you want, with one
 file only `sudo` can create: `sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push`.
 While it exists, the session pushes; `sudo rm /etc/claude/allow-push` closes it. A force push
-stays refused.
+stays refused, and so do a mirror push and a delete of a remote branch.
 
-The same hook refuses the other commands that throw work away or publish it: a hard reset,
-`git clean`, `git branch -D`, `git checkout .`, `git restore .`, a recursive delete of root, home
-or the working tree, `gh repo sync`, and a `gh api` call that changes a git ref. It reads the
-command after it removes quotes and backslashes, so a quoted verb, an option before the verb,
-`sh -c`, and a wrapper such as `sudo` do not get past it. A git alias to a refused command, and a
-script run with `bash` or as `./script`, are read too. A verb from a variable is refused, because
-the hook cannot read it. It also refuses any write to AIDA's own `hooks/` folder, so an agent
-cannot edit the guard away. A heredoc body written to a file or to `git commit -F -` is not read.
-A refused phrase in `git commit -m` is still refused: put the message in a file.
+The same hook refuses the other commands that throw work away. These are a hard reset,
+`git clean`, a forced branch delete, and a checkout or restore of the whole working tree. A
+recursive delete of root, your home folder, the working folder, or a folder above them is refused
+too. It also refuses the commands that publish: `gh repo sync`, `gh pr merge`, and a `gh api` call
+that changes a branch.
+
+The hook removes quotes and backslashes before it reads the command. So a quoted verb does not get
+past it, and neither does an option before the verb, `sh -c`, or a wrapper such as `sudo`. A git
+alias set in the same command is read, and so is a script run with `bash` or as `./script`. A verb
+from a variable is refused, because the hook cannot read it. Any write to AIDA's own `hooks/`
+folder, or to a library the hook uses, is refused, so an agent cannot edit the guard away. So is
+`disableAllHooks` written to a `.claude` settings file. A heredoc body written to a file or to
+`git commit -F -` is not read. A refused phrase in `git commit -m` is still refused: put the
+message in a file.
 
 The hook is best effort, not a boundary. A command built at run time, an encoded string, or
-another language that runs git gets past it. `AIDA_ALLOW_DANGEROUS=1` in the shell that launched
+another language that runs git gets past it. So does an alias set before the command, and a path
+to the guard through a symlink. `AIDA_ALLOW_DANGEROUS=1` in the shell that launched
 the session turns it off. The hook's own header lists every form it catches and every form it
 cannot.
 
