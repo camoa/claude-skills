@@ -9,7 +9,7 @@ All notable changes to this plugin are recorded here. The format follows
 The first release of version 6, after twenty-six betas. It replaces
 `ai-dev-assistant` in the marketplace. The betas ran live tasks on real
 projects, and every row those runs opened is closed. This release adds the
-last nine, and a harder guard against dangerous commands.
+last ten, and a harder guard against dangerous commands.
 
 ### Changed
 
@@ -47,6 +47,10 @@ last nine, and a harder guard against dangerous commands.
 - Design writes an absence as a done-when row of its own, and its check names
   a row that joins one to a behaviour. The tests brief lists each clause with
   a negation word, and the author returns an absence for review with no test.
+- The checkpoint row for an order's done-when names the criteria the order
+  owns, their tests, and the verdict that stands on each. The row checker
+  judges only the parts those tests leave uncovered. A rejected owned row
+  covers nothing, and a repaired owned row sends the done-when row back too.
 
 ### Fixed
 
