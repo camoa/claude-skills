@@ -5,11 +5,13 @@
 # payload's command alike: heredoc bodies dropped, then one segment at a time split into
 # words. The two functions lived in the write hook until 2026-09-20 (live-run row 101), when the
 # read hook gained its own door and needed them. A hook is a script, not a library, so they moved
-# here and both hooks source this file.
+# here and both hooks source this file. hooks/deny-destructive-commands.sh sources it too.
 #
 # Public functions:
 #
-#   strip_heredocs <command>   prints the command with every heredoc body dropped
+#   strip_heredocs <command> [<pattern>]
+#                              prints the command with every heredoc body dropped, or with only
+#                              the bodies whose opening line matches the extended regex pattern
 #   read_words <line>          fills array w with the whitespace-separated words of the line
 
 # Drops every heredoc body from command $1 before a door reads it. The line holding `<<WORD`,
@@ -18,9 +20,11 @@
 # For `<<-` the shell strips leading tabs from the closing line, so the compare does too. A heredoc
 # body is never a write position. Read as commands, it is where PHP's `>=` and YAML's `>-` became
 # a refused write (live-run row 95). A heredoc with no closing line drops to the end. A herestring,
-# `<<<`, is not a heredoc and is left alone. bash 3.2 and zsh, no mapfile.
+# `<<<`, is not a heredoc and is left alone. With pattern $2, a body whose opening line does not
+# match it is kept and read. hooks/deny-destructive-commands.sh drops only a body that goes to a
+# file or to a commit message. bash 3.2 and zsh, no mapfile.
 strip_heredocs() {
-  local line word="" dash=false close q="'\"" tab=$'\t'
+  local line word="" dash=false close q="'\"" tab=$'\t' pattern="${2:-}"
   printf '%s\n' "$1" | while IFS= read -r line; do
     if [ -n "$word" ]; then
       close="$line"
@@ -32,6 +36,7 @@ strip_heredocs() {
     case "$line" in
       *'<<<'*) ;;
       *'<<'*)
+        [ -z "$pattern" ] || printf '%s' "$line" | grep -Eq -e "$pattern" || continue
         word="$(printf '%s' "$line" | sed -n "s/.*<<-\{0,1\}[[:space:]]*[$q]\{0,1\}\([^[:space:]$q;|&)<]*\).*/\1/p")"
         dash=false; case "$line" in *'<<-'*) dash=true ;; esac ;;
     esac

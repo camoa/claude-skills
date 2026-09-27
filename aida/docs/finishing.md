@@ -181,7 +181,24 @@ You merge the pull request. AIDA never does, and never pushes: a hook refuses `g
 the session. You can open that gate on your own machine, for as long as you want, with one
 file only `sudo` can create: `sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push`.
 While it exists, the session pushes; `sudo rm /etc/claude/allow-push` closes it. A force push
-stays refused. Once the branch is merged, the task's worktree and its site are the last things
+stays refused.
+
+The same hook refuses the other commands that throw work away or publish it: a hard reset,
+`git clean`, `git branch -D`, `git checkout .`, `git restore .`, a recursive delete of root, home
+or the working tree, `gh repo sync`, and a `gh api` call that changes a git ref. It reads the
+command after it removes quotes and backslashes, so a quoted verb, an option before the verb,
+`sh -c`, and a wrapper such as `sudo` do not get past it. A git alias to a refused command, and a
+script run with `bash` or as `./script`, are read too. A verb from a variable is refused, because
+the hook cannot read it. It also refuses any write to AIDA's own `hooks/` folder, so an agent
+cannot edit the guard away. A heredoc body written to a file or to `git commit -F -` is not read.
+A refused phrase in `git commit -m` is still refused: put the message in a file.
+
+The hook is best effort, not a boundary. A command built at run time, an encoded string, or
+another language that runs git gets past it. `AIDA_ALLOW_DANGEROUS=1` in the shell that launched
+the session turns it off. The hook's own header lists every form it catches and every form it
+cannot.
+
+Once the branch is merged, the task's worktree and its site are the last things
 left, and they cost disk and a running project each.
 
 Completion ran inside the worktree; pruning runs outside it. Run `/aida:task prune` from the
