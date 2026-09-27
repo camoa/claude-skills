@@ -5831,19 +5831,25 @@ BRV_RECIPES
 # from --value. A name given several --value rows runs its line once per value, in the order
 # given: each run puts that value's row first, where cr_lookup finds it, so the one filler fills
 # it. Only the first such name in a line multiplies it; any other token takes its first value.
+# A line holding `{paths}`, `{file}` or `{dirs}` on an order that owns no file does not apply,
+# as a check row does not (gap row 203): a tool handed no path reads its own default scope. The
+# output names it and the list goes on. When no line applies, the list reads undeclared, which
+# never passes an order alone, because br_checks_pass needs its deciding check met.
 # The first run that fails stops the list. A non-zero exit fails a run whatever its pass says.
 # `stdout empty` and `stdout contains <text>` then read standard output alone, because a status
 # command writes its message to standard error and exits 0 either way. It sets BRL_VERDICT,
-# empty when every line passed, else unmet or unknown; BRL_WHY, the reason in words; BRL_RC, the
-# last exit code or empty; BRL_N, how many lines ran; and BRL_LINE, the last line.
+# empty when every line that applies passed, undeclared when none applies, else unmet or unknown;
+# BRL_WHY, the reason in words; BRL_RC, the last exit code or empty; BRL_N, how many lines ran;
+# and BRL_LINE, the last line.
 BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
 br_run_lines() {
   local lines_json="$1" source="$2" dir="$3" outfile="$4" refused="$5"
   local count i pass literal argv_json result kind payload owned_json run_out run_err
-  local tok multi_name="" multi_values="" value values shown tab
+  local tok multi_name="" multi_values="" value values shown tab owned_count skipped=0
   tab="$(printf '\t')"
   BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
   owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  owned_count="$(printf '%s' "$owned_json" | jq 'length')"
   run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   run_err="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   count="$(printf '%s' "$lines_json" | jq 'length')"
@@ -5851,9 +5857,15 @@ br_run_lines() {
   while [ "$i" -lt "$count" ]; do
     BRL_LINE="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].run')"
     pass="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].pass // "exit 0"')"
-    i=$((i + 1)); BRL_N="$i"
+    i=$((i + 1))
     refuse_if_unsafe "$BRC_WHO" "$source" "$BRL_LINE" || die 3 "$BRC_WHO: $refused"
     argv_json="$(printf '%s' "$BRL_LINE" | jq -Rc 'split(" ") | map(select(. != ""))')"
+    if [ "$owned_count" -eq 0 ] && br_argv_takes_paths "$argv_json"; then
+      printf '+ %s\nnot applicable: gate line %s holds a path placeholder, and this order declares no ownedFiles, so the line does not apply to it.\n' "$BRL_LINE" "$i" >>"$outfile"
+      skipped=$((skipped + 1))
+      continue
+    fi
+    BRL_N=$((BRL_N + 1))
     multi_name=""; multi_values=""
     while IFS= read -r tok; do
       case "$tok" in ''|paths|file|dirs) continue ;; esac
@@ -5909,6 +5921,10 @@ ${multi_values:-one}
 BR_RUN_VALUES
     [ -z "$BRL_VERDICT" ] || break
   done
+  if [ -z "$BRL_VERDICT" ] && [ "$count" -gt 0 ] && [ "$skipped" -eq "$count" ]; then
+    BRL_VERDICT="undeclared"
+    BRL_WHY="each line holds a path placeholder, and this order declares no ownedFiles, so the line does not apply to it"
+  fi
   rm -f "$run_out" "$run_err"
 }
 
@@ -5944,6 +5960,7 @@ br_gate_check() {
     own_verdict="${BRL_VERDICT:-met}"; rc="$BRL_RC"
     case "$own_verdict" in
       met) own_detail="every verify line of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') ($BRL_N of them) passed, from $cites." ;;
+      undeclared) own_detail="$BRL_WHY, from $cites." ;;
       *)   own_detail="$BRL_WHY, from $cites. Every verify line before it passed." ;;
     esac
   fi
@@ -6020,7 +6037,7 @@ br_verify_fold() {
   # The exit code follows the verdict that stands: the lines' own when they failed, the check's
   # own when it failed, and the lines' when both passed and the check ran no command.
   jq --arg v "$verdict" --arg lv "${BRL_VERDICT:-met}" --arg rc "$BRL_RC" --rawfile out "$outfile" \
-     --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them) passed, from %s.' "$BRL_N" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
+     --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them) passed, from %s.' "$BRL_N" "$cites"; elif [ "$BRL_VERDICT" = "undeclared" ]; then printf 'Its verify lines do not apply: %s, from %s.' "$BRL_WHY" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
     .verdict = $v | .detail = (.detail + " " + $add)
     | .output = (if (.output // "") == "" then $out else .output + "\n" + $out end)
     | if $rc == "" then .

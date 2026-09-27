@@ -293,7 +293,8 @@ these forms:
 - `{a.b:json}` is the whole value of the field as one JSON token. Pass
   `--value 'a.b:json=<JSON text>'`. Pass the JSON on one line. For an absent field pass
   nothing, and the token is `null`.
-- `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them.
+- `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them. On
+  an order that owns no file, such a line does not apply, and it never passes the order alone.
 
 A `{a.b}` placeholder with no value reads unknown.
 

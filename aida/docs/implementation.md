@@ -250,7 +250,8 @@ gate lines alone. Every line passing is met;
 the first line that does not is named, with its output. A line passes on exit 0, or on what its
 standard output must hold when the source says so. A command from research runs only when you
 approved it at the design close. A placeholder given several `--value`
-entries runs its command once per value. The check reads
+entries runs its command once per value. A command that holds `{paths}`, `{file}` or `{dirs}`
+does not apply to an order that owns no file, and it never passes the order alone. The check reads
 unknown when the task has no running site recorded, so bring the environment up first. The proof
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.
