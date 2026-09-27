@@ -235,12 +235,12 @@ When you show the draft, list these probes in one block, each with its id and "r
 The person corrects any they disagree with, in the one answer to the draft. A probe they move to
 in is a `remove`, and it becomes a criterion: go back to the criterion flow above.
 
-Ask a probe on its own, one per turn, only when its recommended answer is in or is unclear. A
-single cheap question costs less than one missed criterion. On "out", write it with
+Ask a probe on its own, one per turn, only when its recommended answer is in or you are unsure
+of it. A single cheap question costs less than one missed criterion. On "out", write it with
 `add-non-goal` above. On "in", it becomes a criterion instead.
 
-**Autonomous:** raise the same probes and take the recommended answer on each. On "out", run
-`add-non-goal` above first, and read the new id from its `ADDED:` line. Then run:
+**Autonomous:** take the recommended answer on each probe. The draft already wrote each out-probe;
+read its id from that `ADDED:` line. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
   record-decision "<task_folder>" --text "<the probe, its id, and the recommended answer taken>"
