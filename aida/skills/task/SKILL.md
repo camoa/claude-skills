@@ -133,6 +133,10 @@ check exits 3 and prints what `up` prints. A worktree not on disk prints
 `precondition check: not run`, because only `up` makes a tree again.
 A recipe with no bring-up block, or no address block, exits 3 from `show` too, so its exit code
 says what `up` would do.
+When the recipe has a `## Status` block and the worktree is on disk, `show` runs its one line
+there. Exit 0 prints `status: up`. Any other exit prints `status: down` and the line's first
+output. The line may run a script from `## Files`. The script is written where absent, and taken
+out after the line. The implementation step runs the same line before an order's verify lines.
 
 `up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with each
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,

@@ -1527,6 +1527,11 @@ TA_TOKEN_LIST
       printf 'precondition check: passed in %s\n' "$wt"
     fi
     environment_cleanup quiet || exit 3
+    # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
+    if [ -n "$wt" ] && [ -d "$wt" ]; then
+      recipe_status_run environment "$RECIPE" "$wt" "$task_json" "$TOKENS"
+      case "$?" in 0) printf 'status: up\n' ;; 1) printf 'status: down, %s\n' "${RS_FIRST:-nothing printed}" ;; esac
+    fi
     trap - EXIT INT TERM
     return 0
   fi

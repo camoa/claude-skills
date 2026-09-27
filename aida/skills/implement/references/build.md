@@ -303,6 +303,17 @@ the worktree. A line can run a script the recipe ships. After the lines, it remo
 files, so the tree stays clean. A file that holds the block of an earlier version of the recipe
 is replaced for the run, then put back. Any other file with different content refuses at 3.
 
+The site must be up before the verify lines run. A site command such as `ddev drush` starts a
+stopped site and prints its start-up text. A `stdout empty` line then fails for a reason that is
+not the check. So before any check runs, the script runs the `## Status` line of the task's
+environment recipe in the worktree. It does this when the task records an environment and the
+order has verify run lines or a configuration gate. A non-zero exit refuses (exit 103) in both run
+modes, because `up` is a person's answer. The message quotes the line's first output. No check
+runs and no attempt is spent. Say that the site is down, and show the message. Offer
+`task environment <task-id> up`, then record the same attempt again. A recipe with no `## Status`
+block runs no test, and a task with no environment runs none either. No line kind says that a
+line leaves the site alone, so every such order is tested.
+
 Pass `--nothing-ran <literal substring>` only when the
 framework's own recipe names no `silent_pass` marker of its own; where it does, the script reads
 that marker and this flag is not read.

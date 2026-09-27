@@ -6259,6 +6259,27 @@ br_aida_writes_in_project() {
   return 1
 }
 
+# Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
+# command such as `ddev drush` starts a stopped site and prints its start-up text, so every
+# `stdout empty` line would fail for a reason that is not the check. The test runs when the task
+# records an environment address, the order has verify run lines or holds the configuration gate,
+# and the recipe carries a `## Status` block. No line kind says a line leaves the site alone, so
+# every such order is tested. The refusal holds in both run modes: `task environment up` is a
+# person's answer and refuses unattended. No attempt is spent, so the same attempt records once
+# the site is up. Reads TASK_PATH and BRC_UNIT_JSON.
+br_require_site_up() {
+  local task_json="$TASK_PATH/task.json" recipe wt rc
+  [ -n "$(jq -r '.environment.address // empty' "$task_json" 2>/dev/null)" ] || return 0
+  recipe="$(jq -r '.environment.recipe // empty' "$task_json")"
+  wt="$(jq -r '.worktree.path // empty' "$task_json")"
+  [ -f "$recipe" ] && [ -d "$wt" ] || return 0
+  br_verify_runs; br_order_facts "$BRC_UNIT_JSON"
+  [ "$BRV_RUNS" != "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
+  recipe_status_run "$BRC_WHO" "$recipe" "$wt" "$task_json" ""; rc=$?
+  [ "$rc" -ne 1 ] \
+    || die 103 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then record the attempt again."
+}
+
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
 # coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
 # is gate the first slot holds configuration-gate instead, and on one whose proof is record it
@@ -6269,6 +6290,7 @@ br_aida_writes_in_project() {
 # run (gap row 196). Prints the JSON array.
 br_seven_checks() {
   local parts_file rc_id
+  br_require_site_up
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
   # The slot's own answer goes to a file first, never through a `$(...)`, so a refusal inside it
