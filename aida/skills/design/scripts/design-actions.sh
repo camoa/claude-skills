@@ -1591,6 +1591,20 @@ do_check() {
   else
     echo "absenceJoined: none"
   fi
+  # The orders whose interface names nothing in backticks (gap row 214). The build's interface
+  # check counts only backtick-quoted names, so it reads unknown on such an order. A script cannot
+  # tell whether prose names a code element, so the line never blocks the close.
+  local unquoted
+  unquoted="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '
+        select((.interface | type) == "string" and (.interface | test("\\S")))
+        | select(.interface | test("`[^`]+`") | not) | .id' "$f" 2>/dev/null; done \
+    | paste -s -d ',' - | sed 's/,/, /g')"
+  if [ -n "$unquoted" ]; then
+    echo "interfaceUnquoted: $unquoted | the build's interface check counts only backtick-quoted names. Quote each exposed element with update --interface"
+  else
+    echo "interfaceUnquoted: none"
+  fi
   if [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then

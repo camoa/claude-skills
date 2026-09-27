@@ -432,6 +432,11 @@ the record; read the file at the printed path when a field is needed. `dependsOn
 this conversation; the id space is shared and minted in order, so naming it ahead of its own
 `create` call is safe as long as it is created before design finishes.
 
+Write `--interface` so that it names each exposed element in backticks. That is the service id,
+the class, the interface, the method, the route, the hook and the config key. The build's
+interface check counts only the backtick-quoted names. An order that exposes nothing takes no
+`--interface`.
+
 Name a `--surface` when the order changes a page or a screen a person sees, by its id in the
 surface registry. Most orders name none.
 
@@ -610,6 +615,11 @@ negation word and the word `and`, by order and row number. This is best effort, 
 cannot parse a clause, and it never blocks the close. Read each row it names. When a row joins an
 absence to a behaviour, remove it with `remove-done-when`. Then add each clause with its own
 `add-done-when` call.
+
+`check` also prints `interfaceUnquoted:`, at every exit code. It names each order whose interface
+holds no name in backticks. A script cannot tell whether prose names a code element, so the line
+never blocks the close. Rewrite each such interface with `update --interface`, and quote each
+element it exposes.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 

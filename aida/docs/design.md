@@ -40,7 +40,7 @@ on record the way every other design write is.
 | non-goals | The contract boundaries a reviewer needs in view beside this order |
 | depends on | The orders that must finish first. This is the build order |
 | owned files | The files or directories this order may write. Never a wildcard |
-| interface | What this order exposes to the orders that depend on it |
+| interface | What this order exposes to the orders that depend on it. Each element is in backticks: the service id, class, interface, method, route, hook or config key. The build's interface check counts only those names |
 | tests | What each test must observe, before the code exists |
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
@@ -258,6 +258,9 @@ two orders declaring one file, a wildcard in an owned file, and an id that resol
 The check asks that question the other way too, and reports without holding the close. It prints
 `impliedProofDisagrees:` with every test order that owns criteria of which none is machine-verified.
 Which of the other three proofs fits is a judgment, so no exit code holds it.
+
+It also prints `interfaceUnquoted:` with every order whose interface names nothing in backticks.
+A script cannot tell whether prose names a code element, so this does not hold the close either.
 
 A clean check says design is finished, subject to your confirmation above. An open item names
 the order it is on and its remedy: the missing test, the owner to reconcile, the dependency to
