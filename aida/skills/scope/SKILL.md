@@ -132,7 +132,7 @@ draft, and ask what is wrong. The draft carries everything that can be drafted, 
 is asked once each:
 
 - A gap the draft could not fill: no goal anywhere, or a criterion with no observable outcome.
-- The non-goal probes, asked on their own because they are the part people skip.
+- A non-goal probe whose recommended answer is in, or is unclear, as "Non-goals" says.
 - Whether the task has automated tests, under "Automated tests", asked once on every task.
 - The surfaces offer under "Tests and checks", which is asked once and only where the goal names
   something a person sees.
@@ -223,20 +223,27 @@ as `designer`. Continue through the whole list; do not stop for lack of an answe
 ### Non-goals
 
 Non-goals are asked for, never waited for. The draft carries every non-goal the sources name
-outright. After the draft is shown, raise the things adjacent to the goal that nobody has
-mentioned. Raise them one at a time, each with a recommended answer of in or out. These are the
-single questions people skip, so they are asked on their own. On "out", write it:
+outright. It also carries the probes: the things adjacent to the goal that nobody has mentioned.
+People skip these, so the draft raises them. Give each probe a recommended answer of in or out.
+
+Write each probe recommended out with the draft:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   add-non-goal "<task_folder>" --text "<what the task will not do>"
 ```
-On "in", it becomes a criterion instead: go back to the criterion flow above.
+When you show the draft, list these probes in one block, each with its id and "recommended: out".
+The person corrects any they disagree with, in the one answer to the draft. A probe they move to
+in is a `remove`, and it becomes a criterion: go back to the criterion flow above.
 
-**Autonomous:** raise the same candidates and take the recommended answer on each. On "out", run
+Ask a probe on its own, one per turn, only when its recommended answer is in or is unclear. A
+single cheap question costs less than one missed criterion. On "out", write it with
+`add-non-goal` above. On "in", it becomes a criterion instead.
+
+**Autonomous:** raise the same probes and take the recommended answer on each. On "out", run
 `add-non-goal` above first, and read the new id from its `ADDED:` line. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
-  record-decision "<task_folder>" --text "<the candidate non-goal, its id, and the recommended answer taken>"
+  record-decision "<task_folder>" --text "<the probe, its id, and the recommended answer taken>"
 ```
 to record that this run decided it. A non-goal carries no author field; only criteria do. So the
 id in that entry is the only mark a non-goal this run wrote itself carries.
