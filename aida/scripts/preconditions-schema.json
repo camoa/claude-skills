@@ -34,7 +34,7 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "The value each `## Tokens` block of a test-execution recipe gave, keyed by the token's name, as this run used it. A `--value` for the same name wins, and the value it gave is the one recorded. Absent when no recipe declares a token, or no harness was needed. Every later step fills a row's `{name}` from here when its own `--value` list lacks the name, so the value is derived once (live-run row 205). A block that failed leaves its name out, and a row that needs it reads `unknown`, naming it."
+      "description": "The value each `## Tokens` block of a test-execution recipe gave, keyed by the token's name, as this run used it. A `--value` for the same name wins, and the value it gave is the one recorded. Absent when no recipe declares a token, or no harness was needed. Every later step fills a row's `{name}` from here when its own `--value` list lacks the name. So the value is derived once (live-run row 205). A block that failed leaves its name out, and a row that needs it reads `unknown`, naming it. A `recipe-refresh` that changes a recipe path drops this field."
     },
     "recipeRefreshes": {
       "type": "array",
@@ -189,7 +189,7 @@
         "firstLine": {
           "type": "string",
           "minLength": 1,
-          "description": "The first line the check printed on standard output that holds more than white space, present only when the verdict is not `met` and the check printed one. The `next:` line of an unmet run quotes it, so a person sees the cause without opening this record (live-run row 206)."
+          "description": "The first line the check printed on standard output that holds more than white space. Present only when the verdict is not `met` and the check printed such a line. The `failedOutput:` line of an unmet run quotes it, so a person sees the cause without opening this record (live-run row 206)."
         }
       }
     },
@@ -277,7 +277,7 @@
         "firstLine": {
           "type": "string",
           "minLength": 1,
-          "description": "The first line the command printed that holds more than white space, read from the whole capture before `output` is trimmed. Present only when the command ran, the verdict is not `met`, and it printed one. The `next:` line of an unmet run quotes it (live-run row 206)."
+          "description": "The first line the command printed that holds more than white space, read from the whole capture before `output` is trimmed. Present only when the command ran, the verdict is not `met`, and it printed such a line. The `failedOutput:` line of an unmet run quotes it (live-run row 206)."
         }
       }
     }

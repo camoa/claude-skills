@@ -2285,7 +2285,7 @@ do_start() {
 # a placeholder nobody supplied a value for makes the run `unknown`, naming which one. A recipe
 # documenting a default for a placeholder in its own prose, the way python-cli documents one for
 # `{runner}`, is never read here as a fallback: the caller supplies it or the run says so.
-# A name the recipe's own `## Tokens` blocks give is the one exception, filled below at cr_resolve. The
+# A name the recipe's own `## Tokens` blocks give is the one exception, filled after cr_resolve. The
 # command runs the same way a condition's own check runs, as arguments from inside the code
 # repository and never through a shell. `met` on exit 0, `unmet` on any other exit the command
 # actually returned, `unknown` when it could not be run at all (the conditions did not permit it,
@@ -2965,8 +2965,8 @@ do_preconditions() {
   CR_TEST_RECIPES="$recipes"
   CR_CHECK_RECIPES="$check_recipes"
   cr_resolve
-  # A test-execution recipe's `## Tokens` blocks give the names its rows use for what no recipe
-  # can know, such as the folder that holds the project's own code (live-run row 205). Each block
+  # A test-execution recipe's `## Tokens` blocks give the names its rows use for a fact no recipe
+  # can know. The folder that holds the project's own code is one (live-run row 205). Each block
   # runs here in the worktree, through the runner the environment action uses. A --value for the
   # same name wins, because cr_lookup reads the first. The values this run used are recorded, and
   # every later step reads them there (br_recorded_token). A block that fails stops that recipe's
@@ -3359,32 +3359,35 @@ EOF
   # The report, as summary lines. One line per framework carries its verdict, its lookup, the ids
   # of what answered unmet or unknown with the owner each recipe named, the state of its test
   # commands and its smoke verdict. What a condition or a smoke run printed stays in the record.
-  # A verdict not met names the first row that stopped it, the command that row ran and the first
-  # line it printed (live-run row 206). The install advice is for an absent condition tool only,
-  # and it takes a line of its own, before `next:`, so the 240-character cut never takes it.
-  local pc_next pc_advice="none"
+  # A verdict not met names the first row that stopped it and the command that row ran (live-run
+  # row 206). The first line that command printed takes the `failedOutput:` line. The install
+  # advice takes the `nextAdvice:` line, and only for an absent condition tool. Each is a line of
+  # its own, so the 240-character cut of a long argv never takes the cause or the instruction.
+  local pc_next pc_advice="none" pc_failed="none" pc_cause
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
     met|undeclared|not-needed) ;;
     *)
-      pc_next="none: the build does not go on. $(printf '%s' "$record_json" | jq -r --arg values "$values" '
+      pc_cause="$(printf '%s' "$record_json" | jq -c --arg values "$values" '
         ($values | split("\n") | map(select(contains("\t")) | {key: sub("\t.*"; ""), value: sub("^[^\t]*\t"; "")})
           | reverse | from_entries) as $v
         | def bad: . == "unmet" or . == "unknown";
           def ran($argv): "It ran: " + ($argv | map(if test("^\\{[^{}]+\\}$") then ($v[.[1:-1]] // .) else . end) | join(" "));
-          def said: if (.firstLine // "") == "" then "It printed nothing" else "It printed: " + .firstLine end;
+          def said: if (.firstLine // "") == "" then "the command printed nothing" else .firstLine end;
           def how: " read " + .verdict
             + ([ (.exitCode // empty | "exit " + tostring), (.reason // empty) ] | if length == 0 then "" else " (" + join(", ") + ")" end);
         [ .frameworks[] | . as $f
           | ( (.entries[] | select(.verdict | bad)
-               | "The \($f.framework) condition \(.id)" + how
-                 + (if .check then ". " + ran(.check) + ". " + said else "" end)),
+               | if .check then {next: ("The \($f.framework) condition \(.id)" + how + ". " + ran(.check)), output: said}
+                 else {next: ("The \($f.framework) condition \(.id)" + how), output: "none"} end),
               (.smoke | select(.verdict | bad)
-               | if .exitCode == null then "The \($f.framework) smoke row read \(.verdict): \(.reason // "")"
-                 else "The \($f.framework) smoke row" + ({verdict, exitCode} | how) + ". "
-                   + ran([ $f.testCommands.rows[] | select(.id == "smoke") ][0].argv // []) + ". " + said end),
-              (select(.verdict | bad) | "The \(.framework) framework read \(.verdict), and its recipe lookup answered \(.lookup)") ) ]
-        | .[0] // "Read the record"')"
+               | if .exitCode == null then {next: "The \($f.framework) smoke row read \(.verdict): \(.reason // "")", output: "none"}
+                 else {next: ("The \($f.framework) smoke row" + ({verdict, exitCode} | how) + ". "
+                   + ran([ $f.testCommands.rows[] | select(.id == "smoke") ][0].argv // [])), output: said} end),
+              (select(.verdict | bad) | {next: "The \(.framework) framework read \(.verdict), and its recipe lookup answered \(.lookup)", output: "none"}) ) ]
+        | .[0] // {next: "Read the record", output: "none"}')"
+      pc_next="none: the build does not go on. $(printf '%s' "$pc_cause" | jq -r '.next')"
+      pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
       printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
         && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
       ;;
@@ -3394,7 +3397,8 @@ EOF
         --arg freezeAdvice "$im_advice" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
-        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" '
+        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
+        --arg failedOutput "$pc_failed" '
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -3423,6 +3427,7 @@ EOF
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
                           + " security=" + $baselineSummary.security.verdict end),
+     failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"
 
@@ -3497,8 +3502,11 @@ do_recipe_refresh() {
       '[ (.frameworks // [])[] | select(.framework == $f and .lookup == "resolved") ][0].recipePath // ""')"
     [ -n "$from" ] \
       || die 90 "recipe-refresh: $record_file records no resolved recipe for framework $fw, so there is no path of its own to replace. A first path is preconditions' to record, with --recipe $fw=<path>. Nothing was written."
+    # A new body may declare other ## Tokens blocks. So a changed path drops the values the old
+    # body gave, and a later step reads unknown rather than a stale value.
     record_doc="$(printf '%s' "$record_doc" | jq -c --arg f "$fw" --arg from "$from" --arg to "$rp" --arg at "$today" '
       .frameworks |= map(if .framework == $f then .recipePath = $to else . end)
+      | (if $from != $to then del(.tokens) else . end)
       | .recipeRefreshes = ((.recipeRefreshes // []) + [{framework: $f, kind: "test-execution", from: $from, to: $to, at: $at}])')"
     [ -n "$record_doc" ] || die 3 "recipe-refresh: the record update for $fw failed."
     refreshed="$refreshed$fw	test-execution	$from	$rp

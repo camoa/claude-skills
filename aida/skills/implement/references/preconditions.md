@@ -109,11 +109,12 @@ framework, naming what answered unmet or unknown and who owns it. It prints the 
 and the paths of the record and the baseline. What a check or the smoke command printed is in the
 record; name the path rather than reading it here.
 
-**A verdict that is not met names its cause on the `next:` line.** It names the first condition or
-smoke row that stopped the run, the command that row ran, and the first line it printed. Read that
-line to the person. The `nextAdvice:` line above it carries the instruction. It says to run the tool
-skill's install only when a condition's tool is absent, and it reads `none` otherwise. It is a line
-of its own, so the 240-character cut never takes the instruction.
+**A verdict that is not met names its cause on three lines.** The `next:` line names the first
+condition or smoke row that stopped the run, and the command that row ran. The `failedOutput:` line
+holds the first line that command printed. The `nextAdvice:` line says to run the tool skill's
+install, only when a condition's tool is absent. Both read `none` when they do not apply. Read all
+three to the person. Each is a line of its own, so the 240-character cut of a long command never
+takes the cause or the instruction.
 
 ## Supply a value where a command needs one
 
@@ -126,7 +127,8 @@ the project's own code. It declares one `## Tokens` block per name, the name as 
 word, holding one command. The script runs each block in the worktree, as arguments and never
 through a shell, and the first line the command prints is the value. A `--value` for the same
 name wins. The record keeps the values under `tokens`, and every later step fills its rows from
-there. A block that fails or prints nothing stops the blocks after it. Its name stays unfilled,
+there. A rerun takes new values and never reads the old ones, and `recipe-refresh` drops them
+when it changes a recipe path. A block that fails or prints nothing stops the blocks after it. Its name stays unfilled,
 and a row that needs it reads unknown and names it. A recipe with no `## Tokens` section fills nothing.
 
 ## Read the verdicts to the person
