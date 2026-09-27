@@ -4,6 +4,45 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - 2026-09-27
+
+The first release of version 6, after twenty-six betas. It replaces
+`ai-dev-assistant` in the marketplace. The betas ran live tasks on real
+projects, and every row those runs opened is closed. This release adds the
+last three.
+
+### Changed
+
+- Scope raises the non-goal probes in one block. Each probe recommended out is
+  written with the draft, and the person corrects any of them in one answer.
+  Only a probe recommended in, or one scope is unsure of, is asked on its own.
+  Unattended runs take each recommendation, as before.
+- The design pages no longer say that every recipe holds prose only. A recipe
+  may carry a `verifier:` block, a prose list, or both, and design reads each.
+
+### Fixed
+
+- A verify line that holds `{paths}`, `{file}` or `{dirs}` does not run on an
+  order that owns no file. It reads not applicable with the reason, where
+  before it ran with no path and could pass. It never passes an order alone.
+  The detail counts the lines that did not apply.
+- The README describes the release: how to install it, and where the
+  documentation is.
+
+### Checks
+
+Sixty-four fixtures, 5,662 rows, pass under bash and under zsh on the merged
+branch. The repository's specs pass. One run of the site-check fixture missed
+two interrupt rows under parallel load, because the signal landed after the
+command had finished. It passed 108 of 108 when run again on its own.
+
+### Known limits
+
+- Nothing bounds how many non-goal probes scope raises. The block makes each
+  one cheap to answer.
+- On an order that owns no file, a check row that holds a path reads unknown,
+  and a verify line reads not applicable. Both stop the order from passing.
+
 ## [6.0.0-beta.26] - 2026-09-25
 
 Five rows and the navigator's tooling mode. A task can say it has no
