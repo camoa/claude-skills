@@ -278,12 +278,12 @@ Close the dispatch record as soon as it returns, per SKILL.md.
 **A confirmed row is the checker's, in both modes.** It becomes
 `--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
-confirmed row to the person, except on an interactive run when another row of this order goes
-back to the test author. Then list this order's confirmed rows, each with the checker's note, and
-ask once whether any of them goes back too. The author rewrites this order's tests anyway, so a
-doubt costs nothing to act on now (live-run row 208). A confirmed row the person sends back becomes
-`--row <criterion id>=rejected::person::<the person's words>`. The record says a model judged every
-other confirmed row, so a person can list those rows later and read any of them again.
+confirmed row to the person. There is one exception: an interactive run where another row of this
+order goes back to the test author. Then list this order's confirmed rows, each with the checker's
+note, and ask once whether any of them goes back too. The author rewrites this order's tests
+anyway, so a doubt costs nothing to act on now (live-run row 208). A confirmed row the person sends
+back becomes `--row <criterion id>=rejected::person::<the person's words>`. The record says a model
+judged every other confirmed row, so a person can list those rows later and read any of them again.
 
 **Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
 doubts that the new tests for one requirement prove what it asks. A model may not settle that
@@ -399,6 +399,8 @@ then taken against an empty result, so a test that an empty result passes arrive
 that prints no place in its test file is not compared, and neither is a harness red. This check is
 a floor. A guard written again at the top of each test fails at a different line each time, so
 the freeze cannot see it. The test author's own instructions forbid that guard.
+The check also assumes the harness prints every frame of the failure. `pytest --tb=line` prints
+only the deepest one, so two tests failing in one helper read as one place there.
 
 **Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
 confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the

@@ -4859,11 +4859,11 @@ TF_EOF
     ri=$((ri + 1))
     [ -n "$place_name" ] || continue
     place_rel="$(printf '%s' "$tests_json" | jq -r --arg n "$place_name" '[ .[] | select(.name == $n) ][0].relPath')"
+    # A regex match, because jq's `indices` counts bytes and its slices count characters, so a
+    # position read past any non-ASCII character (jest's bullet) pointed at the wrong text.
     place_chain="$(jq -n -r --rawfile text "$place_path" --arg b "${place_rel##*/}" '
-        [ $text | indices($b)[] as $i
-          | select($i == 0 or ($text[$i - 1:$i] | test("[A-Za-z0-9_.-]") | not))
-          | ($text[$i + ($b | length):$i + ($b | length) + 12] | capture("^:(?<n>[0-9]+)")) as $c
-          | "\($b):\($c.n)" ] | join(" then ")')"
+        [ $text | match("(?<![A-Za-z0-9_.-])" + ($b | gsub("(?<c>[\\\\^$.|?*+()\\[\\]{}])"; "\\\(.c)")) + ":(?<n>[0-9]+)"; "g")
+          | "\($b):\(.captures[0].string)" ] | join(" then ")')"
     [ -z "$place_chain" ] || printf '%s\t%s\t%s\n' "$place_rel" "$place_chain" "$place_name" >>"$places_tmp"
   done
   shared_places="$(jq -R -s -r '

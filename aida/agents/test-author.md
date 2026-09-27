@@ -71,7 +71,8 @@ criterion. The recipe says how the id is spelled here.
 
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe
-declares. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
+declares. Run each test on its own, with the recipe's filter, so that each red file holds only
+that test's run. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
 why you chose it in your report. **A test must fail for the reason it names.** The test-execution
 recipe's `failure_signal` block names two markers. One is what the harness prints when an assertion
 did not hold. The other is what it prints when it never reached the behaviour. A red must hold the
@@ -90,7 +91,9 @@ is such a line when the tests share it. So do not open a test with an assertion 
 exists, not even one written again in each test. When the class may be absent, write a guard that
 asserts nothing. For example, a lookup gives the empty value when the service is absent, and the
 test's own assertion then fails. If that empty value makes a test pass, the test cannot tell the
-behaviour from its absence. Strengthen it: add a case that an empty result fails.
+behaviour from its absence. Strengthen it: add a case that an empty result fails. A table-driven
+test is one test: `test.each`, a data provider or `parametrize` takes one `--test`, never one per
+case.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
