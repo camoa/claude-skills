@@ -45,7 +45,8 @@ It reads the frozen copy and the frozen tests. It writes ten things to
 - every order it depends on, with its declared interface;
 - `dependencyInformation`, each dependency's review `information` items: the id, the order it
   came from, the summary and the file;
-- this attempt's report path;
+- `reportPath`, `implementation/answers-<order id>-attempt<n>.md`, where the implementer writes
+  its five answers;
 - `interfacePath`, `implementation/interface-<order id>.md`, where the implementer writes its
   interface record and where `build-record` reads it;
 - how many attempts this order has used of the count it is allowed;
@@ -59,6 +60,9 @@ It reads the frozen copy and the frozen tests. It writes ten things to
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
 `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
+
+**No role writes a file whose name holds "report".** Claude Code refuses that write from a
+subagent. So the implementer's and the fixer's files are named `answers-*`.
 
 **A dependency that has closed carries a second text beside the declared one, `interfaceRecord`:**
 what its own builder actually wrote about what it exposes. When it exists, it is what this unit's

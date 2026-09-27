@@ -137,7 +137,7 @@ start over it. It writes `implementation/brief-<order id>-fix-<round>.json`:
   paths `--allow` names;
 - `allowedFiles`, the `--allow` list;
 - the frozen tests;
-- this round's own report path, and the order's diff budget;
+- `reportPath`, `implementation/answers-<order id>-fix<round>.md`, and the order's diff budget;
 - the round number;
 - `headNow`, the code repository's own commit at the moment of this call;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.

@@ -5354,7 +5354,7 @@ do_build_brief() {
         --arg commitIn "$bb_codepath" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
-        --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
+        --arg reportPath "$IMPL_DIR/answers-$unit_id-attempt$((attempts_used + 1)).md" \
         --arg interfacePath "$IMPL_DIR/interface-$unit_id.md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
@@ -7930,7 +7930,7 @@ FB_ALLOW
   brief_json="$(jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
     --argjson allowedFiles "$allowed_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
-    --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
+    --arg reportPath "$IMPL_DIR/answers-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
     --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
