@@ -146,7 +146,8 @@ decline cites no cost, because nothing is compared, and stands in both modes.
 
 When the order's build or tests will call the candidate, design records where it lives and what
 it exposes. That is the class or service, the method the tests call, its arguments, and what it
-returns. Design reads the code for this; the test author may not, so the text stands in for it.
+returns. A read-only searcher reads the code and returns that text with its source paths. Design
+records the text word for word. The test author may not read the code, so the text stands in for it.
 
 ## When design finds the scope is wrong
 

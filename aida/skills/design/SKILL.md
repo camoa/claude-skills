@@ -269,11 +269,15 @@ research stated it, the cost dimensions compared, the verdict, and why:
 ```
 Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
 `--path` is where the reused thing lives, relative to the code repository: a file, or a
-configuration path when the candidate is not code. `--interface` is what it exposes, in your own
-words, read from the code. Name the class or service id, the method the tests call, its arguments,
-and the keys of what it returns. Read the code for this; design may. The test author may not, and
-the tests brief carries this text in place of the source. A dispose that omits both records no
-reuse.
+configuration path when the candidate is not code. `--interface` is the text `internal-searcher`
+returns, word for word. Do not read the candidate's source here, and do not reword the return.
+The test author may not read the source either, and the tests brief carries this text in place
+of it. A dispose that omits both records no reuse.
+
+Before that dispose, dispatch `internal-searcher` once per candidate, with the message this file
+names. Its lines are the role, the run mode, the word `interface`, the candidate as research named
+it, the order file's path, the code path, and the project folder. The code path is the repository
+that `--path` is relative to.
 
 A decline takes no `--cost` and no `--path`: nothing is compared, and nothing is reused. Its
 `--why` names what was weighed. It stands in both modes, because a decline with a reason is a

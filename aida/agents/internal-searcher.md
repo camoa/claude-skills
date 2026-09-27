@@ -1,6 +1,6 @@
 ---
 name: internal-searcher
-description: Searches this project's own code and configuration for prior art. Dispatched by the research skill only. Reads the project, never the web.
+description: Searches this project's own code and configuration for prior art, or reads one reuse candidate's interface. Dispatched by the research and design skills only. Reads the project, never the web.
 tools: Read, Glob, Grep
 disallowedTools: Agent
 model: sonnet
@@ -19,6 +19,12 @@ asked about.
 
 A fifth line, when present, names a folder under the task's `inputs/`: prior art extracted from
 another branch, which you may read.
+
+**Interface mode.** Design sends the word `interface` as the second line. The candidate and the
+order file's path replace the words to search. Read the candidate's source and the order. For each
+thing the order's build or tests will call, return the class or service id, the methods, their
+arguments, and the keys of what they return. Give each with its repository-relative path. Return
+only that text, because design records it word for word. Skip the task-record search.
 
 **You cannot reach the web, and that is the point.** Prior art inside a project is a claim about
 this project. A web result answers a different question without announcing that it has. You have no
