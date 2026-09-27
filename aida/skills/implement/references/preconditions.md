@@ -23,13 +23,13 @@ Dispatch it a third time, with `point: implement` and each framework. Do not rea
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.
 
-## Install the tools each recipe names
+## Install the tools the test recipe names
 
-Invoke the tool skill with `require <path>` for the `test-execution` recipe and the `review`
-recipe of each framework. Do this from the worktree, before the checks below run any recipe line.
-The tool skill's section "Tools a recipe names" says what each answer means. Go on only when it
-exits 0. Skip the `test-execution` recipe when every order has `proof: record` or `proof: confirm`,
-because no test runs then.
+Invoke the tool skill with `require <path>` for the `test-execution` recipe of each framework. Do
+this from the worktree, before the checks below run any recipe line. The tool skill's section
+"Tools a recipe names" says what each answer means. Go on only when it exits 0. Skip this when
+every order has `proof: record` or `proof: confirm`, because no test runs then. The `review`
+recipe's tools are review's to check, not this step's.
 
 ## Run the checks
 

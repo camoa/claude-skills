@@ -23,8 +23,9 @@ its own word: SKILL.md holds both rules. The role identifies a path and never op
 fetch a catalog address yourself, and never read a cached copy behind the navigator's back. The
 role reads a folder source this project configured itself first, so it wins over the catalog.
 
-Then invoke the tool skill with `require <path>` for each recipe path, from the worktree. Its
-section "Tools a recipe names" says what each answer means. Go on only when it exits 0.
+Then invoke the tool skill with `require --advisory <path>` for each `review` recipe path, from
+the worktree. Read its `TOOLING:` lines to the person, and go on whatever they say. A missing tool
+makes its own check row read unknown.
 
 ## Run it
 

@@ -7,8 +7,8 @@ reads it, where it comes from, and what a stage does when it finds nothing.
 
 The default place is the hosted catalog at `camoa.github.io/dev-guides`, read through the
 `dev-guides-navigator` plugin. That plugin must be installed for any catalog lookup to run. The
-catalog serves guides, process recipes, agentic recipes and playbook sets. It never serves
-tooling recipes to AIDA: those come from a folder you declare. How to declare a folder is on
+catalog serves guides, process recipes, agentic recipes, playbook sets and tooling recipes. A
+folder you declare for tooling recipes, ranked before the catalog, wins over it. How to declare a folder is on
 [the project page](project.md#using-your-own-guides-playbooks-and-recipes); what it changes is
 below.
 
@@ -202,8 +202,8 @@ start is to copy the catalog's recipe for that phase into the file and edit it; 
 stage reads stay the same.
 
 A folder of tooling recipes has its own layout, `<folder>/tooling-recipes/<framework>/<tool>.md`,
-and the tool skill reads folders and nothing else, so a project that wants AIDA to install a tool
-declares one.
+and the tool skill reads it first. When no folder answers, the tool skill asks the catalog for
+that tool.
 
 A folder of agentic recipes holds `<folder>/agentic-recipes/<framework>/<capability>.md`. Every
 capability your folders hold for a framework you declare is named to research, whatever words it

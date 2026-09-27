@@ -1,7 +1,7 @@
 ---
 name: tool
 description: This skill should be used when a tool has to be installed or run in the AIDA project that owns this directory, for example PHPUnit, PHPStan, Playwright or that project's own test runner, or when a stage needs a tool before it can do its work. It follows that tool's recipe for this project's framework, and it does nothing outside a project.
-argument-hint: "<install | run | show> <tool> [-- <arguments>] | require <recipe path>"
+argument-hint: "<install | run | show> <tool> [-- <arguments>] | require [--advisory] <recipe path>"
 arguments: [action, tool, runArguments]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
 ---
@@ -11,10 +11,11 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
 Install or run one tool. The framework decides how, and that answer lives in a recipe outside this
 plugin. This skill knows no tool's name and no framework's habits.
 
-Read the arguments. The first is `install`, `run` or `show`. The second is the tool, in
-lowercase, as the recipe names it: `phpunit`, `phpstan`, `playwright`, `pytest`. `run` takes more
-after `--`, described below; `install` and `show` take none and refuse them. `require` takes a
-process recipe's path in place of a tool, described under "Tools a recipe names."
+Read the arguments. The first is `install`, `run`, `show` or `require`. For the first three, the
+second is the tool, in lowercase, as the recipe names it: `phpunit`, `phpstan`, `playwright`,
+`pytest`. `run` takes more after `--`, described below; `install` and `show` take none and refuse
+them. `require` takes a process recipe's path in place of a tool, described under "Tools a recipe
+names."
 
 Every call below runs `tool-actions.sh`, named in this skill's own grant, so it runs without asking.
 Any other Bash command still asks for approval.
@@ -106,15 +107,21 @@ recipe's problem or the machine's, and doing it by hand hides which.
 
 ## No recipe
 
-Exit 2 means this tool has no recipe for any framework this project records. The script says which
-frameworks it tried. It also says which sources it did not search: it reads folder sources only, and
-another plugin fetches the hosted catalog.
+Exit 2 means no folder source holds a recipe for this tool. The script says which frameworks it
+tried, and which sources it did not search. It reads folder sources itself, and the navigator
+fetches the hosted catalog.
 
-A project that declares no source of tooling recipes always lands here. Declare one with the
-project skill's `add-source <name-or-path> toolingRecipes <folder>`, where the folder holds
-`tooling-recipes/<framework>/<tool>.md`, then run `show <tool>` again.
+Ask the catalog before you stop. Dispatch `catalog-identifier`, naming the role, with the lines
+`tooling: <tool>`, the framework, and the project folder. A path in its answer goes back to the
+script as `--tooling <tool>=<path>`, before the action, and you run the same call again. A folder
+source ranked before the catalog still wins.
 
-Say all three things in one line: the tool, the frameworks tried, and any source not searched. Then
+The role can answer with a word in place of a path. `no-recipe` means the catalog holds none. A
+project can then declare its own folder with the project skill's `add-source <name-or-path>
+toolingRecipes <folder>`, where the folder holds `tooling-recipes/<framework>/<tool>.md`.
+`listing-unreachable` and `fetch-failed` mean nobody could look.
+
+With a word, say all three things in one line: the tool, the frameworks tried, and the word. Then
 stop. Do not improvise an install from memory. Installing a tool the wrong way for a framework is
 worse than not installing it, and the recipe is where that knowledge belongs.
 
@@ -137,17 +144,26 @@ frontmatter. A stage that resolved such a recipe runs this before the recipe's l
 per recipe path:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> require <recipe path>
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] <recipe path>
 ```
 
 It runs each named tool as "Run a tool" does, because a tooling recipe's Run command is also its
 presence check. It prints one `TOOLING:` line per tool, or `REQUIRES: none`. It installs nothing.
+A tool is absent only when its check exits 127, command not found. Any other exit means the tool
+ran, so it reads present. A site that fails to start therefore reads present, and the later run
+fails where a person sees it.
+
+A line that reads unknown with "no recipe" goes to the catalog first, as "No recipe" says. Pass
+each path it returns as `--tooling`, and run `require` again.
+
+`--advisory` prints the same lines and always exits 0. A stage passes it when a missing tool must
+not stop it.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every named tool is present, or the recipe names none. | Go on with the stage. |
 | 4 | A tool reads absent. | Install each absent tool as "Install a tool" says, then run `require` again. |
-| 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Name the tool and the reason its line gives, and stop, as "No recipe" says. Never read it as present. |
+| 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Ask the catalog as above. Still unknown: name the tool and the reason, and stop. Never read it as present. |
 | 1 | No project owns this directory. | Say so in one line and name the project skill. Stop. |
 | 3 | The path is not a readable file, or its `requires_tooling:` value is not a list. | Show the error text and stop. |
 

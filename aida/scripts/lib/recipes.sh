@@ -1619,16 +1619,19 @@ recipe_name_of() {
 }
 
 # The names under the requires_tooling: list of the frontmatter of the recipe $1, one per line.
+# Items may sit at column 0, and a blank line or a comment inside the list does not end it.
 # Nothing when the key is absent or reads `[]`. Returns 2 on any other value after the colon,
 # because a list this reader cannot see would otherwise read as a recipe that needs no tool.
 recipe_requires_tooling_of() {
   awk 'NR == 1 && !/^---[ \t\r]*$/ { exit }
        NR > 1 && /^---[ \t\r]*$/ { exit }
        inList && /^[ \t]*#/ { next }
-       inList && /^[ \t]+-[ \t]/ { v = $0; sub(/^[ \t]+-[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v)
+       inList && /^[ \t\r]*$/ { next }
+       inList && /^[ \t]*-[ \t]/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v)
                                   sub(/[ \t\r]+$/, "", v); if (v != "") print v; next }
        inList { exit }
-       NR > 1 && /^requires_tooling:/ { v = $0; sub(/^requires_tooling:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
+       NR > 1 && /^requires_tooling:/ { v = $0; sub(/[ \t]+#.*$/, "", v); sub(/^requires_tooling:[ \t]*/, "", v)
+                                       sub(/[ \t\r]+$/, "", v)
                                        if (v == "") { inList = 1; next }
                                        if (v != "[]") bad = 1
                                        exit }

@@ -1,6 +1,6 @@
 ---
 name: catalog-identifier
-description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, implement, review, surfaces and task skills. Identifies only, and never opens a guide body.
+description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, implement, review, surfaces, task and tool skills. Identifies only, and never opens a guide body.
 tools: Skill, Read, Bash, Glob, Grep
 disallowedTools: Agent
 model: sonnet
@@ -94,3 +94,27 @@ you answer, run `test -f "<path>"`. A path that does not exist is not an answer:
 and if the file is still absent answer `fetch-failed` with what the fetch printed. The script
 that reads your answer refuses a path that is not a file, so a path returned unchecked stops the
 skill that dispatched you.
+
+**When asked for one tooling recipe.** A line `tooling: <tool>` names one tool, and the message
+names its framework and the project folder. Both calls below run the navigator's
+`dev-guides-lookup.sh`, at the path its skill gives. First identify the tool in its framework:
+
+```
+dev-guides-lookup.sh identify <tool> --framework <framework>
+```
+
+It revalidates the tooling index. Take the match whose `kind` is `tooling-recipe` and whose `url`
+ends in `/tooling-recipes/<framework>/<tool>/`. Its `name` is the recipe's full name. Then run:
+
+```
+dev-guides-lookup.sh tooling --name <name>
+```
+
+A `body_path:` line is the answer, once `test -f "<path>"` holds. Otherwise answer one word, with
+the navigator's own text beside it:
+
+- `no-recipe`: no match has that `url`, or the reason reads "no recipe named".
+- `listing-unreachable`: `tooling-recipes` is under `unavailable`, or the reason reads "no index
+  cached".
+- `fetch-failed`: a `status: error` line, a "refusing non-canonical body URL" reason, or a path
+  that is not on disk.
