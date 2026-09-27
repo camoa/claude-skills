@@ -1,7 +1,7 @@
 ---
 name: tool
 description: This skill should be used when a tool has to be installed or run in the AIDA project that owns this directory, for example PHPUnit, PHPStan, Playwright or that project's own test runner, or when a stage needs a tool before it can do its work. It follows that tool's recipe for this project's framework, and it does nothing outside a project.
-argument-hint: "<install | run | show> <tool> [-- <arguments>]"
+argument-hint: "<install | run | show> <tool> [-- <arguments>] | require <recipe path>"
 arguments: [action, tool, runArguments]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
 ---
@@ -13,7 +13,8 @@ plugin. This skill knows no tool's name and no framework's habits.
 
 Read the arguments. The first is `install`, `run` or `show`. The second is the tool, in
 lowercase, as the recipe names it: `phpunit`, `phpstan`, `playwright`, `pytest`. `run` takes more
-after `--`, described below; `install` and `show` take none and refuse them.
+after `--`, described below; `install` and `show` take none and refuse them. `require` takes a
+process recipe's path in place of a tool, described under "Tools a recipe names."
 
 Every call below runs `tool-actions.sh`, named in this skill's own grant, so it runs without asking.
 Any other Bash command still asks for approval.
@@ -128,6 +129,30 @@ as permission to guess.
 
 Prints the recipe's path, the framework it matched, and the commands it holds. Runs nothing. Use it
 when someone asks what would happen, or when an install failed and you want to show the steps.
+
+## Tools a recipe names
+
+A process recipe can name the tools its lines need, in a `requires_tooling:` list in its
+frontmatter. A stage that resolved such a recipe runs this before the recipe's lines run, once
+per recipe path:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> require <recipe path>
+```
+
+It runs each named tool as "Run a tool" does, because a tooling recipe's Run command is also its
+presence check. It prints one `TOOLING:` line per tool, or `REQUIRES: none`. It installs nothing.
+
+| Exit code | Meaning | What to do |
+|---|---|---|
+| 0 | Every named tool is present, or the recipe names none. | Go on with the stage. |
+| 4 | A tool reads absent. | Install each absent tool as "Install a tool" says, then run `require` again. |
+| 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Name the tool and the reason its line gives, and stop, as "No recipe" says. Never read it as present. |
+| 1 | No project owns this directory. | Say so in one line and name the project skill. Stop. |
+| 3 | The path is not a readable file, or its `requires_tooling:` value is not a list. | Show the error text and stop. |
+
+Exit 2 wins over exit 4, so read every `TOOLING:` line. An absent tool on the same run still
+needs its install. On an autonomous run the install refuses at 70, so the stage halts there.
 
 ## Reading a process recipe
 

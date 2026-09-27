@@ -7,12 +7,17 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
+#   tool-actions.sh [--run-mode <interactive|autonomous>] require <process recipe path>
 #
 # show     prints where the recipe is and the commands it holds, and runs nothing.
 # install  runs every command in the recipe's Install block, in order.
 # run      runs the recipe's Run command. A missing tool is that command failing. What follows
 #          `--` reaches that command as arguments. show and install refuse the form at 3, because
 #          they take their commands from the recipe and would otherwise drop what a caller typed.
+# require  runs `run` for each tool a process recipe names under requires_tooling, and prints one
+#          `TOOLING: <tool> present|absent|unknown` line each, or `REQUIRES: none`. It exits 0 when
+#          every tool is present, 4 when one is absent, and 2 when one is unknown, over an absent one.
+#          It installs nothing: install stays the one action that needs a person.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
@@ -60,7 +65,38 @@ esac
 
 ACTION="${1:-}"
 TOOL="${2:-}"
-[ -n "$ACTION" ] || { printf 'tool-actions: needs an action: show, install or run\n' >&2; exit 3; }
+[ -n "$ACTION" ] || { printf 'tool-actions: needs an action: show, install, run or require\n' >&2; exit 3; }
+
+# require takes a process recipe's path, not a tool name. Each name its requires_tooling list
+# holds goes to run, because the catalog makes a tooling recipe's Run command its presence check.
+# run resolves the tooling recipe, so a name nothing answers reads unknown with run's own reason.
+if [ "$ACTION" = "require" ]; then
+  [ $# -eq 2 ] || { printf 'tool-actions: require takes one recipe path and nothing after it\n' >&2; exit 3; }
+  [ -f "$TOOL" ] && [ -r "$TOOL" ] || { printf 'tool-actions: the recipe %s is not a readable file\n' "$TOOL" >&2; exit 3; }
+  NAMES="$(recipe_requires_tooling_of "$TOOL")" || {
+    printf 'tool-actions: %s holds a requires_tooling value that is not a list, so no tool was checked\n' "$TOOL" >&2
+    exit 3
+  }
+  if [ -z "$NAMES" ]; then printf 'REQUIRES: none\n'; exit 0; fi
+  WORST=0
+  while IFS= read -r NAME; do
+    NAME="$(pc_unquote "$NAME")"
+    SAID="$("$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" --run-mode "$RUN_MODE" run "$NAME" 2>&1 </dev/null)"
+    case "$?" in
+      0) printf 'TOOLING: %s present\n' "$NAME" ;;
+      1) printf '%s\n' "$SAID" >&2; exit 1 ;;
+      4) printf 'TOOLING: %s absent: %s\n' "$NAME" "$(printf '%s\n' "$SAID" | sed -n 's/^first: //p')"
+         [ "$WORST" -ne 0 ] || WORST=4 ;;
+      *) printf 'TOOLING: %s unknown: %s\n' "$NAME" \
+           "$(printf '%s\n' "$SAID" | sed -n 's/^tool-actions: //p' | awk '{ printf "%s%s", (NR > 1 ? "; " : ""), $0 }')"
+         WORST=2 ;;
+    esac
+  done <<TOOL_NAMES
+$NAMES
+TOOL_NAMES
+  exit "$WORST"
+fi
+
 [ -n "$TOOL" ]   || { printf 'tool-actions: needs a tool name\n' >&2; exit 3; }
 
 # A tool name reaches the filesystem, so it is a single lowercase token and nothing else.
@@ -280,7 +316,7 @@ case "$ACTION" in
     ;;
 
   *)
-    printf 'tool-actions: unknown action %s, expected show, install or run\n' "$ACTION" >&2
+    printf 'tool-actions: unknown action %s, expected show, install, run or require\n' "$ACTION" >&2
     exit 3
     ;;
 esac

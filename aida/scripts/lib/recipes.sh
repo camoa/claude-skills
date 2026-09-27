@@ -81,6 +81,8 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
+#   recipe_requires_tooling_of <recipe>       the names its requires_tooling: list holds; 2 on
+#                                             a value it cannot read
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
 #                                             sets RF_EARLIER
@@ -1614,6 +1616,23 @@ recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/
 recipe_name_of() {
   awk 'NR == 1 && !/^---[ \t\r]*$/ { exit } NR > 1 && /^---[ \t\r]*$/ { exit }
        NR > 1 && /^name:/ { sub(/^name:[ \t]*/, ""); sub(/[ \t\r]+$/, ""); print; exit }' "$1"
+}
+
+# The names under the requires_tooling: list of the frontmatter of the recipe $1, one per line.
+# Nothing when the key is absent or reads `[]`. Returns 2 on any other value after the colon,
+# because a list this reader cannot see would otherwise read as a recipe that needs no tool.
+recipe_requires_tooling_of() {
+  awk 'NR == 1 && !/^---[ \t\r]*$/ { exit }
+       NR > 1 && /^---[ \t\r]*$/ { exit }
+       inList && /^[ \t]*#/ { next }
+       inList && /^[ \t]+-[ \t]/ { v = $0; sub(/^[ \t]+-[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v)
+                                  sub(/[ \t\r]+$/, "", v); if (v != "") print v; next }
+       inList { exit }
+       NR > 1 && /^requires_tooling:/ { v = $0; sub(/^requires_tooling:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
+                                       if (v == "") { inList = 1; next }
+                                       if (v != "[]") bad = 1
+                                       exit }
+       END { exit (bad ? 2 : 0) }' "$1"
 }
 
 # True when the file $3 holds the block for the path $2 of an earlier version of the recipe $1.

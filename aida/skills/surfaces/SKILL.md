@@ -51,6 +51,9 @@ framework. A path on disk is `--recipe <framework>=<path>`. A failed lookup is
 Only the first word says anything about the framework. Never retype a command out of a recipe. The
 script reads the blocks.
 
+Before `install` or `baseline`, invoke the tool skill with `require <path>` for each recipe path.
+Its section "Tools a recipe names" says what each answer means. Go on only when it exits 0.
+
 ## Show, then install
 
 ```
