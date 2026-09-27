@@ -250,10 +250,11 @@ out of its tool rows, because the implementer may not write them.
 Build one row per criterion the tests name: the criterion, its verification sentence, and the names
 of the tests that prove it. Build one more row when a test proves the order's done-when: the order
 id, its done-when text, and those tests. That row also names each criterion the order owns and
-the tests named for it. Add the checker's verdict on that criterion when an earlier round gave
-one. The author tests the done-when only where nothing the order owns covers it. So the checker
-needs the owned criteria to judge the done-when row (gap row 210). The rows carry names and not
-test code. The question is whether the tests named exercise the sentence beside them.
+the tests named for it. Add the verdict that stands on that criterion, the person's where a
+person answered it. Add it only when an earlier round gave one. The author tests the done-when
+only where nothing the order owns covers it. So the checker needs the owned criteria to judge the
+done-when row (gap row 210). The rows carry names and not test code. The question is whether the
+tests named exercise the sentence beside them.
 
 **Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
 recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a
@@ -299,7 +300,8 @@ and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
 the test author before any freeze runs. Never run the freeze with a rejected row still standing.
 `tests-freeze` refuses it and writes nothing. Send that row back first. A repaired test goes
-through the checker again. Freeze once every row for this order reads confirmed. A note may not
+through the checker again. When an owned criterion's row goes back, put the done-when row to the
+checker again too. Freeze once every row for this order reads confirmed. A note may not
 hold the text `; earlier: `. This stage joins one halt reason to another with that text, so a note
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
 

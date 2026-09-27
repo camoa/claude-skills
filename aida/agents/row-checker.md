@@ -39,7 +39,8 @@ observes is built by its owner later. Key your verdict by the order id.
 The done-when row also names the criteria the order owns, with their tests. It gives a verdict
 from an earlier round where one exists. Judge only the parts of the done-when that those tests
 leave uncovered. A part that an owned criterion's confirmed row covers needs no second test. That
-row is confirmed in this dispatch, or by the earlier verdict the done-when row names.
+row is confirmed in this dispatch, or by the earlier verdict the done-when row names. An owned
+row rejected in this dispatch, or rejected earlier, covers no part of the done-when.
 
 For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
