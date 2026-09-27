@@ -637,6 +637,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order that freezes no test, or a row-checker on one that freezes no row. br_order_needs in
 #      scripts/lib/proof.sh decides, and `read` prints its answer on the order's line.
 #
+# The code the site check before the verify lines added (gap row 212).
+# 103  `build-record`, `build-recheck` or `fix-record` found the task's site down. The `## Status`
+#      line of the environment recipe exited non-zero, in either run mode. The message quotes its
+#      first line of output and names `task environment <id> up`. No check ran and nothing is
+#      written, so the same step runs again once the site is up.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -5887,18 +5893,18 @@ BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 # Removes each file the verify lines' recipes wrote, puts back each earlier version they replaced,
 # then removes the folders made for them and the temporary folder. RF_WRITTEN_PATHS and
 # RF_REPLACED_PATHS are read too, because a refusal or an interrupt inside recipe_files_write
-# leaves that recipe's paths there alone. It is safe to run twice. A path it could not take out
+# leaves that recipe's paths there alone. RS_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
 # is named, and the tree is then not what it was.
 br_verify_files_remove() {
   local left=""
   if [ -n "$BRV_TREE" ]; then
     left="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
-      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS" | sed -n 3p)"
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RS_DIRS" | sed -n 3p)"
     [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
   BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RS_DIRS=""
 }
 
 # Runs the order's own verify lines through br_run_lines from the folder $1, output into $2. A line
@@ -6260,13 +6266,15 @@ br_aida_writes_in_project() {
 }
 
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
-# command such as `ddev drush` starts a stopped site and prints its start-up text, so every
+# command such as `ddev drush` starts a stopped site and prints its start-up text. So every
 # `stdout empty` line would fail for a reason that is not the check. The test runs when the task
-# records an environment address, the order has verify run lines or holds the configuration gate,
-# and the recipe carries a `## Status` block. No line kind says a line leaves the site alone, so
-# every such order is tested. The refusal holds in both run modes: `task environment up` is a
-# person's answer and refuses unattended. No attempt is spent, so the same attempt records once
-# the site is up. Reads TASK_PATH and BRC_UNIT_JSON.
+# records an environment address and the order has verify run lines or holds the configuration
+# gate. The recipe must also carry a `## Status` block. No line kind says that a line leaves the
+# site alone, so every such order is tested. The refusal holds in both run modes, because
+# `task environment up` is a person's answer and refuses unattended. No attempt is spent, so the
+# same step runs again once the site is up. The status script's files go out through
+# br_verify_files_remove, on every exit. Its callers run it before their temporary files exist.
+# Reads TASK_PATH, BRC_WHO and BRC_UNIT_JSON.
 br_require_site_up() {
   local task_json="$TASK_PATH/task.json" recipe wt rc
   [ -n "$(jq -r '.environment.address // empty' "$task_json" 2>/dev/null)" ] || return 0
@@ -6275,9 +6283,16 @@ br_require_site_up() {
   [ -f "$recipe" ] && [ -d "$wt" ] || return 0
   br_verify_runs; br_order_facts "$BRC_UNIT_JSON"
   [ "$BRV_RUNS" != "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
-  recipe_status_run "$BRC_WHO" "$recipe" "$wt" "$task_json" ""; rc=$?
+  trap 'br_verify_files_remove' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  BRV_TREE="$wt"
+  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
+  recipe_status_run "$BRC_WHO" "$recipe" "$wt" "$task_json" "$BRV_FILES_DIR"; rc=$?
+  br_verify_files_remove
+  trap - EXIT INT TERM
   [ "$rc" -ne 1 ] \
-    || die 103 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then record the attempt again."
+    || die 103 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then run the same step again once the site is up."
 }
 
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
@@ -6290,7 +6305,6 @@ br_require_site_up() {
 # run (gap row 196). Prints the JSON array.
 br_seven_checks() {
   local parts_file rc_id
-  br_require_site_up
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
 
   # The slot's own answer goes to a file first, never through a `$(...)`, so a refusal inside it
@@ -6584,6 +6598,7 @@ br_eight_checks() {
   [ -n "$interface_check_json" ] \
     || die 3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
 
+  br_require_site_up
   seven_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   br_seven_checks >"$seven_file"
   [ -s "$seven_file" ] \
@@ -8179,6 +8194,7 @@ RV_SCOPE
 
   # The checks travel by file to the record, the same as build-record (nyc defects 9 and 12).
   local seven_file checks_json
+  br_require_site_up
   seven_file="$(mktemp)" || die 3 "fix-record: could not create a temporary file"
   br_seven_checks >"$seven_file"
   [ -s "$seven_file" ] \

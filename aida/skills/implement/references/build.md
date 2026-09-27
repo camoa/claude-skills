@@ -310,7 +310,7 @@ environment recipe in the worktree. It does this when the task records an enviro
 order has verify run lines or a configuration gate. A non-zero exit refuses (exit 103) in both run
 modes, because `up` is a person's answer. The message quotes the line's first output. No check
 runs and no attempt is spent. Say that the site is down, and show the message. Offer
-`task environment <task-id> up`, then record the same attempt again. A recipe with no `## Status`
+`task environment <task-id> up`, then run the same step again. A recipe with no `## Status`
 block runs no test, and a task with no environment runs none either. No line kind says that a
 line leaves the site alone, so every such order is tested.
 

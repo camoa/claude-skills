@@ -1240,9 +1240,9 @@ fill_line_or_refuse() {
 # globals, because zsh runs an EXIT trap after the locals of the function that set it are gone.
 # ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
 # keeps it. ENV_TREE: the worktree the recipe files go into. ENV_HEAD: its commit before the write.
-# ENV_DIRS: the folders this run made there for them. RF_WRITTEN_PATHS, from
-# scripts/lib/recipes.sh, holds the files it wrote, and RF_REPLACED_PATHS the earlier versions it
-# replaced, which RF_SAVED_IN keeps until the temporary folders go.
+# ENV_DIRS: the folders this run made there for them, and RS_DIRS those of a `## Status` run.
+# RF_WRITTEN_PATHS, from scripts/lib/recipes.sh, holds the files it wrote, and RF_REPLACED_PATHS
+# the earlier versions it replaced, which RF_SAVED_IN keeps until the temporary folders go.
 ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 
 # Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
@@ -1276,7 +1276,7 @@ environment_cleanup() {
     done <<ENV_CLEAN_FILES
 $RF_WRITTEN_PATHS$RF_REPLACED_PATHS
 ENV_CLEAN_FILES
-    [ -n "$kept" ] || dirs="$ENV_DIRS"
+    [ -n "$kept" ] || dirs="$ENV_DIRS$RS_DIRS"
     taken="$(recipe_files_take_out "$ENV_TREE" "$RF_SAVED_IN" "$written" "$replaced" "$dirs")"
     back="$(printf '%s\n' "$taken" | sed -n 1p)"; gone="$(printf '%s\n' "$taken" | sed -n 2p)"
     left="$(printf '%s\n' "$taken" | sed -n 3p)"
@@ -1294,7 +1294,7 @@ ENV_CLEAN_FILES
   done <<ENV_CLEAN_TMP
 $ENV_TMP
 ENV_CLEAN_TMP
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; RS_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
   [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
 }
 
@@ -1528,9 +1528,14 @@ TA_TOKEN_LIST
     fi
     environment_cleanup quiet || exit 3
     # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
+    # The EXIT trap still stands, so environment_cleanup removes its files on every exit.
     if [ -n "$wt" ] && [ -d "$wt" ]; then
-      recipe_status_run environment "$RECIPE" "$wt" "$task_json" "$TOKENS"
+      ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
+      files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+      ENV_TMP="$files_dir"
+      recipe_status_run environment "$RECIPE" "$wt" "$task_json" "$files_dir"
       case "$?" in 0) printf 'status: up\n' ;; 1) printf 'status: down, %s\n' "${RS_FIRST:-nothing printed}" ;; esac
+      environment_cleanup quiet || exit 3
     fi
     trap - EXIT INT TERM
     return 0

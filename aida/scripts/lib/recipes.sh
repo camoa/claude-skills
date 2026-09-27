@@ -1772,30 +1772,29 @@ RF_TAKE_DIRS
 
 # Runs the `## Status` line of the environment recipe $2 in the worktree $3. Returns 0 when the
 # site is up, 1 when it is down, and 2 when the recipe has no such block (gap row 212). The recipe
-# decides what up means, so no framework's probe lives here. `{name}` is filled from the seed list
-# $5 and from the keys the task record $4 keeps under `environment`. The `## Files` blocks are
-# written first where absent, so the line may run a script the recipe ships, and taken out after
-# it. A line refused before it runs exits 3 under the name $1. Nothing goes to standard output.
-# RS_FIRST holds the first line the command printed.
-RS_FIRST=""
-# shellcheck disable=SC2034 # RS_FIRST is read by the sourcing script
+# decides what up means, so no framework's probe lives here. `{name}` is filled from the keys the
+# task record $4 keeps under `environment`. A line with a shell character, or with a token still
+# unfilled, exits 3 under the name $1 before any file is written. The `## Files` blocks then go
+# into the tree where absent, with $5 as the folder of blocks, so the line may run a script the
+# recipe ships. The caller takes them out again through its own cleanup. That cleanup reads
+# RF_WRITTEN_PATHS, RF_REPLACED_PATHS and RS_DIRS, the folders made for them, which is set before
+# the first write. Nothing goes to standard output. RS_FIRST holds the command's first line.
+RS_FIRST=""; RS_DIRS=""
+# shellcheck disable=SC2034 # RS_FIRST and RS_DIRS are read by the sourcing script
 recipe_status_run() {
-  local who="$1" recipe="$2" tree="$3" line dir list dirs rc left
+  local who="$1" recipe="$2" tree="$3" dir="$5" line list rest rc
   RS_FIRST=""
   line="$(sh_blocks_under "$recipe" Status | sed -n '/[^ ]/{p;q;}')"
   [ -n "$line" ] || return 2
-  line="$(fill_tokens_from "$5$(jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$4" 2>/dev/null)" "$line")"
-  dir="$(mktemp -d)" || die 3 "$who: could not create a temporary folder"
+  line="$(fill_tokens_from "$(jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$4" 2>/dev/null)" "$line")"
+  refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
+  case "$line" in *'{'*'}'*) rest="${line#*\{}"; die 3 "$who: the ## Status line of $recipe holds a token nothing fills: {${rest%%\}*}}. A status line may hold only the keys the task record keeps under environment." ;; esac
   list="$(recipe_files_into "$recipe" Files "$dir")"
   recipe_files_refuse_differing "$who" "$recipe" "$list" "$tree" "$dir"
-  dirs="$(recipe_files_new_dirs "$tree" "$list")"
+  RS_DIRS="$(recipe_files_new_dirs "$tree" "$list")"
   recipe_files_write "$who" "$list" "$tree" "$dir" >/dev/null
   run_recipe_capture "$who" "$recipe" "$line" "$tree" "$dir/out" "$dir/capture" >/dev/null; rc=$?
   RS_FIRST="$(sed -n 2p "$dir/out")"
-  left="$(recipe_files_take_out "$tree" "$RF_SAVED_IN" "$RF_WRITTEN_PATHS" "$RF_REPLACED_PATHS" "$dirs" | sed -n 3p)"
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""
-  rm -rf "$dir"
-  [ -z "$left" ] || die 3 "$who: could not take the recipe files back out of $tree:$left. Remove them by hand."
   [ "$rc" -eq 0 ] || return 1
 }
 
