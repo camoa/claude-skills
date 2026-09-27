@@ -177,6 +177,11 @@
         "exitCode": {
           "type": "integer",
           "description": "What the check exited with, present whenever one ran. Kept because `unmet` on its own does not say how far the check got, and a person comparing two runs needs the number rather than a word."
+        },
+        "firstLine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The first line the check printed on standard output that holds more than white space, present only when the verdict is not `met` and the check printed one. The `next:` line of an unmet run quotes it, so a person sees the cause without opening this record (live-run row 206)."
         }
       }
     },
@@ -260,6 +265,11 @@
         "exitCode": {
           "type": "integer",
           "description": "What the smoke command exited with, present whenever it actually ran: `met`, `unmet`, and the `unknown` that comes from exit 127. Absent when nothing ran at all, because the conditions did not permit it, the recipe declared no readable smoke row, or a placeholder went unsupplied."
+        },
+        "firstLine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The first line the command printed that holds more than white space, read from the whole capture before `output` is trimmed. Present only when the command ran, the verdict is not `met`, and it printed one. The `next:` line of an unmet run quotes it (live-run row 206)."
         }
       }
     }

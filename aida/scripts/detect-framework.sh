@@ -5,6 +5,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # detect-framework.sh: read a code path and name the frameworks it recognises.
 #
 # Usage: detect-framework.sh <codePath>
+#        detect-framework.sh --custom-root <codePath>
 #
 # Prints one recognised framework per line, on stdout, as `<name>: <file>`. The file is the one
 # under <codePath> that proved the name, so a person can see why. Exits 0 when it recognises at
@@ -30,14 +31,28 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   go          go.mod
 #   python-cli  pyproject.toml, setup.py, setup.cfg, or requirements.txt
 #
+# --custom-root prints the folder that holds the project's own modules, relative to <codePath>, for
+# a recipe line that names `{customRoot}` (live-run row 205). A recipe cannot know it: one Drupal
+# project keeps it under web/, another at the repository root. composer.json's installer-paths
+# entry for type:drupal-custom-module decides, with its `{$name}` segment removed. Without one,
+# the <directory> values under phpunit.xml's testsuites decide: the leading segments they share,
+# up to the first segment that holds a glob character. It exits 1 and prints nothing when neither
+# names a folder. The derivation lives here because this script holds the framework knowledge.
+#
 # Portability: bash 3.2+, tested under bash and zsh. No GNU-only find flags beyond -maxdepth, which
 # both GNU findutils and BSD find accept. No awk regex intervals, since this script uses no awk.
 
 set -uo pipefail
 
 usage() {
-  printf 'usage: detect-framework.sh <codePath>\n' >&2
+  printf 'usage: detect-framework.sh [--custom-root] <codePath>\n' >&2
 }
+
+MODE="frameworks"
+if [ "${1:-}" = "--custom-root" ]; then
+  MODE="custom-root"
+  shift
+fi
 
 if [ "$#" -eq 0 ]; then
   usage
@@ -60,6 +75,31 @@ fi
 if [ ! -r "$CODE_PATH" ] || [ ! -x "$CODE_PATH" ]; then
   printf 'detect-framework: not readable: %s\n' "$CODE_PATH" >&2
   exit 2
+fi
+
+if [ "$MODE" = "custom-root" ]; then
+  ROOT_DIR=""
+  if [ -r "$CODE_PATH/composer.json" ]; then
+    ROOT_DIR="$(jq -r '[ (.extra["installer-paths"] // {}) | to_entries[]
+        | select(.value | arrays | any(.[]; . == "type:drupal-custom-module")) | .key ][0] // ""
+      | sub("^\\./"; "") | sub("/?\\{\\$name\\}.*$"; "")' "$CODE_PATH/composer.json" 2>/dev/null)"
+  fi
+  if [ -z "$ROOT_DIR" ] && [ -r "$CODE_PATH/phpunit.xml" ]; then
+    # One line per testsuite, then every <directory> value inside it, one per line.
+    ROOT_DIR="$(tr '\n' ' ' <"$CODE_PATH/phpunit.xml" | awk '{ gsub(/<\/testsuite>/, "\n"); print }' \
+      | sed -n 's#.*<testsuite[ >]##p' | grep -o '<directory[^>]*>[^<]*</directory>' \
+      | sed 's#<directory[^>]*>[[:space:]]*##; s#[[:space:]]*</directory>##' \
+      | awk -F/ '{
+          n = 0
+          for (i = 1; i <= NF; i++) { if ($i == "." || $i == "") continue; if ($i ~ /[*?[]/) break; seg[++n] = $i }
+          if (NR == 1) { m = n; for (i = 1; i <= n; i++) p[i] = seg[i] }
+          else { k = 0; for (i = 1; i <= m && i <= n; i++) { if (p[i] != seg[i]) break; k = i }; m = k }
+        }
+        END { out = ""; for (i = 1; i <= m; i++) out = out (i > 1 ? "/" : "") p[i]; print out }')"
+  fi
+  [ -n "$ROOT_DIR" ] || exit 1
+  printf '%s\n' "$ROOT_DIR"
+  exit 0
 fi
 
 # Directories that hold someone else's code, never this project's own. Pruned so a vendored

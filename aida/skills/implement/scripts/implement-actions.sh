@@ -2284,7 +2284,8 @@ do_start() {
 # supplies with a repeatable `--value <name>=<value>` flag; nothing else in a token is touched, and
 # a placeholder nobody supplied a value for makes the run `unknown`, naming which one. A recipe
 # documenting a default for a placeholder in its own prose, the way python-cli documents one for
-# `{runner}`, is never read here as a fallback: the caller supplies it or the run says so. The
+# `{runner}`, is never read here as a fallback: the caller supplies it or the run says so.
+# `{customRoot}` is the one token this step derives itself, below at cr_resolve. The
 # command runs the same way a condition's own check runs, as arguments from inside the code
 # repository and never through a shell. `met` on exit 0, `unmet` on any other exit the command
 # actually returned, `unknown` when it could not be run at all (the conditions did not permit it,
@@ -2370,10 +2371,10 @@ PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
 # second call with nothing held writes nothing.
 pc_flush_entry() {
   local out="$1" codepath="$2"
-  local verdict reason rc exitjson
+  local verdict reason rc exitjson first
   [ -n "$PC_ID" ] || return 0
   PC_ANY=1
-  verdict=""; reason=""; exitjson="null"
+  verdict=""; reason=""; exitjson="null"; first=""
   if [ -z "$PC_WHAT" ]; then
     verdict="unknown"; reason="entry-unparseable"
   elif [ -z "$PC_CHECK" ]; then
@@ -2398,10 +2399,11 @@ pc_flush_entry() {
         verdict="unmet"
       fi
     fi
+    [ "$verdict" = "met" ] || first="$(grep -m1 '[^[:space:]]' "$out.stdout" 2>/dev/null)"
     rm -f "$out.stdout"
   fi
   jq -n --arg id "$PC_ID" --arg what "$PC_WHAT" --arg owner "$PC_OWNER" --arg check "$PC_CHECK" \
-        --arg expect "$PC_EXPECT" \
+        --arg expect "$PC_EXPECT" --arg first "$first" \
         --arg verdict "$verdict" --arg reason "$reason" --argjson exitCode "$exitjson" '
     {id: $id, what: (if $what == "" then $id else $what end), verdict: $verdict}
     + (if $check    == ""   then {} else {check: ([$check | splits("[ \t]+")] | map(select(length > 0)))} end)
@@ -2409,6 +2411,7 @@ pc_flush_entry() {
     + (if $owner    == ""   then {} else {owner: $owner} end)
     + (if $reason   == ""   then {} else {reason: $reason} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+    + (if $first    == ""   then {} else {firstLine: $first} end)
   ' >>"$out" || die 3 "preconditions: could not record the entry $PC_ID"
   PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""
 }
@@ -2870,7 +2873,7 @@ do_preconditions() {
   local tc_state tc_rows_json
   local smoke_verdict smoke_reason smoke_output smoke_truncated smoke_exit_code_json
   local smoke_row_json smoke_argv_json smoke_out_file smoke_result smoke_kind smoke_payload
-  local smoke_raw_len smoke_json
+  local smoke_raw_len smoke_json smoke_first custom_root
   local record_file record_json today
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
@@ -2962,6 +2965,17 @@ do_preconditions() {
   CR_TEST_RECIPES="$recipes"
   CR_CHECK_RECIPES="$check_recipes"
   cr_resolve
+  # A recipe line names `{customRoot}` where it needs the folder that holds the project's own
+  # code, which no recipe can know (live-run row 205). It is filled here only when a line names it
+  # and no --value gave it. detect-framework.sh derives it, because that script holds the framework
+  # knowledge. When nothing names the folder, the token stays unfilled and the line names it.
+  if [ -z "$(cr_lookup "$values" customRoot)" ] \
+     && printf '%s' "$CR_DOC" | jq -e '[ .. | strings ] | any(. == "{customRoot}")' >/dev/null 2>&1; then
+    custom_root="$("$PLUGIN_ROOT/scripts/detect-framework.sh" --custom-root "$codepath" 2>/dev/null)"
+    [ -z "$custom_root" ] || values="$values$(printf 'customRoot\t%s' "$custom_root")
+"
+    PC_VALUES="$values"
+  fi
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
     [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
     | join(", ")')"
@@ -3066,7 +3080,7 @@ EOF
     # The smoke row is run, never merely recorded, and only once this framework's own conditions
     # have already answered `met` or `undeclared`. Running it any earlier would only fail for a
     # reason a condition already named.
-    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false
+    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false; smoke_first=""
     smoke_exit_code_json="null"
     case "$fw_verdict" in
       not-needed)
@@ -3126,6 +3140,7 @@ EOF
                 else
                   smoke_output="$(cat "$smoke_out_file" 2>/dev/null)"
                 fi
+                smoke_first="$(grep -m1 '[^[:space:]]' "$smoke_out_file" 2>/dev/null)"
               fi
               rm -f "$smoke_out_file"
             fi
@@ -3140,12 +3155,13 @@ EOF
 
     smoke_json="$(jq -n --arg verdict "$smoke_verdict" --arg reason "$smoke_reason" \
           --arg output "$smoke_output" --argjson truncated "$smoke_truncated" \
-          --argjson exitCode "$smoke_exit_code_json" '
+          --argjson exitCode "$smoke_exit_code_json" --arg first "$smoke_first" '
       {verdict: $verdict}
       + (if $reason == "" then {} else {reason: $reason} end)
       + (if $output == "" then {} else {output: $output} end)
       + (if $truncated == true then {truncated: true} else {} end)
       + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+      + (if $first == "" then {} else {firstLine: $first} end)
     ')"
 
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
@@ -3319,18 +3335,42 @@ EOF
   # The report, as summary lines. One line per framework carries its verdict, its lookup, the ids
   # of what answered unmet or unknown with the owner each recipe named, the state of its test
   # commands and its smoke verdict. What a condition or a smoke run printed stays in the record.
-  local pc_next
+  # A verdict not met names the first row that stopped it, the command that row ran and the first
+  # line it printed (live-run row 206). The install advice is for an absent condition tool only,
+  # and it takes a line of its own, before `next:`, so the 240-character cut never takes it.
+  local pc_next pc_advice="none"
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
     met|undeclared|not-needed) ;;
-    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
+    *)
+      pc_next="none: the build does not go on. $(printf '%s' "$record_json" | jq -r --arg values "$values" '
+        ($values | split("\n") | map(select(contains("\t")) | {key: sub("\t.*"; ""), value: sub("^[^\t]*\t"; "")})
+          | reverse | from_entries) as $v
+        | def bad: . == "unmet" or . == "unknown";
+          def ran($argv): "It ran: " + ($argv | map(if test("^\\{[^{}]+\\}$") then ($v[.[1:-1]] // .) else . end) | join(" "));
+          def said: if (.firstLine // "") == "" then "It printed nothing" else "It printed: " + .firstLine end;
+          def how: " read " + .verdict
+            + ([ (.exitCode // empty | "exit " + tostring), (.reason // empty) ] | if length == 0 then "" else " (" + join(", ") + ")" end);
+        [ .frameworks[] | . as $f
+          | ( (.entries[] | select(.verdict | bad)
+               | "The \($f.framework) condition \(.id)" + how
+                 + (if .check then ". " + ran(.check) + ". " + said else "" end)),
+              (.smoke | select(.verdict | bad)
+               | if .exitCode == null then "The \($f.framework) smoke row read \(.verdict): \(.reason // "")"
+                 else "The \($f.framework) smoke row" + ({verdict, exitCode} | how) + ". "
+                   + ran([ $f.testCommands.rows[] | select(.id == "smoke") ][0].argv // []) + ". " + said end),
+              (select(.verdict | bad) | "The \(.framework) framework read \(.verdict), and its recipe lookup answered \(.lookup)") ) ]
+        | .[0] // "Read the record"')"
+      printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
+        && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
+      ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
         --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
         --arg freezeAdvice "$im_advice" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
-        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" '
+        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" '
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -3359,6 +3399,7 @@ EOF
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
                           + " security=" + $baselineSummary.security.verdict end),
+     nextAdvice: $nextAdvice,
      next: $next}')"
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a

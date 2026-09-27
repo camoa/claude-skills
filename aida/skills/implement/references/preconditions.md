@@ -109,12 +109,25 @@ framework, naming what answered unmet or unknown and who owns it. It prints the 
 and the paths of the record and the baseline. What a check or the smoke command printed is in the
 record; name the path rather than reading it here.
 
+**A verdict that is not met names its cause on the `next:` line.** It names the first condition or
+smoke row that stopped the run, the command that row ran, and the first line it printed. Read that
+line to the person. The `nextAdvice:` line above it carries the instruction. It says to run the tool
+skill's install only when a condition's tool is absent, and it reads `none` otherwise. It is a line
+of its own, so the 240-character cut never takes the instruction.
+
 ## Supply a value where a command needs one
 
 A framework's cheapest test command may carry a placeholder, such as the runner a Python project
-declares. Pass it with `--value <name>=<value>`. The script never guesses one and never reads a
-default out of a recipe's prose: an unsupplied placeholder makes the run unknown and names
-which one had no value.
+declares. Pass it with `--value <name>=<value>`. The script never reads a default out of a
+recipe's prose: an unsupplied placeholder makes the run unknown and names which one had no value.
+
+`{customRoot}` is the one placeholder the script fills itself. It is the folder that holds the
+project's own code, which no recipe can know. When a line names it and no `--value` gives it,
+`detect-framework.sh --custom-root` derives it. The `installer-paths` entry in `composer.json` for
+`type:drupal-custom-module` decides first. The `phpunit.xml` testsuite directories decide next.
+When neither names a folder, the run is unknown and names the token. Pass
+`--value customRoot=<folder>` then. Only this step fills it. A later step whose command names it
+reads unknown, unless a `--value` gives it.
 
 ## Read the verdicts to the person
 
