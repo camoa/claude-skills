@@ -9,7 +9,7 @@ All notable changes to this plugin are recorded here. The format follows
 The first release of version 6, after twenty-six betas. It replaces
 `ai-dev-assistant` in the marketplace. The betas ran live tasks on real
 projects, and every row those runs opened is closed. This release adds the
-last six.
+last nine, and a harder guard against dangerous commands.
 
 ### Changed
 
@@ -31,6 +31,22 @@ last six.
   command on `next:`, and its first output line on its own `failedOutput:`
   line. Tool install advice prints on `nextAdvice:`, only when a condition's
   tool is absent.
+- The destructive-command hook reads a command the way an agent would reword
+  it. It sees through git options before the verb, wrappers, quotes and
+  escapes, `sh -c`, aliases set in the same command, and scripts the command
+  runs. It refuses a verb it cannot read, `gh pr merge`, and `gh api` calls
+  that move branches or commit. It refuses every force-push spelling, even
+  with the push gate open. It protects its own files and refuses
+  `disableAllHooks` in a settings file. A heredoc written to a file or to a
+  commit message is no longer read.
+- The freeze refuses reds that stop at one shared place, such as a guard
+  asserting that a service exists. Each test must fail at its own assertion.
+- The row checker rejects a test that a trivial implementation would pass.
+  On an interactive run, when a row goes back to the test author, the person
+  sees the order's confirmed rows and may send any of them back.
+- Design writes an absence as a done-when row of its own, and its check names
+  a row that joins one to a behaviour. The tests brief lists each clause with
+  a negation word, and the author returns an absence for review with no test.
 
 ### Fixed
 
@@ -43,7 +59,7 @@ last six.
 
 ### Checks
 
-Sixty-five fixtures, 5,728 rows, pass under bash and under zsh on the merged
+Sixty-eight fixtures, 5,772 rows, pass under bash and under zsh on the merged
 branch, every run exit 0. The repository's specs pass. Each build had a fresh
 checker.
 
@@ -56,6 +72,13 @@ checker.
 - A token block is one command with no shell characters. The Drupal test
   recipe finds its custom-code folder on disk until it ships a script.
 - An interrupt in the middle of a site token run can leave a temporary folder.
+- The hook is friction, not a boundary. A script generated at run time, an
+  encoded string, or another language's subprocess still gets past it. The
+  real boundaries are branch protection on the remote and the credentials a
+  session holds.
+- A guard written again at the top of each test fails at a different line, so
+  the freeze cannot see it. Only the author's instructions forbid it.
+- Two sibling hooks split commands with a `sed` form that macOS does not read.
 
 ## [6.0.0-beta.26] - 2026-09-25
 
