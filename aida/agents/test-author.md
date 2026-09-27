@@ -115,7 +115,7 @@ decide it. If you can name neither existing code nor such a commit, report it as
 Return one row per test: the path, the test's name, and the criterion its name carries. The row
 also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test
 returns the order id in place of a criterion. Then each checklist line, each absence clause, the
-path of each support file you wrote or changed, and the list of anything that passed on arrival.
+path of each support file you wrote or changed, and anything that passed on arrival.
 
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a
