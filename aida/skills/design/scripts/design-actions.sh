@@ -1201,8 +1201,8 @@ do_remove_owned_file() {
 # is that field's one writer. `--recipe` replaces the list with the covering agentic recipe's
 # `## Verifier`. Each entry of its `verifier:` block becomes a run entry with its `id`, `kind`,
 # `run` and `pass`, in any key order, the shape the dev-guides proposal asks every recipe to use. Each numbered item of the
-# section's prose becomes a check entry, verbatim, wrapped lines joined: today's nine recipes hold
-# only prose. A paragraph is not a check, and no command is ever made from prose. Every entry
+# section's prose becomes a check entry, verbatim, wrapped lines joined. A recipe may carry either
+# form or both. A paragraph is not a check, and no command is ever made from prose. Every entry
 # cites the recipe and is binding, unless --not-binding says research marked the source as one
 # this project did not accept. `--run` or `--check` adds one entry from a research finding. It
 # cites its source and is never binding, and a second entry with the same text replaces the

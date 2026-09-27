@@ -75,8 +75,8 @@ The knowledge that covers an order says how to verify it, and design carries tha
 order as its `verify` list. When an agentic recipe covers the order, design copies the recipe's
 `## Verifier`. Each entry of its `verifier:` block becomes a command, with what passing means:
 exit 0, empty standard output, or standard output holding a text. Each numbered item of its
-prose becomes a check, word for word. Design never turns a sentence into a command. Today's
-recipes hold prose only, so they give checks.
+prose becomes a check, word for word. Design never turns a sentence into a command. A recipe may
+carry a `verifier:` block, a prose list, or both, and design reads each.
 
 When no recipe covers the order, research's findings on how reputable sources verify the work
 give the entries. Each one cites its source and is marked as not binding, because this project

@@ -503,8 +503,8 @@ a model judges. Every entry cites its source and says whether it is binding.
 The script copies each entry of the `verifier:` block as a run entry, with its `pass` and its
 `kind`. It copies
 each numbered item of the prose as a check entry, verbatim. It reads nothing else, and it never
-turns a sentence into a command. Today's recipes hold prose only, so they give checks. Pass
-`--not-binding` when research said the source is not one this project accepted.
+turns a sentence into a command. A recipe may carry a `verifier:` block, a prose list, or both.
+Pass `--not-binding` when research said the source is not one this project accepted.
 
 **No recipe covers it, and research found how to verify it.** Add one entry per finding:
 ```
