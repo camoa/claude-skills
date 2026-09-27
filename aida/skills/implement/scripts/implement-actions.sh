@@ -2285,7 +2285,7 @@ do_start() {
 # a placeholder nobody supplied a value for makes the run `unknown`, naming which one. A recipe
 # documenting a default for a placeholder in its own prose, the way python-cli documents one for
 # `{runner}`, is never read here as a fallback: the caller supplies it or the run says so.
-# `{customRoot}` is the one token this step derives itself, below at cr_resolve. The
+# A name the recipe's own `## Tokens` blocks give is the one exception, filled below at cr_resolve. The
 # command runs the same way a condition's own check runs, as arguments from inside the code
 # repository and never through a shell. `met` on exit 0, `unmet` on any other exit the command
 # actually returned, `unknown` when it could not be run at all (the conditions did not permit it,
@@ -2873,7 +2873,7 @@ do_preconditions() {
   local tc_state tc_rows_json
   local smoke_verdict smoke_reason smoke_output smoke_truncated smoke_exit_code_json
   local smoke_row_json smoke_argv_json smoke_out_file smoke_result smoke_kind smoke_payload
-  local smoke_raw_len smoke_json smoke_first custom_root
+  local smoke_raw_len smoke_json smoke_first tokens_json token_failures tokens_out token_first token_entry
   local record_file record_json today
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
@@ -2965,15 +2965,35 @@ do_preconditions() {
   CR_TEST_RECIPES="$recipes"
   CR_CHECK_RECIPES="$check_recipes"
   cr_resolve
-  # A recipe line names `{customRoot}` where it needs the folder that holds the project's own
-  # code, which no recipe can know (live-run row 205). It is filled here only when a line names it
-  # and no --value gave it. detect-framework.sh derives it, because that script holds the framework
-  # knowledge. When nothing names the folder, the token stays unfilled and the line names it.
-  if [ -z "$(cr_lookup "$values" customRoot)" ] \
-     && printf '%s' "$CR_DOC" | jq -e '[ .. | strings ] | any(. == "{customRoot}")' >/dev/null 2>&1; then
-    custom_root="$("$PLUGIN_ROOT/scripts/detect-framework.sh" --custom-root "$codepath" 2>/dev/null)"
-    [ -z "$custom_root" ] || values="$values$(printf 'customRoot\t%s' "$custom_root")
+  # A test-execution recipe's `## Tokens` blocks give the names its rows use for what no recipe
+  # can know, such as the folder that holds the project's own code (live-run row 205). Each block
+  # runs here in the worktree, through the runner the environment action uses. A --value for the
+  # same name wins, because cr_lookup reads the first. The values this run used are recorded, and
+  # every later step reads them there (br_recorded_token). A block that fails stops that recipe's
+  # blocks, and a row that needs one of its tokens names it.
+  tokens_json='{}'; token_failures=""
+  if [ "$harness_needed" = "yes" ]; then
+    tokens_out="$(mktemp)" || die 3 "preconditions: could not create a temporary file"
+    while IFS="$(printf '\t')" read -r fw recipe_path; do
+      [ -n "$fw" ] && [ -f "$recipe_path" ] || continue
+      if ! recipe_tokens_run preconditions "$recipe_path" "$tokens_out" "$codepath" "" \
+          "The tokens are the ## Tokens names before this one" >/dev/null; then
+        token_first="$(sed -n "$((RT_BEFORE + 2))p" "$tokens_out")"
+        token_failures="$token_failures$RT_FAILED	${token_first:-it printed nothing}
 "
+      fi
+      values="$values$RT_TOKENS"
+      while IFS= read -r token_entry; do
+        [ -n "$token_entry" ] || continue
+        tokens_json="$(printf '%s' "$tokens_json" | jq -c --arg n "${token_entry%%	*}" \
+          --arg v "$(cr_lookup "$values" "${token_entry%%	*}")" '.[$n] //= $v')"
+      done <<PC_TOKENS
+$RT_TOKENS
+PC_TOKENS
+    done <<PC_RECIPES
+$recipes
+PC_RECIPES
+    rm -f "$tokens_out"
     PC_VALUES="$values"
   fi
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
@@ -3120,6 +3140,9 @@ EOF
               if [ "$smoke_kind" = "UNRESOLVED" ]; then
                 smoke_verdict="unknown"
                 smoke_reason="the token {$smoke_payload} in the smoke command has no supplied value; pass --value $smoke_payload=<value>"
+                token_first="$(cr_lookup "$token_failures" "$smoke_payload")"
+                [ -z "$token_first" ] \
+                  || smoke_reason="the token {$smoke_payload} in the smoke command has no value, because the recipe's ## Tokens block for it failed or printed nothing ($token_first); pass --value $smoke_payload=<value>"
               elif [ "$smoke_kind" = "EMPTY" ]; then
                 smoke_verdict="unknown"
                 smoke_reason="the smoke row's argv holds no token at all, so there was nothing to run"
@@ -3191,8 +3214,9 @@ EOF
   ' "$fw_json_file")"
 
   today="$(date -u +%Y-%m-%d)"
-  record_json="$(jq -s --arg takenAt "$today" --arg verdict "$run_verdict" '
+  record_json="$(jq -s --arg takenAt "$today" --arg verdict "$run_verdict" --argjson tokens "$tokens_json" '
     {schemaVersion: 1, takenAt: $takenAt, verdict: $verdict, frameworks: .}
+    + (if $tokens == {} then {} else {tokens: $tokens} end)
   ' "$fw_json_file")" || die 3 "preconditions: could not assemble the record"
   rm -f "$fw_json_file"
 

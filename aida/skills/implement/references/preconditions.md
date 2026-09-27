@@ -121,13 +121,13 @@ A framework's cheapest test command may carry a placeholder, such as the runner 
 declares. Pass it with `--value <name>=<value>`. The script never reads a default out of a
 recipe's prose: an unsupplied placeholder makes the run unknown and names which one had no value.
 
-`{customRoot}` is the one placeholder the script fills itself. It is the folder that holds the
-project's own code, which no recipe can know. When a line names it and no `--value` gives it,
-`detect-framework.sh --custom-root` derives it. The `installer-paths` entry in `composer.json` for
-`type:drupal-custom-module` decides first. The `phpunit.xml` testsuite directories decide next.
-When neither names a folder, the run is unknown and names the token. Pass
-`--value customRoot=<folder>` then. Only this step fills it. A later step whose command names it
-reads unknown, unless a `--value` gives it.
+A recipe can derive a placeholder a person would otherwise pass, such as the folder that holds
+the project's own code. It declares one `## Tokens` block per name, the name as the fence's second
+word, holding one command. The script runs each block in the worktree, as arguments and never
+through a shell, and the first line the command prints is the value. A `--value` for the same
+name wins. The record keeps the values under `tokens`, and every later step fills its rows from
+there. A block that fails or prints nothing stops the blocks after it. Its name stays unfilled,
+and a row that needs it reads unknown and names it. A recipe with no `## Tokens` section fills nothing.
 
 ## Read the verdicts to the person
 

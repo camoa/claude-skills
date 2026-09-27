@@ -43,6 +43,7 @@
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>]   runs one resolved command
+#   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
 #   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
 #   pc_unquote <text>                         the text with one layer of matching outer quotes removed
@@ -72,6 +73,11 @@
 #   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a
 #                                               shell; writes the command, then its output, to <out>
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
+#   fill_tokens_from <list> <line>            the line with every `{name}` the list holds filled
+#   run_recipe_capture <who> <recipe> <line> <dir> <out> <capture> [<hint>]  runs one line; its
+#                                             stdout to <capture>, both streams to <out>
+#   recipe_tokens_run <who> <recipe> <out> <dir> <seed> <hint>  runs the ## Tokens blocks into RT_TOKENS;
+#                                             stops at the first that fails, named in RT_FAILED
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
@@ -904,7 +910,8 @@ tf_path_matches_catalog_glob() {
 # Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
 # array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry, and
 # that `{dirs}` expands to one token per directory holding one. $5 is
-# the tab-separated `--value` list every other single-placeholder token is read from. A name that
+# the tab-separated `--value` list every other single-placeholder token is read from. A name the
+# list lacks is read from the tokens preconditions recorded (br_recorded_token). A name that
 # ends in `:json` and has no value reads JSON null. $6, when
 # given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
 #
@@ -947,6 +954,7 @@ br_run_resolved() {
       '{'*'}')
         name="${tok#\{}"; name="${name%\}}"
         tok="$(cr_lookup "$values" "$name")"
+        [ -n "$tok" ] || tok="$(br_recorded_token "$name")"
         # `{a.b:json}` is a field's whole value as one JSON token, so an absent field is JSON null.
         case "$name" in *:json) tok="${tok:-null}" ;; esac
         if [ -z "$tok" ]; then
@@ -971,6 +979,15 @@ br_run_resolved() {
     rc=$?
   fi
   printf 'RAN\t%s' "$rc"
+}
+
+# The value the test recipe's `## Tokens` block gave the name $1 at preconditions, from the task's
+# preconditions record, or empty. Every step after preconditions resolves the same recipe's rows,
+# so each reads the value from the record rather than running the block again (live-run row 205).
+# A caller with no task, such as the environment action, reads nothing.
+br_recorded_token() {
+  [ -n "${TASK_PATH:-}" ] || return 0
+  jq -r --arg n "$1" '.tokens[$n] // empty' "$TASK_PATH/implementation/preconditions.json" 2>/dev/null
 }
 
 # Prints the entries of $1, a JSON array of paths, that end in one of the extensions in $2, a JSON
@@ -1490,6 +1507,77 @@ recipe_output_summary() {
   if [ "$1" -ne 0 ]; then
     printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
   fi
+}
+
+# Fills every `{name}` in the line $2 from the tab-separated `<name><TAB><value>` list $1, the
+# shape cr_lookup reads. A shell loop rather than sed, so a value may hold any character.
+fill_tokens_from() {
+  local line="$2" entry name value
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    name="{${entry%%	*}}"; value="${entry#*	}"
+    while [ "${line#*"$name"}" != "$line" ]; do line="${line%%"$name"*}$value${line#*"$name"}"; done
+  done <<FILL_TOKENS
+$1
+FILL_TOKENS
+  printf '%s' "$line"
+}
+
+# Runs the one line $3 of the recipe $2 in $4 and writes its standard output to $6, which a token
+# is read from. Both streams are appended to $5, standard error after standard output, so the
+# record holds them and the caller reads a clean value. Returns the command's exit status. The
+# caller fills the line first. A line refused by refuse_if_unsafe, holding no command, or still
+# holding a `{name}` exits 3 under the name $1, with $7 appended to the message when given.
+# A caller that quotes a line of this record counts two past the length it held before the call:
+# the command's own line, then its first line of output. Both refusals here fire when the command
+# printed nothing, so the record's last line is that command, never output.
+run_recipe_capture() {
+  local who="$1" recipe="$2" line="$3" dir="$4" outfile="$5" capture="$6" hint="${7:-}" err_file result tab
+  tab="$(printf '\t')"
+  refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
+  err_file="$(mktemp)" || die 3 "$who: could not create a temporary file"
+  printf '+ %s\n' "$line"
+  # The filled line, above the output it produced, the same shape run_recipe_line writes. The
+  # record holds a token's output, and the recipe's unfilled line does not say what produced it.
+  printf '+ %s\n' "$line" >>"$outfile"
+  result="$(br_run_resolved "$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')" "$dir" "$capture" '[]' "" "$err_file")"
+  cat "$capture" "$err_file" >>"$outfile"; rm -f "$err_file"
+  case "$result" in RAN*) return "${result#*"$tab"}" ;; esac
+  die 3 "$who: the line holds no command, or a token nothing fills: ${result#*"$tab"}.${hint:+ $hint}"
+}
+
+# Runs each `## Tokens` block of the recipe $2 in $4, in order, the way the environment action
+# and the preconditions step both read them. A block's fence carries the token's name as its
+# second word and holds one command. The line is filled from the list, so a later block can use an
+# earlier token, and its first line of standard output is the value. $3 receives each command and
+# its output. $5 seeds RT_TOKENS, the tab-separated list the values are appended to. The first block
+# that exits non-zero or prints nothing stops the run: RT_FAILED names its token, RT_BEFORE is the
+# length of $3 before that command, and the function returns 1. A recipe with no `## Tokens`
+# section leaves RT_TOKENS as the seed and returns 0. $1 is the name a refusal carries, and $6 the
+# sentence it appends, naming the tokens a line may hold.
+RT_TOKENS=""; RT_FAILED=""; RT_BEFORE=0
+# shellcheck disable=SC2034 # RT_BEFORE is read by the sourcing script
+recipe_tokens_run() {
+  local who="$1" recipe="$2" outfile="$3" dir="$4" hint="$6" blocks capture list n name value result tab
+  tab="$(printf '\t')"
+  RT_TOKENS="$5"; RT_FAILED=""; RT_BEFORE=0
+  blocks="$(mktemp -d)" || die 3 "$who: could not create a temporary folder"
+  capture="$(mktemp)" || die 3 "$who: could not create a temporary file"
+  list="$(recipe_files_into "$recipe" Tokens "$blocks")"
+  while IFS="$tab" read -r n name; do
+    [ -n "$n" ] || continue
+    RT_BEFORE="$(wc -l <"$outfile" | tr -d '[:space:]')"
+    run_recipe_capture "$who" "$recipe" "$(fill_tokens_from "$RT_TOKENS" "$(sed -n '/[^ ]/{p;q;}' "$blocks/$n")")" \
+      "$dir" "$outfile" "$capture" "$hint"; result=$?
+    value="$(head -n 1 "$capture")"
+    if [ "$result" -ne 0 ] || [ -z "$value" ]; then RT_FAILED="$name"; break; fi
+    RT_TOKENS="$RT_TOKENS$name$tab$value
+"
+  done <<RT_LIST
+$list
+RT_LIST
+  rm -rf "$blocks" "$capture"
+  [ -z "$RT_FAILED" ]
 }
 
 # Runs every non-blank line of $3 as one command where the caller stands, output appended to $4,

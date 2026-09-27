@@ -28,6 +28,14 @@
       "items": { "$ref": "#/$defs/frameworkResult" },
       "description": "One entry per framework in project.json, which requires at least one. A project on two frameworks gets two recipes and two sets of entries, and both must be satisfied, because the build runs in one repository that is both."
     },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The value each `## Tokens` block of a test-execution recipe gave, keyed by the token's name, as this run used it. A `--value` for the same name wins, and the value it gave is the one recorded. Absent when no recipe declares a token, or no harness was needed. Every later step fills a row's `{name}` from here when its own `--value` list lacks the name, so the value is derived once (live-run row 205). A block that failed leaves its name out, and a row that needs it reads `unknown`, naming it."
+    },
     "recipeRefreshes": {
       "type": "array",
       "items": { "$ref": "#/$defs/recipeRefresh" },
