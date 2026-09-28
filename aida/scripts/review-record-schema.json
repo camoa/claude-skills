@@ -49,6 +49,17 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/information" },
       "description": "What the reviewer wrote for the person and not as a finding: a fact about the diff or what it stands on that cites no criterion the diff fails, such as a frozen base class built against a schema the site does not have (live-run row 103). Copied from the reviewer's own `information` list, present only when it wrote one, so a record without it reads as it did before the key existed. `review-record` prints one line per item; `tests-brief` and `build-brief` carry the items to every order that depends on this one, under `dependencyInformation`. Nothing routes an item to a fixer, and nothing closes one: it is information, not a finding."
+    },
+    "deviationAccepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["departure", "file", "because"],
+      "properties": {
+        "departure": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "because": { "type": "string", "minLength": 1 }
+      },
+      "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and halts the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason. Present only when a person accepted one."
     }
   },
   "$defs": {

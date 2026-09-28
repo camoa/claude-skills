@@ -423,6 +423,14 @@ schema the site does not have is one example. That goes in its own list beside t
 record keeps it, AIDA prints it one line each, and the next order's author and builder see it in
 their briefs.
 
+A departure the builder declared never closes clean. The builder names one with a `Deviation:`
+line, or a heading that starts with "Deviation", in its report or its interface record. The build
+already stops on one. The review runs the same scan over the latest attempt, because a build
+record from an earlier version can carry one. A hit halts the order for design drift, whatever
+the reviewer wrote. The order's interface is what is wrong, so no fixer can repair it. You change
+the design and restart the order, or you keep the departure with a reason. The review record and
+the ledger keep that reason. Unattended, nobody can keep it, so the halt stands.
+
 ## Fixing what the review found
 
 One fixer per round takes every open finding, in severity order, with the union of their fix

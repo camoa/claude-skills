@@ -61,7 +61,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
-#   implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
+#   implement-actions.sh review-record <task_folder> <unit_id> --findings <path> \
+#                            [--accept-deviation <the person's reason>]
 #   implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
 #   implement-actions.sh fix-record    <task_folder> <unit_id> \
 #                            --report <path to the fixer's report> \
@@ -450,7 +451,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not waiting on another attempt.
 #  68  `grant-attempt`, `restart` or `clear-halt` was called on an autonomous run. Each is a
 #      person's judgement, and an unattended run has none to offer. One number, because it is one
-#      fact.
+#      fact. `review-record --accept-deviation` is the same fact (gap row 224).
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
 #      restart that reset an order anyway would throw away a build that is fine.
 #  70  `tests-freeze` was given a `--row` judged by a person on an autonomous run. An autonomous run
@@ -659,6 +660,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent.
 #
+# The code a departure at review added (gap row 224).
+# 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
+#      latest attempt's report or in the interface record the build record holds. The order's
+#      interface is what is wrong, so the order halts for design drift, whatever the review holds.
+#      The halt names the file and the line. No review record is written. A person accepts the
+#      departure with --accept-deviation instead, interactive only (exit 68).
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -830,6 +838,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--nothing-ran <literal substring>]
        implement-actions.sh review-brief  <task_folder> <unit_id>
        implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
+                            [--accept-deviation <the person's reason>]
        implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
        implement-actions.sh fix-record    <task_folder> <unit_id>
                             --report <path to the fixer's report>
@@ -7491,9 +7500,11 @@ rv_load_state() {
   ! task_is_light "$TASK_PATH" || FIX_ROUNDS_ALLOWED=1
 
   # Exit 49: a halted order refuses every step after the halt. The reason is the halt's own words,
-  # so a reader never has to open the ledger to learn why the step stopped.
+  # so a reader never has to open the ledger to learn why the step stopped. $3, when given, is the
+  # front of the one halt segment the caller answers itself, so only the other segments refuse.
   local halted
   halted="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.haltedBecause // ""')"
+  [ -z "${3:-}" ] || halted="$(halt_segments_matching "$halted" "$(jq -cn --arg p "$3" '[$p]')" drop)"
   [ -z "$halted" ] \
     || die 49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $halted"
 }
@@ -7917,13 +7928,22 @@ RB_PATHS
 # review-record: what the reviewer wrote, checked and recorded.
 # ------------------------------------------------------------------------------------------------
 
+# The front of the halt review-record writes for a departure the builder declared (gap row 224).
+# It begins "design drift: " so `restart` takes it, and matches no own-copy prefix, so a resumed
+# `start` never clears it.
+RR_DEPARTURE_PREFIX="design drift: the builder declared a departure from the design"
+
 do_review_record() {
-  local task_arg="" unit_id="" findings_path=""
+  local task_arg="" unit_id="" findings_path="" accept=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --findings)
         [ "$#" -ge 2 ] || die 3 "review-record: --findings needs a path to the file the reviewer wrote"
         findings_path="$2"; shift 2 ;;
+      --accept-deviation)
+        [ "$#" -ge 2 ] || die 3 "review-record: --accept-deviation needs the person's reason for keeping the departure"
+        [ -n "$2" ] || die 3 "review-record: --accept-deviation was given an empty reason."
+        accept="$2"; shift 2 ;;
       -*) die 3 "review-record: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then task_arg="$1"
@@ -7942,7 +7962,12 @@ do_review_record() {
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
 
-  rv_load_state "review-record" "$unit_id"
+  local answers=""
+  if [ -n "$accept" ]; then
+    fn_require_interactive "review-record" "accepting a departure the builder declared"
+    answers="$RR_DEPARTURE_PREFIX"
+  fi
+  rv_load_state "review-record" "$unit_id" "$answers"
 
   # Exit 50 before the step check, for the reason review-brief above states. One case is not a
   # second review: a crash between the record write and the ledger write leaves the record on disk
@@ -8000,6 +8025,35 @@ do_review_record() {
   [ -z "$dirty" ] \
     || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
+  # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
+  # review holds: the order's interface is what is wrong, so no fixer can repair it. The scan is
+  # build-record's own, over the latest attempt's report and the interface record its build record
+  # holds. A build record written before that scan existed reaches review with one in it. The
+  # builder's line goes into the halt with the halt separator broken, so it forges no segment.
+  local departure departure_file iface_file halt_why=""
+  departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
+  departure="$(br_deviations "$departure_file" | head -n 1)"
+  if [ -z "$departure" ]; then
+    iface_file="$(mktemp)" || die 3 "review-record: could not create a temporary file"
+    printf '%s\n' "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" >"$iface_file"
+    departure="$(br_deviations "$iface_file" | head -n 1)"
+    rm -f "$iface_file"
+    departure_file="the interfaceRecord of $IMPL_DIR/build-$unit_id.json"
+  fi
+  if [ -z "$departure" ]; then
+    [ -z "$accept" ] \
+      || die 3 "review-record: --accept-deviation was given, and neither the report nor the interface record of $unit_id declares a departure. Nothing is written."
+  else
+    halt_why="$RR_DEPARTURE_PREFIX, in $departure_file: $(printf '%s' "$departure" | sed 's/; earlier: /, earlier: /g')"
+    if [ -z "$accept" ]; then
+      local departure_ledger
+      departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
+      [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
+      write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
+      die 107 "review-record: $unit_id is halted for design drift. The builder declared a departure from the design, in $departure_file: $departure. The order's interface is what is wrong, so no fixer can repair it, and no review record is written. Amend the order's interface in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
+    fi
+  fi
+
   local raw_findings alignment count i one built findings_json information_json outside outside_lines=""
   rv_read_findings_array "$findings_path" "findings" "review-record"
   raw_findings="$RV_FINDINGS_ARRAY"
@@ -8032,7 +8086,8 @@ do_review_record() {
   # exactly as it did before the key existed.
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
     --arg findingsPath "$findings_path" --argjson findings "$findings_json" \
-    --argjson information "$information_json" '
+    --argjson information "$information_json" --arg accept "$accept" --arg departure "$departure" \
+    --arg departureFile "$departure_file" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -8042,7 +8097,8 @@ do_review_record() {
       findings: $findings,
       rounds: []
     }
-    + (if ($information | length) == 0 then {} else {information: $information} end)')"
+    + (if ($information | length) == 0 then {} else {information: $information} end)
+    + (if $accept == "" then {} else {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal halts the order with the non-goal
@@ -8050,14 +8106,26 @@ do_review_record() {
   # like any other finding and the skill puts it to the person.
   local nongoal_hits step_expr
   nongoal_hits="$(rv_nongoal_hits "$findings_json" "$alignment")"
-  local new_ledger halt_why=""
-  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
-    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
-  fi
+  local new_ledger
   step_expr='.lastStep = "reviewed"'
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
+  # An accepted departure lands in haltsCleared the way `clear-halt` writes one, with the halt the
+  # order carried, or the one this departure would have written. rv_load_state let only that
+  # segment through, so the order is no longer halted.
+  if [ -n "$accept" ]; then
+    new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --arg reason "$halt_why" \
+      --arg today "$today" --arg because "$accept" '
+      ([ .orders[] | select(.id == $id) | .haltedBecause // empty ] | .[0] // $reason) as $halt
+      | .orders = (.orders | map(if .id == $id then del(.haltedBecause) else . end))
+      | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $halt, clearedAt: $today, because: $because}])')"
+    [ -n "$new_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
+  fi
+  halt_why=""
+  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
+    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
+  fi
   # One function writes every halt, so this reason never erases a reason the order already carried.
   if [ -n "$halt_why" ]; then
     new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$halt_why")"
@@ -8079,9 +8147,9 @@ do_review_record() {
      openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
      nonGoalHits: $nongoals,
      state: "reviewed",
-     halt: $halt,
-     record: $record,
-     next: $next}')"
+     halt: $halt}
+    + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
+    + {record: $record, next: $next}')"
   # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
   # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
   # so the person present decides. Unattended, nothing prints: the record already holds them. The

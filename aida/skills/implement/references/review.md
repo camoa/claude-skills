@@ -93,6 +93,19 @@ beside the findings and prints one `information:` line per item, then a count. `
 `dependencyInformation`. Nothing routes an item to a fixer. Read the lines; a person may need to
 act on one outside this task.
 
+A departure the builder declared never closes clean, whatever the review holds. The script scans
+the latest attempt's report and the interface record in its build record, the way `build-record`
+does. On a hit it refuses (exit 107), writes no review record, and halts the order for design
+drift. The halt names the file and the departure's line. The order's interface is what is wrong,
+so no fixer can repair it. Put it to the person, opening with: "The builder says it departed from
+the design of this unit of work. Only you can say which one stands. Change the design and the
+unit is built again. Keep the departure and the review goes on." Then say the line. To change the
+design, amend the order's interface in design and close design, then offer the restart in
+`references/finish.md`. To keep the departure, run `review-record` again with
+`--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
+reason, and the order goes on as below. Unattended, the flag refuses (exit 68), and the halt
+stands.
+
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
 it is actionable like any other finding, and it goes to the person with the rest. No open
