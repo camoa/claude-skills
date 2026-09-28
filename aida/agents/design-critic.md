@@ -48,6 +48,7 @@ owns?
 or a recipe. An order that builds beside a candidate research ranked close, with no disposition
 in its `reasoning`, is a finding. A `reasoning` that records a disposition is read against the
 finding it cites, not taken as settled.
+A `reasoning` paragraph that starts with `[struck] ` was replaced by a later one, so do not judge it.
 
 **buildability.** Can a test author write each declared test from `tests` and `doneWhen` alone?
 A test that names a surface, a screenshot, or review's own row is a finding: no author can
