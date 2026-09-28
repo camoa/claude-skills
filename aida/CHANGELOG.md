@@ -4,6 +4,40 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.1] - 2026-09-28
+
+Two fixes from the live run on 6.0.0.
+
+### Fixed
+
+- A resumed build now sees files a stopped role left uncommitted. Before, a
+  test author stopped mid-run could leave a test file behind, and `start` said
+  nothing, so the next author and the implementer's test run picked it up.
+  `start` now names each untracked or changed file in the task's worktree,
+  with the order that owns it. An interactive run stops at exit 104 and asks:
+  `--leftovers keep` or `--leftovers set-aside`. An unattended run sets the
+  files aside under `implementation/set-aside/<time>/`, never deletes them,
+  and records the move in the ledger. A deleted, staged or renamed file stops
+  both run modes, because undoing it is a person's decision. Gitignored files
+  and `COMPROMISES.md` are never named.
+- The recovery after a halt for an uncommitted tree now says what to do when
+  an unattended start set files aside: copy them back, commit, then clear the
+  halt.
+- A test row a person rejects now reaches the test author with the person's
+  words. Before, the words stayed in the conversation, because the dispatch
+  message holds only paths. The freeze that refuses the row now records it on
+  the order's ledger entry, with the person's words and the checker's note.
+  `tests-brief` carries those rows, and the test author is dispatched fresh to
+  repair them. The next freeze that writes clears the record. A checker file
+  that cannot be read now refuses and names the file.
+
+### Known limits
+
+- A file name that holds a newline breaks the tree read.
+- If a move fails midway, the files already moved are not in the ledger. The
+  error names their folder.
+- A role that is dispatched again without a new `start` is not checked.
+
 ## [6.0.0] - 2026-09-27
 
 The first release of version 6, after twenty-six betas. It replaces
