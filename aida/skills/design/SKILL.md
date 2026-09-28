@@ -494,12 +494,17 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--append-reasoning <text>] [--diff-budget <text>] \
+  [--interface <text>] [--reasoning <text>] [--supersede-reasoning <n>] \
+  [--append-reasoning <text>] [--diff-budget <text>] \
   [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 `--reasoning` replaces the whole field, the paragraphs `dispose` wrote included. To keep them,
 pass `--append-reasoning`: it adds the text as a new paragraph after a blank line. The two
 flags are refused together.
+When a critique or a person changes a rule that a reasoning paragraph states, supersede that
+paragraph. Pass `--supersede-reasoning <n>` with the new rule in `--append-reasoning`. Count n
+from 1 in the order's `.md`. The old paragraph stays, marked `[superseded]`, and no brief
+carries it. Do not leave both rules live: the builder reads every live paragraph.
 When `--proof` becomes `gate`, `record`, `observe` or `confirm`, `update` prints
 `stillNamesATest:` naming each of `interface`, `reasoning` and `diffBudget` that still names a
 test file.

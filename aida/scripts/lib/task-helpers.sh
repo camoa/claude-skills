@@ -47,6 +47,8 @@
 #   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
 #   DENIES_JQ                             a jq definition, `denies`, true when a string carries
 #                                         a negation word
+#   REASONING_JQ                          jq definitions: `supersededMark`, and `liveReasoning`,
+#                                         a work order's reasoning with no superseded paragraph
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
 # and is_git_repo from scripts/lib/recipes.sh. Two callers, scope and design, do not source that
@@ -69,6 +71,16 @@ DENIES_JQ='
           | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without", "cannot"]
               | index($w)) != null)
             or ($w | test("[a-z]n\u0027t$")));'
+
+# A work order's reasoning is paragraphs separated by a blank line. Design marks a paragraph
+# superseded with a prefix, so the record keeps the old rule and a person sees it marked. A
+# brief carries only the live paragraphs, so a builder never reads two rules (gap row 215).
+# Design's update writes the mark and the briefs read it, so both take it from here.
+# shellcheck disable=SC2034 # read by the sourcing script
+REASONING_JQ='
+  def supersededMark: "[superseded] ";
+  def liveReasoning: (.reasoning // "") | split("\n\n")
+    | map(select(startswith(supersededMark) | not)) | join("\n\n");'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
 # task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree

@@ -137,8 +137,10 @@ records the disposition on the order it lands on: the candidate, the distance, t
 compared, the verdict and the reason. Each disposition is appended, so an order with several
 candidates keeps every verdict, and re-disposing one adds a paragraph. Replacing an order's
 reasoning outright drops those paragraphs, so a later note is appended as a paragraph of its
-own, after a blank line. A fixed table applies. A supersede that cites only build
-cost, or a candidate sharing only a layer, comes back as extend. Interactively, a supersede
+own, after a blank line. When a critique or you change a rule a paragraph states, design marks
+that paragraph superseded and appends the new rule. The old paragraph stays in the order, marked
+`[superseded]`, and the builder and the reviewer never receive it. A fixed table applies. A
+supersede that cites only build cost, or a candidate sharing only a layer, comes back as extend. Interactively, a supersede
 stands only after you are asked, because it widens the task and owes a migration. A supersede
 naming no cost dimension is refused until you say what it compared. Autonomously, a supersede
 comes back as extend, with a reason in the order asking you to revisit it on an attended run. A

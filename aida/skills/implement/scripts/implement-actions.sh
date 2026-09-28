@@ -5303,9 +5303,9 @@ do_build_brief() {
 
   # --- assemble the brief: exactly these keys, and nothing else ------------------------------------
   local unit_out tests_out
-  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
-    '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
-      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // ""),
+  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c "$REASONING_JQ"'
+    {id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
+      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: liveReasoning,
       proof: (.proof // "tests"), verify: (.verify // [])}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
@@ -7556,7 +7556,7 @@ do_review_brief() {
     --arg locksIn "$locks_note" \
     --argjson criteria "$criteria_json" \
     --argjson nonGoals "$nongoals_json" \
-    --argjson order "$RV_UNIT_JSON" \
+    --argjson order "$(printf '%s' "$RV_UNIT_JSON" | jq -c "$REASONING_JQ"'.reasoning = liveReasoning')" \
     --arg diffPath "$diff_path" \
     --argjson deliverables "$deliverables_json" \
     --argjson frozenTests "$tests_json" \
