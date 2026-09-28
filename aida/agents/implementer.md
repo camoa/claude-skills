@@ -97,9 +97,14 @@ Stop: file-not-owned: <the file, and why the unit needs it>
 Stop: attempts-out: <what is still not done>
 ```
 
-Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report is a
-stop, so its line is `interface-misfit`. After a stop line other than `none`, return, and end the
-turn with nothing further written. `build-record` refuses a report with no stop line, and records
-no attempt for a stop. Never write "proceeding unless told otherwise". Never make a change while
+Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report or your
+interface record is a stop, so its line is `interface-misfit`. A departure from the design's
+interface or from a recipe rule is never built. It is a stop, and its line is `interface-misfit`.
+Below the stop line, your report holds exactly one deviation line: `Deviation: none`, or
+`Deviation: <what>: <why>`. Write `Deviation: none` only when the code follows the interface and
+every recipe rule. After a stop line other than `none`, return, and end the turn with nothing
+further written. `build-record` refuses a report with no stop line or no deviation line. It reads
+any deviation other than `none`, in the report or the interface record, as a stop, and records no
+attempt for a stop. Never write "proceeding unless told otherwise". Never make a change while
 you wait for an answer. Nobody can answer inside your turn, and a change made while waiting is a
 build the rule forbade.

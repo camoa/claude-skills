@@ -128,8 +128,10 @@ shell assembles at run time passes the hook and is still denied.
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
 A stop looks like this in the conversation: the role returns early. Its report's stop line names
 the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
-cause, and `build-record` refuses a report without one (exit 106). A cause is a stop even when code
-was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
+cause, and `build-record` refuses a report without one (exit 106). It also holds exactly one
+deviation line, `Deviation: none` or `Deviation: <what>: <why>`, and the same refusal applies. A
+deviation other than none, in the report or the interface record, is a stop. A cause is a stop even
+when code was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
 attempt. It names each commit made after the attempt began, and the person reverts or keeps them
 before the next build. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change

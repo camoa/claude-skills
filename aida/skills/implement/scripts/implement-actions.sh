@@ -652,9 +652,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder
 #      stopped, so this is not an attempt, whatever it committed. The message quotes the line and
 #      names each commit after --started-at. Nothing is recorded and no attempt is spent.
-#      Unattended, the order halts first, and the halt names the commits.
-# 106  `build-record` was given a report with no stop line, or more than one. Nothing is recorded
-#      and no attempt is spent.
+#      Unattended, the order halts first, and the halt names the commits. A deviation line other
+#      than `Deviation: none`, in the report or the interface record, is a stop too (gap row 221).
+# 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
+#      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
+#      attempt is spent.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -6900,6 +6902,14 @@ BR_SHOTS
     || die 94 "$who: these $field images the observed record names lie outside $folder/: ${stray_shots%, }. A file where a browser tool put it vanishes with that folder, and the evidence with it. Move each under that folder and name the new path in the row's $field."
 }
 
+# Prints each line of a builder's file that starts with one key, such as `stop`, in any case.
+# Markdown emphasis, a list marker and a heading marker are dropped first, so `- **Stop:** none`
+# and `## Deviation: x` count. $1 the file, $2 the key.
+br_marked_lines() {
+  sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^[-#]*[[:space:]]*//' "$1" 2>/dev/null \
+    | grep -i "^$2:"
+}
+
 do_build_record() {
   local task_arg="" unit_id="" interface_path="" report_path="" started_at="" observed_path=""
   local nothing_ran="" have_nothing_ran=false
@@ -7022,41 +7032,62 @@ do_build_record() {
   [ -n "$current_commit" ] \
     || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
 
-  # --- exits 105 and 106: the builder's stop line, read before anything else is judged --------------
+  # Without --interface the path is the brief's own interfacePath, the one the implementer was told
+  # to write to. The flag stays for a record a person put somewhere else (live-run row 102).
+  local interface_from="named by --interface"
+  if [ -z "$interface_path" ]; then
+    interface_path="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$unit_id-build.json" 2>/dev/null)"
+    [ -n "$interface_path" ] \
+      || die 3 "build-record: --interface was not given, and $IMPL_DIR/brief-$unit_id-build.json names no interfacePath. Run build-brief on $unit_id again, or pass --interface."
+    interface_from="the brief's interfacePath"
+  fi
+
+  # --- exits 105 and 106: the builder's stop and deviation lines, read before anything is judged ---
   # A builder once named a misfit in prose and then built around it (gap row 219). So every report
   # carries exactly one stop line, `Stop: none` or `Stop: <cause>: <reason>`, and the builder has to
-  # choose. Markdown emphasis, a list marker and the case of "stop" are ignored. A stop recorded as
-  # an attempt spends the budget on work the rule forbade. The halt reason names the report and the
+  # choose. It then wrote the misfit up as a deviation under `Stop: none` (gap row 221). So a report
+  # also carries exactly one `Deviation: none` or `Deviation: <what>: <why>`, and the interface
+  # record may carry the same line. A deviation other than none is a stop. A stop recorded as an
+  # attempt spends the budget on work the rule forbade. The halt reason names the file and the
   # commits, never the builder's text, because that text may hold the halt separator.
-  local ledger_run_mode stop_lines stop_count stop_value
+  local ledger_run_mode stop_lines stop_count stop_value deviation_count stop_file="$report_path"
   ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
-  stop_lines="$(sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^-[[:space:]]*//' "$report_path" 2>/dev/null \
-    | grep -i '^stop:')"
+  stop_lines="$(br_marked_lines "$report_path" stop)"
   stop_count="$(printf '%s' "$stop_lines" | grep -c '.')"
   [ "$stop_count" = "1" ] \
     || die 106 "build-record: the builder's report at $report_path holds $stop_count stop lines, and it must hold exactly one: 'Stop: none', or 'Stop: <cause>: <reason>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
   stop_value="$(printf '%s' "${stop_lines#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   case "$stop_value" in
-    [Nn][Oo][Nn][Ee]) ;;
-    *)
-      local stop_commits stop_commit_count stop_commit_text=""
-      stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
-      stop_commits="${stop_commits% }"
-      stop_commit_count="$(printf '%s' "$stop_commits" | wc -w | tr -d ' ')"
-      if [ "$stop_commit_count" -gt 0 ]; then
-        stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
+    [Nn][Oo][Nn][Ee])
+      stop_lines="$(br_marked_lines "$report_path" deviation)"
+      deviation_count="$(printf '%s' "$stop_lines" | grep -c '.')"
+      [ "$deviation_count" = "1" ] \
+        || die 106 "build-record: the builder's report at $report_path holds $deviation_count deviation lines, and it must hold exactly one: 'Deviation: none', or 'Deviation: <what>: <why>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
+      stop_lines="$(printf '%s\n' "$stop_lines" | grep -v -i '^deviation:[[:space:]]*none[[:space:]]*$')"
+      if [ -z "$stop_lines" ] && [ -f "$interface_path" ]; then
+        stop_file="$interface_path"
+        stop_lines="$(br_marked_lines "$interface_path" deviation | grep -v -i '^deviation:[[:space:]]*none[[:space:]]*$')"
       fi
-      if [ "$ledger_run_mode" = "autonomous" ]; then
-        local stop_ledger_doc
-        stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "the builder stopped: its report holds a Stop: line, at $report_path.$stop_commit_text")"
-        [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
-        write_atomic "$ledger_file" "$stop_ledger_doc"
-      fi
-      [ -z "$stop_commit_text" ] \
-        || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-      die 105 "build-record: the builder's report at $report_path says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md."
       ;;
   esac
+  if [ -n "$stop_lines" ]; then
+    local stop_commits stop_commit_count stop_commit_text=""
+    stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
+    stop_commits="${stop_commits% }"
+    stop_commit_count="$(printf '%s' "$stop_commits" | wc -w | tr -d ' ')"
+    if [ "$stop_commit_count" -gt 0 ]; then
+      stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
+    fi
+    if [ "$ledger_run_mode" = "autonomous" ]; then
+      local stop_ledger_doc
+      stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "the builder stopped: a Stop: or Deviation: line says so, at $stop_file.$stop_commit_text")"
+      [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
+      write_atomic "$ledger_file" "$stop_ledger_doc"
+    fi
+    [ -z "$stop_commit_text" ] \
+      || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
+    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md."
+  fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
@@ -7081,15 +7112,7 @@ do_build_record() {
   fi
 
   # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
-  # Without --interface the path is the brief's own interfacePath, the one the implementer was told
-  # to write to. The flag stays for a record a person put somewhere else (live-run row 102).
-  local unit_interface_declared interface_text="" interface_from="named by --interface"
-  if [ -z "$interface_path" ]; then
-    interface_path="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$unit_id-build.json" 2>/dev/null)"
-    [ -n "$interface_path" ] \
-      || die 3 "build-record: --interface was not given, and $IMPL_DIR/brief-$unit_id-build.json names no interfacePath. Run build-brief on $unit_id again, or pass --interface."
-    interface_from="the brief's interfacePath"
-  fi
+  local unit_interface_declared interface_text=""
   unit_interface_declared="$(printf '%s' "$UNIT_JSON" | jq -r '.interface // ""')"
   if [ -n "$unit_interface_declared" ]; then
     [ -s "$interface_path" ] \
