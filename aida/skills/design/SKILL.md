@@ -86,8 +86,8 @@ order's shape, not its file list. The route is the change, then `check`, `close`
 `design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
 an order's interface, criteria or dependencies, reads as a first run does.
 
-Two changes do not halt an order that implementation already started: an added owned file, and
-an `account` call. Once design closes again, the next `start` takes that order's live copy in
+Three changes do not halt an order that implementation already started: an added owned file, an
+`account` call, and a reason added with `update --append-reasoning`. Once design closes again, the next `start` takes that order's live copy in
 place, even when the order closed. Any other change to a started order halts it for design drift
 at the next `start`. Two routes lead back. Restore the design and `start` clears
 the halt. Or take the restart in the implement skill's `references/finish.md`, which rebuilds the
@@ -714,7 +714,8 @@ Once the check comes back clean, and before closing, have three readers who were
 conversation read the orders. The check counted ids; it read no sentence. Dispatch
 `design-critic` three times, in parallel, with the message this file names. Its lines are the
 role, the run mode, the task folder, and one lens of `contract`, `reuse` and `buildability`.
-Add the design recipe's path when one was read. A dispatch that names no role runs as the general
+Add the design recipe's path when one was read. Add the ids `check` printed on `closedOrders:`
+when that line is not `none`. A dispatch that names no role runs as the general
 agent with write tools. Never give it a summary of this conversation: being denied that account
 is why the role exists.
 
@@ -738,6 +739,9 @@ why it matters and what would fix it. Take one answer per finding: change the or
 it. A change is one of the `update`, `add-owned-file`, `add-done-when` or `add-test` calls above,
 then `check` again. A leave needs a reason from the person. Write it into that order's
 `reasoning` with `update --append-reasoning`, so the reason outlives this conversation.
+Closed orders are not critiqued, and a leave reason on a started or closed order does not halt it.
+The close drops a row that names only closed orders and prints `critiqueDropped:`, so do not show
+such a row.
 A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
 the contract has to change.
 

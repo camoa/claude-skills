@@ -27,6 +27,10 @@ One per line in the dispatch, and nothing else:
 - one lens: `contract`, `reuse` or `buildability`
 - the path of the design recipe the skill read, when it read one; open it for the
   `buildability` lens only
+- the work orders implementation closed, when it closed any
+
+A closed order is built, so read it as context only. Raise a finding on it only when it breaks an
+order that is not closed, and put that open order in the `order` cell.
 
 Read `alignment.json`, the contract: the goal, the criteria with their ids, the non-goals with
 theirs. `alignment.md` beside it is a rendering of it, read for nothing. Read every
