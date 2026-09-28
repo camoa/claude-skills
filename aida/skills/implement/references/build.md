@@ -126,8 +126,10 @@ shell assembles at run time passes the hook and is still denied.
 
 **It stops rather than working around anything.** A test that seems wrong, an interface that does
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
-A stop looks like this in the conversation: the role returns early, its report names what stopped it,
-and nothing is committed. Interactive puts the stop to the person,
+A stop looks like this in the conversation: the role returns early, its report holds a line that
+starts with `Stop:` naming what stopped it, and nothing is committed. A report with that line is a
+stop even when code was committed after it. `build-record` refuses it (exit 105), records nothing
+and spends no attempt. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
 it. It says a test is wrong, the interface does not fit, it needs a file it does not own, or its
 attempts ran out.

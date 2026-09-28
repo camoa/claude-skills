@@ -648,6 +648,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `--leftovers`. Or `--leftovers set-aside` met a change other than an untracked or a modified
 #      file. The message names each path and the orders whose owned files hold it. Nothing is
 #      written and nothing moves.
+# The code the builder's stop added (gap row 219).
+# 105  `build-record` was given a report holding a line that starts with `Stop:`. The builder
+#      stopped, so this is not an attempt, whatever it committed. The message quotes the line.
+#      Nothing is recorded and no attempt is spent. Unattended, the order halts first.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -7014,6 +7018,23 @@ do_build_record() {
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+
+  # --- exit 105: a builder that wrote a stop line stopped, even when it committed code after it ----
+  # A builder once named a misfit in its report and then built around it (gap row 219). Recorded as
+  # an attempt, that spends the budget on work the rule forbade. The halt reason names the report
+  # and not the line, because the builder's text may hold the halt separator.
+  local ledger_run_mode stop_line
+  ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
+  stop_line="$(grep -m 1 '^Stop:' "$report_path" 2>/dev/null)"
+  if [ -n "$stop_line" ]; then
+    if [ "$ledger_run_mode" = "autonomous" ]; then
+      local stop_ledger_doc
+      stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "the builder stopped: its report holds a Stop: line, at $report_path")"
+      [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
+      write_atomic "$ledger_file" "$stop_ledger_doc"
+    fi
+    die 105 "build-record: the builder's report at $report_path says it stopped: $stop_line. A stop is not an attempt, so nothing is recorded and no attempt is spent, even for code it committed after the stop. Put the stop to the person as the builder's stop in references/build.md."
+  fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
@@ -7069,8 +7090,6 @@ do_build_record() {
     criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
 
-  local ledger_run_mode
-  ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
   # --- the eight deciding checks ---------------------------------------------------------------------

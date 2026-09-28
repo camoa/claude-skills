@@ -54,7 +54,9 @@ A `reasoning` paragraph that starts with `[struck] ` was replaced by a later one
 A test that names a surface, a screenshot, or review's own row is a finding: no author can
 write it as a file.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
-what was meant? Does one order own a directory another order owns a file inside? The design
+what was meant? Each method the `interface` exposes must get every input it uses from an argument,
+an injected dependency the interface names, or a named source. An input with no such source, or a
+global service locator call, is a finding. Does one order own a directory another order owns a file inside? The design
 check refuses an identical entry twice; it reads paths as strings, so nesting is yours. Is the
 order small enough: three to seven build steps, ten at most, and one concern per order? Of
 every order, ask the recipe's own question: does the order own every file the operation
