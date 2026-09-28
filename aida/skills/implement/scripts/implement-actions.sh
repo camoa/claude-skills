@@ -663,16 +663,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # The code a departure at review added (gap row 224).
 # 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
-#      latest attempt's report or in the interface record the build record holds. The order's
-#      interface is what is wrong, so the order halts for design drift, whatever the review holds.
-#      The halt names the file and the line. No review record is written. A person accepts the
-#      departure with --accept-deviation instead, interactive only (exit 68). A recipe the
-#      reviewer answers departed takes the same route (gap row 225).
+#      latest attempt's report or in the interface record the build record holds. What is wrong is
+#      the design, or a recipe it relies on, so the order halts for design drift, whatever the
+#      review holds. The halt names the file and the line. No review record is written. A person
+#      accepts the departure with --accept-deviation instead, interactive only (exit 68). A recipe
+#      the reviewer answers departed takes the same route, under a halt of its own wording (gap
+#      row 225).
 #
 # The code the reviewer's recipe answers added (gap row 225).
 # 108  `review-record` found the findings file's `recipes` list does not answer the review
-#      brief's `recipes` list one to one: a recipe or guide with no answer, an answer given twice,
-#      or an answer naming one the order does not carry. Nothing is written.
+#      brief's `recipes` list one to one: a recipe with no answer, an answer given twice, or an
+#      answer naming one the order does not carry. Nothing is written. The message names the next
+#      step: review-brief again, then the reviewer again. The check runs before --accept-deviation
+#      is read, so a person never accepts on a review that skipped a recipe.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -1248,7 +1251,7 @@ im_next_step() {
     i=$((i + 1))
   done
   printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson tools_only "$tools_only" --argjson snap "$snapshot" \
-    --argjson retake_pending "$retake_pending" --arg departure_prefix "$RR_DEPARTURE_PREFIX" \
+    --argjson retake_pending "$retake_pending" --argjson departure_prefixes "$RR_DEPARTURE_PREFIXES" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
     | ([ $orders[] | select(.lastStep == "closed") | .id ]) as $closed
@@ -1261,9 +1264,9 @@ im_next_step() {
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
     # A departure routes to accept-deviation only while it is the one drift segment of the order. A
     # design change drifted it too, so keeping the departure no longer answers the halt.
-    | ([ $orders[] | select((.haltedBecause // "") | contains($departure_prefix))
+    | ([ $orders[] | select((.haltedBecause // "") as $h | any($departure_prefixes[]; . as $p | $h | contains($p)))
          | select([ (.haltedBecause | split("; earlier: "))[] | select(startswith("design drift"))
-                    | select(startswith($departure_prefix) | not) ] | length == 0) ] | .[0]) as $departure
+                    | . as $seg | select(any($departure_prefixes[]; . as $p | $seg | startswith($p)) | not) ] | length == 0) ] | .[0]) as $departure
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift: the design removed ")) ] | .[0]) as $removed
     | ([ $orders[] | select((.haltedBecause // "") | (contains("attempts spent") or contains("budget spent"))) ] | .[0]) as $spent
     | ([ $orders[] | select((.haltedBecause // "") | startswith("test wrong: ")) ] | .[0]) as $testwrong
@@ -7515,11 +7518,12 @@ rv_load_state() {
   ! task_is_light "$TASK_PATH" || FIX_ROUNDS_ALLOWED=1
 
   # Exit 49: a halted order refuses every step after the halt. The reason is the halt's own words,
-  # so a reader never has to open the ledger to learn why the step stopped. $3, when given, is the
-  # front of the one halt segment the caller answers itself, so only the other segments refuse.
+  # so a reader never has to open the ledger to learn why the step stopped. $3, when given, is a
+  # JSON array of the fronts of the halt segments the caller answers itself, so only the other
+  # segments refuse.
   local halted
   halted="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.haltedBecause // ""')"
-  [ -z "${3:-}" ] || halted="$(halt_segments_matching "$halted" "$(jq -cn --arg p "$3" '[$p]')" drop)"
+  [ -z "${3:-}" ] || halted="$(halt_segments_matching "$halted" "$3" drop)"
   [ -z "$halted" ] \
     || die 49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $halted"
 }
@@ -7784,30 +7788,31 @@ rv_read_information_array() {
               departsFromDesign} ]')"
 }
 
-# The recipes and guides the reviewer answers for, one per line, each once (gap row 225): the
-# implement recipe preconditions.json holds for each framework, then each source the order's
-# `verify` list cites. No per-rule list exists, so the unit is a whole recipe or guide. Reads
-# RV_UNIT_JSON and IMPL_DIR. review-brief hands the list over, and review-record checks the
-# reviewer's answers against it.
+# The recipes the reviewer answers for, one per line, each once (gap row 225): the implement
+# recipe preconditions.json holds for each framework. The builder follows its rules and the
+# reviewer is given no other copy. No per-rule list exists, so the unit is a whole recipe. The
+# order's `verify` sources stay out: the reviewer judges each entry already. Reads IMPL_DIR.
+# review-brief hands the list over, and review-record checks the reviewer's answers against it.
 rv_recipe_refs() {
-  local pre=""
-  [ -f "$IMPL_DIR/preconditions.json" ] \
-    && pre="$(jq -c '[ (.frameworks // [])[] | .implementRecipePath // empty ]' "$IMPL_DIR/preconditions.json" 2>/dev/null)"
-  printf '%s' "$RV_UNIT_JSON" | jq -r --argjson pre "${pre:-[]}" '
-    ($pre + [ (.verify // [])[] | .cites // empty ])
-    | reduce .[] as $x ([]; if index([$x]) then . else . + [$x] end) | .[]'
+  [ -f "$IMPL_DIR/preconditions.json" ] || return 0
+  jq -r '[ (.frameworks // [])[] | .implementRecipePath // empty ] | unique | .[]' \
+    "$IMPL_DIR/preconditions.json" 2>/dev/null
 }
 
 # Sets RV_RECIPE_ANSWERS to the reviewer's `recipes` list in the findings file $1, or to [] when
 # the file has none. $2 the action's own name. An answer is {ref, verdict, evidence}: the verdict
-# is followed, departed or not-applicable, and the evidence gives the reason. A departure's
-# evidence names a file and a line. Dies 52 on a malformed answer, and 108 when an item of
-# rv_recipe_refs has no answer, or an answer names a ref twice or a ref not on that list. Called
-# as a plain statement, never with `$(...)`, for the reason rv_read_findings_array states.
+# is followed, departed or not-applicable, and the evidence gives the reason on one line. A
+# departure's evidence names file:line of a file in the order's diff, $3. Dies 52 on a malformed
+# answer, and 108 when an item of rv_recipe_refs has no answer, or an answer names a ref twice or a
+# ref not on that list. Called as a plain statement, never with `$(...)`, for the reason
+# rv_read_findings_array states.
 RV_RECIPE_ANSWERS="[]"
+RR_REDISPATCH="Run review-brief again for this order, then dispatch the reviewer again."
 rv_read_recipe_answers() {
-  local file="$1" who="$2" refs arr count i one ref verdict evidence seen=""
+  local file="$1" who="$2" diff="$3" refs arr count i one ref verdict evidence seen="" diff_paths p in_diff
   refs="$(rv_recipe_refs)"
+  diff_paths=""
+  [ ! -f "$diff" ] || diff_paths="$(sed -n 's#^+++ b/##p; s#^--- a/##p' "$diff" | LC_ALL=C sort -u)"
   arr="$(jq -c 'if has("recipes") then .recipes else [] end' "$file" 2>/dev/null)"
   [ "$(printf '%s' "$arr" | jq -r 'type' 2>/dev/null)" = "array" ] \
     || die 52 "$who: $file holds a recipes key that is not an array. The shape is { \"recipes\": [ { \"ref\", \"verdict\", \"evidence\" } ] }."
@@ -7827,24 +7832,33 @@ rv_read_recipe_answers() {
     esac
     [ -n "$evidence" ] \
       || die 52 "$who: the recipes answer for $ref in $file has no evidence. A not-applicable answer gives its reason there."
+    case "$evidence" in
+      *"
+"*) die 52 "$who: the recipes answer for $ref in $file holds a line break in its evidence. The evidence is one line." ;;
+    esac
     if [ "$verdict" = "departed" ]; then
-      case "$evidence" in
-        *:[0-9]*) ;;
-        *) die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file:line." ;;
-      esac
+      in_diff=no
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        case "$evidence" in *"$p:"[0-9]*) in_diff=yes ;; esac
+      done <<RR_DIFF
+$diff_paths
+RR_DIFF
+      [ "$in_diff" = "yes" ] \
+        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file:line of a file in $diff. Name where the build departs, not the recipe's own line."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
-      || die 108 "$who: $file answers for $ref, which is not a recipe or guide this order carries. The review brief's recipes list is the whole list."
+      || die 108 "$who: $file answers for $ref, which is not a recipe this order carries. The review brief's recipes list is the whole list. $RR_REDISPATCH"
     printf '%s\n' "$seen" | grep -Fxq -- "$ref" \
-      && die 108 "$who: $file answers for $ref more than once. Each recipe or guide gets one answer."
+      && die 108 "$who: $file answers for $ref more than once. Each recipe gets one answer. $RR_REDISPATCH"
     seen="$seen
 $ref"
     i=$((i + 1))
   done
   while IFS= read -r ref; do
     [ -z "$ref" ] || printf '%s\n' "$seen" | grep -Fxq -- "$ref" \
-      || die 108 "$who: $file gives no answer for $ref, a recipe or guide this order carries. Each item of the review brief's recipes list gets one answer: followed, departed or not-applicable."
+      || die 108 "$who: $file gives no answer for $ref, a recipe this order carries. Each item of the review brief's recipes list gets one answer: followed, departed or not-applicable. $RR_REDISPATCH"
   done <<RR_REFS
 $refs
 RR_REFS
@@ -8016,10 +8030,12 @@ RB_PATHS
 # review-record: what the reviewer wrote, checked and recorded.
 # ------------------------------------------------------------------------------------------------
 
-# The front of the halt review-record writes for a departure the builder declared (gap row 224).
-# It begins "design drift: " so `restart` takes it, and matches no own-copy prefix, so a resumed
-# `start` never clears it.
+# The fronts of the halt review-record writes for a departure: one the builder declared (gap row
+# 224), and one the reviewer answered (gap row 225). Each begins "design drift: " so `restart`
+# takes it, and matches no own-copy prefix, so a resumed `start` never clears it.
 RR_DEPARTURE_PREFIX="design drift: the builder declared a departure from the design"
+RR_REVIEWER_PREFIX="design drift: the reviewer answered that the build departs from"
+RR_DEPARTURE_PREFIXES="$(jq -cn --arg a "$RR_DEPARTURE_PREFIX" --arg b "$RR_REVIEWER_PREFIX" '[$a, $b]')"
 
 do_review_record() {
   local task_arg="" unit_id="" findings_path="" accept=""
@@ -8053,7 +8069,7 @@ do_review_record() {
   local answers=""
   if [ -n "$accept" ]; then
     fn_require_interactive "review-record" "accepting a departure the builder declared"
-    answers="$RR_DEPARTURE_PREFIX"
+    answers="$RR_DEPARTURE_PREFIXES"
   fi
   rv_load_state "review-record" "$unit_id" "$answers"
 
@@ -8118,16 +8134,16 @@ do_review_record() {
   raw_findings="$RV_FINDINGS_ARRAY"
   rv_read_information_array "$findings_path" "review-record"
   information_json="$RV_INFORMATION_ARRAY"
-  rv_read_recipe_answers "$findings_path" "review-record"
+  rv_read_recipe_answers "$findings_path" "review-record" "$IMPL_DIR/diff-$unit_id.patch"
 
   # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
-  # review holds: the order's interface is what is wrong, so no fixer can repair it. The scan is
-  # build-record's own, over the latest attempt's report and the interface record its build record
-  # holds. A build record written before that scan existed reaches review with one in it. The
-  # reviewer's information item with departsFromDesign true is the same fact, and so is a recipe
-  # it answers departed (gap row 225). The halt names the file and the line, never the builder's
-  # text, which may hold the halt separator. The reader already refused that separator in the
-  # reviewer's evidence.
+  # review holds: the design, or a recipe it relies on, is what is wrong, so no fixer can repair
+  # it. The scan is build-record's own, over the latest attempt's report and the interface record
+  # its build record holds. A build record written before that scan existed reaches review with
+  # one in it. The reviewer's information item with departsFromDesign true is the same fact, and so
+  # is a recipe it answers departed (gap row 225); those halts carry the reviewer's own front. The
+  # halt names the file and the line, never the builder's text, which may hold the halt separator.
+  # The recipe reader already refused that separator, and a line break, in the reviewer's evidence.
   local departure departure_file departure_line="" iface_file halt_why=""
   departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
   departure="$(br_deviations "$departure_file" | head -n 1)"
@@ -8146,13 +8162,12 @@ do_review_record() {
       '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
     departure_file="$findings_path"
     [ -z "$departure" ] \
-      || halt_why="$RR_DEPARTURE_PREFIX, which the reviewer marks departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
+      || halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
   fi
   if [ -z "$departure" ]; then
     departure="$(printf '%s' "$RV_RECIPE_ANSWERS" | jq -r \
-      '[ .[] | select(.verdict == "departed") ] | .[0] // empty | "recipe \(.ref) departed: \(.evidence)"')"
-    [ -z "$departure" ] \
-      || halt_why="$RR_DEPARTURE_PREFIX, which the reviewer answers in $findings_path: $departure"
+      '[ .[] | select(.verdict == "departed") ] | .[0] // empty | "\(.ref): \(.evidence)"')"
+    [ -z "$departure" ] || halt_why="$RR_REVIEWER_PREFIX $departure"
   fi
   if [ -z "$departure" ]; then
     [ -z "$accept" ] \
@@ -8162,7 +8177,7 @@ do_review_record() {
     departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
     [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
     write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
-    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. The order's interface is what is wrong, so no fixer can repair it, and no review record is written. Amend the order's interface in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
+    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
   fi
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   findings_json='[]'
@@ -9921,7 +9936,7 @@ do_clear_halt() {
   [ "$other_action" != "restart" ] \
     || drift_route=" Or run start again: it clears a halt about this order's own design file once the design no longer differs from the snapshot."
   case "$halt" in
-    *"$RR_DEPARTURE_PREFIX"*)
+    *"$RR_DEPARTURE_PREFIX"*|*"$RR_REVIEWER_PREFIX"*)
       drift_route=" Or a person keeps the departure: run review-record again with --accept-deviation <their reason>, in references/finish.md." ;;
   esac
   [ -z "$other_action" ] \

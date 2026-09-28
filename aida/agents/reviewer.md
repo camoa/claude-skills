@@ -77,14 +77,16 @@ rules, so a play outranks a guide's default where the two differ. A finding on a
 exactly one contract id in `linkedTo`, or none, under the rule below.
 
 **The builder's report is a claim, never proof.** A reason it gives never lowers a finding's
-severity.
+severity. A departure the builder names, in its report or its interface record, that no answer
+under `recipes` covers is a high finding linked to the criterion the order owns.
 
-**Answer each recipe and guide.** The brief's `recipes` lists each recipe and guide the order
-carries. Open each one and judge the diff against its rules. Write one entry per item under
-`recipes`, in the shape above. `departed` names the file and the line in `evidence`, whether or
-not the builder declared it. `not-applicable` gives its reason in `evidence`. A script refuses a
-list that skips an item or adds one, and a departure sends the order back to design. Leave
-`recipes` out when the brief's list is empty.
+**Answer each recipe.** The brief's `recipes` lists each recipe the builder follows. Open each
+one and judge the diff against its rules. Write one entry per item under `recipes`, in the shape
+above, with `evidence` on one line. `departed` names the file and the line of the diff in
+`evidence`, whether or not the builder declared it. The recipe's own line is not enough.
+`not-applicable` gives its reason in `evidence`. A script refuses a list that skips an item or
+adds one, and a departure sends the order back to design. Leave `recipes` out when the brief's
+list is empty.
 
 **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
 only one the contract gave you. A finding naming neither, or naming an id the contract does not
