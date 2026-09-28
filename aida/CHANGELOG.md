@@ -4,6 +4,42 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.4] - 2026-09-28
+
+Two fixes from the live run on 6.0.3. A reviewer again filed a recipe rule
+the build broke as information, and reopening design to fix it would have
+rebuilt an order that was already closed.
+
+### Fixed
+
+- The reviewer now answers for each implement recipe the task resolved, one
+  entry per recipe: `followed`, `departed` or `not-applicable`, with
+  evidence. `review-record` refuses a review with a missing, repeated or
+  extra answer (exit 108), and says to run `review-brief` again and dispatch
+  the reviewer again. A `departed` answer must name a line in the order's
+  diff. It halts the order for design drift (exit 107), the same as a
+  departure the builder declared.
+- A halt from the reviewer's answer now says the reviewer found it. The
+  guidance says the design, or a recipe it relies on, is what is wrong.
+- A departure the builder names from something that is not a recipe, such
+  as a codebase convention, is again a high finding for the reviewer.
+- Recording research findings on an order that implementation already
+  started or closed is no longer design drift. After design closes again,
+  `start` takes the order's new copy in place and keeps its step, attempts
+  and tests. Any other change to a started order still halts it.
+- When a design change and a declared departure both halt an order, the
+  next step offers `restart`, not `--accept-deviation`.
+- A reopen that only records findings no longer counts as a first design
+  run.
+
+### Known limits
+
+- A reviewer who answers `followed` for a recipe the build broke still
+  passes. The script decides from the answer, not from the code.
+- An order halted by 6.0.3 with a review written before 6.0.4 cannot accept
+  its departure. `review-brief` refuses a halted order, so its way out is
+  `restart`.
+
 ## [6.0.3] - 2026-09-28
 
 A fix from the live run on 6.0.2. The reviewer saw a departure the builder
