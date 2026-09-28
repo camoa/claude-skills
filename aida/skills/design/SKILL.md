@@ -103,7 +103,9 @@ Then account for each research finding. Each `<task_folder>/research/<search>.md
 findings of one search, numbered from 1. A finding is named `<search>#<n>`. Each finding is used
 by an order or set aside with a reason. A finding that names a collaborator, a service, a
 convention or a constraint is used by the order it affects. A finding that says nothing was found
-is accounted for too. Once the order a finding affects exists, record the finding on it:
+is accounted for too. A need no finding covers is looked up first, as "Look up what you decided
+to use and research did not" says. Once the order a finding affects exists, record the finding on
+it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh account "<task_folder>" \
   --id <woId> --finding <search>#<n> [--set-aside "<why this order does not use it>"]
@@ -321,15 +323,26 @@ Interactive runs do not dispatch it. A person read the reasoning, and the role h
 ## Look up what you decided to use and research did not
 
 Design names things research had no reason to search for: a particular module, a framework API, a
-pattern. Those were not decisions yet when research ran, so no search covered them.
+pattern. Those were not decisions yet when research ran, so no search covered them. An order's
+interface can also need a collaborator, a service, an input source or a convention that no
+finding covers. How a class in this framework gets the current time is one such question. A
+question a quick lookup can answer is looked up, never guessed, before the close.
 
 First read what research already searched for. Every `research/<search>.json` carries
 `searchedFor`, the words that search used. A name inside those words was searched, and the answer
 is already in that file. Do not pay for it twice.
 
-For a name that was not searched, ask the navigator to identify guides and recipes covering it.
-Identify only. It returns names and never resolves a body, so one name costs one lookup. Read a
-body only when a match is worth reading.
+For a name that was not searched, look in this order, and stop at the first answer:
+
+1. This project's own code. Dispatch `internal-searcher` with the words to search.
+2. The catalog. Ask the navigator to identify guides and recipes covering it. Identify only. It
+   returns names and never resolves a body, so one name costs one lookup. Read a body only when
+   a match is worth reading.
+3. When no guide or recipe covers it, what reputable sources recommend. Dispatch
+   `outward-searcher`, one subject.
+
+Each dispatch carries the message lines that `${CLAUDE_PLUGIN_ROOT}/skills/research/SKILL.md`
+names for that role, under "Dispatch one agent per search".
 
 Record the answer through research's own record action. The research store keeps one producer
 that way, and the finding is checked the same way as every other:

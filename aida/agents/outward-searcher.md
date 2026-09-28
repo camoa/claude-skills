@@ -1,6 +1,6 @@
 ---
 name: outward-searcher
-description: Runs one search outside this project and reports what the search found. Dispatched by the research skill only, one subject per dispatch.
+description: Runs one search outside this project and reports what the search found. Dispatched by the research and design skills only, one subject per dispatch.
 tools: WebSearch, WebFetch, Read
 disallowedTools: Agent
 model: sonnet

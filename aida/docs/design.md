@@ -124,8 +124,11 @@ claim must be followed once design judges it sound, not before. A claim edited a
 grounded it is reported as ungrounded, and it goes back to research when it matters.
 
 Design also names things research had no reason to look for: a particular module, a framework
-API, a pattern that only became a decision here. For each such name it asks the catalog which
-guides and recipes cover it. It records the answer, a nothing included, as one research finding
+API, a pattern that only became a decision here. An order's interface can also need a
+collaborator, a service, an input source or a convention that no finding covers. Such a question
+is looked up before the close, never guessed. Design looks in the project's own code first, then
+asks the catalog which guides and recipes cover it. When none does, it searches outside for what
+reputable sources recommend, one subject per search. It records the answer, a nothing included, as one research finding
 of its own, so the same lookup never runs again during the build.
 
 ## The reuse decision
