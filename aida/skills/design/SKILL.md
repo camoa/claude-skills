@@ -104,15 +104,17 @@ findings of one search, numbered from 1. A finding is named `<search>#<n>`. Each
 by an order or set aside with a reason. A finding that names a collaborator, a service, a
 convention or a constraint is used by the order it affects. A finding that says nothing was found
 is accounted for too. A need no finding covers is looked up first, as "Look up what you decided
-to use and research did not" says. Once the order a finding affects exists, record the finding on
-it:
+to use and research did not" says. Once the orders a finding affects exist, record the finding on
+every one of them:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh account "<task_folder>" \
   --id <woId> --finding <search>#<n> [--set-aside "<why this order does not use it>"]
 ```
 Without `--set-aside`, the order uses the finding, and the build brief carries its text. A
-second call for the same finding on the same order replaces the entry. `check` and `close`
-refuse, exit 7, while a finding is in no order's list. Both modes account the same way.
+second call for the same finding on the same order replaces the entry. `--remove` in place of
+`--set-aside` deletes it. `check` and `close` refuse, exit 7, while a finding is in no order's
+list. They refuse too when research changed a finding's text after it was recorded, or an entry
+names a finding research no longer holds. Both modes account the same way.
 
 Then read `<task_folder>/records/playbooks.md`. It holds the plays research loaded,
 the rules this project and this person want followed. Name a play that decides an order's shape

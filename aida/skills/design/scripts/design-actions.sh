@@ -63,7 +63,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
 #                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
 #                        [--path <path> --interface <text>]
-#   design-actions.sh account    <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason>]
+#   design-actions.sh account    <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason> | --remove]
 #
 # --run-mode is accepted on every action and `close` and `dispose` require it. A close record says who was
 # present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
@@ -128,7 +128,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # research/, and its place in that file's findings, counted from 1 as research-render.sh numbers
 # it. The entry lands in the order's `findings` with the finding's text, so the frozen order and
 # the build brief carry it. With --set-aside, the entry holds the reason and the brief leaves it
-# out. `check` and `close` refuse, exit 7, while a finding is in no order's `findings`.
+# out. `check` and `close` refuse, exit 7, while a finding is in no order's `findings` with its
+# current text, or while an entry names a finding research no longer holds. --remove deletes an
+# entry.
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
@@ -147,7 +149,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
 #      order does not own; or `merge` was given an --into or --from naming no work order file;
 #      or `read-guide` or `verify` was given a path naming no file on disk; or `account` was given
-#      a --finding naming no finding under research/; or `distill` found no
+#      a --finding naming no finding under research/, or a --remove naming no entry on the order;
+#      or `distill` found no
 #      records/design-distill.json, so the distiller has not been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
@@ -293,7 +296,7 @@ usage: design-actions.sh read           <task_folder>
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
                                          --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
                                          [--path <path> --interface <text>]
-       design-actions.sh account        <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason>]
+       design-actions.sh account        <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason> | --remove]
 EOF
 }
 
@@ -519,19 +522,30 @@ critique_findings_of() {
   printf '%s' "$n"
 }
 
-# One line per research finding no work order's `findings` names: `<search>#<n>: <first line>`.
-# Prints nothing when research holds no finding.
+# One line per research finding no work order's `findings` names with both its reference and its
+# text: `<search>#<n>: <first line>`. A text that differs means research changed or dropped a
+# finding after the entry was written, so the reference may now point at a neighbour. Then one
+# line per entry whose reference names no finding research holds now. Prints nothing when every
+# finding is accounted for, and when research holds none.
 unaccounted_findings() {
-  local accounted f
+  local accounted f wo ref search n
   accounted="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
-    | while IFS= read -r f; do jq -r '(.findings // [])[] | .ref' "$f" 2>/dev/null; done)"
+    | while IFS= read -r f; do jq -c '(.findings // [])[] | {ref, text}' "$f" 2>/dev/null; done)"
   find "$TASK_PATH/research" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do
         jq -r --arg s "$(basename -- "$f" .json)" --arg acc "$accounted" '
-          ($acc | split("\n")) as $acc
+          ($acc | split("\n") | map(select(length > 0) | fromjson)) as $acc
           | (.findings // []) | to_entries[] | ($s + "#" + (.key + 1 | tostring)) as $ref
-          | select(($acc | index($ref)) == null)
-          | $ref + ": " + ((.value.text // "") | split("\n")[0])' "$f" 2>/dev/null
+          | .value.text as $t
+          | select(any($acc[]; .ref == $ref and .text == $t) | not)
+          | $ref + ": " + (($t // "") | split("\n")[0])' "$f" 2>/dev/null
+      done
+  find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '.id as $w | (.findings // [])[] | $w + " " + .ref' "$f" 2>/dev/null; done \
+    | while read -r wo ref; do
+        search="${ref%#*}"; n="${ref##*#}"
+        [ "$(jq -r '(.findings // []) | length' "$TASK_PATH/research/$search.json" 2>/dev/null || echo 0)" -ge "$n" ] 2>/dev/null \
+          || echo "$ref: $wo holds this entry, and research holds no such finding now. Remove it with account --remove"
       done
 }
 
@@ -2011,35 +2025,50 @@ do_dispose() {
 # ------------------------------------------------------------------------------------------------
 
 do_account() {
-  local id="" ref="" set_aside="" aside_given=false
+  local id="" ref="" set_aside="" aside_given=false remove=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)        need_value "account" "--id" "$#" "${2:-}";        id="$2"; shift 2 ;;
       --finding)   need_value "account" "--finding" "$#" "${2:-}";   ref="$2"; shift 2 ;;
       --set-aside) need_value "account" "--set-aside" "$#" "${2:-}"; set_aside="$2"; aside_given=true; shift 2 ;;
+      --remove)    remove=true; shift ;;
       *) die3 "account: unrecognized argument: $1" ;;
     esac
   done
   require_wo_id_arg "account" "$id"
   [ "$aside_given" = false ] || ! is_blank "$set_aside" \
     || die3 "account: --set-aside must not be blank. The reason is what a reader judges the set-aside by"
-  local search="${ref%#*}" n="${ref##*#}"
-  case "$ref" in *'#'*) ;; *) die3 "account: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
-  case "$search" in ''|*[!a-z0-9-]*) die3 "account: --finding must be <search>#<n>, got '$ref'" ;; esac
-  case "$n" in ''|0*|*[!0-9]*) die3 "account: --finding must be <search>#<n> with n counted from 1, got '$ref'" ;; esac
-  local rfile="$TASK_PATH/research/$search.json" text
-  [ -f "$rfile" ] || die2 "account: no research file $rfile"
-  text="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$rfile" 2>/dev/null)"
-  [ -n "$text" ] || die2 "account: $rfile holds no finding $n"
-
+  [ "$remove" = false ] || [ "$aside_given" = false ] || die3 "account: --remove takes no --set-aside"
   local file doc
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "account: $file exists but is not valid JSON"
+  if [ "$remove" = true ]; then
+    jq -e --arg r "$ref" 'any((.findings // [])[]; .ref == $r)' "$file" >/dev/null \
+      || die2 "account: $id holds no entry $ref"
+    doc="$(jq --arg r "$ref" '.findings = [ .findings[] | select(.ref != $r) ]' "$file")"
+    write_atomic "$file" "$doc"
+    echo "REMOVED: $ref from $file"
+    echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
+    render_wo "$id"
+    exit 0
+  fi
+  # Numbered from 1, as research/<search>.md shows each finding to design. check-research.sh
+  # reports a 0-based index; that number is never a --finding.
+  local search="${ref%#*}" n="${ref##*#}"
+  case "$ref" in *'#'*) ;; *) die3 "account: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
+  case "$search" in ''|*[!a-z0-9-]*) die3 "account: --finding must be <search>#<n>, got '$ref'" ;; esac
+  local rfile="$TASK_PATH/research/$search.json" text count
+  [ -f "$rfile" ] || die2 "account: no research file $rfile"
+  count="$(jq -r '(.findings // []) | length' "$rfile" 2>/dev/null)"
+  case "$n" in ''|0*|*[!0-9]*) die3 "account: --finding must be <search>#<n>, numbered from 1 as research/$search.md shows it, got '$ref'. $search#1 is: $(jq -r '(.findings // [])[0].text // "" | split("\n")[0]' "$rfile" 2>/dev/null)" ;; esac
+  text="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$rfile" 2>/dev/null)"
+  [ -n "$text" ] || die2 "account: $rfile holds no finding $n. It holds ${count:-0}, numbered from 1 as research/$search.md shows them"
   doc="$(jq --arg r "$ref" --arg t "$text" --arg a "$set_aside" \
     '.findings = ((.findings // []) | map(select(.ref != $r))) + [{ref: $r, text: $t} + (if $a == "" then {} else {setAside: $a} end)]' "$file")"
   write_atomic "$file" "$doc"
   echo "ACCOUNTED: $file"
   echo "finding: $ref"
+  echo "text: $(printf '%s' "$text" | sed -n '1p')"
   if [ -n "$set_aside" ]; then echo "use: set aside"; else echo "use: cited"; fi
   echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
   render_wo "$id"

@@ -57,7 +57,9 @@ A test that names a surface, a screenshot, or review's own row is a finding: no 
 write it as a file.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
 what was meant? A method input with no argument, named dependency or named source, or a global
-service locator call, is a finding. Does one order own a directory another order owns a file
+service locator call, is a finding. An order's `findings` entry with no `setAside` is a finding
+the order uses. A collaborator, service or source it names that the order needs and its
+interface leaves out is a finding. Does one order own a directory another order owns a file
 inside? The design check refuses an identical entry twice; it reads paths as strings, so nesting
 is yours. Is the order small enough: three to seven build steps, ten at most, and one concern
 per order? Of every order, ask the recipe's own question: does the order own every file the

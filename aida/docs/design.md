@@ -70,8 +70,12 @@ finding. A finding is used by an order, or set aside on it with a reason. A find
 collaborator, a service, a convention or a constraint is used by the order it affects. A finding
 that says nothing was found is still an answer, and it is accounted for too. The check and the
 close refuse while a finding is in no order's list, and name each one with the first line of its
-text. The implementer sees each used finding in its build brief, and a critic reads each reason
-for a set-aside. A design that closed before this rule has no entries. Its next check or close
+text. They also refuse when research changed a finding's text after design recorded it, or
+dropped it, because the number may now point at a neighbour. The implementer sees each used
+finding in its build brief. A critic reads each reason for a set-aside. A critic also reads each
+used finding against the order's interface. The check sees only that a finding is recorded, not
+that the order uses all of it: a finding naming two services, with one left out of the
+interface, passes the check. Only reading the prose catches that. A design that closed before this rule has no entries. Its next check or close
 names every finding, and design accounts for each one before it closes again. Design then opens the guides and recipes research named without
 reading. One recipe covering the work means the decision is made and design follows it. Two, and
 design reads both and picks the fit.
