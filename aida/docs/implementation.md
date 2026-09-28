@@ -427,9 +427,11 @@ A departure the builder declared never closes clean. The builder names one with 
 line, or a heading that starts with "Deviation", in its report or its interface record. The build
 already stops on one. The review runs the same scan over the latest attempt, because a build
 record from an earlier version can carry one. A reviewer that sees a departure marks its
-information item `departsFromDesign`, and that is a hit too. A hit halts the order for design
-drift, whatever else the reviewer wrote. The order's interface is what is wrong, so no fixer can
-repair it. You change the design and restart the order, or you keep the departure with a reason.
+information item `departsFromDesign`, and that is a hit too. The reviewer also answers each
+recipe and guide the order carries: followed, departed, or not applicable with a reason. A
+departed answer is a hit, and a missing or extra answer is refused. A hit halts the order for
+design drift, whatever else the reviewer wrote. The order's interface is what is wrong, so no
+fixer can repair it. You change the design and restart the order, or you keep the departure with a reason.
 The review record and the ledger keep that reason. Unattended, nobody can keep it, so the halt
 stands.
 

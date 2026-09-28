@@ -666,7 +666,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      latest attempt's report or in the interface record the build record holds. The order's
 #      interface is what is wrong, so the order halts for design drift, whatever the review holds.
 #      The halt names the file and the line. No review record is written. A person accepts the
-#      departure with --accept-deviation instead, interactive only (exit 68).
+#      departure with --accept-deviation instead, interactive only (exit 68). A recipe the
+#      reviewer answers departed takes the same route (gap row 225).
+#
+# The code the reviewer's recipe answers added (gap row 225).
+# 108  `review-record` found the findings file's `recipes` list does not answer the review
+#      brief's `recipes` list one to one: a recipe or guide with no answer, an answer given twice,
+#      or an answer naming one the order does not carry. Nothing is written.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -7778,6 +7784,73 @@ rv_read_information_array() {
               departsFromDesign} ]')"
 }
 
+# The recipes and guides the reviewer answers for, one per line, each once (gap row 225): the
+# implement recipe preconditions.json holds for each framework, then each source the order's
+# `verify` list cites. No per-rule list exists, so the unit is a whole recipe or guide. Reads
+# RV_UNIT_JSON and IMPL_DIR. review-brief hands the list over, and review-record checks the
+# reviewer's answers against it.
+rv_recipe_refs() {
+  local pre=""
+  [ -f "$IMPL_DIR/preconditions.json" ] \
+    && pre="$(jq -c '[ (.frameworks // [])[] | .implementRecipePath // empty ]' "$IMPL_DIR/preconditions.json" 2>/dev/null)"
+  printf '%s' "$RV_UNIT_JSON" | jq -r --argjson pre "${pre:-[]}" '
+    ($pre + [ (.verify // [])[] | .cites // empty ])
+    | reduce .[] as $x ([]; if index([$x]) then . else . + [$x] end) | .[]'
+}
+
+# Sets RV_RECIPE_ANSWERS to the reviewer's `recipes` list in the findings file $1, or to [] when
+# the file has none. $2 the action's own name. An answer is {ref, verdict, evidence}: the verdict
+# is followed, departed or not-applicable, and the evidence gives the reason. A departure's
+# evidence names a file and a line. Dies 52 on a malformed answer, and 108 when an item of
+# rv_recipe_refs has no answer, or an answer names a ref twice or a ref not on that list. Called
+# as a plain statement, never with `$(...)`, for the reason rv_read_findings_array states.
+RV_RECIPE_ANSWERS="[]"
+rv_read_recipe_answers() {
+  local file="$1" who="$2" refs arr count i one ref verdict evidence seen=""
+  refs="$(rv_recipe_refs)"
+  arr="$(jq -c 'if has("recipes") then .recipes else [] end' "$file" 2>/dev/null)"
+  [ "$(printf '%s' "$arr" | jq -r 'type' 2>/dev/null)" = "array" ] \
+    || die 52 "$who: $file holds a recipes key that is not an array. The shape is { \"recipes\": [ { \"ref\", \"verdict\", \"evidence\" } ] }."
+  count="$(printf '%s' "$arr" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$arr" | jq -c --argjson i "$i" '.[$i]')"
+    [ "$(printf '%s' "$one" | jq -r 'type')" = "object" ] \
+      || die 52 "$who: entry $i of recipes in $file is not an object."
+    ref="$(printf '%s' "$one" | jq -r '.ref // "" | tostring')"
+    verdict="$(printf '%s' "$one" | jq -r '.verdict // "" | tostring')"
+    evidence="$(printf '%s' "$one" | jq -r '.evidence // "" | tostring')"
+    [ -n "$ref" ] || die 52 "$who: entry $i of recipes in $file has no ref."
+    case "$verdict" in
+      followed|departed|not-applicable) ;;
+      *) die 52 "$who: the recipes answer for $ref in $file has the verdict '$verdict'. It is followed, departed or not-applicable." ;;
+    esac
+    [ -n "$evidence" ] \
+      || die 52 "$who: the recipes answer for $ref in $file has no evidence. A not-applicable answer gives its reason there."
+    if [ "$verdict" = "departed" ]; then
+      case "$evidence" in
+        *:[0-9]*) ;;
+        *) die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file:line." ;;
+      esac
+      halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
+    fi
+    printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
+      || die 108 "$who: $file answers for $ref, which is not a recipe or guide this order carries. The review brief's recipes list is the whole list."
+    printf '%s\n' "$seen" | grep -Fxq -- "$ref" \
+      && die 108 "$who: $file answers for $ref more than once. Each recipe or guide gets one answer."
+    seen="$seen
+$ref"
+    i=$((i + 1))
+  done
+  while IFS= read -r ref; do
+    [ -z "$ref" ] || printf '%s\n' "$seen" | grep -Fxq -- "$ref" \
+      || die 108 "$who: $file gives no answer for $ref, a recipe or guide this order carries. Each item of the review brief's recipes list gets one answer: followed, departed or not-applicable."
+  done <<RR_REFS
+$refs
+RR_REFS
+  RV_RECIPE_ANSWERS="$(printf '%s' "$arr" | jq -c '[ .[] | {ref: (.ref | tostring), verdict, evidence: (.evidence | tostring)} ]')"
+}
+
 # Every non-goal the given finding list cites, as a printable list. Empty when none does.
 rv_nongoal_hits() {
   local findings="$1" alignment="$2"
@@ -7897,6 +7970,7 @@ RB_PATHS
     --arg findingsPath "$IMPL_DIR/review-$unit_id-findings.json" \
     --arg startedAt "$started_at" --arg commit "$commit" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+    --arg recipes "$(rv_recipe_refs)" \
     '{
       unit: $unit,
       mode: "review",
@@ -7913,7 +7987,8 @@ RB_PATHS
       checks: ($build[0].checks // []),
       interface: { declared: $interfaceDeclared, record: $interfaceRecord },
       findingsPath: $findingsPath,
-      playbooksPath: $playbooksPath
+      playbooksPath: $playbooksPath,
+      recipes: ($recipes | split("\n") | map(select(. != "")))
     }')"
   [ -n "$brief_json" ] || die 3 "review-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -8043,13 +8118,16 @@ do_review_record() {
   raw_findings="$RV_FINDINGS_ARRAY"
   rv_read_information_array "$findings_path" "review-record"
   information_json="$RV_INFORMATION_ARRAY"
+  rv_read_recipe_answers "$findings_path" "review-record"
 
   # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
   # review holds: the order's interface is what is wrong, so no fixer can repair it. The scan is
   # build-record's own, over the latest attempt's report and the interface record its build record
   # holds. A build record written before that scan existed reaches review with one in it. The
-  # reviewer's information item with departsFromDesign true is the same fact. The halt names the
-  # file and the line, never the builder's text, which may hold the halt separator.
+  # reviewer's information item with departsFromDesign true is the same fact, and so is a recipe
+  # it answers departed (gap row 225). The halt names the file and the line, never the builder's
+  # text, which may hold the halt separator. The reader already refused that separator in the
+  # reviewer's evidence.
   local departure departure_file departure_line="" iface_file halt_why=""
   departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
   departure="$(br_deviations "$departure_file" | head -n 1)"
@@ -8069,6 +8147,12 @@ do_review_record() {
     departure_file="$findings_path"
     [ -z "$departure" ] \
       || halt_why="$RR_DEPARTURE_PREFIX, which the reviewer marks departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
+  fi
+  if [ -z "$departure" ]; then
+    departure="$(printf '%s' "$RV_RECIPE_ANSWERS" | jq -r \
+      '[ .[] | select(.verdict == "departed") ] | .[0] // empty | "recipe \(.ref) departed: \(.evidence)"')"
+    [ -z "$departure" ] \
+      || halt_why="$RR_DEPARTURE_PREFIX, which the reviewer answers in $findings_path: $departure"
   fi
   if [ -z "$departure" ]; then
     [ -z "$accept" ] \
@@ -8107,7 +8191,8 @@ do_review_record() {
   # exactly as it did before the key existed.
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
     --arg findingsPath "$findings_path" --argjson findings "$findings_json" \
-    --argjson information "$information_json" --arg accept "$accept" --arg departure "$departure" \
+    --argjson information "$information_json" --argjson recipes "$RV_RECIPE_ANSWERS" \
+    --arg accept "$accept" --arg departure "$departure" \
     --arg departureFile "$departure_file" '
     {
       schemaVersion: 1,
@@ -8119,6 +8204,7 @@ do_review_record() {
       rounds: []
     }
     + (if ($information | length) == 0 then {} else {information: $information} end)
+    + (if ($recipes | length) == 0 then {} else {recipes: $recipes} end)
     + (if $accept == "" then {} else {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}} end)')"
   write_atomic "$review_file" "$record_json"
 

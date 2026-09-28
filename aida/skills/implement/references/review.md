@@ -95,7 +95,9 @@ act on one outside this task.
 
 A departure the builder declared never closes clean, whatever the review holds. The script scans
 the latest attempt's report and the interface record in its build record, the way `build-record`
-does. An information item the reviewer marks `departsFromDesign` true is a hit too. On a hit it
+does. An information item the reviewer marks `departsFromDesign` true is a hit too. So is a
+recipe the reviewer answers `departed`: the brief's `recipes` lists each recipe and guide the order
+carries, and the findings file answers each once, or is refused (exit 108). On a hit it
 refuses (exit 107), writes no review record, and halts the order for design drift. The halt names
 the file and the line number, or the item. The order's interface is what is wrong, so no fixer
 can repair it. Put it to the person, opening with: "What was built departs from the design of
