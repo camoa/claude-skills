@@ -7553,12 +7553,15 @@ im_order_commits() {
   local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" f r c p g owned paths mine
   id="$(printf '%s' "$unit_json" | jq -r '.id // ""')"
   owned="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
-  for f in "$dir/build-$id.json" "$dir/fix-$id-"*.json; do
+  while IFS= read -r f; do
     [ -f "$f" ] || continue
     r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
     [ -z "$r" ] || recorded="$recorded$(git -C "$repo" rev-list "$r" 2>/dev/null)
 "
-  done
+  done <<IOC_RECORDS
+$dir/build-$id.json
+$(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$id-*.json" 2>/dev/null | sort)
+IOC_RECORDS
   for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
     if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
     paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
@@ -10010,8 +10013,12 @@ RS_RETAKEN
         "?"*) lost="$lost$kind	$old	${c#?}
 "; continue ;;
       esac
+      # A fix record's range names its commit, so it outranks a build record that claims the same
+      # commit only by reading the span through im_order_commits.
       out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
-        if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
+        if any(.[]; .commit == $c) then
+          (if $kind == "fix" then map(if .commit == $c and .kind == "build" then .kind = "fix" | .range = $range else . end) else . end)
+        else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
     done <<RS_RANGE
 $(if [ "$kind" = "build" ] && [ "$span" != HEAD ]; then
     im_order_commits "$codepath" "$started" "${range#*..}" "$unit_json" "$(dirname "$file")" | sed -n 's/^own //p'
