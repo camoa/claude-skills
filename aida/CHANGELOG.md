@@ -9,7 +9,7 @@ All notable changes to this plugin are recorded here. The format follows
 The first release of version 6, after twenty-six betas. It replaces
 `ai-dev-assistant` in the marketplace. The betas ran live tasks on real
 projects, and every row those runs opened is closed. This release adds the
-last fourteen, and a harder guard against dangerous commands.
+last sixteen, and a harder guard against dangerous commands.
 
 ### Changed
 
@@ -67,6 +67,10 @@ last fourteen, and a harder guard against dangerous commands.
 - Design names each exposed interface element in backticks, because the
   build's interface check counts only those. Design's `check` prints
   `interfaceUnquoted:` for an order whose interface has none. It never blocks.
+- Design can strike a reasoning paragraph that a critique or a person
+  replaced: `update --strike-reasoning <n>`. The record keeps it, marked
+  `[struck]`, and every brief to a role carries only the live paragraphs. A
+  merge keeps the mark.
 
 ### Fixed
 
@@ -79,7 +83,7 @@ last fourteen, and a harder guard against dangerous commands.
 
 ### Checks
 
-Seventy-two fixtures, 5,924 rows, pass under bash and under zsh on the merged
+Seventy-three fixtures, 5,970 rows, pass under bash and under zsh on the merged
 branch, every run exit 0. The repository's specs pass. Each build had a fresh
 checker.
 
