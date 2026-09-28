@@ -63,6 +63,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
 #                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
 #                        [--path <path> --interface <text>]
+#   design-actions.sh account    <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason> | --remove]
 #
 # --run-mode is accepted on every action and `close` and `dispose` require it. A close record says who was
 # present, so the mode cannot default: an autonomous run that forgot the flag would otherwise
@@ -122,6 +123,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # resumed run one `guide:` line per entry saying `changed`, `unchanged` or `missing` against the
 # body on disk, so the resumed run reads only what changed. Commits nothing; the close commits it.
 #
+# `account` records what design did with one research finding (gap row 223), the way `dispose`
+# records a prior-art candidate. A finding is named `<search>#<n>`: its search's file under
+# research/, and its place in that file's findings, counted from 1 as research-render.sh numbers
+# it. The entry lands in the order's `findings` with the finding's text, so the frozen order and
+# the build brief carry it. With --set-aside, the entry holds the reason and the brief leaves it
+# out. `check` and `close` refuse, exit 7, while a finding is in no order's `findings` with its
+# current text, or while an entry names a finding research no longer holds. --remove deletes an
+# entry.
+#
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
 #      and that no work orders exist yet. For `check`, this is check-design.sh's own exit 0. For
@@ -138,7 +148,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      task's design/ folder; or `remove-test` was given a --description no test on that order
 #      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
 #      order does not own; or `merge` was given an --into or --from naming no work order file;
-#      or `read-guide` or `verify` was given a path naming no file on disk; or `distill` found no
+#      or `read-guide` or `verify` was given a path naming no file on disk; or `account` was given
+#      a --finding naming no finding under research/, or a --remove naming no entry on the order;
+#      or `distill` found no
 #      records/design-distill.json, so the distiller has not been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
@@ -163,7 +175,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
 #      entry with no run or no pass, a pass or a kind outside its three forms, a run line carrying
 #      a shell character, or a --run or --check with no --cite; or `close` was given
-#      --approve-runs unattended.
+#      --approve-runs unattended; or `account` was given a --finding not shaped <search>#<n>, or a
+#      blank --set-aside.
 #   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
@@ -183,6 +196,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   6  `start` was asked to begin design on a task research has not closed: no
 #      records/research-check.json, or one whose exitCode is not 0. Research is required (the
 #      owner's rule: no skip), and the way through is the research skill.
+#   7  `check` or `close` found a research finding no work order accounts for (gap row 223). Each
+#      one prints as `<search>#<n>: <the first line of its text>`. `account` is the way through.
+#      `check` reports it only when the design check itself is clean.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -232,6 +248,7 @@ die3() { printf 'design-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
 die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
+die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -279,6 +296,7 @@ usage: design-actions.sh read           <task_folder>
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
                                          --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
                                          [--path <path> --interface <text>]
+       design-actions.sh account        <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason> | --remove]
 EOF
 }
 
@@ -502,6 +520,33 @@ critique_findings_of() {
   n="$(grep -E '^findings: [0-9]+$' "$1" | tail -n 1 | sed 's/^findings: //')"
   [ -n "$n" ] || return 1
   printf '%s' "$n"
+}
+
+# One line per research finding no work order's `findings` names with both its reference and its
+# text: `<search>#<n>: <first line>`. A text that differs means research changed or dropped a
+# finding after the entry was written, so the reference may now point at a neighbour. Then one
+# line per entry whose reference names no finding research holds now. Prints nothing when every
+# finding is accounted for, and when research holds none.
+unaccounted_findings() {
+  local accounted f wo ref search n
+  accounted="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -c '(.findings // [])[] | {ref, text}' "$f" 2>/dev/null; done)"
+  find "$TASK_PATH/research" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do
+        jq -r --arg s "$(basename -- "$f" .json)" --arg acc "$accounted" '
+          ($acc | split("\n") | map(select(length > 0) | fromjson)) as $acc
+          | (.findings // []) | to_entries[] | ($s + "#" + (.key + 1 | tostring)) as $ref
+          | .value.text as $t
+          | select(any($acc[]; .ref == $ref and .text == $t) | not)
+          | $ref + ": " + (($t // "") | split("\n")[0])' "$f" 2>/dev/null
+      done
+  find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '.id as $w | (.findings // [])[] | $w + " " + .ref' "$f" 2>/dev/null; done \
+    | while read -r wo ref; do
+        search="${ref%#*}"; n="${ref##*#}"
+        [ "$(jq -r '(.findings // []) | length' "$TASK_PATH/research/$search.json" 2>/dev/null || echo 0)" -ge "$n" ] 2>/dev/null \
+          || echo "$ref: $wo holds this entry, and research holds no such finding now. Remove it with account --remove"
+      done
 }
 
 # Prints $1, a work order document, with $2 added to its `reasoning` as a new paragraph. The
@@ -1442,13 +1487,13 @@ do_merge() {
       def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n\n" + $f[k] end;
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
-    | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify")
+    | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
     | .dependsOn = [ (.dependsOn // [])[] | select(. != $from and . != $i.id) ]
     | append("interface") | append("reasoning")
   ' "$into_file")"
 
   local k before after
-  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses verify; do
+  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses verify findings; do
     before="$(jq -r --arg k "$k" '(.[$k] // []) | length' "$into_file")"
     after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
     echo "$k: $before -> $after"
@@ -1584,6 +1629,9 @@ do_check() {
     4) verdict=5 ;;
     *) die3 "check: check-design.sh exited with an unexpected code $rc" ;;
   esac
+  local unaccounted
+  unaccounted="$(unaccounted_findings)"
+  [ -z "$unaccounted" ] || [ "$verdict" -ne 0 ] || verdict=7
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
   echo "action: check"
   echo "status: $verdict"
@@ -1630,7 +1678,10 @@ do_check() {
   else
     echo "interfaceUnquoted: none"
   fi
-  if [ "$verdict" -ne 0 ]; then
+  if [ "$verdict" -eq 7 ]; then
+    printf '%s\n' "$unaccounted" | sed 's/^/unaccounted: /'
+    echo "next: account for each finding above, cited by the order it affects or set aside with a reason"
+  elif [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then
     # A light task closes with no critique (gap row 197). The clean check is the last step
@@ -1735,6 +1786,12 @@ do_close() {
       die3 "close: check-design.sh exited with an unexpected code $check_rc"
       ;;
   esac
+
+  local unaccounted
+  unaccounted="$(unaccounted_findings)"
+  [ -z "$unaccounted" ] \
+    || die7 "close: a research finding is in no work order's findings. Account for each one with account, cited or set aside with a reason:
+$unaccounted"
 
   # A run line that is not binding was written by a model from research, and only a person stands
   # between it and the worktree. The person approves such lines at this close, the design's
@@ -1961,6 +2018,63 @@ do_dispose() {
   exit 0
 }
 
+# ------------------------------------------------------------------------------------------------
+# account: records what the order --id does with one research finding. The entry holds the
+# reference and the finding's text, read from research/<search>.json, and --set-aside's reason
+# when given. A second account of the same reference on the same order replaces its entry.
+# ------------------------------------------------------------------------------------------------
+
+do_account() {
+  local id="" ref="" set_aside="" aside_given=false remove=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)        need_value "account" "--id" "$#" "${2:-}";        id="$2"; shift 2 ;;
+      --finding)   need_value "account" "--finding" "$#" "${2:-}";   ref="$2"; shift 2 ;;
+      --set-aside) need_value "account" "--set-aside" "$#" "${2:-}"; set_aside="$2"; aside_given=true; shift 2 ;;
+      --remove)    remove=true; shift ;;
+      *) die3 "account: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "account" "$id"
+  [ "$aside_given" = false ] || ! is_blank "$set_aside" \
+    || die3 "account: --set-aside must not be blank. The reason is what a reader judges the set-aside by"
+  [ "$remove" = false ] || [ "$aside_given" = false ] || die3 "account: --remove takes no --set-aside"
+  local file doc
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "account: $file exists but is not valid JSON"
+  if [ "$remove" = true ]; then
+    jq -e --arg r "$ref" 'any((.findings // [])[]; .ref == $r)' "$file" >/dev/null \
+      || die2 "account: $id holds no entry $ref"
+    doc="$(jq --arg r "$ref" '.findings = [ .findings[] | select(.ref != $r) ]' "$file")"
+    write_atomic "$file" "$doc"
+    echo "REMOVED: $ref from $file"
+    echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
+    render_wo "$id"
+    exit 0
+  fi
+  # Numbered from 1, as research/<search>.md shows each finding to design. check-research.sh
+  # reports a 0-based index; that number is never a --finding.
+  local search="${ref%#*}" n="${ref##*#}"
+  case "$ref" in *'#'*) ;; *) die3 "account: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
+  case "$search" in ''|*[!a-z0-9-]*) die3 "account: --finding must be <search>#<n>, got '$ref'" ;; esac
+  local rfile="$TASK_PATH/research/$search.json" text count
+  [ -f "$rfile" ] || die2 "account: no research file $rfile"
+  count="$(jq -r '(.findings // []) | length' "$rfile" 2>/dev/null)"
+  case "$n" in ''|0*|*[!0-9]*) die3 "account: --finding must be <search>#<n>, numbered from 1 as research/$search.md shows it, got '$ref'. $search#1 is: $(jq -r '(.findings // [])[0].text // "" | split("\n")[0]' "$rfile" 2>/dev/null)" ;; esac
+  text="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$rfile" 2>/dev/null)"
+  [ -n "$text" ] || die2 "account: $rfile holds no finding $n. It holds ${count:-0}, numbered from 1 as research/$search.md shows them"
+  doc="$(jq --arg r "$ref" --arg t "$text" --arg a "$set_aside" \
+    '.findings = ((.findings // []) | map(select(.ref != $r))) + [{ref: $r, text: $t} + (if $a == "" then {} else {setAside: $a} end)]' "$file")"
+  write_atomic "$file" "$doc"
+  echo "ACCOUNTED: $file"
+  echo "finding: $ref"
+  echo "text: $(printf '%s' "$text" | sed -n '1p')"
+  if [ -n "$set_aside" ]; then echo "use: set aside"; else echo "use: cited"; fi
+  echo "findings: $(printf '%s' "$doc" | jq -r '.findings | length')"
+  render_wo "$id"
+  exit 0
+}
+
 # Reads the sidecar the distiller wrote after `close`; the read is distill_read in task-helpers.sh.
 do_distill() {
   [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
@@ -2014,6 +2128,7 @@ case "$ACTION" in
   check)          do_check          "$@" ;;
   close)          do_close          "$@" ;;
   dispose)        do_dispose        "$@" ;;
+  account)        do_account        "$@" ;;
   distill)        do_distill        "$@" ;;
   verify)         do_verify         "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;

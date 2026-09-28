@@ -47,6 +47,7 @@ on record the way every other design write is.
 | diff budget | How much change the order should take, in plain words |
 | proof | `tests` for code a test can pin. `gate` for tools run that change state, such as configuration. `record` for a document. `observe` for what a page shows. `confirm` for code on a task with no automated tests |
 | verify | The order's own proof, from the recipe or the research that covers it: commands a script runs and checks a model judges, each citing its source |
+| findings | The research findings this order accounts for. Each one is used, or set aside with a reason. The build brief carries the used ones |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
 several orders. A shared thing, such as one base class serving two criteria, is built once
@@ -64,8 +65,18 @@ constrains it. The diff budget is a signal to the reviewer, never a limit that a
 
 ## What design reads first
 
-Design reads every research finding and the plays research loaded. A finding that says nothing
-was found is still an answer. Design then opens the guides and recipes research named without
+Design reads every research finding and the plays research loaded, and accounts for each
+finding. A finding is used by an order, or set aside on it with a reason. A finding that names a
+collaborator, a service, a convention or a constraint is used by the order it affects. A finding
+that says nothing was found is still an answer, and it is accounted for too. The check and the
+close refuse while a finding is in no order's list, and name each one with the first line of its
+text. They also refuse when research changed a finding's text after design recorded it, or
+dropped it, because the number may now point at a neighbour. The implementer sees each used
+finding in its build brief. A critic reads each reason for a set-aside. A critic also reads each
+used finding against the order's interface. The check sees only that a finding is recorded, not
+that the order uses all of it: a finding naming two services, with one left out of the
+interface, passes the check. Only reading the prose catches that. A design that closed before this rule has no entries. Its next check or close
+names every finding, and design accounts for each one before it closes again. Design then opens the guides and recipes research named without
 reading. One recipe covering the work means the decision is made and design follows it. Two, and
 design reads both and picks the fit.
 
@@ -117,8 +128,11 @@ claim must be followed once design judges it sound, not before. A claim edited a
 grounded it is reported as ungrounded, and it goes back to research when it matters.
 
 Design also names things research had no reason to look for: a particular module, a framework
-API, a pattern that only became a decision here. For each such name it asks the catalog which
-guides and recipes cover it. It records the answer, a nothing included, as one research finding
+API, a pattern that only became a decision here. An order's interface can also need a
+collaborator, a service, an input source or a convention that no finding covers. Such a question
+is looked up before the close, never guessed. Design looks in the project's own code first, then
+asks the catalog which guides and recipes cover it. When none does, it searches outside for what
+reputable sources recommend, one subject per search. It records the answer, a nothing included, as one research finding
 of its own, so the same lookup never runs again during the build.
 
 ## The reuse decision

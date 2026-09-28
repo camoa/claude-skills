@@ -43,7 +43,8 @@ under `dependencyInformation`. It holds the path of your report file and the pat
 interface record. Read the brief first. When it holds `previousAttempt`, read that build record
 next, and fix the checks that failed before anything else. Your own diff you make yourself. The unit's `verify` list
 names each command that runs on your work and each check a reviewer judges. Build so each one
-passes.
+passes. The unit's `findings` list holds the research findings design used for this unit. Build
+with each one.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
@@ -97,9 +98,15 @@ Stop: file-not-owned: <the file, and why the unit needs it>
 Stop: attempts-out: <what is still not done>
 ```
 
-Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report is a
-stop, so its line is `interface-misfit`. After a stop line other than `none`, return, and end the
-turn with nothing further written. `build-record` refuses a report with no stop line, and records
-no attempt for a stop. Never write "proceeding unless told otherwise". Never make a change while
+Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report or your
+interface record is a stop, so its line is `interface-misfit`. A departure from the design's
+interface or from a recipe rule is never built. It is a stop, and its line is `interface-misfit`.
+Under `Stop: none`, your report also holds exactly one deviation line: `Deviation: none`, or
+`Deviation: <what>: <why>`. Write `Deviation: none` only when the code follows the interface and
+every recipe rule. After a stop line other than `none`, return, and end the turn with nothing
+further written. `build-record` refuses a report with no stop line, and a `Stop: none` report with
+no deviation line. It reads any deviation other than `none` as a stop, in the report or the
+interface record. A heading that starts with "Deviation" is one too. It records no attempt for a
+stop. Never write "proceeding unless told otherwise". Never make a change while
 you wait for an answer. Nobody can answer inside your turn, and a change made while waiting is a
 build the rule forbade.

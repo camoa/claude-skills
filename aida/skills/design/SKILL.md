@@ -99,12 +99,24 @@ Exit 6: research has not closed on this task. Research is required and is never 
 the research skill and stop. A `NOTE:` line names a stated mechanism edited after research
 grounded it; read that claim as ungrounded.
 
-Then read every file under `<task_folder>/research/`, one search at a time. Each holds findings
-for one subject: prior art inside the project, prior art outside it, guides and recipes, what
-reputable sources recommend, or an assumption checked. A finding that says nothing was found is
-not a reason to stop. Design decides from nothing found, same as when research covered it.
+Then account for each research finding. Each `<task_folder>/research/<search>.md` holds the
+findings of one search, numbered from 1. A finding is named `<search>#<n>`. Each finding is used
+by an order or set aside with a reason. A finding that names a collaborator, a service, a
+convention or a constraint is used by the order it affects. A finding that says nothing was found
+is accounted for too. A need no finding covers is looked up first, as "Look up what you decided
+to use and research did not" says. Once the orders a finding affects exist, record the finding on
+every one of them:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh account "<task_folder>" \
+  --id <woId> --finding <search>#<n> [--set-aside "<why this order does not use it>"]
+```
+Without `--set-aside`, the order uses the finding, and the build brief carries its text. A
+second call for the same finding on the same order replaces the entry. `--remove` in place of
+`--set-aside` deletes it. `check` and `close` refuse, exit 7, while a finding is in no order's
+list. They refuse too when research changed a finding's text after it was recorded, or an entry
+names a finding research no longer holds. Both modes account the same way.
 
-Then read `<task_folder>/records/playbooks.md` the same way: it holds the plays research loaded,
+Then read `<task_folder>/records/playbooks.md`. It holds the plays research loaded,
 the rules this project and this person want followed. Name a play that decides an order's shape
 by its id in that order's `reasoning`.
 
@@ -313,15 +325,26 @@ Interactive runs do not dispatch it. A person read the reasoning, and the role h
 ## Look up what you decided to use and research did not
 
 Design names things research had no reason to search for: a particular module, a framework API, a
-pattern. Those were not decisions yet when research ran, so no search covered them.
+pattern. Those were not decisions yet when research ran, so no search covered them. An order's
+interface can also need a collaborator, a service, an input source or a convention that no
+finding covers. How a class in this framework gets the current time is one such question. A
+question a quick lookup can answer is looked up, never guessed, before the close.
 
 First read what research already searched for. Every `research/<search>.json` carries
 `searchedFor`, the words that search used. A name inside those words was searched, and the answer
 is already in that file. Do not pay for it twice.
 
-For a name that was not searched, ask the navigator to identify guides and recipes covering it.
-Identify only. It returns names and never resolves a body, so one name costs one lookup. Read a
-body only when a match is worth reading.
+For a name that was not searched, look in this order, and stop at the first answer:
+
+1. This project's own code. Dispatch `internal-searcher` with the words to search.
+2. The catalog. Ask the navigator to identify guides and recipes covering it. Identify only. It
+   returns names and never resolves a body, so one name costs one lookup. Read a body only when
+   a match is worth reading.
+3. When no guide or recipe covers it, what reputable sources recommend. Dispatch
+   `outward-searcher`, one subject.
+
+Each dispatch carries the message lines that `${CLAUDE_PLUGIN_ROOT}/skills/research/SKILL.md`
+names for that role, under "Dispatch one agent per search".
 
 Record the answer through research's own record action. The research store keeps one producer
 that way, and the finding is checked the same way as every other:
@@ -627,6 +650,11 @@ never blocks the close. Rewrite each such interface with `update --interface`, a
 element it exposes.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
+
+Exit 7: the design check is clean, but a research finding is in no order's list. Each one prints
+on an `unaccounted:` line, with its id and the first line of its text. Account for each one, as
+"Then account for each research finding" says, and check again. A design that closed before this
+rule has no entries, so its next `check` or `close` stops here.
 
 Exit 4: a work order file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix it with another `update` call, or by hand, and check again.

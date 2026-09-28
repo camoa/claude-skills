@@ -39,7 +39,8 @@ Run:
 It reads the frozen copy and the frozen tests. It writes eleven things to
 `implementation/brief-<order id>-build.json`:
 
-- this order's own record, with the files it owns;
+- this order's own record, with the files it owns and, under `findings`, the research findings
+  design used for it;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
@@ -128,8 +129,11 @@ shell assembles at run time passes the hook and is still denied.
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
 A stop looks like this in the conversation: the role returns early. Its report's stop line names
 the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
-cause, and `build-record` refuses a report without one (exit 106). A cause is a stop even when code
-was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
+cause, and `build-record` refuses a report without one (exit 106). Under `Stop: none`, the report
+also holds exactly one deviation line, `Deviation: none` or `Deviation: <what>: <why>`, and the
+same refusal applies. A deviation other than none, or a heading that starts with "Deviation", in
+the report or the interface record, is a stop. A cause is a stop even
+when code was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
 attempt. It names each commit made after the attempt began, and the person reverts or keeps them
 before the next build. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
@@ -240,7 +244,9 @@ recorded on any of these.
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
 Equal to the code repository's own current commit, or not an ancestor of it, refuses (exit 71):
-either makes the range this attempt claims false.
+either makes the range this attempt claims false. The build record keeps this attempt's range
+only. Review and close read the order's range from the freeze, so a second attempt that changes
+one line is reviewed with the code the first attempt wrote.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not

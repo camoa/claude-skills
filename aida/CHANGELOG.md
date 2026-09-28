@@ -4,6 +4,53 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.2] - 2026-09-28
+
+Three fixes from the live run on 6.0.1. Design dropped half of a research
+finding, the builder worked around the gap twice, and review would have seen
+only the last correction.
+
+### Changed
+
+- Design accounts for every research finding. A new `account` action records
+  each finding on the work orders it affects, either used or set aside with a
+  reason. `check` and `close` refuse (exit 7) while any finding is not
+  accounted for, and list each one with its first line. An entry counts only
+  while its text still matches the finding, so a finding that research moved
+  or removed must be accounted again. `account --remove` clears a stale entry.
+  The build brief carries the text of each finding an order uses.
+- Design looks up a practice question before it guesses. When an order needs a
+  collaborator, a service, an input source or a convention that no finding
+  covers, design searches the project's own code, then the catalog, then
+  reputable outside sources when no guide or recipe covers it. The answer is
+  recorded as a research finding.
+- The design critics judge used findings. A service a used finding names that
+  the order needs, and its interface leaves out, is a finding. A set-aside
+  reason that does not say why the order is unchanged is a finding.
+
+### Fixed
+
+- A departure the builder writes down now stops the build. Under `Stop: none`,
+  every report also holds one `Deviation:` line. Any deviation other than
+  `none`, and any heading in the report or interface record that starts with
+  "Deviation", stops the order (exit 105). The reviewer treats a departure the
+  builder names as a high finding on the criterion the order owns.
+- Review and close see an order's whole change after more than one attempt.
+  An order's range starts at its test freeze, and only the order's own commits
+  count: its recorded attempts and fixes, and commits that touch only its owned
+  files. Close never records a range that holds another order's commit, and
+  restart never lists one.
+
+### Known limits
+
+- The check sees that a finding is recorded on an order, not that the order
+  uses all of it. The critics judge that.
+- A departure stated only in plain prose passes the build check. The reviewer
+  is the backstop.
+- A heading such as "Deviations considered" stops the build even when nothing
+  departs. It costs one question and no attempt.
+- A design closed before 6.0.2 must account its findings at its next check.
+
 ## [6.0.1] - 2026-09-28
 
 Four fixes from the live run on 6.0.0.

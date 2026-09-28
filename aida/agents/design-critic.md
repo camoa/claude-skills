@@ -49,13 +49,17 @@ or a recipe. An order that builds beside a candidate research ranked close, with
 in its `reasoning`, is a finding. A `reasoning` that records a disposition is read against the
 finding it cites, not taken as settled.
 A `reasoning` paragraph that starts with `[struck] ` was replaced by a later one, so do not judge it.
+An order's `findings` entry with a `setAside` reason is a research finding design did not use. A
+reason that does not say why the finding does not change the order is a finding.
 
 **buildability.** Can a test author write each declared test from `tests` and `doneWhen` alone?
 A test that names a surface, a screenshot, or review's own row is a finding: no author can
 write it as a file.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
 what was meant? A method input with no argument, named dependency or named source, or a global
-service locator call, is a finding. Does one order own a directory another order owns a file
+service locator call, is a finding. An order's `findings` entry with no `setAside` is a finding
+the order uses. A collaborator, service or source it names that the order needs and its
+interface leaves out is a finding. Does one order own a directory another order owns a file
 inside? The design check refuses an identical entry twice; it reads paths as strings, so nesting
 is yours. Is the order small enough: three to seven build steps, ten at most, and one concern
 per order? Of every order, ask the recipe's own question: does the order own every file the
