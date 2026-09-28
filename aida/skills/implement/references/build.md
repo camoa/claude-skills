@@ -50,8 +50,9 @@ It reads the frozen copy and the frozen tests. It writes eleven things to
 - `interfacePath`, `implementation/interface-<order id>.md`, where the implementer writes its
   interface record and where `build-record` reads it;
 - how many attempts this order has used of the count it is allowed;
-- `previousAttempt`, on a later attempt only: the earlier attempt's number, the path of its build
-  record, and each check that stopped it, with its verdict, its detail and any `newLines`;
+- `previousAttempt`, present only when the order's last recorded attempt failed a check. It holds
+  that attempt's number and the path of its build record. It also holds each check that stopped
+  it, with its verdict, its detail and any `newLines`;
 - `headNow`, the commit of the repository this order lands in at the moment of this call, and
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;

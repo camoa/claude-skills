@@ -5443,7 +5443,8 @@ do_build_brief() {
       (.checks // []) as $checks | ($checks | stoppers) as $ids
       | {attempt, recordPath: $path,
          failedChecks: [ $checks[] | select(.id as $i | $ids | index($i))
-                         | {id, verdict, detail} + (if has("newLines") then {newLines} else {} end) ]}' \
+                         | {id, verdict, detail} + (if has("newLines") then {newLines} else {} end) ]}
+      | if (.failedChecks | length) == 0 then null else . end' \
       "$prev_record_file" 2>/dev/null)"
     [ -n "$previous_attempt_json" ] || previous_attempt_json="null"
   fi
