@@ -40,7 +40,8 @@ changed and the fewest lines added, not a rewrite you can defend afterward.
 The brief holds your unit in the frozen copy and the frozen tests, to read. It holds the
 interface records of the units you depend on, and what their reviewers recorded for the person
 under `dependencyInformation`. It holds the path of your report file and the path of your
-interface record. Read the brief first. Your own diff you make yourself. The unit's `verify` list
+interface record. Read the brief first. When it holds `previousAttempt`, read that build record
+next, and fix the checks that failed before anything else. Your own diff you make yourself. The unit's `verify` list
 names each command that runs on your work and each check a reviewer judges. Build so each one
 passes.
 

@@ -5434,6 +5434,20 @@ do_build_brief() {
   [ "$attempts_used" -lt "$attempts_allowed" ] \
     || die 41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
+  # A later attempt starts from the earlier one's committed code. The build record keeps the last
+  # attempt only, so its stoppers are what that attempt failed on, read here and not recomputed
+  # (gap row 220).
+  local previous_attempt_json="null" prev_record_file="$IMPL_DIR/build-$unit_id.json"
+  if [ "$attempts_used" -gt 0 ] && [ -f "$prev_record_file" ]; then
+    previous_attempt_json="$(jq -c --arg path "$prev_record_file" "$BR_STOPPERS_JQ"'
+      (.checks // []) as $checks | ($checks | stoppers) as $ids
+      | {attempt, recordPath: $path,
+         failedChecks: [ $checks[] | select(.id as $i | $ids | index($i))
+                         | {id, verdict, detail} + (if has("newLines") then {newLines} else {} end) ]}' \
+      "$prev_record_file" 2>/dev/null)"
+    [ -n "$previous_attempt_json" ] || previous_attempt_json="null"
+  fi
+
   # --- assemble the brief: exactly these keys, and nothing else ------------------------------------
   local unit_out tests_out
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c "$REASONING_JQ"'
@@ -5492,12 +5506,14 @@ do_build_brief() {
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
         --arg beforeLookPath "$bb_before" \
+        --argjson previousAttempt "$previous_attempt_json" \
         --arg fakeMarker "$(! task_is_light "$TASK_PATH" || printf '%s' "$FAKE_MARKER")" \
     '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
      + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)
+     + (if $previousAttempt == null then {} else {previousAttempt: $previousAttempt} end)
      + (if $fakeMarker == "" then {} else {fakeMarker: $fakeMarker} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
