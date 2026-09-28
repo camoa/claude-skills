@@ -9,7 +9,7 @@ All notable changes to this plugin are recorded here. The format follows
 The first release of version 6, after twenty-six betas. It replaces
 `ai-dev-assistant` in the marketplace. The betas ran live tasks on real
 projects, and every row those runs opened is closed. This release adds the
-last thirteen, and a harder guard against dangerous commands.
+last fourteen, and a harder guard against dangerous commands.
 
 ### Changed
 
@@ -64,6 +64,9 @@ last thirteen, and a harder guard against dangerous commands.
 - Role answer files are named `answers-<order>-attempt<n>.md` and
   `answers-<order>-fix<n>.md`. Claude Code refuses a subagent's write to a file
   named like a report.
+- Design names each exposed interface element in backticks, because the
+  build's interface check counts only those. Design's `check` prints
+  `interfaceUnquoted:` for an order whose interface has none. It never blocks.
 
 ### Fixed
 
@@ -76,7 +79,7 @@ last thirteen, and a harder guard against dangerous commands.
 
 ### Checks
 
-Seventy-one fixtures, 5,916 rows, pass under bash and under zsh on the merged
+Seventy-two fixtures, 5,924 rows, pass under bash and under zsh on the merged
 branch, every run exit 0. The repository's specs pass. Each build had a fresh
 checker.
 
