@@ -170,7 +170,9 @@ findings open halt the same way. A `test wrong` halt is cleared by `retake-tests
 in `references/review.md`, and `clear-halt` refuses it. Put the halt and its reason to the person, opening with: "This unit of
 work stopped on something only you can do. It waits until you say you have done it. Do what
 the reason names, then say so, and the build resumes where it stopped." Then say the reason in
-plain words. When they have repaired the test, ruled on the finding, or committed the tree, run:
+plain words. A dirty-tree halt may be followed by a `setAside` entry in the ledger, written by an
+unattended start. Then copy those files back from the folder it names, and commit them first.
+When they have repaired the test, ruled on the finding, or committed the tree, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh clear-halt "<task_folder>" <order id> \
   --because <what the person did about it>

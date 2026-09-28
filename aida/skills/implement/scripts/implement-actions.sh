@@ -438,7 +438,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
 #      itself rejected halts the order first, because a refusal nobody is there to read leaves the
 #      order in flight with no reason on it. A row a person rejected never halts anything: the
-#      person is already there.
+#      person is already there. It lands on the order's ledger entry as `rowsRejected`, which the
+#      next `tests-brief` carries to the test author.
 #  66  `finish` found implementation is not finished for this task: an order that is not closed, an
 #      order carrying a halt whether or not it closed, or a machine-verified criterion whose row
 #      state is not confirmed. The message names every one of them.
@@ -642,6 +643,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      line of the environment recipe exited non-zero, in either run mode. The message quotes its
 #      first line of output and names `task environment <id> up`. No check ran and nothing is
 #      written, so the same step runs again once the site is up.
+# The code the leftover check added (gap row 217).
+# 104  `start` found uncommitted files in the task's tree, on an interactive run given no
+#      `--leftovers`. Or `--leftovers set-aside` met a change other than an untracked or a modified
+#      file. The message names each path and the orders whose owned files hold it. Nothing is
+#      written and nothing moves.
+# The code the builder's stop added (gap row 219).
+# 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder
+#      stopped, so this is not an attempt, whatever it committed. The message quotes the line and
+#      names each commit after --started-at. Nothing is recorded and no attempt is spent.
+#      Unattended, the order halts first, and the halt names the commits.
+# 106  `build-record` was given a report with no stop line, or more than one. Nothing is recorded
+#      and no attempt is spent.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -777,6 +790,7 @@ usage() {
   cat <<'EOF' >&2
 usage: implement-actions.sh read  <task_folder>
        implement-actions.sh start <task_folder> [--rebased-onto <commit>]
+                            [--leftovers <keep|set-aside>]
        implement-actions.sh preconditions <task_folder>
                             [--recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
@@ -1508,13 +1522,18 @@ do_read() {
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
-  local task_path="" rebased_onto=""
+  local task_path="" rebased_onto="" leftovers_choice=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --rebased-onto)
         [ "$#" -ge 2 ] || die 3 "start: --rebased-onto needs the commit the branch now builds on"
         [ -n "$2" ] || die 3 "start: --rebased-onto was given an empty commit."
         rebased_onto="$2"; shift 2 ;;
+      --leftovers)
+        case "${2:-}" in
+          keep|set-aside) leftovers_choice="$2"; shift 2 ;;
+          *) die 3 "start: --leftovers takes keep or set-aside" ;;
+        esac ;;
       -*) die 3 "start: unrecognized argument: $1" ;;
       *)
         [ -z "$task_path" ] || die 3 "start: unrecognized extra argument: $1"
@@ -1642,6 +1661,53 @@ do_start() {
   # field's value against the schema is check-task.sh's to refuse, not this script's.
   local run_mode
   run_mode="$(task_run_mode "$TASK_PATH" implement)"
+
+  # --- step 7b: files a stopped role left in the tree (gap row 217) -------------------------------
+  # A role stopped mid-run leaves its files uncommitted, and the next role would work beside them.
+  # So start names each path git reports changed or untracked, with the orders whose owned files
+  # hold it. A gitignored file is not read. COMPROMISES.md is AIDA's own file, so it is not named.
+  # `-uall` names each file in a new folder, because only a file meets an owned-file entry.
+  # `-z` leaves a name unquoted. git_status_of passes neither flag, so this reads git directly.
+  # Interactive refuses until a person picks keep or set-aside. Unattended sets them aside. Only an
+  # untracked or a modified file can move. Any other change is a person's to undo, in both modes.
+  local lo_status lo_line lo_xy lo_rel lo_owners lo_id lo_glob lo_tab lo_orders_tsv lo_tracked="" lo_skip=false
+  local leftovers_json='[]' lo_text_jq
+  lo_text_jq='.[] | .path + " (" + (if (.orders | length) > 0 then (.orders | join(", ")) else "no order owns it" end) + ")"'
+  lo_tab="$(printf '\t')"
+  lo_orders_tsv="$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } \
+    | jq -r '.[] | .id as $id | (.ownedFiles // [])[] | $id + "\t" + .' 2>/dev/null)"
+  lo_status="$(git -C "$code_path" status --porcelain -z --untracked-files=all 2>/dev/null | tr '\0' '\n')"
+  while IFS= read -r lo_line; do
+    # A rename or a copy carries its source name as the next field. It refuses below as it is.
+    if [ "$lo_skip" = "true" ]; then lo_skip=false; continue; fi
+    [ -n "$lo_line" ] || continue
+    lo_xy="$(printf '%s' "$lo_line" | cut -c1-2)"
+    lo_rel="${lo_line#???}"
+    case "$lo_xy" in R*|C*|?R|?C) lo_skip=true ;; esac
+    [ "$lo_rel" != "$COMPROMISES_FILE" ] || continue
+    lo_owners=""
+    while IFS="$lo_tab" read -r lo_id lo_glob; do
+      [ -n "$lo_id" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue
+      case ",$lo_owners," in *",$lo_id,"*) ;; *) lo_owners="${lo_owners:+$lo_owners,}$lo_id" ;; esac
+    done <<LO_ORDERS
+$lo_orders_tsv
+LO_ORDERS
+    case "$lo_xy" in '??'|' M'|'M '|'MM') ;; *) lo_tracked="$lo_tracked$lo_rel ($lo_xy), " ;; esac
+    leftovers_json="$(printf '%s' "$leftovers_json" | jq -c --arg p "$lo_rel" --arg xy "$lo_xy" --arg o "$lo_owners" \
+      '. + [{path: $p, status: $xy, orders: ($o | split(",") | map(select(length > 0)))}]')"
+  done <<LO_STATUS
+$lo_status
+LO_STATUS
+  if [ "$leftovers_json" != "[]" ]; then
+    if [ "$run_mode" = "autonomous" ]; then
+      [ "$leftovers_choice" != "keep" ] || die 3 "start: --leftovers keep is a person's call, and this run is unattended."
+      leftovers_choice="set-aside"
+    fi
+    [ -n "$leftovers_choice" ] \
+      || die 104 "start: uncommitted files in $code_path: $(printf '%s' "$leftovers_json" | jq -r "[ $lo_text_jq ] | join(\", \")"). A role stopped mid-run may have left them, and the next role would work beside them. To keep a file, commit it, or run start again with --leftovers keep to leave it as it is. To set them aside, run start again with --leftovers set-aside. That moves them under $IMPL_DIR/set-aside/ and deletes nothing."
+    [ "$leftovers_choice" != "set-aside" ] || [ -z "$lo_tracked" ] \
+      || die 104 "start: these changes cannot be set aside: ${lo_tracked%, }. Only an untracked or a modified file moves aside. Commit them, or undo them by hand, then run start again."
+  fi
 
   # --- step 8: look for an existing snapshot: absent, present-readable, or present-unreadable ----
   local snapshot_present snapshot_doc
@@ -2102,6 +2168,32 @@ do_start() {
     final_criteria_json="$(printf '%s' "$snapshot_criteria_json" | jq -c '[ .[] | {id: .id, rowState: "not-judged"} ]')"
   fi
 
+  # The leftovers move only here, after every refusal, so a refused start moves nothing. An untracked
+  # file moves. A modified file is copied, then its tracked version comes back from HEAD.
+  local set_aside_json='[]' set_aside_dir="" lo_move_tsv
+  [ -z "$ledger_doc" ] || set_aside_json="$(printf '%s' "$ledger_doc" | jq -c '.setAside // []')"
+  if [ "$leftovers_choice" = "set-aside" ] && [ "$leftovers_json" != "[]" ]; then
+    set_aside_dir="$IMPL_DIR/set-aside/$(date -u +%Y%m%dT%H%M%SZ)"
+    [ ! -e "$set_aside_dir" ] || die 3 "start: $set_aside_dir already exists. Run start again in a second."
+    lo_move_tsv="$(printf '%s' "$leftovers_json" | jq -r '.[] | .status + "\t" + .path')"
+    while IFS="$lo_tab" read -r lo_xy lo_rel; do
+      [ -n "$lo_rel" ] || continue
+      mkdir -p "$(dirname -- "$set_aside_dir/$lo_rel")" || die 3 "start: could not create a folder under $set_aside_dir"
+      if [ "$lo_xy" = "??" ]; then
+        mv -- "$code_path/$lo_rel" "$set_aside_dir/$lo_rel" \
+          || die 3 "start: could not move $lo_rel to $set_aside_dir. The files moved before it are in that folder, and the ledger does not record them."
+      else
+        cp -p -- "$code_path/$lo_rel" "$set_aside_dir/$lo_rel" && git -C "$code_path" checkout -q HEAD -- "$lo_rel" \
+          || die 3 "start: could not set aside the change to $lo_rel in $set_aside_dir. The files moved before it are in that folder, and the ledger does not record them."
+      fi
+    done <<LO_MOVE
+$lo_move_tsv
+LO_MOVE
+    set_aside_json="$(printf '%s' "$set_aside_json" | jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg folder "$set_aside_dir" --argjson paths "$leftovers_json" \
+      '. + [{at: $at, folder: $folder, paths: [ $paths[] | {path, orders} ]}]')"
+  fi
+
   # The re-snapshot lands after the ledger's hash check above, which reads the hash the ledger was
   # opened against; the ledger written below carries the new one, and one line per replaced order
   # naming both, so a reader can tell which shape each order was built from.
@@ -2122,10 +2214,11 @@ do_start() {
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
     --argjson resnapshots "$resnapshots_json" --argjson startedFromBefore "$started_from_before_json" \
-    --argjson haltsCleared "$halts_cleared_json" \
+    --argjson haltsCleared "$halts_cleared_json" --argjson setAside "$set_aside_json" \
     '{schemaVersion: 1, startedFrom: $startedFrom, startedAt: $startedAt, runMode: $runMode, snapshotHash: $snapshotHash,
       orders: $orders, criteria: $criteria}
      | if ($startedFromBefore | length) > 0 then .startedFromBefore = $startedFromBefore else . end
+     | if ($setAside | length) > 0 then .setAside = $setAside else . end
      | if ($haltsCleared | length) > 0 then .haltsCleared = $haltsCleared else . end
      | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
@@ -2231,6 +2324,8 @@ do_start() {
     --argjson removed "$removed_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
     --argjson partialBuild "$st_partial_json" \
+    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $lo_text_jq ]")" \
+    --arg setAside "$set_aside_dir" \
     --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
     --argjson ready "$ready_ids_json" \
@@ -2239,7 +2334,10 @@ do_start() {
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
      drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted,
      driftCleared: $driftCleared, removed: $removed, newLiveOrders: $newLiveOrders,
-     partialBuild: $partialBuild, halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
+     partialBuild: $partialBuild, leftovers: $leftovers, setAside: $setAside,
+     halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
+    | if ($leftovers | length) == 0 then del(.leftovers) else . end
+    | if $setAside == "" then del(.setAside) else . end
     | if ($removed | length) == 0 then del(.removed) else . end
     | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
     | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
@@ -3722,7 +3820,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: these fixed keys, then the optional ones: treeHolds, retake, absenceCandidates ---
+  # --- assemble the brief: these fixed keys, then the optional ones: treeHolds, retake, rowsRejected, absenceCandidates ---
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -3815,6 +3913,15 @@ do_tests_brief() {
     [ -n "$retake_json" ] || die 3 "tests-brief: could not assemble the retake key for $unit_id."
   fi
 
+  # Another key, only while a row a person rejected at the checkpoint stands: `tests-freeze`
+  # recorded it on the ledger with the person's words and the checker's note (gap row 218).
+  local rows_rejected_json
+  rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '
+    ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
+    | if length == 0 then null
+      else {rows: .,
+            whatToDo: "A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone."} end')"
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -3825,6 +3932,7 @@ do_tests_brief() {
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
         --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
+        --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
@@ -3833,6 +3941,7 @@ do_tests_brief() {
       playbooksPath: $playbooksPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
+     | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
      | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -3852,11 +3961,13 @@ do_tests_brief() {
                  + (.retake.finding.rulingReason // "the ruling reason is not on record")
                  + " | correct the tests it names and leave the other frozen rows alone")
               else null end),
+     rowsRejected: (if has("rowsRejected") then ([ .rowsRejected.rows[] | .criterion ] | join(", ")) else null end),
      absenceCandidates: (if has("absenceCandidates") then (.absenceCandidates.clauses | length) else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
     | if .treeHolds == null then del(.treeHolds) else . end
     | if .absenceCandidates == null then del(.absenceCandidates) else . end
-    | if .retake == null then del(.retake) else . end')"
+    | if .retake == null then del(.retake) else . end
+    | if .rowsRejected == null then del(.rowsRejected) else . end')"
   exit 0
 }
 
@@ -4637,6 +4748,33 @@ TF_EOF
         echo "TESTS-FREEZE: $unit_id is halted. $tf_why" >&2
       fi
     fi
+    # A row a person rejected goes back to the test author, and the person's words existed only in
+    # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
+    # note from its verdict file, and `tests-brief` carries them to a fresh test author.
+    local tf_person_rejected tf_rejected_doc tf_check_file tf_check_doc='{}'
+    tf_person_rejected="$(printf '%s' "$rows_meta_json" | jq -c '
+        [ .[] | select(.verdict == "rejected" and .judgedBy == "person") ]')"
+    if [ "$tf_person_rejected" != "[]" ] && [ -n "$tf_ledger_doc" ]; then
+      # A missing verdict file leaves each note null. A present one that does not read refuses,
+      # because the rejection would otherwise be lost with it.
+      tf_check_file="$IMPL_DIR/row-check-$unit_id.json"
+      if [ -f "$tf_check_file" ]; then
+        tf_check_doc="$(jq -c '.' "$tf_check_file" 2>/dev/null)"
+        [ -n "$tf_check_doc" ] \
+          || die 3 "tests-freeze: $tf_check_file exists but could not be read as JSON. The rejected rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
+      fi
+      tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" '
+          [ .[] | .criterion as $c
+            | {criterion: $c, personWords: .note,
+               checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null)} ]' 2>/dev/null)"
+      [ -n "$tf_person_rejected" ] \
+        || die 3 "tests-freeze: $tf_check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. Repair or remove it by hand before running this again."
+      tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
+        '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
+      [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
+      write_atomic "$tf_ledger_file" "$tf_rejected_doc"
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Run tests-freeze again once the checker confirms the repaired test."
+    fi
     die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
   fi
 
@@ -5104,7 +5242,8 @@ TF_EOF
   # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
   # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
   # criterion judgement this order already left is replaced rather than added to. The routed
-  # clauses are replaced the same way, and removed when this freeze routed none.
+  # clauses are replaced the same way, and removed when this freeze routed none. A freeze that gets
+  # here had no rejected row, so the rows a person rejected earlier are answered and removed.
   ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
     --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" '
     ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
@@ -5121,7 +5260,8 @@ TF_EOF
       else ((if $dw == null then del(.doneWhenJudgement)
              else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
-               else .absenceClauses = $absences end))
+               else .absenceClauses = $absences end)
+            | del(.rowsRejected))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
@@ -5301,6 +5441,21 @@ do_build_brief() {
   [ "$attempts_used" -lt "$attempts_allowed" ] \
     || die 41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
+  # A later attempt starts from the earlier one's committed code. The build record keeps the last
+  # attempt only, so its stoppers are what that attempt failed on, read here and not recomputed
+  # (gap row 220).
+  local previous_attempt_json="null" prev_record_file="$IMPL_DIR/build-$unit_id.json"
+  if [ "$attempts_used" -gt 0 ] && [ -f "$prev_record_file" ]; then
+    previous_attempt_json="$(jq -c --arg path "$prev_record_file" "$BR_STOPPERS_JQ"'
+      (.checks // []) as $checks | ($checks | stoppers) as $ids
+      | {attempt, recordPath: $path,
+         failedChecks: [ $checks[] | select(.id as $i | $ids | index($i))
+                         | {id, verdict, detail} + (if has("newLines") then {newLines} else {} end) ]}
+      | if (.failedChecks | length) == 0 then null else . end' \
+      "$prev_record_file" 2>/dev/null)"
+    [ -n "$previous_attempt_json" ] || previous_attempt_json="null"
+  fi
+
   # --- assemble the brief: exactly these keys, and nothing else ------------------------------------
   local unit_out tests_out
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c "$REASONING_JQ"'
@@ -5359,12 +5514,14 @@ do_build_brief() {
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
         --arg beforeLookPath "$bb_before" \
+        --argjson previousAttempt "$previous_attempt_json" \
         --arg fakeMarker "$(! task_is_light "$TASK_PATH" || printf '%s' "$FAKE_MARKER")" \
     '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
      + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)
+     + (if $previousAttempt == null then {} else {previousAttempt: $previousAttempt} end)
      + (if $fakeMarker == "" then {} else {fakeMarker: $fakeMarker} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -6864,6 +7021,42 @@ do_build_record() {
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+
+  # --- exits 105 and 106: the builder's stop line, read before anything else is judged --------------
+  # A builder once named a misfit in prose and then built around it (gap row 219). So every report
+  # carries exactly one stop line, `Stop: none` or `Stop: <cause>: <reason>`, and the builder has to
+  # choose. Markdown emphasis, a list marker and the case of "stop" are ignored. A stop recorded as
+  # an attempt spends the budget on work the rule forbade. The halt reason names the report and the
+  # commits, never the builder's text, because that text may hold the halt separator.
+  local ledger_run_mode stop_lines stop_count stop_value
+  ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
+  stop_lines="$(sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^-[[:space:]]*//' "$report_path" 2>/dev/null \
+    | grep -i '^stop:')"
+  stop_count="$(printf '%s' "$stop_lines" | grep -c '.')"
+  [ "$stop_count" = "1" ] \
+    || die 106 "build-record: the builder's report at $report_path holds $stop_count stop lines, and it must hold exactly one: 'Stop: none', or 'Stop: <cause>: <reason>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
+  stop_value="$(printf '%s' "${stop_lines#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  case "$stop_value" in
+    [Nn][Oo][Nn][Ee]) ;;
+    *)
+      local stop_commits stop_commit_count stop_commit_text=""
+      stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
+      stop_commits="${stop_commits% }"
+      stop_commit_count="$(printf '%s' "$stop_commits" | wc -w | tr -d ' ')"
+      if [ "$stop_commit_count" -gt 0 ]; then
+        stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
+      fi
+      if [ "$ledger_run_mode" = "autonomous" ]; then
+        local stop_ledger_doc
+        stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "the builder stopped: its report holds a Stop: line, at $report_path.$stop_commit_text")"
+        [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
+        write_atomic "$ledger_file" "$stop_ledger_doc"
+      fi
+      [ -z "$stop_commit_text" ] \
+        || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
+      die 105 "build-record: the builder's report at $report_path says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md."
+      ;;
+  esac
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
@@ -6919,8 +7112,6 @@ do_build_record() {
     criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
 
-  local ledger_run_mode
-  ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
   # --- the eight deciding checks ---------------------------------------------------------------------

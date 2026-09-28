@@ -40,7 +40,8 @@ changed and the fewest lines added, not a rewrite you can defend afterward.
 The brief holds your unit in the frozen copy and the frozen tests, to read. It holds the
 interface records of the units you depend on, and what their reviewers recorded for the person
 under `dependencyInformation`. It holds the path of your report file and the path of your
-interface record. Read the brief first. Your own diff you make yourself. The unit's `verify` list
+interface record. Read the brief first. When it holds `previousAttempt`, read that build record
+next, and fix the checks that failed before anything else. Your own diff you make yourself. The unit's `verify` list
 names each command that runs on your work and each check a reviewer judges. Build so each one
 passes.
 
@@ -64,7 +65,9 @@ units that depend on it. Write it from what you built, not from what you intende
 path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there.
 
 Record the evidence: the command you ran, what it printed before, and what it printed after. Run the
-unit's own tests while you work, and the whole suite once before you stop.
+unit's own tests while you work, and the whole suite once before you stop. Run every tool that each
+recipe step names before you report. `build-record` runs them again, and a tool you skipped can
+spend the attempt.
 
 Do not add a test you think is missing. Report it instead, and say what it would cover.
 
@@ -84,7 +87,19 @@ given does not fit what the unit has to do, or when your attempts run out. A tes
 has been replaced by your own judgement, which is the failure this whole process exists to prevent.
 Name the test and the reason, and let a person decide.
 
-**A stop is a stop.** Write your report naming what stopped you and why, return, and end the turn
-with nothing further written. Never write "proceeding unless told otherwise". Never make a change
-while you wait for an answer. Nobody can answer inside your turn, and a change made while waiting
-is a build the rule forbade.
+**A stop is a stop.** Your report holds exactly one stop line, in one of these forms:
+
+```
+Stop: none
+Stop: test-wrong: <the test, and why it seems wrong>
+Stop: interface-misfit: <what the unit needs that the interface does not give>
+Stop: file-not-owned: <the file, and why the unit needs it>
+Stop: attempts-out: <what is still not done>
+```
+
+Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report is a
+stop, so its line is `interface-misfit`. After a stop line other than `none`, return, and end the
+turn with nothing further written. `build-record` refuses a report with no stop line, and records
+no attempt for a stop. Never write "proceeding unless told otherwise". Never make a change while
+you wait for an answer. Nobody can answer inside your turn, and a change made while waiting is a
+build the rule forbade.

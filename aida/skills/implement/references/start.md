@@ -25,6 +25,27 @@ unset, the script says so and continues. That is a check that could not look, no
 a refusal. Tell the person plainly that the trunk was not confirmed, rather than reporting it as
 either.
 
+Before it writes, the script reads the task's tree. It names each file that git reports untracked
+or changed and not committed, and the orders whose owned files hold it. A role stopped mid-run
+leaves such files, and the next role would work beside them. A gitignored file is never named.
+`COMPROMISES.md` is AIDA's own file, so it is not named either. The usual first-run case is
+`package-lock.json`, changed by a surfaces harness install at `environment up`. Commit it.
+
+Interactive, such a file refuses with exit 104, and nothing is written. Read the paths to the
+person and offer two choices. To keep a file, the person commits it. Or you run start again with
+`--leftovers keep` to leave it as it is, for that run only. To set the files aside, run start
+again with `--leftovers set-aside`. Unattended, the script sets them aside itself, and
+`--leftovers keep` refuses.
+
+Set aside moves each untracked file to `<task_folder>/implementation/set-aside/<time>/`, under its
+own path. A modified file is copied there, and its committed version comes back. Nothing is
+deleted. Any other change, such as a deleted file or a staged new one, refuses with exit 104 in
+both modes. The ledger records each move under `setAside`. The `setAside:` line names the folder,
+so give the person that path. The `leftovers:` line names each file that was kept or set aside.
+
+The freeze keeps its own warning about uncommitted files. It names a file that the test author
+made during its own run, after this check.
+
 On success the script prints summary lines. They say whether this is a new run or a resumed one.
 They give the snapshot's path, hash and counts, and the ledger's path. They name which order is in
 flight and at what step, what drifted since an earlier snapshot, and which work orders that halted.

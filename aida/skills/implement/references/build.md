@@ -36,7 +36,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes ten things to
+It reads the frozen copy and the frozen tests. It writes eleven things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns;
@@ -50,6 +50,9 @@ It reads the frozen copy and the frozen tests. It writes ten things to
 - `interfacePath`, `implementation/interface-<order id>.md`, where the implementer writes its
   interface record and where `build-record` reads it;
 - how many attempts this order has used of the count it is allowed;
+- `previousAttempt`, present only when the order's last recorded attempt failed a check. It holds
+  that attempt's number and the path of its build record. It also holds each check that stopped
+  it, with its verdict, its detail and any `newLines`;
 - `headNow`, the commit of the repository this order lands in at the moment of this call, and
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
@@ -123,8 +126,12 @@ shell assembles at run time passes the hook and is still denied.
 
 **It stops rather than working around anything.** A test that seems wrong, an interface that does
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
-A stop looks like this in the conversation: the role returns early, its report names what stopped it,
-and nothing is committed. Interactive puts the stop to the person,
+A stop looks like this in the conversation: the role returns early. Its report's stop line names
+the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
+cause, and `build-record` refuses a report without one (exit 106). A cause is a stop even when code
+was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
+attempt. It names each commit made after the attempt began, and the person reverts or keeps them
+before the next build. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
 it. It says a test is wrong, the interface does not fit, it needs a file it does not own, or its
 attempts ran out.
@@ -132,7 +139,8 @@ Repair that and the next attempt continues. Leave it and this unit of work stays
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
-halt a started order. Unattended halts the order and records what was left.
+halt a started order. Unattended, run `build-record` as after any return. It halts the order
+itself, so do not halt it again. The next `start` sets aside what was left.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.

@@ -85,8 +85,9 @@ checked, and it says which orders halted. Its own `next:` line then applies.
 ## One order halting does not stop the run
 
 When an order halts, at its attempt cap or for drift, only the orders that depend on it wait.
-Everything else that is ready still builds. Run `start` again: it is safe on a resumed run, and it
-reports which orders are ready, which halted and why, and which are in flight. Take the next ready
+Everything else that is ready still builds. Run `start` again. It reports which orders are ready,
+which halted and why, and which are in flight. Unattended, it also sets aside the files a stopped
+role left uncommitted (`references/start.md`). Take the next ready
 order and apply the table. Stop only when nothing is ready.
 
 Then report what halted, with the reason the ledger holds, and what is waiting on it. Interactive

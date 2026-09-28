@@ -79,9 +79,46 @@
         "$ref": "#/$defs/resnapshot"
       },
       "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and `restart` for each order it resets, both after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
+    },
+    "setAside": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/setAside"
+      },
+      "description": "One entry per `start` that moved uncommitted files out of the task's tree, in the order it happened. Present only when one did. A role stopped mid-run leaves its files uncommitted, and the next role would work beside them (gap row 217). Unattended, or with `--leftovers set-aside`, `start` moves them under the folder this entry names. Nothing is deleted."
     }
   },
   "$defs": {
+    "setAside": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "folder", "paths"],
+      "properties": {
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "description": "The UTC time of the move. Set by the script, never typed."
+        },
+        "folder": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The folder the files moved to, under the implementation folder. Each file keeps its path relative to the tree."
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "orders"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1, "description": "The file's path relative to the tree."},
+              "orders": {"type": "array", "items": {"type": "string", "pattern": "^wo[1-9][0-9]*$"}, "description": "The orders whose owned files hold the path. Empty when none does."}
+            }
+          }
+        }
+      }
+    },
     "orderEntry": {
       "type": "object",
       "additionalProperties": false,
@@ -157,6 +194,21 @@
             "note": { "$ref": "#/$defs/judgement/properties/note" }
           },
           "description": "The checkpoint's verdict on the tests that prove this order's own doneWhen rather than a criterion: the `--row` keyed by the order's id, written by `tests-freeze` and replaced on every freeze of this order. Present only when the order froze such a test. A supporting order serves criteria it cannot observe, so its tests are judged against its doneWhen text instead of a verify clause (live-run row 59). Counted with the criterion judgements in every rowsJudgedByModel, so a model's reading here is listed for a person to judge again like any other."
+        },
+        "rowsRejected": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["criterion", "personWords", "checkerNote"],
+            "properties": {
+              "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, or the order id for the done-when row."},
+              "personWords": {"type": "string", "minLength": 1, "description": "The person's words, verbatim, from the row's `--row <key>=rejected::person::<words>` flag."},
+              "checkerNote": {"type": ["string", "null"], "description": "The checker's note on this row, read from `implementation/row-check-<order id>.json`. Null when that file or its row is absent."}
+            }
+          },
+          "description": "The rows a person rejected at the checkpoint, written by `tests-freeze` when it refuses on them and replaced on each such refusal. Removed by the next freeze that writes, since that freeze had no rejected row. Present only while one stands. `tests-brief` carries it to a fresh test author, because the person's words otherwise lived only in the conversation (gap row 218). A row the checker rejected on an unattended run is not here: it halts the order instead."
         },
         "absenceClauses": {
           "type": "array",

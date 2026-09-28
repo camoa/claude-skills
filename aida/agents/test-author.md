@@ -39,6 +39,9 @@ Write no new test for a criterion the frozen rows already cover. The finding's `
 a criterion, and the frozen rows are keyed by criterion, so that field says which rows to read.
 A test the correction makes necessary is allowed, and the checker reads the affected rows.
 
+When the brief holds `rowsRejected`, a person rejected those rows at the checkpoint. Each row holds
+the person's words and the checker's note. Repair the tests of those rows only.
+
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
 plays are the person's own rules, so a play outranks a guide's default where the two differ. A

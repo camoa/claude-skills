@@ -122,6 +122,10 @@ And it says what the author must do: correct the tests the finding names,
 and leave every other frozen row alone. A record a person removed is named under `absent`, and
 the brief carries what is left. The summary prints a `retake:` line.
 
+`rowsRejected`, only while a row a person rejected at the checkpoint below stands. It holds each
+row's key, the person's words verbatim, and the checker's note. The summary prints a
+`rowsRejected:` line.
+
 It prints the brief's path and counts, never the brief.
 
 That list is the withheld list, decided once rather than at each dispatch. Adding an input here
@@ -277,8 +281,8 @@ enforcing them.
 
 **Then dispatch `row-checker`**, on opus, with the message SKILL.md names. Its lines are the
 role, the run mode, the rows built above, the test-authoring recipe's path, and its verdict
-file's path under the task folder. The rows are the one input typed by hand, because no brief
-action writes them.
+file's path. That path is `implementation/row-check-<order id>.json` under the task folder. The
+rows are the one input typed by hand, because no brief action writes them.
 Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes
@@ -298,11 +302,15 @@ anything is built." Then name the requirement in its own words, the tests, the c
 and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=confirmed::person::<the person's words>` or
 `--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
-the test author before any freeze runs. Never run the freeze with a rejected row still standing.
-`tests-freeze` refuses it and writes nothing. Send that row back first. A repaired test goes
-through the checker again. When an owned criterion's row goes back, put the done-when row to the
-checker again too. Freeze once every row for this order reads confirmed. A note may not
-hold the text `; earlier: `. This stage joins one halt reason to another with that text, so a note
+the test author before anything is frozen, in three steps. Run `tests-freeze` with every row as
+answered. It refuses (exit 65) and writes no test record. It records each rejected row on the
+order's ledger entry, with the person's words and the checker's note. Run `tests-brief` again, which
+carries those rows under `rowsRejected`. Then open a new dispatch record and dispatch the test
+author fresh, with the same message as before. Do not resume the earlier author with a message: the
+brief is the one carrier. A repaired test goes through the checker again. When an owned
+criterion's row goes back, put the done-when row to the checker again too. Freeze once every row
+for this order reads confirmed; that freeze clears the record. A note may not hold the text
+`; earlier: `. This stage joins one halt reason to another with that text, so a note
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
 
 **Unattended, there is nobody to ask.** A rejected row becomes
