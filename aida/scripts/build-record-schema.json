@@ -9,6 +9,7 @@
     "takenAt",
     "unit",
     "startedAt",
+    "orderStartedAt",
     "commit",
     "attempt",
     "interfaceRecord",
@@ -38,6 +39,11 @@
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "The commit this attempt began from, the full form of the `--started-at` value `build-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). Check three's own diff runs from here to `commit`."
+    },
+    "orderStartedAt": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "The commit this order's first attempt began from: `startedAt` on attempt 1, and the earlier record's own value on every later attempt (gap row 222). `review-brief` and `close` read the order's range from here to `commit`, so a review of a second attempt still sees the first attempt's code. `restart` and `retake-tests` move the record aside, so the next attempt after either starts a new range."
     },
     "commit": {
       "type": "string",

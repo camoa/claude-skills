@@ -7104,7 +7104,7 @@ do_build_record() {
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
-  local record_file="$IMPL_DIR/build-$unit_id.json"
+  local record_file="$IMPL_DIR/build-$unit_id.json" order_started_at="$started_at_full"
   if [ -f "$record_file" ]; then
     local existing_doc existing_commit existing_attempt
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
@@ -7122,6 +7122,10 @@ do_build_record() {
     if [ -n "$existing_commit" ] && [ "$existing_commit" = "$current_commit" ]; then
       die 45 "build-record: $record_file already holds attempt $existing_attempt at commit $current_commit, so the code has not moved since that attempt. An attempt spent on unchanged code is an attempt nobody worked."
     fi
+    # A later attempt keeps the order's first start, so review and close read every attempt's
+    # commits (gap row 222). `restart` and `retake-tests` move this record aside, and a second
+    # freeze refuses once the order is built, so the attempt after either begins a new range.
+    order_started_at="$(printf '%s' "$existing_doc" | jq -r --arg s "$started_at_full" '.orderStartedAt // .startedAt // $s')"
   fi
 
   # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
@@ -7179,6 +7183,7 @@ do_build_record() {
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c \
     --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
+    --arg orderStartedAt "$order_started_at" \
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
     --argjson executed "$executed_count" \
@@ -7187,6 +7192,7 @@ do_build_record() {
       takenAt: $takenAt,
       unit: $unit,
       startedAt: $startedAt,
+      orderStartedAt: $orderStartedAt,
       commit: $commit,
       attempt: $attempt,
       interfaceRecord: $interfaceRecord,
@@ -7747,8 +7753,9 @@ do_review_brief() {
   # (ideal/implementation.md, "What a review is given, and what it is refused"). For an order
   # whose proof is record it is the task folder's diff in the project folder, and the brief names
   # the deliverables by path, since a document is read whole and not as a patch (nyc defect 17).
+  # The range is the order's, from its first attempt's start (gap row 222).
   local started_at commit diff_path deliverables_json
-  started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
+  started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.orderStartedAt // .startedAt // ""')"
   commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   [ -n "$started_at" ] && [ -n "$commit" ] \
     || die 3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no startedAt or no commit, though build-record writes both."
@@ -9043,7 +9050,7 @@ do_close() {
   rv_load_range_repo "close" "$RV_UNIT_JSON"
 
   local started_at head_now
-  started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
+  started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.orderStartedAt // .startedAt // ""')"
   [ -n "$started_at" ] \
     || die 3 "close: $IMPL_DIR/build-$unit_id.json holds no startedAt, though build-record writes it."
   head_now="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
@@ -9819,8 +9826,8 @@ rs_on_branch() {
 # entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
 # the same subject test decides it. Without them the reset answer stops at the superseded freeze
 # and leaves the wrong test standing in the tree (live-run row 147). A build record holds
-# the last attempt's range; a fix record each round's. A record whose commits git no longer has
-# names nothing (live-run row 94).
+# the order's range over every attempt (gap row 222); a fix record each round's. A record whose
+# commits git no longer has names nothing (live-run row 94).
 # A build and fix record does not stay at the top of the implementation folder. `retake-tests`
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
@@ -9902,7 +9909,7 @@ find "$task" -mindepth 2 -maxdepth 2 -type d -path "*/implementation-*/retaken-$
 RS_RETAKEN
   while IFS= read -r file; do
     [ -f "$file" ] || continue
-    range="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$file" 2>/dev/null)"
+    range="$(jq -r 'select(.startedAt != null and .commit != null) | (.orderStartedAt // .startedAt) + ".." + .commit' "$file" 2>/dev/null)"
     [ -n "$range" ] || continue
     case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
     while IFS= read -r c; do

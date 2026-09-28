@@ -243,7 +243,10 @@ recorded on any of these.
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
 Equal to the code repository's own current commit, or not an ancestor of it, refuses (exit 71):
-either makes the range this attempt claims false.
+either makes the range this attempt claims false. The record also keeps the start of the order's
+first attempt, and review and close read the range from there. So a second attempt that changes
+one line is reviewed with the code the first attempt wrote. `restart` and `retake-tests` move the
+record aside, so the attempt after either starts a new range.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not

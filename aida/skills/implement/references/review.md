@@ -28,7 +28,8 @@ It writes `implementation/brief-<order id>-review.json`:
 
 - the criteria this order serves and owns, and the non-goals;
 - the order record;
-- the diff as a path, the frozen tests, and the builder's report path; on an order whose proof
+- the diff as a path, from the start of the order's first build attempt, so every attempt is in
+  it; the frozen tests, and the builder's report path; on an order whose proof
   is `record` the diff is the project folder's whole, and `deliverables` names
   each owned file by path. The reviewer reads the document whole rather than a patch;
 - the eight check results;
@@ -365,7 +366,7 @@ Run:
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
 the last record left it. On success it writes `lastStep = "closed"` and the commit range the order
-produced. On a `record` order the tree, HEAD and the range are the project folder's. The
+produced, from the start of its first build attempt. On a `record` order the tree, HEAD and the range are the project folder's. The
 machine criteria it owns are written as judged by whoever judged its done-when row, person or
 model, never `gate`.
 
