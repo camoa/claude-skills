@@ -519,11 +519,12 @@ took the new contract, so no later run sees the change. An order halted because 
 drifted is the other. A reopen that changed an order's design file and a criterion it serves
 halts it for both reasons. The criterion one then holds the order when only the file goes back.
 
-One change to a started order does not halt it: an owned file added and nothing else. The
-build found a file the operation rewrites that no order owned, and design added it. The frozen
-tests were written from the criteria and the order's other fields, so they still hold. Once
-design has closed again, the next run takes the wider order in place and keeps its step and
-attempts. The orders that depend on it are left alone. A removed owned file, or any other
+Two changes to a started order do not halt it. One is an owned file added and nothing else. The
+build found a file the operation rewrites that no order owned, and design added it. The other is
+a research finding accounted to the order, which a design reopen does even for a closed order.
+The frozen tests were written from the criteria and the order's other fields, so they still hold.
+Once design has closed again, the next run takes the live order in place and keeps its step and
+attempts. The next build brief carries the new findings. The orders that depend on it are left alone. A removed owned file, or any other
 change, halts as above.
 
 A restart moves records, not commits. The halted order's frozen tests and its build attempts are

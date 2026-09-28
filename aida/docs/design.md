@@ -356,6 +356,7 @@ edited after design closed. Changing a closed design is supported: edit the orde
 again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
 done-when row may skip the research and guide reading. That reading shapes an order, not its file
 list. A change to an order that implementation already started halts that order for design drift.
+Two changes are the exception: an added owned file, and a research finding accounted to the order.
 Put the design back and the next build clears the halt, or take the restart.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
