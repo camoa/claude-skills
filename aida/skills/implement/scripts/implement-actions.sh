@@ -438,7 +438,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
 #      itself rejected halts the order first, because a refusal nobody is there to read leaves the
 #      order in flight with no reason on it. A row a person rejected never halts anything: the
-#      person is already there.
+#      person is already there. It lands on the order's ledger entry as `rowsRejected`, which the
+#      next `tests-brief` carries to the test author.
 #  66  `finish` found implementation is not finished for this task: an order that is not closed, an
 #      order carrying a halt whether or not it closed, or a machine-verified criterion whose row
 #      state is not confirmed. The message names every one of them.
@@ -3812,7 +3813,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: these fixed keys, then the optional ones: treeHolds, retake, absenceCandidates ---
+  # --- assemble the brief: these fixed keys, then the optional ones: treeHolds, retake, rowsRejected, absenceCandidates ---
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -3905,6 +3906,15 @@ do_tests_brief() {
     [ -n "$retake_json" ] || die 3 "tests-brief: could not assemble the retake key for $unit_id."
   fi
 
+  # Another key, only while a row a person rejected at the checkpoint stands: `tests-freeze`
+  # recorded it on the ledger with the person's words and the checker's note (gap row 218).
+  local rows_rejected_json
+  rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '
+    ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
+    | if length == 0 then null
+      else {rows: .,
+            whatToDo: "A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone."} end')"
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -3915,6 +3925,7 @@ do_tests_brief() {
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
         --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
+        --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
@@ -3923,6 +3934,7 @@ do_tests_brief() {
       playbooksPath: $playbooksPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
+     | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
      | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -3942,11 +3954,13 @@ do_tests_brief() {
                  + (.retake.finding.rulingReason // "the ruling reason is not on record")
                  + " | correct the tests it names and leave the other frozen rows alone")
               else null end),
+     rowsRejected: (if has("rowsRejected") then ([ .rowsRejected.rows[] | .criterion ] | join(", ")) else null end),
      absenceCandidates: (if has("absenceCandidates") then (.absenceCandidates.clauses | length) else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
     | if .treeHolds == null then del(.treeHolds) else . end
     | if .absenceCandidates == null then del(.absenceCandidates) else . end
-    | if .retake == null then del(.retake) else . end')"
+    | if .retake == null then del(.retake) else . end
+    | if .rowsRejected == null then del(.rowsRejected) else . end')"
   exit 0
 }
 
@@ -4727,7 +4741,23 @@ TF_EOF
         echo "TESTS-FREEZE: $unit_id is halted. $tf_why" >&2
       fi
     fi
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
+    # A row a person rejected goes back to the test author, and the person's words existed only in
+    # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
+    # note from its verdict file, and `tests-brief` carries them to a fresh test author.
+    local tf_person_rejected tf_rejected_doc tf_check_doc
+    tf_check_doc="$(jq -c '.' "$IMPL_DIR/row-check-$unit_id.json" 2>/dev/null)"
+    [ -n "$tf_check_doc" ] || tf_check_doc='{}'
+    tf_person_rejected="$(printf '%s' "$rows_meta_json" | jq -c --argjson check "$tf_check_doc" '
+        [ .[] | select(.verdict == "rejected" and .judgedBy == "person") | .criterion as $c
+          | {criterion: $c, personWords: .note,
+             checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null)} ]')"
+    if [ "$tf_person_rejected" != "[]" ] && [ -n "$tf_ledger_doc" ]; then
+      tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
+        '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
+      [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
+      write_atomic "$tf_ledger_file" "$tf_rejected_doc"
+    fi
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Run tests-freeze again once the checker confirms the repaired test."
   fi
 
   # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
@@ -5194,7 +5224,8 @@ TF_EOF
   # The doneWhen row is keyed by the unit's own id and belongs to the order, not to a criterion,
   # so it lands on the order's ledger entry. Replaced or removed on every freeze, the same way a
   # criterion judgement this order already left is replaced rather than added to. The routed
-  # clauses are replaced the same way, and removed when this freeze routed none.
+  # clauses are replaced the same way, and removed when this freeze routed none. A freeze that gets
+  # here had no rejected row, so the rows a person rejected earlier are answered and removed.
   ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
     --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" '
     ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
@@ -5211,7 +5242,8 @@ TF_EOF
       else ((if $dw == null then del(.doneWhenJudgement)
              else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
-               else .absenceClauses = $absences end))
+               else .absenceClauses = $absences end)
+            | del(.rowsRejected))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
