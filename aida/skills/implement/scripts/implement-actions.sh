@@ -4744,20 +4744,31 @@ TF_EOF
     # A row a person rejected goes back to the test author, and the person's words existed only in
     # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
     # note from its verdict file, and `tests-brief` carries them to a fresh test author.
-    local tf_person_rejected tf_rejected_doc tf_check_doc
-    tf_check_doc="$(jq -c '.' "$IMPL_DIR/row-check-$unit_id.json" 2>/dev/null)"
-    [ -n "$tf_check_doc" ] || tf_check_doc='{}'
-    tf_person_rejected="$(printf '%s' "$rows_meta_json" | jq -c --argjson check "$tf_check_doc" '
-        [ .[] | select(.verdict == "rejected" and .judgedBy == "person") | .criterion as $c
-          | {criterion: $c, personWords: .note,
-             checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null)} ]')"
+    local tf_person_rejected tf_rejected_doc tf_check_file tf_check_doc='{}'
+    tf_person_rejected="$(printf '%s' "$rows_meta_json" | jq -c '
+        [ .[] | select(.verdict == "rejected" and .judgedBy == "person") ]')"
     if [ "$tf_person_rejected" != "[]" ] && [ -n "$tf_ledger_doc" ]; then
+      # A missing verdict file leaves each note null. A present one that does not read refuses,
+      # because the rejection would otherwise be lost with it.
+      tf_check_file="$IMPL_DIR/row-check-$unit_id.json"
+      if [ -f "$tf_check_file" ]; then
+        tf_check_doc="$(jq -c '.' "$tf_check_file" 2>/dev/null)"
+        [ -n "$tf_check_doc" ] \
+          || die 3 "tests-freeze: $tf_check_file exists but could not be read as JSON. The rejected rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
+      fi
+      tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" '
+          [ .[] | .criterion as $c
+            | {criterion: $c, personWords: .note,
+               checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null)} ]' 2>/dev/null)"
+      [ -n "$tf_person_rejected" ] \
+        || die 3 "tests-freeze: $tf_check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. Repair or remove it by hand before running this again."
       tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
         '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Run tests-freeze again once the checker confirms the repaired test."
     fi
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Run tests-freeze again once the checker confirms the repaired test."
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
   fi
 
   # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
