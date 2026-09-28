@@ -642,6 +642,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      line of the environment recipe exited non-zero, in either run mode. The message quotes its
 #      first line of output and names `task environment <id> up`. No check ran and nothing is
 #      written, so the same step runs again once the site is up.
+# The code the leftover check added (gap row 217).
+# 104  `start` found uncommitted files in the task's tree, on an interactive run given no
+#      `--leftovers`. Or `--leftovers set-aside` met a change other than an untracked or a modified
+#      file. The message names each path and the orders whose owned files hold it. Nothing is
+#      written and nothing moves.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -777,6 +782,7 @@ usage() {
   cat <<'EOF' >&2
 usage: implement-actions.sh read  <task_folder>
        implement-actions.sh start <task_folder> [--rebased-onto <commit>]
+                            [--leftovers <keep|set-aside>]
        implement-actions.sh preconditions <task_folder>
                             [--recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
@@ -1508,13 +1514,18 @@ do_read() {
 # ------------------------------------------------------------------------------------------------
 
 do_start() {
-  local task_path="" rebased_onto=""
+  local task_path="" rebased_onto="" leftovers_choice=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --rebased-onto)
         [ "$#" -ge 2 ] || die 3 "start: --rebased-onto needs the commit the branch now builds on"
         [ -n "$2" ] || die 3 "start: --rebased-onto was given an empty commit."
         rebased_onto="$2"; shift 2 ;;
+      --leftovers)
+        case "${2:-}" in
+          keep|set-aside) leftovers_choice="$2"; shift 2 ;;
+          *) die 3 "start: --leftovers takes keep or set-aside" ;;
+        esac ;;
       -*) die 3 "start: unrecognized argument: $1" ;;
       *)
         [ -z "$task_path" ] || die 3 "start: unrecognized extra argument: $1"
@@ -1642,6 +1653,49 @@ do_start() {
   # field's value against the schema is check-task.sh's to refuse, not this script's.
   local run_mode
   run_mode="$(task_run_mode "$TASK_PATH" implement)"
+
+  # --- step 7b: files a stopped role left in the tree (gap row 217) -------------------------------
+  # A role stopped mid-run leaves its files uncommitted, and the next role would work beside them.
+  # So start names each path git reports changed or untracked, with the orders whose owned files
+  # hold it. A gitignored file is not read. COMPROMISES.md is AIDA's own file, so it is not named.
+  # `-uall` names each file in a new folder, because only a file meets an owned-file entry.
+  # Interactive refuses until a person picks keep or set-aside. Unattended sets them aside. Only an
+  # untracked or a modified file can move. Any other change is a person's to undo, in both modes.
+  local lo_status lo_line lo_xy lo_rel lo_owners lo_id lo_glob lo_tab lo_orders_tsv lo_tracked=""
+  local leftovers_json='[]' lo_text_jq
+  lo_text_jq='.[] | .path + " (" + (if (.orders | length) > 0 then (.orders | join(", ")) else "no order owns it" end) + ")"'
+  lo_tab="$(printf '\t')"
+  lo_orders_tsv="$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } \
+    | jq -r '.[] | .id as $id | (.ownedFiles // [])[] | $id + "\t" + .' 2>/dev/null)"
+  lo_status="$(git -C "$code_path" status --porcelain --untracked-files=all 2>/dev/null)"
+  while IFS= read -r lo_line; do
+    [ -n "$lo_line" ] || continue
+    lo_xy="$(printf '%s' "$lo_line" | cut -c1-2)"
+    lo_rel="${lo_line#???}"
+    [ "$lo_rel" != "$COMPROMISES_FILE" ] || continue
+    lo_owners=""
+    while IFS="$lo_tab" read -r lo_id lo_glob; do
+      [ -n "$lo_id" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue
+      case ",$lo_owners," in *",$lo_id,"*) ;; *) lo_owners="${lo_owners:+$lo_owners,}$lo_id" ;; esac
+    done <<LO_ORDERS
+$lo_orders_tsv
+LO_ORDERS
+    case "$lo_xy" in '??'|' M'|'M '|'MM') ;; *) lo_tracked="$lo_tracked$lo_rel ($lo_xy), " ;; esac
+    leftovers_json="$(printf '%s' "$leftovers_json" | jq -c --arg p "$lo_rel" --arg xy "$lo_xy" --arg o "$lo_owners" \
+      '. + [{path: $p, status: $xy, orders: ($o | split(",") | map(select(length > 0)))}]')"
+  done <<LO_STATUS
+$lo_status
+LO_STATUS
+  if [ "$leftovers_json" != "[]" ]; then
+    if [ "$run_mode" = "autonomous" ]; then
+      [ "$leftovers_choice" != "keep" ] || die 3 "start: --leftovers keep is a person's call, and this run is unattended."
+      leftovers_choice="set-aside"
+    fi
+    [ -n "$leftovers_choice" ] \
+      || die 104 "start: uncommitted files in $code_path: $(printf '%s' "$leftovers_json" | jq -r "[ $lo_text_jq ] | join(\", \")"). A role stopped mid-run may have left them, and the next role would work beside them. To keep a file, commit it, or run start again with --leftovers keep to leave it as it is. To set them aside, run start again with --leftovers set-aside. That moves them under $IMPL_DIR/set-aside/ and deletes nothing."
+    [ "$leftovers_choice" != "set-aside" ] || [ -z "$lo_tracked" ] \
+      || die 104 "start: these changes cannot be set aside: ${lo_tracked%, }. Only an untracked or a modified file moves aside. Commit them, or undo them by hand, then run start again."
+  fi
 
   # --- step 8: look for an existing snapshot: absent, present-readable, or present-unreadable ----
   local snapshot_present snapshot_doc
@@ -2102,6 +2156,32 @@ do_start() {
     final_criteria_json="$(printf '%s' "$snapshot_criteria_json" | jq -c '[ .[] | {id: .id, rowState: "not-judged"} ]')"
   fi
 
+  # The leftovers move only here, after every refusal, so a refused start moves nothing. An untracked
+  # file moves. A modified file is copied, then its tracked version comes back from HEAD.
+  local set_aside_json='[]' set_aside_dir="" lo_move_tsv
+  [ -z "$ledger_doc" ] || set_aside_json="$(printf '%s' "$ledger_doc" | jq -c '.setAside // []')"
+  if [ "$leftovers_choice" = "set-aside" ] && [ "$leftovers_json" != "[]" ]; then
+    set_aside_dir="$IMPL_DIR/set-aside/$(date -u +%Y%m%dT%H%M%SZ)"
+    [ ! -e "$set_aside_dir" ] || die 3 "start: $set_aside_dir already exists. Run start again in a second."
+    lo_move_tsv="$(printf '%s' "$leftovers_json" | jq -r '.[] | .status + "\t" + .path')"
+    while IFS="$lo_tab" read -r lo_xy lo_rel; do
+      [ -n "$lo_rel" ] || continue
+      mkdir -p "$(dirname -- "$set_aside_dir/$lo_rel")" || die 3 "start: could not create a folder under $set_aside_dir"
+      if [ "$lo_xy" = "??" ]; then
+        mv -- "$code_path/$lo_rel" "$set_aside_dir/$lo_rel" \
+          || die 3 "start: could not move $lo_rel to $set_aside_dir. What moved before it is there."
+      else
+        cp -p -- "$code_path/$lo_rel" "$set_aside_dir/$lo_rel" && git -C "$code_path" checkout -q HEAD -- "$lo_rel" \
+          || die 3 "start: could not set aside the change to $lo_rel in $set_aside_dir. What moved before it is there."
+      fi
+    done <<LO_MOVE
+$lo_move_tsv
+LO_MOVE
+    set_aside_json="$(printf '%s' "$set_aside_json" | jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg folder "$set_aside_dir" --argjson paths "$leftovers_json" \
+      '. + [{at: $at, folder: $folder, paths: [ $paths[] | {path, orders} ]}]')"
+  fi
+
   # The re-snapshot lands after the ledger's hash check above, which reads the hash the ledger was
   # opened against; the ledger written below carries the new one, and one line per replaced order
   # naming both, so a reader can tell which shape each order was built from.
@@ -2122,10 +2202,11 @@ do_start() {
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
     --argjson resnapshots "$resnapshots_json" --argjson startedFromBefore "$started_from_before_json" \
-    --argjson haltsCleared "$halts_cleared_json" \
+    --argjson haltsCleared "$halts_cleared_json" --argjson setAside "$set_aside_json" \
     '{schemaVersion: 1, startedFrom: $startedFrom, startedAt: $startedAt, runMode: $runMode, snapshotHash: $snapshotHash,
       orders: $orders, criteria: $criteria}
      | if ($startedFromBefore | length) > 0 then .startedFromBefore = $startedFromBefore else . end
+     | if ($setAside | length) > 0 then .setAside = $setAside else . end
      | if ($haltsCleared | length) > 0 then .haltsCleared = $haltsCleared else . end
      | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
@@ -2231,6 +2312,8 @@ do_start() {
     --argjson removed "$removed_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
     --argjson partialBuild "$st_partial_json" \
+    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $lo_text_jq ]")" \
+    --arg setAside "$set_aside_dir" \
     --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
     --argjson ready "$ready_ids_json" \
@@ -2239,7 +2322,10 @@ do_start() {
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
      drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted,
      driftCleared: $driftCleared, removed: $removed, newLiveOrders: $newLiveOrders,
-     partialBuild: $partialBuild, halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
+     partialBuild: $partialBuild, leftovers: $leftovers, setAside: $setAside,
+     halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
+    | if ($leftovers | length) == 0 then del(.leftovers) else . end
+    | if $setAside == "" then del(.setAside) else . end
     | if ($removed | length) == 0 then del(.removed) else . end
     | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
     | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"

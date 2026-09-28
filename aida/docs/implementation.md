@@ -566,6 +566,10 @@ why, and the commit range that built each order. Read it first, before the recor
 compaction. A person arriving after an autonomous run reads the rows a model judged to decide
 where to look. Running `/aida:implement <task-id>` again resumes. The start reports which orders
 are in flight, which halted and why, and which are ready, then continues with the next ready one.
+A role stopped mid-run can leave files in the tree that nobody committed. The start names each one
+and the order that owns it. With you present, it stops and you choose: keep the file, or set it
+aside. An autonomous run sets them aside. Nothing is deleted. The files move under the task's
+`implementation/set-aside/` folder, and the start names where.
 The tool grants a skill holds last one turn, so the same command may prompt for permission again
 partway through a long build. That is how grants work, not a fault in the build.
 
