@@ -168,7 +168,7 @@
     "information": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "summary", "file", "lines"],
+      "required": ["id", "summary", "file", "lines", "departsFromDesign"],
       "properties": {
         "id": {
           "type": "string",
@@ -187,6 +187,10 @@
         "lines": {
           "type": "string",
           "description": "Which lines, as the reviewer wrote it. May be empty."
+        },
+        "departsFromDesign": {
+          "type": "boolean",
+          "description": "The reviewer's one routed answer: true when the item names a departure from the order's design or interface (gap row 224). `review-record` refuses an item without it (exit 52), and halts the order for design drift on true (exit 107), naming the item."
         }
       }
     },

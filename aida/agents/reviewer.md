@@ -43,7 +43,8 @@ findings to the path the brief gives, in this shape:
   { "id": "f1", "severity": "high|medium|low", "file": "...", "lines": "...",
     "linkedTo": "c3", "evidence": "...", "fixScope": ["path", ...] }
 ], "information": [
-  { "id": "i1", "summary": "one sentence", "file": "...", "lines": "..." }
+  { "id": "i1", "summary": "one sentence", "file": "...", "lines": "...",
+    "departsFromDesign": false }
 ] }
 ```
 
@@ -61,7 +62,9 @@ the evidence that this project did not accept the source.
 next order needs that cites no criterion the diff fails is not a finding. A frozen base class built
 against a schema the site does not have. A function that returns one result per occurrence, so
 the next order must deduplicate. Write one sentence per item, with the file and lines. No severity
-and no fix scope. The record keeps it, and the next order's briefs carry it. Your return text says
+and no fix scope. Every item carries `departsFromDesign`: true when it names a departure from the
+order's design or interface, which sends the order back to design, and false otherwise. The record
+keeps it, and the next order's briefs carry it. Your return text says
 only the file path and the two counts, findings and information.
 
 **Read the plays.** The brief's `playbooksPath` names the playbook record that research loaded,

@@ -95,13 +95,14 @@ act on one outside this task.
 
 A departure the builder declared never closes clean, whatever the review holds. The script scans
 the latest attempt's report and the interface record in its build record, the way `build-record`
-does. On a hit it refuses (exit 107), writes no review record, and halts the order for design
-drift. The halt names the file and the departure's line. The order's interface is what is wrong,
-so no fixer can repair it. Put it to the person, opening with: "The builder says it departed from
-the design of this unit of work. Only you can say which one stands. Change the design and the
-unit is built again. Keep the departure and the review goes on." Then say the line. To change the
-design, amend the order's interface in design and close design, then offer the restart in
-`references/finish.md`. To keep the departure, run `review-record` again with
+does. An information item the reviewer marks `departsFromDesign` true is a hit too. On a hit it
+refuses (exit 107), writes no review record, and halts the order for design drift. The halt names
+the file and the line number, or the item. The order's interface is what is wrong, so no fixer
+can repair it. Put it to the person, opening with: "What was built departs from the design of
+this unit of work. Only you can say which one stands. Change the design and the unit is built
+again. Keep the departure and the review goes on." Then say what that line or item says. To
+change the design, amend the order's interface in design and close design, then offer the
+restart in `references/finish.md`. To keep the departure, run `review-record` again with
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
 reason, and the order goes on as below. Unattended, the flag refuses (exit 68), and the halt
 stands.

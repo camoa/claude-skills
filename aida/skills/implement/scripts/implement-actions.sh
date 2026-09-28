@@ -1241,7 +1241,7 @@ im_next_step() {
     i=$((i + 1))
   done
   printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson tools_only "$tools_only" --argjson snap "$snapshot" \
-    --argjson retake_pending "$retake_pending" \
+    --argjson retake_pending "$retake_pending" --arg departure_prefix "$RR_DEPARTURE_PREFIX" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
     | ([ $orders[] | select(.lastStep == "closed") | .id ]) as $closed
@@ -1252,6 +1252,7 @@ im_next_step() {
                           or (.lastStep == "code-written" and ((.attemptsUsed // 0) < (.attemptsAllowed // $allowed)))) ] | .[0]) as $bd
     | ([ $live[] | select(.lastStep == null) | select((($deps[.id] // []) - $closed) | length == 0) ] | .[0]) as $ts
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
+    | ([ $orders[] | select((.haltedBecause // "") | contains($departure_prefix)) ] | .[0]) as $departure
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift: the design removed ")) ] | .[0]) as $removed
     | ([ $orders[] | select((.haltedBecause // "") | (contains("attempts spent") or contains("budget spent"))) ] | .[0]) as $spent
     | ([ $orders[] | select((.haltedBecause // "") | startswith("test wrong: ")) ] | .[0]) as $testwrong
@@ -1270,6 +1271,7 @@ im_next_step() {
       elif $removed != null and $ts != null then "restart: the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
+      elif $departure != null then "finish: \($departure.id) is halted for a departure from the design, so offer the restart or review-record --accept-deviation"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
       elif $testwrong != null then "retake-tests \($testwrong.id): a frozen test is ruled wrong, and the retake sends the order back to its tests"
@@ -7732,17 +7734,18 @@ rv_finding_record() {
 
 # Sets RV_INFORMATION_ARRAY to the `information` list of the findings file $1, checked item by
 # item, or to [] when the file has no such key. $2 the action's own name. An item is
-# {id, summary, file, lines}: information for the person that is not a finding, so it carries no
-# severity and no fix scope (live-run row 103). Dies (exit 52, the findings shape's own code) on a
-# list that is not an array, an item that is not an object, an empty id or summary, or an id used
-# twice. Called as a plain statement, never with `$(...)`, for the reason rv_read_findings_array
+# {id, summary, file, lines, departsFromDesign}: information for the person that is not a finding,
+# so it carries no severity and no fix scope (live-run row 103). departsFromDesign is the
+# reviewer's one routed answer: true sends the order back to design (gap row 224). Dies (exit 52,
+# the findings shape's own code) on a list that is not an array, an item that is not an object, an
+# empty id or summary, a departsFromDesign that is not a boolean, or an id used twice. Called as a plain statement, never with `$(...)`, for the reason rv_read_findings_array
 # states. The file's JSON and its duplicate keys were already checked by that reader.
 RV_INFORMATION_ARRAY="[]"
 rv_read_information_array() {
   local file="$1" who="$2" arr count i one id summary seen_ids=""
   arr="$(jq -c 'if has("information") then .information else [] end' "$file" 2>/dev/null)"
   [ "$(printf '%s' "$arr" | jq -r 'type' 2>/dev/null)" = "array" ] \
-    || die 52 "$who: $file holds an information key that is not an array. The shape is { \"findings\": [ ... ], \"information\": [ { \"id\", \"summary\", \"file\", \"lines\" } ] }."
+    || die 52 "$who: $file holds an information key that is not an array. The shape is { \"findings\": [ ... ], \"information\": [ { \"id\", \"summary\", \"file\", \"lines\", \"departsFromDesign\" } ] }."
   count="$(printf '%s' "$arr" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
@@ -7754,6 +7757,8 @@ rv_read_information_array() {
     summary="$(printf '%s' "$one" | jq -r '.summary // "" | tostring')"
     [ -n "$summary" ] \
       || die 52 "$who: information $id in $file has no summary. One sentence saying what the person needs to know."
+    [ "$(printf '%s' "$one" | jq -r '.departsFromDesign | type')" = "boolean" ] \
+      || die 52 "$who: information $id in $file has no departsFromDesign boolean. It is true when the item names a departure from the order's design or interface, false otherwise."
     case " $seen_ids " in
       *" $id "*) die 52 "$who: $file names the information item $id more than once. Each item carries its own id." ;;
     esac
@@ -7762,7 +7767,8 @@ rv_read_information_array() {
   done
   RV_INFORMATION_ARRAY="$(printf '%s' "$arr" | jq -c \
     '[ .[] | {id: (.id | tostring), summary: (.summary | tostring),
-              file: ((.file // "") | tostring), lines: ((.lines // "") | tostring)} ]')"
+              file: ((.file // "") | tostring), lines: ((.lines // "") | tostring),
+              departsFromDesign} ]')"
 }
 
 # Every non-goal the given finding list cites, as a printable list. Empty when none does.
@@ -8025,40 +8031,48 @@ do_review_record() {
   [ -z "$dirty" ] \
     || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 
-  # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
-  # review holds: the order's interface is what is wrong, so no fixer can repair it. The scan is
-  # build-record's own, over the latest attempt's report and the interface record its build record
-  # holds. A build record written before that scan existed reaches review with one in it. The
-  # builder's line goes into the halt with the halt separator broken, so it forges no segment.
-  local departure departure_file iface_file halt_why=""
-  departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
-  departure="$(br_deviations "$departure_file" | head -n 1)"
-  if [ -z "$departure" ]; then
-    iface_file="$(mktemp)" || die 3 "review-record: could not create a temporary file"
-    printf '%s\n' "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" >"$iface_file"
-    departure="$(br_deviations "$iface_file" | head -n 1)"
-    rm -f "$iface_file"
-    departure_file="the interfaceRecord of $IMPL_DIR/build-$unit_id.json"
-  fi
-  if [ -z "$departure" ]; then
-    [ -z "$accept" ] \
-      || die 3 "review-record: --accept-deviation was given, and neither the report nor the interface record of $unit_id declares a departure. Nothing is written."
-  else
-    halt_why="$RR_DEPARTURE_PREFIX, in $departure_file: $(printf '%s' "$departure" | sed 's/; earlier: /, earlier: /g')"
-    if [ -z "$accept" ]; then
-      local departure_ledger
-      departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
-      [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
-      write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
-      die 107 "review-record: $unit_id is halted for design drift. The builder declared a departure from the design, in $departure_file: $departure. The order's interface is what is wrong, so no fixer can repair it, and no review record is written. Amend the order's interface in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
-    fi
-  fi
-
   local raw_findings alignment count i one built findings_json information_json outside outside_lines=""
   rv_read_findings_array "$findings_path" "findings" "review-record"
   raw_findings="$RV_FINDINGS_ARRAY"
   rv_read_information_array "$findings_path" "review-record"
   information_json="$RV_INFORMATION_ARRAY"
+
+  # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
+  # review holds: the order's interface is what is wrong, so no fixer can repair it. The scan is
+  # build-record's own, over the latest attempt's report and the interface record its build record
+  # holds. A build record written before that scan existed reaches review with one in it. The
+  # reviewer's information item with departsFromDesign true is the same fact. The halt names the
+  # file and the line, never the builder's text, which may hold the halt separator.
+  local departure departure_file departure_line="" iface_file halt_why=""
+  departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
+  departure="$(br_deviations "$departure_file" | head -n 1)"
+  [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$departure_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
+  if [ -z "$departure" ]; then
+    iface_file="$(mktemp)" || die 3 "review-record: could not create a temporary file"
+    printf '%s\n' "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" >"$iface_file"
+    departure="$(br_deviations "$iface_file" | head -n 1)"
+    [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$iface_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
+    rm -f "$iface_file"
+    departure_file="the interfaceRecord of $IMPL_DIR/build-$unit_id.json"
+  fi
+  [ -z "$departure" ] || halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"
+  if [ -z "$departure" ]; then
+    departure="$(printf '%s' "$information_json" | jq -r \
+      '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
+    departure_file="$findings_path"
+    [ -z "$departure" ] \
+      || halt_why="$RR_DEPARTURE_PREFIX, which the reviewer marks departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
+  fi
+  if [ -z "$departure" ]; then
+    [ -z "$accept" ] \
+      || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
+  elif [ -z "$accept" ]; then
+    local departure_ledger
+    departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
+    [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
+    write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
+    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. The order's interface is what is wrong, so no fixer can repair it, and no review record is written. Amend the order's interface in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
+  fi
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   findings_json='[]'
   count="$(printf '%s' "$raw_findings" | jq 'length')"
@@ -9813,6 +9827,10 @@ do_clear_halt() {
   local drift_route=""
   [ "$other_action" != "restart" ] \
     || drift_route=" Or run start again: it clears a halt about this order's own design file once the design no longer differs from the snapshot."
+  case "$halt" in
+    *"$RR_DEPARTURE_PREFIX"*)
+      drift_route=" Or a person keeps the departure: run review-record again with --accept-deviation <their reason>, in references/finish.md." ;;
+  esac
   [ -z "$other_action" ] \
     || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead.$drift_route Nothing is written."
 
