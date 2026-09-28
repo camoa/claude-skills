@@ -653,7 +653,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      stopped, so this is not an attempt, whatever it committed. The message quotes the line and
 #      names each commit after --started-at. Nothing is recorded and no attempt is spent.
 #      Unattended, the order halts first, and the halt names the commits. A deviation line other
-#      than `Deviation: none`, in the report or the interface record, is a stop too (gap row 221).
+#      than `Deviation: none`, or a heading that starts with "Deviation", in the report or the
+#      interface record, is a stop too (gap row 221).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent.
@@ -6903,11 +6904,21 @@ BR_SHOTS
 }
 
 # Prints each line of a builder's file that starts with one key, such as `stop`, in any case.
-# Markdown emphasis, a list marker and a heading marker are dropped first, so `- **Stop:** none`
-# and `## Deviation: x` count. $1 the file, $2 the key.
+# Markdown emphasis and a list marker are dropped first, so `- **Stop:** none` counts. A heading
+# never counts, so a `# stop:` comment in a code block is not the stop line. $1 the file, $2 the key.
 br_marked_lines() {
-  sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^[-#]*[[:space:]]*//' "$1" 2>/dev/null \
+  sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^-[[:space:]]*//' "$1" 2>/dev/null \
     | grep -i "^$2:"
+}
+
+# Prints each deviation a builder's file names, other than none: its deviation lines, and every
+# heading whose text starts with "Deviation". The live builder wrote a section headed "Deviation
+# from the module's DI convention" (gap row 221). $1 the file.
+br_deviations() {
+  { br_marked_lines "$1" deviation
+    grep -i '^[[:space:]]*#[#]*[[:space:]]*[*]*deviation' "$1" 2>/dev/null \
+      | sed -e 's/\*//g' -e 's/^[[:space:]]*#[#]*[[:space:]]*//'
+  } | grep -v -i '^deviations*:[[:space:]]*none[[:space:]]*$'
 }
 
 do_build_record() {
@@ -7047,7 +7058,8 @@ do_build_record() {
   # carries exactly one stop line, `Stop: none` or `Stop: <cause>: <reason>`, and the builder has to
   # choose. It then wrote the misfit up as a deviation under `Stop: none` (gap row 221). So a report
   # also carries exactly one `Deviation: none` or `Deviation: <what>: <why>`, and the interface
-  # record may carry the same line. A deviation other than none is a stop. A stop recorded as an
+  # record may carry the same line. A deviation other than none is a stop, and so is a heading
+  # that starts with "Deviation" in either file, checked before the count. A stop recorded as an
   # attempt spends the budget on work the rule forbade. The halt reason names the file and the
   # commits, never the builder's text, because that text may hold the halt separator.
   local ledger_run_mode stop_lines stop_count stop_value deviation_count stop_file="$report_path"
@@ -7059,14 +7071,15 @@ do_build_record() {
   stop_value="$(printf '%s' "${stop_lines#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   case "$stop_value" in
     [Nn][Oo][Nn][Ee])
-      stop_lines="$(br_marked_lines "$report_path" deviation)"
-      deviation_count="$(printf '%s' "$stop_lines" | grep -c '.')"
-      [ "$deviation_count" = "1" ] \
-        || die 106 "build-record: the builder's report at $report_path holds $deviation_count deviation lines, and it must hold exactly one: 'Deviation: none', or 'Deviation: <what>: <why>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
-      stop_lines="$(printf '%s\n' "$stop_lines" | grep -v -i '^deviation:[[:space:]]*none[[:space:]]*$')"
+      stop_lines="$(br_deviations "$report_path")"
       if [ -z "$stop_lines" ] && [ -f "$interface_path" ]; then
         stop_file="$interface_path"
-        stop_lines="$(br_marked_lines "$interface_path" deviation | grep -v -i '^deviation:[[:space:]]*none[[:space:]]*$')"
+        stop_lines="$(br_deviations "$interface_path")"
+      fi
+      if [ -z "$stop_lines" ]; then
+        deviation_count="$(br_marked_lines "$report_path" deviation | grep -c '.')"
+        [ "$deviation_count" = "1" ] \
+          || die 106 "build-record: the builder's report at $report_path holds $deviation_count deviation lines, and it must hold exactly one: 'Deviation: none', or 'Deviation: <what>: <why>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
       fi
       ;;
   esac

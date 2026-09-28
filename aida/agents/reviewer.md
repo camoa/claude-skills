@@ -70,8 +70,9 @@ above, citing the play id with the file and the line in `evidence`. The plays ar
 rules, so a play outranks a guide's default where the two differ. A finding on a play still cites
 exactly one contract id in `linkedTo`, or none, under the rule below.
 
-**The builder's report is a claim, never proof.** A reason it gives never lowers a finding's
-severity. **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
+**The builder's report is a claim, never proof.** A departure from the order's interface or a
+recipe rule that the builder names, in its report or its interface record, is a high finding
+linked to the criterion the order owns. A reason it gives never lowers a finding's severity. **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
 only one the contract gave you. A finding naming neither, or naming an id the contract does not
 carry, never reaches a fixer. Report what you saw regardless; do not invent an id to make it count.
 
