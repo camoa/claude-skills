@@ -7104,7 +7104,7 @@ do_build_record() {
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
-  local record_file="$IMPL_DIR/build-$unit_id.json" order_started_at="$started_at_full"
+  local record_file="$IMPL_DIR/build-$unit_id.json"
   if [ -f "$record_file" ]; then
     local existing_doc existing_commit existing_attempt
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
@@ -7122,10 +7122,6 @@ do_build_record() {
     if [ -n "$existing_commit" ] && [ "$existing_commit" = "$current_commit" ]; then
       die 45 "build-record: $record_file already holds attempt $existing_attempt at commit $current_commit, so the code has not moved since that attempt. An attempt spent on unchanged code is an attempt nobody worked."
     fi
-    # A later attempt keeps the order's first start, so review and close read every attempt's
-    # commits (gap row 222). `restart` and `retake-tests` move this record aside, and a second
-    # freeze refuses once the order is built, so the attempt after either begins a new range.
-    order_started_at="$(printf '%s' "$existing_doc" | jq -r --arg s "$started_at_full" '.orderStartedAt // .startedAt // $s')"
   fi
 
   # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
@@ -7183,7 +7179,6 @@ do_build_record() {
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c \
     --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
-    --arg orderStartedAt "$order_started_at" \
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
     --argjson executed "$executed_count" \
@@ -7192,7 +7187,6 @@ do_build_record() {
       takenAt: $takenAt,
       unit: $unit,
       startedAt: $startedAt,
-      orderStartedAt: $orderStartedAt,
       commit: $commit,
       attempt: $attempt,
       interfaceRecord: $interfaceRecord,
@@ -7529,6 +7523,62 @@ rv_load_range_repo() {
   RV_RANGE_NAME="the project folder"
 }
 
+# Where an order's range starts, for review-brief and close (gap row 222). The build record keeps
+# the last attempt only, so its startedAt drops every earlier attempt. In the code repository the
+# start is the freeze record's commit, HEAD when the tests froze: `restart` and `retake-tests`
+# move the records aside, so the next freeze starts a new range. A record order keeps the build
+# record's startedAt, because AIDA's own writes land in the project folder between its attempts.
+# $1 the action's own name, $2 the unit id. Call after rv_load_build_record and
+# rv_load_range_repo. Sets RV_ORDER_START.
+RV_ORDER_START=""
+rv_load_order_start() {
+  local who="$1" unit_id="$2"
+  if [ -n "$RV_RANGE_SCOPE" ]; then
+    RV_ORDER_START="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
+  else
+    RV_ORDER_START="$(jq -r '.commit // ""' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
+  fi
+  [ -n "$RV_ORDER_START" ] \
+    || die 3 "$who: the start of $unit_id's range could not be read from its freeze record or its build record, though both steps write it."
+}
+
+# The commits after $2 up to $3 in the repository $1, oldest first, one line each: "own <sha>" when
+# the commit is order $4's, "other <sha>" when it is not. A commit is the order's when a range one
+# of its records names holds it: the build record's, or a fix round's. Or when every file it
+# changes matches the order's ownedFiles, which is how an earlier attempt is found. Another
+# order's freeze or build changes a file this order does not own, so it reads as other.
+# $4 the frozen work order, $5 the folder holding the order's build and fix records.
+im_order_commits() {
+  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" f r c p g owned paths mine
+  id="$(printf '%s' "$unit_json" | jq -r '.id // ""')"
+  owned="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
+  for f in "$dir/build-$id.json" "$dir/fix-$id-"*.json; do
+    [ -f "$f" ] || continue
+    r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
+    [ -z "$r" ] || recorded="$recorded$(git -C "$repo" rev-list "$r" 2>/dev/null)
+"
+  done
+  for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
+    if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
+    paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
+    mine=false
+    [ -z "$paths" ] || mine=true
+    while IFS= read -r p; do
+      [ -n "$p" ] && [ "$mine" = "true" ] || continue
+      mine=false
+      while IFS= read -r g; do
+        [ -n "$g" ] || continue
+        if tf_path_matches_catalog_glob "$p" "$g"; then mine=true; break; fi
+      done <<IOC_OWNED
+$owned
+IOC_OWNED
+    done <<IOC_PATHS
+$paths
+IOC_PATHS
+    if [ "$mine" = "true" ]; then echo "own $c"; else echo "other $c"; fi
+  done
+}
+
 # Exit 48: the order must be at one of the steps this action can follow. $1 the action's own name,
 # $2 the unit id, $3 the allowed steps, separated by spaces.
 rv_require_step() {
@@ -7753,16 +7803,34 @@ do_review_brief() {
   # (ideal/implementation.md, "What a review is given, and what it is refused"). For an order
   # whose proof is record it is the task folder's diff in the project folder, and the brief names
   # the deliverables by path, since a document is read whole and not as a patch (nyc defect 17).
-  # The range is the order's, from its first attempt's start (gap row 222).
-  local started_at commit diff_path deliverables_json
-  started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.orderStartedAt // .startedAt // ""')"
+  # In the code repository the diff runs over every attempt, and holds only the files this order's
+  # own commits changed, so another order built between two attempts stays out (gap row 222).
+  local started_at commit diff_path deliverables_json own_paths
+  rv_load_order_start "review-brief" "$unit_id"
+  started_at="$RV_ORDER_START"
   commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
-  [ -n "$started_at" ] && [ -n "$commit" ] \
-    || die 3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no startedAt or no commit, though build-record writes both."
+  [ -n "$commit" ] \
+    || die 3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no commit, though build-record writes it."
   diff_path="$IMPL_DIR/diff-$unit_id.patch"
   deliverables_json="[]"
-  git_diff_of "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_RANGE_SCOPE" > "$diff_path" \
-    || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+  if [ -n "$RV_RANGE_SCOPE" ]; then
+    git_diff_of "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_RANGE_SCOPE" > "$diff_path" \
+      || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+  else
+    own_paths="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_UNIT_JSON" "$IMPL_DIR" \
+      | sed -n 's/^own //p' | while IFS= read -r c; do
+          git -C "$RV_RANGE_REPO" diff-tree --no-commit-id --name-only -r --no-renames "$c"
+        done | LC_ALL=C sort -u)"
+    set --
+    while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<RB_PATHS
+$own_paths
+RB_PATHS
+    : > "$diff_path" || die 3 "review-brief: could not write $diff_path."
+    if [ "$#" -gt 0 ]; then
+      git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" -- "$@" > "$diff_path" 2>/dev/null \
+        || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+    fi
+  fi
   [ -z "$RV_RANGE_PATHS" ] || deliverables_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
 
   local criteria_json nongoals_json tests_json
@@ -9050,12 +9118,25 @@ do_close() {
   rv_load_range_repo "close" "$RV_UNIT_JSON"
 
   local started_at head_now
-  started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.orderStartedAt // .startedAt // ""')"
-  [ -n "$started_at" ] \
-    || die 3 "close: $IMPL_DIR/build-$unit_id.json holds no startedAt, though build-record writes it."
+  rv_load_order_start "close" "$unit_id"
+  started_at="$RV_ORDER_START"
   head_now="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   [ -n "$head_now" ] \
     || die 3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
+
+  # A range holds every commit between its ends. When another order's commit sits between two of
+  # this order's attempts, the range starts after the last such commit, so it names none of that
+  # order's work. The earlier commits of this order are printed, not recorded (gap row 222).
+  local close_commits last_other earlier_own=""
+  if [ -z "$RV_RANGE_SCOPE" ]; then
+    close_commits="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$head_now" "$RV_UNIT_JSON" "$IMPL_DIR")"
+    last_other="$(printf '%s\n' "$close_commits" | sed -n 's/^other //p' | tail -1)"
+    if [ -n "$last_other" ]; then
+      earlier_own="$(printf '%s\n' "$close_commits" | sed -n "/^other $last_other\$/q;s/^own //p" \
+        | cut -c1-12 | tr '\n' ' ')"
+      started_at="$last_other"
+    fi
+  fi
 
   # Exit 61 and exit 63. Close writes the commit range this order produced, and a range is a claim
   # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
@@ -9186,13 +9267,15 @@ CLOSE_FAKES
   # The model-judged count is over the whole ledger, not this order alone: it is what a person
   # returning to a finished run reads to list every row no person ever looked at.
   im_print_summary "close" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --argjson served "$served_json" \
-    --arg ledger "$RV_LEDGER_FILE" \
+    --arg ledger "$RV_LEDGER_FILE" --arg earlier "${earlier_own% }" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
     | {order: $id,
        state: ($o.lastStep // ""),
-       commitRange: ($o.commitRange // ""),
-       attempts: ("\($o.attemptsUsed // 0) used"),
+       commitRange: ($o.commitRange // "")}
+    + (if $earlier == "" then {} else
+        {earlierCommits: ($earlier + ": this order'"'"'s own, before another order'"'"'s commit, so outside commitRange")} end)
+    + {attempts: ("\($o.attemptsUsed // 0) used"),
        rounds: ("\($o.roundsUsed // 0) used"),
        criterion: [ (.criteria // [])[] | select((.id as $i | $served | index($i)) != null)
                     | {id: .id, rowState: .rowState,
@@ -9826,8 +9909,10 @@ rs_on_branch() {
 # entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
 # the same subject test decides it. Without them the reset answer stops at the superseded freeze
 # and leaves the wrong test standing in the tree (live-run row 147). A build record holds
-# the order's range over every attempt (gap row 222); a fix record each round's. A record whose
-# commits git no longer has names nothing (live-run row 94).
+# the last attempt's range; a fix record each round's. A record whose commits git no longer has
+# names nothing (live-run row 94). An earlier attempt is in no record, so a build record's
+# commits are read from `startedFrom` to its commit, and im_order_commits keeps this order's own.
+# Another order's commit is never listed, so no reset advice drops it (gap row 222).
 # A build and fix record does not stay at the top of the implementation folder. `retake-tests`
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
@@ -9849,7 +9934,10 @@ rs_on_branch() {
 # folder the restart's own ledger reset had stopped naming (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
-  local out='[]' c old range file kind dir files started span table="" lost=""
+  local out='[]' c old range file kind dir files started span table="" lost="" unit_json
+  unit_json="$(jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {id: $id}' \
+    "$impl/snapshot.json" 2>/dev/null)"
+  [ -n "$unit_json" ] || unit_json="$(jq -nc --arg id "$one_id" '{id: $id}')"
   # `git log --grep` reads the whole message, so it only narrows the candidates; the subject test
   # below decides. HEAD alone when the ledger holds no usable startedFrom, which no ledger this
   # stage writes does: the field is required, and the wider search still answers this order.
@@ -9909,7 +9997,7 @@ find "$task" -mindepth 2 -maxdepth 2 -type d -path "*/implementation-*/retaken-$
 RS_RETAKEN
   while IFS= read -r file; do
     [ -f "$file" ] || continue
-    range="$(jq -r 'select(.startedAt != null and .commit != null) | (.orderStartedAt // .startedAt) + ".." + .commit' "$file" 2>/dev/null)"
+    range="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$file" 2>/dev/null)"
     [ -n "$range" ] || continue
     case "$file" in */build-*) kind=build ;; *) kind=fix ;; esac
     while IFS= read -r c; do
@@ -9924,7 +10012,11 @@ RS_RETAKEN
       out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg kind "$kind" --arg c "$c" --arg range "$range" '
         if any(.[]; .commit == $c) then . else . + [{order: $id, kind: $kind, commit: $c, range: $range}] end')"
     done <<RS_RANGE
-$(git -C "$codepath" rev-list --reverse "$range" 2>/dev/null)
+$(if [ "$kind" = "build" ] && [ "$span" != HEAD ]; then
+    im_order_commits "$codepath" "$started" "${range#*..}" "$unit_json" "$(dirname "$file")" | sed -n 's/^own //p'
+  else
+    git -C "$codepath" rev-list --reverse "$range" 2>/dev/null
+  fi)
 RS_RANGE
   done <<RS_FILES
 $files
