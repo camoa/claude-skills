@@ -240,8 +240,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  13  a new run found design-closed.json, readable, but its recorded hash disagrees with a hash
 #      re-derived from the live alignment.json and design/*.json. Design changed after it closed,
 #      without closing again. Close design again. A resumed run answers the same when a drifted
-#      order that has not started would take its live copy, and `restart` when the halted orders
-#      would: a live copy design did not close on is never frozen.
+#      order that has not started would take its live copy, or a started or closed order that
+#      only gained owned files or findings would take its copy in place, and `restart` when the
+#      halted orders would: a live copy design did not close on is never frozen.
 #  14  the task's own project.json exists but is not valid JSON, so its codePath cannot be read.
 #      A different fact from exit 3's "no usable codePath", which is a valid file with the field
 #      absent or empty.
@@ -1252,7 +1253,11 @@ im_next_step() {
                           or (.lastStep == "code-written" and ((.attemptsUsed // 0) < (.attemptsAllowed // $allowed)))) ] | .[0]) as $bd
     | ([ $live[] | select(.lastStep == null) | select((($deps[.id] // []) - $closed) | length == 0) ] | .[0]) as $ts
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
-    | ([ $orders[] | select((.haltedBecause // "") | contains($departure_prefix)) ] | .[0]) as $departure
+    # A departure routes to accept-deviation only while it is the one drift segment of the order. A
+    # design change drifted it too, so keeping the departure no longer answers the halt.
+    | ([ $orders[] | select((.haltedBecause // "") | contains($departure_prefix))
+         | select([ (.haltedBecause | split("; earlier: "))[] | select(startswith("design drift"))
+                    | select(startswith($departure_prefix) | not) ] | length == 0) ] | .[0]) as $departure
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift: the design removed ")) ] | .[0]) as $removed
     | ([ $orders[] | select((.haltedBecause // "") | (contains("attempts spent") or contains("budget spent"))) ] | .[0]) as $spent
     | ([ $orders[] | select((.haltedBecause // "") | startswith("test wrong: ")) ] | .[0]) as $testwrong
