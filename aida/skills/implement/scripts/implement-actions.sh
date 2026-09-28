@@ -5464,7 +5464,8 @@ do_build_brief() {
   unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c "$REASONING_JQ"'
     {id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
       doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: liveReasoning,
-      proof: (.proof // "tests"), verify: (.verify // [])}')"
+      proof: (.proof // "tests"), verify: (.verify // []),
+      findings: [ (.findings // [])[] | select(has("setAside") | not) | {ref, text} ]}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
   tests_out="$(printf '%s' "$tests_doc" | jq -c \

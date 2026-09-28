@@ -138,6 +138,14 @@
       },
       "description": "The existing things this order's build and tests call, one entry per reuse disposition, written by design-actions.sh's `dispose` beside the outcome it puts in `reasoning`. Optional: an order disposed before this field has none, and an order that reuses nothing has none. The tests brief carries this list whole. The test author may not open production source, and a reused module belongs to no work order (live-run row 69)."
     },
+    "findings": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "description": "The research findings this order accounts for, one entry per finding, written by design-actions.sh's `account` alone (gap row 223). An entry with no `setAside` is a finding this order uses, and the build brief carries it. An entry with `setAside` is a finding design weighed and did not use, with the reason, and a critic reads that reason. `check` and `close` refuse while a finding under research/ is in no order's list. Optional: an order accounted for nothing has none."
+    },
     "verify": {
       "type": "array",
       "default": [],
@@ -165,6 +173,31 @@
           "type": "string",
           "minLength": 1,
           "description": "What the reused thing exposes, in design's own words read from the code. The class or service id, and the shape a test builds against: the method, its arguments, and the keys of what it returns."
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "text"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*#[1-9][0-9]*$",
+          "description": "The finding, as `<search>#<n>`: its search's file under research/, and its place in that file's findings, counted from 1 as research-render.sh numbers it."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The finding's text, copied from the research file when the entry was written, so the frozen order carries it."
+        },
+        "setAside": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this finding is not used. Absent when the order uses it."
         }
       }
     },

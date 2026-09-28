@@ -47,6 +47,7 @@ on record the way every other design write is.
 | diff budget | How much change the order should take, in plain words |
 | proof | `tests` for code a test can pin. `gate` for tools run that change state, such as configuration. `record` for a document. `observe` for what a page shows. `confirm` for code on a task with no automated tests |
 | verify | The order's own proof, from the recipe or the research that covers it: commands a script runs and checks a model judges, each citing its source |
+| findings | The research findings this order accounts for. Each one is used, or set aside with a reason. The build brief carries the used ones |
 
 Serving and owning are two lists because they answer two questions. One criterion often needs
 several orders. A shared thing, such as one base class serving two criteria, is built once
@@ -64,8 +65,14 @@ constrains it. The diff budget is a signal to the reviewer, never a limit that a
 
 ## What design reads first
 
-Design reads every research finding and the plays research loaded. A finding that says nothing
-was found is still an answer. Design then opens the guides and recipes research named without
+Design reads every research finding and the plays research loaded, and accounts for each
+finding. A finding is used by an order, or set aside on it with a reason. A finding that names a
+collaborator, a service, a convention or a constraint is used by the order it affects. A finding
+that says nothing was found is still an answer, and it is accounted for too. The check and the
+close refuse while a finding is in no order's list, and name each one with the first line of its
+text. The implementer sees each used finding in its build brief, and a critic reads each reason
+for a set-aside. A design that closed before this rule has no entries. Its next check or close
+names every finding, and design accounts for each one before it closes again. Design then opens the guides and recipes research named without
 reading. One recipe covering the work means the decision is made and design follows it. Two, and
 design reads both and picks the fit.
 

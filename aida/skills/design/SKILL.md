@@ -99,12 +99,20 @@ Exit 6: research has not closed on this task. Research is required and is never 
 the research skill and stop. A `NOTE:` line names a stated mechanism edited after research
 grounded it; read that claim as ungrounded.
 
-Then read every file under `<task_folder>/research/`, one search at a time. Each holds findings
-for one subject: prior art inside the project, prior art outside it, guides and recipes, what
-reputable sources recommend, or an assumption checked. A finding that says nothing was found is
-not a reason to stop. Design decides from nothing found, same as when research covered it.
+Then account for each research finding. Each `<task_folder>/research/<search>.md` holds the
+findings of one search, numbered from 1. A finding is named `<search>#<n>`. Each finding is used
+by an order or set aside with a reason. A finding that names a collaborator, a service, a
+convention or a constraint is used by the order it affects. A finding that says nothing was found
+is accounted for too. Once the order a finding affects exists, record the finding on it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh account "<task_folder>" \
+  --id <woId> --finding <search>#<n> [--set-aside "<why this order does not use it>"]
+```
+Without `--set-aside`, the order uses the finding, and the build brief carries its text. A
+second call for the same finding on the same order replaces the entry. `check` and `close`
+refuse, exit 7, while a finding is in no order's list. Both modes account the same way.
 
-Then read `<task_folder>/records/playbooks.md` the same way: it holds the plays research loaded,
+Then read `<task_folder>/records/playbooks.md`. It holds the plays research loaded,
 the rules this project and this person want followed. Name a play that decides an order's shape
 by its id in that order's `reasoning`.
 
@@ -627,6 +635,11 @@ never blocks the close. Rewrite each such interface with `update --interface`, a
 element it exposes.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
+
+Exit 7: the design check is clean, but a research finding is in no order's list. Each one prints
+on an `unaccounted:` line, with its id and the first line of its text. Account for each one, as
+"Then account for each research finding" says, and check again. A design that closed before this
+rule has no entries, so its next `check` or `close` stops here.
 
 Exit 4: a work order file itself is broken: not valid JSON, not an object, or a missing or
 malformed required field. Fix it with another `update` call, or by hand, and check again.

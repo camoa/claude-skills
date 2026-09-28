@@ -49,6 +49,8 @@ or a recipe. An order that builds beside a candidate research ranked close, with
 in its `reasoning`, is a finding. A `reasoning` that records a disposition is read against the
 finding it cites, not taken as settled.
 A `reasoning` paragraph that starts with `[struck] ` was replaced by a later one, so do not judge it.
+An order's `findings` entry with a `setAside` reason is a research finding design did not use. A
+reason that does not say why the finding does not change the order is a finding.
 
 **buildability.** Can a test author write each declared test from `tests` and `doneWhen` alone?
 A test that names a surface, a screenshot, or review's own row is a finding: no author can

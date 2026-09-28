@@ -43,7 +43,8 @@ under `dependencyInformation`. It holds the path of your report file and the pat
 interface record. Read the brief first. When it holds `previousAttempt`, read that build record
 next, and fix the checks that failed before anything else. Your own diff you make yourself. The unit's `verify` list
 names each command that runs on your work and each check a reviewer judges. Build so each one
-passes.
+passes. The unit's `findings` list holds the research findings design used for this unit. Build
+with each one.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The

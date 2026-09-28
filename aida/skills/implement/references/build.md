@@ -39,7 +39,8 @@ Run:
 It reads the frozen copy and the frozen tests. It writes eleven things to
 `implementation/brief-<order id>-build.json`:
 
-- this order's own record, with the files it owns;
+- this order's own record, with the files it owns and, under `findings`, the research findings
+  design used for it;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;

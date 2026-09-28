@@ -226,6 +226,14 @@ render_text_list() {
     printf '\n'
   fi
 
+  # Written by design-actions.sh account alone, so the shape is its.
+  if [ "$(jq -r '(.findings // []) | if type == "array" then length else 0 end' "$WO_FILE")" -gt 0 ]; then
+    printf '## Research findings\n\n'
+    jq -r '.findings[] | "- " + .ref + ": " + (.text | split("\n")[0])
+      + (if has("setAside") then ". Set aside: " + .setAside else ". Used" end) + "."' "$WO_FILE"
+    printf '\n'
+  fi
+
   printf '## Reasoning\n\n'
   REASONING="$(jq -r 'if (.reasoning? | type) == "string" and (.reasoning | length) > 0 then .reasoning else "" end' "$WO_FILE")"
   if [ -n "$REASONING" ]; then
