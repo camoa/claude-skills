@@ -354,8 +354,10 @@ Implementation reads this record on its first run, before it freezes anything, a
 start on a contract or an order that no longer matches the hash. That is what catches an order
 edited after design closed. Changing a closed design is supported: edit the order, then close
 again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
-done-when row may skip the research and guide reading. That reading shapes an order, not its file
+done-when row, or only changes accounted findings, may skip the research and guide reading. That reading shapes an order, not its file
 list. A change to an order that implementation already started halts that order for design drift.
+Two changes are the exception: an added owned file, and a change to the order's research
+findings through `account`.
 Put the design back and the next build clears the halt, or take the restart.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the

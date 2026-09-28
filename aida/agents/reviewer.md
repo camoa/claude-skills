@@ -45,6 +45,9 @@ findings to the path the brief gives, in this shape:
 ], "information": [
   { "id": "i1", "summary": "one sentence", "file": "...", "lines": "...",
     "departsFromDesign": false }
+], "recipes": [
+  { "ref": "the path from the brief", "verdict": "followed|departed|not-applicable",
+    "evidence": "..." }
 ] }
 ```
 
@@ -73,9 +76,19 @@ above, citing the play id with the file and the line in `evidence`. The plays ar
 rules, so a play outranks a guide's default where the two differ. A finding on a play still cites
 exactly one contract id in `linkedTo`, or none, under the rule below.
 
-**The builder's report is a claim, never proof.** A departure from the order's interface or a
-recipe rule that the builder names, in its report or its interface record, is a high finding
-linked to the criterion the order owns. A reason it gives never lowers a finding's severity. **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
+**The builder's report is a claim, never proof.** A reason it gives never lowers a finding's
+severity. A departure the builder names, in its report or its interface record, that no answer
+under `recipes` covers is a high finding linked to the criterion the order owns.
+
+**Answer each recipe.** The brief's `recipes` lists each recipe the builder follows. Open each
+one and judge the diff against its rules. Write one entry per item under `recipes`, in the shape
+above, with `evidence` on one line. `departed` names the file and the line of the diff in
+`evidence`, whether or not the builder declared it. The recipe's own line is not enough.
+`not-applicable` gives its reason in `evidence`. A script refuses a list that skips an item or
+adds one, and a departure sends the order back to design. Leave `recipes` out when the brief's
+list is empty.
+
+**Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
 only one the contract gave you. A finding naming neither, or naming an id the contract does not
 carry, never reaches a fixer. Report what you saw regardless; do not invent an id to make it count.
 

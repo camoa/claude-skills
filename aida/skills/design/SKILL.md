@@ -79,15 +79,17 @@ to serve is nothing this stage can check.
 `work-orders:` above zero: this is a resumed or repeated run. Read each named file before
 drafting anything new, rather than starting over.
 
-A reopen that changes only owned files or done-when rows on an existing order may skip the
-research and guide reading below. Those calls are `add-owned-file`, `remove-owned-file`,
-`add-done-when` and `remove-done-when`. The reading informs an order's shape, not its file
-list. The route is the change, then `check`, `close` with the verdict the last
+A reopen that changes only owned files, done-when rows or accounted findings on an existing
+order may skip the research and guide reading below. Those calls are `add-owned-file`,
+`remove-owned-file`, `add-done-when`, `remove-done-when` and `account`. The reading informs an
+order's shape, not its file list. The route is the change, then `check`, `close` with the verdict the last
 `design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
 an order's interface, criteria or dependencies, reads as a first run does.
 
-A change to an order that implementation already started halts that order for design drift at
-the next `start`, whatever the call. Two routes lead back. Restore the design and `start` clears
+Two changes do not halt an order that implementation already started: an added owned file, and
+an `account` call. Once design closes again, the next `start` takes that order's live copy in
+place, even when the order closed. Any other change to a started order halts it for design drift
+at the next `start`. Two routes lead back. Restore the design and `start` clears
 the halt. Or take the restart in the implement skill's `references/finish.md`, which rebuilds the
 order against the new design. The cheap reopen stays cheap for an order that has not started.
 

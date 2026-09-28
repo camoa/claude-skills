@@ -78,7 +78,7 @@
       "items": {
         "$ref": "#/$defs/resnapshot"
       },
-      "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and `restart` for each order it resets, both after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
+      "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and one for a started or closed order that only gained owned files or findings, which takes its live copy in place (live-run row 91, gap row 226). `restart` writes one for each order it resets. Each is written only after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
     },
     "setAside": {
       "type": "array",

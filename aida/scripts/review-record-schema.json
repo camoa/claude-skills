@@ -50,6 +50,21 @@
       "items": { "$ref": "#/$defs/information" },
       "description": "What the reviewer wrote for the person and not as a finding: a fact about the diff or what it stands on that cites no criterion the diff fails, such as a frozen base class built against a schema the site does not have (live-run row 103). Copied from the reviewer's own `information` list, present only when it wrote one, so a record without it reads as it did before the key existed. `review-record` prints one line per item; `tests-brief` and `build-brief` carry the items to every order that depends on this one, under `dependencyInformation`. Nothing routes an item to a fixer, and nothing closes one: it is information, not a finding."
     },
+    "recipes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "verdict", "evidence"],
+        "properties": {
+          "ref": { "type": "string", "minLength": 1 },
+          "verdict": { "enum": ["followed", "departed", "not-applicable"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      },
+      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and halts the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
+    },
     "deviationAccepted": {
       "type": "object",
       "additionalProperties": false,

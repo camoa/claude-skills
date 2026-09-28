@@ -427,8 +427,10 @@ A departure the builder declared never closes clean. The builder names one with 
 line, or a heading that starts with "Deviation", in its report or its interface record. The build
 already stops on one. The review runs the same scan over the latest attempt, because a build
 record from an earlier version can carry one. A reviewer that sees a departure marks its
-information item `departsFromDesign`, and that is a hit too. A hit halts the order for design
-drift, whatever else the reviewer wrote. The order's interface is what is wrong, so no fixer can
+information item `departsFromDesign`, and that is a hit too. The reviewer also answers each
+implement recipe: followed, departed, or not applicable with a reason. A departed answer is a
+hit, and a missing or extra answer is refused. A hit halts the order for design drift, whatever
+else the reviewer wrote. What is wrong is the design, or a recipe it relies on, so no fixer can
 repair it. You change the design and restart the order, or you keep the departure with a reason.
 The review record and the ledger keep that reason. Unattended, nobody can keep it, so the halt
 stands.
@@ -519,12 +521,13 @@ took the new contract, so no later run sees the change. An order halted because 
 drifted is the other. A reopen that changed an order's design file and a criterion it serves
 halts it for both reasons. The criterion one then holds the order when only the file goes back.
 
-One change to a started order does not halt it: an owned file added and nothing else. The
-build found a file the operation rewrites that no order owned, and design added it. The frozen
-tests were written from the criteria and the order's other fields, so they still hold. Once
-design has closed again, the next run takes the wider order in place and keeps its step and
-attempts. The orders that depend on it are left alone. A removed owned file, or any other
-change, halts as above.
+Two changes to a started order do not halt it. One is an owned file added and nothing else. The
+build found a file the operation rewrites that no order owned, and design added it. The other is
+a change to the order's research findings through `account`, which a design reopen makes even
+for a closed order. The frozen tests were written from the criteria and the order's other fields,
+so they still hold. Once design has closed again, the next run takes the live order in place and
+keeps its step and attempts. The next build brief carries the new findings. The orders that
+depend on it are left alone. A removed owned file, or any other change, halts as above.
 
 A restart moves records, not commits. The halted order's frozen tests and its build attempts are
 still on the branch. A test author sent against them could write a test that passes at once. So the
