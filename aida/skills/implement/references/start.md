@@ -28,7 +28,8 @@ either.
 Before it writes, the script reads the task's tree. It names each file that git reports untracked
 or changed and not committed, and the orders whose owned files hold it. A role stopped mid-run
 leaves such files, and the next role would work beside them. A gitignored file is never named.
-`COMPROMISES.md` is AIDA's own file, so it is not named either.
+`COMPROMISES.md` is AIDA's own file, so it is not named either. The usual first-run case is
+`package-lock.json`, changed by a surfaces harness install at `environment up`. Commit it.
 
 Interactive, such a file refuses with exit 104, and nothing is written. Read the paths to the
 person and offer two choices. To keep a file, the person commits it. Or you run start again with

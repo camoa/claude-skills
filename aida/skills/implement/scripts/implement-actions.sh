@@ -1659,19 +1659,23 @@ do_start() {
   # So start names each path git reports changed or untracked, with the orders whose owned files
   # hold it. A gitignored file is not read. COMPROMISES.md is AIDA's own file, so it is not named.
   # `-uall` names each file in a new folder, because only a file meets an owned-file entry.
+  # `-z` leaves a name unquoted. git_status_of passes neither flag, so this reads git directly.
   # Interactive refuses until a person picks keep or set-aside. Unattended sets them aside. Only an
   # untracked or a modified file can move. Any other change is a person's to undo, in both modes.
-  local lo_status lo_line lo_xy lo_rel lo_owners lo_id lo_glob lo_tab lo_orders_tsv lo_tracked=""
+  local lo_status lo_line lo_xy lo_rel lo_owners lo_id lo_glob lo_tab lo_orders_tsv lo_tracked="" lo_skip=false
   local leftovers_json='[]' lo_text_jq
   lo_text_jq='.[] | .path + " (" + (if (.orders | length) > 0 then (.orders | join(", ")) else "no order owns it" end) + ")"'
   lo_tab="$(printf '\t')"
   lo_orders_tsv="$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } \
     | jq -r '.[] | .id as $id | (.ownedFiles // [])[] | $id + "\t" + .' 2>/dev/null)"
-  lo_status="$(git -C "$code_path" status --porcelain --untracked-files=all 2>/dev/null)"
+  lo_status="$(git -C "$code_path" status --porcelain -z --untracked-files=all 2>/dev/null | tr '\0' '\n')"
   while IFS= read -r lo_line; do
+    # A rename or a copy carries its source name as the next field. It refuses below as it is.
+    if [ "$lo_skip" = "true" ]; then lo_skip=false; continue; fi
     [ -n "$lo_line" ] || continue
     lo_xy="$(printf '%s' "$lo_line" | cut -c1-2)"
     lo_rel="${lo_line#???}"
+    case "$lo_xy" in R*|C*|?R|?C) lo_skip=true ;; esac
     [ "$lo_rel" != "$COMPROMISES_FILE" ] || continue
     lo_owners=""
     while IFS="$lo_tab" read -r lo_id lo_glob; do
@@ -2169,10 +2173,10 @@ LO_STATUS
       mkdir -p "$(dirname -- "$set_aside_dir/$lo_rel")" || die 3 "start: could not create a folder under $set_aside_dir"
       if [ "$lo_xy" = "??" ]; then
         mv -- "$code_path/$lo_rel" "$set_aside_dir/$lo_rel" \
-          || die 3 "start: could not move $lo_rel to $set_aside_dir. What moved before it is there."
+          || die 3 "start: could not move $lo_rel to $set_aside_dir. The files moved before it are in that folder, and the ledger does not record them."
       else
         cp -p -- "$code_path/$lo_rel" "$set_aside_dir/$lo_rel" && git -C "$code_path" checkout -q HEAD -- "$lo_rel" \
-          || die 3 "start: could not set aside the change to $lo_rel in $set_aside_dir. What moved before it is there."
+          || die 3 "start: could not set aside the change to $lo_rel in $set_aside_dir. The files moved before it are in that folder, and the ledger does not record them."
       fi
     done <<LO_MOVE
 $lo_move_tsv
