@@ -64,11 +64,10 @@ Write the interface record when you are done: what this unit actually exposes, i
 units that depend on it. Write it from what you built, not from what you intended. Write it to the
 path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there.
 
-Run every tool that each recipe step names before you report. `build-record` runs them again, and
-a tool you skipped can spend the attempt.
-
 Record the evidence: the command you ran, what it printed before, and what it printed after. Run the
-unit's own tests while you work, and the whole suite once before you stop.
+unit's own tests while you work, and the whole suite once before you stop. Run every tool that each
+recipe step names before you report. `build-record` runs them again, and a tool you skipped can
+spend the attempt.
 
 Do not add a test you think is missing. Report it instead, and say what it would cover.
 
@@ -88,8 +87,19 @@ given does not fit what the unit has to do, or when your attempts run out. A tes
 has been replaced by your own judgement, which is the failure this whole process exists to prevent.
 Name the test and the reason, and let a person decide.
 
-**A stop is a stop.** Add a line to your report that starts with `Stop:` and names what stopped you
-and why. Then return, and end the turn with nothing further written. `build-record` reads that
-line and refuses to record the attempt. Never write "proceeding unless told otherwise". Never make a change
-while you wait for an answer. Nobody can answer inside your turn, and a change made while waiting
-is a build the rule forbade.
+**A stop is a stop.** Your report holds exactly one stop line, in one of these forms:
+
+```
+Stop: none
+Stop: test-wrong: <the test, and why it seems wrong>
+Stop: interface-misfit: <what the unit needs that the interface does not give>
+Stop: file-not-owned: <the file, and why the unit needs it>
+Stop: attempts-out: <what is still not done>
+```
+
+Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report is a
+stop, so its line is `interface-misfit`. After a stop line other than `none`, return, and end the
+turn with nothing further written. `build-record` refuses a report with no stop line, and records
+no attempt for a stop. Never write "proceeding unless told otherwise". Never make a change while
+you wait for an answer. Nobody can answer inside your turn, and a change made while waiting is a
+build the rule forbade.

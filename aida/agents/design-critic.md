@@ -54,20 +54,20 @@ A `reasoning` paragraph that starts with `[struck] ` was replaced by a later one
 A test that names a surface, a screenshot, or review's own row is a finding: no author can
 write it as a file.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
-what was meant? Each method the `interface` exposes must get every input it uses from an argument,
-an injected dependency the interface names, or a named source. An input with no such source, or a
-global service locator call, is a finding. Does one order own a directory another order owns a file inside? The design
-check refuses an identical entry twice; it reads paths as strings, so nesting is yours. Is the
-order small enough: three to seven build steps, ten at most, and one concern per order? Of
-every order, ask the recipe's own question: does the order own every file the operation
-rewrites? The design recipe names the framework's couplings, such as a registered service and
-its definition file, or a route and its routing file. Read the owned list against that list.
-An order that changes a class must own every coupling file that names the class. A constructor
-change rewrites the service definition, so an order that owns the class and not the definition
-is a finding. For an order whose `proof` is `gate`, also ask: does its `## Configuration gate`
-exist? The design recipe's sentence is the rule, and it names the recipe that carries the
-block. Read the design recipe from the path you were given, and the named recipe where it sits
-beside it. Given no path, say so and report the order as not read under that question.
+what was meant? A method input with no argument, named dependency or named source, or a global
+service locator call, is a finding. Does one order own a directory another order owns a file
+inside? The design check refuses an identical entry twice; it reads paths as strings, so nesting
+is yours. Is the order small enough: three to seven build steps, ten at most, and one concern
+per order? Of every order, ask the recipe's own question: does the order own every file the
+operation rewrites? The design recipe names the framework's couplings, such as a registered
+service and its definition file, or a route and its routing file. Read the owned list against
+that list. An order that changes a class must own every coupling file that names the class. A
+constructor change rewrites the service definition, so an order that owns the class and not the
+definition is a finding. For an order whose `proof` is `gate`, also ask: does its
+`## Configuration gate` exist? The design recipe's sentence is the rule, and it names the recipe
+that carries the block. Read the design recipe from the path you were given, and the named
+recipe where it sits beside it. Given no path, say so and report the order as not read under
+that question.
 For an order whose `proof` is `observe`, read each machine criterion it owns beside its
 done-when rows. A clause that names a fact no row shows the page displaying is a finding.
 Read each criterion an order owns against its own `verification` clause. A clause naming nothing
