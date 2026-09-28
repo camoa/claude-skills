@@ -4,6 +4,34 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.3] - 2026-09-28
+
+A fix from the live run on 6.0.2. The reviewer saw a departure the builder
+declared and filed it as information, so the order would have closed clean.
+
+### Fixed
+
+- A departure the builder declared can no longer close as clean.
+  `review-record` runs the build step's departure scan on the order's report
+  and stored interface record. On a hit it writes no review record, halts the
+  order for design drift (exit 107), and names the file and line. The way out
+  is to amend the order's interface in design and run `restart`. In an
+  interactive run a person may keep the departure instead, with
+  `review-record --accept-deviation "<reason>"`. The reason is recorded on the
+  review record and in the ledger. An unattended run cannot accept one.
+- Every information item a reviewer writes now carries `departsFromDesign`,
+  true or false. A true item takes the same halt, so the script decides, not
+  the reviewer's choice of severity. An item without the field is refused.
+- The guidance after this halt now says it came from review and names both
+  ways out.
+
+### Known limits
+
+- A departure stated only in plain prose, and answered `false` by the
+  reviewer, still passes. No script can read it.
+- Review records written before 6.0.3 lack `departsFromDesign` on their
+  information items.
+
 ## [6.0.2] - 2026-09-28
 
 Three fixes from the live run on 6.0.1. Design dropped half of a research

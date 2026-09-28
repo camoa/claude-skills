@@ -100,6 +100,9 @@ by one; say so.
 
 ## Offer the restart, when a halt reads "design drift"
 
+A halt beginning `design drift: the builder declared a departure` comes from review, not from
+`start`. Put it to the person as `references/review.md` says, with both ways out.
+
 A halt beginning `design drift` means `start` found the live design changed after this order
 started. That can be direct, or through a started order it depends on. The halted orders start
 over; every other order keeps what it has.
