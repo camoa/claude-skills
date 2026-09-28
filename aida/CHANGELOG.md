@@ -6,7 +6,7 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.0.1] - 2026-09-28
 
-Two fixes from the live run on 6.0.0.
+Four fixes from the live run on 6.0.0.
 
 ### Fixed
 
@@ -30,6 +30,19 @@ Two fixes from the live run on 6.0.0.
   `tests-brief` carries those rows, and the test author is dispatched fresh to
   repair them. The next freeze that writes clears the record. A checker file
   that cannot be read now refuses and names the file.
+- Every implementer report now carries one stop line: `Stop: none`, or
+  `Stop: <cause>: <reason>` for a wrong test, an interface misfit, a file the
+  order does not own, or no attempts left. Before, a builder named a misfit in
+  prose and built a workaround anyway. `build-record` refuses a report with no
+  stop line (exit 106) and spends no attempt. Any cause stops the order (exit
+  105). The refusal and the unattended halt name the commits made after the
+  stop, so they are reverted or kept on purpose.
+- The implementer runs every tool each recipe step names before it reports.
+- Design's critique now flags an interface method with an input that has no
+  argument, named dependency or named source, and a global service locator call.
+- A second build attempt now knows why the first failed. `build-brief` carries
+  `previousAttempt`, with the record path and each check that stopped the
+  attempt, when the last recorded attempt failed a check.
 
 ### Known limits
 
@@ -37,6 +50,8 @@ Two fixes from the live run on 6.0.0.
 - If a move fails midway, the files already moved are not in the ledger. The
   error names their folder.
 - A role that is dispatched again without a new `start` is not checked.
+- A builder can still write `Stop: none` and work around a misfit. The build
+  checks remain the backstop.
 
 ## [6.0.0] - 2026-09-27
 
