@@ -137,7 +137,7 @@ start over it. It writes `implementation/brief-<order id>-fix-<round>.json`:
   paths `--allow` names;
 - `allowedFiles`, the `--allow` list;
 - the frozen tests;
-- this round's own report path, and the order's diff budget;
+- `reportPath`, `implementation/answers-<order id>-fix<round>.md`, and the order's diff budget;
 - the round number;
 - `headNow`, the code repository's own commit at the moment of this call;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
@@ -213,6 +213,7 @@ another, and a reason carrying it would forge one.
 
 The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
 not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
+A task site that is down refuses (exit 103) before any check runs, as build.md says for `build-record`.
 
 **`fix-record` refuses when the code repository's tree is not clean.** The fixer commits its own
 work before it returns. A dirty tree means that commit did not happen. This round is not recorded.

@@ -111,7 +111,7 @@ by its id in that order's `reasoning`.
 ## Read the guides and recipes research found
 
 Research named these without opening them, so design is the first read. Research recorded an
-address for each; open it through the navigator the same way, and read a project's own source
+address for each; open it through the navigator the same way, and read a project's own guide file
 directly. Open a tooling recipe with the navigator's `tooling --name` mode, by the name research
 recorded. One agentic recipe covering the work means the decision is already made: follow it.
 Its `## Verifier` becomes the proof of each order it covers, as "Carry the proof from its source"
@@ -269,11 +269,16 @@ research stated it, the cost dimensions compared, the verdict, and why:
 ```
 Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
 `--path` is where the reused thing lives, relative to the code repository: a file, or a
-configuration path when the candidate is not code. `--interface` is what it exposes, in your own
-words, read from the code. Name the class or service id, the method the tests call, its arguments,
-and the keys of what it returns. Read the code for this; design may. The test author may not, and
-the tests brief carries this text in place of the source. A dispose that omits both records no
-reuse.
+configuration path when the candidate is not code. When the return names several paths, give the
+file the order calls as `--path`. The other paths stay in the interface text. `--interface` is
+the text `internal-searcher` returns, word for word. Do not read the candidate's source here, and
+do not reword the return. The test author may not read the source either, and the tests brief
+carries this text in place of it. A dispose that omits both records no reuse.
+
+Before that dispose, dispatch `internal-searcher` once per candidate the order's build or tests
+will call, with the message this file names. Its lines are the role, the run mode and the word
+`interface`. Then come the candidate as research named it, the order file's path, the code path,
+and the project folder. The code path is the task's worktree, from the `worktree:` line.
 
 A decline takes no `--cost` and no `--path`: nothing is compared, and nothing is reused. Its
 `--why` names what was weighed. It stands in both modes, because a decline with a reason is a
@@ -427,6 +432,11 @@ the record; read the file at the printed path when a field is needed. `dependsOn
 this conversation; the id space is shared and minted in order, so naming it ahead of its own
 `create` call is safe as long as it is created before design finishes.
 
+Write `--interface` so that it names each exposed element in backticks. That is the service id,
+the class, the interface, the method, the route, the hook and the config key. The build's
+interface check counts only the backtick-quoted names. An order that exposes nothing takes no
+`--interface`.
+
 Name a `--surface` when the order changes a page or a screen a person sees, by its id in the
 surface registry. Most orders name none.
 
@@ -459,6 +469,11 @@ closed again on the live files. Nothing halts when nothing else on the order cha
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
   --id <woId> --description "<what this test must observe>"
 ```
+Write an absence as a done-when row of its own. An absence says the change added nothing of a
+named kind, such as no new dependency or no static call to the container. No test can watch it
+fail, so the build routes it to review by its exact words. A row that joins it to a behaviour,
+such as "contains no static call and saves no entity", cannot be routed without a reopen.
+
 A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
 here; the check below refuses an order that skips this. Four orders are the exception. One created
 with `--proof gate` declares no test, and the configuration check judges its owned machine
@@ -479,12 +494,17 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--append-reasoning <text>] [--diff-budget <text>] \
+  [--interface <text>] [--reasoning <text>] [--strike-reasoning <n>] \
+  [--append-reasoning <text>] [--diff-budget <text>] \
   [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 `--reasoning` replaces the whole field, the paragraphs `dispose` wrote included. To keep them,
 pass `--append-reasoning`: it adds the text as a new paragraph after a blank line. The two
 flags are refused together.
+When a critique or a person changes a rule that a reasoning paragraph states, strike that
+paragraph. Pass `--strike-reasoning <n>` with the new rule in `--append-reasoning`. Count n
+from 1 in the order's `.md`. The old paragraph stays, marked `[struck]`, and no brief
+carries it. Do not leave both rules live: the builder reads every live paragraph.
 When `--proof` becomes `gate`, `record`, `observe` or `confirm`, `update` prints
 `stillNamesATest:` naming each of `interface`, `reasoning` and `diffBudget` that still names a
 test file.
@@ -503,8 +523,8 @@ a model judges. Every entry cites its source and says whether it is binding.
 The script copies each entry of the `verifier:` block as a run entry, with its `pass` and its
 `kind`. It copies
 each numbered item of the prose as a check entry, verbatim. It reads nothing else, and it never
-turns a sentence into a command. Today's recipes hold prose only, so they give checks. Pass
-`--not-binding` when research said the source is not one this project accepted.
+turns a sentence into a command. A recipe may carry a `verifier:` block, a prose list, or both.
+Pass `--not-binding` when research said the source is not one this project accepted.
 
 **No recipe covers it, and research found how to verify it.** Add one entry per finding:
 ```
@@ -594,6 +614,17 @@ those orders open, because which of the other proofs fits is a judgment. Either 
 owns a machine-verified criterion after all, which `update --criteria-owned` sets. Or its proof is
 one of the others, which `update --proof` sets. Read the `verification` clause of each
 criterion the order owns, and ask what would settle it.
+
+`check` also prints `absenceJoined:`, at every exit code. It names each done-when row that holds a
+negation word and the word `and`, by order and row number. This is best effort, because a script
+cannot parse a clause, and it never blocks the close. Read each row it names. When a row joins an
+absence to a behaviour, remove it with `remove-done-when`. Then add each clause with its own
+`add-done-when` call.
+
+`check` also prints `interfaceUnquoted:`, at every exit code. It names each order whose interface
+holds no name in backticks. A script cannot tell whether prose names a code element, so the line
+never blocks the close. Rewrite each such interface with `update --interface`, and quote each
+element it exposes.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 

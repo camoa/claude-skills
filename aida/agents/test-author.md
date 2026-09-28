@@ -62,6 +62,13 @@ Write this order's own tests against its `doneWhen` instead. For each criterion 
 person, write a checklist line, copying its verification sentence whole. A base class or a fixture
 you write beside the tests is a support file. The tests stand on it, and it is not a test.
 
+**An absence gets no test.** When the brief holds `absenceCandidates`, read each clause it names.
+A clause that asserts an absence says the change added nothing of a named kind. Write no test for
+it. Return it, verbatim, as an absence clause, and the freeze routes it to review. Never test an
+absence by reading the production source and searching it. That test cannot fail for the right
+reason: a comment fails it, and a call written another way passes it. A clause in that list that
+states a behaviour still takes a test.
+
 Choose the level from the recipe, not from habit. The recipe names the levels this framework has and
 what each one reaches.
 
@@ -71,7 +78,8 @@ criterion. The recipe says how the id is spelled here.
 
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe
-declares. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
+declares. Run each test on its own, with the recipe's filter, so that each red file holds only
+that test's run. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
 why you chose it in your report. **A test must fail for the reason it names.** The test-execution
 recipe's `failure_signal` block names two markers. One is what the harness prints when an assertion
 did not hold. The other is what it prints when it never reached the behaviour. A red must hold the
@@ -83,6 +91,16 @@ Report that as a setup gap, with the output, and stop. Do not write the module's
 a test fail: you may write no production file. When this order creates the module, that first run
 erroring where the harness enables it is the expected red. The freeze records it as such; write no
 scaffold to get another.
+
+**Each test fails at its own assertion.** When two tests stop at the same line of the same file,
+neither has a red, and the freeze refuses both. A guard that asserts the class or service exists
+is such a line when the tests share it. So do not open a test with an assertion that the unit
+exists, not even one written again in each test. When the class may be absent, write a guard that
+asserts nothing. For example, a lookup gives the empty value when the service is absent, and the
+test's own assertion then fails. If that empty value makes a test pass, the test cannot tell the
+behaviour from its absence. Strengthen it: add a case that an empty result fails. A table-driven
+test is one test: `test.each`, a data provider or `parametrize` takes one `--test`, never one per
+case.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
@@ -96,8 +114,8 @@ decide it. If you can name neither existing code nor such a commit, report it as
 
 Return one row per test: the path, the test's name, and the criterion its name carries. The row
 also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test
-returns the order id in place of a criterion. Then each checklist line, the path of each support
-file you wrote or changed, and the list of anything that passed on arrival.
+returns the order id in place of a criterion. Then each checklist line, each absence clause, the
+path of each support file you wrote or changed, and anything that passed on arrival.
 
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a

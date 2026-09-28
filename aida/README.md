@@ -37,27 +37,29 @@ make a decision once.
 
 ## Status
 
-Version 6.0.0-beta. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every
-stage is built and proved against fixtures under bash and zsh. The beta exists to run the first
-live tasks: one started under version 5, one from scratch. Defects come from those runs.
+Version 6.0.0. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage
+is built and proved against fixtures under bash and zsh. Live tasks on real projects ran through
+the betas, and the defects they found are fixed.
 
-## Running it while it is built
+## Installing it
 
-Load it for one session, from wherever you cloned it:
-
-```bash
-claude --plugin-dir /path/to/aida-v6-code/aida
+```text
+/plugin marketplace add camoa/claude-skills
+/plugin install aida@camoa-skills
 ```
 
-The flag loads the plugin for that session only. A session started without it does not see
-version 6, so version 5 keeps working.
+To run it from a clone for one session, load the plugin folder:
+
+```bash
+claude --plugin-dir /path/to/claude-skills/aida
+```
 
 To see what actually registered, rather than what the files claim, put the flag before the
 subcommand:
 
 ```bash
-claude --plugin-dir /path/to/aida-v6-code/aida plugin list
-claude --plugin-dir /path/to/aida-v6-code/aida plugin details aida
+claude --plugin-dir /path/to/claude-skills/aida plugin list
+claude --plugin-dir /path/to/claude-skills/aida plugin details aida
 ```
 
 `plugin list` shows whether the plugin loaded. `plugin details` lists the components it
@@ -65,10 +67,10 @@ registered. `claude --debug` shows the load itself, including manifest errors.
 
 ## Documentation
 
-The documentation is written stage by stage, as each one closes. It will live in `docs/`, as an
-overview with a page per topic. It covers the process and every variant of it: each entry point,
-both run modes, every task shape, every build path, the optional test harnesses, and what to do
-for a stack that has no recipe.
+The documentation lives in `docs/`. Start at `docs/README.md`, then `docs/overview.md`. There is a
+page per topic. The pages cover the process and every variant of it: each entry point, the run
+modes, every task shape, every build path, the optional test harnesses, and a stack that has no
+recipe.
 
 ## License
 

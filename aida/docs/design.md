@@ -40,7 +40,7 @@ on record the way every other design write is.
 | non-goals | The contract boundaries a reviewer needs in view beside this order |
 | depends on | The orders that must finish first. This is the build order |
 | owned files | The files or directories this order may write. Never a wildcard |
-| interface | What this order exposes to the orders that depend on it |
+| interface | What this order exposes to the orders that depend on it. Each element is in backticks: the service id, class, interface, method, route, hook or config key. The build's interface check counts only those names |
 | tests | What each test must observe, before the code exists |
 | done when | What must be true for the order to be finished, in your words |
 | reasoning | Why this order exists, when a decision is shared with other orders |
@@ -75,8 +75,8 @@ The knowledge that covers an order says how to verify it, and design carries tha
 order as its `verify` list. When an agentic recipe covers the order, design copies the recipe's
 `## Verifier`. Each entry of its `verifier:` block becomes a command, with what passing means:
 exit 0, empty standard output, or standard output holding a text. Each numbered item of its
-prose becomes a check, word for word. Design never turns a sentence into a command. Today's
-recipes hold prose only, so they give checks.
+prose becomes a check, word for word. Design never turns a sentence into a command. A recipe may
+carry a `verifier:` block, a prose list, or both, and design reads each.
 
 When no recipe covers the order, research's findings on how reputable sources verify the work
 give the entries. Each one cites its source and is marked as not binding, because this project
@@ -137,16 +137,20 @@ records the disposition on the order it lands on: the candidate, the distance, t
 compared, the verdict and the reason. Each disposition is appended, so an order with several
 candidates keeps every verdict, and re-disposing one adds a paragraph. Replacing an order's
 reasoning outright drops those paragraphs, so a later note is appended as a paragraph of its
-own, after a blank line. A fixed table applies. A supersede that cites only build
-cost, or a candidate sharing only a layer, comes back as extend. Interactively, a supersede
-stands only after you are asked, because it widens the task and owes a migration. A supersede
-naming no cost dimension is refused until you say what it compared. Autonomously, a supersede
-comes back as extend, with a reason in the order asking you to revisit it on an attended run. A
-decline cites no cost, because nothing is compared, and stands in both modes.
+own, after a blank line. When a critique or you change a rule a paragraph states, design strikes
+that paragraph and appends the new rule. The old paragraph stays in the order, marked
+`[struck]`, and the builder and the reviewer never receive it. A fixed table applies. A
+supersede that cites only build cost, or a candidate sharing only a layer, comes back as
+extend. Interactively, a supersede stands only after you are asked, because it widens the task
+and owes a migration. A supersede naming no cost dimension is refused until you say what it
+compared. Autonomously, a supersede comes back as extend, with a reason in the order asking you
+to revisit it on an attended run. A decline cites no cost, because nothing is compared, and
+stands in both modes.
 
 When the order's build or tests will call the candidate, design records where it lives and what
 it exposes. That is the class or service, the method the tests call, its arguments, and what it
-returns. Design reads the code for this; the test author may not, so the text stands in for it.
+returns. A read-only searcher reads the code and returns that text with its source paths. Design
+records the text word for word. The test author may not read the code, so the text stands in for it.
 
 ## When design finds the scope is wrong
 
@@ -257,6 +261,9 @@ two orders declaring one file, a wildcard in an owned file, and an id that resol
 The check asks that question the other way too, and reports without holding the close. It prints
 `impliedProofDisagrees:` with every test order that owns criteria of which none is machine-verified.
 Which of the other three proofs fits is a judgment, so no exit code holds it.
+
+It also prints `interfaceUnquoted:` with every order whose interface names nothing in backticks.
+A script cannot tell whether prose names a code element, so this does not hold the close either.
 
 A clean check says design is finished, subject to your confirmation above. An open item names
 the order it is on and its remedy: the missing test, the owner to reconcile, the dependency to

@@ -23,6 +23,14 @@ Dispatch it a third time, with `point: implement` and each framework. Do not rea
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.
 
+## Install the tools the test recipe names
+
+Invoke the tool skill with `require <path>` for the `test-execution` recipe of each framework. Do
+this from the worktree, before the checks below run any recipe line. The tool skill's section
+"Tools a recipe names" says what each answer means. Go on only when it exits 0. Skip this when
+every order has `proof: record` or `proof: confirm`, because no test runs then. The `review`
+recipe's tools are review's to check, not this step's.
+
 ## Run the checks
 
 Run, with one `--recipe` and one `--check-recipe` per framework:
@@ -109,12 +117,27 @@ framework, naming what answered unmet or unknown and who owns it. It prints the 
 and the paths of the record and the baseline. What a check or the smoke command printed is in the
 record; name the path rather than reading it here.
 
+**A verdict that is not met names its cause on three lines.** The `next:` line names the first
+condition or smoke row that stopped the run, and the command that row ran. The `failedOutput:` line
+holds the first line that command printed. The `nextAdvice:` line says to run the tool skill's
+install, only when a condition's tool is absent. Both read `none` when they do not apply. Read all
+three to the person. Each is a line of its own, so the 240-character cut of a long command never
+takes the cause or the instruction.
+
 ## Supply a value where a command needs one
 
 A framework's cheapest test command may carry a placeholder, such as the runner a Python project
-declares. Pass it with `--value <name>=<value>`. The script never guesses one and never reads a
-default out of a recipe's prose: an unsupplied placeholder makes the run unknown and names
-which one had no value.
+declares. Pass it with `--value <name>=<value>`. The script never reads a default out of a
+recipe's prose: an unsupplied placeholder makes the run unknown and names which one had no value.
+
+A recipe can derive a placeholder a person would otherwise pass, such as the folder that holds
+the project's own code. It declares one `## Tokens` block per name, the name as the fence's second
+word, holding one command. The script runs each block in the worktree, as arguments and never
+through a shell, and the first line the command prints is the value. A `--value` for the same
+name wins. The record keeps the values under `tokens`, and every later step fills its rows from
+there. A rerun takes new values and never reads the old ones, and `recipe-refresh` drops them
+when it changes a recipe path. A block that fails or prints nothing stops the blocks after it. Its name stays unfilled,
+and a row that needs it reads unknown and names it. A recipe with no `## Tokens` section fills nothing.
 
 ## Read the verdicts to the person
 

@@ -177,8 +177,8 @@ is checked before the build is measured against it, whether or not a person is p
 Resolving which recipe is this step's job; reading it is the role's. The recipe runs to well over
 a hundred lines per framework, and reading it into this conversation is the cost the dispatch
 exists to avoid. What the author returns is in its definition, and each item has a flag in the
-freeze below. The red-run file per test goes under `--red`, and each support file under
-`--support`.
+freeze below. The red-run file per test goes under `--red`, each support file under
+`--support`, and each absence clause under `--absence`.
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
@@ -211,6 +211,8 @@ the four outcomes above fits. The author is then left choosing between an unprov
 `--absence <the clause, verbatim>`, one flag per clause. The freeze records it on the order's
 ledger entry. Review's brief carries it to the architecture reviewer, which judges it against the
 task's own diff. A clause routed this way is visible as owed, rather than untested in silence.
+The tests brief names each done-when clause that holds a negation word, under `absenceCandidates`.
+So the author, who decides what to test, returns an absence verbatim and writes no test for it.
 
 **What makes a clause an absence.** It is a claim about what the change added, answered by reading
 the diff and nothing else. "No new Composer dependency" is one. "The form shows the repeat field" is
@@ -247,8 +249,12 @@ out of its tool rows, because the implementer may not write them.
 
 Build one row per criterion the tests name: the criterion, its verification sentence, and the names
 of the tests that prove it. Build one more row when a test proves the order's done-when: the order
-id, its done-when text, and those tests. The rows carry names and not test code. The question is
-whether the tests named exercise the sentence beside them.
+id, its done-when text, and those tests. That row also names each criterion the order owns and
+the tests named for it. Add the verdict that stands on that criterion, the person's where a
+person answered it. Add it only when an earlier round gave one. The author tests the done-when
+only where nothing the order owns covers it. So the checker needs the owned criteria to judge the
+done-when row (gap row 210). The rows carry names and not test code. The question is whether the
+tests named exercise the sentence beside them.
 
 **Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
 recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a
@@ -278,8 +284,12 @@ Close the dispatch record as soon as it returns, per SKILL.md.
 **A confirmed row is the checker's, in both modes.** It becomes
 `--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
-confirmed row to the person. The record says a model judged it, so a person can list those rows
-later and read any of them again.
+confirmed row to the person. There is one exception: an interactive run where another row of this
+order goes back to the test author. Then list this order's confirmed rows, each with the checker's
+note, and ask once whether any of them goes back too. The author rewrites this order's tests
+anyway, so a doubt costs nothing to act on now (live-run row 208). A confirmed row the person sends
+back becomes `--row <criterion id>=rejected::person::<the person's words>`. The record says a model
+judged every other confirmed row, so a person can list those rows later and read any of them again.
 
 **Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
 doubts that the new tests for one requirement prove what it asks. A model may not settle that
@@ -290,7 +300,8 @@ and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
 the test author before any freeze runs. Never run the freeze with a rejected row still standing.
 `tests-freeze` refuses it and writes nothing. Send that row back first. A repaired test goes
-through the checker again. Freeze once every row for this order reads confirmed. A note may not
+through the checker again. When an owned criterion's row goes back, put the done-when row to the
+checker again too. Freeze once every row for this order reads confirmed. A note may not
 hold the text `; earlier: `. This stage joins one halt reason to another with that text, so a note
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
 
@@ -383,6 +394,20 @@ then freezes it as before, records `redSignal: unchecked` on the test, and says 
 line. Every other red carries the reading that accepted it. A freeze with a `--red`, no
 `--test-recipe` and no recipe on record refuses, because then no red can be read at all. A `--locks-in` reason is
 recorded beside the test, and the review brief says where it is.
+
+**Two tests that fail at one place have no red.** The freeze reads each red it accepted on an
+assertion for the places it prints: every `<test file name>:<line>`, in order. Two tests of one
+file whose reds print the same places failed at one shared line. That line is a precondition, such
+as a guard that the class or service exists, and the freeze refuses (exit 80). Ten tests that fail
+on one guard prove one fact ten times, and none was watched failing for its criterion (live-run row
+207). The repair is the test: each test reaches its own assertion. A guard may stay if it asserts
+nothing, for example a lookup that gives the empty value when the service is absent. The red is
+then taken against an empty result, so a test that an empty result passes arrives green. A red
+that prints no place in its test file is not compared, and neither is a harness red. This check is
+a floor. A guard written again at the top of each test fails at a different line each time, so
+the freeze cannot see it. The test author's own instructions forbid that guard.
+The check also assumes the harness prints every frame of the failure. `pytest --tb=line` prints
+only the deepest one, so two tests failing in one helper read as one place there.
 
 **Every machine-verified criterion a `--test` names needs exactly one row**, naming whether it was
 confirmed or rejected and who judged it. A done-when test needs the done-when row, keyed by the

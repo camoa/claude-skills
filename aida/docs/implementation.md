@@ -193,8 +193,9 @@ judged, because the build step leaves the frozen tests out of its tool checks.
 
 Before anything is frozen, one row per criterion goes to a checker. A row holds the criterion,
 its verification sentence, and the names of the tests that claim to prove it. A test of the order's
-own done-when gets a row beside them, keyed by the order's id, with the done-when text. The
-question is whether those tests exercise the sentence beside them. The failure it catches is a
+own done-when gets a row beside them, keyed by the order's id. That row carries the done-when
+text, and the criteria the order owns, with their tests. The question is whether those tests
+exercise the sentence beside them. The failure it catches is a
 test measuring something adjacent and easier than what was asked.
 
 The checker runs in both modes, on the top tier, and reads each named test against the
@@ -250,7 +251,8 @@ gate lines alone. Every line passing is met;
 the first line that does not is named, with its output. A line passes on exit 0, or on what its
 standard output must hold when the source says so. A command from research runs only when you
 approved it at the design close. A placeholder given several `--value`
-entries runs its command once per value. The check reads
+entries runs its command once per value. A command that holds `{paths}`, `{file}` or `{dirs}`
+does not apply to an order that owns no file, and it never passes the order alone. The check reads
 unknown when the task has no running site recorded, so bring the environment up first. The proof
 of what the configuration does lives with the tests of the order that consumes it. When the order
 closes, its criteria are recorded as judged by the gate, a third judge beside person and model.

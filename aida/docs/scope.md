@@ -98,9 +98,11 @@ or correct.
 
 - **A gap the draft could not fill.** No goal anywhere, or a criterion with no observable
   outcome.
-- **The non-goal probes.** After the draft, scope raises the things next to the goal that nobody
-  mentioned. It asks whether each is in or out. Out becomes a non-goal. In becomes a criterion.
-  These are asked on their own because they are the part people skip.
+- **The non-goal probes whose answer is not plainly out.** The draft raises the things next to
+  the goal that nobody mentioned, because people skip them. Each probe recommended out is already
+  a non-goal in the draft, listed in one block, and you correct any of them in your one answer.
+  Only a probe recommended in, or one whose answer is unclear, is asked on its own. Out becomes a
+  non-goal. In becomes a criterion.
 - **Whether the task has automated tests.** Asked on every task. The recommended answer is yes,
   unless you or the task said there are none.
 - **The test setup offer**, described below, only when the goal names something a person sees.

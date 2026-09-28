@@ -496,6 +496,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and the file is then accepted as `harness-new-unit`. The same exit when no
 #      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
+#      The same exit when two tests of one file have reds that print the same places in it: they
+#      failed on a shared precondition, not on their own assertions (live-run row 207).
 #  81  `tests-freeze` was given an --absence the order cannot route to review. Two facts, one
 #      refusal, because both say the same thing: the flag names something that is not an absence
 #      clause of this order. The clause is not, verbatim, one of the order's frozen `doneWhen`
@@ -634,6 +636,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 102  `dispatch-open` was given a role the order's proof kind does not need: a test author on an
 #      order that freezes no test, or a row-checker on one that freezes no row. br_order_needs in
 #      scripts/lib/proof.sh decides, and `read` prints its answer on the order's line.
+#
+# The code the site check before the verify lines added (gap row 212).
+# 103  `build-record`, `build-recheck` or `fix-record` found the task's site down. The `## Status`
+#      line of the environment recipe exited non-zero, in either run mode. The message quotes its
+#      first line of output and names `task environment <id> up`. No check ran and nothing is
+#      written, so the same step runs again once the site is up.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -2284,7 +2292,8 @@ do_start() {
 # supplies with a repeatable `--value <name>=<value>` flag; nothing else in a token is touched, and
 # a placeholder nobody supplied a value for makes the run `unknown`, naming which one. A recipe
 # documenting a default for a placeholder in its own prose, the way python-cli documents one for
-# `{runner}`, is never read here as a fallback: the caller supplies it or the run says so. The
+# `{runner}`, is never read here as a fallback: the caller supplies it or the run says so.
+# A name the recipe's own `## Tokens` blocks give is the one exception, filled after cr_resolve. The
 # command runs the same way a condition's own check runs, as arguments from inside the code
 # repository and never through a shell. `met` on exit 0, `unmet` on any other exit the command
 # actually returned, `unknown` when it could not be run at all (the conditions did not permit it,
@@ -2370,10 +2379,10 @@ PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
 # second call with nothing held writes nothing.
 pc_flush_entry() {
   local out="$1" codepath="$2"
-  local verdict reason rc exitjson
+  local verdict reason rc exitjson first
   [ -n "$PC_ID" ] || return 0
   PC_ANY=1
-  verdict=""; reason=""; exitjson="null"
+  verdict=""; reason=""; exitjson="null"; first=""
   if [ -z "$PC_WHAT" ]; then
     verdict="unknown"; reason="entry-unparseable"
   elif [ -z "$PC_CHECK" ]; then
@@ -2398,10 +2407,11 @@ pc_flush_entry() {
         verdict="unmet"
       fi
     fi
+    [ "$verdict" = "met" ] || first="$(grep -m1 '[^[:space:]]' "$out.stdout" 2>/dev/null)"
     rm -f "$out.stdout"
   fi
   jq -n --arg id "$PC_ID" --arg what "$PC_WHAT" --arg owner "$PC_OWNER" --arg check "$PC_CHECK" \
-        --arg expect "$PC_EXPECT" \
+        --arg expect "$PC_EXPECT" --arg first "$first" \
         --arg verdict "$verdict" --arg reason "$reason" --argjson exitCode "$exitjson" '
     {id: $id, what: (if $what == "" then $id else $what end), verdict: $verdict}
     + (if $check    == ""   then {} else {check: ([$check | splits("[ \t]+")] | map(select(length > 0)))} end)
@@ -2409,6 +2419,7 @@ pc_flush_entry() {
     + (if $owner    == ""   then {} else {owner: $owner} end)
     + (if $reason   == ""   then {} else {reason: $reason} end)
     + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+    + (if $first    == ""   then {} else {firstLine: $first} end)
   ' >>"$out" || die 3 "preconditions: could not record the entry $PC_ID"
   PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""
 }
@@ -2870,7 +2881,7 @@ do_preconditions() {
   local tc_state tc_rows_json
   local smoke_verdict smoke_reason smoke_output smoke_truncated smoke_exit_code_json
   local smoke_row_json smoke_argv_json smoke_out_file smoke_result smoke_kind smoke_payload
-  local smoke_raw_len smoke_json
+  local smoke_raw_len smoke_json smoke_first tokens_json token_failures tokens_out token_first token_entry
   local record_file record_json today
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
@@ -2962,6 +2973,37 @@ do_preconditions() {
   CR_TEST_RECIPES="$recipes"
   CR_CHECK_RECIPES="$check_recipes"
   cr_resolve
+  # A test-execution recipe's `## Tokens` blocks give the names its rows use for a fact no recipe
+  # can know. The folder that holds the project's own code is one (live-run row 205). Each block
+  # runs here in the worktree, through the runner the environment action uses. A --value for the
+  # same name wins, because cr_lookup reads the first. The values this run used are recorded, and
+  # every later step reads them there (br_recorded_token). A block that fails stops that recipe's
+  # blocks, and a row that needs one of its tokens names it.
+  tokens_json='{}'; token_failures=""
+  if [ "$harness_needed" = "yes" ]; then
+    tokens_out="$(mktemp)" || die 3 "preconditions: could not create a temporary file"
+    while IFS="$(printf '\t')" read -r fw recipe_path; do
+      [ -n "$fw" ] && [ -f "$recipe_path" ] || continue
+      if ! recipe_tokens_run preconditions "$recipe_path" "$tokens_out" "$codepath" "" \
+          "The tokens are the ## Tokens names before this one" >/dev/null; then
+        token_first="$(sed -n "$((RT_BEFORE + 2))p" "$tokens_out")"
+        token_failures="$token_failures$RT_FAILED	${token_first:-it printed nothing}
+"
+      fi
+      values="$values$RT_TOKENS"
+      while IFS= read -r token_entry; do
+        [ -n "$token_entry" ] || continue
+        tokens_json="$(printf '%s' "$tokens_json" | jq -c --arg n "${token_entry%%	*}" \
+          --arg v "$(cr_lookup "$values" "${token_entry%%	*}")" '.[$n] //= $v')"
+      done <<PC_TOKENS
+$RT_TOKENS
+PC_TOKENS
+    done <<PC_RECIPES
+$recipes
+PC_RECIPES
+    rm -f "$tokens_out"
+    PC_VALUES="$values"
+  fi
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
     [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
     | join(", ")')"
@@ -3066,7 +3108,7 @@ EOF
     # The smoke row is run, never merely recorded, and only once this framework's own conditions
     # have already answered `met` or `undeclared`. Running it any earlier would only fail for a
     # reason a condition already named.
-    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false
+    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false; smoke_first=""
     smoke_exit_code_json="null"
     case "$fw_verdict" in
       not-needed)
@@ -3106,6 +3148,9 @@ EOF
               if [ "$smoke_kind" = "UNRESOLVED" ]; then
                 smoke_verdict="unknown"
                 smoke_reason="the token {$smoke_payload} in the smoke command has no supplied value; pass --value $smoke_payload=<value>"
+                token_first="$(cr_lookup "$token_failures" "$smoke_payload")"
+                [ -z "$token_first" ] \
+                  || smoke_reason="the token {$smoke_payload} in the smoke command has no value, because the recipe's ## Tokens block for it failed or printed nothing ($token_first); pass --value $smoke_payload=<value>"
               elif [ "$smoke_kind" = "EMPTY" ]; then
                 smoke_verdict="unknown"
                 smoke_reason="the smoke row's argv holds no token at all, so there was nothing to run"
@@ -3126,6 +3171,7 @@ EOF
                 else
                   smoke_output="$(cat "$smoke_out_file" 2>/dev/null)"
                 fi
+                smoke_first="$(grep -m1 '[^[:space:]]' "$smoke_out_file" 2>/dev/null)"
               fi
               rm -f "$smoke_out_file"
             fi
@@ -3140,12 +3186,13 @@ EOF
 
     smoke_json="$(jq -n --arg verdict "$smoke_verdict" --arg reason "$smoke_reason" \
           --arg output "$smoke_output" --argjson truncated "$smoke_truncated" \
-          --argjson exitCode "$smoke_exit_code_json" '
+          --argjson exitCode "$smoke_exit_code_json" --arg first "$smoke_first" '
       {verdict: $verdict}
       + (if $reason == "" then {} else {reason: $reason} end)
       + (if $output == "" then {} else {output: $output} end)
       + (if $truncated == true then {truncated: true} else {} end)
       + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+      + (if $first == "" then {} else {firstLine: $first} end)
     ')"
 
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
@@ -3175,8 +3222,9 @@ EOF
   ' "$fw_json_file")"
 
   today="$(date -u +%Y-%m-%d)"
-  record_json="$(jq -s --arg takenAt "$today" --arg verdict "$run_verdict" '
+  record_json="$(jq -s --arg takenAt "$today" --arg verdict "$run_verdict" --argjson tokens "$tokens_json" '
     {schemaVersion: 1, takenAt: $takenAt, verdict: $verdict, frameworks: .}
+    + (if $tokens == {} then {} else {tokens: $tokens} end)
   ' "$fw_json_file")" || die 3 "preconditions: could not assemble the record"
   rm -f "$fw_json_file"
 
@@ -3319,18 +3367,46 @@ EOF
   # The report, as summary lines. One line per framework carries its verdict, its lookup, the ids
   # of what answered unmet or unknown with the owner each recipe named, the state of its test
   # commands and its smoke verdict. What a condition or a smoke run printed stays in the record.
-  local pc_next
+  # A verdict not met names the first row that stopped it and the command that row ran (live-run
+  # row 206). The first line that command printed takes the `failedOutput:` line. The install
+  # advice takes the `nextAdvice:` line, and only for an absent condition tool. Each is a line of
+  # its own, so the 240-character cut of a long argv never takes the cause or the instruction.
+  local pc_next pc_advice="none" pc_failed="none" pc_cause
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
     met|undeclared|not-needed) ;;
-    *) pc_next="none: the preconditions verdict is $run_verdict, so the build does not go on; read the record. The checks ran in the worktree $codepath, which holds tracked files only, so run the tool skill's install from that directory" ;;
+    *)
+      pc_cause="$(printf '%s' "$record_json" | jq -c --arg values "$values" '
+        ($values | split("\n") | map(select(contains("\t")) | {key: sub("\t.*"; ""), value: sub("^[^\t]*\t"; "")})
+          | reverse | from_entries) as $v
+        | def bad: . == "unmet" or . == "unknown";
+          def ran($argv): "It ran: " + ($argv | map(if test("^\\{[^{}]+\\}$") then ($v[.[1:-1]] // .) else . end) | join(" "));
+          def said: if (.firstLine // "") == "" then "the command printed nothing" else .firstLine end;
+          def how: " read " + .verdict
+            + ([ (.exitCode // empty | "exit " + tostring), (.reason // empty) ] | if length == 0 then "" else " (" + join(", ") + ")" end);
+        [ .frameworks[] | . as $f
+          | ( (.entries[] | select(.verdict | bad)
+               | if .check then {next: ("The \($f.framework) condition \(.id)" + how + ". " + ran(.check)), output: said}
+                 else {next: ("The \($f.framework) condition \(.id)" + how), output: "none"} end),
+              (.smoke | select(.verdict | bad)
+               | if .exitCode == null then {next: "The \($f.framework) smoke row read \(.verdict): \(.reason // "")", output: "none"}
+                 else {next: ("The \($f.framework) smoke row" + ({verdict, exitCode} | how) + ". "
+                   + ran([ $f.testCommands.rows[] | select(.id == "smoke") ][0].argv // [])), output: said} end),
+              (select(.verdict | bad) | {next: "The \(.framework) framework read \(.verdict), and its recipe lookup answered \(.lookup)", output: "none"}) ) ]
+        | .[0] // {next: "Read the record", output: "none"}')"
+      pc_next="none: the build does not go on. $(printf '%s' "$pc_cause" | jq -r '.next')"
+      pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
+      printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
+        && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
+      ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
         --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
         --arg freezeAdvice "$im_advice" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
-        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" '
+        --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
+        --arg failedOutput "$pc_failed" '
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -3359,6 +3435,8 @@ EOF
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
                           + " security=" + $baselineSummary.security.verdict end),
+     failedOutput: $failedOutput,
+     nextAdvice: $nextAdvice,
      next: $next}')"
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a
@@ -3432,8 +3510,11 @@ do_recipe_refresh() {
       '[ (.frameworks // [])[] | select(.framework == $f and .lookup == "resolved") ][0].recipePath // ""')"
     [ -n "$from" ] \
       || die 90 "recipe-refresh: $record_file records no resolved recipe for framework $fw, so there is no path of its own to replace. A first path is preconditions' to record, with --recipe $fw=<path>. Nothing was written."
+    # A new body may declare other ## Tokens blocks. So a changed path drops the values the old
+    # body gave, and a later step reads unknown rather than a stale value.
     record_doc="$(printf '%s' "$record_doc" | jq -c --arg f "$fw" --arg from "$from" --arg to "$rp" --arg at "$today" '
       .frameworks |= map(if .framework == $f then .recipePath = $to else . end)
+      | (if $from != $to then del(.tokens) else . end)
       | .recipeRefreshes = ((.recipeRefreshes // []) + [{framework: $f, kind: "test-execution", from: $from, to: $to, at: $at}])')"
     [ -n "$record_doc" ] || die 3 "recipe-refresh: the record update for $fw failed."
     refreshed="$refreshed$fw	test-execution	$from	$rp
@@ -3641,7 +3722,7 @@ do_tests_brief() {
       || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
   fi
 
-  # --- assemble the brief: exactly these eight keys, and a ninth only after a restart -------------
+  # --- assemble the brief: these fixed keys, then the optional ones: treeHolds, retake, absenceCandidates ---
   local non_goal_ids_json non_goals_out unit_out
   non_goal_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.nonGoals // []')"
   non_goals_out="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson ids "$non_goal_ids_json" \
@@ -3660,6 +3741,16 @@ do_tests_brief() {
   # disposed before the field existed has none, and the brief says so.
   local reuses_out
   reuses_out="$(printf '%s' "$UNIT_JSON" | jq -c '.reuses // []')"
+
+  # Another key, only when a done-when clause carries a negation word: the author decides what to
+  # test, and was never told an absence goes to review instead (gap row 209). A negation word is
+  # the floor a script can read, so the author still judges each clause by references/tests.md.
+  local absence_out
+  absence_out="$(printf '%s' "$UNIT_JSON" | jq -c "$DENIES_JQ"'
+    [ (.doneWhen // [])[] | select(type == "string" and denies) ]
+    | if length == 0 then null
+      else {clauses: .,
+            whatToDo: "Each clause here carries a negation word. Return one that asserts an absence, verbatim, and write no test for it. The freeze routes it to review with --absence. A clause that states a behaviour still takes a test."} end')"
 
   # A ninth thing, only after a restart or a retake left this order's build and fix commits on the
   # branch: a test that passes on arrival is suspect, and the author is told rather than left to
@@ -3733,7 +3824,7 @@ do_tests_brief() {
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
-        --argjson retake "$retake_json" \
+        --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
         --arg testRecipePath "$test_recipe_path" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
@@ -3741,7 +3832,8 @@ do_tests_brief() {
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
       playbooksPath: $playbooksPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
-     | if $retake == null then . else .retake = $retake end')"
+     | if $retake == null then . else .retake = $retake end
+     | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -3760,8 +3852,10 @@ do_tests_brief() {
                  + (.retake.finding.rulingReason // "the ruling reason is not on record")
                  + " | correct the tests it names and leave the other frozen rows alone")
               else null end),
+     absenceCandidates: (if has("absenceCandidates") then (.absenceCandidates.clauses | length) else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
     | if .treeHolds == null then del(.treeHolds) else . end
+    | if .absenceCandidates == null then del(.absenceCandidates) else . end
     | if .retake == null then del(.retake) else . end')"
   exit 0
 }
@@ -4168,19 +4262,11 @@ do_tests_freeze() {
   #
   # `denies` is a floor and not the whole rule: "the form shows no legacy field" carries `no` and a
   # test can watch it fail, so references/tests.md carries the judgement and this carries the
-  # refusal a script can make. The word list is closed, so it reads the same clause the same way
-  # every time. A word ending in n't after a letter is a negation too, so "doesn't" and "won't"
-  # deny and a bare "n't" does not. U+2018, U+2019 and U+02BC read as a straight apostrophe first,
-  # because a clause pasted from a document or typed on a phone carries one of them.
+  # refusal a script can make. `denies` is DENIES_JQ, from scripts/lib/task-helpers.sh, which
+  # the tests brief reads too.
   local absence_sorted absence_json absence_unknown absence_asserts
   absence_sorted="$(printf '%s' "$absence_raw" | jq -c \
-    --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" '
-    def denies: ascii_downcase | gsub("[\u2018\u2019\u02bc]"; "\u0027")
-      | [scan("[a-z0-9]+(?:\u0027[a-z]+)?")]
-      | any(.[]; . as $w
-            | ((["no", "not", "never", "neither", "nor", "none", "nothing", "without", "cannot"]
-                | index($w)) != null)
-              or ($w | test("[a-z]n\u0027t$")));
+    --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" "$DENIES_JQ"'
     def known: . as $t | ($dw | index($t)) != null;
     . as $given
     | { routed: (reduce ($given[] | select(known) | select(denies)) as $t
@@ -4766,6 +4852,38 @@ TF_EOF
     echo "TESTS-FREEZE: $unit_id creates a unit: $unit_file matches $unit_file_glob under ## Unit declaration in $unit_file_recipe. A red holding only the harness marker is accepted for it, because nothing can fail an assertion before the unit exists."
   fi
 
+  # --- 80: two tests that fail at one place failed on a shared precondition (live-run row 207) ----
+  # Ten tests opened with one guard that the service exists, and all ten reds stopped on that
+  # line. Each held an assertion marker, yet no test was watched failing on its own assertion. A
+  # red's place is every `<test file name>:<line>` its file prints, in order: the failing line and,
+  # through a helper, the test's own call line. Two tests of one file whose reds print the same
+  # places failed at one shared line, so that red counts for neither. Only the reds read on an
+  # assertion are compared, because every harness red of the order that creates the unit stops at
+  # one place by nature.
+  local places_tmp place_name place_rel place_path place_chain shared_places
+  places_tmp="$IMPL_DIR/.tests-freeze-places.$$"
+  : >"$places_tmp"
+  ri=0
+  while [ "$ri" -lt "$red_count" ]; do
+    place_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri] | select(.signal == "assertion" or .signal == "failure-line") | .name')"
+    place_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
+    ri=$((ri + 1))
+    [ -n "$place_name" ] || continue
+    place_rel="$(printf '%s' "$tests_json" | jq -r --arg n "$place_name" '[ .[] | select(.name == $n) ][0].relPath')"
+    # A regex match, because jq's `indices` counts bytes and its slices count characters, so a
+    # position read past any non-ASCII character (jest's bullet) pointed at the wrong text.
+    place_chain="$(jq -n -r --rawfile text "$place_path" --arg b "${place_rel##*/}" '
+        [ $text | match("(?<![A-Za-z0-9_.-])" + ($b | gsub("(?<c>[\\\\^$.|?*+()\\[\\]{}])"; "\\\(.c)")) + ":(?<n>[0-9]+)"; "g")
+          | "\($b):\(.captures[0].string)" ] | join(" then ")')"
+    [ -z "$place_chain" ] || printf '%s\t%s\t%s\n' "$place_rel" "$place_chain" "$place_name" >>"$places_tmp"
+  done
+  shared_places="$(jq -R -s -r '
+      split("\n") | map(select(length > 0) | split("\t")) | group_by(.[0] + "\t" + .[1])
+      | map(select(length > 1) | "\(.[0][1]) (\(map(.[2]) | join(", ")))") | join("; ")' "$places_tmp")"
+  rm -f "$places_tmp"
+  [ -z "$shared_places" ] \
+    || die 80 "tests-freeze: these tests' reds all stop at one place: $shared_places. A failure there is a shared precondition, such as a guard that the class or service exists, so it is a red for none of them. Nothing is frozen. Make each test reach its own assertion: write the guard so that it asserts nothing, for example a lookup that gives the empty value when the service is absent. Then run each test again."
+
   # --- 101: a --locks-in reason written commit:<id> names one of this order's own commits --------
   # A test of the order's own done-when that arrives green has no code the author may cite: the
   # code is this order's earlier build, which a restart or a retake left in the tree, and the author
@@ -5185,9 +5303,9 @@ do_build_brief() {
 
   # --- assemble the brief: exactly these keys, and nothing else ------------------------------------
   local unit_out tests_out
-  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
-    '{id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
-      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: (.reasoning // ""),
+  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c "$REASONING_JQ"'
+    {id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
+      doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: liveReasoning,
       proof: (.proof // "tests"), verify: (.verify // [])}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
@@ -5236,7 +5354,7 @@ do_build_brief() {
         --arg commitIn "$bb_codepath" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
-        --arg reportPath "$IMPL_DIR/report-$unit_id-attempt$((attempts_used + 1)).md" \
+        --arg reportPath "$IMPL_DIR/answers-$unit_id-attempt$((attempts_used + 1)).md" \
         --arg interfacePath "$IMPL_DIR/interface-$unit_id.md" \
         --argjson attemptsUsed "$attempts_used" --argjson attemptsAllowed "$attempts_allowed" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
@@ -5775,18 +5893,18 @@ BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 # Removes each file the verify lines' recipes wrote, puts back each earlier version they replaced,
 # then removes the folders made for them and the temporary folder. RF_WRITTEN_PATHS and
 # RF_REPLACED_PATHS are read too, because a refusal or an interrupt inside recipe_files_write
-# leaves that recipe's paths there alone. It is safe to run twice. A path it could not take out
+# leaves that recipe's paths there alone. RS_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
 # is named, and the tree is then not what it was.
 br_verify_files_remove() {
   local left=""
   if [ -n "$BRV_TREE" ]; then
     left="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
-      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS" | sed -n 3p)"
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RS_DIRS" | sed -n 3p)"
     [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
   BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RS_DIRS=""
 }
 
 # Runs the order's own verify lines through br_run_lines from the folder $1, output into $2. A line
@@ -5831,19 +5949,25 @@ BRV_RECIPES
 # from --value. A name given several --value rows runs its line once per value, in the order
 # given: each run puts that value's row first, where cr_lookup finds it, so the one filler fills
 # it. Only the first such name in a line multiplies it; any other token takes its first value.
+# A line holding `{paths}`, `{file}` or `{dirs}` on an order that owns no file does not apply,
+# as a check row does not (gap row 203). A tool handed no path reads its own default scope. The
+# output names it and the list goes on. When no line applies, the list reads undeclared, which
+# never passes an order alone, because br_checks_pass needs its deciding check met.
 # The first run that fails stops the list. A non-zero exit fails a run whatever its pass says.
 # `stdout empty` and `stdout contains <text>` then read standard output alone, because a status
 # command writes its message to standard error and exits 0 either way. It sets BRL_VERDICT,
-# empty when every line passed, else unmet or unknown; BRL_WHY, the reason in words; BRL_RC, the
-# last exit code or empty; BRL_N, how many lines ran; and BRL_LINE, the last line.
-BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
+# empty when every line that applies passed, undeclared when none applies, else unmet or unknown;
+# BRL_WHY, the reason in words; BRL_RC, the last exit code or empty; BRL_N, how many lines ran;
+# BRL_SKIPPED, how many did not apply; and BRL_LINE, the last line.
+BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_SKIPPED=0; BRL_LINE=""
 br_run_lines() {
   local lines_json="$1" source="$2" dir="$3" outfile="$4" refused="$5"
   local count i pass literal argv_json result kind payload owned_json run_out run_err
-  local tok multi_name="" multi_values="" value values shown tab
+  local tok multi_name="" multi_values="" value values shown tab owned_count
   tab="$(printf '\t')"
-  BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_LINE=""
+  BRL_VERDICT=""; BRL_WHY=""; BRL_RC=""; BRL_N=0; BRL_SKIPPED=0; BRL_LINE=""
   owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
+  owned_count="$(printf '%s' "$owned_json" | jq 'length')"
   run_out="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   run_err="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   count="$(printf '%s' "$lines_json" | jq 'length')"
@@ -5851,9 +5975,15 @@ br_run_lines() {
   while [ "$i" -lt "$count" ]; do
     BRL_LINE="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].run')"
     pass="$(printf '%s' "$lines_json" | jq -r --argjson i "$i" '.[$i].pass // "exit 0"')"
-    i=$((i + 1)); BRL_N="$i"
+    i=$((i + 1))
     refuse_if_unsafe "$BRC_WHO" "$source" "$BRL_LINE" || die 3 "$BRC_WHO: $refused"
     argv_json="$(printf '%s' "$BRL_LINE" | jq -Rc 'split(" ") | map(select(. != ""))')"
+    if [ "$owned_count" -eq 0 ] && br_argv_takes_paths "$argv_json"; then
+      printf '+ %s\nnot applicable: gate line %s holds a path placeholder, and this order declares no ownedFiles, so the line does not apply to it.\n' "$BRL_LINE" "$i" >>"$outfile"
+      BRL_SKIPPED=$((BRL_SKIPPED + 1))
+      continue
+    fi
+    BRL_N=$((BRL_N + 1))
     multi_name=""; multi_values=""
     while IFS= read -r tok; do
       case "$tok" in ''|paths|file|dirs) continue ;; esac
@@ -5909,6 +6039,10 @@ ${multi_values:-one}
 BR_RUN_VALUES
     [ -z "$BRL_VERDICT" ] || break
   done
+  if [ -z "$BRL_VERDICT" ] && [ "$count" -gt 0 ] && [ "$BRL_SKIPPED" -eq "$count" ]; then
+    BRL_VERDICT="undeclared"
+    BRL_WHY="each line holds a path placeholder, and this order declares no ownedFiles, so no line applies to it"
+  fi
   rm -f "$run_out" "$run_err"
 }
 
@@ -5943,7 +6077,8 @@ br_gate_check() {
     br_run_verify_lines "$BRC_CODEPATH" "$outfile"
     own_verdict="${BRL_VERDICT:-met}"; rc="$BRL_RC"
     case "$own_verdict" in
-      met) own_detail="every verify line of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') ($BRL_N of them) passed, from $cites." ;;
+      met) own_detail="every verify line of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') ($BRL_N of them$([ "$BRL_SKIPPED" -eq 0 ] || printf ', %s did not apply' "$BRL_SKIPPED")) passed, from $cites." ;;
+      undeclared) own_detail="$BRL_WHY, from $cites." ;;
       *)   own_detail="$BRL_WHY, from $cites. Every verify line before it passed." ;;
     esac
   fi
@@ -5980,7 +6115,7 @@ BR_GATE
       # The exit code the check carries is the first failing list's, else the last that ran.
       [ -z "$BRL_RC" ] || [ "$own_verdict" = "unmet" ] || rc="$BRL_RC"
       case "$gate_verdict" in
-        met)   gate_detail="every ## Configuration gate line ($BRL_N of them) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output." ;;
+        met)   gate_detail="every ## Configuration gate line ($BRL_N of them$([ "$BRL_SKIPPED" -eq 0 ] || printf ', %s did not apply' "$BRL_SKIPPED")) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output." ;;
         unmet) gate_detail="$BRL_WHY on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0." ;;
         *)     gate_detail="$BRL_WHY" ;;
       esac
@@ -6020,7 +6155,7 @@ br_verify_fold() {
   # The exit code follows the verdict that stands: the lines' own when they failed, the check's
   # own when it failed, and the lines' when both passed and the check ran no command.
   jq --arg v "$verdict" --arg lv "${BRL_VERDICT:-met}" --arg rc "$BRL_RC" --rawfile out "$outfile" \
-     --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them) passed, from %s.' "$BRL_N" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
+     --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them%s) passed, from %s.' "$BRL_N" "$([ "$BRL_SKIPPED" -eq 0 ] || printf ', %s did not apply' "$BRL_SKIPPED")" "$cites"; elif [ "$BRL_VERDICT" = "undeclared" ]; then printf 'Its verify lines do not apply: %s, from %s.' "$BRL_WHY" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
     .verdict = $v | .detail = (.detail + " " + $add)
     | .output = (if (.output // "") == "" then $out else .output + "\n" + $out end)
     | if $rc == "" then .
@@ -6128,6 +6263,36 @@ br_aida_writes_in_project() {
     project.json|tasks/*) return 0 ;;
   esac
   return 1
+}
+
+# Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
+# command such as `ddev drush` starts a stopped site and prints its start-up text. So every
+# `stdout empty` line would fail for a reason that is not the check. The test runs when the task
+# records an environment address and the order has verify run lines or holds the configuration
+# gate. The recipe must also carry a `## Status` block. No line kind says that a line leaves the
+# site alone, so every such order is tested. The refusal holds in both run modes, because
+# `task environment up` is a person's answer and refuses unattended. No attempt is spent, so the
+# same step runs again once the site is up. The status script's files go out through
+# br_verify_files_remove, on every exit. Its callers run it before their temporary files exist.
+# Reads TASK_PATH, BRC_WHO and BRC_UNIT_JSON.
+br_require_site_up() {
+  local task_json="$TASK_PATH/task.json" recipe wt rc
+  [ -n "$(jq -r '.environment.address // empty' "$task_json" 2>/dev/null)" ] || return 0
+  recipe="$(jq -r '.environment.recipe // empty' "$task_json")"
+  wt="$(jq -r '.worktree.path // empty' "$task_json")"
+  [ -f "$recipe" ] && [ -d "$wt" ] || return 0
+  br_verify_runs; br_order_facts "$BRC_UNIT_JSON"
+  [ "$BRV_RUNS" != "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
+  trap 'br_verify_files_remove' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  BRV_TREE="$wt"
+  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
+  recipe_status_run "$BRC_WHO" "$recipe" "$wt" "$task_json" "$BRV_FILES_DIR"; rc=$?
+  br_verify_files_remove
+  trap - EXIT INT TERM
+  [ "$rc" -ne 1 ] \
+    || die 103 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then run the same step again once the site is up."
 }
 
 # The seven, in the fixed order this stage records them: order-tests, suite-regression,
@@ -6433,6 +6598,7 @@ br_eight_checks() {
   [ -n "$interface_check_json" ] \
     || die 3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
 
+  br_require_site_up
   seven_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   br_seven_checks >"$seven_file"
   [ -s "$seven_file" ] \
@@ -7390,7 +7556,7 @@ do_review_brief() {
     --arg locksIn "$locks_note" \
     --argjson criteria "$criteria_json" \
     --argjson nonGoals "$nongoals_json" \
-    --argjson order "$RV_UNIT_JSON" \
+    --argjson order "$(printf '%s' "$RV_UNIT_JSON" | jq -c "$REASONING_JQ"'.reasoning = liveReasoning')" \
     --arg diffPath "$diff_path" \
     --argjson deliverables "$deliverables_json" \
     --argjson frozenTests "$tests_json" \
@@ -7764,7 +7930,7 @@ FB_ALLOW
   brief_json="$(jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
     --argjson allowedFiles "$allowed_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \
-    --arg reportPath "$IMPL_DIR/report-$unit_id-fix$((rounds_used + 1)).md" \
+    --arg reportPath "$IMPL_DIR/answers-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
     --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
@@ -8028,6 +8194,7 @@ RV_SCOPE
 
   # The checks travel by file to the record, the same as build-record (nyc defects 9 and 12).
   local seven_file checks_json
+  br_require_site_up
   seven_file="$(mktemp)" || die 3 "fix-record: could not create a temporary file"
   br_seven_checks >"$seven_file"
   [ -s "$seven_file" ] \

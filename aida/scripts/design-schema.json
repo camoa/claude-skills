@@ -116,7 +116,7 @@
     "reasoning": {
       "type": "string",
       "default": "",
-      "description": "Why this order exists, for a decision shared by several orders, for example why a base class sits here rather than being copied into each order that needs it (ideal/design.md, 'Why the architecture is not a document'). Empty for most orders: only a shared decision needs stating, and most orders need none."
+      "description": "Why this order exists, for a decision shared by several orders, for example why a base class sits here rather than being copied into each order that needs it (ideal/design.md, 'Why the architecture is not a document'). Empty for most orders: only a shared decision needs stating, and most orders need none. Paragraphs are separated by a blank line. A paragraph that starts `[struck] ` was replaced by a later one (design-actions.sh `update --strike-reasoning`, gap row 215). It stays here and in the rendered design. No brief carries it."
     },
     "diffBudget": {
       "type": "string",

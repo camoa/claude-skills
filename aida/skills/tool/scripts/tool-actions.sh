@@ -7,12 +7,22 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
+#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] <process recipe path>
+#
+# Every form also takes `--tooling <tool>=<path>` before the action, once per tool: a catalog
+# recipe catalog-identifier found. A folder source ranked before the catalog still wins.
 #
 # show     prints where the recipe is and the commands it holds, and runs nothing.
 # install  runs every command in the recipe's Install block, in order.
 # run      runs the recipe's Run command. A missing tool is that command failing. What follows
 #          `--` reaches that command as arguments. show and install refuse the form at 3, because
 #          they take their commands from the recipe and would otherwise drop what a caller typed.
+# require  runs `run` for each tool a process recipe names under requires_tooling, and prints one
+#          `TOOLING: <tool> present|absent|unknown` line each, or `REQUIRES: none`. Absent means the
+#          check exited 127, command not found; any other exit means the tool ran. It exits 0 when
+#          every tool is present, 4 when one is absent, and 2 when one is unknown, over an absent one.
+#          --advisory prints the same lines and exits 0. It installs nothing: install stays the one
+#          action that needs a person.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
@@ -48,11 +58,24 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/..
 . "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 
 RUN_MODE="interactive"
-if [ "${1:-}" = "--run-mode" ]; then
-  [ $# -ge 2 ] || { printf 'tool-actions: --run-mode needs a value\n' >&2; exit 3; }
-  RUN_MODE="$2"
-  shift 2
-fi
+# `<tool><TAB><path>`, one line per --tooling: a recipe the catalog served, found by the caller.
+TOOLING=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --run-mode)
+      [ $# -ge 2 ] || { printf 'tool-actions: --run-mode needs a value\n' >&2; exit 3; }
+      RUN_MODE="$2"; shift 2 ;;
+    --tooling)
+      case "${2:-}" in
+        ?*=?*) ;;
+        *) printf 'tool-actions: --tooling takes <tool>=<path>, got %s\n' "${2:-}" >&2; exit 3 ;;
+      esac
+      TOOLING="$TOOLING${2%%=*}	${2#*=}
+"
+      shift 2 ;;
+    *) break ;;
+  esac
+done
 case "$RUN_MODE" in
   interactive|autonomous) ;;
   *) printf 'tool-actions: run mode must be interactive or autonomous, got %s\n' "$RUN_MODE" >&2; exit 3 ;;
@@ -60,7 +83,50 @@ esac
 
 ACTION="${1:-}"
 TOOL="${2:-}"
-[ -n "$ACTION" ] || { printf 'tool-actions: needs an action: show, install or run\n' >&2; exit 3; }
+[ -n "$ACTION" ] || { printf 'tool-actions: needs an action: show, install, run or require\n' >&2; exit 3; }
+
+# require takes a process recipe's path, not a tool name. Each name its requires_tooling list
+# holds goes to run, because the catalog makes a tooling recipe's Run command its presence check.
+# run resolves the tooling recipe, so a name nothing answers reads unknown with run's own reason.
+if [ "$ACTION" = "require" ]; then
+  # --advisory prints the same lines and always exits 0, for a caller that goes on either way.
+  ADVISORY=no
+  if [ "$TOOL" = "--advisory" ]; then ADVISORY=yes; shift 2; set -- require "$@"; TOOL="${2:-}"; fi
+  [ $# -eq 2 ] || { printf 'tool-actions: require takes one recipe path and nothing after it\n' >&2; exit 3; }
+  [ -f "$TOOL" ] && [ -r "$TOOL" ] || { printf 'tool-actions: the recipe %s is not a readable file\n' "$TOOL" >&2; exit 3; }
+  NAMES="$(recipe_requires_tooling_of "$TOOL")" || {
+    printf 'tool-actions: %s holds a requires_tooling value that is not a list, so no tool was checked\n' "$TOOL" >&2
+    exit 3
+  }
+  if [ -z "$NAMES" ]; then printf 'REQUIRES: none\n'; exit 0; fi
+  WORST=0
+  while IFS= read -r NAME; do
+    NAME="$(pc_unquote "$NAME")"
+    SUBARGS=(--run-mode "$RUN_MODE")
+    GIVEN="$(cr_lookup "$TOOLING" "$NAME")"
+    [ -z "$GIVEN" ] || SUBARGS+=(--tooling "$NAME=$GIVEN")
+    SAID="$("$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" "${SUBARGS[@]}" run "$NAME" 2>&1 </dev/null)"
+    RC=$?
+    STATUS="$(printf '%s\n' "$SAID" | sed -n 's/^status: //p')"
+    # Only 127, command not found, says the tool is absent. Any other failure means it ran.
+    [ "$RC" -eq 4 ] && [ "$STATUS" != "127" ] && RC=0
+    case "$RC" in
+      0) if [ "$STATUS" = "0" ]; then printf 'TOOLING: %s present\n' "$NAME"
+         else printf 'TOOLING: %s present: its check ran and exited %s\n' "$NAME" "$STATUS"; fi ;;
+      1) printf '%s\n' "$SAID" >&2; exit 1 ;;
+      4) printf 'TOOLING: %s absent: %s\n' "$NAME" "$(printf '%s\n' "$SAID" | sed -n 's/^first: //p')"
+         [ "$WORST" -ne 0 ] || WORST=4 ;;
+      *) printf 'TOOLING: %s unknown: %s\n' "$NAME" \
+           "$(printf '%s\n' "$SAID" | sed -n 's/^tool-actions: //p' | awk '{ printf "%s%s", (NR > 1 ? "; " : ""), $0 }')"
+         WORST=2 ;;
+    esac
+  done <<TOOL_NAMES
+$NAMES
+TOOL_NAMES
+  [ "$ADVISORY" = "no" ] || exit 0
+  exit "$WORST"
+fi
+
 [ -n "$TOOL" ]   || { printf 'tool-actions: needs a tool name\n' >&2; exit 3; }
 
 # A tool name reaches the filesystem, so it is a single lowercase token and nothing else.
@@ -105,25 +171,34 @@ if [ -z "$FRAMEWORKS" ]; then
 fi
 
 # ----------------------------------------------------------------- the recipe
-# Only a folder source can be read here. A catalog source is fetched by the navigator
-# plugin, which this script does not call, so it is reported rather than guessed at.
+# This script reads folder sources itself. A catalog recipe is fetched by the navigator, which
+# this script does not call. The caller hands its path over as --tooling, found by
+# catalog-identifier; without one, a catalog source is reported rather than guessed at.
 
 RECIPE=""
 RECIPE_FRAMEWORK=""
 UNREACHABLE=""
+GIVEN="$(cr_lookup "$TOOLING" "$TOOL")"
+ASKS=no
+if [ -n "$GIVEN" ]; then
+  [ -f "$GIVEN" ] && [ -r "$GIVEN" ] || { printf 'tool-actions: the --tooling recipe for %s is not a readable file: %s\n' "$TOOL" "$GIVEN" >&2; exit 3; }
+  ASKS=yes
+fi
 
 # The walk is sw_probe in scripts/lib/recipes.sh, shared with the project skill's process-recipe
-# lookup. `no` says this caller cannot ask the catalog, so a catalog entry is reported rather than
-# followed, and the folders ranked below it are still read.
+# lookup. With no --tooling path it passes `no`: a catalog entry is reported, and the folders ranked
+# below it are still read. With one it passes `yes`, so a folder ranked before the catalog wins, and
+# the catalog's path answers where the walk reached a catalog entry or found no folder recipe.
 while IFS= read -r fw; do
   [ -n "$fw" ] || continue
-  if sw_probe "$PROJECT_FILE" toolingRecipes tooling-recipes "$fw" "$TOOL" no; then
+  if sw_probe "$PROJECT_FILE" toolingRecipes tooling-recipes "$fw" "$TOOL" "$ASKS"; then
     RECIPE="$SW_PATH"; RECIPE_FRAMEWORK="$fw"; break
   fi
   if [ -n "$SW_UNREADABLE" ]; then
     printf 'tool-actions: %s is on disk and could not be read. A recipe that cannot be read is not a recipe that is absent, so no other source answered for it\n' "$SW_UNREADABLE" >&2
     exit 3
   fi
+  if [ -n "$GIVEN" ]; then RECIPE="$GIVEN"; RECIPE_FRAMEWORK="$fw"; break; fi
   UNREACHABLE="$SW_OTHER"
 done <<< "$FRAMEWORKS"
 
@@ -275,12 +350,12 @@ case "$ACTION" in
       exit 0
     fi
     # Line 2: the record opens with the command as it ran, and `first:` quotes its output.
-    recipe_output_summary 4 "$OUTFILE" 2
+    recipe_output_summary "$RC" "$OUTFILE" 2
     exit 4
     ;;
 
   *)
-    printf 'tool-actions: unknown action %s, expected show, install or run\n' "$ACTION" >&2
+    printf 'tool-actions: unknown action %s, expected show, install, run or require\n' "$ACTION" >&2
     exit 3
     ;;
 esac

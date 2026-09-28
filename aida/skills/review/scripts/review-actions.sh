@@ -1513,7 +1513,7 @@ RW_SOURCES
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
     --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
     --argjson absenceClauses "$RW_ABSENCE_CLAUSES" \
-    --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
+    --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" "$REASONING_JQ"'
     $record[0] as $record
     | {task: $task,
      codePath: $codePath,
@@ -1526,7 +1526,7 @@ RW_SOURCES
      lenses: ($lenses | split(" ")),
      criteria: [ ($alignment.criteria // [])[] | {id, text, verification, verifiedBy} ],
      nonGoals: ($alignment.nonGoals // []),
-     workOrders: ($snap.workOrders // []),
+     workOrders: [ ($snap.workOrders // [])[] | .reasoning = liveReasoning ],
      absenceClauses: $absenceClauses,
      research: $research,
      deferredFindings: ($finished.deferred // []),

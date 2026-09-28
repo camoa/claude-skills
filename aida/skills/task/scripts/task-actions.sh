@@ -1210,19 +1210,11 @@ ENV_ADDRESS_MARK="--- the address command,"
 # reads. `codePath` heads it; the tokens and the address keys follow.
 TOKENS=""
 
-# Fills every `{name}` in $1 from TOKENS. A shell loop rather than sed, so a value may hold any
-# character.
-fill_tokens() {
-  local line="$1" entry name value
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    name="{${entry%%	*}}"; value="${entry#*	}"
-    while [ "${line#*"$name"}" != "$line" ]; do line="${line%%"$name"*}$value${line#*"$name"}"; done
-  done <<TA_TOKENS
-$TOKENS
-TA_TOKENS
-  printf '%s' "$line"
-}
+# Fills every `{name}` in $1 from TOKENS.
+fill_tokens() { fill_tokens_from "$TOKENS" "$1"; }
+
+# The sentence a refused line carries, naming the tokens an environment line may hold.
+ENV_TOKENS_HINT="The tokens are {codePath}, the ## Tokens names and the address keys"
 
 # The `## Bring up` lines of the recipe $1 before ($2 `before`) or after ($2 `after`) its
 # `## Address` heading. The recipe places the address between two bring-up headings, and only the
@@ -1240,39 +1232,17 @@ bring_up_half() {
 fill_line_or_refuse() {
   local line rest
   line="$(fill_tokens "$1")"
-  case "$line" in *'{'*'}'*) rest="${line#*\{}"; die3 "environment: $2 line holds a token nothing fills: {${rest%%\}*}}. The tokens are {codePath}, the ## Tokens names and the address keys" ;; esac
+  case "$line" in *'{'*'}'*) rest="${line#*\{}"; die3 "environment: $2 line holds a token nothing fills: {${rest%%\}*}}. $ENV_TOKENS_HINT" ;; esac
   printf '%s' "$line"
-}
-
-# Runs the one line $1 in $2 and writes its standard output to $4, which a token and the address
-# are read from. Both streams are appended to $3, standard error after standard output, so the
-# record holds them and the caller reads a clean value. Returns the command's exit status. A line
-# refused by refuse_if_unsafe, holding no command, or still holding a `{name}` exits 3.
-# A caller that quotes a line of this record counts two past the length it held before the call:
-# the command's own line, then its first line of output. Both refusals here fire when the command
-# printed nothing, so the record's last line is that command, never output.
-run_recipe_capture() {
-  local line="$1" dir="$2" outfile="$3" capture="$4" err_file result tab; tab="$(printf '\t')"
-  line="$(fill_tokens "$line")"
-  refuse_if_unsafe environment "$RECIPE" "$line" || exit 3
-  err_file="$(mktemp)" || die3 "environment: could not create a temporary file"
-  printf '+ %s\n' "$line"
-  # The filled line, above the output it produced, the same shape run_recipe_line writes. The
-  # record holds a token's output, and the recipe's unfilled line does not say what produced it.
-  printf '+ %s\n' "$line" >>"$outfile"
-  result="$(br_run_resolved "$(printf '%s' "$line" | jq -Rc 'split(" ") | map(select(. != ""))')" "$dir" "$capture" '[]' "" "$err_file")"
-  cat "$capture" "$err_file" >>"$outfile"; rm -f "$err_file"
-  case "$result" in RAN*) return "${result#*"$tab"}" ;; esac
-  die3 "environment: the line holds no command, or a token nothing fills: ${result#*"$tab"}. The tokens are {codePath}, the ## Tokens names and the address keys"
 }
 
 # What environment_cleanup removes when `show` or `up` stops before it keeps them. They are
 # globals, because zsh runs an EXIT trap after the locals of the function that set it are gone.
 # ENV_TMP: temporary files and folders, one per line. ENV_OUT: the check's output file, until `up`
 # keeps it. ENV_TREE: the worktree the recipe files go into. ENV_HEAD: its commit before the write.
-# ENV_DIRS: the folders this run made there for them. RF_WRITTEN_PATHS, from
-# scripts/lib/recipes.sh, holds the files it wrote, and RF_REPLACED_PATHS the earlier versions it
-# replaced, which RF_SAVED_IN keeps until the temporary folders go.
+# ENV_DIRS: the folders this run made there for them, and RS_DIRS those of a `## Status` run.
+# RF_WRITTEN_PATHS, from scripts/lib/recipes.sh, holds the files it wrote, and RF_REPLACED_PATHS
+# the earlier versions it replaced, which RF_SAVED_IN keeps until the temporary folders go.
 ENV_TMP=""; ENV_OUT=""; ENV_TREE=""; ENV_HEAD=""; ENV_DIRS=""
 
 # Removes what `show` or `up` made and did not keep. It unstages and removes each recipe file
@@ -1306,7 +1276,7 @@ environment_cleanup() {
     done <<ENV_CLEAN_FILES
 $RF_WRITTEN_PATHS$RF_REPLACED_PATHS
 ENV_CLEAN_FILES
-    [ -n "$kept" ] || dirs="$ENV_DIRS"
+    [ -n "$kept" ] || dirs="$ENV_DIRS$RS_DIRS"
     taken="$(recipe_files_take_out "$ENV_TREE" "$RF_SAVED_IN" "$written" "$replaced" "$dirs")"
     back="$(printf '%s\n' "$taken" | sed -n 1p)"; gone="$(printf '%s\n' "$taken" | sed -n 2p)"
     left="$(printf '%s\n' "$taken" | sed -n 3p)"
@@ -1324,7 +1294,7 @@ ENV_CLEAN_FILES
   done <<ENV_CLEAN_TMP
 $ENV_TMP
 ENV_CLEAN_TMP
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; RS_DIRS=""; ENV_OUT=""; ENV_TMP=""; ENV_HEAD=""
   [ -z "$left" ] || { printf 'environment: could not remove from %s:%s. Remove them by hand.\n' "$ENV_TREE" "$left" >&2; return 1; }
 }
 
@@ -1557,6 +1527,16 @@ TA_TOKEN_LIST
       printf 'precondition check: passed in %s\n' "$wt"
     fi
     environment_cleanup quiet || exit 3
+    # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
+    # The EXIT trap still stands, so environment_cleanup removes its files on every exit.
+    if [ -n "$wt" ] && [ -d "$wt" ]; then
+      ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
+      files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+      ENV_TMP="$files_dir"
+      recipe_status_run environment "$RECIPE" "$wt" "$task_json" "$files_dir"
+      case "$?" in 0) printf 'status: up\n' ;; 1) printf 'status: down, %s\n' "${RS_FIRST:-nothing printed}" ;; esac
+      environment_cleanup quiet || exit 3
+    fi
     trap - EXIT INT TERM
     return 0
   fi
@@ -1582,17 +1562,9 @@ TA_TOKEN_LIST
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"
   ENV_TMP="$ENV_TMP
 $capture"
-  while IFS="$tab" read -r n name; do
-    [ -n "$n" ] || continue
-    before="$(wc -l <"$outfile" | tr -d '[:space:]')"
-    run_recipe_capture "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")" "$wt" "$outfile" "$capture"; result=$?
-    value="$(head -n 1 "$capture")"
-    [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$name" >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
-    TOKENS="$TOKENS$name$tab$value
-"
-  done <<TA_TOKEN_LIST
-$token_list
-TA_TOKEN_LIST
+  recipe_tokens_run environment "$RECIPE" "$outfile" "$wt" "$TOKENS" "$ENV_TOKENS_HINT" \
+    || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$RT_FAILED" >&2; recipe_output_summary 4 "$outfile" "$((RT_BEFORE + 2))"; exit 4; }
+  TOKENS="$RT_TOKENS"
   rm -rf "$tokens_dir"
   # The record names the site before the site exists. Every later reader finds a site through
   # .environment, so a failure between a bring-up line and the record would leave one running that
@@ -1618,7 +1590,7 @@ TA_TOKEN_LIST
   # this record. It goes in before the line count below, which `first:` quotes from.
   printf '%s %s\n' "$ENV_ADDRESS_MARK" "$marker_at" >>"$outfile"
   before="$(wc -l <"$outfile" | tr -d '[:space:]')"
-  run_recipe_capture "$address" "$wt" "$outfile" "$capture"; result=$?
+  run_recipe_capture environment "$RECIPE" "$(fill_tokens "$address")" "$wt" "$outfile" "$capture" "$ENV_TOKENS_HINT"; result=$?
   value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
   [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
   keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"

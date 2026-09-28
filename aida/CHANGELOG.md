@@ -4,6 +4,110 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - 2026-09-27
+
+The first release of version 6, after twenty-six betas. It replaces
+`ai-dev-assistant` in the marketplace. The betas ran live tasks on real
+projects, and every row those runs opened is closed. This release adds the
+last sixteen, and a harder guard against dangerous commands.
+
+### Changed
+
+- Scope raises the non-goal probes in one block. Each probe recommended out is
+  written with the draft, and the person corrects any of them in one answer.
+  Only a probe recommended in, or one scope is unsure of, is asked on its own.
+  Unattended runs take each recommendation, as before.
+- The design pages no longer say that every recipe holds prose only. A recipe
+  may carry a `verifier:` block, a prose list, or both, and design reads each.
+- Design no longer reads production source for a reuse decision. It sends
+  `internal-searcher`, in a new interface mode, once per candidate the order
+  calls, and records its return word for word as `--interface`. Design's
+  `read` prints the task's worktree, which that dispatch names.
+- A test recipe may declare `## Tokens`. Preconditions run them in the
+  worktree and record the values, and every later step fills them in any
+  row. The token runner is one copy, shared with the site bring-up. AIDA
+  holds no framework logic for it: the recipe computes each value.
+- A precondition verdict that is not met names the failing row and its
+  command on `next:`, and its first output line on its own `failedOutput:`
+  line. Tool install advice prints on `nextAdvice:`, only when a condition's
+  tool is absent.
+- The destructive-command hook reads a command the way an agent would reword
+  it. It sees through git options before the verb, wrappers, quotes and
+  escapes, `sh -c`, aliases set in the same command, and scripts the command
+  runs. It refuses a verb it cannot read, `gh pr merge`, and `gh api` calls
+  that move branches or commit. It refuses every force-push spelling, even
+  with the push gate open. It protects its own files and refuses
+  `disableAllHooks` in a settings file. A heredoc written to a file or to a
+  commit message is no longer read.
+- The freeze refuses reds that stop at one shared place, such as a guard
+  asserting that a service exists. Each test must fail at its own assertion.
+- The row checker rejects a test that a trivial implementation would pass.
+  On an interactive run, when a row goes back to the test author, the person
+  sees the order's confirmed rows and may send any of them back.
+- Design writes an absence as a done-when row of its own, and its check names
+  a row that joins one to a behaviour. The tests brief lists each clause with
+  a negation word, and the author returns an absence for review with no test.
+- The checkpoint row for an order's done-when names the criteria the order
+  owns, their tests, and the verdict that stands on each. The row checker
+  judges only the parts those tests leave uncovered. A rejected owned row
+  covers nothing, and a repaired owned row sends the done-when row back too.
+- A recipe's `requires_tooling` is read. Preconditions check each tool the
+  test recipe names, through the tool skill's new `require` action, and a
+  missing one goes to the install path before any recipe line runs. Review
+  checks its tools as advice and does not stop. A tool with no folder recipe
+  is looked up in the catalog through the navigator's `tooling --name`.
+  Absent means command not found, exit 127, only.
+- An environment recipe may declare `## Status`. Before an order's verify
+  lines run, AIDA runs it, and a site that is down stops the step at exit 103
+  in both run modes, naming `task environment <id> up`. No attempt is spent.
+  `task environment show` prints the status.
+- Role answer files are named `answers-<order>-attempt<n>.md` and
+  `answers-<order>-fix<n>.md`. Claude Code refuses a subagent's write to a file
+  named like a report.
+- Design names each exposed interface element in backticks, because the
+  build's interface check counts only those. Design's `check` prints
+  `interfaceUnquoted:` for an order whose interface has none. It never blocks.
+- Design can strike a reasoning paragraph that a critique or a person
+  replaced: `update --strike-reasoning <n>`. The record keeps it, marked
+  `[struck]`, and every brief to a role carries only the live paragraphs. A
+  merge keeps the mark.
+
+### Fixed
+
+- A verify line that holds `{paths}`, `{file}` or `{dirs}` does not run on an
+  order that owns no file. It reads not applicable with the reason, where
+  before it ran with no path and could pass. It never passes an order alone.
+  The detail counts the lines that did not apply.
+- The README describes the release: how to install it, and where the
+  documentation is.
+
+### Checks
+
+Seventy-three fixtures, 5,970 rows, pass under bash and under zsh on the merged
+branch, every run exit 0. The repository's specs pass. Each build had a fresh
+checker.
+
+### Known limits
+
+- Nothing bounds how many non-goal probes scope raises. The block makes each
+  one cheap to answer.
+- On an order that owns no file, a check row that holds a path reads unknown,
+  and a verify line reads not applicable. Both stop the order from passing.
+- A token block is one command with no shell characters. The Drupal test
+  recipe finds its custom-code folder on disk until it ships a script.
+- An interrupt in the middle of a site token run can leave a temporary folder.
+- The hook is friction, not a boundary. A script generated at run time, an
+  encoded string, or another language's subprocess still gets past it. The
+  real boundaries are branch protection on the remote and the credentials a
+  session holds.
+- A guard written again at the top of each test fails at a different line, so
+  the freeze cannot see it. Only the author's instructions forbid it.
+- Two sibling hooks split commands with a `sed` form that macOS does not read.
+- A tool whose check fails for another reason, such as a site that will not
+  start, reads present, and the later run fails where a person sees it.
+- The Drupal site recipe needs its `## Status` block from the catalog before
+  stopped Drupal sites are caught.
+
 ## [6.0.0-beta.26] - 2026-09-25
 
 Five rows and the navigator's tooling mode. A task can say it has no

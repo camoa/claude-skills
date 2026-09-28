@@ -28,6 +28,14 @@
       "items": { "$ref": "#/$defs/frameworkResult" },
       "description": "One entry per framework in project.json, which requires at least one. A project on two frameworks gets two recipes and two sets of entries, and both must be satisfied, because the build runs in one repository that is both."
     },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The value each `## Tokens` block of a test-execution recipe gave, keyed by the token's name, as this run used it. A `--value` for the same name wins, and the value it gave is the one recorded. Absent when no recipe declares a token, or no harness was needed. Every later step fills a row's `{name}` from here when its own `--value` list lacks the name. So the value is derived once (live-run row 205). A block that failed leaves its name out, and a row that needs it reads `unknown`, naming it. A `recipe-refresh` that changes a recipe path drops this field."
+    },
     "recipeRefreshes": {
       "type": "array",
       "items": { "$ref": "#/$defs/recipeRefresh" },
@@ -177,6 +185,11 @@
         "exitCode": {
           "type": "integer",
           "description": "What the check exited with, present whenever one ran. Kept because `unmet` on its own does not say how far the check got, and a person comparing two runs needs the number rather than a word."
+        },
+        "firstLine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The first line the check printed on standard output that holds more than white space. Present only when the verdict is not `met` and the check printed such a line. The `failedOutput:` line of an unmet run quotes it, so a person sees the cause without opening this record (live-run row 206)."
         }
       }
     },
@@ -260,6 +273,11 @@
         "exitCode": {
           "type": "integer",
           "description": "What the smoke command exited with, present whenever it actually ran: `met`, `unmet`, and the `unknown` that comes from exit 127. Absent when nothing ran at all, because the conditions did not permit it, the recipe declared no readable smoke row, or a placeholder went unsupplied."
+        },
+        "firstLine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The first line the command printed that holds more than white space, read from the whole capture before `output` is trimmed. Present only when the command ran, the verdict is not `met`, and it printed such a line. The `failedOutput:` line of an unmet run quotes it (live-run row 206)."
         }
       }
     }

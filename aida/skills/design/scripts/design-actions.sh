@@ -36,7 +36,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--append-reasoning <text>] \
+#                        [--strike-reasoning <n>] [--append-reasoning <text>] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
@@ -156,7 +156,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      library could not be sourced; or `close`'s own call to records_hash_for failing, once
 #      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
 #      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
-#      `update` was given --reasoning and --append-reasoning together; or `close` was given
+#      `update` was given --reasoning with --append-reasoning or --strike-reasoning; or
+#      --strike-reasoning named no paragraph that is there and live; or `close` was given
 #      --critique-outcome with no finished critique file to record it beside, or unattended; or
 #      `close` found something that is not a file where a critique file has to move; or `verify`
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
@@ -253,7 +254,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--append-reasoning <text>] \
+                                         [--strike-reasoning <n>] [--append-reasoning <text>] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -559,6 +560,7 @@ do_read() {
   [ "$(contract_ok)" = "true" ] && contract_state="present"
   echo "action: read"
   echo "task: $TASK_PATH"
+  echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
   echo "contract: $contract_state"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
@@ -772,13 +774,17 @@ do_create() {
 # actions. --reasoning replaces the whole field; --append-reasoning adds a paragraph after a
 # blank line and keeps what is there, the write `dispose` makes (live-run row 131). The two
 # together are refused: one call cannot both replace the text and add to it.
+# --strike-reasoning <n> marks paragraph n, counted from 1, with REASONING_JQ's prefix. The
+# paragraph stays in the record and the rendered design; no brief carries it (gap row 215). It
+# runs before --append-reasoning, so n counts the paragraphs already there. With --reasoning it
+# is refused, since the replaced text has no paragraph n.
 # ------------------------------------------------------------------------------------------------
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" append_reasoning="" diff_budget="" surfaces_json='[]' proof=""
+  local interface="" reasoning="" append_reasoning="" strike_n="" diff_budget="" surfaces_json='[]' proof=""
   local set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
-  local set_interface=false set_reasoning=false set_append=false set_diffbudget=false set_surfaces=false set_proof=false
+  local set_interface=false set_reasoning=false set_append=false set_strike=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
@@ -808,6 +814,9 @@ do_update() {
       --append-reasoning)
         need_value "update" "--append-reasoning" "$#" "${2:-}"
         append_reasoning="$2"; set_append=true; shift 2 ;;
+      --strike-reasoning)
+        need_value "update" "--strike-reasoning" "$#" "${2:-}"
+        strike_n="$2"; set_strike=true; shift 2 ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
@@ -828,6 +837,13 @@ do_update() {
     is_blank "$append_reasoning" && die3 "update: --append-reasoning must not be blank"
     [ "$set_reasoning" != "true" ] \
       || die3 "update: --reasoning replaces the field and --append-reasoning adds to it. Pass one"
+  fi
+  if [ "$set_strike" = "true" ]; then
+    case "$strike_n" in
+      ''|0*|*[!0-9]*) die3 "update: --strike-reasoning takes a paragraph number from 1, got '$strike_n'" ;;
+    esac
+    [ "$set_reasoning" != "true" ] \
+      || die3 "update: --reasoning replaces the field, so it has no paragraph $strike_n to strike. Pass one"
   fi
   local file
   file="$(wo_file_for "$id")"
@@ -862,6 +878,15 @@ do_update() {
   fi
   if [ "$set_reasoning" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$reasoning" '.reasoning = $v')"
+  fi
+  if [ "$set_strike" = "true" ]; then
+    local live
+    live="$(printf '%s' "$doc" | jq -r --argjson n "$strike_n" "$REASONING_JQ"'
+      (.reasoning // "") | split("\n\n") | .[$n - 1] // "" | . != "" and (startswith(struckMark) | not)')"
+    [ "$live" = "true" ] \
+      || die3 "update: $id's reasoning has no live paragraph $strike_n. Read $id.md and count its paragraphs"
+    doc="$(printf '%s' "$doc" | jq --argjson n "$strike_n" "$REASONING_JQ"'
+      .reasoning = ((.reasoning | split("\n\n")) | .[$n - 1] = struckMark + .[$n - 1] | join("\n\n"))')"
   fi
   if [ "$set_append" = "true" ]; then
     doc="$(reasoning_appended "$doc" "$append_reasoning")"
@@ -1201,8 +1226,8 @@ do_remove_owned_file() {
 # is that field's one writer. `--recipe` replaces the list with the covering agentic recipe's
 # `## Verifier`. Each entry of its `verifier:` block becomes a run entry with its `id`, `kind`,
 # `run` and `pass`, in any key order, the shape the dev-guides proposal asks every recipe to use. Each numbered item of the
-# section's prose becomes a check entry, verbatim, wrapped lines joined: today's nine recipes hold
-# only prose. A paragraph is not a check, and no command is ever made from prose. Every entry
+# section's prose becomes a check entry, verbatim, wrapped lines joined. A recipe may carry either
+# form or both. A paragraph is not a check, and no command is ever made from prose. Every entry
 # cites the recipe and is binding, unless --not-binding says research marked the source as one
 # this project did not accept. `--run` or `--check` adds one entry from a research finding. It
 # cites its source and is never binding, and a second entry with the same text replaces the
@@ -1365,7 +1390,8 @@ do_verify() {
 # merge: folds one order into another (SKILL.md, "Size a work order"). Every list field is the
 # ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
 # appended under a line naming the folded order. A disposition `dispose` wrote on it is not
-# lost, and a reader can tell which order stated what. The summary says which scalars were carried
+# lost, and a reader can tell which order stated what. That line is a paragraph of its own, so
+# a folded paragraph marked struck still starts with REASONING_JQ's prefix. The summary says which scalars were carried
 # and which were dropped. A live run that saw only list counts read the append as a drop and
 # rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
 # and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
@@ -1413,7 +1439,7 @@ do_merge() {
     $f[0] as $f
     | def dedupe: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
       def union(k): if (has(k) or ($f | has(k))) then .[k] = (((.[k] // []) + ($f[k] // [])) | dedupe) else . end;
-      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n" + $f[k] end;
+      def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n\n" + $f[k] end;
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
     | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify")
@@ -1572,6 +1598,38 @@ do_check() {
   echo "verifyNotBinding: $(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do jq -r 'select(any((.verify // [])[]; .binding == false)) | .id' "$f" 2>/dev/null; done \
     | paste -s -d ',' - | sed 's/,/, /g; s/^$/none/')"
+  # The done-when rows that may join an absence to a behaviour (gap row 209). --absence routes a
+  # clause verbatim, so a joined row cannot go to review without a reopen. A script cannot parse a
+  # clause, so a negation word and an `and` is the whole test, and the line never blocks the close.
+  local joined
+  joined="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r "$DENIES_JQ"'
+        . as $wo
+        | [ (.doneWhen // []) | to_entries[] | select(.value | type == "string")
+            | select((.value | denies) and (.value | ascii_downcase | test("\\band\\b")))
+            | .key + 1 | tostring ]
+        | select(length > 0)
+        | $wo.id + (if length == 1 then " row " else " rows " end) + join(", ")' "$f" 2>/dev/null; done \
+    | paste -s -d ';' - | sed 's/;/; /g')"
+  if [ -n "$joined" ]; then
+    echo "absenceJoined: $joined | best effort: each row holds a negation word and an \"and\". Split a row that joins an absence to a behaviour into two rows"
+  else
+    echo "absenceJoined: none"
+  fi
+  # The orders whose interface names nothing in backticks (gap row 214). The build's interface
+  # check counts only backtick-quoted names, so it reads unknown on such an order. A script cannot
+  # tell whether prose names a code element, so the line never blocks the close.
+  local unquoted
+  unquoted="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '
+        select((.interface | type) == "string" and (.interface | test("\\S")))
+        | select(.interface | test("`[^`]+`") | not) | .id' "$f" 2>/dev/null; done \
+    | paste -s -d ',' - | sed 's/,/, /g')"
+  if [ -n "$unquoted" ]; then
+    echo "interfaceUnquoted: $unquoted | the build's interface check counts only backtick-quoted names. Quote each exposed element with update --interface"
+  else
+    echo "interfaceUnquoted: none"
+  fi
   if [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then
