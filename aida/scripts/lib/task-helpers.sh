@@ -377,6 +377,21 @@ automated_tests() {
   printf '%s' "$answer"
 }
 
+# The orders implementation has started, as a JSON array of ids. Started means a ledger step
+# reached or an attempt spent, a frozen test record, or a build record. Design's `remove` and
+# implementation's `start` both read it. $1 the canonical task folder.
+started_orders_json() {
+  local impl="$1/implementation" ids f
+  ids="$(jq -c '[ (.orders // [])[] | select(.lastStep != null or (.attemptsUsed // 0) > 0) | .id ]' "$impl/ledger.json" 2>/dev/null)"
+  [ -n "$ids" ] || ids='[]'
+  # find, not a glob: zsh refuses a glob that matches nothing.
+  while IFS= read -r f; do
+    f="$(basename -- "$f" .json)"
+    ids="$(printf '%s' "$ids" | jq -c --arg id "${f#*-}" 'if index($id) == null then . + [$id] else . end')"
+  done < <(find "$impl" -mindepth 1 -maxdepth 1 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' \) 2>/dev/null)
+  printf '%s' "$ids"
+}
+
 # Moves the task to in_progress the first time a stage writes into it (skills/task/SKILL.md,
 # `start`: a task becomes in progress the moment a stage first writes an artifact into it). It
 # reads the state first, so a task already in progress costs no process and prints nothing. Any

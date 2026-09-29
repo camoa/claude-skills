@@ -188,7 +188,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
 #      exit 1, "not a task folder"). `close` refuses for the same reason, on the live files, before
-#      writing anything.
+#      writing anything. `close` also refuses a design-removed.json that is not in its shape.
 #      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says standsAlone
 #      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
 #      and stdout names it in a `setAside:` line.
@@ -1294,7 +1294,8 @@ do_remove_done_when() {
   jq empty "$file" 2>/dev/null || die3 "remove-done-when: $file exists but is not valid JSON"
   matched="$(jq -r --arg t "$text" '[(.doneWhen // [])[] | select(. == $t)] | length' "$file")"
   [ "$matched" -gt 0 ] || die2 "remove-done-when: $id carries no done-when row with the text '$text'"
-  doc="$(jq --arg t "$text" '.doneWhen = [(.doneWhen // [])[] | select(. != $t)]' "$file")"
+  doc="$(jq --arg t "$text" '.doneWhen = [(.doneWhen // [])[] | select(. != $t)]
+    | if has("absenceReviewed") then .absenceReviewed -= [$t] else . end' "$file")"
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   echo "removed-done-when: $matched"
@@ -1631,16 +1632,11 @@ do_remove() {
   local file
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "remove: $file exists but is not valid JSON"
+  local doc_before
+  doc_before="$(cat "$file")"
 
-  local started
-  started="$(jq -r --arg id "$id" '[ (.orders // [])[] | select(.id == $id)
-      | if .lastStep != null then "its last step is " + .lastStep
-        elif (.attemptsUsed // 0) > 0 then "an attempt is spent" else empty end ][0] // empty' \
-    "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
-  [ -n "$started" ] || [ ! -e "$TASK_PATH/implementation/tests-$id.json" ] || started="its tests are frozen"
-  [ -n "$started" ] || [ ! -e "$TASK_PATH/implementation/build-$id.json" ] || started="it has a build record"
-  [ -z "$started" ] \
-    || die3 "remove: implementation started $id: $started. Fold it into the order that takes its work with merge. Implementation's start then halts it for design drift, and implement-actions.sh restart sets its records aside"
+  started_orders_json "$TASK_PATH" | jq -e --arg id "$id" 'index($id) == null' >/dev/null \
+    || die3 "remove: implementation started $id: a ledger step, a spent attempt, a frozen test record or a build record. Fold it into the order that takes its work with merge. Implementation's start then halts it for design drift, and implement-actions.sh restart sets its records aside"
 
   local others f dependents
   others="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
@@ -1650,16 +1646,16 @@ do_remove() {
   [ -z "$dependents" ] \
     || die3 "remove: $dependents $(case "$dependents" in *,*) echo depend ;; *) echo depends ;; esac) on $id. Change each dependsOn with update first, or fold $id into another order with merge"
 
+  # The criteria of the live contract that only this order serves, then those only it owns.
   local alone
   alone="$(jq -r --argjson others "$others" --argjson live "$(contract_criteria_json)" '
       ($live | map(.id)) as $ids
-      | ([ $others[] | (.criteriaServed // [])[] ]) as $served
-      | ([ $others[] | (.criteriaOwned // [])[] ]) as $owned
-      | [ ((.criteriaServed // [])[] | select(. as $c | ($served | index($c)) == null)),
-          ((.criteriaOwned // [])[] | select(. as $c | ($owned | index($c)) == null)) ]
-      | map(select(. as $c | ($ids | index($c)) != null)) | unique | join(", ")' "$file")"
+      | def only(k): [ (.[k] // [])[] | . as $c | select(($ids | index($c)) != null)
+                       | select(([ $others[] | (.[k] // [])[] ] | index($c)) == null) ] | join(", ");
+      [ (only("criteriaServed") | select(. != "") | "the only order serving " + .),
+        (only("criteriaOwned") | select(. != "") | "the only order owning " + .) ] | join(", and ")' "$file")"
   [ -z "$alone" ] \
-    || die3 "remove: $id is the only order serving or owning $alone. Give each to another order with update first"
+    || die3 "remove: $id is $alone. Give each to another order with update first"
 
   local record entry
   if [ -f "$REMOVED_FILE" ]; then
@@ -1676,6 +1672,9 @@ do_remove() {
   echo "removed: $DESIGN_DIR/$id.md"
   echo "RECORDED: $REMOVED_FILE"
   echo "removedOrders: $(printf '%s' "$record" | jq -r '[.removed[].id] | join(", ")')"
+  # The findings the order accounted for are now in no order's list, and `check` refuses until
+  # each is accounted for again.
+  echo "findingsLeft: $(printf '%s' "$doc_before" | jq -r '[ (.findings // [])[] | .ref ] | if length == 0 then "none" else join(", ") + ". Account for each again" end')"
   exit 0
 }
 
@@ -1968,6 +1967,16 @@ do_close() {
       ;;
   esac
 
+  # The removals the record will carry, refused before anything moves when not in their shape.
+  if [ -f "$REMOVED_FILE" ]; then
+    jq -e '(.removed | type) == "array" and all(.removed[]; type == "object"
+        and (keys == ["id", "reason", "removedAt"])
+        and (.id | type == "string" and test("^wo[1-9][0-9]*$"))
+        and (.reason | type == "string" and length > 0)
+        and (.removedAt | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")))' "$REMOVED_FILE" >/dev/null 2>&1 \
+      || die4 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason and removedAt"
+  fi
+
   local unaccounted
   unaccounted="$(unaccounted_findings)"
   [ -z "$unaccounted" ] \
@@ -2074,8 +2083,7 @@ $unaccounted"
 
   # The orders `remove` deleted, with the reason each went, so the close says why a number is missing.
   if [ -f "$REMOVED_FILE" ]; then
-    doc="$(printf '%s' "$doc" | jq --slurpfile r "$REMOVED_FILE" '.removed = ($r[0].removed // [])')" \
-      || die3 "close: $REMOVED_FILE is not valid JSON"
+    doc="$(printf '%s' "$doc" | jq --slurpfile r "$REMOVED_FILE" '.removed = $r[0].removed')"
   fi
 
   write_atomic "$CLOSED_FILE" "$doc"

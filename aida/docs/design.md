@@ -371,9 +371,10 @@ edited after design closed. Changing a closed design is supported: edit the orde
 again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
 done-when row, or only changes accounted findings, may skip the research and guide reading. That reading shapes an order, not its file
 list. A change to an order that implementation already started halts that order for design drift.
-Three changes are the exception. The first is an added owned file. The second is a change to the
+Four changes are the exception. The first is an added owned file. The second is a change to the
 order's research findings through `account`. The third is a paragraph appended to its reasoning
-with `update --append-reasoning`. The critics judge only the orders implementation has not
+with `update --append-reasoning`. The fourth is a done-when row marked reviewed with
+`update --absence-reviewed`. The critics judge only the orders implementation has not
 closed. The design check drops a critique row that names only closed orders.
 Put the design back and the next build clears the halt, or take the restart.
 

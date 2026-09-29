@@ -1867,14 +1867,8 @@ do_start() {
       # stays a halt and `restart` drops it. The live copy is taken, or the frozen one dropped,
       # only when design closed on the live files, the same rule a new run applies to the whole
       # design.
-      local started_ids_json drifted_id
-      started_ids_json="$(jq -c '[ (.orders // [])[] | select(.lastStep != null or (.attemptsUsed // 0) > 0) | .id ]' "$LEDGER_FILE" 2>/dev/null)"
-      [ -n "$started_ids_json" ] || started_ids_json='[]'
-      for drifted_id in $(printf '%s' "$drifted_orders_json" | jq -r '.[].id'); do
-        if [ -e "$IMPL_DIR/tests-$drifted_id.json" ] || [ -e "$IMPL_DIR/build-$drifted_id.json" ]; then
-          started_ids_json="$(printf '%s' "$started_ids_json" | jq -c --arg id "$drifted_id" '. + [$id]')"
-        fi
-      done
+      local started_ids_json
+      started_ids_json="$(started_orders_json "$TASK_PATH")"
       resnapshot_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
@@ -1884,7 +1878,8 @@ do_start() {
       # A started order whose live copy differs from the frozen one only by added owned files is
       # not halted either (live-run row 91), and neither is one that only took research findings
       # from `account` (gap row 226), and neither is one whose reasoning only grew by
-      # `update --append-reasoning`: the live value starts with the frozen one (gap row 227). Its
+      # `update --append-reasoning`: the live value starts with the frozen one (gap row 227).
+      # Neither is one whose absence rows design marked reviewed (gap row 237). Its
       # frozen tests were written from the criteria and the order's other fields, and none of
       # those changed, so the live copy is taken in place:
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
@@ -1898,10 +1893,10 @@ do_start() {
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .findings, .reasoning)) == ($s | del(.ownedFiles, .findings, .reasoning)))
+              | select(($l | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
-              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning)
+              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning or $l.absenceReviewed != $s.absenceReviewed)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
               | $d ]')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not

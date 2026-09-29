@@ -83,11 +83,12 @@ A reopen that changes only owned files, done-when rows or accounted findings on 
 order may skip the research and guide reading below. Those calls are `add-owned-file`,
 `remove-owned-file`, `add-done-when`, `remove-done-when` and `account`. The reading informs an
 order's shape, not its file list. The route is the change, then `check`, `close` with the verdict the last
-`design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
+`design-closed.json` records, and `distill`. A reopen that creates, merges or removes an order, or changes
 an order's interface, criteria or dependencies, reads as a first run does.
 
-Three changes do not halt an order that implementation already started: an added owned file, an
-`account` call, and a reason added with `update --append-reasoning`. Once design closes again,
+Four changes do not halt an order that implementation already started: an added owned file, an
+`account` call, a reason added with `update --append-reasoning`, and a row marked with
+`update --absence-reviewed`. Once design closes again,
 the next `start` takes that order's live copy in place, even when the order closed. Any other
 change to a started order halts it for design drift at the next `start`. Two routes lead back.
 Restore the design and `start` clears the halt. Or take the restart in the implement skill's
