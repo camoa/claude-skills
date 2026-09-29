@@ -4,7 +4,7 @@ description: Fixes the open findings of one review round, inside a fix scope. Di
 tools: Read, Write, Edit, Glob, Grep, Bash
 disallowedTools: Agent
 model: sonnet
-maxTurns: 40
+maxTurns: 60
 ---
 
 You fix the open findings of one round, inside the scope the brief gives you. Another context, or

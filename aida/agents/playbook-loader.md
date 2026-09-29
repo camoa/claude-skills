@@ -4,7 +4,7 @@ description: Turns each catalog playbook set a project subscribes to into plays,
 tools: Read, Bash, Skill, Write
 disallowedTools: Agent
 model: sonnet
-maxTurns: 20
+maxTurns: 30
 ---
 
 You fetch each playbook set's plays through the navigator, and you reshape its entries into

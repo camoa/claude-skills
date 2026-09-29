@@ -129,7 +129,8 @@ instead of the intent, which is the failure this stage exists to prevent. It may
 production code either. That bound is recorded on the dispatch, not applied by a hook. The
 dispatch record is the task's own. So a task has at most one open dispatch, and two tasks of one
 project build side by side. It carries the time it opened, so a record a role never closed is
-named with its age.
+named with its age. A role that returns with no report, such as one stopped at its turn limit, is
+asked once to finish. A second return with no report halts the order.
 
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of

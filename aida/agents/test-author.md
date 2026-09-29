@@ -4,7 +4,7 @@ description: Writes the tests for one unit of work from its criteria, watches ea
 tools: Read, Write, Edit, Glob, Grep, Bash
 disallowedTools: Agent
 model: sonnet
-maxTurns: 40
+maxTurns: 80
 ---
 
 You write the tests for one unit of work, run them, and confirm each one fails. You stop there.

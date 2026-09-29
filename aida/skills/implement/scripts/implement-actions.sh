@@ -101,7 +101,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # record is open (live-run row 92). A fixer's record carries the key too: the order's list plus
 # the `allowedFiles` of the round's fix brief, which must exist (live-run row 116). No other
 # role's record carries the key.
-#   implement-actions.sh dispatch-close <task_folder>
+#   implement-actions.sh dispatch-close <task_folder> [--no-report]
+#
+# `dispatch-close --no-report` is for a role that returned with no report: the runtime said it
+# stopped at its turn cap, or the report file its brief names is absent. The first time, the record
+# stays open and takes `resumedAt`, and the role is resumed once by message. The second time, the
+# order halts and the record is removed (exit 109, gap row 228).
 #   implement-actions.sh step <name>
 #
 # `step` prints one of this skill's own step files, from
@@ -677,6 +682,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      step: review-brief again, then the reviewer again. The check runs before --accept-deviation
 #      is read, so a person never accepts on a review that skipped a recipe.
 #
+# The code the turn cap added (gap row 228).
+# 109  `dispatch-close --no-report` found the open record already carries `resumedAt`: the role
+#      was resumed once and returned with no report again. The order halts with a reason naming
+#      the role and its `maxTurns`, and the record is removed. A person clears the halt.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -873,7 +883,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
                             [--test-glob <glob from the implement recipe>]...
-       implement-actions.sh dispatch-close <task_folder>
+       implement-actions.sh dispatch-close <task_folder> [--no-report]
        implement-actions.sh step <name>
 EOF
 }
@@ -10835,8 +10845,12 @@ do_step() {
 
 do_dispatch_close() {
   [ "$#" -ge 1 ] || die 3 "dispatch-close: a task folder is required"
-  [ "$#" -le 1 ] || die 3 "dispatch-close: unrecognized extra argument: $2"
-  local task_path="$1"
+  local task_path="$1" no_report=false
+  if [ "$#" -ge 2 ]; then
+    [ "$2" = "--no-report" ] || die 3 "dispatch-close: unrecognized extra argument: $2"
+    [ "$#" -le 2 ] || die 3 "dispatch-close: unrecognized extra argument: $3"
+    no_report=true
+  fi
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_path" "dispatch-close")"
   resolve_rc=$?
@@ -10845,6 +10859,34 @@ do_dispatch_close() {
   # The record lives under the task's own folder, so a close can only reach this task's record
   # and another task's stays open (live-run row 139).
   local dispatch_file="$TASK_PATH/implementation/dispatch.json"
+  # A role with no report is resumed once, not dispatched fresh: its brief is unchanged and its
+  # work is unfinished, and a fresh role meets its half-written files (gap row 228). The record
+  # stays open so both hooks keep applying while it finishes.
+  if [ "$no_report" = true ]; then
+    [ -f "$dispatch_file" ] \
+      || die 3 "dispatch-close: --no-report needs an open dispatch to resume, and $dispatch_file is absent."
+    local nr_role nr_unit nr_cap nr_ledger
+    nr_role="$(jq -r '.role // ""' "$dispatch_file" 2>/dev/null)"
+    nr_unit="$(jq -r '.unit // ""' "$dispatch_file" 2>/dev/null)"
+    [ -n "$nr_role" ] && [ -n "$nr_unit" ] \
+      || die 3 "dispatch-close: $dispatch_file names no role or unit. Repair or remove it by hand."
+    if [ "$(jq -r 'has("resumedAt")' "$dispatch_file")" != "true" ]; then
+      write_atomic "$dispatch_file" "$(jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '.resumedAt = $at' "$dispatch_file")"
+      echo "DISPATCH-CLOSE: $nr_role on $nr_unit returned no report; the record stays open for one resume"
+      echo "next: resume the same $nr_role agent by message: finish the work and write the report. Then run dispatch-close again, with --no-report if it returns none."
+      exit 0
+    fi
+    nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
+    nr_ledger="$(jq -c '.' "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+    [ -n "$nr_ledger" ] || die 3 "dispatch-close: $TASK_PATH/implementation/ledger.json could not be read as JSON, so the halt on $nr_unit could not be written."
+    nr_ledger="$(halt_order_in "$nr_ledger" "$nr_unit" \
+      "turn cap: ${nr_role##*:} returned no report twice, after one resume; its cap is ${nr_cap:-unknown} turns")"
+    [ -n "$nr_ledger" ] || die 3 "dispatch-close: the halt on $nr_unit could not be written."
+    write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
+    rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
+    die 109 "dispatch-close: $nr_unit is halted. $nr_role returned no report twice, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, then clears the halt with clear-halt."
+  fi
   if [ -f "$dispatch_file" ]; then
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"

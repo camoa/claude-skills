@@ -307,8 +307,9 @@ answered. It refuses (exit 65) and writes no test record. It records each reject
 order's ledger entry, with the person's words and the checker's note. Run `tests-brief` again, which
 carries those rows under `rowsRejected`. Then open a new dispatch record and dispatch the test
 author fresh, with the same message as before. Do not resume the earlier author with a message: the
-brief is the one carrier. A repaired test goes through the checker again. When an owned
-criterion's row goes back, put the done-when row to the checker again too. Freeze once every row
+brief is the one carrier. A role that stopped with no report is a different case, in SKILL.md.
+A repaired test goes through the checker again. When an owned criterion's row goes back, put the
+done-when row to the checker again too. Freeze once every row
 for this order reads confirmed; that freeze clears the record. A note may not hold the text
 `; earlier: `. This stage joins one halt reason to another with that text, so a note
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.

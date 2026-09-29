@@ -188,6 +188,16 @@ record only. An open record refuses the next dispatch (exit 37), naming the role
 that hold it. The refusal names the record's age when it opened over a day ago, because a role
 that never returned leaves one.
 
+**A role that returns with no report is resumed once.** This holds for every role this skill
+dispatches. No report means the runtime says the role stopped at its turn limit. It also means the
+report file its brief names is absent. Close with `--no-report` added. The record stays open, so
+both hooks keep applying. Then send one message to the same agent: finish the work and write the
+report. Do not dispatch a fresh role. The brief is unchanged and the work is unfinished, and a fresh
+role meets the half-written files. This differs from a row a person rejects, where the brief
+changes and the role is dispatched fresh. When the resumed role returns, close again, with
+`--no-report` if it still wrote none. The second `--no-report` halts the order (exit 109) with a
+reason that names the role and its turn cap. Report the halt; a person clears it.
+
 ## What this skill does
 
 The permissions this step describes are applied by the runtime, not by the words above. Two hooks
