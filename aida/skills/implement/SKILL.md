@@ -188,6 +188,26 @@ record only. An open record refuses the next dispatch (exit 37), naming the role
 that hold it. The refusal names the record's age when it opened over a day ago, because a role
 that never returned leaves one.
 
+**A role the runtime stops at its turn limit is resumed once.** This holds for every role this
+skill dispatches. The signal is the runtime's own mark that the role stopped at its turn limit.
+For the reviewer the script also sees it: a plain close refuses (exit 111) when the findings or
+verdicts file its brief names is missing. For the other roles only the mark tells, so watch for it.
+Close with `--no-report` added. The record stays open, so both hooks keep applying. Then send one
+message to the same agent: finish the work and write the report. Do not dispatch a fresh role. The
+brief is unchanged and the work is unfinished, and a fresh role meets the half-written files. This
+differs from a row a person rejects, where the brief changes and the role is dispatched fresh.
+When the resumed role returns, close again, with `--no-report` if it stopped again. The second
+`--no-report` halts the order (exit 110) with a reason that names the role and its turn cap.
+Report the halt. A person runs `clear-halt`, then `start` to keep or set aside the role's files,
+then dispatches again.
+
+A record already closed takes the same route. Run `dispatch-open` with the same role and unit and
+`--resume`, then resume the same agent by message. When that agent cannot be reached, as from
+another session, dispatch the role fresh. A fresh `dispatch-open` refuses (exit 104) while the tree
+holds uncommitted files, so no role starts beside another role's work. Commit a file to keep it,
+or run `start` with `--leftovers set-aside`. A row-checker, and a test author sent back for a
+rejected row, are exempt, because their work starts from those files.
+
 ## What this skill does
 
 The permissions this step describes are applied by the runtime, not by the words above. Two hooks

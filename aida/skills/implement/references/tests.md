@@ -126,6 +126,11 @@ the brief carries what is left. The summary prints a `retake:` line.
 row's key, the person's words verbatim, and the checker's note. The summary prints a
 `rowsRejected:` line.
 
+One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
+round began. A brief written again for a retake or a rejected row keeps the earlier time, because
+the unchanged tests keep their red runs. It keeps it only while the order and its criteria are
+unchanged. A design change, or a restart that moves the brief aside, starts a new round.
+
 It prints the brief's path and counts, never the brief.
 
 That list is the withheld list, decided once rather than at each dispatch. Adding an input here
@@ -307,8 +312,9 @@ answered. It refuses (exit 65) and writes no test record. It records each reject
 order's ledger entry, with the person's words and the checker's note. Run `tests-brief` again, which
 carries those rows under `rowsRejected`. Then open a new dispatch record and dispatch the test
 author fresh, with the same message as before. Do not resume the earlier author with a message: the
-brief is the one carrier. A repaired test goes through the checker again. When an owned
-criterion's row goes back, put the done-when row to the checker again too. Freeze once every row
+brief is the one carrier. A role that stopped with no report is a different case, in SKILL.md.
+A repaired test goes through the checker again. When an owned criterion's row goes back, put the
+done-when row to the checker again too. Freeze once every row
 for this order reads confirmed; that freeze clears the record. A note may not hold the text
 `; earlier: `. This stage joins one halt reason to another with that text, so a note
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
@@ -379,6 +385,11 @@ place. A test with neither refuses (exit 33). A `--locks-in` reason written `com
 name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,
 is shorter than seven characters, or is not this order's own refuses (exit 101). A reason with no
 `commit:` prefix is prose and names the existing code.
+A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). So does one written
+before its test file last changed. Either is the run of an earlier test, for example one a restart
+moved aside. The message names each file and both times. Run the test again and pass the new
+output. A brief that holds no `roundStartedAt` is read by its own file time. A freeze with no tests
+brief compares the test files only.
 It reads each `--red` file against the markers the
 test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
 A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a

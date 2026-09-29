@@ -4,6 +4,44 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.6] - 2026-09-29
+
+Two fixes from the live run on 6.0.5. The test author stopped at its turn
+limit with no report and no way on, and a restart left the old failing test
+runs where a freeze could accept them.
+
+### Fixed
+
+- Turn limits are raised where measured runs came near them: the test
+  author from 40 to 80, the fixer from 40 to 60, the distiller from 10 to
+  20, the catalog identifier from 30 to 40, and the playbook loader from 20
+  to 30.
+- A role that stops at its turn limit with no report is resumed once, by
+  message, to finish. `dispatch-close --no-report` keeps the record open and
+  records the resume. A second stop halts the order (exit 110), naming the
+  role and its limit.
+- A dispatch record that is already closed can be opened again with
+  `dispatch-open --resume` to resume the same agent.
+- `dispatch-open` refuses to send a fresh role onto uncommitted files in the
+  code worktree (exit 104). A row checker, an author repairing rejected
+  rows, and a resume are exempt.
+- A plain `dispatch-close` on a reviewer refuses when the reviewer's
+  findings or verdicts file is missing or older than the dispatch (exit
+  111).
+- `restart` now moves folders named for the order, such as its failing test
+  runs and its retake folders, with its other records.
+- `tests-freeze` refuses a failing test run written before the test round
+  began, or before its own test file last changed (exit 109). A design
+  change to an order starts a new round.
+
+### Known limits
+
+- For the test author and the fixer, only the runtime shows that the role
+  stopped at its limit. The orchestrator passes `--no-report`; a plain close
+  still closes.
+- The freeze compares file times in whole seconds. A copy that does not keep
+  file times makes an old run look new.
+
 ## [6.0.5] - 2026-09-29
 
 A fix from the live run on 6.0.4. Reopening design on a partly built task

@@ -4,7 +4,7 @@ description: Reads one stage's close record from disk and says whether it stands
 tools: Read, Glob, Grep, Write
 disallowedTools: Agent
 model: opus
-maxTurns: 10
+maxTurns: 20
 ---
 
 You read a record that a conversation produced, and you were not in that conversation. That is the

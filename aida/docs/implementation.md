@@ -129,7 +129,8 @@ instead of the intent, which is the failure this stage exists to prevent. It may
 production code either. That bound is recorded on the dispatch, not applied by a hook. The
 dispatch record is the task's own. So a task has at most one open dispatch, and two tasks of one
 project build side by side. It carries the time it opened, so a record a role never closed is
-named with its age.
+named with its age. A role that returns with no report, such as one stopped at its turn limit, is
+asked once to finish. A second return with no report halts the order.
 
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of
@@ -157,7 +158,8 @@ and the freeze refuses it, because nothing in that output says the behaviour is 
 is the exception: the one that creates the unit. No test can assert before the module exists, so
 for that order alone the harness error is the expected red, and the author writes no scaffold.
 The exception reads only declared markers, so the freeze refuses an undeclared form: the recipe
-declares it, or the test drops the module-local class.
+declares it, or the test drops the module-local class. The freeze also refuses a red run written
+before the order's test round began, because it is the run of an earlier test.
 
 A test green on its first run has four outcomes. The test was wrong: corrected once. Still green,
 and the author can name the existing code that satisfies it: frozen, with that reason recorded
