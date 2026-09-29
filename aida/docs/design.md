@@ -23,8 +23,9 @@ and a feature becomes fifty orders that cost more to coordinate than to build.
 
 The merge is a script action, `merge`, not a hand edit. It folds one order into another. Every
 list joins the survivor's without duplicates, the folded file is removed, and every dependency
-that named it now names the survivor. The folded order's interface and reasoning are appended
-to the survivor's, under a line naming the folded order. The title stays the survivor's, and the
+that named it now names the survivor. The folded id, the survivor and a reason go into
+`design-removed.json`, the same record `remove` writes. The folded order's interface and
+reasoning are appended to the survivor's, under a line naming the folded order. The title stays the survivor's, and the
 output says what was carried and what was not. A test that no longer belongs on an order leaves
 through `remove-test`, which refuses the last test an owned machine criterion needs. A done-when
 row leaves through `remove-done-when` and an owned file through `remove-owned-file`. A file

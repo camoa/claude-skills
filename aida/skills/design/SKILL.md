@@ -391,14 +391,15 @@ mix phases. Merge two orders when each has fewer than three steps, they address 
 component, and they cannot run in parallel anyway. The script folds one into the other:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh merge "<task_folder>" \
-  --into <woId> --from <woId>
+  --into <woId> --from <woId> --reason "<why the two are one order>"
 ```
 Every list on the folded order joins the survivor's, without duplicates. The folded order's
 `interface` and `reasoning` are appended to the survivor's, each under a line `From <woId>:`.
 The title and the diff budget stay the survivor's; the output says `carried:` and `dropped:` so
 nothing goes unseen. Retitle with `update` when the survivor's title no longer covers what it
 owns. The folded order's file is removed, and every `dependsOn` that named it now names the
-survivor. The two proofs must agree; set one order's `--proof` first when they do not. Never
+survivor. The folded id, the survivor and the reason go into `design-removed.json`, the same
+record `remove` writes. The two proofs must agree; set one order's `--proof` first when they do not. Never
 remove or edit an order file by any other means. A write outside the script prints nothing, so
 nothing records that it happened.
 
@@ -416,6 +417,14 @@ records aside. It also refuses an order that another order depends on. It also r
 order that serves or owns a criterion of the contract. Move the dependency or the criterion
 with `update` first. A finding that the removed order accounted for shows in `check`. Account
 for it again.
+
+An order folded before `merge` wrote that record left no entry, so the design shows a gap in its
+numbers. Record it with the survivor and a reason:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove "<task_folder>" \
+  --id <woId> --merged-into <woId> --reason "<why the order was folded>"
+```
+The script refuses an id that is still an order, and an id the record already holds.
 
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:

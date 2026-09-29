@@ -57,6 +57,11 @@ write one that says how many questions an unattended run answered on the person'
 how many of them a person approved later. An approved entry beside `owner` criteria is no
 contradiction. The person approved the contract after the unattended run.
 
+For design, `design-closed.json` carries `removed`. Each entry names an order that `remove`
+deleted or `merge` folded, with the reason. A folded order also names its survivor in
+`mergedInto`. An id missing from `design/` that `removed` names is accounted for, so it is never
+a gap.
+
 ## What you write
 
 One file, `<task folder>/records/<stage>-distill.json`, in the shape of `scripts/distill-schema.json`:

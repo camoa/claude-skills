@@ -49,8 +49,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
 #   design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
 #   design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
-#   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
-#   design-actions.sh remove         <task_folder> --id <woId> --reason <text>
+#   design-actions.sh merge          <task_folder> --into <woId> --from <woId> --reason <text>
+#   design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
 #   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
@@ -100,10 +100,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # present and taking the next number. There is no counter file recording a high-water mark the
 # way alignment.json's nextCriterionId does for a criterion. Two actions delete an order. `merge`
 # folds one order into another, and the folded order's file goes (live-run row 74). `remove`
-# deletes an order nothing started, and records its id and the reason in
-# <task_folder>/design-removed.json (gap row 234). The scan reads that record too, so a removed
-# id is never minted again. The gap left, named plainly rather than hidden, is that folding the
-# highest-numbered work order and then minting again reuses its id.
+# deletes an order nothing started. Both record the id and the reason in
+# <task_folder>/design-removed.json (gap rows 234, 245), and a merge adds the survivor as
+# `mergedInto`. The scan reads that record too, so a removed or folded id is never minted again.
+# `remove --merged-into` records an order folded before merge kept a record.
 #
 # `close` records what design closed on (ideal/implementation.md, "Freezing, and what a freeze is
 # for"). It runs check-design.sh against the live files first, and writes
@@ -151,7 +151,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `remove-owned-file`, `remove` or `render` were given an --id naming no work order file in this
 #      task's design/ folder; or `remove-test` was given a --description no test on that order
 #      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
-#      order does not own; or `merge` was given an --into or --from naming no work order file;
+#      order does not own; or `merge` was given an --into or --from naming no work order file,
+#      or `remove --merged-into` a survivor naming none;
 #      or `read-guide` or `verify` was given a path naming no file on disk; or `account` was given
 #      a --finding naming no finding under research/, or a --remove naming no entry on the order;
 #      or `distill` found no
@@ -164,9 +165,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the order's own surfaces on a `tests` order; a `remove-test` refused because the test named is the last one
 #      on a `tests` order owning a machine-verified criterion; a `remove-owned-file` refused because
 #      the path named is the only file the order owns; a `merge` refused because the two orders' proofs differ or
-#      --into and --from name the same order; a `remove` with no --reason, or refused because
-#      implementation started the order, another order depends on it, or it is the only order
-#      serving or owning a criterion of the contract; a work order file already on disk that is not valid
+#      --into and --from name the same order; a `merge` or `remove` with no --reason; a `remove`
+#      refused because implementation started the order, another order depends on it, or it is
+#      the only order serving or owning a criterion of the contract; a `remove --merged-into`
+#      refused because the id is still an order or is already recorded; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
@@ -287,8 +289,8 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh remove-test    <task_folder> --id <woId> --description <text>
        design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
-       design-actions.sh merge          <task_folder> --into <woId> --from <woId>
-       design-actions.sh remove         <task_folder> --id <woId> --reason <text>
+       design-actions.sh merge          <task_folder> --into <woId> --from <woId> --reason <text>
+       design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
        design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
@@ -762,8 +764,7 @@ do_start() {
 
 # ------------------------------------------------------------------------------------------------
 # The next work order id: scan design/*.json and the removed record for the highest wo<n> and take
-# the next number, starting at wo1 when none exist. See this script's own header for the known gap
-# this leaves around a merged, highest-numbered work order.
+# the next number, starting at wo1 when none exist.
 # ------------------------------------------------------------------------------------------------
 
 next_wo_id() {
@@ -1528,13 +1529,14 @@ do_verify() {
 # and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
 # `tests` order would carry tests it may not declare, or the reverse. The folded order's
 # json and md are removed. Every other order's `dependsOn` naming it is rewritten to the survivor,
-# without duplicates, and the survivor never depends on itself. This is the delete path the id
-# comment above once said did not exist, and the gap named there now applies here. Commits
-# nothing, the same as every edit before `close`.
+# without duplicates, and the survivor never depends on itself. The folded id, the survivor and
+# --reason go into design-removed.json through record_removal, as `remove` writes them (gap row
+# 245). --reason is required for the same reason `remove` requires it: the close record then says
+# why the number is missing. Commits nothing, the same as every edit before `close`.
 # ------------------------------------------------------------------------------------------------
 
 do_merge() {
-  local into="" from=""
+  local into="" from="" reason=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --into)
@@ -1543,6 +1545,7 @@ do_merge() {
       --from)
         need_value "merge" "--from" "$#" "${2:-}"
         from="$2"; shift 2 ;;
+      --reason) need_value "merge" "--reason" "$#" "${2:-}"; reason="$2"; shift 2 ;;
       *) die3 "merge: unrecognized argument: $1" ;;
     esac
   done
@@ -1551,6 +1554,7 @@ do_merge() {
   id_shape_ok "$into" wo || die3 "merge: --into '$into' is not a valid wo<n> id shape"
   id_shape_ok "$from" wo || die3 "merge: --from '$from' is not a valid wo<n> id shape"
   [ "$into" != "$from" ] || die3 "merge: --into and --from both name $into"
+  is_blank "$reason" && die3 "merge: --reason is required. It says why $from is gone, for every later reader"
   wo_exists "$into" || die2 "merge: no work order $into in $DESIGN_DIR"
   wo_exists "$from" || die2 "merge: no work order $from in $DESIGN_DIR"
 
@@ -1590,6 +1594,7 @@ do_merge() {
   echo "carried: ${carried:-none}"
   echo "dropped: title, diffBudget; the survivor's stand"
   echo "title: $(jq -r '.title' "$into_file"), the survivor's"
+  record_removal "merge" "$from" "$reason" "$into"
   write_atomic "$into_file" "$doc"
 
   # Every other order that depended on the folded one now depends on the survivor.
@@ -1616,6 +1621,23 @@ do_merge() {
   exit 0
 }
 
+# record_removal <who> <id> <reason> [<survivor>]: appends one entry to design-removed.json, with
+# mergedInto when a survivor is given. The one writer of that record, for `remove` and `merge`.
+record_removal() {
+  local record entry
+  if [ -f "$REMOVED_FILE" ]; then
+    record="$(jq -c '.' "$REMOVED_FILE" 2>/dev/null)" || die3 "$1: $REMOVED_FILE exists but is not valid JSON"
+  else
+    record='{"schemaVersion": 1, "removed": []}'
+  fi
+  entry="$(jq -nc --arg id "$2" --arg reason "$3" --arg into "${4:-}" --arg d "$(date -u +%Y-%m-%d)" \
+    '{id: $id, reason: $reason, removedAt: $d} + (if $into == "" then {} else {mergedInto: $into} end)')"
+  record="$(printf '%s' "$record" | jq --argjson e "$entry" '.removed = ((.removed // []) + [$e])')"
+  write_atomic "$REMOVED_FILE" "$record"
+  echo "RECORDED: $REMOVED_FILE"
+  echo "removedOrders: $(printf '%s' "$record" | jq -r '[.removed[].id] | join(", ")')"
+}
+
 # ------------------------------------------------------------------------------------------------
 # remove: deletes an order that no longer earns its place, when a changed contract left it with
 # nothing to do (gap row 234). The id and the reason go into <task_folder>/design-removed.json,
@@ -1624,18 +1646,34 @@ do_merge() {
 # a ledger step reached or an attempt spent, a frozen test record, or a build record. Refused
 # while another order depends on it, or while it is the only order serving or owning a criterion
 # the contract still holds. A finding the order accounted for is left to `check`, which names it.
-# Commits nothing, the same as every edit before `close`.
+# With --merged-into, it records an order that a merge folded before merge wrote this record (gap
+# row 245). The order is already gone, so it refuses an id that is still an order, or one the
+# record already holds, and the survivor must be an order. Commits nothing, the same as every
+# edit before `close`.
 # ------------------------------------------------------------------------------------------------
 
 do_remove() {
-  local id="" reason=""
+  local id="" reason="" into=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)     need_value "remove" "--id" "$#" "${2:-}";     id="$2"; shift 2 ;;
       --reason) need_value "remove" "--reason" "$#" "${2:-}"; reason="$2"; shift 2 ;;
+      --merged-into) need_value "remove" "--merged-into" "$#" "${2:-}"; into="$2"; shift 2 ;;
       *) die3 "remove: unrecognized argument: $1" ;;
     esac
   done
+  if [ -n "$into" ]; then
+    is_blank "$id" && die3 "remove: --id is required and must not be blank"
+    id_shape_ok "$id" wo || die3 "remove: --id '$id' is not a valid wo<n> id shape"
+    id_shape_ok "$into" wo || die3 "remove: --merged-into '$into' is not a valid wo<n> id shape"
+    is_blank "$reason" && die3 "remove: --reason is required. It says why $id is gone, for every later reader"
+    ! wo_exists "$id" || die3 "remove: $id is still an order. Fold it into $into with merge, which records it"
+    [ ! -f "$REMOVED_FILE" ] || jq -e --arg id "$id" 'all((.removed // [])[]; .id != $id)' "$REMOVED_FILE" >/dev/null 2>&1 \
+      || die3 "remove: $id is already recorded in $REMOVED_FILE"
+    wo_exists "$into" || die2 "remove: no work order $into in $DESIGN_DIR"
+    record_removal "remove" "$id" "$reason" "$into"
+    exit 0
+  fi
   require_wo_id_arg "remove" "$id"
   is_blank "$reason" && die3 "remove: --reason is required. It says why $id is gone, for every later reader"
   local file
@@ -1666,21 +1704,10 @@ do_remove() {
   [ -z "$alone" ] \
     || die3 "remove: $id is $alone. Give each to another order with update first"
 
-  local record entry
-  if [ -f "$REMOVED_FILE" ]; then
-    record="$(jq -c '.' "$REMOVED_FILE" 2>/dev/null)" || die3 "remove: $REMOVED_FILE exists but is not valid JSON"
-  else
-    record='{"schemaVersion": 1, "removed": []}'
-  fi
-  entry="$(jq -nc --arg id "$id" --arg reason "$reason" --arg d "$(date -u +%Y-%m-%d)" \
-    '{id: $id, reason: $reason, removedAt: $d}')"
-  record="$(printf '%s' "$record" | jq --argjson e "$entry" '.removed = ((.removed // []) + [$e])')"
-  write_atomic "$REMOVED_FILE" "$record"
+  record_removal "remove" "$id" "$reason"
   rm -f "$file" "$DESIGN_DIR/$id.md"
   echo "REMOVED: $file"
   echo "removed: $DESIGN_DIR/$id.md"
-  echo "RECORDED: $REMOVED_FILE"
-  echo "removedOrders: $(printf '%s' "$record" | jq -r '[.removed[].id] | join(", ")')"
   # The findings the order accounted for are now in no order's list, and `check` refuses until
   # each is accounted for again.
   echo "findingsLeft: $(printf '%s' "$doc_before" | jq -r '[ (.findings // [])[] | .ref ] | if length == 0 then "none" else join(", ") + ". Account for each again" end')"
@@ -1979,11 +2006,12 @@ do_close() {
   # The removals the record will carry, refused before anything moves when not in their shape.
   if [ -f "$REMOVED_FILE" ]; then
     jq -e '(.removed | type) == "array" and all(.removed[]; type == "object"
-        and (keys == ["id", "reason", "removedAt"])
+        and ((keys - ["mergedInto"]) == ["id", "reason", "removedAt"])
         and (.id | type == "string" and test("^wo[1-9][0-9]*$"))
+        and ((has("mergedInto") | not) or (.mergedInto | type == "string" and test("^wo[1-9][0-9]*$")))
         and (.reason | type == "string" and length > 0)
         and (.removedAt | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")))' "$REMOVED_FILE" >/dev/null 2>&1 \
-      || die4 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason and removedAt"
+      || die4 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason, removedAt and an optional mergedInto"
   fi
 
   local unaccounted
@@ -2090,7 +2118,7 @@ $unaccounted"
     die3 "close: --critique-outcome names how the critique's findings were answered, and no finished critique file is under $TASK_PATH/records or $DESIGN_DIR to record it beside"
   fi
 
-  # The orders `remove` deleted, with the reason each went, so the close says why a number is missing.
+  # The orders `remove` deleted and `merge` folded, with the reason each went, so the close says why a number is missing.
   if [ -f "$REMOVED_FILE" ]; then
     doc="$(printf '%s' "$doc" | jq --slurpfile r "$REMOVED_FILE" '.removed = $r[0].removed')"
   fi
