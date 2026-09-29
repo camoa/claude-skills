@@ -4,6 +4,35 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.5] - 2026-09-29
+
+A fix from the live run on 6.0.4. Reopening design on a partly built task
+asked the person to answer critique findings on an order that was already
+closed, and every answer would have rebuilt it.
+
+### Fixed
+
+- The design critics now judge only orders that are not closed. `check`
+  names the closed orders, and the critics read them as context only. A
+  finding a closed order causes goes on the open order it breaks.
+- `check` removes a critique row that names only closed orders, before the
+  person reads the critique. The file keeps a line saying how many rows were
+  removed and from which orders. `close` does the same, so the record stays
+  clean.
+- A reason appended to an order's reasoning with `update --append-reasoning`
+  no longer halts a started or closed order. After design closes again,
+  `start` takes the order in place, as it does for owned files and findings.
+  A reasoning whose earlier text changed still halts it.
+
+### Known limits
+
+- The person still sees a critique row that the critics attach to the
+  contract or to an open order, even when its fix would change a closed
+  order. Changing a criterion a closed order serves rebuilds that order.
+- The early removal depends on the skill running `check` before it reads the
+  critique. If it skips that call, the person sees the rows, and `close`
+  still removes them from the record.
+
 ## [6.0.4] - 2026-09-28
 
 Two fixes from the live run on 6.0.3. A reviewer again filed a recipe rule

@@ -241,8 +241,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      re-derived from the live alignment.json and design/*.json. Design changed after it closed,
 #      without closing again. Close design again. A resumed run answers the same when a drifted
 #      order that has not started would take its live copy, or a started or closed order that
-#      only gained owned files or findings would take its copy in place, and `restart` when the
-#      halted orders would: a live copy design did not close on is never frozen.
+#      only gained owned files, findings or an appended reason would take its copy in place, and
+#      `restart` when the halted orders would: a live copy design did not close on is never frozen.
 #  14  the task's own project.json exists but is not valid JSON, so its codePath cannot be read.
 #      A different fact from exit 3's "no usable codePath", which is a valid file with the field
 #      absent or empty.
@@ -1884,11 +1884,13 @@ LO_STATUS
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
       # A started order whose live copy differs from the frozen one only by added owned files is
       # not halted either (live-run row 91), and neither is one that only took research findings
-      # from `account` (gap row 226). Its frozen tests were written from the criteria and
-      # the order's other fields, and none of those changed, so the live copy is taken in place:
+      # from `account` (gap row 226), and neither is one whose reasoning only grew by
+      # `update --append-reasoning`: the live value starts with the frozen one (gap row 227). Its
+      # frozen tests were written from the criteria and the order's other fields, and none of
+      # those changed, so the live copy is taken in place:
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
-      # build brief then carries the new findings. Any other difference, a removed owned file,
-      # or a changed criterion it serves, halts as before.
+      # build brief then carries the new findings. Any other difference, a removed owned file, a
+      # reasoning whose earlier text changed, or a changed criterion it serves, halts as before.
       widened_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
@@ -1897,9 +1899,10 @@ LO_STATUS
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .findings)) == ($s | del(.ownedFiles, .findings)))
+              | select(($l | del(.ownedFiles, .findings, .reasoning)) == ($s | del(.ownedFiles, .findings, .reasoning)))
+              | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
-              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings)
+              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
               | $d ]')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
@@ -1911,7 +1914,7 @@ LO_STATUS
       fi
       if [ "$(printf '%s' "$widened_ids_json" | jq 'length')" -gt 0 ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
-        drift_what="${drift_what}these started work orders gained owned files or findings and changed nothing else: $(printf '%s' "$widened_ids_json" | jq -r 'join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
+        drift_what="${drift_what}these started work orders gained owned files, findings or an appended reason and changed nothing else: $(printf '%s' "$widened_ids_json" | jq -r 'join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
         resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$widened_ids_json" '$a + $b')"
       fi
       if [ "$contract_changed" = "true" ]; then
