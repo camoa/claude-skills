@@ -280,7 +280,8 @@ the design stage to read. Call `record` once per finding; calling it again with 
 `--search` adds another finding to the same JSON file, and the rendered markdown with it, rather
 than replacing it. A finding is named `<search>#<n>`, counted from 1 as the rendered file
 numbers it. A finding whose text cites another finding names it that way, never by a number
-counted from 0.
+counted from 0. No script can tell an older text that counted from 0 from one that counts
+from 1, so a person rewrites such a text when one is found.
 
 `--searched-for` holds the words this search searched for. Words, not a sentence about how the
 search ran: "responsive images, image styles, picture element". Give the same value on every
@@ -491,6 +492,10 @@ by one, so the report's other numbers for that file are stale. Repair one entry,
 again, then the next. `drop` prints one `cites:` line per finding whose text names the dropped
 finding, or a later one it moved down. Rewrite each citing finding: drop it and `record` it
 again with the right number, or with no citation. The script cannot tell what the text meant.
+The report's `danglingCitations` lists each finding whose text cites a search with no file, or a
+number past that file's findings. Rewrite it the same way. A citation that now lands on the
+finding that moved into a dropped one's place passes the check. The `cites:` lines are the only
+warning, so read them when `drop` prints them.
 A finding citing an id the contract does not hold is listed in the report's
 `unknownCriteriaIds` the same way. Serve it with the ids it does serve. A finding with a missing
 or malformed field is listed by its `finding` too. Drop it with `drop`, then `record` it again

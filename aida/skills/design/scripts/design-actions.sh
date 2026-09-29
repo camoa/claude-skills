@@ -2257,10 +2257,10 @@ do_account() {
     render_wo "$id"
     exit 0
   fi
-  parse_finding_ref account "$ref" "$TASK_PATH/research"
+  parse_finding_ref account "$ref" "$TASK_PATH/research" \
+    || die2 "account: no research file $TASK_PATH/research/$FINDING_REF_SEARCH.json"
   local search="$FINDING_REF_SEARCH" n="$FINDING_REF_N"
   local rfile="$TASK_PATH/research/$search.json" text count
-  [ -f "$rfile" ] || die2 "account: no research file $rfile"
   count="$(jq -r '(.findings // []) | length' "$rfile" 2>/dev/null)"
   text="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$rfile" 2>/dev/null)"
   [ -n "$text" ] || die2 "account: $rfile holds no finding $n. It holds ${count:-0}, numbered from 1 as research/$search.md shows them"

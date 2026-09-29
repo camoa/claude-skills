@@ -91,8 +91,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      three words, without its two companions, or differing from the recipeFit on disk; a `serve`
 #      or `drop` naming a search with no file, or a --finding not shaped <search>#<n> from 1 or
 #      naming no finding in that file, or the old --search and --index pair; a `serve` with no
-#      --criteria-served; the plugin root could not be resolved; a write that failed; a call to research-render.sh failing to produce
-#      <search>.md; or `check`'s own call to check-research.sh failing to run at all
+#      --criteria-served; the plugin root could not be resolved; a write that failed; a call to
+#      research-render.sh failing to produce <search>.md; or `check`'s own call to check-research.sh failing to run at all
 #      (check-research.sh's own exit 3, meaning it could not do its job either).
 #   4  `check` ran and found a research file that cannot be read as this format: not valid JSON,
 #      not an object, or a missing, malformed or unknown field at any depth (check-research.sh's
@@ -106,8 +106,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      Either malformed sidecar is moved aside first, to <name>.malformed-<date>.json, and
 #      stdout names it in a `setAside:` line.
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
-#      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
-#      criterion in the contract (check-research.sh's own exit 4).
+#      criterion with no finding, a finding with no criterion, a criteriaServed id naming no
+#      criterion in the contract, or a finding text citing a finding research does not hold
+#      (check-research.sh's own exit 4).
 #   6  `check` found the coverage clean, but <codePath>/.aida-spike/ still exists. A spike is a
 #      throwaway experiment research writes to answer one question (skills/research/SKILL.md,
 #      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
@@ -400,16 +401,17 @@ resolve_finding() {
     esac
   done
   if [ "$old_given" = true ]; then
+    local name="${old_search:-<search>}"
     case "$old_index" in
-      ''|*[!0-9]*) die3 "$action: --search and --index are gone. Name the finding as --finding <search>#<n>, counted from 1 as research/<search>.md shows it" ;;
+      ''|*[!0-9]*) die3 "$action: --search and --index are gone. Name the finding as --finding $name#<n>, counted from 1 as research/$name.md shows it" ;;
     esac
-    die3 "$action: --search and --index are gone. --index counted from 0; name this finding as --finding ${old_search:-<search>}#$((old_index + 1)), counted from 1 as research/<search>.md shows it"
+    die3 "$action: --search and --index are gone. --index counted from 0; name this finding as --finding $name#$((10#$old_index + 1)), counted from 1 as research/$name.md shows it"
   fi
   is_blank "$ref" && die3 "$action: --finding is required: <search>#<n>, counted from 1 as research/<search>.md shows it"
-  parse_finding_ref "$action" "$ref" "$RESEARCH_DIR"
+  parse_finding_ref "$action" "$ref" "$RESEARCH_DIR" \
+    || die3 "$action: no search named '$FINDING_REF_SEARCH': $RESEARCH_DIR/$FINDING_REF_SEARCH.json does not exist"
   local search="$FINDING_REF_SEARCH" n="$FINDING_REF_N"
   local file="$RESEARCH_DIR/$search.json"
-  [ -f "$file" ] || die3 "$action: no search named '$search': $file does not exist"
   jq empty "$file" 2>/dev/null || die3 "$action: $file is not valid JSON"
   local count
   count="$(jq -r 'if type == "object" and ((.findings | type) == "array") then (.findings | length) else "none" end' "$file")"
@@ -574,19 +576,21 @@ do_serve() {
 
 # One `cites:` line per finding under research/ whose text names $1#$2, the finding just dropped,
 # or a later finding of $1 the drop moved down. $3 is how many findings $1 held before the drop,
-# so a number past it names nothing and prints nothing. A text names a finding as `<search>#<n>`
-# or as `<search file> finding <n>`, with or without the .json or .md ending (gap row 236). It
-# runs after the write, so each citing finding carries its own number as it stands now. It warns
-# and never refuses: only a person can tell whether the citing text still holds.
+# so a number past it names nothing and prints nothing; `check` refuses that one. A citation is
+# read by CITES_JQ in task-helpers.sh, the reader `check` uses (gap row 236). It runs after the
+# write, so each citing finding carries its own number as it stands now. It warns and never
+# refuses: only a person can tell what a citation to the finding that moved into place meant.
 cites_after_drop() {
-  local f
+  local f known
+  known="$( { find "$RESEARCH_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null \
+    | while IFS= read -r f; do basename -- "$f" .json; done; printf '%s\n' "$1"; } | jq -R . | jq -sc .)"
   find "$RESEARCH_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do
-        jq -r --arg s "$(basename -- "$f" .json)" --arg t "$1" --argjson n "$2" --argjson old "$3" '
+        jq -r --arg s "$(basename -- "$f" .json)" --arg t "$1" --argjson n "$2" --argjson old "$3" \
+          --argjson known "$known" "$CITES_JQ"'
           (.findings // []) | to_entries[] | ($s + "#" + (.key + 1 | tostring)) as $me
-          | [ (.value.text // "" | tostring)
-              | scan("(?<![a-z0-9-])" + $t + "(?:\\.json|\\.md)?(?:#| finding )([0-9]+)") | .[0] | tonumber
-              | select(. >= $n and . <= $old) ] | unique[]
+          | [ (.value.text // "" | tostring) | citations($known)
+              | select(.search == $t and .n >= $n and .n <= $old) | .n ] | unique[]
           | "cites: " + $me + " names " + $t + "#" + tostring
             + (if . == $n then ", the finding dropped" else ", now " + $t + "#" + (. - 1 | tostring) end)
         ' "$f" 2>/dev/null
@@ -695,6 +699,7 @@ do_check() {
           | select(endswith(": 0") | not)),
         ("unknown criterion ids: " + ((.coverage.unknownCriteriaIds // []) | map(.id) | unique | join(" "))
           | select(endswith(": ") | not)),
+        ("dangling citations: " + ((.danglingCitations // []) | length | tostring) | select(endswith(": 0") | not)),
         ("files with issues: " + ((.fileIssueCount // 0) | tostring) | select(endswith(": 0") | not))
       ] | join("; ")' "$CHECK_FILE" 2>/dev/null)"
   fi

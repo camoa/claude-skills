@@ -16,7 +16,7 @@
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   parse_finding_ref <action> <ref> <research folder>
 #                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
-#                                         <search>#<n>, counted from 1, or dies
+#                                         <search>#<n>, counted from 1; 1 when no such search
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
@@ -55,6 +55,8 @@
 #                                         a negation word
 #   REASONING_JQ                          jq definitions: `struckMark`, and `liveReasoning`,
 #                                         a work order's reasoning with no struck paragraph
+#   CITES_JQ                              a jq definition, `citations($known)`, the findings
+#                                         a finding's text cites
 #
 # Every script that sources this file runs warn_newer_installed. These never source it, so
 # they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
@@ -92,6 +94,20 @@ REASONING_JQ='
   def struckMark: "[struck] ";
   def liveReasoning: (.reasoning // "") | split("\n\n")
     | map(select(startswith(struckMark) | not)) | join("\n\n");'
+
+# The findings a finding's text cites, any case: `<search>#<n>`, or `<search>[.json|.md]
+# finding <n>`, or `findings <n> and <n>` (gap rows 235 and 236). Research's drop and its check
+# read citations alike, so they take them from here. `citations($known)` yields {search, n} per
+# number. A bare name before `finding` counts only when $known, the task's search names, holds
+# it, so "see finding 2" in prose is not read as a search called "see".
+# shellcheck disable=SC2034 # read by the sourcing script
+CITES_JQ='
+  def citations($known):
+    [ scan("(?i)(?<![a-z0-9-])([a-z0-9]+(?:-[a-z0-9]+)*)(\\.json|\\.md)?(?:#([0-9]+)|\\s+findings?\\s+([0-9]+(?:\\s+and\\s+[0-9]+)*))") ]
+    | .[] | (.[0] | ascii_downcase) as $s
+    | select(.[1] != null or .[2] != null or (($known | index($s)) != null))
+    | (if .[2] != null then .[2] else (.[3] | scan("[0-9]+")) end)
+    | {search: $s, n: tonumber};'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
 # task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree
@@ -205,15 +221,18 @@ is_blank() {
 # in that file's findings, counted from 1 as research-render.sh numbers it. Research's serve and
 # drop and design's account take this one form, so a person meets one number (gap row 235).
 # $1 the action, $2 the reference, $3 the research folder. Sets FINDING_REF_SEARCH and
-# FINDING_REF_N, or dies 3 on a reference not in that form. Whether the finding exists is the
-# caller's question.
+# FINDING_REF_N. Dies 3 on a reference not in that form. Returns 1 when research holds no file
+# for the search, before the number is read, so each caller refuses that with its own exit code.
+# Whether the finding exists is the caller's question.
 parse_finding_ref() {
   local who="$1" ref="$2" dir="$3" search n
   search="${ref%#*}"; n="${ref##*#}"
   case "$ref" in *'#'*) ;; *) die3 "$who: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
-  case "$search" in ''|*[!a-z0-9-]*) die3 "$who: --finding must be <search>#<n>, got '$ref'" ;; esac
+  case "$search" in ''|*[!a-z0-9-]*|-*|*-) die3 "$who: --finding must be <search>#<n>, got '$ref'" ;; esac
+  FINDING_REF_SEARCH="$search"
+  [ -f "$dir/$search.json" ] || return 1
   case "$n" in ''|0*|*[!0-9]*) die3 "$who: --finding must be <search>#<n>, numbered from 1 as research/$search.md shows it, got '$ref'. $search#1 is: $(jq -r '(.findings // [])[0].text // "" | split("\n")[0]' "$dir/$search.json" 2>/dev/null)" ;; esac
-  FINDING_REF_SEARCH="$search"; FINDING_REF_N="$n"
+  FINDING_REF_N="$n"
 }
 
 # Writes $2 (assumed already-valid JSON text) to $1 through a temporary file in the target's own

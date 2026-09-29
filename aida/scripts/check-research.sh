@@ -20,7 +20,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # finding anywhere cites, and a finding whose criteriaServed is empty, which is work nobody asked
 # for (ideal/research.md, "'Looked and found nothing' is a finding" and "What a finding holds").
 # The join runs only when the contract itself can be read; when it cannot, this script says so
-# rather than guessing coverage from nothing.
+# rather than guessing coverage from nothing. Last, a finding whose text cites `<search>#<n>` or
+# `<search>[.json|.md] finding(s) <n>` that research does not hold is refused, exit 4.
 #
 # A research file is plain JSON: <task_folder>/research/<search>.json, no fences, no markdown.
 # research-render.sh renders a sibling <search>.md from it, for the design stage to read; this
@@ -79,7 +80,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      object, missing or empty text or source, a lookedAt not matching YYYY-MM-DD, a
 #      criteriaServed that is not an array of strings, a criteriaServed id naming no criterion in
 #      the contract, a criterion in the contract with no finding anywhere, or a finding whose
-#      criteriaServed is empty. Each is named in the JSON on stdout.
+#      criteriaServed is empty, or a finding whose text cites a finding research does not hold.
+#      Each is named in the JSON on stdout.
 #
 # researchStarted (top level, on stdout) is false when <task_folder>/research does not exist yet,
 # true otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -105,6 +107,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     coverage: { checked, note, criteriaWithNoFinding: [ {id, text} ],
 #                 findingsWithNoCriterion: [ {path, finding, text} ],
 #                 unknownCriteriaIds: [ {path, finding, text, id} ] },
+#     danglingCitations: [ {path, finding, text, cites} ],
 #     fileIssueCount, contentIssueCount,
 #     notChecked: [...]
 #   }
@@ -180,6 +183,11 @@ SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
 [ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
+# CITES_JQ, the citation reader research's drop uses too.
+TASK_HELPERS_LIB="$PLUGIN_ROOT/scripts/lib/task-helpers.sh"
+[ -f "$TASK_HELPERS_LIB" ] || die3 "cannot read the task-helper library: $TASK_HELPERS_LIB not found"
+# shellcheck source=/dev/null
+source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
 [ -f "$RESEARCH_SCHEMA_FILE" ] || die3 "cannot read the research field list: $RESEARCH_SCHEMA_FILE not found"
 jq empty "$RESEARCH_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the research field list: $RESEARCH_SCHEMA_FILE is not valid JSON"
@@ -235,6 +243,17 @@ fi
 # 5. Walk every research file. One jq program per file checks its findings and collects them,
 #    with their own `<search>#<n>` and a truncated text, for the cross-file coverage join in step 6.
 # ---------------------------------------------------------------------------
+
+# Each readable search's finding count, for the citation join in step 6. A file that cannot be
+# read has no count, so a citation of it reads as dangling too; the file's own fault outranks it.
+SEARCH_COUNTS_JSON='{}'
+if [ "$RESEARCH_STARTED" = "true" ]; then
+  while IFS= read -r rfile; do
+    c="$(jq -r 'if type == "object" and ((.findings | type) == "array") then (.findings | length) else empty end' "$rfile" 2>/dev/null)"
+    [ -z "$c" ] || SEARCH_COUNTS_JSON="$(printf '%s' "$SEARCH_COUNTS_JSON" \
+      | jq --arg s "$(basename -- "$rfile" .json)" --argjson c "$c" '. + {($s): $c}')"
+  done < <(find "$RESEARCH_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null)
+fi
 
 FILES_JSON='[]'
 ALL_FINDINGS_JSON='[]'
@@ -322,14 +341,16 @@ if [ "$RESEARCH_STARTED" = "true" ]; then
       # tagged with the file it came from, its own `<search>#<n>`, and its own text
       # (truncated), so an orphaned or unknown-id finding can be pointed at directly rather than
       # only at the file that holds it.
-      THIS_FINDINGS="$(jq -c --arg path "$rfile" --arg s "$(basename -- "$rfile" .json)" --argjson n "$TRUNC_LEN" '
+      THIS_FINDINGS="$(jq -c --arg path "$rfile" --arg s "$(basename -- "$rfile" .json)" --argjson n "$TRUNC_LEN" \
+        --argjson known "$(printf '%s' "$SEARCH_COUNTS_JSON" | jq -c 'keys')" "$CITES_JQ"'
         def trunctext($v; $n):
           if ($v | type) == "string" then
             (if ($v | length) > $n then ($v[0:$n] + "...") else $v end)
           else "(no text recorded)" end;
         [ (.findings // []) | to_entries[] | select((.value | type) == "object")
           | {path: $path, finding: ($s + "#" + (.key + 1 | tostring)), text: trunctext(.value.text?; $n),
-             criteriaServed: (.value.criteriaServed? // [])} ]
+             criteriaServed: (.value.criteriaServed? // []),
+             cites: [ .value.text? | strings | citations($known) ]} ]
       ' "$rfile")"
       ALL_FINDINGS_JSON="$(printf '%s' "$ALL_FINDINGS_JSON" | jq --argjson add "$THIS_FINDINGS" '. + $add')"
     fi
@@ -401,7 +422,15 @@ else
   fi
 fi
 
-CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + COVERAGE_ISSUE_COUNT))
+# A finding whose text cites a finding research does not hold: a search with no file, or a
+# number past that file's count (gap row 236). It needs no contract, so it runs either way. A
+# citation that now lands on whatever moved into a dropped finding's place reads as fine here;
+# only a person can tell, and drop names each one when it happens.
+DANGLING_CITATIONS_JSON="$(jq -c -n --argjson findings "$ALL_FINDINGS_JSON" --argjson counts "$SEARCH_COUNTS_JSON" '
+  [ $findings[] | . as $f | ($f.cites // [])[] | select(($counts[.search] // 0) < .n)
+    | {path: $f.path, finding: $f.finding, text: $f.text, cites: (.search + "#" + (.n | tostring))} ] | unique
+')"
+CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + COVERAGE_ISSUE_COUNT + $(printf '%s' "$DANGLING_CITATIONS_JSON" | jq 'length')))
 
 # ---------------------------------------------------------------------------
 # 7. What this script could not check, named on stdout rather than silently skipped.
@@ -450,6 +479,7 @@ jq -n \
   --argjson criteriaWithNoFinding "$CRITERIA_WITH_NO_FINDING_JSON" \
   --argjson findingsWithNoCriterion "$FINDINGS_WITH_NO_CRITERION_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
+  --argjson danglingCitations "$DANGLING_CITATIONS_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
   --argjson contentIssueCount "$CONTENT_ISSUE_COUNT" \
   --argjson notChecked "$NOT_CHECKED_JSON" \
@@ -468,6 +498,7 @@ jq -n \
       findingsWithNoCriterion: $findingsWithNoCriterion,
       unknownCriteriaIds: $unknownCriteriaIds
     },
+    danglingCitations: $danglingCitations,
     fileIssueCount: $fileIssueCount,
     contentIssueCount: $contentIssueCount,
     notChecked: $notChecked

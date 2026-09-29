@@ -173,7 +173,7 @@ contract and every search file, in both directions. Every criterion the contract
 a finding somewhere, and every finding must cite a criterion. The same data, grouped the other
 way, is the report, so nothing is authored twice.
 
-The check refuses on five things:
+The check refuses on six things:
 
 - A finding with a missing or broken field. Research drops it and records it again. A file that
   is not JSON, or broken above its findings, is one no AIDA action wrote. Research names it and
@@ -188,6 +188,8 @@ The check refuses on five things:
   removes none. Both name the finding `<search>#<n>`, counted from 1, the number the rendered
   file and design use. A drop names each finding whose text cites the dropped one, or a later
   one it moved down, so research rewrites those.
+- A finding whose text cites a finding research does not hold: a search with no file, or a
+  number past its findings. Research rewrites the citing finding.
 - The spike folder still on disk. Delete it, then check again; nothing else is missing.
 
 Research is done only when the check passes. Every gap is closed one of three ways: recording
