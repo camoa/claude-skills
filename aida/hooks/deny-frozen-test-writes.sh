@@ -427,22 +427,25 @@ case "$TOOL" in
                  if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
                done ;; esac ;;
         cp|mv|ln|install|rsync)
-          last="${w[$((${#w[@]} - 1))]}"
           VIA="${w[0]}"
-          if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi
-          # -t names where the copy lands, except in rsync, where it keeps times. mv removes each
-          # source. So both are write positions too (gap row 243).
-          j=1
+          # -t names where the copy lands, except in rsync, where it keeps times, and the last
+          # operand is then a source. mv removes each source. So each is a write position
+          # (gap row 243).
+          j=1; named=false
           while [ -z "$HIT" ] && [ "$j" -lt "${#w[@]}" ]; do
             t="${w[$j]}"; j=$((j + 1))
             case "$t" in
-              -t|--target-directory) [ "${w[0]}" != rsync ] || continue; t="${w[$j]:-}"; j=$((j + 1)) ;;
-              --target-directory=*) t="${t#*=}" ;;
+              -t|--target-directory) [ "${w[0]}" != rsync ] || continue; named=true; t="${w[$j]:-}"; j=$((j + 1)) ;;
+              --target-directory=*) named=true; t="${t#*=}" ;;
               -*) continue ;;
               *) [ "${w[0]}" = mv ] || continue ;;
             esac
             if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; fi
-          done ;;
+          done
+          last="${w[$((${#w[@]} - 1))]}"
+          if [ -z "$HIT" ] && [ "$named" = false ] && owner_of_arg "$last"; then
+            HIT="$last"; HIT_OWNER="$OWNER_UNIT"
+          fi ;;
         tar)
           # tar extracts into the folder -C names, else where the shell stands, and creates,
           # appends or updates the archive f names. Rule three reads both (gap row 243).

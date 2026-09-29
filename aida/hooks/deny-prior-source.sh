@@ -45,8 +45,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # role in that checkout finds its record by its type (scripts/lib/paths.sh,
 # dispatch_record_for). Gap row 243 adds the forms that read that checkout without a reading verb:
 # git run there, through -C, --git-dir or --work-tree too, and cp, rsync, install, mv and tar with
-# a source there. They are judged in the main checkout only, so the same form in the worktree
-# passes. judge_git and judge_copy below say what each form reads.
+# a source there. judge_git and judge_copy below say what each form reads, and which forms are
+# judged in the main checkout only.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, or a tool that is
 # none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
@@ -210,7 +210,7 @@ deny_if_listed() {
       if is_under "$target_abs" "$CODE_CANON"; then
         reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
       elif [ -n "$MAIN_CANON" ] && is_under "$target_abs" "$MAIN_CANON"; then
-        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role that path in the main checkout $MAIN_CANON, as in the task's worktree $CODE_CANON. Work in the worktree: start each shell command with cd $CODE_CANON &&."
+        reason="$ROLE_BARE may not read $target_abs: it is or holds $deny_abs, which this dispatch denies this role, in the main checkout $MAIN_CANON. This role works in the task's worktree $CODE_CANON: start each shell command with cd $CODE_CANON &&."
       else
         reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
       fi
@@ -223,24 +223,27 @@ $DENY_ABS
 DENY_EOF
 }
 
-# deny_if_listed, for a target $1 in the main checkout and not in the worktree only. The git and
-# copy forms below are judged there alone (gap row 243), so the same form in the worktree passes.
+# deny_if_listed, for a target $1 in the main checkout and not in the worktree only. The git
+# whole-tree reads and the copy forms below are judged there alone (gap row 243).
 deny_if_main() {
   [ -n "$MAIN_CANON" ] && is_under "$1" "$MAIN_CANON" && ! is_under "$1" "$CODE_CANON" || return 0
   deny_if_listed "$1"
 }
 
-# A git segment, in the words w. git reads a file through its history, its diff or its index.
-# Only a tree in the main checkout is judged, so git in the worktree stays the role's view of its
-# own work. A <rev>:<path> reads that path from the checkout's top. A diff, a patch log, a show of
-# a commit, a grep, a blame or an archive reads the whole tree, as a search does.
+# A git segment, in the words w. git reads a file through its history, its diff or its index. In
+# either tree, a <rev>:<path> in git show or git cat-file reads that path from the tree's top, and
+# git grep searches from where git works, as rg with no path does. A diff, a patch log, a show of a
+# commit, a blame or an archive reads the whole tree. That set is judged in the main checkout
+# only, so git diff and git log -p in the worktree stay the role's view of its own work.
 judge_git() {
-  local whole=false t p base
+  local whole=false t p top
   git_tree_of "$RUN_DIR" "${w[@]:1}"
-  [ -n "$MAIN_CANON" ] && is_under "$GIT_TREE" "$MAIN_CANON" \
-    && ! is_under "$GIT_TREE" "$CODE_CANON" || return 0
+  top="$GIT_TREE"
+  if is_under "$GIT_TREE" "$CODE_CANON"; then top="$CODE_CANON"
+  elif [ -n "$MAIN_CANON" ] && is_under "$GIT_TREE" "$MAIN_CANON"; then top="$MAIN_CANON"; fi
   case "${w[$GIT_SUB_AT]:-}" in
-    diff|grep|blame|archive) whole=true ;;
+    grep) SEARCH=true; deny_if_listed "$GIT_TREE"; return 0 ;;
+    diff|blame|archive) whole=true ;;
     log) for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
            case "$t" in -p|-u|--patch|--patch-with-*) whole=true ;; esac
          done ;;
@@ -250,12 +253,12 @@ judge_git() {
         case "$t" in -*|*:) continue ;; *:*) ;; *) continue ;; esac
         whole=false
         p="${t#*:}"
-        case "$p" in ./*|../*) base="$GIT_TREE" ;; *) base="$MAIN_CANON" ;; esac
-        deny_if_listed "$(normalize_abs "$(resolve_against "$p" "$base")")"
+        case "$p" in ./*|../*) ;; *) p="$top/$p" ;; esac
+        deny_if_listed "$(normalize_abs "$(resolve_against "$p" "$GIT_TREE")")"
       done ;;
   esac
   SEARCH=true
-  [ "$whole" = false ] || deny_if_listed "$GIT_TREE"
+  [ "$whole" = false ] || deny_if_main "$GIT_TREE"
 }
 
 # A copy segment, in the words w. A copy out of the main checkout reads it. Each source there is
