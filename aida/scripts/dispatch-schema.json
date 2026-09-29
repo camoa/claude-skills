@@ -30,7 +30,7 @@
     "resumedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). A second `--no-report` on a record carrying it halts the order and removes the record (exit 109)."
+      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A second `--no-report` on a record carrying it halts the order and removes the record (exit 110)."
     },
     "unit": {
       "type": "string",

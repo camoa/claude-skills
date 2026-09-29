@@ -87,7 +87,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]... \
-#                            [--test-glob <glob>]...
+#                            [--test-glob <glob>]... [--resume]
 #
 # `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
 # that matches none of them. For the four roles that read or write the code, it also derives the
@@ -103,10 +103,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # role's record carries the key.
 #   implement-actions.sh dispatch-close <task_folder> [--no-report]
 #
-# `dispatch-close --no-report` is for a role that returned with no report: the runtime said it
-# stopped at its turn cap, or the report file its brief names is absent. The first time, the record
-# stays open and takes `resumedAt`, and the role is resumed once by message. The second time, the
-# order halts and the record is removed (exit 109, gap row 228).
+# `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. The
+# first time, the record stays open and takes `resumedAt`, and the role is resumed once by message.
+# The second time, the order halts and the record is removed (exit 110, gap row 228). For a
+# reviewer, a plain close also refuses when its brief's findings or verdicts file is missing (111).
+# `dispatch-open --resume` reopens a record already closed for that one resume. It skips the
+# leftover check `dispatch-open` otherwise runs (exit 104) and writes `resumedAt` at once.
 #   implement-actions.sh step <name>
 #
 # `step` prints one of this skill's own step files, from
@@ -654,7 +656,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 104  `start` found uncommitted files in the task's tree, on an interactive run given no
 #      `--leftovers`. Or `--leftovers set-aside` met a change other than an untracked or a modified
 #      file. The message names each path and the orders whose owned files hold it. Nothing is
-#      written and nothing moves.
+#      written and nothing moves. Since gap row 228 `dispatch-open` refuses the same way before a
+#      fresh role meets such files. A row-checker, a test author sent back for a rejected row, and
+#      `--resume` are exempt.
 # The code the builder's stop added (gap row 219).
 # 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder
 #      stopped, so this is not an attempt, whatever it committed. The message quotes the line and
@@ -664,7 +668,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      interface record, is a stop too (gap row 221).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
-#      attempt is spent.
+#      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
+#      names `dispatch-open --resume` (gap row 228).
 #
 # The code a departure at review added (gap row 224).
 # 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
@@ -682,10 +687,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      step: review-brief again, then the reviewer again. The check runs before --accept-deviation
 #      is read, so a person never accepts on a review that skipped a recipe.
 #
-# The code the turn cap added (gap row 228).
-# 109  `dispatch-close --no-report` found the open record already carries `resumedAt`: the role
+# The codes the turn cap added (gap row 228).
+# 110  `dispatch-close --no-report` found the open record already carries `resumedAt`: the role
 #      was resumed once and returned with no report again. The order halts with a reason naming
-#      the role and its `maxTurns`, and the record is removed. A person clears the halt.
+#      the role and its `maxTurns`, and the record is removed. A person runs clear-halt, then
+#      start, then dispatches again.
+# 111  a plain `dispatch-close` on a reviewer's record found the file its brief names missing, or
+#      no newer than the record: `findingsPath` in review mode, `verdictsPath` in verify mode after
+#      the ledger's `fixed`. The record stays open. The message names `--no-report`.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -882,7 +891,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
-                            [--test-glob <glob from the implement recipe>]...
+                            [--test-glob <glob from the implement recipe>]... [--resume]
        implement-actions.sh dispatch-close <task_folder> [--no-report]
        implement-actions.sh step <name>
 EOF
@@ -1701,48 +1710,21 @@ do_start() {
   run_mode="$(task_run_mode "$TASK_PATH" implement)"
 
   # --- step 7b: files a stopped role left in the tree (gap row 217) -------------------------------
-  # A role stopped mid-run leaves its files uncommitted, and the next role would work beside them.
-  # So start names each path git reports changed or untracked, with the orders whose owned files
-  # hold it. A gitignored file is not read. COMPROMISES.md is AIDA's own file, so it is not named.
-  # `-uall` names each file in a new folder, because only a file meets an owned-file entry.
-  # `-z` leaves a name unquoted. git_status_of passes neither flag, so this reads git directly.
-  # Interactive refuses until a person picks keep or set-aside. Unattended sets them aside. Only an
-  # untracked or a modified file can move. Any other change is a person's to undo, in both modes.
-  local lo_status lo_line lo_xy lo_rel lo_owners lo_id lo_glob lo_tab lo_orders_tsv lo_tracked="" lo_skip=false
-  local leftovers_json='[]' lo_text_jq
-  lo_text_jq='.[] | .path + " (" + (if (.orders | length) > 0 then (.orders | join(", ")) else "no order owns it" end) + ")"'
+  # im_scan_leftovers names them. Interactive refuses until a person picks keep or set-aside.
+  # Unattended sets them aside. Only an untracked or a modified file can move. Any other change is
+  # a person's to undo, in both modes.
+  local lo_xy lo_rel lo_tab lo_tracked leftovers_json
   lo_tab="$(printf '\t')"
-  lo_orders_tsv="$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } \
-    | jq -r '.[] | .id as $id | (.ownedFiles // [])[] | $id + "\t" + .' 2>/dev/null)"
-  lo_status="$(git -C "$code_path" status --porcelain -z --untracked-files=all 2>/dev/null | tr '\0' '\n')"
-  while IFS= read -r lo_line; do
-    # A rename or a copy carries its source name as the next field. It refuses below as it is.
-    if [ "$lo_skip" = "true" ]; then lo_skip=false; continue; fi
-    [ -n "$lo_line" ] || continue
-    lo_xy="$(printf '%s' "$lo_line" | cut -c1-2)"
-    lo_rel="${lo_line#???}"
-    case "$lo_xy" in R*|C*|?R|?C) lo_skip=true ;; esac
-    [ "$lo_rel" != "$COMPROMISES_FILE" ] || continue
-    lo_owners=""
-    while IFS="$lo_tab" read -r lo_id lo_glob; do
-      [ -n "$lo_id" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue
-      case ",$lo_owners," in *",$lo_id,"*) ;; *) lo_owners="${lo_owners:+$lo_owners,}$lo_id" ;; esac
-    done <<LO_ORDERS
-$lo_orders_tsv
-LO_ORDERS
-    case "$lo_xy" in '??'|' M'|'M '|'MM') ;; *) lo_tracked="$lo_tracked$lo_rel ($lo_xy), " ;; esac
-    leftovers_json="$(printf '%s' "$leftovers_json" | jq -c --arg p "$lo_rel" --arg xy "$lo_xy" --arg o "$lo_owners" \
-      '. + [{path: $p, status: $xy, orders: ($o | split(",") | map(select(length > 0)))}]')"
-  done <<LO_STATUS
-$lo_status
-LO_STATUS
+  im_scan_leftovers "$code_path" "$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } )"
+  leftovers_json="$LO_LEFTOVERS_JSON"
+  lo_tracked="$LO_TRACKED"
   if [ "$leftovers_json" != "[]" ]; then
     if [ "$run_mode" = "autonomous" ]; then
       [ "$leftovers_choice" != "keep" ] || die 3 "start: --leftovers keep is a person's call, and this run is unattended."
       leftovers_choice="set-aside"
     fi
     [ -n "$leftovers_choice" ] \
-      || die 104 "start: uncommitted files in $code_path: $(printf '%s' "$leftovers_json" | jq -r "[ $lo_text_jq ] | join(\", \")"). A role stopped mid-run may have left them, and the next role would work beside them. To keep a file, commit it, or run start again with --leftovers keep to leave it as it is. To set them aside, run start again with --leftovers set-aside. That moves them under $IMPL_DIR/set-aside/ and deletes nothing."
+      || die 104 "start: uncommitted files in $code_path: $(printf '%s' "$leftovers_json" | jq -r "[ $LO_TEXT_JQ ] | join(\", \")"). A role stopped mid-run may have left them, and the next role would work beside them. To keep a file, commit it, or run start again with --leftovers keep to leave it as it is. To set them aside, run start again with --leftovers set-aside. That moves them under $IMPL_DIR/set-aside/ and deletes nothing."
     [ "$leftovers_choice" != "set-aside" ] || [ -z "$lo_tracked" ] \
       || die 104 "start: these changes cannot be set aside: ${lo_tracked%, }. Only an untracked or a modified file moves aside. Commit them, or undo them by hand, then run start again."
   fi
@@ -2367,7 +2349,7 @@ LO_MOVE
     --argjson removed "$removed_ids_json" \
     --argjson newLiveOrders "$new_live_order_ids_json" \
     --argjson partialBuild "$st_partial_json" \
-    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $lo_text_jq ]")" \
+    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $LO_TEXT_JQ ]")" \
     --arg setAside "$set_aside_dir" \
     --argjson halted "$(printf '%s' "$halted_json" | jq -c '[ .[] | {id, haltedBecause} ]')" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
@@ -7108,7 +7090,7 @@ do_build_record() {
   stop_lines="$(br_marked_lines "$report_path" stop)"
   stop_count="$(printf '%s' "$stop_lines" | grep -c '.')"
   [ "$stop_count" = "1" ] \
-    || die 106 "build-record: the builder's report at $report_path holds $stop_count stop lines, and it must hold exactly one: 'Stop: none', or 'Stop: <cause>: <reason>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
+    || die 106 "build-record: the builder's report at $report_path holds $stop_count stop lines, and it must hold exactly one: 'Stop: none', or 'Stop: <cause>: <reason>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again. A builder stopped at its turn limit writes none: run dispatch-open with implementer, $unit_id and --resume, then resume the same agent by message."
   stop_value="$(printf '%s' "${stop_lines#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   case "$stop_value" in
     [Nn][Oo][Nn][Ee])
@@ -10522,6 +10504,43 @@ do_restart() {
 # removes it, safe to call when none is open. Two tasks of one project each hold their own.
 # ------------------------------------------------------------------------------------------------
 
+# im_scan_leftovers <code path> <work orders json>: the files a stopped role left in the tree (gap
+# row 217). Sets LO_LEFTOVERS_JSON, one {path, status, orders} per path git reports changed or
+# untracked, with the orders whose owned files hold it. Sets LO_TRACKED to the changes that cannot
+# move aside: a change other than an untracked or a modified file. A gitignored file is not read.
+# COMPROMISES.md is AIDA's own file, so it is not named. `-uall` names each file in a new folder,
+# because only a file meets an owned-file entry. `-z` leaves a name unquoted. git_status_of passes
+# neither flag, so this reads git directly. `start` and `dispatch-open` both call it.
+LO_TEXT_JQ='.[] | .path + " (" + (if (.orders | length) > 0 then (.orders | join(", ")) else "no order owns it" end) + ")"'
+im_scan_leftovers() {
+  local lo_status lo_line lo_xy lo_rel lo_owners lo_id lo_glob lo_tab lo_orders_tsv lo_skip=false
+  LO_LEFTOVERS_JSON='[]'; LO_TRACKED=""
+  lo_tab="$(printf '\t')"
+  lo_orders_tsv="$(printf '%s' "$2" | jq -r '.[] | .id as $id | (.ownedFiles // [])[] | $id + "\t" + .' 2>/dev/null)"
+  lo_status="$(git -C "$1" status --porcelain -z --untracked-files=all 2>/dev/null | tr '\0' '\n')"
+  while IFS= read -r lo_line; do
+    # A rename or a copy carries its source name as the next field. It refuses as it is.
+    if [ "$lo_skip" = "true" ]; then lo_skip=false; continue; fi
+    [ -n "$lo_line" ] || continue
+    lo_xy="$(printf '%s' "$lo_line" | cut -c1-2)"
+    lo_rel="${lo_line#???}"
+    case "$lo_xy" in R*|C*|?R|?C) lo_skip=true ;; esac
+    [ "$lo_rel" != "$COMPROMISES_FILE" ] || continue
+    lo_owners=""
+    while IFS="$lo_tab" read -r lo_id lo_glob; do
+      [ -n "$lo_id" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue
+      case ",$lo_owners," in *",$lo_id,"*) ;; *) lo_owners="${lo_owners:+$lo_owners,}$lo_id" ;; esac
+    done <<LO_ORDERS
+$lo_orders_tsv
+LO_ORDERS
+    case "$lo_xy" in '??'|' M'|'M '|'MM') ;; *) LO_TRACKED="$LO_TRACKED$lo_rel ($lo_xy), " ;; esac
+    LO_LEFTOVERS_JSON="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c --arg p "$lo_rel" --arg xy "$lo_xy" --arg o "$lo_owners" \
+      '. + [{path: $p, status: $xy, orders: ($o | split(",") | map(select(length > 0)))}]')"
+  done <<LO_STATUS
+$lo_status
+LO_STATUS
+}
+
 # Exit 102. br_order_needs decides which roles a proof kind needs, and this reads its answer. A
 # role the kind does not need would judge nothing. Examples are a test author on an order that
 # freezes no test, and a row-checker on one with no row. $1 the bare role, $2 the order id.
@@ -10536,9 +10555,10 @@ im_refuse_unneeded_role() {
 }
 
 do_dispatch_open() {
-  local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw=""
+  local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw="" resume=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --resume) resume=true; shift ;;
       --deny-read)
         [ "$#" -ge 2 ] || die 3 "dispatch-open: --deny-read needs a path relative to codePath"
         deny_raw="$deny_raw$2
@@ -10775,6 +10795,19 @@ TG_OWNED
     die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on unit $held_unit.$held_age Run dispatch-close first."
   fi
 
+  # A fresh role must not meet the files another role left (gap row 228, row 217's check). Three
+  # dispatches start beside files on purpose. A row-checker reads the author's uncommitted tests. A
+  # test author sent back for a rejected row repairs its predecessor's tests. A resume reopens the
+  # record for the same agent, whose own files they are.
+  if [ "$resume" = false ] && [ "$role_bare" != "row-checker" ] \
+     && ! { [ "$role_bare" = "test-author" ] && [ "$(jq -r --arg id "$unit_id" \
+       '[ (.orders // [])[] | select(.id == $id) | has("rowsRejected") ][0] // false' \
+       "$TASK_PATH/implementation/ledger.json" 2>/dev/null)" = "true" ]; }; then
+    im_scan_leftovers "$codepath" "$(jq -c '.workOrders // []' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null || printf '[]')"
+    [ "$LO_LEFTOVERS_JSON" = "[]" ] \
+      || die 104 "dispatch-open: uncommitted files in $codepath: $(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r "[ $LO_TEXT_JQ ] | join(\", \")"). A role stopped mid-run may have left them, and a fresh $role_bare would work beside them. To keep a file, commit it. To set them aside, run start with --leftovers set-aside. To resume the agent that left them, run dispatch-open again with --resume. Nothing was dispatched."
+  fi
+
   local deny_json allow_json
   deny_json="$(printf '%s' "$deny_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
   allow_json="$(printf '%s' "$allow_raw" | jq -R -s 'split("\n") | map(select(length>0))')"
@@ -10803,6 +10836,8 @@ TG_OWNED
     --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
       openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
+  # A reopened record carries the one resume already, so a second return with no report halts.
+  [ "$resume" = false ] || record_json="$(printf '%s' "$record_json" | jq -c '.resumedAt = .openedAt')"
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
@@ -10864,7 +10899,7 @@ do_dispatch_close() {
   # stays open so both hooks keep applying while it finishes.
   if [ "$no_report" = true ]; then
     [ -f "$dispatch_file" ] \
-      || die 3 "dispatch-close: --no-report needs an open dispatch to resume, and $dispatch_file is absent."
+      || die 3 "dispatch-close: --no-report needs an open dispatch record, and $dispatch_file is absent. If the role's record was already closed, run dispatch-open with the same role and unit and --resume, then resume the same agent by message. If that agent cannot be reached, as from another session, run dispatch-open without --resume and dispatch the role fresh."
     local nr_role nr_unit nr_cap nr_ledger
     nr_role="$(jq -r '.role // ""' "$dispatch_file" 2>/dev/null)"
     nr_unit="$(jq -r '.unit // ""' "$dispatch_file" 2>/dev/null)"
@@ -10885,7 +10920,22 @@ do_dispatch_close() {
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: the halt on $nr_unit could not be written."
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
-    die 109 "dispatch-close: $nr_unit is halted. $nr_role returned no report twice, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, then clears the halt with clear-halt."
+    die 110 "dispatch-close: $nr_unit is halted. $nr_role returned no report twice, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
+  fi
+  # The reviewer's file is named by its brief, so the script can see it is missing. A file older
+  # than the record is a previous run's. The fixer, the test author and the row-checker return
+  # their report as text or a file no script pins, so for them the flag is the only signal.
+  if [ -f "$dispatch_file" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file" 2>/dev/null)" = "reviewer" ]; then
+    local rc_unit rc_brief rc_expected
+    rc_unit="$(jq -r '.unit // ""' "$dispatch_file")"
+    rc_brief="$(jq -r --arg id "$rc_unit" '[ (.orders // [])[] | select(.id == $id) ][0]
+        | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
+      "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+    [ -z "$rc_brief" ] || rc_brief="$TASK_PATH/implementation/brief-$rc_unit-$rc_brief.json"
+    rc_expected="$(jq -r '.findingsPath // .verdictsPath // ""' "$rc_brief" 2>/dev/null)"
+    if [ -n "$rc_expected" ] && { [ ! -f "$rc_expected" ] || [ ! "$rc_expected" -nt "$dispatch_file" ]; }; then
+      die 111 "dispatch-close: the reviewer on $rc_unit returned, and $rc_expected is missing or older than its dispatch record. The record stays open. If the reviewer stopped at its turn limit, run dispatch-close again with --no-report."
+    fi
   fi
   if [ -f "$dispatch_file" ]; then
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
