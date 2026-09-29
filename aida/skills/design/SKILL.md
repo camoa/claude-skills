@@ -401,6 +401,21 @@ survivor. The two proofs must agree; set one order's `--proof` first when they d
 remove or edit an order file by any other means. A write outside the script prints nothing, so
 nothing records that it happened.
 
+An order that no longer earns its place, for example after the contract changed, leaves
+through the script with its reason:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove "<task_folder>" \
+  --id <woId> --reason "<why the order is gone>"
+```
+The script deletes the order's files and records the id and the reason in
+`design-removed.json`. The close copies that list into `design-closed.json`. A removed id is
+never minted again. The script refuses an order that implementation started. Fold that order
+into the order that takes its work with `merge`, and implementation's `restart` sets its
+records aside. It also refuses an order that another order depends on. It also refuses the only
+order that serves or owns a criterion of the contract. Move the dependency or the criterion
+with `update` first. A finding that the removed order accounted for shows in `check`. Account
+for it again.
+
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:
 ```
@@ -644,7 +659,13 @@ criterion the order owns, and ask what would settle it.
 negation word and the word `and`, by order and row number. This is best effort, because a script
 cannot parse a clause, and it never blocks the close. Read each row it names. When a row joins an
 absence to a behaviour, remove it with `remove-done-when`. Then add each clause with its own
-`add-done-when` call.
+`add-done-when` call. When a row does not join the two, mark it reviewed:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
+  --id <woId> --absence-reviewed <row>
+```
+The order keeps the row's text, and `check` stops naming that row. A row whose text changes is
+named again.
 
 `check` also prints `interfaceUnquoted:`, at every exit code. It names each order whose interface
 holds no name in backticks. A script cannot tell whether prose names a code element, so the line

@@ -31,6 +31,17 @@ row leaves through `remove-done-when` and an owned file through `remove-owned-fi
 moved to another order then leaves no rows behind. All print what moved, so the change is
 on record the way every other design write is.
 
+An order that no longer earns its place, for example after the contract changed, leaves through
+`remove` with a reason. The reason goes into `design-removed.json`, and the close copies it into
+its own record. A reader can then tell why a number is missing, and the number is never used
+again. `remove` refuses an order that implementation started, an order another order depends
+on, and the only order that serves or owns a criterion. A started order is folded with `merge`
+instead, and implementation's `restart` sets its records aside.
+
+The design check names each done-when row that holds a negation word and "and", because such a
+row may join an absence to a behaviour. A row that does not can be marked reviewed with
+`update --absence-reviewed`. The check then stops naming it until its text changes.
+
 ## What a work order declares
 
 | Field | What it says |

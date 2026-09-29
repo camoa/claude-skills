@@ -70,6 +70,20 @@
         "outcome": { "type": "string", "minLength": 1, "description": "How the findings were answered, from `close --critique-outcome`. How many changed an order and how many were left with a reason, in the person's words, one line per flag. `none` when no flag was passed, which is every unattended close (live-run row 135). A count alone said nothing about what changed." }
       },
       "description": "What the design critique found before this close, and how it was answered. A person can see later what was read, how much it raised and what came of it. Absent when no critic ran. The findings themselves stay in the files; the critique blocks nothing, and a count here is a pointer, never a verdict."
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "reason", "removedAt"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The id of the order `remove` deleted. It is never minted again." },
+          "reason": { "type": "string", "minLength": 1, "description": "Why the order went, from `remove --reason`." },
+          "removedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the removal." }
+        }
+      },
+      "description": "The orders design-actions.sh's `remove` deleted, copied by `close` from <task folder>/design-removed.json (gap row 234). A reader can tell why a number is missing from design/. Absent when no order was removed."
     }
   }
 }

@@ -38,7 +38,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--strike-reasoning <n>] [--append-reasoning <text>] \
+#                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path>
@@ -50,6 +50,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
 #   design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
 #   design-actions.sh merge          <task_folder> --into <woId> --from <woId>
+#   design-actions.sh remove         <task_folder> --id <woId> --reason <text>
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
 #   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
@@ -97,11 +98,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # An id is minted by scanning this task's own design/ folder for the highest wo<n> already
 # present and taking the next number. There is no counter file recording a high-water mark the
-# way alignment.json's nextCriterionId does for a criterion. `merge` is the one delete path: the
-# sizing rule folds one order into another, and the folded order's file goes (live-run row 74).
-# The gap this leaves, named plainly rather than hidden, is that folding the highest-numbered
-# work order and then minting again reuses its id. Fix that by adding a counter, kept beside
-# nextCriterionId's own precedent, the day a reused id is found to mislead a later record.
+# way alignment.json's nextCriterionId does for a criterion. Two actions delete an order. `merge`
+# folds one order into another, and the folded order's file goes (live-run row 74). `remove`
+# deletes an order nothing started, and records its id and the reason in
+# <task_folder>/design-removed.json (gap row 234). The scan reads that record too, so a removed
+# id is never minted again. The gap left, named plainly rather than hidden, is that folding the
+# highest-numbered work order and then minting again reuses its id.
 #
 # `close` records what design closed on (ideal/implementation.md, "Freezing, and what a freeze is
 # for"). It runs check-design.sh against the live files first, and writes
@@ -146,7 +148,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  the target of this action is not present: `start` was asked to begin a task with no
 #      alignment.json, or with one that will not parse or is not a contract; or `update`,
 #      `add-owned-file`, `add-done-when`, `add-test`, `remove-test`, `remove-done-when`,
-#      `remove-owned-file` or `render` were given an --id naming no work order file in this
+#      `remove-owned-file`, `remove` or `render` were given an --id naming no work order file in this
 #      task's design/ folder; or `remove-test` was given a --description no test on that order
 #      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
 #      order does not own; or `merge` was given an --into or --from naming no work order file;
@@ -162,7 +164,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the order's own surfaces on a `tests` order; a `remove-test` refused because the test named is the last one
 #      on a `tests` order owning a machine-verified criterion; a `remove-owned-file` refused because
 #      the path named is the only file the order owns; a `merge` refused because the two orders' proofs differ or
-#      --into and --from name the same order; a work order file already on disk that is not valid
+#      --into and --from name the same order; a `remove` with no --reason, or refused because
+#      implementation started the order, another order depends on it, or it is the only order
+#      serving or owning a criterion of the contract; a work order file already on disk that is not valid
 #      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
 #      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
 #      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
@@ -171,7 +175,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
 #      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
 #      `update` was given --reasoning with --append-reasoning or --strike-reasoning; or
-#      --strike-reasoning named no paragraph that is there and live; or `close` was given
+#      --strike-reasoning named no paragraph that is there and live; or --absence-reviewed named
+#      no done-when row; or `close` was given
 #      --critique-outcome with no finished critique file to record it beside, or unattended; or
 #      `close` found something that is not a file where a critique file has to move; or `verify`
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
@@ -273,7 +278,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--strike-reasoning <n>] [--append-reasoning <text>] \
+                                         [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -283,6 +288,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh remove-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh remove-owned-file <task_folder> --id <woId> --path <path>
        design-actions.sh merge          <task_folder> --into <woId> --from <woId>
+       design-actions.sh remove         <task_folder> --id <woId> --reason <text>
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
        design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
@@ -746,30 +752,27 @@ do_start() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# The next work order id: scan design/*.json for the highest wo<n> present and take the next
-# number, starting at wo1 when none exist. See this script's own header for the known gap this
-# leaves around a deleted, highest-numbered work order.
+# The next work order id: scan design/*.json and the removed record for the highest wo<n> and take
+# the next number, starting at wo1 when none exist. See this script's own header for the known gap
+# this leaves around a merged, highest-numbered work order.
 # ------------------------------------------------------------------------------------------------
 
 next_wo_id() {
   local max this_id this_num
   max=0
-  if [ -d "$DESIGN_DIR" ]; then
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      jq empty "$f" 2>/dev/null || continue
-      this_id="$(jq -r '.id? // empty' "$f" 2>/dev/null)"
-      case "$this_id" in
-        wo[1-9]*)
-          this_num="${this_id#wo}"
-          case "$this_num" in
-            ''|*[!0-9]*) continue ;;
-          esac
-          [ "$this_num" -gt "$max" ] && max="$this_num"
-          ;;
-      esac
-    done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null)
-  fi
+  while IFS= read -r this_id; do
+    case "$this_id" in
+      wo[1-9]*)
+        this_num="${this_id#wo}"
+        case "$this_num" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        [ "$this_num" -gt "$max" ] && max="$this_num"
+        ;;
+    esac
+  done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null \
+             | while IFS= read -r f; do jq -r '.id? // empty' "$f" 2>/dev/null; done
+           jq -r '(.removed // [])[]? | .id? // empty' "$REMOVED_FILE" 2>/dev/null)
   printf 'wo%d' "$((max + 1))"
 }
 
@@ -881,12 +884,15 @@ do_create() {
 # paragraph stays in the record and the rendered design; no brief carries it (gap row 215). It
 # runs before --append-reasoning, so n counts the paragraphs already there. With --reasoning it
 # is refused, since the replaced text has no paragraph n.
+# --absence-reviewed <n> stores the text of done-when row n, counted from 1, in `absenceReviewed`.
+# `check` stops printing that row under `absenceJoined:` (gap row 237). The text is the key, so a
+# row whose text changes flags again. Each write drops the entries no row holds any more.
 # ------------------------------------------------------------------------------------------------
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" append_reasoning="" strike_n="" diff_budget="" surfaces_json='[]' proof=""
-  local set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
+  local interface="" reasoning="" append_reasoning="" strike_n="" absence_n="" diff_budget="" surfaces_json='[]' proof=""
+  local set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
   local set_interface=false set_reasoning=false set_append=false set_strike=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -920,6 +926,9 @@ do_update() {
       --strike-reasoning)
         need_value "update" "--strike-reasoning" "$#" "${2:-}"
         strike_n="$2"; set_strike=true; shift 2 ;;
+      --absence-reviewed)
+        need_value "update" "--absence-reviewed" "$#" "${2:-}"
+        absence_n="$2"; set_absence=true; shift 2 ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
@@ -993,6 +1002,15 @@ do_update() {
   fi
   if [ "$set_append" = "true" ]; then
     doc="$(reasoning_appended "$doc" "$append_reasoning")"
+  fi
+  if [ "$set_absence" = "true" ]; then
+    case "$absence_n" in
+      ''|0*|*[!0-9]*) die3 "update: --absence-reviewed takes a done-when row number from 1, got '$absence_n'" ;;
+    esac
+    printf '%s' "$doc" | jq -e --argjson n "$absence_n" '((.doneWhen // [])[$n - 1] | type) == "string"' >/dev/null \
+      || die3 "update: $id has no done-when row $absence_n. Read $id.md and count its rows"
+    doc="$(printf '%s' "$doc" | jq --argjson n "$absence_n" '(.doneWhen // []) as $d
+      | .absenceReviewed = ([ (.absenceReviewed // [])[] | select(. as $t | any($d[]; . == $t)) ] + [$d[$n - 1]] | unique)')"
   fi
   if [ "$set_diffbudget" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$diff_budget" '.diffBudget = $v')"
@@ -1589,6 +1607,79 @@ do_merge() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# remove: deletes an order that no longer earns its place, when a changed contract left it with
+# nothing to do (gap row 234). The id and the reason go into <task_folder>/design-removed.json,
+# which `close` carries into design-closed.json, so a reader can tell why the number is missing.
+# Refused while implementation has started the order, read as implementation's `start` reads it:
+# a ledger step reached or an attempt spent, a frozen test record, or a build record. Refused
+# while another order depends on it, or while it is the only order serving or owning a criterion
+# the contract still holds. A finding the order accounted for is left to `check`, which names it.
+# Commits nothing, the same as every edit before `close`.
+# ------------------------------------------------------------------------------------------------
+
+do_remove() {
+  local id="" reason=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --id)     need_value "remove" "--id" "$#" "${2:-}";     id="$2"; shift 2 ;;
+      --reason) need_value "remove" "--reason" "$#" "${2:-}"; reason="$2"; shift 2 ;;
+      *) die3 "remove: unrecognized argument: $1" ;;
+    esac
+  done
+  require_wo_id_arg "remove" "$id"
+  is_blank "$reason" && die3 "remove: --reason is required. It says why $id is gone, for every later reader"
+  local file
+  file="$(wo_file_for "$id")"
+  jq empty "$file" 2>/dev/null || die3 "remove: $file exists but is not valid JSON"
+
+  local started
+  started="$(jq -r --arg id "$id" '[ (.orders // [])[] | select(.id == $id)
+      | if .lastStep != null then "its last step is " + .lastStep
+        elif (.attemptsUsed // 0) > 0 then "an attempt is spent" else empty end ][0] // empty' \
+    "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+  [ -n "$started" ] || [ ! -e "$TASK_PATH/implementation/tests-$id.json" ] || started="its tests are frozen"
+  [ -n "$started" ] || [ ! -e "$TASK_PATH/implementation/build-$id.json" ] || started="it has a build record"
+  [ -z "$started" ] \
+    || die3 "remove: implementation started $id: $started. Fold it into the order that takes its work with merge. Implementation's start then halts it for design drift, and implement-actions.sh restart sets its records aside"
+
+  local others f dependents
+  others="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do [ "$f" = "$file" ] || jq -c '.' "$f" 2>/dev/null; done | jq -sc '.')"
+  dependents="$(printf '%s' "$others" | jq -r --arg id "$id" \
+    '[ .[] | select(((.dependsOn // []) | index($id)) != null) | .id ] | join(", ")')"
+  [ -z "$dependents" ] \
+    || die3 "remove: $dependents $(case "$dependents" in *,*) echo depend ;; *) echo depends ;; esac) on $id. Change each dependsOn with update first, or fold $id into another order with merge"
+
+  local alone
+  alone="$(jq -r --argjson others "$others" --argjson live "$(contract_criteria_json)" '
+      ($live | map(.id)) as $ids
+      | ([ $others[] | (.criteriaServed // [])[] ]) as $served
+      | ([ $others[] | (.criteriaOwned // [])[] ]) as $owned
+      | [ ((.criteriaServed // [])[] | select(. as $c | ($served | index($c)) == null)),
+          ((.criteriaOwned // [])[] | select(. as $c | ($owned | index($c)) == null)) ]
+      | map(select(. as $c | ($ids | index($c)) != null)) | unique | join(", ")' "$file")"
+  [ -z "$alone" ] \
+    || die3 "remove: $id is the only order serving or owning $alone. Give each to another order with update first"
+
+  local record entry
+  if [ -f "$REMOVED_FILE" ]; then
+    record="$(jq -c '.' "$REMOVED_FILE" 2>/dev/null)" || die3 "remove: $REMOVED_FILE exists but is not valid JSON"
+  else
+    record='{"schemaVersion": 1, "removed": []}'
+  fi
+  entry="$(jq -nc --arg id "$id" --arg reason "$reason" --arg d "$(date -u +%Y-%m-%d)" \
+    '{id: $id, reason: $reason, removedAt: $d}')"
+  record="$(printf '%s' "$record" | jq --argjson e "$entry" '.removed = ((.removed // []) + [$e])')"
+  write_atomic "$REMOVED_FILE" "$record"
+  rm -f "$file" "$DESIGN_DIR/$id.md"
+  echo "REMOVED: $file"
+  echo "removed: $DESIGN_DIR/$id.md"
+  echo "RECORDED: $REMOVED_FILE"
+  echo "removedOrders: $(printf '%s' "$record" | jq -r '[.removed[].id] | join(", ")')"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # read-guide: records that design opened a guide body, by path, with the body's sha256 and the
 # UTC date (live-run row 77). --name carries the name research gave the guide, so the entry joins
 # the finding that named it. One entry per path; a second read of the same path replaces its
@@ -1705,7 +1796,8 @@ do_check() {
   echo "verifyNotBinding: $(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do jq -r 'select(any((.verify // [])[]; .binding == false)) | .id' "$f" 2>/dev/null; done \
     | paste -s -d ',' - | sed 's/,/, /g; s/^$/none/')"
-  # The done-when rows that may join an absence to a behaviour (gap row 209). --absence routes a
+  # The done-when rows that may join an absence to a behaviour (gap row 209), less the rows a
+  # person marked reviewed with update --absence-reviewed (gap row 237). --absence routes a
   # clause verbatim, so a joined row cannot go to review without a reopen. A script cannot parse a
   # clause, so a negation word and an `and` is the whole test, and the line never blocks the close.
   local joined
@@ -1714,12 +1806,13 @@ do_check() {
         . as $wo
         | [ (.doneWhen // []) | to_entries[] | select(.value | type == "string")
             | select((.value | denies) and (.value | ascii_downcase | test("\\band\\b")))
+            | select(.value as $v | any(($wo.absenceReviewed // [])[]; . == $v) | not)
             | .key + 1 | tostring ]
         | select(length > 0)
         | $wo.id + (if length == 1 then " row " else " rows " end) + join(", ")' "$f" 2>/dev/null; done \
     | paste -s -d ';' - | sed 's/;/; /g')"
   if [ -n "$joined" ]; then
-    echo "absenceJoined: $joined | best effort: each row holds a negation word and an \"and\". Split a row that joins an absence to a behaviour into two rows"
+    echo "absenceJoined: $joined | best effort: each row holds a negation word and an \"and\". Split a row that joins an absence to a behaviour into two rows. Mark a row that does not with update --absence-reviewed <row>"
   else
     echo "absenceJoined: none"
   fi
@@ -1979,6 +2072,12 @@ $unaccounted"
     die3 "close: --critique-outcome names how the critique's findings were answered, and no finished critique file is under $TASK_PATH/records or $DESIGN_DIR to record it beside"
   fi
 
+  # The orders `remove` deleted, with the reason each went, so the close says why a number is missing.
+  if [ -f "$REMOVED_FILE" ]; then
+    doc="$(printf '%s' "$doc" | jq --slurpfile r "$REMOVED_FILE" '.removed = ($r[0].removed // [])')" \
+      || die3 "close: $REMOVED_FILE is not valid JSON"
+  fi
+
   write_atomic "$CLOSED_FILE" "$doc"
   # The stage boundary: the task folder is committed, with the order count the check just
   # walked and who closed as the reason. Closing again commits again, over the new hash.
@@ -2197,6 +2296,7 @@ ALIGNMENT_FILE="$TASK_PATH/alignment.json"
 DESIGN_DIR="$TASK_PATH/design"
 CLOSED_FILE="$TASK_PATH/design-closed.json"
 GUIDES_FILE="$TASK_PATH/design-guides-read.json"
+REMOVED_FILE="$TASK_PATH/design-removed.json"
 CHECK_FILE="$TASK_PATH/records/design-check.json"
 RESEARCH_CHECK_FILE="$TASK_PATH/records/research-check.json"
 
@@ -2212,6 +2312,7 @@ case "$ACTION" in
   remove-done-when)  do_remove_done_when  "$@" ;;
   remove-owned-file) do_remove_owned_file "$@" ;;
   merge)          do_merge          "$@" ;;
+  remove)         do_remove         "$@" ;;
   read-guide)     do_read_guide     "$@" ;;
   render)         do_render         "$@" ;;
   check)          do_check          "$@" ;;
