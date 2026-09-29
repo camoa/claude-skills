@@ -81,7 +81,7 @@
           "id": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The id of the order `remove` deleted or `merge` folded. It is never minted again." },
           "reason": { "type": "string", "minLength": 1, "description": "Why the order went, from `remove --reason` or `merge --reason`." },
           "mergedInto": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The survivor, when `merge` folded the order, or `remove --merged-into` recorded an earlier merge. Absent when `remove` deleted it." },
-          "removedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the removal." }
+          "removedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the entry was recorded. For an order recorded with `remove --merged-into`, that is later than the merge." }
         }
       },
       "description": "The orders design-actions.sh's `remove` deleted and `merge` folded, copied by `close` from <task folder>/design-removed.json (gap rows 234, 245). A reader can tell why a number is missing from design/. Absent when no order was removed or folded."

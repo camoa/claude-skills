@@ -83,8 +83,10 @@ A reopen that changes only owned files, done-when rows or accounted findings on 
 order may skip the research and guide reading below. Those calls are `add-owned-file`,
 `remove-owned-file`, `add-done-when`, `remove-done-when` and `account`. The reading informs an
 order's shape, not its file list. The route is the change, then `check`, `close` with the verdict the last
-`design-closed.json` records, and `distill`. A reopen that creates, merges or removes an order, or changes
-an order's interface, criteria or dependencies, reads as a first run does.
+`design-closed.json` records, and `distill`. A reopen that creates or merges an order, removes
+one with `remove --id --reason`, or changes an order's interface, criteria or dependencies, reads
+as a first run does. Recording an old merge with `remove --merged-into` changes no order, so it
+takes the cheap route above.
 
 Four changes do not halt an order that implementation already started: an added owned file, an
 `account` call, a reason added with `update --append-reasoning`, and a row marked with
@@ -424,7 +426,10 @@ numbers. Record it with the survivor and a reason:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove "<task_folder>" \
   --id <woId> --merged-into <woId> --reason "<why the order was folded>"
 ```
-The script refuses an id that is still an order, and an id the record already holds.
+The script refuses an id that is still an order, and an id the record already holds. `check`
+lists each such id under `unrecordedIds:`. Recording changes no order, so it halts nothing. Then
+run `check`, `close` with the verdict the last `design-closed.json` records, and `distill`, as for
+an owned-file reopen. The close copies the entry into its record.
 
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:

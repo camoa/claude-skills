@@ -188,7 +188,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              orphanSupportOrders: [ id, ... ],
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
-#              globbedOwnedFiles: [ {id, path} ] },
+#              globbedOwnedFiles: [ {id, path} ],
+#              unrecordedIds: [ id, ... ] },   advisory, never raises the exit code
 #     fileIssueCount, contentIssueCount,
 #     notChecked: [...]
 #   }
@@ -757,6 +758,7 @@ ORPHAN_SUPPORT_ORDERS_JSON='[]'
 ORDERS_NOT_AFTER_SKELETON_JSON='[]'
 OVERLAPPING_OWNED_FILES_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
+UNRECORDED_IDS_JSON='[]'
 GRAPH_ISSUE_COUNT=0
 
 if [ "$DESIGN_STARTED" != "true" ]; then
@@ -835,6 +837,18 @@ else
       | select(test("[*?\\[]") or startswith("-"))
       | {id: $id, path: .}
     ]
+  ')"
+
+  # Each wo<n> below the highest id, live or recorded, that has no order file and no entry in
+  # <task_folder>/design-removed.json (gap row 245). An order folded before merge kept a record
+  # leaves such a gap. Only a person knows the survivor, so the list never raises the exit code.
+  RECORDED_WO_IDS_JSON="$(jq -c '[ (.removed // [])[]? | .id? // empty ]' "$TASK_PATH/design-removed.json" 2>/dev/null)" \
+    || RECORDED_WO_IDS_JSON='[]'
+  [ -n "$RECORDED_WO_IDS_JSON" ] || RECORDED_WO_IDS_JSON='[]'
+  UNRECORDED_IDS_JSON="$(jq -c -n --argjson known "$KNOWN_WO_IDS_JSON" --argjson recorded "$RECORDED_WO_IDS_JSON" '
+    [ ($known + $recorded)[] | select(type == "string" and test("^wo[1-9][0-9]*$")) | ltrimstr("wo") | tonumber ] as $nums
+    | [ range(1; ($nums | max // 0)) | "wo" + tostring
+        | select(. as $x | ($known + $recorded) | index($x) == null) ]
   ')"
 
   UNKNOWN_DEPENDS_COUNT="$(printf '%s' "$UNKNOWN_DEPENDS_ON_IDS_JSON" | jq 'length')"
@@ -922,6 +936,7 @@ jq -n \
   --argjson ordersNotAfterSkeleton "$ORDERS_NOT_AFTER_SKELETON_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
+  --argjson unrecordedIds "$UNRECORDED_IDS_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
   --argjson contentIssueCount "$CONTENT_ISSUE_COUNT" \
   --argjson notChecked "$NOT_CHECKED_JSON" \
@@ -962,7 +977,8 @@ jq -n \
       orphanSupportOrders: $orphanSupportOrders,
       ordersNotAfterSkeleton: $ordersNotAfterSkeleton,
       overlappingOwnedFiles: $overlappingOwnedFiles,
-      globbedOwnedFiles: $globbedOwnedFiles
+      globbedOwnedFiles: $globbedOwnedFiles,
+      unrecordedIds: $unrecordedIds
     },
     fileIssueCount: $fileIssueCount,
     contentIssueCount: $contentIssueCount,

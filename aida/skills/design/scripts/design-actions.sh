@@ -1554,7 +1554,7 @@ do_merge() {
   id_shape_ok "$into" wo || die3 "merge: --into '$into' is not a valid wo<n> id shape"
   id_shape_ok "$from" wo || die3 "merge: --from '$from' is not a valid wo<n> id shape"
   [ "$into" != "$from" ] || die3 "merge: --into and --from both name $into"
-  is_blank "$reason" && die3 "merge: --reason is required. It says why $from is gone, for every later reader"
+  require_reason "merge" "$from" "$reason"
   wo_exists "$into" || die2 "merge: no work order $into in $DESIGN_DIR"
   wo_exists "$from" || die2 "merge: no work order $from in $DESIGN_DIR"
 
@@ -1594,7 +1594,6 @@ do_merge() {
   echo "carried: ${carried:-none}"
   echo "dropped: title, diffBudget; the survivor's stand"
   echo "title: $(jq -r '.title' "$into_file"), the survivor's"
-  record_removal "merge" "$from" "$reason" "$into"
   write_atomic "$into_file" "$doc"
 
   # Every other order that depended on the folded one now depends on the survivor.
@@ -1613,12 +1612,20 @@ do_merge() {
   done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
 
   rm -f "$from_file" "$DESIGN_DIR/$from.md"
+  # Recorded last, so a failed write never leaves a record naming an order that still exists.
+  record_removal "merge" "$from" "$reason" "$into"
   echo "REMOVED: $from_file"
   echo "removed: $DESIGN_DIR/$from.md"
   echo "UPDATED: $into_file"
   wo_summary "$doc"
   render_wo "$into"
   exit 0
+}
+
+# require_reason <who> <id> <reason>: the one refusal of a blank --reason, for `remove` and `merge`.
+require_reason() {
+  is_blank "$3" && die3 "$1: --reason is required. It says why $2 is gone, for every later reader"
+  return 0
 }
 
 # record_removal <who> <id> <reason> [<survivor>]: appends one entry to design-removed.json, with
@@ -1662,11 +1669,11 @@ do_remove() {
       *) die3 "remove: unrecognized argument: $1" ;;
     esac
   done
+  require_reason "remove" "$id" "$reason"
   if [ -n "$into" ]; then
     is_blank "$id" && die3 "remove: --id is required and must not be blank"
     id_shape_ok "$id" wo || die3 "remove: --id '$id' is not a valid wo<n> id shape"
     id_shape_ok "$into" wo || die3 "remove: --merged-into '$into' is not a valid wo<n> id shape"
-    is_blank "$reason" && die3 "remove: --reason is required. It says why $id is gone, for every later reader"
     ! wo_exists "$id" || die3 "remove: $id is still an order. Fold it into $into with merge, which records it"
     [ ! -f "$REMOVED_FILE" ] || jq -e --arg id "$id" 'all((.removed // [])[]; .id != $id)' "$REMOVED_FILE" >/dev/null 2>&1 \
       || die3 "remove: $id is already recorded in $REMOVED_FILE"
@@ -1675,7 +1682,6 @@ do_remove() {
     exit 0
   fi
   require_wo_id_arg "remove" "$id"
-  is_blank "$reason" && die3 "remove: --reason is required. It says why $id is gone, for every later reader"
   local file
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "remove: $file exists but is not valid JSON"
@@ -1885,6 +1891,15 @@ do_check() {
       | select(length > 0)
       | $wo.id + " " + join(", ")' 2>/dev/null \
     | paste -s -d ';' - | sed 's/;/; /g')"
+  # The ids below the highest with no order and no record (gap row 245). Only a person knows the
+  # survivor, so the line never blocks the close.
+  local unrecorded
+  unrecorded="$(jq -r '(.graph.unrecordedIds // []) | join(", ")' "$CHECK_FILE" 2>/dev/null)"
+  if [ -n "$unrecorded" ]; then
+    echo "unrecordedIds: $unrecorded | no order file and no entry in design-removed.json. Record each with remove --id <wo> --merged-into <survivor> --reason <text>"
+  else
+    echo "unrecordedIds: none"
+  fi
   if [ -n "$undeclared" ]; then
     echo "callsUndeclared: $undeclared | best effort: each call is in a done-when row or a test, and in no interface this order declares. Add the reuse with dispose --path --interface, or answer why the call needs no signature"
   else
