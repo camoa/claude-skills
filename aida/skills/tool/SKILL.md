@@ -86,23 +86,26 @@ change that. A tool that runs no test, such as a coding standards checker, insta
 ```
 
 The install writes the files under the recipe's `## Files` heading before its first command, and
-the files stay after the install.
+the files stay after the install. The install commits nothing, so those files and its other
+changes, such as a changed `composer.json`, stay uncommitted. The person commits them before the
+next build step, or the clean-tree check refuses.
 
 `install` and `show` take no `--` arguments. They read every command from the recipe, so there is
 nowhere to put one. Passing any refuses at 3, rather than dropping what the person typed. Only
 `run` takes them.
 
-Interactive: run `show <tool>` first, print its commands, and wait for a plain yes before you run
-`install`. Autonomous: halt here and say the install needs a person, because an install changes the
-project and nobody is there to approve it. Before you ask, name the files the recipe's commands
-change and check them against the active order's untouched list.
+Interactive: run `show <tool>` first, print its commands and the files it ships, and wait for a
+plain yes before you run `install`. Autonomous: halt here and say the install needs a person,
+because an install changes the project and nobody is there to approve it. Before you ask, name
+the files the recipe ships and the files its commands change. Check both against the active
+order's untouched list.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran. | Run the tool once to confirm it works. |
 | 70 | The run is autonomous, and an install needs a person. | Say the install waits for a person. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
-| 3 | A command was refused, the recipe has no install steps, a file the recipe ships differs from the file on disk, or arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. A differing file may be a person's edit or a stale recipe, so name the file and ask the person which. The last is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
+| 3 | A command was refused, or the recipe has no install steps. A shipped file differs from the file on disk. Arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. A differing file may be a person's edit or a stale recipe, so name the file and ask the person which. The last is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
 | 4 | A step failed. | The `first:` line quotes the step's first line of output, and the file at `output:` holds the rest. Show what it said; it says what is missing better than a guess would. |
 
 Do not install by hand when a step fails. A missing package manager or a wrong version is the

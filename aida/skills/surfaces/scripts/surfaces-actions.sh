@@ -149,6 +149,9 @@ do_show_or_install() {
   shift; cr_resolve_recipe "$@"
   steps="$(sh_blocks_under "$RECIPE" Install)"
   files_dir="$(mktemp -d)" || die 3 "$ACTION: could not create a temporary folder"
+  # The path goes in now, because zsh runs an EXIT trap after this function's locals are gone.
+  # shellcheck disable=SC2064 # the path is fixed when the trap is set
+  trap "rm -rf '$files_dir'" EXIT
   list="$(recipe_files_into "$RECIPE" Files "$files_dir")"
   printf 'RECIPE: %s\nFRAMEWORK: %s\n' "$RECIPE" "$RECIPE_FW"
   # Checked before show prints, so a recipe that install would refuse never reads as fine on exit 0.

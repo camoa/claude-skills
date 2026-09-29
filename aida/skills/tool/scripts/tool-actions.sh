@@ -306,7 +306,16 @@ case "$ACTION" in
       printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"
       printf '%s\n' "$STEPS" | sed 's/^/  /'
     fi
+    # Every line is checked before a file is written, so a recipe that would be refused writes nothing.
+    while IFS= read -r LINE; do
+      [ -n "$LINE" ] || continue
+      refuse_if_unsafe tool-actions "$RECIPE" "$LINE" || exit 3
+    done <<TOOL_STEPS
+$STEPS
+TOOL_STEPS
     FILES_DIR="$(mktemp -d)" || { printf 'tool-actions: could not create a temporary folder\n' >&2; exit 3; }
+    # shellcheck disable=SC2064 # the path is fixed when the trap is set
+    trap "rm -rf '$FILES_DIR'" EXIT
     recipe_files_place install "$RECIPE" "$(pwd -P)" "$FILES_DIR"; rm -rf "$FILES_DIR"
     mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
     OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-install.txt"
