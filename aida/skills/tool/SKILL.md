@@ -151,8 +151,23 @@ frontmatter. A stage that resolved such a recipe runs this before the recipe's l
 per recipe path:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] <recipe path>
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] [--task <task folder>] <recipe path>
 ```
+
+A recipe can also name a tool that it needs only on a task with automated tests. That tool goes
+in a second list, `requires_tooling_with_tests:`, beside the first:
+
+```yaml
+requires_tooling:
+  - phpcs
+requires_tooling_with_tests:
+  - phpunit
+```
+
+A name under `requires_tooling:` is always needed. A name under `requires_tooling_with_tests:` is
+needed unless `--task` names a task whose contract says it has no automated tests. Pass `--task`
+whenever a task is active, so that answer is read. The second list is a key of its own because the
+catalog accepts only tool names under `requires_tooling:`.
 
 It runs each named tool as "Run a tool" does, because a tooling recipe's Run command is also its
 presence check. It prints one `TOOLING:` line per tool, or `REQUIRES: none`. It installs nothing.
@@ -171,8 +186,9 @@ not stop it.
 | 0 | Every named tool is present, or the recipe names none. | Go on with the stage. |
 | 4 | A tool reads absent. | Install each absent tool as "Install a tool" says, then run `require` again. |
 | 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Ask the catalog as above. Still unknown: name the tool and the reason, and stop. Never read it as present. |
-| 1 | No project owns this directory. | Say so in one line and name the project skill. Stop. |
-| 3 | The path is not a readable file, or its `requires_tooling:` value is not a list. | Show the error text and stop. |
+| 1 | No project owns this directory, or `--task` names no task folder. | Say so in one line and name the project skill. Stop. |
+| 3 | The path is not a readable file, or one of its two lists is not a list. | Show the error text and stop. |
+| 79 | `--task` names a task that builds in its worktree, and this window is elsewhere. | Run the call again from that worktree. |
 
 Exit 2 wins over exit 4, so read every `TOOLING:` line. An absent tool on the same run still
 needs its install. On an autonomous run the install refuses at 70, so the stage halts there.

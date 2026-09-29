@@ -2650,6 +2650,34 @@ pc_parse_recipe() {
   if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'declared-empty'; fi
 }
 
+# Who owns a condition that answered no while the task's worktree has no running site (gap row
+# 246). The recipe's owner then sends a person to the wrong fix. The task record decides, never
+# the check's words. No `environment` means the site offer was never answered. A marker with no
+# address means a bring-up did not finish. An address whose `## Status` line exits non-zero means
+# the site is down. Prints the step and the reason, or nothing: no worktree, a person said no
+# site, the site is up, or the recipe has no `## Status` line to ask. Reads TASK_PATH.
+pc_environment_owner() {
+  local task_json="$TASK_PATH/task.json" id wt recipe rc
+  wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
+  [ -n "$wt" ] && [ -d "$wt" ] || return 0
+  id="$(jq -r '.id' "$task_json")"
+  case "$(jq -r '.environment as $e
+      | if ($e | type) != "object" then "absent"
+        elif ($e["not-applicable"] // "") != "" then "not-applicable"
+        elif ($e.address // "") != "" then "up"
+        elif $e.state == "coming-up" then "coming-up"
+        else "other" end' "$task_json")" in
+    absent)    printf 'task environment %s up: the environment step of this worktree has not run' "$id" ;;
+    coming-up) printf 'task environment %s down, then up: the bring-up of this worktree did not finish' "$id" ;;
+    up)
+      recipe="$(jq -r '.environment.recipe // empty' "$task_json")"
+      [ -f "$recipe" ] || return 0
+      BRC_WHO="preconditions" br_site_status "$recipe" "$wt"; rc=$?
+      [ "$rc" -ne 1 ] \
+        || printf 'task environment %s up: the ## Status line of %s says the site is down' "$id" "$recipe" ;;
+  esac
+}
+
 # The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared
 # nothing is a smaller hole than a check that could not answer, and a check that answered no is the
 # only one of the four that names something a person can fix.
@@ -3060,7 +3088,7 @@ do_preconditions() {
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
-  local harness_needed harness_reason
+  local harness_needed harness_reason env_asked=no env_owner=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3129,14 +3157,11 @@ do_preconditions() {
   # A task whose every order is proved by its record writes no test and runs none, so the test
   # harness is not needed. Its conditions and its smoke row are recorded `not-needed` and never
   # run, and the baseline runs no suite (live-run row 136). An order a person confirms runs no
-  # test either: its task has no automated tests (gap row 196). Any other proof needs the harness.
-  # A `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
-  # An `observe` order's build runs the suite against the baseline. The recipe is still
-  # resolved and recorded, because the freeze and finish read its path.
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
-    [ (.workOrders // [])[] | orderFacts.slot ]
-    | if length > 0 and all(. == "done-when" or . == "confirm-at-review") then "no" else "yes" end')"
-  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record or confirm, so no test is written or run"
+  # test either: its task has no automated tests (gap row 196). On such a task a `gate` order runs
+  # its own lines and no suite, so it needs no harness (gap row 246). BR_HARNESS_JQ holds the rule.
+  # The recipe is still resolved and recorded, because the freeze and finish read its path.
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ harnessNeeded")"
+  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record or confirm, or a configuration gate on a task with no automated tests, so no test is written or run"
 
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
   # framework that can never answer is named now rather than at the first build-record. An order
@@ -3268,6 +3293,13 @@ PC_RECIPES
     fi
 
     entries_json="$(jq -s '.' "$entries_file" 2>/dev/null)" || entries_json="[]"
+    # A condition that answered no names the environment step as its owner when the worktree has
+    # no running site. The recipe's owner stays beside it, as recipeOwner. Asked once per run.
+    if printf '%s' "$entries_json" | jq -e 'any(.[]; .verdict == "unmet")' >/dev/null; then
+      [ "$env_asked" = "yes" ] || { env_owner="$(pc_environment_owner)"; env_asked=yes; }
+      [ -z "$env_owner" ] || entries_json="$(printf '%s' "$entries_json" | jq --arg o "$env_owner" '
+        map(if .verdict == "unmet" then . + {owner: $o} + (if .owner then {recipeOwner: .owner} else {} end) else . end)')"
+    fi
     tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
     if [ "$section_state" = "ok" ]; then
       fw_verdict="$(jq -r '
@@ -6602,6 +6634,23 @@ br_aida_writes_in_project() {
   return 1
 }
 
+# Runs the `## Status` line of the environment recipe $1 in the worktree $2, and returns what
+# recipe_status_run returns: 0 up, 1 down, 2 no such block. The status script's files go out
+# through br_verify_files_remove, on every exit. Its callers run it before their temporary files
+# exist. br_require_site_up and preconditions both ask it. Reads TASK_PATH and BRC_WHO.
+br_site_status() {
+  local rc
+  trap 'br_verify_files_remove' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  BRV_TREE="$2"
+  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
+  recipe_status_run "$BRC_WHO" "$1" "$2" "$TASK_PATH/task.json" "$BRV_FILES_DIR"; rc=$?
+  br_verify_files_remove
+  trap - EXIT INT TERM
+  return "$rc"
+}
+
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
 # command such as `ddev drush` starts a stopped site and prints its start-up text. So every
 # `stdout empty` line would fail for a reason that is not the check. The test runs when the task
@@ -6609,9 +6658,7 @@ br_aida_writes_in_project() {
 # gate. The recipe must also carry a `## Status` block. No line kind says that a line leaves the
 # site alone, so every such order is tested. The refusal holds in both run modes, because
 # `task environment up` is a person's answer and refuses unattended. No attempt is spent, so the
-# same step runs again once the site is up. The status script's files go out through
-# br_verify_files_remove, on every exit. Its callers run it before their temporary files exist.
-# Reads TASK_PATH, BRC_WHO and BRC_UNIT_JSON.
+# same step runs again once the site is up. Reads TASK_PATH, BRC_WHO and BRC_UNIT_JSON.
 br_require_site_up() {
   local task_json="$TASK_PATH/task.json" recipe wt rc
   [ -n "$(jq -r '.environment.address // empty' "$task_json" 2>/dev/null)" ] || return 0
@@ -6620,14 +6667,7 @@ br_require_site_up() {
   [ -f "$recipe" ] && [ -d "$wt" ] || return 0
   br_verify_runs; br_order_facts "$BRC_UNIT_JSON"
   [ "$BRV_RUNS" != "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
-  trap 'br_verify_files_remove' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  BRV_TREE="$wt"
-  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
-  recipe_status_run "$BRC_WHO" "$recipe" "$wt" "$task_json" "$BRV_FILES_DIR"; rc=$?
-  br_verify_files_remove
-  trap - EXIT INT TERM
+  br_site_status "$recipe" "$wt"; rc=$?
   [ "$rc" -ne 1 ] \
     || die 103 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then run the same step again once the site is up."
 }
@@ -6639,7 +6679,8 @@ br_require_site_up() {
 # folder is nothing a suite or a tool reads (nyc defect 17). On one whose proof is observe it
 # holds observed, and the rest run as they do for a code order (live-run row 104). On one whose
 # proof is confirm it holds confirm-at-review, the suite reads undeclared, and the three tool rows
-# run (gap row 196). Prints the JSON array.
+# run (gap row 196). A gate order on a task with no automated tests reads its suite undeclared
+# too (gap row 246). Prints the JSON array.
 br_seven_checks() {
   local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
@@ -6666,6 +6707,9 @@ br_seven_checks() {
   else
     if [ "$BR_ORDER_SLOT" = "confirm-at-review" ]; then
       jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is confirmed by a person: its task has no automated tests, so no suite runs."}' >>"$parts_file"
+    elif [ "$BR_ORDER_SLOT" = "configuration-gate" ] \
+      && [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.alignment.automatedTests')" = "false" ]; then
+      jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is proved by its configuration gate, and its task has no automated tests, so no suite runs."}' >>"$parts_file"
     else
       br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
     fi
@@ -9815,13 +9859,11 @@ do_finish() {
   # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
   # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
   # more than an argument or a reader can carry. A task whose every order is proved by its
-  # record, or confirmed by a person, ran no test and took no suite baseline. So the suite is
-  # recorded not-needed and never run, the same reading preconditions makes of the snapshot
-  # (live-run row 136, gap row 196).
+  # record, or confirmed by a person, ran no test and took no suite baseline. So did a task with
+  # no automated tests whose other orders are gates. The suite is then recorded not-needed and
+  # never run, the same reading preconditions makes of the snapshot (BR_HARNESS_JQ).
   local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
-    [ (.workOrders // [])[] | orderFacts.slot ]
-    | if length > 0 and all(. == "done-when" or . == "confirm-at-review") then "no" else "yes" end')"
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ harnessNeeded")"
   pre_file="$IMPL_DIR/preconditions.json"
   if [ "$harness_needed" = "no" ]; then
     :
@@ -9852,7 +9894,7 @@ FN_RECIPES
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
   if [ "$harness_needed" = "no" ]; then
     jq -nc '{id: "suite-regression", verdict: "not-needed",
-             detail: "the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, so no test exists and no suite baseline was taken."}' >"$suite_file"
+             detail: "the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, or is a configuration gate on a task with no automated tests, so no test exists and no suite baseline was taken."}' >"$suite_file"
   else
     br_test_check "suite-regression" "suite" "suite" >"$suite_file"
   fi

@@ -80,7 +80,10 @@ in one of four words:
 Undeclared is never reported as conditions that passed. A checker that is not installed says
 nothing about the condition it was meant to probe. A recipe declaring nothing has answered, and
 stopping on it would mean no project on that framework ever builds. On unmet or unknown you
-decide what to do; an autonomous run halts there. A command that carries a placeholder, such as
+decide what to do; an autonomous run halts there. When the worktree has no running site, an
+unmet condition names the task's environment step as its owner, not the tool the recipe named.
+The task record decides that: a site never brought up, a bring-up that did not finish, or a
+status line that says down. A command that carries a placeholder, such as
 the test runner a Python project names, needs a value from you. AIDA never guesses one.
 
 Two refusals end the whole run here rather than later. A framework whose recipe can run neither
@@ -93,7 +96,8 @@ A task whose every order is proved by its record, or confirmed by you, runs no t
 conditions and its smoke command are recorded as not needed and never run. No suite baseline is taken, and the build
 goes on. The review tools still run over any file an order owns under the code path. One order
 proved by a test, by a configuration gate or by a look at a page brings the whole harness back.
-That one order runs the suite.
+That one order runs the suite. The configuration gate is the exception on a task with no
+automated tests: it runs its own lines and no suite, so it brings nothing back.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist

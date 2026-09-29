@@ -28,6 +28,7 @@
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
 #                                          and `confirmCriteria` beside it
+#   BR_HARNESS_JQ                          `harnessNeeded` on a snapshot: whether any test runs
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
 #
@@ -80,6 +81,20 @@ BR_ORDER_FACTS_JQ='
     elif ((.criteriaOwned // []) | length) > 0 then .criteriaOwned
     else (.criteriaServed // []) end;'
 
+# Whether a build needs the test harness, as a jq definition on the snapshot document: "yes" or
+# "no". A `tests` order runs its tests, and an `observe` order's build runs the suite. A `gate`
+# order runs the suite after its lines only while the task has automated tests (gap row 246). A
+# `record` or `confirm` order runs no test. A snapshot with no order reads yes. `preconditions`
+# and `finish` both read it, so the two never disagree about the suite.
+# shellcheck disable=SC2034 # read by the sourcing script
+BR_HARNESS_JQ="$BR_ORDER_FACTS_JQ"'
+  def harnessNeeded:
+    (.alignment.automatedTests == false) as $noTests
+    | [ (.workOrders // [])[] | orderFacts.slot ]
+    | if length > 0 and all(. == "done-when" or . == "confirm-at-review"
+                             or ($noTests and . == "configuration-gate"))
+      then "no" else "yes" end;'
+
 # The roles one order's proof kind dispatches, and the catalog points its tests step asks. $1 one
 # work order document. Sets two space-separated lists. It reads the slot br_order_facts sets, so a
 # fifth kind is still one edit above. `read` prints both on the order's line, the tests step reads
@@ -98,6 +113,7 @@ BR_ORDER_FACTS_JQ='
 #   without the checker nothing judges the deliverable before the build.
 # - No top-tier critic leaves because an order is small. A small diff can still break a criterion,
 #   and a missed defect costs the same whatever the size.
+# shellcheck disable=SC2034 # read by the sourcing script
 BR_KIND_ROLES="test-author row-checker implementer reviewer"
 BR_ORDER_ROLES=""; BR_ORDER_LOOKUPS=""
 # shellcheck disable=SC2034 # read by the sourcing script

@@ -7,7 +7,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
-#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] <process recipe path>
+#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] [--task <task folder>] <process recipe path>
 #
 # Every form also takes `--tooling <tool>=<path>` before the action, once per tool: a catalog
 # recipe catalog-identifier found. A folder source ranked before the catalog still wins.
@@ -24,7 +24,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #          check exited 127, command not found; any other exit means the tool ran. It exits 0 when
 #          every tool is present, 4 when one is absent, and 2 when one is unknown, over an absent one.
 #          --advisory prints the same lines and exits 0. It installs nothing: install stays the one
-#          action that needs a person.
+#          action that needs a person. A tool under requires_tooling_with_tests is named too, except
+#          when --task names a task whose contract says it has no automated tests.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
@@ -35,11 +36,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Exit codes:
 #   0  did what was asked
-#   1  no project owns this directory
+#   1  no project owns this directory, or require's --task names no task folder
 #   2  no recipe for this tool and this project's frameworks
 #   3  the script could not do its job (bad arguments, unreadable file, refused command)
 #   4  a command from the recipe ran and failed; its own output, in the file, is the answer
 #  70  the action needs a person and this run is autonomous
+#  79  require's --task names a task that builds in its worktree, and this window is elsewhere
 #
 # A command from a recipe runs as arguments, never through a shell. A command carrying a
 # shell metacharacter is refused, because a recipe is data written elsewhere and a
@@ -92,14 +94,37 @@ TOOL="${2:-}"
 # run resolves the tooling recipe, so a name nothing answers reads unknown with run's own reason.
 if [ "$ACTION" = "require" ]; then
   # --advisory prints the same lines and always exits 0, for a caller that goes on either way.
-  ADVISORY=no
-  if [ "$TOOL" = "--advisory" ]; then ADVISORY=yes; shift 2; set -- require "$@"; TOOL="${2:-}"; fi
-  [ $# -eq 2 ] || { printf 'tool-actions: require takes one recipe path and nothing after it\n' >&2; exit 3; }
+  # --task names the task folder, so a tool under requires_tooling_with_tests is left out when the
+  # task has no automated tests. With no task, nothing says the tests are off, so it is named.
+  ADVISORY=no; TASK_ARG=""
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --advisory) ADVISORY=yes; shift ;;
+      --task) [ $# -ge 2 ] || { printf 'tool-actions: --task needs a task folder\n' >&2; exit 3; }
+              TASK_ARG="$2"; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  [ $# -eq 1 ] || { printf 'tool-actions: require takes one recipe path and nothing after it\n' >&2; exit 3; }
+  TOOL="$1"
   [ -f "$TOOL" ] && [ -r "$TOOL" ] || { printf 'tool-actions: the recipe %s is not a readable file\n' "$TOOL" >&2; exit 3; }
-  NAMES="$(recipe_requires_tooling_of "$TOOL")" || {
+  NAMES="$(recipe_requires_tooling_of "$TOOL")" \
+    && WITH_TESTS="$(recipe_requires_tooling_of "$TOOL" requires_tooling_with_tests)" || {
     printf 'tool-actions: %s holds a requires_tooling value that is not a list, so no tool was checked\n' "$TOOL" >&2
     exit 3
   }
+  if [ -n "$TASK_ARG" ]; then
+    # The task lookup and the contract's answer every stage script reads.
+    die1() { die 1 "$1"; }
+    die3() { die 3 "$1"; }
+    die79() { die 79 "$1"; }
+    # shellcheck source=../../../scripts/lib/task-helpers.sh
+    . "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+    TASK_ARG="$(resolve_task_folder "$TASK_ARG" "require")" || exit $?
+    [ "$(automated_tests "$TASK_ARG")" != "no" ] || WITH_TESTS=""
+  fi
+  NAMES="$(printf '%s\n%s\n' "$NAMES" "$WITH_TESTS" | grep -v '^$')"
   if [ -z "$NAMES" ]; then printf 'REQUIRES: none\n'; exit 0; fi
   WORST=0
   while IFS= read -r NAME; do

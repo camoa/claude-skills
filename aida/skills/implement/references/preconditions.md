@@ -25,11 +25,12 @@ dispatch exists so the freeze wall below is named before any order is built.
 
 ## Install the tools the test recipe names
 
-Invoke the tool skill with `require <path>` for the `test-execution` recipe of each framework. Do
-this from the worktree, before the checks below run any recipe line. The tool skill's section
-"Tools a recipe names" says what each answer means. Go on only when it exits 0. Skip this when
-every order has `proof: record` or `proof: confirm`, because no test runs then. The `review`
-recipe's tools are review's to check, not this step's.
+Invoke the tool skill with `require --task <task_folder> <path>` for the `test-execution` recipe
+of each framework. Do this from the worktree, before the checks below run any recipe line. The
+tool skill's section "Tools a recipe names" says what each answer means. Go on only when it exits
+0. Skip this when every order has `proof: record` or `proof: confirm`, because no test runs then.
+Skip it too when the task has no automated tests and every other order has `proof: gate`. The
+`review` recipe's tools are review's to check, not this step's.
 
 ## Run the checks
 
@@ -58,14 +59,16 @@ nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` r
 undeclared, with a reason saying no check recipe was resolved.
 
 **A task whose orders are all proved by their records runs no test, so it needs no harness.**
-The same holds for an order a person confirms, whose task has no automated tests. When every
-order in the snapshot has `proof: record` or `proof: confirm`, the script records each framework's
-conditions and its smoke row as `not-needed`, with the reason, and runs neither. The verdict is
+The same holds for an order a person confirms, whose task has no automated tests. On such a task
+a `gate` order runs its own lines and no suite, so it needs no harness either. When no order in
+the snapshot needs the harness, the script records each framework's conditions and its smoke row
+as `not-needed`, with the reason, and runs neither. The verdict is
 `not-needed` and the build goes on. The recipe is still resolved and recorded, because the freeze
 reads its path. The baseline runs no suite and records `not-needed` per framework there too. The
 `## Check commands` tools still run where an order owns a file under the code path, and read
-undeclared where none does. Any other proof needs the harness. A `gate` order runs the recipe's
-lines in the same environment, and an `observe` order's build runs the suite against the baseline.
+undeclared where none does. Any other proof needs the harness. A `gate` order on a task with
+tests runs the suite after its lines, and an `observe` order's build runs the suite against the
+baseline.
 
 **A project with no implement recipe cannot build a test-proved order, and this step says so.**
 `tests-freeze` takes its test globs from the implement recipe's `## Oracle files` block. With no
@@ -143,7 +146,9 @@ and a row that needs it reads unknown and names it. A recipe with no `## Tokens`
 
 - **met.** Every declared condition answered yes. The build can go on.
 - **unmet.** A condition answered no. Name it, name the framework, and name the owner the recipe
-  gave. An owner is the action; without one the person has to work out what to do.
+  gave. An owner is the action; without one the person has to work out what to do. When the
+  worktree has no running site, the owner names the task's environment step and says why. Name
+  that step as the fix, and the recipe's owner after it.
 - **unknown.** Nobody could tell. A checker that is not installed says nothing about the condition
   it was meant to probe, so this is never reported as a failure of the condition.
 - **undeclared.** The recipe named no conditions, or the catalog holds no recipe for this

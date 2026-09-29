@@ -81,8 +81,8 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
-#   recipe_requires_tooling_of <recipe>       the names its requires_tooling: list holds; 2 on
-#                                             a value it cannot read
+#   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
+#                                             the list under <key>; 2 on a value it cannot read
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
 #                                             sets RF_EARLIER
@@ -1621,19 +1621,22 @@ recipe_name_of() {
 }
 
 # The names under the requires_tooling: list of the frontmatter of the recipe $1, one per line.
+# $2 names another list key instead: requires_tooling_with_tests, the tools a recipe needs only on
+# a task with automated tests (gap row 247). A key of its own, because the catalog refuses any
+# requires_tooling entry that is not one tool name.
 # Items may sit at column 0, and a blank line or a comment inside the list does not end it.
 # Nothing when the key is absent or reads `[]`. Returns 2 on any other value after the colon,
 # because a list this reader cannot see would otherwise read as a recipe that needs no tool.
 recipe_requires_tooling_of() {
-  awk 'NR == 1 && !/^---[ \t\r]*$/ { exit }
+  awk -v key="${2:-requires_tooling}:" 'NR == 1 && !/^---[ \t\r]*$/ { exit }
        NR > 1 && /^---[ \t\r]*$/ { exit }
        inList && /^[ \t]*#/ { next }
        inList && /^[ \t\r]*$/ { next }
        inList && /^[ \t]*-[ \t]/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v)
                                   sub(/[ \t\r]+$/, "", v); if (v != "") print v; next }
        inList { exit }
-       NR > 1 && /^requires_tooling:/ { v = $0; sub(/[ \t]+#.*$/, "", v); sub(/^requires_tooling:[ \t]*/, "", v)
-                                       sub(/[ \t\r]+$/, "", v)
+       NR > 1 && index($0, key) == 1 { v = substr($0, length(key) + 1); sub(/[ \t]+#.*$/, "", v)
+                                       sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
                                        if (v == "") { inList = 1; next }
                                        if (v != "[]") bad = 1
                                        exit }
