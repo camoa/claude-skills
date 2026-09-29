@@ -101,6 +101,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # record is open (live-run row 92). A fixer's record carries the key too: the order's list plus
 # the `allowedFiles` of the round's fix brief, which must exist (live-run row 116). No other
 # role's record carries the key.
+# A test author's record carries `denyCommand`, the runtime forms scripts/introspection-forms.txt
+# lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
 #   implement-actions.sh dispatch-close <task_folder> [--no-report]
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. The
@@ -10885,7 +10887,7 @@ TG_OWNED
   # record carries the same key: the order's list plus the `allowedFiles` of the round's fix
   # brief. So the hook refuses it a write outside the scope a person allowed (live-run row 116).
   # A fixer with no fix brief for the round has nothing to be held to, so that refuses.
-  local record_json owned_extra='{}' fx_round fx_brief fx_allowed
+  local record_json owned_extra='{}' fx_round fx_brief fx_allowed forms_file
   if [ "$role_bare" = "implementer" ]; then
     owned_extra="$(jq -nc --argjson m "$mine_json" '{ownedFiles: $m}')"
   elif [ "$role_bare" = "fixer" ]; then
@@ -10897,6 +10899,15 @@ TG_OWNED
     [ -n "$fx_allowed" ] \
       || die 3 "dispatch-open: no fix brief for round $fx_round of $unit_id at $fx_brief. Run fix-brief first: the fixer's record takes the paths it allowed."
     owned_extra="$(jq -nc --argjson m "$mine_json" --argjson a "$fx_allowed" '{ownedFiles: ($m + $a | unique)}')"
+  elif [ "$role_bare" = "test-author" ]; then
+    # A runtime shows the shape of production code as surely as a read of its source, and the
+    # live author took every signature it lacked that way (gap row 231). The forms are data, so
+    # the read hook names no language.
+    forms_file="$PLUGIN_ROOT/scripts/introspection-forms.txt"
+    owned_extra="$(grep -v -e '^#' -e '^[[:space:]]*$' "$forms_file" 2>/dev/null \
+      | jq -R -s -c '{denyCommand: (split("\n") | map(select(length > 0)))}')"
+    [ "$(printf '%s' "$owned_extra" | jq '.denyCommand | length' 2>/dev/null)" -gt 0 ] 2>/dev/null \
+      || die 3 "dispatch-open: $forms_file holds no form or could not be read. This plugin's own files are incomplete; nothing about the task is wrong."
   fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
@@ -10917,6 +10928,8 @@ TG_OWNED
   else
     echo "DISPATCH-OPEN: this dispatch denies no read. Every path under $codepath stays readable."
   fi
+  printf '%s' "$owned_extra" | jq -r 'select(has("denyCommand"))
+    | "DISPATCH-OPEN: shell forms denied to this role: " + (.denyCommand | join(", "))'
   printf '%s\n' "$dispatch_file"
   exit 0
 }

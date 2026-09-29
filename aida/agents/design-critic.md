@@ -59,6 +59,9 @@ reason that does not say why the finding does not change the order is a finding.
 **buildability.** Can a test author write each declared test from `tests` and `doneWhen` alone?
 A test that names a surface, a screenshot, or review's own row is a finding: no author can
 write it as a file.
+A test or done-when row can call a class, a method or a command of another order or of existing
+code. Its signature must be in the order's `reuses` or in a `dependsOn` order's `interface`. When
+it is in neither, that is a finding: the test author may not open the source to learn it.
 Can an implementer build from `interface`, `dependsOn` and `ownedFiles` alone, without asking
 what was meant? A method input with no argument, named dependency or named source, or a global
 service locator call, is a finding. An order's `findings` entry with no `setAside` is a finding

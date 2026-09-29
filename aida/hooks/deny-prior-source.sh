@@ -34,7 +34,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # skipped. A `cd` operand is never a target. A hit is refused with the Read door's own reason. For
 # grep and rg a search root holding a denied path is a hit too, as it is for the Grep tool. An rg
 # or a recursive grep with no path and no pipe into it starts at codePath. What survives is the
-# accidental read, which is the failure this rule exists to prevent.
+# accidental read, which is the failure this rule exists to prevent. Since gap row 231 the Bash
+# door also refuses the record's denyCommand forms, the runtime routes to a class's shape.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, or a tool that is
 # none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
@@ -172,6 +173,17 @@ deny_if_listed() {
 if [ "$TOOL" = "Bash" ]; then
   CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
   [ -n "$CMD" ] || { echo '{}'; exit 0; }
+  # A runtime shows a class's shape as surely as its source does (gap row 231). The record's
+  # denyCommand forms are matched as whole words on the full text, heredocs included, since a
+  # heredoc fed to an interpreter is that route. A script the role writes first and then runs
+  # passes, and so does a form assembled from variables.
+  while IFS= read -r form; do
+    [ -n "$form" ] || continue
+    printf '%s\n' "$CMD" | grep -Fqw -e "$form" || continue
+    jq -nc --arg r "$ROLE_BARE may not run \`$form\`: this dispatch denies this role reading the shape of code through a runtime. Stop and name the class or method whose signature the brief lacks, and the test that needs it." \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+    exit 0
+  done < <(jq -r '(.denyCommand // [])[]' "$DISPATCH_FILE" 2>/dev/null)
   # A relative operand is resolved against codePath and the payload's working directory both,
   # for the reason the write hook's header gives. A dispatched agent's working directory is not
   # guaranteed to be codePath, and a shell's own relative path really is relative to where the

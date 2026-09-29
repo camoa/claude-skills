@@ -54,6 +54,11 @@
       "items": { "type": "string", "minLength": 1 },
       "description": "Paths under codePath the dispatched role is meant to write, relative to codePath. Recorded for a person or a later check reading this file to see what the dispatch was for; neither hook enforces it today. deny-frozen-test-writes.sh decides a write by whether the target is a path this task already froze, or by `ownedFiles` below, not by whether it appears here."
     },
+    "denyCommand": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Present on a test author's record since gap row 231: the shell command forms that read the shape of code through a runtime, such as `php:eval` or `ReflectionClass`. `dispatch-open` copies them from scripts/introspection-forms.txt and never takes them by hand. hooks/deny-prior-source.sh refuses a Bash command that holds one as a whole word, heredoc bodies included, for the dispatched role only. A script the role writes to a file and then runs passes, because its text never reaches the command."
+    },
     "ownedFiles": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },

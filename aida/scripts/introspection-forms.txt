@@ -1,0 +1,11 @@
+# introspection-forms.txt: shell command forms that read the shape of code through a runtime.
+# dispatch-open copies each line into a test author's dispatch record as `denyCommand`, and
+# hooks/deny-prior-source.sh refuses a Bash command holding one as a whole word (gap row 231).
+# One literal form per line, of any language. A line starting with # and a blank line are skipped.
+# The hook holds no language; a new framework's forms are added here.
+php:eval
+php-eval
+drush ev
+php -r
+ReflectionClass
+ReflectionMethod

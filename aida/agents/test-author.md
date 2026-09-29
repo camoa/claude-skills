@@ -123,3 +123,7 @@ path of each support file you wrote or changed, and anything that passed on arri
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a
 criterion silently.
+
+Stop too when a test needs a signature the brief does not hold. Name the class or method, and the
+test that needs it. Never learn the signature from the code by another route. A runtime is such a
+route: `php:eval`, `drush ev`, reflection, a debugger, or a script that prints a class.

@@ -175,7 +175,16 @@ below unenforced while the record on disk says otherwise.
 
 **It may not read production source.** Not this order's, and not any order already built. If it
 sees the code, the tests describe the code instead of the intent, which is the same failure one
-step earlier. A hook refuses the read while the dispatch record is open.
+step earlier. A hook refuses the read while the dispatch record is open. The same hook refuses it
+a shell command that names a runtime form in `scripts/introspection-forms.txt`, such as
+`php:eval` or `ReflectionClass`. A runtime shows the code's shape as surely as its source does.
+
+**A missing signature is design's gap.** The author stops when a test needs a signature the brief
+does not hold, and names it. The brief carries every reuse and dependency design declared, so the
+order did not declare what its tests call. Do not give the signature in the dispatch. Put it to
+the person: design adds the reuse, and the build takes the order fresh, as `references/finish.md`
+says for design drift. A run nobody attends cannot change the design, so it reports the stop and
+the author's words.
 
 **It may not write production code.** It writes the test, watches it fail, and stops.
 
