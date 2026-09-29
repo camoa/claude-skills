@@ -1890,7 +1890,7 @@ LO_STATUS
       # those changed, so the live copy is taken in place:
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
       # build brief then carries the new findings. Any other difference, a removed owned file, a
-      # replaced reasoning, or a changed criterion it serves, halts as before.
+      # reasoning whose earlier text changed, or a changed criterion it serves, halts as before.
       widened_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap

@@ -87,11 +87,11 @@ order's shape, not its file list. The route is the change, then `check`, `close`
 an order's interface, criteria or dependencies, reads as a first run does.
 
 Three changes do not halt an order that implementation already started: an added owned file, an
-`account` call, and a reason added with `update --append-reasoning`. Once design closes again, the next `start` takes that order's live copy in
-place, even when the order closed. Any other change to a started order halts it for design drift
-at the next `start`. Two routes lead back. Restore the design and `start` clears
-the halt. Or take the restart in the implement skill's `references/finish.md`, which rebuilds the
-order against the new design. The cheap reopen stays cheap for an order that has not started.
+`account` call, and a reason added with `update --append-reasoning`. Once design closes again,
+the next `start` takes that order's live copy in place, even when the order closed. Any other
+change to a started order halts it for design drift at the next `start`. Two routes lead back.
+Restore the design and `start` clears the halt. Or take the restart in the implement skill's
+`references/finish.md`, which rebuilds the order against the new design. The cheap reopen stays cheap for an order that has not started.
 
 Then start design:
 ```
@@ -722,8 +722,9 @@ is why the role exists.
 Each critic writes `<task_folder>/records/design-critique-<lens>.md`, a findings table and a
 `findings: N` last line. Wait for all three files. A file that never arrives, or arrives without
 its `findings:` line, means that lens was not read. Dispatch it again, once. If it fails twice,
-say so and go on: the close leaves that file out and names it. Read the three files, never the
-dispatch replies.
+say so and go on: the close leaves that file out and names it. Then run `check` before you read
+the files, also when an earlier session wrote them. `check` removes each row that names only
+closed orders, and prints `critiqueDropped:`. Read the three files, never the dispatch replies.
 
 The close moves each finished file into `<task_folder>/design/` and commits it with the record.
 A critic goes on writing into `records/`, which the project ignores: a critique is a working file
@@ -740,8 +741,6 @@ it. A change is one of the `update`, `add-owned-file`, `add-done-when` or `add-t
 then `check` again. A leave needs a reason from the person. Write it into that order's
 `reasoning` with `update --append-reasoning`, so the reason outlives this conversation.
 Closed orders are not critiqued, and a leave reason on a started or closed order does not halt it.
-The close drops a row that names only closed orders and prints `critiqueDropped:`, so do not show
-such a row.
 A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
 the contract has to change.
 

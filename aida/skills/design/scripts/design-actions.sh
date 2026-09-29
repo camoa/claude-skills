@@ -24,6 +24,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A report that changes on every run is a derived value and never something to commit. A clean
 # `check` on a light task also prints `critique: skipped, light run` and logs the skip. On any
 # other task it prints `closedOrders:`, the orders implementation closed, for the critic dispatch.
+# Every `check` removes the critique rows on closed orders and prints `critiqueDropped:` for each.
 #
 # Usage:
 #   design-actions.sh read       <task_folder>
@@ -533,7 +534,9 @@ closed_orders() {
 
 # The critique file at $1 without each table row whose order cell names only orders in $2, a
 # closed_orders list, and with its `findings: N` line lowered by the rows removed. A row that also
-# names an open order stays. Prints the new file, then the count removed as its own last line.
+# names an open order stays. Above the findings line, `dropped on closed orders: N (<ids>)` keeps
+# the total removed across passes, so a second pass that removes nothing changes nothing. Prints
+# the new file, then the count this pass removed as its own last line.
 critique_without_closed() {
   awk -F'|' -v closed="$2" '
     BEGIN { n = split(closed, c, /, */); for (i = 1; i <= n; i++) shut[c[i]] = 1 }
@@ -542,14 +545,39 @@ critique_without_closed() {
       for (i = 1; i <= k; i++) if (!(ids[i] in shut)) all = 0
       if (all) { dropped++; next }
     }
+    /^dropped on closed orders: [0-9]+ / { split($0, d, " "); before = d[5]; trace = m + 1 }
     { line[++m] = $0 }
     END {
       for (i = 1; i <= m; i++) {
-        if (line[i] ~ /^findings: [0-9]+$/) { split(line[i], f, " "); line[i] = "findings: " (f[2] - dropped) }
+        if (dropped > 0 && i == trace) continue
+        if (dropped > 0 && line[i] ~ /^findings: [0-9]+$/) {
+          split(line[i], f, " ")
+          print "dropped on closed orders: " (before + dropped) " (" closed ")"
+          line[i] = "findings: " (f[2] - dropped)
+        }
         print line[i]
       }
       print dropped + 0
     }' "$1"
+}
+
+# Removes the rows on closed orders from every finished critique under records/, and prints one
+# `critiqueDropped:` line per file that lost a row (gap row 227). `check` runs it before a person
+# reads the findings, and `close` again before the files move. The rows are dropped rather than
+# refused: a refusal would let a critic stop the close.
+drop_closed_critique_rows() {
+  local closed crit_file kept dropped
+  closed="$(closed_orders)"
+  [ -n "$closed" ] || return 0
+  while IFS= read -r crit_file; do
+    [ -n "$crit_file" ] || continue
+    critique_findings_of "$crit_file" >/dev/null || continue
+    kept="$(critique_without_closed "$crit_file" "$closed")"
+    dropped="$(printf '%s\n' "$kept" | tail -n 1)"
+    [ "$dropped" -gt 0 ] || continue
+    write_atomic "$crit_file" "$(printf '%s\n' "$kept" | sed '$d')"
+    echo "critiqueDropped: $(basename -- "$crit_file") $dropped on closed orders $closed"
+  done < <(find "$TASK_PATH/records" -mindepth 1 -maxdepth 1 -type f -name 'design-critique-*.md' 2>/dev/null | sort)
 }
 
 # One line per research finding no work order's `findings` names with both its reference and its
@@ -1667,6 +1695,7 @@ do_check() {
   echo "status: $verdict"
   echo "lines: $lines"
   echo "report: $CHECK_FILE"
+  drop_closed_critique_rows
   disagrees="$(proof_disagreement_of "$(cat "$CHECK_FILE")")"
   echo "impliedProofDisagrees: ${disagrees:-none}"
   [ -z "$disagrees" ] \
@@ -1877,22 +1906,11 @@ $unaccounted"
   # read from it would be invented. The prefix keeps it out of the `design-critique-*.md` pattern.
   # So the count loop below skips it. And the design skill still routes a bare `close` to the
   # critique step when no finished file is there.
-  #
-  # A finished critique loses its rows on closed orders before it moves (gap row 227). The rows
-  # are dropped rather than refused: a refusal would let a critic stop the close.
-  local crit_file crit_dest closed kept dropped
-  closed="$(closed_orders)"
+  local crit_file crit_dest
+  drop_closed_critique_rows
   while IFS= read -r crit_file; do
     [ -n "$crit_file" ] || continue
     if critique_findings_of "$crit_file" >/dev/null; then
-      if [ -n "$closed" ]; then
-        kept="$(critique_without_closed "$crit_file" "$closed")"
-        dropped="$(printf '%s\n' "$kept" | tail -n 1)"
-        if [ "$dropped" -gt 0 ]; then
-          write_atomic "$crit_file" "$(printf '%s\n' "$kept" | sed '$d')"
-          echo "critiqueDropped: $(basename -- "$crit_file") $dropped on closed orders $closed"
-        fi
-      fi
       crit_dest="$DESIGN_DIR/$(basename -- "$crit_file")"
     else
       crit_dest="$DESIGN_DIR/unfinished-$(basename -- "$crit_file")"
