@@ -170,6 +170,8 @@ SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
 [ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/decided.sh" || die3 "the decided library failed to load"
 
 [ -f "$ALIGNMENT_SCHEMA_FILE" ] || die3 "cannot read the alignment field list: $ALIGNMENT_SCHEMA_FILE not found"
 jq empty "$ALIGNMENT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the alignment field list: $ALIGNMENT_SCHEMA_FILE is not valid JSON"
@@ -417,9 +419,9 @@ IDS_ISSUE_COUNT=$(( \
 
 # ---------------------------------------------------------------------------
 # 8. Content check, decidedWithoutAPerson: run only when the field itself passed step 4. Each
-#    entry must be a string, or an object that approve marked, carrying text, approvedAt and
-#    approvedBy. The shared comparison reads the array's items too since 2026-09-23, but it does
-#    not check `required` below the root, so the three keys are checked here.
+#    entry must be an open string, or a whole approved object as decidedApproved in
+#    scripts/lib/decided.sh reads it. The shared comparison reads the array's items too since
+#    2026-09-23, but it does not check `required` below the root, so the object is checked here.
 # ---------------------------------------------------------------------------
 
 DWAP_ISSUES_JSON='[]'
@@ -430,14 +432,10 @@ if [ "$DECIDED_WITHOUT_A_PERSON_OK" != "true" ]; then
 else
   DWAP_COUNT="$(jq '.decidedWithoutAPerson | length' "$ALIGNMENT_FILE")"
 
-  DWAP_ISSUES_JSON="$(jq -c '
+  DWAP_ISSUES_JSON="$(jq -c "$DECIDED_JQ"'
     [ .decidedWithoutAPerson | to_entries[]
-      | if (.value | type) == "string" then empty
-        elif (.value | type) == "object" then
-          ([ "text", "approvedAt", "approvedBy" ] - (.value | keys)) as $absent
-          | if ($absent | length) == 0 then empty
-            else {index: .key, problem: ("approved entry lacks " + ($absent | join(", ")))} end
-        else {index: .key, problem: ("entry is not a string or an approved entry, is a " + (.value | type))} end ]
+      | select((.value | type) != "string" and ([.value | decidedApproved] | length) == 0)
+      | {index: .key, problem: ("entry is neither a string nor an approved entry with text, approvedAt and approvedBy, is a " + (.value | type))} ]
   ' "$ALIGNMENT_FILE")"
 
   DWAP_NOTE="ran: checked $DWAP_COUNT entry/entries"

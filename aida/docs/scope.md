@@ -190,8 +190,8 @@ The close shows you each gap. A gap never blocks: acting on one is the relevant 
 conversation above, run again. The close then commits the task folder, names the next command,
 `/aida:research <task-id>`, and stops. A malformed distiller record is renamed beside its
 original path, dated, and a fresh distiller runs with the rule it broke. A second malformed
-record stops for you. A reader's answer older than the last change to the record is stale. The close says so, shows
-none of its old gaps, and asks for the reader again.
+record stops for you. A reader's answer older than the last change to the record is stale. The
+close says so, shows none of its old gaps, and asks for the reader again.
 
 ## The autonomous run
 

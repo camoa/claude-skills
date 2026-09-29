@@ -45,11 +45,11 @@ record needs and lacks goes in `gaps`, one sentence each, naming what is missing
 belongs. A record path that does not exist is absent, and named in `gaps`; it is never a reason
 to stop.
 
-For scope, `alignment.json` carries `decidedWithoutAPerson`. Its schema says: "Each entry names
-one question an unattended run answered on a person's behalf while drafting or updating this
-contract." And: "A string entry is open: nobody has approved it yet." And: "An object entry is
-history, not an open decision, and a reader never asks for a repair because of it." An empty
-list is not a gap. The approval itself lives in each criterion's `author`.
+For scope, `alignment.json` carries `decidedWithoutAPerson`. Each entry names one question an
+unattended run answered on a person's behalf. A string entry is open: nobody has approved it
+yet. An object entry carries `approvedAt`, because a person approved it later. It is history,
+so never ask for a repair because of it. An empty list is not a gap. The approval itself lives
+in each criterion's `author`.
 
 A non-empty list is a decision the record holds, so name it in `decisions`. It is never a gap:
 the fact is written down, and nothing is missing. `decisions` takes five sentences at most, so
@@ -70,10 +70,6 @@ One file, `<task folder>/records/<stage>-distill.json`, in the shape of `scripts
   "gaps": ["<one sentence per decision the record lacks, naming where it belongs>"]
 }
 ```
-
-Write no other field. The script that reads the file adds `recordsHash` itself, the hash of the
-records at its first read. A later read compares that hash, and says the file is stale when the
-records changed.
 
 `standsAlone` is false exactly when `gaps` is not empty. The caller refuses a sidecar with
 `standsAlone: true` beside a non-empty `gaps` and sets it aside, so read this rule before you write.

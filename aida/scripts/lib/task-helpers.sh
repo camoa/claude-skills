@@ -498,10 +498,9 @@ sidecar_set_aside() {
   echo "setAside: $aside"
 }
 
-# The jq filter for the decisions an unattended run took that no person has approved yet: the
-# string entries of alignment.json's decidedWithoutAPerson. An entry `approve` marked is an object,
-# and it is history (scripts/alignment-schema.json, gap row 232).
-DECIDED_OPEN_JQ='[(.decidedWithoutAPerson // [])[] | select(type == "string")]'
+# The one reading of decidedWithoutAPerson, DECIDED_JQ (gap row 232).
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/decided.sh"
 
 # The records the distiller reads for one stage, the set distill-schema.json's `stage` names, as
 # paths in the task folder, sorted. Run it from inside the task folder. $1 the stage.
@@ -513,21 +512,47 @@ distill_records() {
   esac | sort
 }
 
-# Whether records/<stage>-distill.json was written before the last change to the records it read.
-# Prints yes or no, and no when there is no sidecar. A sidecar carries recordsHash from its first
-# read, and a later read compares that hash (gap row 233). A sidecar no read has stamped compares
-# file times instead, because the distiller writes after it reads. A stage action that writes its
-# records before distill_read calls this first and passes the answer on. $1 the task folder,
-# $2 the stage.
+# The sha256 of stdin. records-hash.sh is sourced here for the sha256 tool, the way distill_read
+# sources schema-check.sh.
+distill_sha256() {
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/records-hash.sh" || die3 "distill: the records-hash library failed to load"
+  records_hash__resolve_sha256_cmd || die3 "distill: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1
+}
+
+# The sha256 over the records distill_records names: each present file's path, then its bytes.
+# $1 the task folder, $2 the stage.
+distill_records_hash() {
+  (cd "$1" && distill_records "$2" | while IFS= read -r rel; do
+    [ -f "$rel" ] || continue
+    printf '%s\n' "$rel"
+    cat -- "$rel"
+  done) | distill_sha256
+}
+
+# Whether records/<stage>-distill.json was written before the last change to the records it read
+# (gap row 233). Prints yes or no, and no when there is no sidecar. The first read that finds a
+# sidecar current writes records/<stage>-distill.stamp beside it: the sidecar's own sha256 and the
+# records hash, one JSON object. The distiller never reads or writes the stamp. While the sidecar
+# still matches its stamp, the records hash decides. A sidecar with no stamp, or one the distiller
+# rewrote since, even with the same bytes, compares file times, because the distiller writes after
+# it reads. A stage action
+# that writes its records before distill_read calls this first and passes the answer on. $1 the
+# task folder, $2 the stage.
 distill_stale() {
-  local task_folder="$1" stage="$2" sidecar stamped newer hash
+  local task_folder="$1" stage="$2" sidecar stamp stamped hash newer
   sidecar="$task_folder/records/$stage-distill.json"
+  stamp="$task_folder/records/$stage-distill.stamp"
   [ -f "$sidecar" ] || { echo no; return 0; }
-  stamped="$(jq -r '.recordsHash? // empty' "$sidecar" 2>/dev/null)"
-  if [ -n "$stamped" ]; then
-    hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
-    if [ "$stamped" = "$hash" ]; then echo no; else echo yes; fi
-    return 0
+  if [ -f "$stamp" ]; then
+    stamped="$(jq -r '.sidecar // empty' "$stamp" 2>/dev/null)"
+    hash="$(distill_sha256 <"$sidecar")" || exit $?
+    if [ -n "$stamped" ] && [ "$stamped" = "$hash" ] && ! [ "$sidecar" -nt "$stamp" ]; then
+      hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
+      if [ "$(jq -r '.records // empty' "$stamp" 2>/dev/null)" = "$hash" ]; then echo no; else echo yes; fi
+      return 0
+    fi
   fi
   newer="$(cd "$task_folder" && distill_records "$stage" | while IFS= read -r rel; do
     [ -f "$rel" ] && [ "$rel" -nt "records/$stage-distill.json" ] && echo "$rel"
@@ -535,30 +560,15 @@ distill_stale() {
   if [ -n "$newer" ]; then echo yes; else echo no; fi
 }
 
-# The sha256 over the records distill_records names: each present file's path, then its bytes.
-# records-hash.sh is sourced here for the sha256 tool, the way distill_read sources schema-check.sh.
-# $1 the task folder, $2 the stage.
-distill_records_hash() {
-  local task_folder="$1" stage="$2"
-  # shellcheck source=/dev/null
-  source "${PLUGIN_ROOT}/scripts/lib/records-hash.sh" || die3 "distill: the records-hash library failed to load"
-  records_hash__resolve_sha256_cmd || die3 "distill: neither sha256sum nor 'shasum -a 256' was found on PATH"
-  (cd "$task_folder" && distill_records "$stage" | while IFS= read -r rel; do
-    [ -f "$rel" ] || continue
-    printf '%s\n' "$rel"
-    cat -- "$rel"
-  done) | "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1
-}
-
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
 # blocks, so every value exits 0. schema-check.sh is sourced here because no stage script sources
 # it on its own. A stale sidecar prints `standsAlone: stale` and a `stale:` line naming the
-# dispatch that refreshes it, and none of its gaps. A current one is stamped with the hash of the
-# records as they are now. $1 the canonical task folder, $2 the stage, $3 optional, the answer
-# distill_stale gave before the caller wrote its records.
+# dispatch that refreshes it, and none of its gaps. A current one gets its stamp, as distill_stale
+# says. $1 the canonical task folder, $2 the stage, $3 optional, the answer distill_stale gave
+# before the caller wrote its records.
 distill_read() {
-  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults hash stamped
+  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults sidecar_hash records_hash
   sidecar="$task_folder/records/$stage-distill.json"
   schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
   [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
@@ -578,10 +588,10 @@ distill_read() {
     echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again, then run this call again"
     return 0
   fi
-  hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
-  stamped="$(jq --arg h "$hash" '.recordsHash = $h' "$sidecar")" \
-    || die3 "distill: could not update $sidecar"
-  write_atomic "$sidecar" "$stamped"
+  sidecar_hash="$(distill_sha256 <"$sidecar")" || exit $?
+  records_hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
+  write_atomic "$task_folder/records/$stage-distill.stamp" \
+    "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }

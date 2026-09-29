@@ -31,11 +31,6 @@
       "type": "array",
       "items": {"type": "string", "minLength": 1},
       "description": "Each one sentence a person can act on, naming what is missing and where it belongs: an approach with no reason, a rejected alternative left unnamed, a constraint or a library the text assumes, a record path that does not exist. Empty when the record stands alone. A gap is advisory; acting on it is the stage's own action run again."
-    },
-    "recordsHash": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$",
-      "description": "The sha256 of the stage's records, the set `stage` names, written by distill_read at the first read that finds the sidecar current. The distiller never writes it. A later read that computes a different hash prints the sidecar as stale, with the dispatch that refreshes it, and none of its gaps (gap row 233)."
     }
   }
 }

@@ -252,12 +252,12 @@ id_kind() {
 # text field.
 contract_summary() {
   echo "contract-file: $ALIGNMENT_FILE"
-  jq -r '
+  jq -r "$DECIDED_JQ"'
     "goal-set: " + (if (.goal // "") == "" then "no" else "yes" end),
     "expected-result-set: " + (if (.expectedResult // "") == "" then "no" else "yes" end),
     "criteria: " + ([(.criteria // [])[] | .id] | join(" ")),
     "non-goals: " + ([(.nonGoals // [])[] | .id] | join(" ")),
-    "decided-without-a-person: " + ('"$DECIDED_OPEN_JQ"' | length | tostring)' \
+    "decided-without-a-person: " + (decidedOpen | length | tostring)' \
     "$ALIGNMENT_FILE"
   echo "automated-tests: $(automated_tests "$TASK_PATH")"
 }
@@ -811,7 +811,7 @@ do_approve() {
   else
     echo "ALREADY APPROVED: no criterion is still designer, nothing to promote"
   fi
-  marked="$(jq "$DECIDED_OPEN_JQ | length" "$ALIGNMENT_FILE")"
+  marked="$(jq "$DECIDED_JQ decidedOpen | length" "$ALIGNMENT_FILE")"
   if [ "$marked" -gt 0 ]; then
     updated="$(jq --arg at "$(date -u +%Y-%m-%d)" '.decidedWithoutAPerson |= map(
         if type == "string" then {text: ., approvedAt: $at, approvedBy: "person"} else . end)' "$ALIGNMENT_FILE")" \
