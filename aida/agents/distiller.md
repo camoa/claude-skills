@@ -47,10 +47,10 @@ to stop.
 
 For scope, `alignment.json` carries `decidedWithoutAPerson`. Each entry names one question an
 unattended run answered on a person's behalf. A string entry, or an object with only `text` and
-`field`, is open: nobody has approved it yet. Every other object is history, so never ask for a
+`fields`, is open: nobody has approved it yet. Every other object is history, so never ask for a
 repair because of it. It carries `approvedAt` when a person approved it later. It carries
-`supersededAt` when a later action changed its field, and `retiredAt` when a person retired it.
-A superseded or retired entry that disagrees with the contract is no gap: the contract holds the
+`supersededAt` when a later action changed one of its fields, and `retiredAt` when a person retired
+it. A superseded or retired entry that disagrees with the contract is no gap: the contract holds the
 answer now. An empty list is not a gap. The approval itself lives in each criterion's `author`.
 
 A non-empty list is a decision the record holds, so name it in `decisions`. It is never a gap:

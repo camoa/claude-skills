@@ -35,7 +35,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   scope-actions.sh [--run-mode <interactive|autonomous>] set-mechanism  <task_folder> \
 #                      --approach <text> --status <suggested|required>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] record-decision <task_folder> \
-#                      --text <text> [--field <automatedTests|goal|expectedResult|id>]
+#                      --text <text> [--field <automatedTests|goal|expectedResult|id>[,...]]
 #   scope-actions.sh [--run-mode <interactive|autonomous>] approve        <task_folder>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] retire         <task_folder> \
 #                      --entry <n> --reason <text>
@@ -68,9 +68,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # contract instead of living somewhere that can be lost or reset independently of it. There is no
 # alignment-ids.json; this script never writes one, and one found on disk is not read.
 # decidedWithoutAPerson holds an entry per question an unattended run answered on the person's
-# behalf (ideal/scope.md, "The autonomous branch"); only `record-decision` appends to it.
-# scripts/lib/decided.sh states what an entry holds. set-goal, set-tests, update and remove mark an
-# entry superseded when they change the field it names; approve and retire mark the rest.
+# behalf (ideal/scope.md, "The autonomous branch"). `record-decision` appends to it, and so do
+# set-tests and add-non-goal under an autonomous run, with the field they set.
+# scripts/lib/decided.sh states what an entry holds. Under an interactive run, set-goal,
+# set-tests, update and remove mark an entry superseded when they change a field it names, and
+# print `superseded-decisions: <count>`. approve and retire mark the rest.
 #
 # Every write is atomic: a temporary file in the task folder itself, then a rename over the
 # target, so a write that fails partway never leaves a half-written alignment.json or task.json
@@ -94,7 +96,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  the target of this action is not present: alignment.json does not exist yet, for an action
 #      that needs one already (every action but `read`, `init`, `set-mechanism` and `distill`);
 #      or, for `update` and `remove`, the given --id names no criterion and no non-goal in an
-#      alignment.json that does exist; or, for `record-decision`, the given --field id names none;
+#      alignment.json that does exist; or, for `record-decision`, an id in --field names none;
 #      or, for `retire`, no entry is at the given --entry; or, for `approve` and `distill`, records/scope-distill.json
 #      does not exist yet, so the distiller has not been dispatched. `approve` has promoted and
 #      committed by then; run it again once the sidecar exists.
@@ -107,7 +109,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
 #      autonomous; a given --automated that is not yes or no, or yes on a light task; a missing
-#      or unusable nextCriterionId or nextNonGoalId; a --field record-decision does not know;
+#      or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
 #      `retire` under --run-mode autonomous, or on an entry already superseded or retired; the
 #      plugin root could not be resolved; or a write that failed.
 #   4  a script this action calls ran and failed. `render`, and every action that writes
@@ -184,7 +186,7 @@ usage: scope-actions.sh read            <task_folder>
        scope-actions.sh render          <task_folder>
        scope-actions.sh set-mechanism   <task_folder> --approach <text> --status <suggested|required>
        scope-actions.sh record-decision <task_folder> --text <text> \
-                                         [--field <automatedTests|goal|expectedResult|id>]
+                                         [--field <automatedTests|goal|expectedResult|id>[,...]]
        scope-actions.sh approve         <task_folder>
        scope-actions.sh retire          <task_folder> --entry <n> --reason <text>
        scope-actions.sh distill         <task_folder>
@@ -270,10 +272,15 @@ contract_summary() {
   echo "automated-tests: $(automated_tests "$TASK_PATH")"
 }
 
-# Writes $2 as the contract, for $1, an action that can change a field a decided entry names. Each
-# entry whose field it changes is marked superseded first (decidedSupersede in
-# scripts/lib/decided.sh), and a superseded-decisions line says how many.
+# Writes $2 as the contract, for $1, an action that can change a field a decided entry names.
+# Under an interactive run, each entry with a field it changes is marked superseded first
+# (decidedSupersede in scripts/lib/decided.sh), and a superseded-decisions line says how many. An
+# autonomous run never supersedes an answer: no person has seen it yet.
 write_contract() {
+  if [ "$RUN_MODE" != "interactive" ]; then
+    write_atomic "$ALIGNMENT_FILE" "$2"
+    return
+  fi
   local count="$DECIDED_JQ"' [(.decidedWithoutAPerson // [])[] | objects | select(decidedState == "superseded")] | length'
   local before after updated
   before="$(jq "$count" "$ALIGNMENT_FILE")" || die3 "$1: could not read $ALIGNMENT_FILE"
@@ -283,6 +290,22 @@ write_contract() {
   write_atomic "$ALIGNMENT_FILE" "$updated"
   after="$(jq "$count" "$ALIGNMENT_FILE")"
   [ "$after" -eq "$before" ] || echo "superseded-decisions: $((after - before))"
+}
+
+# Appends one decidedWithoutAPerson entry: a string, or {text, fields} when $2, a JSON list of
+# field names, is given. It prints the entry's text, the one text this script prints, so the run
+# that wrote it can say what it decided without opening the contract.
+append_decision() {
+  local entry updated
+  if [ -z "${2:-}" ]; then
+    entry="$(jq -n --arg t "$1" '$t')"
+  else
+    entry="$(jq -n --arg t "$1" --argjson f "$2" '{text: $t, fields: $f}')"
+  fi
+  updated="$(jq --argjson e "$entry" '.decidedWithoutAPerson = ((.decidedWithoutAPerson // []) + [$e])' "$ALIGNMENT_FILE")" \
+    || die3 "could not record the decision in $ALIGNMENT_FILE"
+  write_atomic "$ALIGNMENT_FILE" "$updated"
+  echo "decided: $1"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -411,6 +434,8 @@ do_set_tests() {
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \
     || die3 "set-tests: could not update $ALIGNMENT_FILE"
   write_contract set-tests "$updated"
+  [ "$RUN_MODE" = "interactive" ] \
+    || append_decision "Automated tests: $automated, the recommended answer, taken" '["automatedTests"]'
 
   echo "TESTS SET"
   contract_summary
@@ -520,6 +545,8 @@ do_add_non_goal() {
        | .nextNonGoalId = $next' "$ALIGNMENT_FILE")" \
     || die3 "add-non-goal: could not add the new non-goal to $ALIGNMENT_FILE"
   write_atomic "$ALIGNMENT_FILE" "$updated"
+  [ "$RUN_MODE" = "interactive" ] \
+    || append_decision "Non-goal $id, $text: the recommended answer, out, taken" "[\"$id\"]"
 
   echo "ADDED: $id"
   contract_summary
@@ -747,8 +774,9 @@ do_set_mechanism() {
 # ------------------------------------------------------------------------------------------------
 # record-decision: appends to alignment.json's own decidedWithoutAPerson, one entry per question
 # an unattended run answered on the person's behalf (ideal/scope.md, "The autonomous branch").
-# With --field, the entry is an object that names the field the answer set, so a later action
-# that changes that field marks it superseded (gap row 244). Without it, the entry is a string.
+# With --field, a comma-separated list, the entry is an object that names the fields the answer
+# set, so a later interactive action that changes any of them marks it superseded (gap row 244).
+# Without it, the entry is a string.
 # ------------------------------------------------------------------------------------------------
 
 do_record_decision() {
@@ -768,28 +796,22 @@ do_record_decision() {
 
   require_alignment_exists "record-decision"
 
-  local entry
-  case "$field" in
-    '') entry="$(jq -n --arg text "$text" '$text')" ;;
-    automatedTests|goal|expectedResult) entry="$(jq -n --arg text "$text" --arg f "$field" '{text: $text, field: $f}')" ;;
-    *)
-      [ -n "$(id_kind "$field")" ] \
-        || die3 "record-decision: --field must be automatedTests, goal, expectedResult, or a criterion or non-goal id, got '$field'"
-      [ "$(jq -r --arg id "$field" '[(.criteria // [])[], (.nonGoals // [])[] | .id?] | index($id) != null' "$ALIGNMENT_FILE")" = "true" ] \
-        || die2 "record-decision: no criterion or non-goal with id $field in $ALIGNMENT_FILE"
-      entry="$(jq -n --arg text "$text" --arg f "$field" '{text: $text, field: $f}')" ;;
-  esac
-
-  local updated
-  updated="$(jq --argjson entry "$entry" \
-      '.decidedWithoutAPerson = ((.decidedWithoutAPerson // []) + [$entry])' "$ALIGNMENT_FILE")" \
-    || die3 "record-decision: could not update $ALIGNMENT_FILE"
-  write_atomic "$ALIGNMENT_FILE" "$updated"
+  local fields='' name
+  if [ -n "$field" ]; then
+    fields="$(jq -cn --arg f "$field" '$f | split(",")')"
+    while IFS= read -r name; do
+      case "$name" in
+        automatedTests|goal|expectedResult) continue ;;
+      esac
+      [ -n "$(id_kind "$name")" ] \
+        || die3 "record-decision: each --field name must be automatedTests, goal, expectedResult, or a criterion or non-goal id, got '$name'"
+      [ "$(jq -r --arg id "$name" '[(.criteria // [])[], (.nonGoals // [])[] | .id?] | index($id) != null' "$ALIGNMENT_FILE")" = "true" ] \
+        || die2 "record-decision: no criterion or non-goal with id $name in $ALIGNMENT_FILE"
+    done < <(printf '%s' "$fields" | jq -r '.[]')
+  fi
+  append_decision "$text" "$fields"
 
   echo "DECISION RECORDED"
-  # The one text this script prints: the entry just written, so the run that wrote it can say
-  # what it decided without opening the contract. contract_summary below keeps to the count.
-  echo "decided: $text"
   contract_summary
   render_alignment
   exit 0

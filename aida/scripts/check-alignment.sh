@@ -438,7 +438,7 @@ else
       | {index: .key, problem: ("entry is neither a string nor an object with text and whole approved, superseded or retired keys, is a " + (.value | type))} ]
   ' "$ALIGNMENT_FILE")"
 
-  DWAP_NOTE="ran: checked $DWAP_COUNT entry/entries"
+  if [ "$DWAP_COUNT" -eq 1 ]; then DWAP_NOTE="ran: checked 1 entry"; else DWAP_NOTE="ran: checked $DWAP_COUNT entries"; fi
 fi
 
 DWAP_ISSUE_COUNT="$(printf '%s' "$DWAP_ISSUES_JSON" | jq 'length')"

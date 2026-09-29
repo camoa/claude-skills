@@ -55,7 +55,7 @@
       "type": "array",
       "default": [],
       "items": { "oneOf": [ { "type": "string", "minLength": 1 }, { "$ref": "#/$defs/decision" } ] },
-      "description": "Each entry names one question an unattended run answered on a person's behalf while drafting or updating this contract. An autonomous run drafts the contract from what is on disk, records every criterion as the designer's, and records which questions it answered without anyone present, so a person reviewing the contract later can see exactly where a judgment call was made for them rather than by them (ideal/scope.md, 'The autonomous branch'). An interactive run never adds an entry. A string entry, or an object with only text and field, is open: nobody has approved it yet. Only open entries count as decided without a person. Every other object is history, and a reader never asks for a repair because of it. scripts/lib/decided.sh holds the one reading of the states (gap rows 232 and 244)."
+      "description": "Each entry names one question an unattended run answered on a person's behalf while drafting or updating this contract. An autonomous run drafts the contract from what is on disk, records every criterion as the designer's, and records which questions it answered without anyone present, so a person reviewing the contract later can see exactly where a judgment call was made for them rather than by them (ideal/scope.md, 'The autonomous branch'). An interactive run never adds an entry. A string entry, or an object with only text and fields, is open: nobody has approved it yet. Only open entries count as decided without a person. Every other object is history, and a reader never asks for a repair because of it. scripts/lib/decided.sh holds the one reading of the states (gap rows 232 and 244)."
     }
   },
   "$defs": {
@@ -63,14 +63,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["text"],
-      "description": "One decision an unattended run took. `record-decision --field` writes text and field. `approve` adds approvedAt and approvedBy to an open entry. A scope action that changes the field adds supersededAt and supersededBy. `retire` adds retiredAt, retiredBy and retiredReason. Each group is whole or absent, which check-alignment.sh checks.",
+      "description": "One decision an unattended run took. `record-decision --field`, and `set-tests` and `add-non-goal` under an autonomous run, write text and fields. `approve` adds approvedAt and approvedBy to an open entry. An interactive scope action that changes one of the fields adds supersededAt and supersededBy. `retire` adds retiredAt, retiredBy and retiredReason. Each group is whole or absent, which check-alignment.sh checks.",
       "properties": {
         "text": { "type": "string", "minLength": 1, "description": "The entry's own text, unchanged." },
-        "field": { "type": "string", "minLength": 1, "description": "What the answer set: automatedTests, goal, expectedResult, or a criterion or non-goal id." },
+        "fields": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "description": "What the answer set: automatedTests, goal, expectedResult, or criterion and non-goal ids. A change to any one supersedes the entry." },
         "approvedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the approve that marked it." },
         "approvedBy": { "type": "string", "enum": ["person"], "description": "Who approved it. `approve` refuses an autonomous run, so the value is always person." },
-        "supersededAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the action that changed the field." },
-        "supersededBy": { "type": "string", "enum": ["set-goal", "set-tests", "update", "remove"], "description": "The scope action that changed the field." },
+        "supersededAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the action that changed one of the fields." },
+        "supersededBy": { "type": "string", "enum": ["set-goal", "set-tests", "update", "remove"], "description": "The scope action that changed one of the fields." },
         "retiredAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the retire." },
         "retiredBy": { "type": "string", "enum": ["person"], "description": "Who retired it. `retire` refuses an autonomous run, so the value is always person." },
         "retiredReason": { "type": "string", "minLength": 1, "description": "Why the person retired it." }
