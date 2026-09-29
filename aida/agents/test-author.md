@@ -115,7 +115,8 @@ build or fix commits the brief lists there, written `commit:<id>`, as the `locks
 prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
 decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
 
-Return one row per test: the path, the test's name, and the criterion its name carries. The row
+Write what you return to the report file the brief names under `reportPath`, and name that path
+in your reply. Return one row per test: the path, the test's name, and the criterion its name carries. The row
 also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test
 returns the order id in place of a criterion. Then each checklist line, each absence clause, the
 path of each support file you wrote or changed, and anything that passed on arrival.
@@ -125,6 +126,8 @@ when a criterion cannot be tested as written, or when you cannot make a test fai
 criterion silently.
 
 Stop too when a test needs a signature the brief does not hold. End your reply with one line per
-missing signature, `Stop: missing-signature: <class or method>: <test>`. Never learn the signature
+missing signature, `Stop: missing-signature: <class or method>: <test>`. Write the same lines at the
+end of the report file. **End the report file with the line `Report: complete` as your last
+action.** A report without it tells the build you stopped before you finished. Never learn the signature
 from the code by another route. A runtime is such a route: `php:eval`, `drush ev`, reflection, a
 debugger, or a script that prints a class.

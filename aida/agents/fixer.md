@@ -66,5 +66,8 @@ already checked out. `fix-record` refuses when the tree is not clean.
 Return: status, the commits, the five answers per finding, one line per finding of fixed or
 scope-insufficient, and the report path.
 
+**End the report file with the line `Report: complete` as your last action**, after the commit. A
+report without it tells the build you stopped before you finished.
+
 Stop and say so, rather than working around it, when a finding needs a test to change, or when no
 scope would hold the fix it needs. Name the finding and the reason, and let a person decide.

@@ -105,7 +105,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
 #   implement-actions.sh dispatch-close <task_folder> [--no-report]
 #
-# `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. The
+# `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
+# fixer or test author whose pinned report lacks its completion line takes that path unasked (112). The
 # first time, the record stays open and takes `resumedAt`, and the role is resumed once by message.
 # The second time, the order halts and the record is removed (exit 110, gap row 228). For a
 # reviewer, a plain close also refuses when its brief's findings or verdicts file is missing (111).
@@ -704,6 +705,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 111  a plain `dispatch-close` on a reviewer's record found the file its brief names missing, or
 #      no newer than the record: `findingsPath` in review mode, `verdictsPath` in verify mode after
 #      the ledger's `fixed`. The record stays open. The message names `--no-report`.
+# The code the completion line added (gap row 248).
+# 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
+#      pins missing, no newer than the record, or not ending with the line `Report: complete`. The
+#      role stopped before its last act, so the close runs as `--no-report` does: the record stays
+#      open and takes `resumedAt`. A second such close halts the order at exit 110.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -830,6 +836,10 @@ attempts_allowed_for() {
 # rather than learning something new. A constant here beside the attempt cap, so the two caps are
 # read and changed in one place.
 FIX_ROUNDS_ALLOWED=2
+
+# The last line a fixer and a test author write in the report their brief pins, as their last act
+# (gap row 248). dispatch-close reads its absence as a stop before the role finished.
+IM_REPORT_DONE="Report: complete"
 
 # A light task allows a fake off the demo path, marked in the code with this text. The build brief
 # names it, and `close` logs every added line that carries it (gap row 197).
@@ -3988,10 +3998,11 @@ do_tests_brief() {
         --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
+        --arg reportPath "$IMPL_DIR/answers-$unit_id-tests.md" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
-      playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt}
+      playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt, reportPath: $reportPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
@@ -4003,6 +4014,7 @@ do_tests_brief() {
     {order: .unit.id,
      brief: $brief,
      worktree: .worktree,
+     reportPath: .reportPath,
      criteria: ([ .criteria[] | .id + " (" + .verifiedBy + ")" ]),
      nonGoals: (.nonGoals | length),
      declaredTests: (.unit.tests | length),
@@ -10992,6 +11004,30 @@ do_dispatch_close() {
   # The record lives under the task's own folder, so a close can only reach this task's record
   # and another task's stays open (live-run row 139).
   local dispatch_file="$TASK_PATH/implementation/dispatch.json"
+  # A fixer and a test author end the report their brief pins with IM_REPORT_DONE, as their last
+  # act (gap row 248). A plain close that finds the report missing, older than the record, or
+  # without that line takes the --no-report path itself, so a cut-off role never closes as done.
+  # A brief written before the brief pinned a path names none, and nothing is checked.
+  local cut_off=""
+  if [ "$no_report" = false ] && [ -f "$dispatch_file" ]; then
+    local co_role co_unit co_brief="" co_report
+    co_role="$(jq -r '.role // "" | split(":") | last' "$dispatch_file" 2>/dev/null)"
+    co_unit="$(jq -r '.unit // ""' "$dispatch_file" 2>/dev/null)"
+    case "$co_role" in
+      fixer)
+        co_brief="$TASK_PATH/implementation/brief-$co_unit-fix-$(jq -r --arg id "$co_unit"           '(.orders // [])[] | select(.id == $id) | (.roundsUsed // 0) + 1' "$TASK_PATH/implementation/ledger.json" 2>/dev/null).json" ;;
+      test-author) co_brief="$TASK_PATH/implementation/brief-$co_unit-tests.json" ;;
+    esac
+    co_report="$(jq -r '.reportPath // ""' "$co_brief" 2>/dev/null)"
+    if [ -n "$co_report" ]; then
+      if [ ! -f "$co_report" ] || [ ! "$co_report" -nt "$dispatch_file" ]; then
+        cut_off="$co_report is missing or older than its dispatch record"
+      elif [ "$(grep -v '^[[:space:]]*$' "$co_report" | tail -n 1 | sed 's/[[:space:]]*$//')" != "$IM_REPORT_DONE" ]; then
+        cut_off="$co_report does not end with the line '$IM_REPORT_DONE'"
+      fi
+    fi
+    [ -z "$cut_off" ] || no_report=true
+  fi
   # A role with no report is resumed once, not dispatched fresh: its brief is unchanged and its
   # work is unfinished, and a fresh role meets its half-written files (gap row 228). The record
   # stays open so both hooks keep applying while it finishes.
@@ -11006,6 +11042,8 @@ do_dispatch_close() {
     if [ "$(jq -r 'has("resumedAt")' "$dispatch_file")" != "true" ]; then
       write_atomic "$dispatch_file" "$(jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '.resumedAt = $at' "$dispatch_file")"
+      [ -z "$cut_off" ] \
+        || die 112 "dispatch-close: $nr_role on $nr_unit returned, and $cut_off, so it stopped before it finished, most likely at its turn limit. The record stays open for one resume. Resume the same $nr_role agent by message: finish the work and end the report with '$IM_REPORT_DONE'. Then run dispatch-close again."
       echo "DISPATCH-CLOSE: $nr_role on $nr_unit returned no report; the record stays open for one resume"
       echo "next: resume the same $nr_role agent by message: finish the work and write the report. Then run dispatch-close again, with --no-report if it returns none."
       exit 0
@@ -11021,8 +11059,9 @@ do_dispatch_close() {
     die 110 "dispatch-close: $nr_unit is halted. $nr_role returned no report twice, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
   fi
   # The reviewer's file is named by its brief, so the script can see it is missing. A file older
-  # than the record is a previous run's. The fixer, the test author and the row-checker return
-  # their report as text or a file no script pins, so for them the flag is the only signal.
+  # than the record is a previous run's. The fixer's and the test author's reports are pinned too,
+  # and are checked above. The row-checker returns its answer as text, so for it the flag is the
+  # only signal.
   if [ -f "$dispatch_file" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file" 2>/dev/null)" = "reviewer" ]; then
     local rc_unit rc_brief rc_expected
     rc_unit="$(jq -r '.unit // ""' "$dispatch_file")"

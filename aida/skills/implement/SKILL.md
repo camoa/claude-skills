@@ -197,8 +197,9 @@ that never returned leaves one.
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. The signal is the runtime's own mark that the role stopped at its turn limit.
 For the reviewer the script also sees it: a plain close refuses (exit 111) when the findings or
-verdicts file its brief names is missing. For the other roles only the mark tells, so watch for it.
-Close with `--no-report` added. The record stays open, so both hooks keep applying. Then send one
+verdicts file its brief names is missing. For the fixer and the test author a plain close whose
+pinned report lacks its last line, `Report: complete`, takes the step below itself (exit 112). For
+the row-checker only the mark tells, so watch for it. Close with `--no-report` added. The record stays open, so both hooks keep applying. Then send one
 message to the same agent: finish the work and write the report. Do not dispatch a fresh role. The
 brief is unchanged and the work is unfinished, and a fresh role meets the half-written files. This
 differs from a row a person rejects, where the brief changes and the role is dispatched fresh.
