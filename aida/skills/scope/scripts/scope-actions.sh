@@ -292,15 +292,15 @@ write_contract() {
   [ "$after" -eq "$before" ] || echo "superseded-decisions: $((after - before))"
 }
 
-# Appends one decidedWithoutAPerson entry: a string, or {text, fields} when $2, a JSON list of
-# field names, is given. It prints the entry's text, the one text this script prints, so the run
+# Appends one decidedWithoutAPerson entry: a string, or {text, field} when $2, the field the
+# answer set, is given. It prints the entry's text, the one text this script prints, so the run
 # that wrote it can say what it decided without opening the contract.
 append_decision() {
   local entry updated
   if [ -z "${2:-}" ]; then
     entry="$(jq -n --arg t "$1" '$t')"
   else
-    entry="$(jq -n --arg t "$1" --argjson f "$2" '{text: $t, fields: $f}')"
+    entry="$(jq -n --arg t "$1" --arg f "$2" '{text: $t, field: $f}')"
   fi
   updated="$(jq --argjson e "$entry" '.decidedWithoutAPerson = ((.decidedWithoutAPerson // []) + [$e])' "$ALIGNMENT_FILE")" \
     || die3 "could not record the decision in $ALIGNMENT_FILE"
@@ -435,7 +435,7 @@ do_set_tests() {
     || die3 "set-tests: could not update $ALIGNMENT_FILE"
   write_contract set-tests "$updated"
   [ "$RUN_MODE" = "interactive" ] \
-    || append_decision "Automated tests: $automated, the recommended answer, taken" '["automatedTests"]'
+    || append_decision "Automated tests: $automated, the recommended answer, taken" automatedTests
 
   echo "TESTS SET"
   contract_summary
@@ -546,7 +546,7 @@ do_add_non_goal() {
     || die3 "add-non-goal: could not add the new non-goal to $ALIGNMENT_FILE"
   write_atomic "$ALIGNMENT_FILE" "$updated"
   [ "$RUN_MODE" = "interactive" ] \
-    || append_decision "Non-goal $id, $text: the recommended answer, out, taken" "[\"$id\"]"
+    || append_decision "Non-goal $id, $text: the recommended answer, out, taken" "$id"
 
   echo "ADDED: $id"
   contract_summary
@@ -774,9 +774,10 @@ do_set_mechanism() {
 # ------------------------------------------------------------------------------------------------
 # record-decision: appends to alignment.json's own decidedWithoutAPerson, one entry per question
 # an unattended run answered on the person's behalf (ideal/scope.md, "The autonomous branch").
-# With --field, a comma-separated list, the entry is an object that names the fields the answer
-# set, so a later interactive action that changes any of them marks it superseded (gap row 244).
-# Without it, the entry is a string.
+# With --field, the entry is an object that names the field the answer set, so a later
+# interactive action that changes that field marks it superseded (gap row 244). --field takes a
+# comma-separated list: every name is checked first, then one entry per name is appended, each
+# with the same text, since each name is one question answered. Without it, the entry is a string.
 # ------------------------------------------------------------------------------------------------
 
 do_record_decision() {
@@ -796,9 +797,9 @@ do_record_decision() {
 
   require_alignment_exists "record-decision"
 
-  local fields='' name
+  local names='' name
   if [ -n "$field" ]; then
-    fields="$(jq -cn --arg f "$field" '$f | split(",")')"
+    names="$(jq -rn --arg f "$field" '$f | split(",") | .[]')"
     while IFS= read -r name; do
       case "$name" in
         automatedTests|goal|expectedResult) continue ;;
@@ -807,9 +808,13 @@ do_record_decision() {
         || die3 "record-decision: each --field name must be automatedTests, goal, expectedResult, or a criterion or non-goal id, got '$name'"
       [ "$(jq -r --arg id "$name" '[(.criteria // [])[], (.nonGoals // [])[] | .id?] | index($id) != null' "$ALIGNMENT_FILE")" = "true" ] \
         || die2 "record-decision: no criterion or non-goal with id $name in $ALIGNMENT_FILE"
-    done < <(printf '%s' "$fields" | jq -r '.[]')
+    done < <(printf '%s\n' "$names")
+    while IFS= read -r name; do
+      append_decision "$text" "$name"
+    done < <(printf '%s\n' "$names")
+  else
+    append_decision "$text"
   fi
-  append_decision "$text" "$fields"
 
   echo "DECISION RECORDED"
   contract_summary

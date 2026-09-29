@@ -147,13 +147,13 @@ For each other question, run:
   ```
   "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
     record-decision "<task_folder>" --text "<the question, and the recommended answer taken>" \
-    [--field <the fields the answer set>]
+    [--field <the field the answer set>]
   ```
   to mark it as decided on the person's behalf, and continue. Never treat silence as the owner's
   own answer. Give `--field` when the answer set a field: `goal`, `expectedResult`, or the
-  criterion ids, comma-separated. A later interactive `set-goal`, `update` or `remove` that
-  changes one of them then marks the entry superseded. So `approve` never approves an answer the
-  person reversed.
+  criterion ids, comma-separated, one entry each. A later interactive `set-goal`, `update` or
+  `remove` that changes that field then marks its entry superseded. So `approve` never approves
+  an answer the person reversed.
 
 ### The goal and the expected result
 
