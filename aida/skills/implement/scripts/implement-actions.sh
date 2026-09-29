@@ -689,8 +689,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # The code the stale red run added (gap row 229).
 # 109  `tests-freeze` was given a --red file written before the order's test round began, the
-#      tests brief's `roundStartedAt`. It is a run of earlier tests, such as those a restart set
-#      aside. The message names each file and both times. Nothing is frozen.
+#      tests brief's `roundStartedAt`, or before its own test file last changed. It is a run of
+#      earlier tests, such as those a restart set aside. The message names each file and both
+#      times. Nothing is frozen.
 # The codes the turn cap added (gap row 228).
 # 110  `dispatch-close --no-report` found the open record already carries `resumedAt`: the role
 #      was resumed once and returned with no report again. The order halts with a reason naming
@@ -3763,6 +3764,12 @@ tt_load_snapshot() {
     || die 3 "$who: $snapshot_file exists but could not be read as JSON, though start already wrote it. Repair or remove it by hand before running this again."
 }
 
+# im_mtime <file>: the file's modification time in seconds since the epoch, or nothing. GNU stat
+# first, then the BSD form macOS carries.
+im_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
+# im_iso_of <seconds>: that time as an ISO 8601 UTC string, or nothing.
+im_iso_of() { jq -rn --arg e "$1" '$e | tonumber | todate' 2>/dev/null; }
+
 do_tests_brief() {
   [ "$#" -ge 2 ] || die 3 "tests-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "tests-brief: unrecognized extra argument: $3"
@@ -3956,11 +3963,16 @@ do_tests_brief() {
   # would spend the orchestrator's own context on words only the test author reads.
   # `roundStartedAt` is when this order's test round began, and `tests-freeze` refuses a red run
   # older than it (exit 109). A brief written again in the same round, for a retake or a rejected
-  # row, keeps the first time, because the unchanged tests keep their red runs. A restart moves
-  # the brief aside, so the next brief starts a new round.
-  local brief_file brief_json round_started_at
+  # row, keeps the first time, because the unchanged tests keep their red runs. The round is the
+  # same only while the order and its criteria are. A restart moves the brief aside, so the next
+  # brief starts a new round.
+  local brief_file brief_json round_started_at=""
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
-  round_started_at="$(jq -r '.roundStartedAt // empty' "$brief_file" 2>/dev/null)"
+  if [ -f "$brief_file" ] && [ "$(jq -c --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
+      '.unit == $unit and .criteria == $criteria' "$brief_file" 2>/dev/null)" = "true" ]; then
+    round_started_at="$(jq -r '.roundStartedAt // empty' "$brief_file" 2>/dev/null)"
+    [ -n "$round_started_at" ] || round_started_at="$(im_iso_of "$(im_mtime "$brief_file")")"
+  fi
   [ -n "$round_started_at" ] || round_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
@@ -4834,35 +4846,46 @@ TF_EOF
   [ -z "$bad_red_files" ] \
     || die 32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
 
-  # --- 109: a red run older than this order's test round is a run of other tests (gap row 229) ----
-  # The round began at the tests brief's `roundStartedAt`. A restart moves the brief aside, so the
-  # time is never older than the restart. A brief from before the stamp is read by its file time.
-  # With no brief, no author was briefed, and there is nothing to compare against.
-  local tf_brief tf_round_at tf_round_epoch tf_red_epoch stale_reds=""
+  # --- 109: a red run older than its round or its test file is a run of other tests (row 229) ---
+  # The round began at the tests brief's `roundStartedAt`. A restart moves the brief aside, and a
+  # changed order or criterion restamps it, so the time is never older than either. A brief from
+  # before the stamp is read by its file time. With no brief, only the test files are compared.
+  # A red names its test by name, and every --test row of that name is the file it ran.
+  local tf_brief tf_round_at="" tf_round_epoch="" tf_red_epoch tf_test_path tf_test_epoch stale_reds=""
   tf_brief="$IMPL_DIR/brief-$unit_id-tests.json"
   if [ "$red_count" -gt 0 ] && [ -f "$tf_brief" ]; then
     tf_round_at="$(jq -r '.roundStartedAt // empty' "$tf_brief" 2>/dev/null)"
     if [ -n "$tf_round_at" ]; then
       tf_round_epoch="$(jq -rn --arg t "$tf_round_at" '$t | fromdateiso8601' 2>/dev/null)"
     else
-      tf_round_epoch="$(stat -c %Y "$tf_brief" 2>/dev/null || stat -f %m "$tf_brief" 2>/dev/null)"
-      tf_round_at="$(jq -rn --arg e "$tf_round_epoch" '$e | tonumber | todate' 2>/dev/null)"
+      tf_round_epoch="$(im_mtime "$tf_brief")"
+      tf_round_at="$(im_iso_of "$tf_round_epoch")"
     fi
     [ -n "$tf_round_epoch" ] && [ -n "$tf_round_at" ] \
       || die 3 "tests-freeze: could not read when the test round began from $tf_brief."
-    ri=0
-    while [ "$ri" -lt "$red_count" ]; do
-      red_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].name')"
-      red_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
-      tf_red_epoch="$(stat -c %Y "$red_path" 2>/dev/null || stat -f %m "$red_path" 2>/dev/null)"
-      [ -n "$tf_red_epoch" ] || die 3 "tests-freeze: could not read when $red_path was written."
-      [ "$tf_red_epoch" -ge "$tf_round_epoch" ] \
-        || stale_reds="$stale_reds$red_name ($red_path, written $(jq -rn --arg e "$tf_red_epoch" '$e | tonumber | todate')), "
-      ri=$((ri + 1))
-    done
-    [ -z "$stale_reds" ] \
-      || die 109 "tests-freeze: these --red files were written before this test round began at $tf_round_at, so they are runs of earlier tests: ${stale_reds%, }. Run each test again and pass the new output."
   fi
+  ri=0
+  while [ "$ri" -lt "$red_count" ]; do
+    red_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].name')"
+    red_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
+    tf_red_epoch="$(im_mtime "$red_path")"
+    [ -n "$tf_red_epoch" ] || die 3 "tests-freeze: could not read when $red_path was written."
+    if [ -n "$tf_round_epoch" ] && [ "$tf_red_epoch" -lt "$tf_round_epoch" ]; then
+      stale_reds="$stale_reds$red_name ($red_path, written $(im_iso_of "$tf_red_epoch"), before the round began at $tf_round_at), "
+    fi
+    while IFS= read -r tf_test_path; do
+      [ -n "$tf_test_path" ] || continue
+      tf_test_epoch="$(im_mtime "$tf_test_path")"
+      [ -n "$tf_test_epoch" ] || die 3 "tests-freeze: could not read when $tf_test_path was written."
+      [ "$tf_red_epoch" -ge "$tf_test_epoch" ] \
+        || stale_reds="$stale_reds$red_name ($red_path, written $(im_iso_of "$tf_red_epoch"), before its test file $tf_test_path changed at $(im_iso_of "$tf_test_epoch")), "
+    done <<TF_RED_TESTS
+$(printf '%s' "$tests_json" | jq -r --arg n "$red_name" '[ .[] | select(.name == $n) | .absPath ] | unique | .[]')
+TF_RED_TESTS
+    ri=$((ri + 1))
+  done
+  [ -z "$stale_reds" ] \
+    || die 109 "tests-freeze: these --red files are runs of earlier tests: ${stale_reds%, }. Run each test again and pass the new output."
 
   # --- 91: the reds are read against the recipe preconditions recorded (live-run row 99) -----------
   # The record is the one producer of a test-execution recipe path, and build-record reads it from
@@ -10067,8 +10090,9 @@ do_retake_tests() {
   [ -n "$new_ledger" ] || die 3 "retake-tests: the ledger update for $unit_id failed."
 
   mkdir -p "$target" || die 3 "retake-tests: could not create $target"
-  # The same names restart moves, less the two the tests step wrote: the freeze record, which
-  # the next freeze overwrites, and the tests brief, which the next tests-brief overwrites.
+  # The files among the names restart moves, less the two the tests step wrote: the freeze
+  # record, which the next freeze overwrites, and the tests brief, which the next tests-brief
+  # overwrites. A folder stays, because a retake keeps the unchanged tests' red runs.
   local moved moved_count
   moved_count=0
   while IFS= read -r moved; do

@@ -128,8 +128,8 @@ row's key, the person's words verbatim, and the checker's note. The summary prin
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
 round began. A brief written again for a retake or a rejected row keeps the earlier time, because
-the unchanged tests keep their red runs. A restart moves the brief aside, so the next brief starts
-a new round.
+the unchanged tests keep their red runs. It keeps it only while the order and its criteria are
+unchanged. A design change, or a restart that moves the brief aside, starts a new round.
 
 It prints the brief's path and counts, never the brief.
 
@@ -385,10 +385,11 @@ place. A test with neither refuses (exit 33). A `--locks-in` reason written `com
 name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,
 is shorter than seven characters, or is not this order's own refuses (exit 101). A reason with no
 `commit:` prefix is prose and names the existing code.
-A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). It is the run of an
-earlier test, for example one a restart moved aside. The message names each file and both times.
-Run the test again and pass the new output. A brief that holds no `roundStartedAt` is read by its
-own file time. A freeze with no tests brief compares nothing.
+A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). So does one written
+before its test file last changed. Either is the run of an earlier test, for example one a restart
+moved aside. The message names each file and both times. Run the test again and pass the new
+output. A brief that holds no `roundStartedAt` is read by its own file time. A freeze with no tests
+brief compares the test files only.
 It reads each `--red` file against the markers the
 test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
 A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a
