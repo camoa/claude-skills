@@ -597,8 +597,9 @@ partway through a long build. That is how grants work, not a fault in the build.
 
 A dispatched role works in the task's worktree. Each brief and each dispatch message names it.
 While a dispatch is open, the hooks refuse that role a denied read and any write in the project's
-main checkout. The role would otherwise start there. A path a shell assembles at run time still
-passes. So does a `git commit` run in the main checkout.
+main checkout. The role would otherwise start there. This covers git run there, also through its
+-C option, and a copy out of the checkout or into it. A path a shell assembles at run time still
+passes. In the worktree, git still shows the history of a denied file.
 
 The read denials and the frozen-test refusal are hooks the runtime applies. The read denial covers
 the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` and their kin. A

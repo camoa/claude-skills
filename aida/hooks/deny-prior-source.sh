@@ -43,7 +43,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # directory, which is often the project's main checkout, and every file the worktree holds is
 # there as well. So each denied path is also resolved against the project's own codePath, and a
 # role in that checkout finds its record by its type (scripts/lib/paths.sh,
-# dispatch_record_for).
+# dispatch_record_for). Gap row 243 adds the forms that read that checkout without a reading verb:
+# git run there, through -C, --git-dir or --work-tree too, and cp, rsync, install, mv and tar with
+# a source there. They are judged in the main checkout only, so the same form in the worktree
+# passes. judge_git and judge_copy below say what each form reads.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, or a tool that is
 # none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
@@ -220,6 +223,88 @@ $DENY_ABS
 DENY_EOF
 }
 
+# deny_if_listed, for a target $1 in the main checkout and not in the worktree only. The git and
+# copy forms below are judged there alone (gap row 243), so the same form in the worktree passes.
+deny_if_main() {
+  [ -n "$MAIN_CANON" ] && is_under "$1" "$MAIN_CANON" && ! is_under "$1" "$CODE_CANON" || return 0
+  deny_if_listed "$1"
+}
+
+# A git segment, in the words w. git reads a file through its history, its diff or its index.
+# Only a tree in the main checkout is judged, so git in the worktree stays the role's view of its
+# own work. A <rev>:<path> reads that path from the checkout's top. A diff, a patch log, a show of
+# a commit, a grep, a blame or an archive reads the whole tree, as a search does.
+judge_git() {
+  local whole=false t p base
+  git_tree_of "$RUN_DIR" "${w[@]:1}"
+  [ -n "$MAIN_CANON" ] && is_under "$GIT_TREE" "$MAIN_CANON" \
+    && ! is_under "$GIT_TREE" "$CODE_CANON" || return 0
+  case "${w[$GIT_SUB_AT]:-}" in
+    diff|grep|blame|archive) whole=true ;;
+    log) for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
+           case "$t" in -p|-u|--patch|--patch-with-*) whole=true ;; esac
+         done ;;
+    show|cat-file)
+      [ "${w[$GIT_SUB_AT]}" = cat-file ] || whole=true
+      for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
+        case "$t" in -*|*:) continue ;; *:*) ;; *) continue ;; esac
+        whole=false
+        p="${t#*:}"
+        case "$p" in ./*|../*) base="$GIT_TREE" ;; *) base="$MAIN_CANON" ;; esac
+        deny_if_listed "$(normalize_abs "$(resolve_against "$p" "$base")")"
+      done ;;
+  esac
+  SEARCH=true
+  [ "$whole" = false ] || deny_if_listed "$GIT_TREE"
+}
+
+# A copy segment, in the words w. A copy out of the main checkout reads it. Each source there is
+# judged as a search root, so a folder holding a denied path is a hit. The last operand of cp,
+# rsync, install and mv is where the copy lands, unless -t names that (rsync's -t keeps times).
+# tar reads its operands only when it creates, appends or updates, each from the folder the last
+# -C before it names.
+judge_copy() {
+  local i=1 t pend="" dest_named=false from="$RUN_DIR" tar_ops="" reads=false
+  SEARCH=true
+  while [ "$i" -lt "${#w[@]}" ]; do
+    t="${w[$i]}"; i=$((i + 1))
+    if [ "${w[0]}" = tar ]; then
+      case "$t" in
+        --create|--append|--update) reads=true ;;
+        --directory=*) from="$(shell_dir_after "$from" cd "${t#*=}")" ;;
+        -C|--directory) from="$(shell_dir_after "$from" cd "${w[$i]:-}")"; i=$((i + 1)) ;;
+        --file) i=$((i + 1)) ;;
+        --*) ;;
+        *)
+          # A flag cluster, or the first word in the old form without a dash, such as czf. Its f
+          # takes the next word, the archive.
+          if [ "${t#-}" != "$t" ] || [ "$i" -eq 2 ]; then
+            case "$t" in *[cru]*) reads=true ;; esac
+            case "$t" in *f*) i=$((i + 1)) ;; esac
+          else
+            tar_ops="$tar_ops$(normalize_abs "$(resolve_against "$t" "$from")")
+"
+          fi ;;
+      esac
+      continue
+    fi
+    case "$t" in
+      -t|--target-directory) [ "${w[0]}" = rsync ] || { dest_named=true; i=$((i + 1)); } ;;
+      --target-directory=*) dest_named=true ;;
+      -*) ;;
+      *) [ -z "$pend" ] || deny_if_main "$pend"
+         pend="$(normalize_abs "$(resolve_against "$t" "$RUN_DIR")")" ;;
+    esac
+  done
+  [ "$dest_named" = false ] || [ -z "$pend" ] || deny_if_main "$pend"
+  [ "$reads" = true ] || return 0
+  while IFS= read -r t; do
+    [ -z "$t" ] || deny_if_main "$t"
+  done <<TAR_EOF
+$tar_ops
+TAR_EOF
+}
+
 if [ "$TOOL" = "Bash" ]; then
   [ -n "$CMD" ] || { echo '{}'; exit 0; }
   # A relative operand is resolved against codePath and the payload's working directory both,
@@ -244,6 +329,8 @@ if [ "$TOOL" = "Bash" ]; then
     SEARCH=false; script_skip=false; recursive=false
     case "${w[0]}" in
       cd|pushd) RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")"; continue ;;
+      git) judge_git; continue ;;
+      cp|rsync|install|mv|tar) judge_copy; continue ;;
       cat|head|tail|less|more|nl) ;;
       grep|rg) SEARCH=true; script_skip=true ;;
       sed|awk) script_skip=true ;;

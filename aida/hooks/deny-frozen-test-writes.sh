@@ -35,9 +35,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # main checkout: the registered codePath, when it is not the worktree. A dispatched role starts in
 # the session's directory, often that checkout, and a file it writes there lands on the person's
 # own branch. Its record is found by its agent type when no record's codePath holds the directory
-# it works in. It reads rule one's write positions, with rule one's limits: a git commit there,
-# or a write through a variable or an interpreter, passes. The person, and any other agent type,
-# is not its concern.
+# it works in. It reads rule one's write positions, with rule one's limits: a write through a
+# variable or an interpreter passes. Since gap row 243 it also reads git's -C, --git-dir and
+# --work-tree, a git verb that changes a tree, the index or a branch, mv's sources, the folder
+# cp's -t names, and tar's extract folder and created archive. The person, and any other agent
+# type, is not its concern.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -401,12 +403,24 @@ case "$TOOL" in
             if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
             if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
           done ;;
-        git) case "${w[1]:-}" in rm|mv|checkout|restore|stash|apply|clean|reset)
-               VIA="git ${w[1]}"
-               for t in "${w[@]:2}"; do
-                 case "$t" in -*) continue ;; esac
-                 if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
-               done ;; esac ;;
+        git)
+          # -C, --git-dir and --work-tree name the tree git works in, and its operands resolve
+          # there (gap row 243). A verb that changes the tree, the index or the branch is a write
+          # to that tree, which rule three reads.
+          git_tree_of "$RUN_DIR" "${w[@]:1}"
+          sub="${w[$GIT_SUB_AT]:-}"
+          case "$sub" in
+            add|am|apply|checkout|cherry-pick|clean|commit|merge|mv|pull|rebase|reset|restore|revert|rm|stash|switch)
+              note_main "$GIT_TREE" ;;
+          esac
+          case "$sub" in rm|mv|checkout|restore|stash|apply|clean|reset)
+            VIA="git $sub"
+            shell_dir="$RUN_DIR"; RUN_DIR="$GIT_TREE"
+            for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
+              case "$t" in -*) continue ;; esac
+              if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
+            done
+            RUN_DIR="$shell_dir" ;; esac ;;
         sed) case "${w[1]:-}" in -i*)
                VIA="sed ${w[1]}"
                for t in "${w[@]:2}"; do
@@ -415,7 +429,46 @@ case "$TOOL" in
         cp|mv|ln|install|rsync)
           last="${w[$((${#w[@]} - 1))]}"
           VIA="${w[0]}"
-          if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi ;;
+          if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi
+          # -t names where the copy lands, except in rsync, where it keeps times. mv removes each
+          # source. So both are write positions too (gap row 243).
+          j=1
+          while [ -z "$HIT" ] && [ "$j" -lt "${#w[@]}" ]; do
+            t="${w[$j]}"; j=$((j + 1))
+            case "$t" in
+              -t|--target-directory) [ "${w[0]}" != rsync ] || continue; t="${w[$j]:-}"; j=$((j + 1)) ;;
+              --target-directory=*) t="${t#*=}" ;;
+              -*) continue ;;
+              *) [ "${w[0]}" = mv ] || continue ;;
+            esac
+            if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; fi
+          done ;;
+        tar)
+          # tar extracts into the folder -C names, else where the shell stands, and creates,
+          # appends or updates the archive f names. Rule three reads both (gap row 243).
+          j=1; into="$RUN_DIR"; archive=""; mode=""
+          while [ "$j" -lt "${#w[@]}" ]; do
+            t="${w[$j]}"; j=$((j + 1))
+            case "$t" in
+              --extract|--get) mode=x ;;
+              --create|--append|--update) mode=c ;;
+              --directory=*) into="$(shell_dir_after "$into" cd "${t#*=}")" ;;
+              -C|--directory) into="$(shell_dir_after "$into" cd "${w[$j]:-}")"; j=$((j + 1)) ;;
+              --file=*) archive="${t#*=}" ;;
+              --file) archive="${w[$j]:-}"; j=$((j + 1)) ;;
+              --*) ;;
+              *)
+                # A flag cluster, or the first word in the old form without a dash, such as xzf.
+                if [ "${t#-}" != "$t" ] || [ "$j" -eq 2 ]; then
+                  case "$t" in *x*) mode=x ;; *[cru]*) mode=c ;; esac
+                  case "$t" in *f*) archive="${w[$j]:-}"; j=$((j + 1)) ;; esac
+                fi ;;
+            esac
+          done
+          case "$mode" in
+            x) note_main "$into" ;;
+            c) [ -z "$archive" ] || note_main "$(normalize_abs "$(resolve_against "$archive" "$RUN_DIR")")" ;;
+          esac ;;
         cd|pushd)
           # A cd operand is never a write target, so rules two and three must not see it: STRAY
           # and MAIN_HIT are put back to what they were, and rule one keeps its own check. The

@@ -223,9 +223,9 @@ The message they send when they cannot find the record has not run live, so do n
 part as proven.
 
 While a record is open, both hooks also guard the project's main checkout, the code path the
-project registers. There the role is refused each denied read and every write. A role in that
-checkout is matched to the record by its type. A shell command that builds a path at run time
-still passes, and so does a `git commit` run there.
+project registers. There the role is refused each denied read and every write, also through git
+and through a copy in or out. A role in that checkout is matched to the record by its type. A
+shell command that builds a path at run time still passes.
 
 The read denial covers Read, Grep and the plain shell reads: `cat`, `head`, `tail`, `less`,
 `more`, `sed`, `awk`, `grep`, `rg` and `nl`. A path a shell assembles at run time passes. That
