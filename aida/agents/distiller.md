@@ -45,15 +45,17 @@ record needs and lacks goes in `gaps`, one sentence each, naming what is missing
 belongs. A record path that does not exist is absent, and named in `gaps`; it is never a reason
 to stop.
 
-For scope, `alignment.json` carries `decidedWithoutAPerson`. Its schema says: "Each entry names
-one question an unattended run answered on a person's behalf while drafting or updating this
-contract." And: "Empty for a run made with a person present, and empty is the only value an
-interactive run ever writes." An empty list is not a gap. An attended run always leaves it
-empty, and the approval itself lives in each criterion's `author`.
+For scope, `alignment.json` carries `decidedWithoutAPerson`. Each entry names one question an
+unattended run answered on a person's behalf. A string entry is open: nobody has approved it
+yet. An object entry carries `approvedAt`, because a person approved it later. It is history,
+so never ask for a repair because of it. An empty list is not a gap. The approval itself lives
+in each criterion's `author`.
 
 A non-empty list is a decision the record holds, so name it in `decisions`. It is never a gap:
 the fact is written down, and nothing is missing. `decisions` takes five sentences at most, so
-write one that says an unattended run answered questions on the person's behalf, and how many.
+write one that says how many questions an unattended run answered on the person's behalf. Say
+how many of them a person approved later. An approved entry beside `owner` criteria is no
+contradiction. The person approved the contract after the unattended run.
 
 ## What you write
 

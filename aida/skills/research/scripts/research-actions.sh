@@ -25,8 +25,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                          --search <slug> --searched-for <text> --text <text> \
 #                          --source <text> [--criteria-served <id[,id...]>] \
 #                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
-#   research-actions.sh serve  <task_folder> --search <slug> --index <n> --criteria-served <id[,id...]>
-#   research-actions.sh drop   <task_folder> --search <slug> --index <n>
+#   research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
+#   research-actions.sh drop   <task_folder> --finding <search>#<n>
 #   research-actions.sh check  <task_folder>
 #   research-actions.sh distill <task_folder>
 #   research-actions.sh split-read <task_folder>
@@ -49,8 +49,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # alignment.json and then calls alignment-render.sh. Nothing reads <search>.md back: it is for
 # the design stage to read, and it says so on itself. `record` only appends, so `serve` and
 # `drop` are the producers for a finding already on disk: `serve` rewrites one finding's
-# criteriaServed, `drop` removes one finding, and both take the finding's 0-based position in the
-# file, the `index` check-research.sh reports on an orphan. They write through the same path.
+# criteriaServed, `drop` removes one finding, and both name it `<search>#<n>`, counted from 1 as
+# <search>.md and check-research.sh's report number it. They write through the same path.
 #
 # `criteriaServed` holds ids scope minted in alignment.json, not criterion text (ideal/scope.md,
 # 'Why the id exists'; ideal/research.md, 'What a finding holds'). This script checks only that
@@ -89,10 +89,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      of words from the one this call gives (one search records one set of words, and this
 #      script never rewrites the field on a file that already exists); a --recipe-fit outside its
 #      three words, without its two companions, or differing from the recipeFit on disk; a `serve`
-#      or `drop` naming a search with no file, or an --index that is not a whole number or names
-#      no finding in that file; a `serve` with no --criteria-served; the plugin root could not be
-#      resolved; a write that failed; a call to research-render.sh failing to produce
-#      <search>.md; or `check`'s own call to check-research.sh failing to run at all
+#      or `drop` naming a search with no file, or a --finding not shaped <search>#<n> from 1 or
+#      naming no finding in that file, or the old --search and --index pair; a `serve` with no
+#      --criteria-served; the plugin root could not be resolved; a write that failed; a call to
+#      research-render.sh failing to produce <search>.md; or `check`'s own call to check-research.sh failing to run at all
 #      (check-research.sh's own exit 3, meaning it could not do its job either).
 #   4  `check` ran and found a research file that cannot be read as this format: not valid JSON,
 #      not an object, or a missing, malformed or unknown field at any depth (check-research.sh's
@@ -106,8 +106,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      Either malformed sidecar is moved aside first, to <name>.malformed-<date>.json, and
 #      stdout names it in a `setAside:` line.
 #   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
-#      criterion with no finding, a finding with no criterion, or a criteriaServed id naming no
-#      criterion in the contract (check-research.sh's own exit 4).
+#      criterion with no finding, a finding with no criterion, a criteriaServed id naming no
+#      criterion in the contract, or a finding text citing a finding research does not hold
+#      (check-research.sh's own exit 4).
 #   6  `check` found the coverage clean, but <codePath>/.aida-spike/ still exists. A spike is a
 #      throwaway experiment research writes to answer one question (skills/research/SKILL.md,
 #      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
@@ -166,8 +167,8 @@ usage: research-actions.sh read   <task_folder>
                                    --text <text> --source <text> \
                                    [--criteria-served <id[,id...]>] \
                                    [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
-       research-actions.sh serve  <task_folder> --search <slug> --index <n> --criteria-served <id[,id...]>
-       research-actions.sh drop   <task_folder> --search <slug> --index <n>
+       research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
+       research-actions.sh drop   <task_folder> --finding <search>#<n>
        research-actions.sh check  <task_folder>
        research-actions.sh distill <task_folder>
        research-actions.sh split-read <task_folder>
@@ -252,7 +253,7 @@ do_read() {
   criteria_json="$(contract_criteria_json)"
   contract_state="absent"
   [ "$(contract_ok)" = "true" ] && contract_state="present"
-  decided="$(jq -r '(.decidedWithoutAPerson // []) | length' "$ALIGNMENT_FILE" 2>/dev/null)"
+  decided="$(jq -r "$DECIDED_JQ decidedOpen | length" "$ALIGNMENT_FILE" 2>/dev/null)"
   [ -n "$decided" ] || decided=0
   echo "action: read"
   echo "task: $TASK_PATH"
@@ -367,24 +368,30 @@ write_search_file() {
     || die3 "$action: research-render.sh could not render $search.md (exit $render_rc)"
 }
 
-# Parses the --search and --index pair `serve` and `drop` take, then checks that the search file
-# exists, is a JSON object with a findings array, and holds a finding at that index. Sets
-# FINDING_SEARCH, FINDING_INDEX and FINDING_FILE for the caller; any extra argument is an error.
-# $1 is the action name, the rest are the arguments. The index is the finding's position in the
-# file's findings array, 0 based, the same number check-research.sh reports on an orphan.
+# Parses the --finding `serve` and `drop` take, `<search>#<n>` counted from 1 (parse_finding_ref in
+# task-helpers.sh, the parser design's account uses), then checks that the search file exists, is
+# a JSON object with a findings array, and holds that finding. Sets FINDING_SEARCH, FINDING_N,
+# FINDING_INDEX (the 0-based array position, for jq only) and FINDING_FILE; any extra argument is
+# an error. $1 is the action name, the rest are the arguments. The old --search and --index pair
+# counted from 0. It refuses, naming the same finding in the new form, rather than being read
+# either way (gap row 235).
 resolve_finding() {
   local action="$1"; shift
-  local search="" index=""
+  local ref="" old_search="" old_index="" old_given=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --search)
-        [ $# -ge 2 ] || die3 "$action: --search needs a value"
-        looks_like_flag "$2" && die3 "$action: --search needs a value, got the option $2 instead"
-        search="$2"; shift 2 ;;
-      --index)
-        [ $# -ge 2 ] || die3 "$action: --index needs a value"
-        looks_like_flag "$2" && die3 "$action: --index needs a value, got the option $2 instead"
-        index="$2"; shift 2 ;;
+      --finding)
+        [ $# -ge 2 ] || die3 "$action: --finding needs a value"
+        looks_like_flag "$2" && die3 "$action: --finding needs a value, got the option $2 instead"
+        ref="$2"; shift 2 ;;
+      --search|--index)
+        old_given=true
+        if [ $# -ge 2 ] && ! looks_like_flag "$2"; then
+          if [ "$1" = "--search" ]; then old_search="$2"; else old_index="$2"; fi
+          shift 2
+        else
+          shift
+        fi ;;
       --criteria-served)
         [ "$action" = "serve" ] || die3 "$action: unrecognized argument: $1"
         [ $# -ge 2 ] || die3 "$action: --criteria-served needs a value"
@@ -393,24 +400,25 @@ resolve_finding() {
       *) die3 "$action: unrecognized argument: $1" ;;
     esac
   done
-  is_blank "$search" && die3 "$action: --search is required and must not be blank"
-  case "$search" in
-    *[!a-z0-9-]*|-*|*-)
-      die3 "$action: --search must be lowercase letters, digits and single hyphens, got '$search'" ;;
-  esac
-  is_blank "$index" && die3 "$action: --index is required: the finding's position in the file, 0 based, as check reports it"
-  case "$index" in
-    *[!0-9]*) die3 "$action: --index must be a whole number, got '$index'" ;;
-  esac
+  if [ "$old_given" = true ]; then
+    local name="${old_search:-<search>}"
+    case "$old_index" in
+      ''|*[!0-9]*) die3 "$action: --search and --index are gone. Name the finding as --finding $name#<n>, counted from 1 as research/$name.md shows it" ;;
+    esac
+    die3 "$action: --search and --index are gone. --index counted from 0; name this finding as --finding $name#$((10#$old_index + 1)), counted from 1 as research/$name.md shows it"
+  fi
+  is_blank "$ref" && die3 "$action: --finding is required: <search>#<n>, counted from 1 as research/<search>.md shows it"
+  parse_finding_ref "$action" "$ref" "$RESEARCH_DIR" \
+    || die3 "$action: no search named '$FINDING_REF_SEARCH': $RESEARCH_DIR/$FINDING_REF_SEARCH.json does not exist"
+  local search="$FINDING_REF_SEARCH" n="$FINDING_REF_N"
   local file="$RESEARCH_DIR/$search.json"
-  [ -f "$file" ] || die3 "$action: no search named '$search': $file does not exist"
   jq empty "$file" 2>/dev/null || die3 "$action: $file is not valid JSON"
   local count
   count="$(jq -r 'if type == "object" and ((.findings | type) == "array") then (.findings | length) else "none" end' "$file")"
   [ "$count" != "none" ] || die3 "$action: $file is not an object with a findings array"
-  [ "$index" -lt "$count" ] \
-    || die3 "$action: $file holds $count finding(s), so there is no finding at index $index"
-  FINDING_SEARCH="$search"; FINDING_INDEX="$index"; FINDING_FILE="$file"
+  [ "$n" -le "$count" ] \
+    || die3 "$action: $file holds $count finding(s), numbered from 1, so there is no $search#$n"
+  FINDING_SEARCH="$search"; FINDING_N="$n"; FINDING_INDEX="$((n - 1))"; FINDING_FILE="$file"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -548,12 +556,11 @@ do_serve() {
 
   local doc
   doc="$(jq --argjson i "$FINDING_INDEX" --argjson ids "$ids_json" '.findings[$i].criteriaServed = $ids' "$FINDING_FILE")" \
-    || die3 "serve: could not rewrite finding $FINDING_INDEX in $FINDING_FILE"
+    || die3 "serve: could not rewrite $FINDING_SEARCH#$FINDING_N in $FINDING_FILE"
   write_search_file serve "$FINDING_SEARCH" "$doc"
 
   echo "SERVED: $FINDING_FILE"
-  echo "search: $FINDING_SEARCH"
-  echo "index: $FINDING_INDEX"
+  echo "finding: $FINDING_SEARCH#$FINDING_N"
   echo "criteriaServed: $(printf '%s' "$ids_json" | jq -r 'join(",")')"
   echo "rendered: $RESEARCH_DIR/$FINDING_SEARCH.md"
   exit 0
@@ -563,35 +570,58 @@ do_serve() {
 # drop: removes one finding from its search file. A file left with no findings is removed with
 # its rendered markdown: a search that found nothing holds one finding saying so
 # (research-schema.json, findings), so a file holding none is a search that never reported.
-# Removing a finding moves every later one in that file down by one, so the indexes a report
+# Removing a finding moves every later one in that file down by one, so the numbers a report
 # gave for them are stale; `check` must run again before the next `drop`, and the summary says so.
 # ------------------------------------------------------------------------------------------------
+
+# One `cites:` line per finding under research/ whose text names $1#$2, the finding just dropped,
+# or a later finding of $1 the drop moved down. $3 is how many findings $1 held before the drop,
+# so a number past it names nothing and prints nothing; `check` refuses that one. A citation is
+# read by CITES_JQ in task-helpers.sh, the reader `check` uses (gap row 236). It runs after the
+# write, so each citing finding carries its own number as it stands now. It warns and never
+# refuses: only a person can tell what a citation to the finding that moved into place meant.
+cites_after_drop() {
+  local f known
+  known="$( { find "$RESEARCH_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null \
+    | while IFS= read -r f; do basename -- "$f" .json; done; printf '%s\n' "$1"; } | jq -R . | jq -sc .)"
+  find "$RESEARCH_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do
+        jq -r --arg s "$(basename -- "$f" .json)" --arg t "$1" --argjson n "$2" --argjson old "$3" \
+          --argjson known "$known" "$CITES_JQ"'
+          (.findings // []) | to_entries[] | ($s + "#" + (.key + 1 | tostring)) as $me
+          | [ (.value.text // "" | tostring) | citations($known)
+              | select(.search == $t and .n >= $n and .n <= $old) | .n ] | unique[]
+          | "cites: " + $me + " names " + $t + "#" + tostring
+            + (if . == $n then ", the finding dropped" else ", now " + $t + "#" + (. - 1 | tostring) end)
+        ' "$f" 2>/dev/null
+      done
+}
 
 do_drop() {
   resolve_finding drop "$@"
   local doc remaining
   doc="$(jq --argjson i "$FINDING_INDEX" 'del(.findings[$i])' "$FINDING_FILE")" \
-    || die3 "drop: could not remove finding $FINDING_INDEX from $FINDING_FILE"
+    || die3 "drop: could not remove $FINDING_SEARCH#$FINDING_N from $FINDING_FILE"
   remaining="$(printf '%s' "$doc" | jq -r '.findings | length')"
 
   if [ "$remaining" -eq 0 ]; then
     rm -f "$FINDING_FILE" "$RESEARCH_DIR/$FINDING_SEARCH.md" \
       || die3 "drop: could not remove $FINDING_FILE"
     echo "DROPPED: $FINDING_FILE"
-    echo "search: $FINDING_SEARCH"
-    echo "index: $FINDING_INDEX"
+    echo "finding: $FINDING_SEARCH#$FINDING_N"
     echo "findings: 0"
     echo "removed: $FINDING_FILE"
+    cites_after_drop "$FINDING_SEARCH" "$FINDING_N" "$((remaining + 1))"
     exit 0
   fi
 
   write_search_file drop "$FINDING_SEARCH" "$doc"
   echo "DROPPED: $FINDING_FILE"
-  echo "search: $FINDING_SEARCH"
-  echo "index: $FINDING_INDEX"
+  echo "finding: $FINDING_SEARCH#$FINDING_N"
   echo "findings: $remaining"
   echo "rendered: $RESEARCH_DIR/$FINDING_SEARCH.md"
-  echo "moved: every finding after index $FINDING_INDEX is now one lower; run check before the next drop"
+  echo "moved: every finding after $FINDING_SEARCH#$FINDING_N is now one lower; run check before the next drop"
+  cites_after_drop "$FINDING_SEARCH" "$FINDING_N" "$((remaining + 1))"
   exit 0
 }
 
@@ -669,6 +699,7 @@ do_check() {
           | select(endswith(": 0") | not)),
         ("unknown criterion ids: " + ((.coverage.unknownCriteriaIds // []) | map(.id) | unique | join(" "))
           | select(endswith(": ") | not)),
+        ("dangling citations: " + ((.danglingCitations // []) | length | tostring) | select(endswith(": 0") | not)),
         ("files with issues: " + ((.fileIssueCount // 0) | tostring) | select(endswith(": 0") | not))
       ] | join("; ")' "$CHECK_FILE" 2>/dev/null)"
   fi

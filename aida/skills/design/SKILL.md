@@ -83,11 +83,12 @@ A reopen that changes only owned files, done-when rows or accounted findings on 
 order may skip the research and guide reading below. Those calls are `add-owned-file`,
 `remove-owned-file`, `add-done-when`, `remove-done-when` and `account`. The reading informs an
 order's shape, not its file list. The route is the change, then `check`, `close` with the verdict the last
-`design-closed.json` records, and `distill`. A reopen that creates or merges an order, or changes
+`design-closed.json` records, and `distill`. A reopen that creates, merges or removes an order, or changes
 an order's interface, criteria or dependencies, reads as a first run does.
 
-Three changes do not halt an order that implementation already started: an added owned file, an
-`account` call, and a reason added with `update --append-reasoning`. Once design closes again,
+Four changes do not halt an order that implementation already started: an added owned file, an
+`account` call, a reason added with `update --append-reasoning`, and a row marked with
+`update --absence-reviewed`. Once design closes again,
 the next `start` takes that order's live copy in place, even when the order closed. Any other
 change to a started order halts it for design drift at the next `start`. Two routes lead back.
 Restore the design and `start` clears the halt. Or take the restart in the implement skill's
@@ -401,6 +402,21 @@ survivor. The two proofs must agree; set one order's `--proof` first when they d
 remove or edit an order file by any other means. A write outside the script prints nothing, so
 nothing records that it happened.
 
+An order that no longer earns its place, for example after the contract changed, leaves
+through the script with its reason:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove "<task_folder>" \
+  --id <woId> --reason "<why the order is gone>"
+```
+The script deletes the order's files and records the id and the reason in
+`design-removed.json`. The close copies that list into `design-closed.json`. A removed id is
+never minted again. The script refuses an order that implementation started. Fold that order
+into the order that takes its work with `merge`, and implementation's `restart` sets its
+records aside. It also refuses an order that another order depends on. It also refuses the only
+order that serves or owns a criterion of the contract. Move the dependency or the criterion
+with `update` first. A finding that the removed order accounted for shows in `check`. Account
+for it again.
+
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:
 ```
@@ -644,12 +660,25 @@ criterion the order owns, and ask what would settle it.
 negation word and the word `and`, by order and row number. This is best effort, because a script
 cannot parse a clause, and it never blocks the close. Read each row it names. When a row joins an
 absence to a behaviour, remove it with `remove-done-when`. Then add each clause with its own
-`add-done-when` call.
+`add-done-when` call. When a row does not join the two, mark it reviewed:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
+  --id <woId> --absence-reviewed <row>
+```
+The order keeps the row's text, and `check` stops naming that row. A row whose text changes is
+named again.
 
 `check` also prints `interfaceUnquoted:`, at every exit code. It names each order whose interface
 holds no name in backticks. A script cannot tell whether prose names a code element, so the line
 never blocks the close. Rewrite each such interface with `update --interface`, and quote each
 element it exposes.
+
+`check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
+order's done-when rows and tests that no interface the order declares holds. It reads the order's
+own interface, its reuses and its `dependsOn` orders. The test author may not open source, so a
+missing signature stops the tests. It is best effort, and a call a clause denies is named too. It
+never blocks the close. Answer each one: add the reuse with `dispose --path --interface`, or say
+why the call needs no signature.
 
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 
@@ -801,14 +830,16 @@ of `design/*.json` and `design-closed.json`. Never a summary of this conversatio
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
-`gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
-written. Send the same agent one message: write the file and read it back. An agent has reported
-a write it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar
-was malformed. The script set it aside at the `setAside:` path it printed. Dispatch a fresh
-distiller, with the rule it broke quoted from `agents/distiller.md`. Then run the same call
-again. A second exit 4 stops for the person: show the stderr line and the path set aside. A
-dispatch that ends before the role's first write is the third case. The scope skill states the
-rule under "The distill check": once more with the same message, then once on `model: sonnet`.
+`gap:` line; acting on one is an `update` and a second close. `standsAlone: stale` means the
+orders or the close changed after the distiller read them: dispatch it again, then run the same
+call again. Exit 2 means the sidecar was not written. Send the same agent one message: write the
+file and read it back. An agent has reported a write it never made. Dispatch a fresh one only
+when exit 2 repeats. Exit 4 means the sidecar was malformed. The script set it aside at the
+`setAside:` path it printed. Dispatch a fresh distiller, with the rule it broke quoted from
+`agents/distiller.md`. Then run the same call again. A second exit 4 stops for the person: show
+the stderr line and the path set aside. A dispatch that ends before the role's first write is the
+third case. The scope skill states the rule under "The distill check": once more with the same
+message, then once on `model: sonnet`.
 
 Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
 never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with

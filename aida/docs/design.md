@@ -31,6 +31,17 @@ row leaves through `remove-done-when` and an owned file through `remove-owned-fi
 moved to another order then leaves no rows behind. All print what moved, so the change is
 on record the way every other design write is.
 
+An order that no longer earns its place, for example after the contract changed, leaves through
+`remove` with a reason. The reason goes into `design-removed.json`, and the close copies it into
+its own record. A reader can then tell why a number is missing, and the number is never used
+again. `remove` refuses an order that implementation started, an order another order depends
+on, and the only order that serves or owns a criterion. A started order is folded with `merge`
+instead, and implementation's `restart` sets its records aside.
+
+The design check names each done-when row that holds a negation word and "and", because such a
+row may join an absence to a behaviour. A row that does not can be marked reviewed with
+`update --absence-reviewed`. The check then stops naming it until its text changes.
+
 ## What a work order declares
 
 | Field | What it says |
@@ -279,6 +290,10 @@ Which of the other three proofs fits is a judgment, so no exit code holds it.
 It also prints `interfaceUnquoted:` with every order whose interface names nothing in backticks.
 A script cannot tell whether prose names a code element, so this does not hold the close either.
 
+It also prints `callsUndeclared:` with each `name()` call a done-when row or a test makes that no
+interface the order declares holds. The test author cannot read source to learn the signature. A
+call a clause denies is named too, so this does not hold the close either.
+
 A clean check says design is finished, subject to your confirmation above. An open item names
 the order it is on and its remedy: the missing test, the owner to reconcile, the dependency to
 add. A dependency points from the owner to the order it needs, never the other way. An order no
@@ -356,18 +371,20 @@ edited after design closed. Changing a closed design is supported: edit the orde
 again, and the new hash replaces the old. A reopen that only adds or removes an owned file or a
 done-when row, or only changes accounted findings, may skip the research and guide reading. That reading shapes an order, not its file
 list. A change to an order that implementation already started halts that order for design drift.
-Three changes are the exception. The first is an added owned file. The second is a change to the
+Four changes are the exception. The first is an added owned file. The second is a change to the
 order's research findings through `account`. The third is a paragraph appended to its reasoning
-with `update --append-reasoning`. The critics judge only the orders implementation has not
+with `update --append-reasoning`. The fourth is a done-when row marked reviewed with
+`update --absence-reviewed`. The critics judge only the orders implementation has not
 closed. The design check drops a critique row that names only closed orders.
 Put the design back and the next build clears the halt, or take the restart.
 
 After the close, the distiller, the same reader scope and research dispatch, checks whether the
 record stands alone without the conversation that produced it. Does each approach carry its
-reason, and is each rejected alternative named? It never blocks. Design shows each gap it
-names; acting on one is an edit and a second close. A malformed distiller record is renamed
-beside its original path, dated, and a fresh distiller runs with the rule it broke. A second
-malformed record stops for you.
+reason, and is each rejected alternative named? It never blocks. Design shows each gap it names;
+acting on one is an edit and a second close. A malformed distiller record is renamed beside its
+original path, dated, and a fresh distiller runs with the rule it broke. A second malformed
+record stops for you. A reader's answer older than the last change to the record is stale. The
+close says so, shows none of its old gaps, and asks for the reader again.
 
 Interactively, design stops here and names the next command, `/aida:implement <task-id>`.
 Autonomously, it starts implementation itself. Each stage refuses to start without the previous

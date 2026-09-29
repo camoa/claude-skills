@@ -14,9 +14,15 @@
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
 #   is_blank <value>                      true when the value is empty or only whitespace
+#   parse_finding_ref <action> <ref> <research folder>
+#                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
+#                                         <search>#<n>, counted from 1; 1 when no such search
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
+#   version_at_least <have> <want>        true when <have> is <want> or later
+#   warn_newer_installed                  one stderr line when a newer copy of this plugin sits
+#                                         beside PLUGIN_ROOT; runs once when this file is sourced
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
@@ -49,6 +55,13 @@
 #                                         a negation word
 #   REASONING_JQ                          jq definitions: `struckMark`, and `liveReasoning`,
 #                                         a work order's reasoning with no struck paragraph
+#   CITES_JQ                              a jq definition, `citations($known)`, the findings
+#                                         a finding's text cites
+#
+# Every script that sources this file runs warn_newer_installed. These never source it, so
+# they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
+# check-design.sh, and every hook but session-start.sh, which discards the line.
+# project-actions.sh sources it in check-machine alone.
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
 # and is_git_repo from scripts/lib/recipes.sh. Two callers, scope and design, do not source that
@@ -81,6 +94,20 @@ REASONING_JQ='
   def struckMark: "[struck] ";
   def liveReasoning: (.reasoning // "") | split("\n\n")
     | map(select(startswith(struckMark) | not)) | join("\n\n");'
+
+# The findings a finding's text cites, any case: `<search>#<n>`, or `<search>[.json|.md]
+# finding <n>`, or `findings <n> and <n>` (gap rows 235 and 236). Research's drop and its check
+# read citations alike, so they take them from here. `citations($known)` yields {search, n} per
+# number. A bare name before `finding` counts only when $known, the task's search names, holds
+# it, so "see finding 2" in prose is not read as a search called "see".
+# shellcheck disable=SC2034 # read by the sourcing script
+CITES_JQ='
+  def citations($known):
+    [ scan("(?i)(?<![a-z0-9-])([a-z0-9]+(?:-[a-z0-9]+)*)(\\.json|\\.md)?(?:#([0-9]+)|\\s+findings?\\s+([0-9]+(?:\\s+and\\s+[0-9]+)*))") ]
+    | .[] | (.[0] | ascii_downcase) as $s
+    | select(.[1] != null or .[2] != null or (($known | index($s)) != null))
+    | (if .[2] != null then .[2] else (.[3] | scan("[0-9]+")) end)
+    | {search: $s, n: tonumber};'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
 # task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree
@@ -190,6 +217,24 @@ is_blank() {
   return 0
 }
 
+# A research finding is named `<search>#<n>`: its search's file under research/, and its place
+# in that file's findings, counted from 1 as research-render.sh numbers it. Research's serve and
+# drop and design's account take this one form, so a person meets one number (gap row 235).
+# $1 the action, $2 the reference, $3 the research folder. Sets FINDING_REF_SEARCH and
+# FINDING_REF_N. Dies 3 on a reference not in that form. Returns 1 when research holds no file
+# for the search, before the number is read, so each caller refuses that with its own exit code.
+# Whether the finding exists is the caller's question.
+parse_finding_ref() {
+  local who="$1" ref="$2" dir="$3" search n
+  search="${ref%#*}"; n="${ref##*#}"
+  case "$ref" in *'#'*) ;; *) die3 "$who: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
+  case "$search" in ''|*[!a-z0-9-]*|-*|*-) die3 "$who: --finding must be <search>#<n>, got '$ref'" ;; esac
+  FINDING_REF_SEARCH="$search"
+  [ -f "$dir/$search.json" ] || return 1
+  case "$n" in ''|0*|*[!0-9]*) die3 "$who: --finding must be <search>#<n>, numbered from 1 as research/$search.md shows it, got '$ref'. $search#1 is: $(jq -r '(.findings // [])[0].text // "" | split("\n")[0]' "$dir/$search.json" 2>/dev/null)" ;; esac
+  FINDING_REF_N="$n"
+}
+
 # Writes $2 (assumed already-valid JSON text) to $1 through a temporary file in the target's own
 # directory, then renames over the target. The rename stays inside one filesystem, and a failure
 # partway through never leaves a half-written file at $1.
@@ -215,13 +260,75 @@ write_atomic() {
 # record. Live-run row 134 had critics dispatched by beta.15 and the close written by beta.21,
 # and nothing on disk said so. Nothing reads the field back; it is for a person or a later
 # reader. A file that is missing, unreadable or malformed prints `unknown`, never an empty
-# string. The record then still says a version was asked for and not found. This is the one jq
-# call on plugin.json in the plugin.
+# string. The record then still says a version was asked for and not found. warn_newer_installed
+# reads the same field in its one scan of this folder and its siblings.
 plugin_version() {
   local version
   version="$(jq -r '.version // empty' "${PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null)"
   [ -n "$version" ] || version="unknown"
   printf '%s' "$version"
+}
+
+# True when $1, a dotted version, is $2 or later. Three fields, compared as numbers, because
+# `sort -V` is not on every build. A field that is not a number counts as zero, so two
+# prereleases of one version compare equal.
+version_at_least() {
+  local have="$1" want="$2" hp wp i
+  i=1
+  while [ "$i" -le 3 ]; do
+    hp="$(printf '%s' "$have" | cut -d. -f"$i")"
+    wp="$(printf '%s' "$want" | cut -d. -f"$i")"
+    case "$hp" in ''|*[!0-9]*) hp=0 ;; esac
+    case "$wp" in ''|*[!0-9]*) wp=0 ;; esac
+    [ "$hp" -gt "$wp" ] && return 0
+    [ "$hp" -lt "$wp" ] && return 1
+    i=$((i + 1))
+  done
+  return 0
+}
+
+# A plugin update keeps the old version's folder in the plugin cache, one folder per version
+# under one parent. A skill loaded before the update still names the old folder's scripts, and
+# they still run (gap row 238). So every script that sources this file says so, once, when a
+# sibling folder holds this plugin at a later version. A sibling counts only when its plugin.json
+# carries this plugin's name, so a marketplace clone, whose siblings are other plugins, stays
+# quiet. It warns and never refuses: the old scripts still work, and the person decides when to
+# reload. stderr, because stdout of several actions is read as data. Nothing is written.
+#
+# One jq call reads every plugin.json and compares inside jq, because a call per folder cost about
+# half a second per script start on a cache of 23 versions. The files are read as raw lines and
+# parsed per file, so one malformed file drops out alone. The key is the first three dotted fields
+# as numbers, a field that is not a number counting as zero, as version_at_least reads them. The
+# export marks the scan done, warned or not, so a script another script started does not scan
+# again.
+#
+# Claude Code leaves `.orphaned_at` in a cache folder it no longer uses. The mirror does not
+# document that file, so this rests on observed behaviour. A sibling carrying it is not installed
+# and is skipped, so a downgrade does not warn. The running folder counts either way. If the
+# marker is renamed, orphaned folders count again, and the scan warns more, not less.
+warn_newer_installed() {
+  local dir found
+  [ -z "${AIDA_NEWER_CHECKED:-}" ] || return 0
+  export AIDA_NEWER_CHECKED=1
+  set -- "${PLUGIN_ROOT}/.claude-plugin/plugin.json"
+  for dir in "$(dirname -- "$PLUGIN_ROOT")"/*/; do
+    # The running folder is already $1; named twice, its lines would join into two objects.
+    [ "${dir}.claude-plugin/plugin.json" != "$1" ] && [ -f "${dir}.claude-plugin/plugin.json" ] \
+      && [ ! -e "${dir}.orphaned_at" ] && set -- "$@" "${dir}.claude-plugin/plugin.json"
+  done
+  found="$(jq -nrR --arg own "$1" '
+    def key: (split(".")[0:3] | map(tonumber? // 0)) + [0, 0, 0] | .[0:3];
+    [inputs | {f: input_filename, l: .}] | group_by(.f)
+    | map({f: .[0].f, j: (map(.l) | join("\n") | fromjson?)} | select(.j | type == "object"))
+    | (map(select(.f == $own))[0].j // {}) as $me
+    | select(($me.name | type) == "string" and ($me.version | type) == "string")
+    | [.[].j | select(.name == $me.name and (.version | type) == "string") | .version]
+    | max_by(key) as $top
+    | select(($top | key) > ($me.version | key))
+    | "AIDA \($top) is installed, and this script runs from \($me.version). Run /reload-plugins, load the skill again, then restart the current step on \($top)."
+  ' "$@" 2>/dev/null)"
+  [ -z "$found" ] || printf '%s\n' "$found" >&2
+  return 0
 }
 
 # The run mode of one stage, from task.json (task-schema.json, runMode and runModeStages). The
@@ -307,6 +414,21 @@ automated_tests() {
   printf '%s' "$answer"
 }
 
+# The orders implementation has started, as a JSON array of ids. Started means a ledger step
+# reached or an attempt spent, a frozen test record, or a build record. Design's `remove` and
+# implementation's `start` both read it. $1 the canonical task folder.
+started_orders_json() {
+  local impl="$1/implementation" ids f
+  ids="$(jq -c '[ (.orders // [])[] | select(.lastStep != null or (.attemptsUsed // 0) > 0) | .id ]' "$impl/ledger.json" 2>/dev/null)"
+  [ -n "$ids" ] || ids='[]'
+  # find, not a glob: zsh refuses a glob that matches nothing.
+  while IFS= read -r f; do
+    f="$(basename -- "$f" .json)"
+    ids="$(printf '%s' "$ids" | jq -c --arg id "${f#*-}" 'if index($id) == null then . + [$id] else . end')"
+  done < <(find "$impl" -mindepth 1 -maxdepth 1 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' \) 2>/dev/null)
+  printf '%s' "$ids"
+}
+
 # Moves the task to in_progress the first time a stage writes into it (skills/task/SKILL.md,
 # `start`: a task becomes in progress the moment a stage first writes an artifact into it). It
 # reads the state first, so a task already in progress costs no process and prints nothing. Any
@@ -376,12 +498,77 @@ sidecar_set_aside() {
   echo "setAside: $aside"
 }
 
+# The one reading of decidedWithoutAPerson, DECIDED_JQ (gap row 232).
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/decided.sh"
+
+# The records the distiller reads for one stage, the set distill-schema.json's `stage` names, as
+# paths in the task folder, sorted. Run it from inside the task folder. $1 the stage.
+distill_records() {
+  case "$1" in
+    scope)    printf 'alignment.json\n' ;;
+    research) find research -maxdepth 1 -type f -name '*.json' 2>/dev/null; printf 'records/research-check.json\n' ;;
+    design)   find design -maxdepth 1 -type f -name '*.json' 2>/dev/null; printf 'design-closed.json\n' ;;
+  esac | sort
+}
+
+# The sha256 of stdin. records-hash.sh is sourced here for the sha256 tool, the way distill_read
+# sources schema-check.sh.
+distill_sha256() {
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/records-hash.sh" || die3 "distill: the records-hash library failed to load"
+  records_hash__resolve_sha256_cmd || die3 "distill: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1
+}
+
+# The sha256 over the records distill_records names: each present file's path, then its bytes.
+# $1 the task folder, $2 the stage.
+distill_records_hash() {
+  (cd "$1" && distill_records "$2" | while IFS= read -r rel; do
+    [ -f "$rel" ] || continue
+    printf '%s\n' "$rel"
+    cat -- "$rel"
+  done) | distill_sha256
+}
+
+# Whether records/<stage>-distill.json was written before the last change to the records it read
+# (gap row 233). Prints yes or no, and no when there is no sidecar. The first read that finds a
+# sidecar current writes records/<stage>-distill.stamp beside it: the sidecar's own sha256 and the
+# records hash, one JSON object. The distiller never reads or writes the stamp. While the sidecar
+# still matches its stamp, the records hash decides. A sidecar with no stamp, or one the distiller
+# rewrote since, even with the same bytes, compares file times, because the distiller writes after
+# it reads. A stage action
+# that writes its records before distill_read calls this first and passes the answer on. $1 the
+# task folder, $2 the stage.
+distill_stale() {
+  local task_folder="$1" stage="$2" sidecar stamp stamped hash newer
+  sidecar="$task_folder/records/$stage-distill.json"
+  stamp="$task_folder/records/$stage-distill.stamp"
+  [ -f "$sidecar" ] || { echo no; return 0; }
+  if [ -f "$stamp" ]; then
+    stamped="$(jq -r '.sidecar // empty' "$stamp" 2>/dev/null)"
+    hash="$(distill_sha256 <"$sidecar")" || exit $?
+    if [ -n "$stamped" ] && [ "$stamped" = "$hash" ] && ! [ "$sidecar" -nt "$stamp" ]; then
+      hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
+      if [ "$(jq -r '.records // empty' "$stamp" 2>/dev/null)" = "$hash" ]; then echo no; else echo yes; fi
+      return 0
+    fi
+  fi
+  newer="$(cd "$task_folder" && distill_records "$stage" | while IFS= read -r rel; do
+    [ -f "$rel" ] && [ "$rel" -nt "records/$stage-distill.json" ] && echo "$rel"
+  done)"
+  if [ -n "$newer" ]; then echo yes; else echo no; fi
+}
+
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
-# blocks, so both values exit 0. schema-check.sh is sourced here because no stage script sources
-# it on its own. $1 the canonical task folder, $2 the stage.
+# blocks, so every value exits 0. schema-check.sh is sourced here because no stage script sources
+# it on its own. A stale sidecar prints `standsAlone: stale` and a `stale:` line naming the
+# dispatch that refreshes it, and none of its gaps. A current one gets its stamp, as distill_stale
+# says. $1 the canonical task folder, $2 the stage, $3 optional, the answer distill_stale gave
+# before the caller wrote its records.
 distill_read() {
-  local task_folder="$1" stage="$2" sidecar schema result faults
+  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults sidecar_hash records_hash
   sidecar="$task_folder/records/$stage-distill.json"
   schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
   [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
@@ -395,6 +582,16 @@ distill_read() {
     sidecar_set_aside "$sidecar"
     die4 "distill: $sidecar has standsAlone and gaps that disagree. False needs a gap, and a gap needs false"
   fi
+  [ -n "$stale" ] || stale="$(distill_stale "$task_folder" "$stage")" || exit $?
+  if [ "$stale" = "yes" ]; then
+    echo "standsAlone: stale"
+    echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again, then run this call again"
+    return 0
+  fi
+  sidecar_hash="$(distill_sha256 <"$sidecar")" || exit $?
+  records_hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
+  write_atomic "$task_folder/records/$stage-distill.stamp" \
+    "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }
@@ -535,3 +732,5 @@ active_tree_for() {
     printf '%s' "$code"
   fi
 }
+
+warn_newer_installed

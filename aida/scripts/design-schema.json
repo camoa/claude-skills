@@ -146,6 +146,12 @@
       },
       "description": "The research findings this order accounts for, one entry per finding, written by design-actions.sh's `account` alone (gap row 223). An entry with no `setAside` is a finding this order uses, and the build brief carries it. An entry with `setAside` is a finding design weighed and did not use, with the reason, and a critic reads that reason. `check` and `close` refuse while a finding under research/ is in no order's list. Optional: an order accounted for nothing has none."
     },
+    "absenceReviewed": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The done-when rows a person reviewed after `check` flagged them under `absenceJoined:`, each held by its full text, written by design-actions.sh's `update --absence-reviewed` alone (gap row 237). `check` stops flagging a row whose text is here. A row whose text changes flags again, because its new text is not here. Optional: an order with no reviewed row has none."
+    },
     "verify": {
       "type": "array",
       "default": [],

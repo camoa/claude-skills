@@ -173,7 +173,7 @@ contract and every search file, in both directions. Every criterion the contract
 a finding somewhere, and every finding must cite a criterion. The same data, grouped the other
 way, is the report, so nothing is authored twice.
 
-The check refuses on five things:
+The check refuses on six things:
 
 - A finding with a missing or broken field. Research drops it and records it again. A file that
   is not JSON, or broken above its findings, is one no AIDA action wrote. Research names it and
@@ -185,7 +185,11 @@ The check refuses on five things:
   looked for, so research serves it with that id. A positive finding attached to nothing is work
   nobody asked for, so research serves it with the criterion it serves or drops it. Serving and
   dropping are their own actions on one finding, because recording again adds a finding and
-  removes none.
+  removes none. Both name the finding `<search>#<n>`, counted from 1, the number the rendered
+  file and design use. A drop names each finding whose text cites the dropped one, or a later
+  one it moved down, so research rewrites those.
+- A finding whose text cites a finding research does not hold: a search with no file, or a
+  number past its findings. Research rewrites the citing finding.
 - The spike folder still on disk. Delete it, then check again; nothing else is missing.
 
 Research is done only when the check passes. Every gap is closed one of three ways: recording
@@ -194,10 +198,11 @@ deliberately open, because design refuses to start until this check has passed. 
 commits the task folder; nothing before it is committed.
 
 After the check, research dispatches a reader, the distiller, over the findings on disk, never
-the conversation, and it says whether they stand alone. Each gap it names is one advisory
-line, and acting on one is another recorded finding. It blocks nothing. A malformed distiller
-record is renamed beside its original path, dated, and a fresh distiller runs with the rule it
-broke. A second malformed record stops for you.
+the conversation, and it says whether they stand alone. Each gap it names is one advisory line,
+and acting on one is another recorded finding. It blocks nothing. A malformed distiller record
+is renamed beside its original path, dated, and a fresh distiller runs with the rule it broke. A
+second malformed record stops for you. A reader's answer older than the last change to the
+record is stale. The close says so, shows none of its old gaps, and asks for the reader again.
 
 **A task with no automated tests.** When the contract says the task has none, the search in
 your own code also asks whether a test runner covers the changed code. When one does, research

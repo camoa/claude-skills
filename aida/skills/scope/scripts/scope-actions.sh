@@ -252,12 +252,12 @@ id_kind() {
 # text field.
 contract_summary() {
   echo "contract-file: $ALIGNMENT_FILE"
-  jq -r '
+  jq -r "$DECIDED_JQ"'
     "goal-set: " + (if (.goal // "") == "" then "no" else "yes" end),
     "expected-result-set: " + (if (.expectedResult // "") == "" then "no" else "yes" end),
     "criteria: " + ([(.criteria // [])[] | .id] | join(" ")),
     "non-goals: " + ([(.nonGoals // [])[] | .id] | join(" ")),
-    "decided-without-a-person: " + ((.decidedWithoutAPerson // []) | length | tostring)' \
+    "decided-without-a-person: " + (decidedOpen | length | tostring)' \
     "$ALIGNMENT_FILE"
   echo "automated-tests: $(automated_tests "$TASK_PATH")"
 }
@@ -758,8 +758,10 @@ do_record_decision() {
 # The close both branches share: commits the contract, then reads the sidecar the distiller
 # wrote; the read is distill_read in task-helpers.sh. The commit comes first because the contract
 # is final by then whatever the distiller wrote, and a missing or malformed sidecar exits 2 or 4
-# without blocking the stage. A second close after a re-dispatch finds nothing to commit.
+# without blocking the stage. A second close after a re-dispatch finds nothing to commit. $1 is
+# distill_stale's answer, taken before the caller's first write to the contract.
 close_scope() {
+  local stale="$1"
   # The goal is the reason. init writes it as "", and a commit with an empty reason is refused
   # by the shape check, so a contract closed without one says that instead.
   local why
@@ -776,7 +778,7 @@ close_scope() {
     write_atomic "$ALIGNMENT_FILE" "$stamped"
   fi
   commit_stage_close "$TASK_PATH" scope "Close scope for $(jq -r '.id' "$TASK_FILE")" "$why"
-  distill_read "$TASK_PATH" scope
+  distill_read "$TASK_PATH" scope "$stale"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -785,7 +787,9 @@ close_scope() {
 # row (sources/nyc-defects-2026-09-14.md, item 14). A question the model decides when to ask is
 # one it can repeat. This promotes every criterion still `designer` to `owner`, then closes as
 # `distill` does. Nothing left to promote is not a refusal. The contract was already approved,
-# and the call says so, still commits any later edit, and reads the sidecar again.
+# and the call says so, still commits any later edit, and reads the sidecar again. It also marks
+# each open decidedWithoutAPerson entry as approved by the person today, so no later reader takes
+# an approved contract for an unapproved one (gap row 232).
 # ------------------------------------------------------------------------------------------------
 
 do_approve() {
@@ -795,7 +799,8 @@ do_approve() {
 
   require_alignment_exists "approve"
 
-  local ids count updated
+  local ids count updated marked stale
+  stale="$(distill_stale "$TASK_PATH" scope)" || exit $?
   ids="$(jq -r '[.criteria[] | select(.author == "designer") | .id] | join(" ")' "$ALIGNMENT_FILE")"
   count="$(jq -r '[.criteria[] | select(.author == "designer")] | length' "$ALIGNMENT_FILE")"
   if [ "$count" -gt 0 ]; then
@@ -806,18 +811,28 @@ do_approve() {
   else
     echo "ALREADY APPROVED: no criterion is still designer, nothing to promote"
   fi
+  marked="$(jq "$DECIDED_JQ decidedOpen | length" "$ALIGNMENT_FILE")"
+  if [ "$marked" -gt 0 ]; then
+    updated="$(jq --arg at "$(date -u +%Y-%m-%d)" '.decidedWithoutAPerson |= map(
+        if type == "string" then {text: ., approvedAt: $at, approvedBy: "person"} else . end)' "$ALIGNMENT_FILE")" \
+      || die3 "approve: could not update $ALIGNMENT_FILE"
+    write_atomic "$ALIGNMENT_FILE" "$updated"
+  fi
   echo "promoted: $count"
+  echo "approved-decisions: $marked"
   [ -z "$ids" ] || echo "promoted-ids: $ids"
   contract_summary
   # Rendered before the commit, so the committed folder carries the page as promoted.
   render_alignment
-  close_scope
+  close_scope "$stale"
   exit 0
 }
 
 do_distill() {
   [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
-  close_scope
+  local stale
+  stale="$(distill_stale "$TASK_PATH" scope)" || exit $?
+  close_scope "$stale"
   exit 0
 }
 

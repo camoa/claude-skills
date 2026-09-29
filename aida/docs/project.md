@@ -219,6 +219,12 @@ machine can reach a task's worktree at all. It reads the Claude Code version, th
 where the check ran, and the trees git holds against the task records. It names each repair and
 performs none of them.
 
+A plugin update keeps the old version on disk, so a skill loaded before the update still runs the
+old scripts. Every stage script then prints one warning line. The line names the installed
+version and the version the script runs from. It tells you to run `/reload-plugins`, load the
+skill again, and restart the current step on the new version. The script still does its work;
+the warning refuses nothing.
+
 ## Ending a project
 
 A project carries one of three lifecycle states, and every transition between them is

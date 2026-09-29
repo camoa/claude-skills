@@ -101,6 +101,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # record is open (live-run row 92). A fixer's record carries the key too: the order's list plus
 # the `allowedFiles` of the round's fix brief, which must exist (live-run row 116). No other
 # role's record carries the key.
+# A test author's record carries `denyCommand`, the runtime forms scripts/introspection-forms.txt
+# lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
 #   implement-actions.sh dispatch-close <task_folder> [--no-report]
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. The
@@ -121,13 +123,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Every action prints a summary of `key: value` lines and nothing else: no record body, no diff, no
 # command output, no brief, no finding's evidence. Each line that a person may want in full names
 # the path that holds it. The five brief actions write their brief to a file under
-# <task_folder>/implementation/ and print its path, which the dispatch then names:
+# <task_folder>/implementation/ and print its path, which the dispatch then names. Each brief
+# carries the task's worktree under `worktree`, and prints it (gap row 230):
 # brief-<unit_id>-tests.json, brief-<unit_id>-build.json, brief-<unit_id>-review.json,
 # brief-<unit_id>-fix-<round>.json and brief-<unit_id>-verify-<round>.json. `read`, `start` and
 # every record action end with a `next:` line, derived from the ledger the way SKILL.md's routing
 # table reads it. The two exceptions to the summary rule are the bodies a person or a caller has to
 # read verbatim: `tests-freeze`'s checklist rows, and `step`'s own step file. `restart` prints the
-# archive path alone, and `dispatch-open` the denied paths and the record path.
+# archive path alone, and `dispatch-open` the worktree, the denied paths and the record path.
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -1865,14 +1868,8 @@ do_start() {
       # stays a halt and `restart` drops it. The live copy is taken, or the frozen one dropped,
       # only when design closed on the live files, the same rule a new run applies to the whole
       # design.
-      local started_ids_json drifted_id
-      started_ids_json="$(jq -c '[ (.orders // [])[] | select(.lastStep != null or (.attemptsUsed // 0) > 0) | .id ]' "$LEDGER_FILE" 2>/dev/null)"
-      [ -n "$started_ids_json" ] || started_ids_json='[]'
-      for drifted_id in $(printf '%s' "$drifted_orders_json" | jq -r '.[].id'); do
-        if [ -e "$IMPL_DIR/tests-$drifted_id.json" ] || [ -e "$IMPL_DIR/build-$drifted_id.json" ]; then
-          started_ids_json="$(printf '%s' "$started_ids_json" | jq -c --arg id "$drifted_id" '. + [$id]')"
-        fi
-      done
+      local started_ids_json
+      started_ids_json="$(started_orders_json "$TASK_PATH")"
       resnapshot_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
@@ -1882,7 +1879,8 @@ do_start() {
       # A started order whose live copy differs from the frozen one only by added owned files is
       # not halted either (live-run row 91), and neither is one that only took research findings
       # from `account` (gap row 226), and neither is one whose reasoning only grew by
-      # `update --append-reasoning`: the live value starts with the frozen one (gap row 227). Its
+      # `update --append-reasoning`: the live value starts with the frozen one (gap row 227).
+      # Neither is one whose absence rows design marked reviewed (gap row 237). Its
       # frozen tests were written from the criteria and the order's other fields, and none of
       # those changed, so the live copy is taken in place:
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
@@ -1896,10 +1894,10 @@ do_start() {
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .findings, .reasoning)) == ($s | del(.ownedFiles, .findings, .reasoning)))
+              | select(($l | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
-              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning)
+              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning or $l.absenceReviewed != $s.absenceReviewed)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
               | $d ]')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
@@ -3981,7 +3979,7 @@ do_tests_brief() {
         --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
         --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
-        --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+        --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
@@ -3989,12 +3987,14 @@ do_tests_brief() {
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
-     | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end')"
+     | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end
+     | .worktree = $worktree')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit.id,
      brief: $brief,
+     worktree: .worktree,
      criteria: ([ .criteria[] | .id + " (" + .verifiedBy + ")" ]),
      nonGoals: (.nonGoals | length),
      declaredTests: (.unit.tests | length),
@@ -5563,11 +5563,12 @@ do_build_brief() {
   # the brief says so under commitIn (nyc defect 17).
   local bb_codepath bb_head
   bb_head=""
+  rv_load_codepath "build-brief"
   br_order_facts "$BB_UNIT_JSON"
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     bb_codepath="$(resolve_project_folder "$TASK_PATH")"
   else
-    bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+    bb_codepath="$RV_CODEPATH"
   fi
   if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
     bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
@@ -5595,7 +5596,7 @@ do_build_brief() {
   local brief_file brief_json
   brief_file="$IMPL_DIR/brief-$unit_id-build.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
-        --arg commitIn "$bb_codepath" \
+        --arg commitIn "$bb_codepath" --arg worktree "$RV_CODEPATH" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --arg reportPath "$IMPL_DIR/answers-$unit_id-attempt$((attempts_used + 1)).md" \
@@ -5605,7 +5606,7 @@ do_build_brief() {
         --arg beforeLookPath "$bb_before" \
         --argjson previousAttempt "$previous_attempt_json" \
         --arg fakeMarker "$(! task_is_light "$TASK_PATH" || printf '%s' "$FAKE_MARKER")" \
-    '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
+    '{unit: $unit, worktree: $worktree, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
@@ -5621,6 +5622,7 @@ do_build_brief() {
   im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" --arg beforeState "$bb_before_state" '
     {order: .unit.id,
      brief: $brief,
+     worktree: .worktree,
      reportPath: .reportPath,
      interfacePath: .interfacePath,
      headNow: (if .headNow == "" then "none: the commit of \(.commitIn) could not be read" else .headNow end),
@@ -8042,10 +8044,11 @@ RB_PATHS
     --arg findingsPath "$IMPL_DIR/review-$unit_id-findings.json" \
     --arg startedAt "$started_at" --arg commit "$commit" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
-    --arg recipes "$(rv_recipe_refs)" \
+    --arg recipes "$(rv_recipe_refs)" --arg worktree "$RV_CODEPATH" \
     '{
       unit: $unit,
       mode: "review",
+      worktree: $worktree,
       criteria: $criteria,
       nonGoals: $nonGoals,
       order: $order,
@@ -8069,6 +8072,7 @@ RB_PATHS
   im_print_summary "review-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit,
      brief: $brief,
+     worktree: .worktree,
      diff: .diffPath,
      deliverables: (.deliverables | length),
      findingsPath: .findingsPath,
@@ -8487,9 +8491,11 @@ FB_ALLOW
     --arg reportPath "$IMPL_DIR/answers-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
-    --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
+    --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+    --arg worktree "$RV_CODEPATH" '
     {
       unit: $unit,
+      worktree: $worktree,
       round: $round,
       roundsUsed: $roundsUsed,
       roundsAllowed: $roundsAllowed,
@@ -8509,6 +8515,7 @@ FB_ALLOW
     {order: .unit,
      round: "\(.round) of \(.roundsAllowed)",
      brief: $brief,
+     worktree: .worktree,
      reportPath: .reportPath,
      headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
      finding: ([ .findings[] | {id, severity, linkedTo: ("cites " + (.linkedTo // "nothing")), file} ]),
@@ -8896,6 +8903,7 @@ do_verify_brief() {
   rv_load_state "verify-brief" "$unit_id"
   rv_require_step "verify-brief" "$unit_id" "fixed"
   rv_load_review_record "verify-brief" "$unit_id"
+  rv_load_codepath "verify-brief"
 
   local rounds_used already
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
@@ -8931,10 +8939,11 @@ do_verify_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
     --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" \
-    --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" '
+    --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" --arg worktree "$RV_CODEPATH" '
     $fix[0] as $fix
     | {unit: $unit,
      mode: "verify",
+     worktree: $worktree,
      round: $round,
      findings: $findings,
      fixDiffPath: ($fix.diffPath // ""),
@@ -8948,6 +8957,7 @@ do_verify_brief() {
     {order: .unit,
      round: .round,
      brief: $brief,
+     worktree: .worktree,
      fixDiff: .fixDiffPath,
      fixReport: .fixReportPath,
      verdictsPath: .verdictsPath,
@@ -10885,7 +10895,7 @@ TG_OWNED
   # record carries the same key: the order's list plus the `allowedFiles` of the round's fix
   # brief. So the hook refuses it a write outside the scope a person allowed (live-run row 116).
   # A fixer with no fix brief for the round has nothing to be held to, so that refuses.
-  local record_json owned_extra='{}' fx_round fx_brief fx_allowed
+  local record_json owned_extra='{}' fx_round fx_brief fx_allowed forms_file
   if [ "$role_bare" = "implementer" ]; then
     owned_extra="$(jq -nc --argjson m "$mine_json" '{ownedFiles: $m}')"
   elif [ "$role_bare" = "fixer" ]; then
@@ -10897,6 +10907,15 @@ TG_OWNED
     [ -n "$fx_allowed" ] \
       || die 3 "dispatch-open: no fix brief for round $fx_round of $unit_id at $fx_brief. Run fix-brief first: the fixer's record takes the paths it allowed."
     owned_extra="$(jq -nc --argjson m "$mine_json" --argjson a "$fx_allowed" '{ownedFiles: ($m + $a | unique)}')"
+  elif [ "$role_bare" = "test-author" ]; then
+    # A runtime shows the shape of production code as surely as a read of its source, and the
+    # live author took every signature it lacked that way (gap row 231). The forms are data, so
+    # the read hook names no language.
+    forms_file="$PLUGIN_ROOT/scripts/introspection-forms.txt"
+    owned_extra="$(grep -v -e '^#' -e '^[[:space:]]*$' "$forms_file" 2>/dev/null \
+      | jq -R -s -c '{denyCommand: (split("\n") | map(select(length > 0)))}')"
+    [ "$(printf '%s' "$owned_extra" | jq '.denyCommand | length' 2>/dev/null)" -gt 0 ] 2>/dev/null \
+      || die 3 "dispatch-open: $forms_file holds no form or could not be read. This plugin's own files are incomplete; nothing about the task is wrong."
   fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
@@ -10908,15 +10927,19 @@ TG_OWNED
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
-  local deny_count
+  echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
+  local deny_count main
+  main="$(main_checkout "$(project_code_path_value "$RV_PROJECT_FOLDER")" "$(cd "$codepath" && pwd -P)")"
   deny_count="$(printf '%s' "$deny_json" | jq 'length' 2>/dev/null)"
   [ -n "$deny_count" ] || deny_count=0
   if [ "$deny_count" -gt 0 ] 2>/dev/null; then
-    echo "DISPATCH-OPEN: reads denied to this role, resolved against $codepath:"
+    echo "DISPATCH-OPEN: reads denied to this role, resolved against $codepath${main:+ and against the main checkout $main}:"
     printf '%s' "$deny_json" | jq -r '.[] | "  " + .'
   else
     echo "DISPATCH-OPEN: this dispatch denies no read. Every path under $codepath stays readable."
   fi
+  printf '%s' "$owned_extra" | jq -r 'select(has("denyCommand"))
+    | "DISPATCH-OPEN: shell forms denied to this role: " + (.denyCommand | join(", "))'
   printf '%s\n' "$dispatch_file"
   exit 0
 }

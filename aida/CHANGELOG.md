@@ -4,6 +4,58 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.7] - 2026-09-29
+
+Nine fixes from two live runs: the event archive task on 6.0.6, and a
+Drupal site task run through scope, research and design on 6.0.5.
+
+### Fixed
+
+- A dispatched role works in the task worktree. Every brief carries the
+  worktree path, and `dispatch-open` prints it. While a dispatch is open,
+  the hooks refuse that role a denied read or any write in the project's
+  main checkout. Shell commands that change directory with `cd` or `pushd`
+  are followed.
+- A test author with an open dispatch is refused shell commands that read a
+  class's shape through a runtime, such as `drush php:eval`, `drush ev` or
+  reflection. When the brief lacks a signature, the author stops with
+  `Stop: missing-signature:`. Design `check` prints `callsUndeclared:` for
+  a call in an order's done-when rows or tests that no declared interface
+  covers.
+- Scope `approve` marks each decision an unattended run took as approved
+  later, with the date. Checks and critics read a marked decision as
+  history, not as pending.
+- A distill summary written before its records changed reads as stale.
+  `approve` and `distill` say so and name the dispatch that refreshes it,
+  and do not print its old gaps. The records hash is kept in its own file
+  beside the summary.
+- Design `remove` deletes an order that implementation has not started and
+  records the reason. It refuses a started order, one another order depends
+  on, and the only order serving a criterion.
+- `update --absence-reviewed <row>` stops a reviewed absence flag from
+  repeating. An edited row flags again. The mark does not halt a started
+  order.
+- Research `serve` and `drop` take `--finding <search>#<n>`, counted from 1,
+  as design `account` does. The old `--index` form is refused with the
+  equivalent.
+- `drop` names every finding whose text cites the dropped one. The research
+  check refuses a citation of a finding that does not exist. The design
+  check compares an accounted finding's text with the finding at its number.
+- A stage script warns when a newer AIDA version is installed than the one
+  it runs from.
+
+### Known limits
+
+- A path built at run time, `git -C`, `git show`, a copy out of the main
+  checkout, or a PHP file the author writes and runs still gets past the
+  hooks.
+- `callsUndeclared` is best effort. It flags a call named in a negation, and
+  misses a call written without brackets.
+- No script can tell an old finding text that counted from 0 from one that
+  counts from 1. A person rewrites it.
+- The task skill's `save` reads the distill summary without checking whether
+  it is stale.
+
 ## [6.0.6] - 2026-09-29
 
 Two fixes from the live run on 6.0.5. The test author stopped at its turn

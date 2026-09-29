@@ -150,9 +150,14 @@ unenforced one.
 
 **The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
 call, and set the model where the step says. The message itself is one line per item: the run
-mode, `interactive` or `autonomous`, then each path the step hands over. Where a step names one
-word beside the paths, such as a lens, that word is a line too. The one labelled line is the
-identifier's process-recipe point, written `point: <phase>` and never a bare word. A bare
+mode, `interactive` or `autonomous`, then the worktree, then each path the step hands over.
+Where a step names one word beside the paths, such as a lens, that word is a line too. Two lines
+carry a label. The worktree line is written `worktree: <path>`, from the path `dispatch-open`
+prints and each brief carries. The role works there and starts each shell command with
+`cd <worktree> &&`. A role starts in this session's directory, and without the line it worked in
+the main checkout (gap row 230). The row checker has no brief, so only this line and the hooks
+keep it out of the main checkout. The identifier's process-recipe point is written
+`point: <phase>` and never a bare word. A bare
 `implement` reads as a task and not a phase (live-run row 138). Nothing else goes in. The
 role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch.
@@ -216,6 +221,11 @@ silence. Both hooks have refused inside a live dispatch. The read hook refused a
 paths on its denied list. The write hook refused an implementer a write outside its owned files.
 The message they send when they cannot find the record has not run live, so do not report that
 part as proven.
+
+While a record is open, both hooks also guard the project's main checkout, the code path the
+project registers. There the role is refused each denied read and every write. A role in that
+checkout is matched to the record by its type. A shell command that builds a path at run time
+still passes, and so does a `git commit` run there.
 
 The read denial covers Read, Grep and the plain shell reads: `cat`, `head`, `tail`, `less`,
 `more`, `sed`, `awk`, `grep`, `rg` and `nl`. A path a shell assembles at run time passes. That

@@ -149,6 +149,9 @@ done-when instead, and those names end with the order's id. An order that neithe
 any criterion refuses here; the repair is the work order, so close design again. A criterion a
 person verifies gets no test. The author writes a checklist line for it, copying the verification
 sentence whole, and the review stage asks you those lines at its close.
+When a test needs a signature the brief does not hold, the author stops and names it on a
+`Stop: missing-signature:` line. The brief carries every reuse and dependency design declared, so
+the repair is design adding the reuse.
 
 **A red run is read against the framework's failure signal, never the exit status.** Three of the
 five frameworks exit zero when a filter selects nothing, so a mistyped test name reports success.
@@ -592,9 +595,18 @@ partway through a long build. That is how grants work, not a fault in the build.
 
 ## What is enforced, and what is only recorded
 
+A dispatched role works in the task's worktree. Each brief and each dispatch message names it.
+While a dispatch is open, the hooks refuse that role a denied read and any write in the project's
+main checkout. The role would otherwise start there. A path a shell assembles at run time still
+passes. So does a `git commit` run in the main checkout.
+
 The read denials and the frozen-test refusal are hooks the runtime applies. The read denial covers
 the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` and their kin. A
-path a shell assembles at run time passes. The rule exists to stop a role opening the source
+path a shell assembles at run time passes. The test author is also refused a shell command
+naming a runtime form from `scripts/introspection-forms.txt`, such as `php:eval` or
+`ReflectionClass`. A PHP file it writes and then runs with `php` passes. So do `python`, `php -a`
+and any form not on the list. A command that only names a form is refused too, such as a `grep`
+or a commit message holding `ReflectionMethod`. The rule exists to stop a role opening the source
 because that is the obvious way to write a test about it. A role working around it on purpose
 has already failed in a way no hook catches. The implementer's owned files are enforced too: the
 write hook refuses it a write under the code path outside them. The fixer is held the same way,

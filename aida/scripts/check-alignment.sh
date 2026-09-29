@@ -74,8 +74,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not an object, a malformed id, a duplicate id within its own
 #      space, an unknown field inside an entry, a criterion missing verification, a verifiedBy,
 #      author or verdict outside its allowed values, an id counter below 1 or at or below an id
-#      already minted, or a decidedWithoutAPerson entry that is not a string. Each is named in
-#      the JSON on stdout.
+#      already minted, or a decidedWithoutAPerson entry that is neither a string nor a whole
+#      approved entry. Each is named in the JSON on stdout.
 #
 # What this script could not check is always named on stdout, never silently skipped
 # (check-task.sh states the same rule in its own header): schema-check.sh, the shared comparison
@@ -170,6 +170,8 @@ SCHEMA_CHECK_LIB="$PLUGIN_ROOT/scripts/lib/schema-check.sh"
 [ -f "$SCHEMA_CHECK_LIB" ] || die3 "cannot read the comparison library: $SCHEMA_CHECK_LIB not found"
 # shellcheck source=/dev/null
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/decided.sh" || die3 "the decided library failed to load"
 
 [ -f "$ALIGNMENT_SCHEMA_FILE" ] || die3 "cannot read the alignment field list: $ALIGNMENT_SCHEMA_FILE not found"
 jq empty "$ALIGNMENT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the alignment field list: $ALIGNMENT_SCHEMA_FILE is not valid JSON"
@@ -417,8 +419,9 @@ IDS_ISSUE_COUNT=$(( \
 
 # ---------------------------------------------------------------------------
 # 8. Content check, decidedWithoutAPerson: run only when the field itself passed step 4. Each
-#    entry must be a string. The shared comparison reads the array's items too since 2026-09-23,
-#    so this is a second reading of them, kept until something removes it deliberately.
+#    entry must be an open string, or a whole approved object as decidedApproved in
+#    scripts/lib/decided.sh reads it. The shared comparison reads the array's items too since
+#    2026-09-23, but it does not check `required` below the root, so the object is checked here.
 # ---------------------------------------------------------------------------
 
 DWAP_ISSUES_JSON='[]'
@@ -429,9 +432,10 @@ if [ "$DECIDED_WITHOUT_A_PERSON_OK" != "true" ]; then
 else
   DWAP_COUNT="$(jq '.decidedWithoutAPerson | length' "$ALIGNMENT_FILE")"
 
-  DWAP_ISSUES_JSON="$(jq -c '
-    [ .decidedWithoutAPerson | to_entries[] | select((.value | type) != "string")
-      | {index: .key, problem: ("entry is not a string, is a " + (.value | type))} ]
+  DWAP_ISSUES_JSON="$(jq -c "$DECIDED_JQ"'
+    [ .decidedWithoutAPerson | to_entries[]
+      | select((.value | type) != "string" and ([.value | decidedApproved] | length) == 0)
+      | {index: .key, problem: ("entry is neither a string nor an approved entry with text, approvedAt and approvedBy, is a " + (.value | type))} ]
   ' "$ALIGNMENT_FILE")"
 
   DWAP_NOTE="ran: checked $DWAP_COUNT entry/entries"
