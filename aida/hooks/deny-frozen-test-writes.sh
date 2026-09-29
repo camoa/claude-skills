@@ -122,6 +122,11 @@ COMMAND_LIB="${PLUGIN_ROOT}/scripts/lib/command-text.sh"
 # shellcheck source=/dev/null
 source "$COMMAND_LIB" 2>/dev/null \
   || not_enforced "the command library at $COMMAND_LIB could not be read. Nothing was checked."
+# recipes.sh holds project_code_path_value, the reader dispatch-open takes the main checkout from.
+RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
+# shellcheck source=/dev/null
+source "$RECIPES_LIB" 2>/dev/null \
+  || not_enforced "the recipe library at $RECIPES_LIB could not be read. Nothing was checked."
 
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
@@ -163,8 +168,8 @@ CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
 # main checkout. It works in the worktree, and a file it leaves in the checkout lands on the
 # branch the person is on. The person, and any other agent type, is not this rule's.
 MAIN_CANON=""
-if [ -n "$AGENT" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
-  MAIN_CANON="$(main_checkout "$(jq -r '.codePath // empty' <<<"$MATCH" 2>/dev/null)" "$CODE_CANON")"
+if [ -n "$AGENT" ] && role_matches "$AGENT" "$ROLE"; then
+  MAIN_CANON="$(main_checkout "$(project_code_path_value "$PROJECT_PATH")" "$CODE_CANON")"
 fi
 
 # The frozen records sit beside the dispatch record, in the task's own implementation folder.
@@ -411,7 +416,7 @@ case "$TOOL" in
           last="${w[$((${#w[@]} - 1))]}"
           VIA="${w[0]}"
           if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi ;;
-        cd)
+        cd|pushd)
           # A cd operand is never a write target, so rules two and three must not see it: STRAY
           # and MAIN_HIT are put back to what they were, and rule one keeps its own check. The
           # operand is where later relative targets resolve.
@@ -420,7 +425,7 @@ case "$TOOL" in
             HIT="${w[1]}"; HIT_OWNER="$OWNER_UNIT"
           fi
           STRAY="$stray_before"; MAIN_HIT="$main_before"
-          case "${w[1]:-}" in ''|-|'~'*) ;; *) RUN_DIR="$(normalize_abs "$(resolve_against "${w[1]}" "$RUN_DIR")")" ;; esac ;;
+          RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")" ;;
       esac
     done < <(strip_heredocs "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
     if [ -n "$HIT" ]; then

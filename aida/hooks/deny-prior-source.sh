@@ -102,6 +102,11 @@ COMMAND_LIB="${PLUGIN_ROOT}/scripts/lib/command-text.sh"
 # shellcheck source=/dev/null
 source "$COMMAND_LIB" 2>/dev/null \
   || not_enforced "the command library at $COMMAND_LIB could not be read. Nothing was checked."
+# recipes.sh holds project_code_path_value, the reader dispatch-open takes the main checkout from.
+RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
+# shellcheck source=/dev/null
+source "$RECIPES_LIB" 2>/dev/null \
+  || not_enforced "the recipe library at $RECIPES_LIB could not be read. Nothing was checked."
 
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
@@ -164,7 +169,7 @@ fi
 
 # The project's main checkout holds the same files as the worktree (gap row 230). A denied path is
 # denied there too, or a role that starts in the session's directory reads the source from it.
-MAIN_CANON="$(main_checkout "$(jq -r '.codePath // empty' <<<"$MATCH" 2>/dev/null)" "$CODE_CANON")"
+MAIN_CANON="$(main_checkout "$(project_code_path_value "$PROJECT_PATH")" "$CODE_CANON")"
 
 DENY_JSON="$(jq -c '.denyRead // []' "$DISPATCH_FILE" 2>/dev/null)"
 DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
@@ -227,7 +232,7 @@ if [ "$TOOL" = "Bash" ]; then
   fi
   # A segment after a pipe keeps a leading `|` as its own word, so a grep reading its stdin is
   # told apart from one searching the tree. RUN_DIR is where the shell stands: the payload's
-  # directory, then each `cd` operand, so `cd <worktree> && cat x` resolves x in the worktree.
+  # directory, then each `cd` or `pushd`, so `cd <worktree> && cat x` resolves x in the worktree.
   RUN_DIR="$CWD_CANON"
   while IFS= read -r seg; do
     set -f; read_words "$(printf '%s' "$seg" | tr '`$"()' '     ' | tr -d "'")"; set +f
@@ -238,9 +243,7 @@ if [ "$TOOL" = "Bash" ]; then
     [ "${#w[@]}" -gt 0 ] || continue
     SEARCH=false; script_skip=false; recursive=false
     case "${w[0]}" in
-      cd)
-        case "${w[1]:-}" in ''|-|'~'*) ;; *) RUN_DIR="$(normalize_abs "$(resolve_against "${w[1]}" "$RUN_DIR")")" ;; esac
-        continue ;;
+      cd|pushd) RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")"; continue ;;
       cat|head|tail|less|more|nl) ;;
       grep|rg) SEARCH=true; script_skip=true ;;
       sed|awk) script_skip=true ;;

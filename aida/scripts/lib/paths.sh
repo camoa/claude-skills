@@ -20,6 +20,10 @@
 #   main_checkout <project codePath> <canonical record codePath>
 #                               prints the project's main checkout in canonical form, or nothing
 #                               when it is the record's own tree or is not on disk.
+#   role_matches <agent type> <record role>
+#                               true when the two name the same role
+#   shell_dir_after <dir> <cd|pushd> <operand>...
+#                               prints where the shell stands after that cd or pushd
 
 # Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
 # drops a trailing slash. Never touches the filesystem, so it works on a path that does not exist.
@@ -80,12 +84,11 @@ is_under() {
 DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
 dispatch_record_for() {
   local project="$1" dir="$2" agent="${3:-}" f code by_role="" by_role_count=0
-  agent="${agent##*:}"
   DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1))
-    if [ -n "$agent" ] && [ "$(jq -r '.role // empty | split(":") | last' "$f" 2>/dev/null)" = "$agent" ]; then
+    if [ -n "$agent" ] && role_matches "$agent" "$(jq -r '.role // empty' "$f" 2>/dev/null)"; then
       by_role="$f"; by_role_count=$((by_role_count + 1))
     fi
     [ -z "$DISPATCH_RECORD" ] || continue
@@ -109,4 +112,37 @@ main_checkout() {
   [ -n "$1" ] || return 0
   main="$(cd "$1" 2>/dev/null && pwd -P)" || return 0
   [ "$main" = "$2" ] || printf '%s' "$main"
+}
+
+# True when agent type $1 names record role $2. The runtime reports `<plugin>:<role>` or the bare
+# name, and dispatch-open records the form it was given. Two prefixed forms compare whole, so
+# another plugin's role of the same name is not this one. A bare form on either side compares
+# with the other's bare name.
+role_matches() {
+  [ -n "$2" ] || return 1
+  [ "$1" = "$2" ] && return 0
+  case "$1" in *:*) ;; *) [ "$1" = "${2##*:}" ]; return ;; esac
+  case "$2" in *:*) ;; *) [ "${1##*:}" = "$2" ]; return ;; esac
+  return 1
+}
+
+# Where the shell stands after `cd` or `pushd` ($2) run from $1 with operands $3... A leading
+# flag such as -L or -P is skipped. A leading `~/` is $HOME. `cd` with no operand is $HOME.
+# `cd -`, `pushd +N`, `~user` and a bare `pushd` name a directory this text does not show, so the
+# shell is taken to stay where it was.
+shell_dir_after() {
+  local dir="$1" verb="$2" a
+  shift 2
+  for a in "$@"; do
+    # shellcheck disable=SC2088 # the command text holds a literal tilde, matched here as text
+    case "$a" in
+      -|+[0-9]*|-[0-9]*) printf '%s' "$dir"; return 0 ;;
+      -*) continue ;;
+      '~') printf '%s' "$HOME"; return 0 ;;
+      '~/'*) normalize_abs "$HOME/${a:2}"; return 0 ;;
+      '~'*) printf '%s' "$dir"; return 0 ;;
+      *) normalize_abs "$(resolve_against "$a" "$dir")"; return 0 ;;
+    esac
+  done
+  if [ "$verb" = cd ]; then printf '%s' "$HOME"; else printf '%s' "$dir"; fi
 }

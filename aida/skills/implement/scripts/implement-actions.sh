@@ -3980,14 +3980,15 @@ do_tests_brief() {
         --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
-    '{unit: $unit, worktree: $worktree, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
+    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
       playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
-     | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end')"
+     | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end
+     | .worktree = $worktree')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -5560,14 +5561,14 @@ do_build_brief() {
   # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry. An
   # order whose proof is record commits in the project folder, so its commit is read there and
   # the brief says so under commitIn (nyc defect 17).
-  local bb_codepath bb_head bb_worktree
+  local bb_codepath bb_head
   bb_head=""
-  bb_worktree="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  rv_load_codepath "build-brief"
   br_order_facts "$BB_UNIT_JSON"
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     bb_codepath="$(resolve_project_folder "$TASK_PATH")"
   else
-    bb_codepath="$bb_worktree"
+    bb_codepath="$RV_CODEPATH"
   fi
   if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
     bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
@@ -5595,7 +5596,7 @@ do_build_brief() {
   local brief_file brief_json
   brief_file="$IMPL_DIR/brief-$unit_id-build.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
-        --arg commitIn "$bb_codepath" --arg worktree "$bb_worktree" \
+        --arg commitIn "$bb_codepath" --arg worktree "$RV_CODEPATH" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --arg reportPath "$IMPL_DIR/answers-$unit_id-attempt$((attempts_used + 1)).md" \
