@@ -687,6 +687,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      step: review-brief again, then the reviewer again. The check runs before --accept-deviation
 #      is read, so a person never accepts on a review that skipped a recipe.
 #
+# The code the stale red run added (gap row 229).
+# 109  `tests-freeze` was given a --red file written before the order's test round began, the
+#      tests brief's `roundStartedAt`. It is a run of earlier tests, such as those a restart set
+#      aside. The message names each file and both times. Nothing is frozen.
 # The codes the turn cap added (gap row 228).
 # 110  `dispatch-close --no-report` found the open record already carries `resumedAt`: the role
 #      was resumed once and returned with no report again. The order halts with a reason naming
@@ -3950,20 +3954,26 @@ do_tests_brief() {
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
-  local brief_file brief_json
+  # `roundStartedAt` is when this order's test round began, and `tests-freeze` refuses a red run
+  # older than it (exit 109). A brief written again in the same round, for a retake or a rejected
+  # row, keeps the first time, because the unchanged tests keep their red runs. A restart moves
+  # the brief aside, so the next brief starts a new round.
+  local brief_file brief_json round_started_at
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
+  round_started_at="$(jq -r '.roundStartedAt // empty' "$brief_file" 2>/dev/null)"
+  [ -n "$round_started_at" ] || round_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
         --argjson nonGoals "$non_goals_out" --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
         --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
         --argjson rowsRejected "$rows_rejected_json" \
-        --arg testRecipePath "$test_recipe_path" \
+        --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
-      playbooksPath: $playbooksPath}
+      playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
@@ -4823,6 +4833,36 @@ TF_EOF
   done
   [ -z "$bad_red_files" ] \
     || die 32 "tests-freeze: these --red files are missing or empty: ${bad_red_files%, }"
+
+  # --- 109: a red run older than this order's test round is a run of other tests (gap row 229) ----
+  # The round began at the tests brief's `roundStartedAt`. A restart moves the brief aside, so the
+  # time is never older than the restart. A brief from before the stamp is read by its file time.
+  # With no brief, no author was briefed, and there is nothing to compare against.
+  local tf_brief tf_round_at tf_round_epoch tf_red_epoch stale_reds=""
+  tf_brief="$IMPL_DIR/brief-$unit_id-tests.json"
+  if [ "$red_count" -gt 0 ] && [ -f "$tf_brief" ]; then
+    tf_round_at="$(jq -r '.roundStartedAt // empty' "$tf_brief" 2>/dev/null)"
+    if [ -n "$tf_round_at" ]; then
+      tf_round_epoch="$(jq -rn --arg t "$tf_round_at" '$t | fromdateiso8601' 2>/dev/null)"
+    else
+      tf_round_epoch="$(stat -c %Y "$tf_brief" 2>/dev/null || stat -f %m "$tf_brief" 2>/dev/null)"
+      tf_round_at="$(jq -rn --arg e "$tf_round_epoch" '$e | tonumber | todate' 2>/dev/null)"
+    fi
+    [ -n "$tf_round_epoch" ] && [ -n "$tf_round_at" ] \
+      || die 3 "tests-freeze: could not read when the test round began from $tf_brief."
+    ri=0
+    while [ "$ri" -lt "$red_count" ]; do
+      red_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].name')"
+      red_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
+      tf_red_epoch="$(stat -c %Y "$red_path" 2>/dev/null || stat -f %m "$red_path" 2>/dev/null)"
+      [ -n "$tf_red_epoch" ] || die 3 "tests-freeze: could not read when $red_path was written."
+      [ "$tf_red_epoch" -ge "$tf_round_epoch" ] \
+        || stale_reds="$stale_reds$red_name ($red_path, written $(jq -rn --arg e "$tf_red_epoch" '$e | tonumber | todate')), "
+      ri=$((ri + 1))
+    done
+    [ -z "$stale_reds" ] \
+      || die 109 "tests-freeze: these --red files were written before this test round began at $tf_round_at, so they are runs of earlier tests: ${stale_reds%, }. Run each test again and pass the new output."
+  fi
 
   # --- 91: the reds are read against the recipe preconditions recorded (live-run row 99) -----------
   # The record is the one producer of a test-execution recipe path, and build-record reads it from
@@ -10461,13 +10501,16 @@ do_restart() {
   write_atomic "$target/restarted.json" "$restart_json"
   # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
   # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
-  # interface record. find, not a glob: zsh stops on a glob with no match.
+  # interface record. find, not a glob: zsh stops on a glob with no match. A folder whose name
+  # carries the id is the order's too, such as the test author's <id>-red-runs/, so a red run of a
+  # test that no longer exists leaves with its order (gap row 229).
   local one_id moved
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     while IFS= read -r moved; do
       [ -n "$moved" ] || continue
       mv "$moved" "$target/" || die 3 "restart: could not move $moved to $target"
-    done < <(find "$IMPL_DIR" -mindepth 1 -maxdepth 1 -type f \( -name "*-$one_id.*" -o -name "*-$one_id-*" \) 2>/dev/null)
+    done < <(find "$IMPL_DIR" -mindepth 1 -maxdepth 1 \( -type f -o -type d \) \
+      \( -name "*-$one_id.*" -o -name "*-$one_id-*" -o -name "$one_id-*" -o -name "*-$one_id" \) 2>/dev/null)
   done
   write_atomic "$IMPL_DIR/snapshot.json" "$new_snapshot"
   write_atomic "$FN_LEDGER_FILE" "$new_ledger"

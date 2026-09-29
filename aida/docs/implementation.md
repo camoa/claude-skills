@@ -158,7 +158,8 @@ and the freeze refuses it, because nothing in that output says the behaviour is 
 is the exception: the one that creates the unit. No test can assert before the module exists, so
 for that order alone the harness error is the expected red, and the author writes no scaffold.
 The exception reads only declared markers, so the freeze refuses an undeclared form: the recipe
-declares it, or the test drops the module-local class.
+declares it, or the test drops the module-local class. The freeze also refuses a red run written
+before the order's test round began, because it is the run of an earlier test.
 
 A test green on its first run has four outcomes. The test was wrong: corrected once. Still green,
 and the author can name the existing code that satisfies it: frozen, with that reason recorded

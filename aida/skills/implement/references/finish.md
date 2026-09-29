@@ -137,8 +137,9 @@ live copies into the snapshot, and refuses with exit 13 until `design-closed.jso
 close over them.
 
 On success it moves only the halted orders' records to `implementation-<date>-<commit>/`. A
-record is the order's when its file name carries the order id, the way every record the script
-writes does. It writes the reason and the halted orders there as `restarted.json`, and prints
+record is the order's when its name carries the order id, the way every record the script
+writes does. A folder counts too, such as the test author's `<order id>-red-runs/`, so a red run
+of a test that no longer exists leaves with its order. It writes the reason and the halted orders there as `restarted.json`, and prints
 that path. It keeps every other order's records, and the snapshot and the ledger, in place. In
 the ledger the halted orders go back to not started, and their judgements are dropped. The
 criteria they serve go back to not judged. A finished order is never redone for a change it never
