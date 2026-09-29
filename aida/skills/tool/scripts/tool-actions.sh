@@ -12,8 +12,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Every form also takes `--tooling <tool>=<path>` before the action, once per tool: a catalog
 # recipe catalog-identifier found. A folder source ranked before the catalog still wins.
 #
-# show     prints where the recipe is and the commands it holds, and runs nothing.
-# install  runs every command in the recipe's Install block, in order.
+# show     prints where the recipe is, the commands it holds and its files, and runs nothing.
+# install  writes the recipe's `## Files` into this directory where absent, and keeps them, so an
+#          install line can run a script the recipe ships. A file there that differs refuses at 3,
+#          before any command runs. Then it runs every command in the Install block, in order.
 # run      runs the recipe's Run command. A missing tool is that command failing. What follows
 #          `--` reaches that command as arguments. show and install refuse the form at 3, because
 #          they take their commands from the recipe and would otherwise drop what a caller typed.
@@ -270,6 +272,10 @@ case "$ACTION" in
     else
       sh_blocks_under "$RECIPE" Install | sed 's/^/  /'
     fi
+    FILES_DIR="$(mktemp -d)" || { printf 'tool-actions: could not create a temporary folder\n' >&2; exit 3; }
+    printf 'FILES:\n'
+    recipe_files_into "$RECIPE" Files "$FILES_DIR" | cut -f2 | sed 's/^/  /'
+    rm -rf "$FILES_DIR"
     printf 'RUN:\n'
     NRUN="$(sh_block_count_under Run)"
     NCMD="$(sh_command_count_under Run)"
@@ -300,6 +306,8 @@ case "$ACTION" in
       printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"
       printf '%s\n' "$STEPS" | sed 's/^/  /'
     fi
+    FILES_DIR="$(mktemp -d)" || { printf 'tool-actions: could not create a temporary folder\n' >&2; exit 3; }
+    recipe_files_place install "$RECIPE" "$(pwd -P)" "$FILES_DIR"; rm -rf "$FILES_DIR"
     mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
     OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-install.txt"
     : >"$OUTFILE"

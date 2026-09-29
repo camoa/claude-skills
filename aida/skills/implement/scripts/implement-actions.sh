@@ -6141,18 +6141,18 @@ BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 # Removes each file the verify lines' recipes wrote, puts back each earlier version they replaced,
 # then removes the folders made for them and the temporary folder. RF_WRITTEN_PATHS and
 # RF_REPLACED_PATHS are read too, because a refusal or an interrupt inside recipe_files_write
-# leaves that recipe's paths there alone. RS_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
+# leaves that recipe's paths there alone. RF_NEW_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
 # is named, and the tree is then not what it was.
 br_verify_files_remove() {
   local left=""
   if [ -n "$BRV_TREE" ]; then
     left="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
-      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RS_DIRS" | sed -n 3p)"
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RF_NEW_DIRS" | sed -n 3p)"
     [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
   BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RS_DIRS=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_NEW_DIRS=""
 }
 
 # Runs the order's own verify lines through br_run_lines from the folder $1, output into $2. A line
