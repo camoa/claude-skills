@@ -396,6 +396,12 @@ records `savedAt` in `task.json`, commits, and prints `savedAt:` and `note:` wit
 it writes no note and prints `savedAt:` only. When the stage had no record, it prints `distill:
 none` naming the stage. Show the lines.
 
+When the sidecar is older than the last change to the stage's records, `save` also prints
+`standsAlone: stale` and a `stale:` line, and none of the sidecar's gaps. The list was then built
+from an old summary. Dispatch the `distiller` again as above and read the new sidecar. Name what
+this conversation decided that neither the new sidecar nor the saved note holds, and ask again. A
+yes runs `save` again.
+
 A note is never a stage record: the stage action that later records the same decision makes it
 stale, and the record wins. The session-start hook names the newest note after `Stage:`, and
 `/aida:next` lists its date, so the next window reads it before its first turn.

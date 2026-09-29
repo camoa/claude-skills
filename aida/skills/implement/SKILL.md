@@ -69,10 +69,14 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
 | `finished: recorded` | The review stage is next. After a failed review, fix what it found and take `finish` again | `finish` |
-| An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart, or the design put back and `start` run again | `finish` |
 | An `order(...)` line whose halt says `the design removed` it, and an order `not started` that could move | Offer the restart before those tests are written: the removed order's frozen record still guards its test files | `finish` |
+| An `order(...)` line whose only drift segments begin `design drift: the builder declared a departure` or `design drift: the reviewer answered`, a person present | Offer `review-record --accept-deviation` to keep the departure, or the restart once design amends the order | `review` |
+| An `order(...)` line whose halt holds any other `design drift...` segment, a person present | Offer the restart. A segment about the order's own design file also clears when the design is put back and `start` runs again | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
-| An `order(...)` line whose halt holds none of those three segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
+| An `order(...)` line whose halt begins `test wrong`, a person present | Offer `retake-tests`, which sends the order back to its tests | `review` |
+| An `order(...)` line whose halt holds none of those segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
+
+A refusal writes no halt, so no row above routes it. Its message names the route. Take that route.
 
 A recipe the catalog republished after `preconditions` ran is not a step the table derives. Run
 `recipe-refresh` before the next freeze, as `references/preconditions.md` says.
@@ -99,11 +103,8 @@ can still be retaken. After the build, the route is `retake-tests` under Rulings
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
 
-A halt beginning `attempts spent`, `budget spent` or `design drift` has its own next step in
-`references/finish.md`. The first takes the grant of one more attempt. The second takes the same
-grant, after the run's budget is raised. The third takes the restart after a design change. Every
-other halt takes `clear-halt`, after the person has done what the reason names. Offer any of them
-only when a person is present to decide it.
+Each halt takes the route of its row in the table above, and the `next:` line from `read` names
+it. Offer any of them only when a person is present to decide it.
 
 A run has a ceiling when the task sets `budget` in its own record, in dispatches or in minutes.
 `dispatch-open` recomputes what was spent from the ledger before every dispatch and halts the

@@ -251,8 +251,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      re-derived from the live alignment.json and design/*.json. Design changed after it closed,
 #      without closing again. Close design again. A resumed run answers the same when a drifted
 #      order that has not started would take its live copy, or a started or closed order that
-#      only gained owned files, findings or an appended reason would take its copy in place, and
-#      `restart` when the halted orders would: a live copy design did not close on is never frozen.
+#      changed only in fields its frozen tests were not written from would take its copy in place.
+#      The message names each such order and what changed in it. `restart` answers the same when
+#      the halted orders would take their copies: a live copy design did not close on is never frozen.
 #  14  the task's own project.json exists but is not valid JSON, so its codePath cannot be read.
 #      A different fact from exit 3's "no usable codePath", which is a valid file with the field
 #      absent or empty.
@@ -1754,7 +1755,7 @@ do_start() {
   local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
-  local widened_ids_json='[]'
+  local widened_ids_json='[]' widened_json='[]'
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -1886,7 +1887,9 @@ do_start() {
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
       # build brief then carries the new findings. Any other difference, a removed owned file, a
       # reasoning whose earlier text changed, or a changed criterion it serves, halts as before.
-      widened_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
+      # The program also lists what changed in each order, and a refusal names that list (gap row
+      # 241), so the cause a person reads is the one this comparison found.
+      widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
@@ -1897,9 +1900,14 @@ do_start() {
               | select(($l | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
-              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning or $l.absenceReviewed != $s.absenceReviewed)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
-              | $d ]')"
+              | [ (if ((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 then "gained owned files" else empty end),
+                  (if $l.findings != $s.findings then "findings changed" else empty end),
+                  (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
+                  (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end) ] as $why
+              | select(($why | length) > 0)
+              | {id: $d, why: $why} ]')"
+      widened_ids_json="$(printf '%s' "$widened_json" | jq -c 'map(.id)')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
       # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
       # still has to be the frozen copy the next order's tests are written from.
@@ -1909,7 +1917,7 @@ do_start() {
       fi
       if [ "$(printf '%s' "$widened_ids_json" | jq 'length')" -gt 0 ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
-        drift_what="${drift_what}these started work orders gained owned files, findings or an appended reason and changed nothing else: $(printf '%s' "$widened_ids_json" | jq -r 'join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
+        drift_what="${drift_what}these started work orders changed only in fields their frozen tests were not written from: $(printf '%s' "$widened_json" | jq -r 'map(.id + " (" + (.why | join(", ")) + ")") | join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
         resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$widened_ids_json" '$a + $b')"
       fi
       if [ "$contract_changed" = "true" ]; then
@@ -10005,7 +10013,7 @@ do_clear_halt() {
     || drift_route=" Or run start again: it clears a halt about this order's own design file once the design no longer differs from the snapshot."
   case "$halt" in
     *"$RR_DEPARTURE_PREFIX"*|*"$RR_REVIEWER_PREFIX"*)
-      drift_route=" Or a person keeps the departure: run review-record again with --accept-deviation <their reason>, in references/finish.md." ;;
+      drift_route=" Or a person keeps the departure: run review-record again with --accept-deviation <their reason>, in references/review.md." ;;
   esac
   [ -z "$other_action" ] \
     || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead.$drift_route Nothing is written."

@@ -104,6 +104,8 @@ die3() {
 # The two libraries take these from their caller, so a refusal still says which script refused.
 die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
+die2() { die 2 "$1"; }
+die4() { die 4 "$1"; }
 for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
   [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
@@ -1114,6 +1116,8 @@ do_decline_recipe() {
 # state new, or one whose stage has no record on disk yet (live run, row 119). The stage is
 # task_stage's; its first record is alignment.json for scope, research/*.json for research,
 # design/*.json for design. Prints one line in that case, the rule the skill's `save` states.
+# A sidecar written before the last change to the stage's records prints distill_read's stale
+# lines and none of its gaps (gap row 242). A current one prints nothing, as before.
 # $1 the task folder.
 save_distill_line() {
   local task_folder="$1" stage none=no
@@ -1126,7 +1130,14 @@ save_distill_line() {
       research|design) [ -n "$(find "$task_folder/$stage" -maxdepth 1 -name '*.json' 2>/dev/null | head -n 1)" ] || none=yes ;;
     esac
   fi
-  [ "$none" = no ] || echo "distill: none, $stage has no record yet"
+  if [ "$none" = yes ]; then
+    echo "distill: none, $stage has no record yet"
+  else
+    case "$stage" in
+      scope|research|design)
+        [ "$(distill_stale "$task_folder" "$stage")" != yes ] || distill_read "$task_folder" "$stage" yes ;;
+    esac
+  fi
 }
 
 do_save() {
