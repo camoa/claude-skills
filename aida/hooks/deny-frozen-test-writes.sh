@@ -26,9 +26,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Such a token is what a comparison operator leaves once `>` is read as a redirect. Its refusal
 # names the token it read as a path. The known limits stay. A path from a variable, an
 # interpreter, an editor or a symlink passes. `cd lib && echo x > l.php` is judged as a write to
-# l.php at the code root. A `mkdir`, with or without `-p`, of a directory that an owned path lies
+# l.php at the code root and to lib/l.php, since a `cd` operand moves where later targets resolve.
+# A `mkdir`, with or without `-p`, of a directory that an owned path lies
 # under is allowed (2026-09-20, live-run row 100). Design owns files, not directories, so a new
 # unit's first directory has no other route. Any other verb on an unowned directory still refuses.
+#
+# Rule three, added for gap row 230, refuses the role the record names any write in the project's
+# main checkout: the registered codePath, when it is not the worktree. A dispatched role starts in
+# the session's directory, often that checkout, and a file it writes there lands on the person's
+# own branch. Its record is found by its agent type when no record's codePath holds the directory
+# it works in. It reads rule one's write positions, with rule one's limits: a git commit there,
+# or a write through a variable or an interpreter, passes. The person, and any other agent type,
+# is not its concern.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -58,10 +67,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # registered for this working directory, or no dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
 # guard kept. The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json,
-# found as the one whose codePath holds the payload's working directory (scripts/lib/paths.sh,
-# dispatch_record_for). Records open for other trees only: allow, through `systemMessage` naming
-# why. dispatch.json unreadable, missing fields, or no unit has frozen anything yet for
-# this task and rule two is off: allow, through `systemMessage` naming why. Nothing is frozen
+# found as the one whose codePath holds the payload's working directory, else the one open record
+# naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). Records open for other
+# trees only: allow, through `systemMessage` naming why. dispatch.json unreadable, missing
+# fields, or no unit has frozen anything yet for this task and rules two and three are off: allow, through `systemMessage` naming why. Nothing is frozen
 # before the third step of implementation runs, and that is a real state, not a fault, the same
 # distinction dispatch-schema.json's own header draws. An agent that reports a test author type
 # while the record names another role, or names no role, still gets the exception
@@ -128,7 +137,7 @@ PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
 # and a working directory that no longer exists still normalizes textually.
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_for "$PROJECT_PATH" "$CWD_CANON"
+dispatch_record_for "$PROJECT_PATH" "$CWD_CANON" "$AGENT"
 DISPATCH_FILE="$DISPATCH_RECORD"
 if [ -z "$DISPATCH_FILE" ]; then
   [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
@@ -149,6 +158,14 @@ CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
 CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
 [ -n "$CODE_CANON" ] \
   || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
+
+# Rule three, added for gap row 230: the role the record names writes nothing in the project's
+# main checkout. It works in the worktree, and a file it leaves in the checkout lands on the
+# branch the person is on. The person, and any other agent type, is not this rule's.
+MAIN_CANON=""
+if [ -n "$AGENT" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
+  MAIN_CANON="$(main_checkout "$(jq -r '.codePath // empty' <<<"$MATCH" 2>/dev/null)" "$CODE_CANON")"
+fi
 
 # The frozen records sit beside the dispatch record, in the task's own implementation folder.
 IMPL_DIR="$(dirname -- "$DISPATCH_FILE")"
@@ -187,7 +204,7 @@ $(jq -r '.ownedFiles[]? // empty' "$DISPATCH_FILE" 2>/dev/null)
 OWNED_EOF
 fi
 
-[ -n "$FROZEN" ] || [ -n "$OWNED" ] || not_enforced "no unit has frozen tests yet for this task"
+[ -n "$FROZEN" ] || [ -n "$OWNED" ] || [ -n "$MAIN_CANON" ] || not_enforced "no unit has frozen tests yet for this task"
 
 # Prints the unit that owns frozen path $1, or nothing when $1 is not frozen.
 owner_of() {
@@ -231,9 +248,19 @@ STRAY_EOF
   STRAY="$cand"; STRAY_TOKEN="$2"; STRAY_VIA="$VIA"
 }
 
+# Rule three's own test on one resolved candidate $1: keeps the first one that lies in the main
+# checkout and not in the worktree, in MAIN_HIT. Never returns non-zero. Off while MAIN_CANON is
+# empty.
+MAIN_HIT=""
+note_main() {
+  [ -n "$MAIN_CANON" ] && [ -z "$MAIN_HIT" ] || return 0
+  is_under "$1" "$MAIN_CANON" && ! is_under "$1" "$CODE_CANON" && MAIN_HIT="$1"
+  return 0
+}
+
 # Resolves one write target and reports whether a frozen test owns it. The record's codePath is
-# tried first, and the payload's working directory second when it is a different directory, for the
-# reason this file's own header gives. On a match this sets OWNER_UNIT to the owning unit and
+# tried first, and the directory the shell stands in (RUN_DIR) second when it is a different
+# directory, for the reason this file's own header gives. On a match this sets OWNER_UNIT to the owning unit and
 # OWNER_ABS to the resolution that matched, and returns 0. Sets them by assignment rather than
 # printing them, because a command substitution runs in a subshell and would lose the second value.
 # A candidate no frozen test owns is handed to note_stray on the way past, so rule two reads every
@@ -247,16 +274,18 @@ owner_of_arg() {
   if u="$(owner_of "$cand")"; then
     OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
   fi
-  note_stray "$cand" "$arg"
-  if [ "$CWD_CANON" != "$CODE_CANON" ]; then
-    cand="$(normalize_abs "$(resolve_against "$arg" "$CWD_CANON")")"
+  note_stray "$cand" "$arg"; note_main "$cand"
+  if [ "$RUN_DIR" != "$CODE_CANON" ]; then
+    cand="$(normalize_abs "$(resolve_against "$arg" "$RUN_DIR")")"
     if u="$(owner_of "$cand")"; then
       OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
     fi
-    note_stray "$cand" "$arg"
+    note_stray "$cand" "$arg"; note_main "$cand"
   fi
   return 1
 }
+# The payload's directory. The Bash door moves it at each `cd`.
+RUN_DIR="$CWD_CANON"
 
 deny() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
@@ -284,6 +313,12 @@ allow_unnamed_role() {
 frozen_reason() {
   printf 'this task froze this test for unit %s. Changing it needs the design reopened. If the test is wrong, stop and report it. Do not edit it.' "$1"
 }
+# Rule three's exit, reached only when rule one found nothing, and before rule two's. $1 is a
+# suffix naming the door.
+main_exit() {
+  [ -n "$MAIN_HIT" ] || return 0
+  deny "$MAIN_HIT$1: this is the project's main checkout $MAIN_CANON, not this task's worktree. Work in the worktree $CODE_CANON: start each shell command with cd $CODE_CANON &&, and write only there."
+}
 # Rule two's exit, reached only when rule one found nothing. $1 is a suffix naming the door.
 # The person is allowed with a note, the owned-files check reads the diff after the attempt.
 stray_exit() {
@@ -308,7 +343,7 @@ case "$TOOL" in
   Write|Edit|MultiEdit|NotebookEdit)
     TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
     [ -n "$TARGET" ] || { echo '{}'; exit 0; }
-    owner_of_arg "$TARGET" || { stray_exit ""; echo '{}'; exit 0; }
+    owner_of_arg "$TARGET" || { main_exit ""; stray_exit ""; echo '{}'; exit 0; }
     TARGET_ABS="$OWNER_ABS"
     OWNER="$OWNER_UNIT"
     if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ]; then
@@ -377,13 +412,15 @@ case "$TOOL" in
           VIA="${w[0]}"
           if owner_of_arg "$last"; then HIT="$last"; HIT_OWNER="$OWNER_UNIT"; fi ;;
         cd)
-          # A cd operand is never a write target, so rule two must not see it: STRAY is put back
-          # to what it was, and rule one keeps its own check.
-          stray_before="$STRAY"
+          # A cd operand is never a write target, so rules two and three must not see it: STRAY
+          # and MAIN_HIT are put back to what they were, and rule one keeps its own check. The
+          # operand is where later relative targets resolve.
+          stray_before="$STRAY"; main_before="$MAIN_HIT"
           if owner_of_arg "${w[1]:-}" && printf '%s' "$CMD" | grep -q '>'; then
             HIT="${w[1]}"; HIT_OWNER="$OWNER_UNIT"
           fi
-          STRAY="$stray_before" ;;
+          STRAY="$stray_before"; MAIN_HIT="$main_before"
+          case "${w[1]:-}" in ''|-|'~'*) ;; *) RUN_DIR="$(normalize_abs "$(resolve_against "${w[1]}" "$RUN_DIR")")" ;; esac ;;
       esac
     done < <(strip_heredocs "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
     if [ -n "$HIT" ]; then
@@ -396,6 +433,7 @@ case "$TOOL" in
       [ -n "$AGENT" ] || allow_person "$HIT" "$HIT_OWNER"
       deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"
     fi
+    main_exit " through Bash"
     stray_exit " through Bash"
     ;;
 esac

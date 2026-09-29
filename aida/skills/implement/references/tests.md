@@ -156,7 +156,8 @@ Open it first:
 One `--test-glob` per pattern, the same ones the freeze below takes. The script refuses a role
 name that matches no agent this plugin ships, and for this role it adds the production source to
 the denied reads itself, taken from the owned files every work order in the frozen snapshot
-declares. An owned file that matches a test glob is a test, and it stays readable, so the author
+declares. The script denies those paths in the main checkout too, and prints the worktree the
+role works in. An owned file that matches a test glob is a test, and it stays readable, so the author
 can read back what it writes. So is an owned file under a directory the glob names literally,
 `tests` in `**/tests/**/*Test.php`, because the author also writes base classes and fixtures
 there. The globs decide, not the write path, because a framework may keep its tests beside the

@@ -595,6 +595,11 @@ partway through a long build. That is how grants work, not a fault in the build.
 
 ## What is enforced, and what is only recorded
 
+A dispatched role works in the task's worktree. Each brief and each dispatch message names it.
+While a dispatch is open, the hooks refuse that role a denied read and any write in the project's
+main checkout, where the role would otherwise start. A path a shell assembles at run time, and a
+`git commit` run there, still pass.
+
 The read denials and the frozen-test refusal are hooks the runtime applies. The read denial covers
 the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` and their kin. A
 path a shell assembles at run time passes. The test author is also refused a shell command

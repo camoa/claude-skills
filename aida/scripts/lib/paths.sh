@@ -12,10 +12,14 @@
 #   normalize_abs <path>        collapses "." and ".." textually, drops a trailing slash
 #   resolve_against <p> <base>  prints p when it is absolute, base/p when it is not
 #   is_under <path> <root>      true when path is root itself or falls under it
-#   dispatch_record_for <project path> <dir>
+#   dispatch_record_for <project path> <dir> [<agent type>]
 #                               sets DISPATCH_RECORD to the open dispatch record of the task whose
-#                               codePath holds dir, or empty, and DISPATCH_OPEN_COUNT to how many
-#                               records are open. The one function here that reads the disk.
+#                               codePath holds dir, else to the one open record whose role is the
+#                               agent type, or empty, and DISPATCH_OPEN_COUNT to how many records
+#                               are open. One of the two functions here that read the disk.
+#   main_checkout <project codePath> <canonical record codePath>
+#                               prints the project's main checkout in canonical form, or nothing
+#                               when it is the record's own tree or is not on disk.
 
 # Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
 # drops a trailing slash. Never touches the filesystem, so it works on a path that does not exist.
@@ -68,13 +72,22 @@ is_under() {
 # from records for other trees. Two globals rather than a printed value, because a `$(...)`
 # capture would run this in a subshell and the count would never reach the caller. find, not a
 # glob: zsh stops on a glob with no match. Both permission hooks call this; nothing else does.
+#
+# A dispatched role starts in the session's own directory, which is often the project's main
+# checkout and not the worktree (gap row 230). So when no record's codePath holds $2, the record
+# is the one open record whose role is the agent type $3, bare or `<plugin>:<role>`. Two such
+# records are two tasks with the same role out, and nothing tells them apart, so none is chosen.
 DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
 dispatch_record_for() {
-  local project="$1" dir="$2" f code
+  local project="$1" dir="$2" agent="${3:-}" f code by_role="" by_role_count=0
+  agent="${agent##*:}"
   DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1))
+    if [ -n "$agent" ] && [ "$(jq -r '.role // empty | split(":") | last' "$f" 2>/dev/null)" = "$agent" ]; then
+      by_role="$f"; by_role_count=$((by_role_count + 1))
+    fi
     [ -z "$DISPATCH_RECORD" ] || continue
     code="$(jq -r '.codePath // empty' "$f" 2>/dev/null)"
     [ -n "$code" ] || continue
@@ -84,4 +97,16 @@ dispatch_record_for() {
   done <<DR_FILES
 $(find "$project/tasks" -mindepth 3 -maxdepth 3 -type f -path '*/implementation/dispatch.json' 2>/dev/null | sort)
 DR_FILES
+  if [ -z "$DISPATCH_RECORD" ] && [ "$by_role_count" -eq 1 ]; then DISPATCH_RECORD="$by_role"; fi
+}
+
+# The project's registered codePath is its main checkout, and a task's worktree is a second tree
+# holding the same files (gap row 230). Both hooks guard it while a dispatch is open. Prints it in
+# the canonical form codePath takes, so the two compare as strings, or nothing when it is the
+# worktree itself: a task that builds in the checkout has no second tree to guard.
+main_checkout() {
+  local main
+  [ -n "$1" ] || return 0
+  main="$(cd "$1" 2>/dev/null && pwd -P)" || return 0
+  [ "$main" = "$2" ] || printf '%s' "$main"
 }

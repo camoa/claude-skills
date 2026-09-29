@@ -123,13 +123,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Every action prints a summary of `key: value` lines and nothing else: no record body, no diff, no
 # command output, no brief, no finding's evidence. Each line that a person may want in full names
 # the path that holds it. The five brief actions write their brief to a file under
-# <task_folder>/implementation/ and print its path, which the dispatch then names:
+# <task_folder>/implementation/ and print its path, which the dispatch then names. Each brief
+# carries the task's worktree under `worktree`, and prints it (gap row 230):
 # brief-<unit_id>-tests.json, brief-<unit_id>-build.json, brief-<unit_id>-review.json,
 # brief-<unit_id>-fix-<round>.json and brief-<unit_id>-verify-<round>.json. `read`, `start` and
 # every record action end with a `next:` line, derived from the ledger the way SKILL.md's routing
 # table reads it. The two exceptions to the summary rule are the bodies a person or a caller has to
 # read verbatim: `tests-freeze`'s checklist rows, and `step`'s own step file. `restart` prints the
-# archive path alone, and `dispatch-open` the denied paths and the record path.
+# archive path alone, and `dispatch-open` the worktree, the denied paths and the record path.
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -3978,8 +3979,8 @@ do_tests_brief() {
         --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
         --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
-        --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
-    '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
+        --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
+    '{unit: $unit, worktree: $worktree, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
       playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt}
@@ -3992,6 +3993,7 @@ do_tests_brief() {
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit.id,
      brief: $brief,
+     worktree: .worktree,
      criteria: ([ .criteria[] | .id + " (" + .verifiedBy + ")" ]),
      nonGoals: (.nonGoals | length),
      declaredTests: (.unit.tests | length),
@@ -5558,13 +5560,14 @@ do_build_brief() {
   # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry. An
   # order whose proof is record commits in the project folder, so its commit is read there and
   # the brief says so under commitIn (nyc defect 17).
-  local bb_codepath bb_head
+  local bb_codepath bb_head bb_worktree
   bb_head=""
+  bb_worktree="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
   br_order_facts "$BB_UNIT_JSON"
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     bb_codepath="$(resolve_project_folder "$TASK_PATH")"
   else
-    bb_codepath="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+    bb_codepath="$bb_worktree"
   fi
   if [ -n "$bb_codepath" ] && [ -d "$bb_codepath" ]; then
     bb_head="$(git -C "$bb_codepath" rev-parse HEAD 2>/dev/null)"
@@ -5592,7 +5595,7 @@ do_build_brief() {
   local brief_file brief_json
   brief_file="$IMPL_DIR/brief-$unit_id-build.json"
   brief_json="$(jq -n --argjson unit "$unit_out" --argjson tests "$tests_out" --arg headNow "$bb_head" \
-        --arg commitIn "$bb_codepath" \
+        --arg commitIn "$bb_codepath" --arg worktree "$bb_worktree" \
         --argjson dependencyInterfaces "$dependency_interfaces_json" \
         --argjson dependencyInformation "$dependency_information_json" \
         --arg reportPath "$IMPL_DIR/answers-$unit_id-attempt$((attempts_used + 1)).md" \
@@ -5602,7 +5605,7 @@ do_build_brief() {
         --arg beforeLookPath "$bb_before" \
         --argjson previousAttempt "$previous_attempt_json" \
         --arg fakeMarker "$(! task_is_light "$TASK_PATH" || printf '%s' "$FAKE_MARKER")" \
-    '{unit: $unit, tests: $tests, headNow: $headNow, commitIn: $commitIn,
+    '{unit: $unit, worktree: $worktree, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
@@ -5618,6 +5621,7 @@ do_build_brief() {
   im_print_summary "build-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" --arg beforeState "$bb_before_state" '
     {order: .unit.id,
      brief: $brief,
+     worktree: .worktree,
      reportPath: .reportPath,
      interfacePath: .interfacePath,
      headNow: (if .headNow == "" then "none: the commit of \(.commitIn) could not be read" else .headNow end),
@@ -8039,10 +8043,11 @@ RB_PATHS
     --arg findingsPath "$IMPL_DIR/review-$unit_id-findings.json" \
     --arg startedAt "$started_at" --arg commit "$commit" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
-    --arg recipes "$(rv_recipe_refs)" \
+    --arg recipes "$(rv_recipe_refs)" --arg worktree "$RV_CODEPATH" \
     '{
       unit: $unit,
       mode: "review",
+      worktree: $worktree,
       criteria: $criteria,
       nonGoals: $nonGoals,
       order: $order,
@@ -8066,6 +8071,7 @@ RB_PATHS
   im_print_summary "review-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit,
      brief: $brief,
+     worktree: .worktree,
      diff: .diffPath,
      deliverables: (.deliverables | length),
      findingsPath: .findingsPath,
@@ -8484,9 +8490,11 @@ FB_ALLOW
     --arg reportPath "$IMPL_DIR/answers-$unit_id-fix$((rounds_used + 1)).md" \
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
-    --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" '
+    --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
+    --arg worktree "$RV_CODEPATH" '
     {
       unit: $unit,
+      worktree: $worktree,
       round: $round,
       roundsUsed: $roundsUsed,
       roundsAllowed: $roundsAllowed,
@@ -8506,6 +8514,7 @@ FB_ALLOW
     {order: .unit,
      round: "\(.round) of \(.roundsAllowed)",
      brief: $brief,
+     worktree: .worktree,
      reportPath: .reportPath,
      headNow: (if .headNow == "" then "none: the code repository commit could not be read" else .headNow end),
      finding: ([ .findings[] | {id, severity, linkedTo: ("cites " + (.linkedTo // "nothing")), file} ]),
@@ -8893,6 +8902,7 @@ do_verify_brief() {
   rv_load_state "verify-brief" "$unit_id"
   rv_require_step "verify-brief" "$unit_id" "fixed"
   rv_load_review_record "verify-brief" "$unit_id"
+  rv_load_codepath "verify-brief"
 
   local rounds_used already
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
@@ -8928,10 +8938,11 @@ do_verify_brief() {
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
     --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" \
-    --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" '
+    --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" --arg worktree "$RV_CODEPATH" '
     $fix[0] as $fix
     | {unit: $unit,
      mode: "verify",
+     worktree: $worktree,
      round: $round,
      findings: $findings,
      fixDiffPath: ($fix.diffPath // ""),
@@ -8945,6 +8956,7 @@ do_verify_brief() {
     {order: .unit,
      round: .round,
      brief: $brief,
+     worktree: .worktree,
      fixDiff: .fixDiffPath,
      fixReport: .fixReportPath,
      verdictsPath: .verdictsPath,
@@ -10914,11 +10926,13 @@ TG_OWNED
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
-  local deny_count
+  echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
+  local deny_count main
+  main="$(main_checkout "$(project_code_path_value "$RV_PROJECT_FOLDER")" "$(cd "$codepath" && pwd -P)")"
   deny_count="$(printf '%s' "$deny_json" | jq 'length' 2>/dev/null)"
   [ -n "$deny_count" ] || deny_count=0
   if [ "$deny_count" -gt 0 ] 2>/dev/null; then
-    echo "DISPATCH-OPEN: reads denied to this role, resolved against $codepath:"
+    echo "DISPATCH-OPEN: reads denied to this role, resolved against $codepath${main:+ and against the main checkout $main}:"
     printf '%s' "$deny_json" | jq -r '.[] | "  " + .'
   else
     echo "DISPATCH-OPEN: this dispatch denies no read. Every path under $codepath stays readable."
