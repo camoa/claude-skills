@@ -401,9 +401,9 @@ The title and the diff budget stay the survivor's; the output says `carried:` an
 nothing goes unseen. Retitle with `update` when the survivor's title no longer covers what it
 owns. The folded order's file is removed, and every `dependsOn` that named it now names the
 survivor. The folded id, the survivor and the reason go into `design-removed.json`, the same
-record `remove` writes. The two proofs must agree; set one order's `--proof` first when they do not. Never
-remove or edit an order file by any other means. A write outside the script prints nothing, so
-nothing records that it happened.
+record `remove` writes. The two proofs must agree; set one order's `--proof` first when they do
+not. Never remove or edit an order file by any other means. A write outside the script prints
+nothing, so nothing records that it happened.
 
 An order that no longer earns its place, for example after the contract changed, leaves
 through the script with its reason:
