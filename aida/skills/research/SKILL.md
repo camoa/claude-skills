@@ -278,7 +278,9 @@ For every finding an agent returns, record it under that search's own name:
 renders `research/prior-art-internal.md` from it. Nothing reads the rendered file back; it is for
 the design stage to read. Call `record` once per finding; calling it again with the same
 `--search` adds another finding to the same JSON file, and the rendered markdown with it, rather
-than replacing it.
+than replacing it. A finding is named `<search>#<n>`, counted from 1 as the rendered file
+numbers it. A finding whose text cites another finding names it that way, never by a number
+counted from 0.
 
 `--searched-for` holds the words this search searched for. Words, not a sentence about how the
 search ran: "responsive images, image styles, picture element". Give the same value on every
@@ -471,26 +473,28 @@ Exit 5: the file reads, but a finding or the coverage is wrong. For each id the 
 names under criteria with no finding, dispatch another search for that criterion specifically.
 Every finding names the criterion it serves, so repair each entry in the report's
 `findingsWithNoCriterion`.
-The report gives each one as a file path and an `index`, the finding's position in that file. A
-"looked and found nothing" finding serves the criterion its search was dispatched for, so serve
-it:
+The report names each one as `finding`, `<search>#<n>`, counted from 1. A "looked and found
+nothing" finding serves the criterion its search was dispatched for, so serve it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh serve "<task_folder>" \
-  --search <slug> --index <n> --criteria-served <id[,id...]>
+  --finding <search>#<n> --criteria-served <id[,id...]>
 ```
 A positive finding attached to nothing is work nobody asked for: serve it with the criterion it
 serves, or drop it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh drop "<task_folder>" \
-  --search <slug> --index <n>
+  --finding <search>#<n>
 ```
 `serve` rewrites that one finding's `criteriaServed`; `drop` removes that one finding, and
 removes the file when no finding is left. A `drop` moves every later finding in that file down
-by one, so the report's other indexes for that file are stale. Repair one entry, run `check`
-again, then the next. A finding citing an id the contract does not hold is listed in the
-report's `unknownCriteriaIds` the same way. Serve it with the ids it does serve. A finding with
-a missing or malformed field is listed by path and `index` too. Drop it with `drop`, then
-`record` it again with every field. Calling `record` alone, with the same `--search`, appends a
+by one, so the report's other numbers for that file are stale. Repair one entry, run `check`
+again, then the next. `drop` prints one `cites:` line per finding whose text names the dropped
+finding, or a later one it moved down. Rewrite each citing finding: drop it and `record` it
+again with the right number, or with no citation. The script cannot tell what the text meant.
+A finding citing an id the contract does not hold is listed in the report's
+`unknownCriteriaIds` the same way. Serve it with the ids it does serve. A finding with a missing
+or malformed field is listed by its `finding` too. Drop it with `drop`, then `record` it again
+with every field. Calling `record` alone, with the same `--search`, appends a
 second finding and leaves the first one as it was, so it repairs nothing.
 
 Research is done only when this check reaches exit 0. Nothing is left deliberately open, because

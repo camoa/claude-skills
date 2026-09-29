@@ -589,10 +589,12 @@ drop_closed_critique_rows() {
 # One line per research finding no work order's `findings` names with both its reference and its
 # text: `<search>#<n>: <first line>`. A text that differs means research changed or dropped a
 # finding after the entry was written, so the reference may now point at a neighbour. Then one
-# line per entry whose reference names no finding research holds now. Prints nothing when every
+# line per entry whose reference names no finding research holds now, or a finding whose text is
+# not the entry's. Another order can account for the finding now at that number, so the first
+# pass alone lets an entry for a dropped finding through (gap row 236). Prints nothing when every
 # finding is accounted for, and when research holds none.
 unaccounted_findings() {
-  local accounted f wo ref search n
+  local accounted f e wo ref search n now
   accounted="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do jq -c '(.findings // [])[] | {ref, text}' "$f" 2>/dev/null; done)"
   find "$TASK_PATH/research" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort \
@@ -605,11 +607,18 @@ unaccounted_findings() {
           | $ref + ": " + (($t // "") | split("\n")[0])' "$f" 2>/dev/null
       done
   find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
-    | while IFS= read -r f; do jq -r '.id as $w | (.findings // [])[] | $w + " " + .ref' "$f" 2>/dev/null; done \
-    | while read -r wo ref; do
+    | while IFS= read -r f; do jq -c '.id as $w | (.findings // [])[] | {w: $w, ref, text}' "$f" 2>/dev/null; done \
+    | while IFS= read -r e; do
+        wo="$(printf '%s' "$e" | jq -r '.w')"; ref="$(printf '%s' "$e" | jq -r '.ref')"
         search="${ref%#*}"; n="${ref##*#}"
-        [ "$(jq -r '(.findings // []) | length' "$TASK_PATH/research/$search.json" 2>/dev/null || echo 0)" -ge "$n" ] 2>/dev/null \
-          || echo "$ref: $wo holds this entry, and research holds no such finding now. Remove it with account --remove"
+        case "$n" in ''|0*|*[!0-9]*) now="" ;;
+          *) now="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$TASK_PATH/research/$search.json" 2>/dev/null)" ;;
+        esac
+        if [ -z "$now" ]; then
+          echo "$ref: $wo holds this entry, and research holds no such finding now. Remove it with account --remove"
+        elif [ "$now" != "$(printf '%s' "$e" | jq -r '.text')" ]; then
+          echo "$ref: $wo holds this entry, and research's $ref now reads differently, so the finding it named changed or was dropped. Remove it with account --remove, then account the finding it meant"
+        fi
       done
 }
 
@@ -2248,15 +2257,11 @@ do_account() {
     render_wo "$id"
     exit 0
   fi
-  # Numbered from 1, as research/<search>.md shows each finding to design. check-research.sh
-  # reports a 0-based index; that number is never a --finding.
-  local search="${ref%#*}" n="${ref##*#}"
-  case "$ref" in *'#'*) ;; *) die3 "account: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
-  case "$search" in ''|*[!a-z0-9-]*) die3 "account: --finding must be <search>#<n>, got '$ref'" ;; esac
+  parse_finding_ref account "$ref" "$TASK_PATH/research"
+  local search="$FINDING_REF_SEARCH" n="$FINDING_REF_N"
   local rfile="$TASK_PATH/research/$search.json" text count
   [ -f "$rfile" ] || die2 "account: no research file $rfile"
   count="$(jq -r '(.findings // []) | length' "$rfile" 2>/dev/null)"
-  case "$n" in ''|0*|*[!0-9]*) die3 "account: --finding must be <search>#<n>, numbered from 1 as research/$search.md shows it, got '$ref'. $search#1 is: $(jq -r '(.findings // [])[0].text // "" | split("\n")[0]' "$rfile" 2>/dev/null)" ;; esac
   text="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$rfile" 2>/dev/null)"
   [ -n "$text" ] || die2 "account: $rfile holds no finding $n. It holds ${count:-0}, numbered from 1 as research/$search.md shows them"
   doc="$(jq --arg r "$ref" --arg t "$text" --arg a "$set_aside" \

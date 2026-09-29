@@ -103,15 +103,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     files: [ { path, schema: {missingFields, unreadableFields, unknownFields, issueCount},
 #                findings: {checked, note, count, issues} } ],
 #     coverage: { checked, note, criteriaWithNoFinding: [ {id, text} ],
-#                 findingsWithNoCriterion: [ {path, index, text} ],
-#                 unknownCriteriaIds: [ {path, index, text, id} ] },
+#                 findingsWithNoCriterion: [ {path, finding, text} ],
+#                 unknownCriteriaIds: [ {path, finding, text, id} ] },
 #     fileIssueCount, contentIssueCount,
 #     notChecked: [...]
 #   }
 #
-#   `index` is the finding's own position in that file's findings array (0 based), and `text` is
-#   its text, truncated to 120 characters with an ellipsis when longer, so two findings in one
-#   file are told apart in the report instead of producing two identical rows.
+#   `finding` names the finding `<search>#<n>`, counted from 1 as <search>.md numbers it and as
+#   research's serve and drop take it (gap row 235). `text` is its text, truncated to 120
+#   characters with an ellipsis when longer, so two findings in one file are told apart in the
+#   report instead of producing two identical rows.
 #
 # Portability notes, because this script must run wherever the plugin runs:
 #   - No awk, no GNU-only flags, the same as check-alignment.sh. Every read of a research file
@@ -232,7 +233,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # 5. Walk every research file. One jq program per file checks its findings and collects them,
-#    with their own index and a truncated text, for the cross-file coverage join in step 6.
+#    with their own `<search>#<n>` and a truncated text, for the cross-file coverage join in step 6.
 # ---------------------------------------------------------------------------
 
 FILES_JSON='[]'
@@ -289,7 +290,7 @@ if [ "$RESEARCH_STARTED" = "true" ]; then
       FINDINGS_NOTE="not checked: findings is missing or not well-formed above"
     else
       FINDINGS_COUNT="$(jq '.findings | length' "$rfile")"
-      FINDINGS_ISSUES_JSON="$(jq -c --argjson allowed "$ALLOWED_FINDING_FIELDS_JSON" '
+      FINDINGS_ISSUES_JSON="$(jq -c --argjson allowed "$ALLOWED_FINDING_FIELDS_JSON" --arg s "$(basename -- "$rfile" .json)" '
         def str_present($v): ($v != null) and (($v | type) == "string") and (($v | length) > 0);
         def issues_for($f; $idx):
           (
@@ -312,22 +313,22 @@ if [ "$RESEARCH_STARTED" = "true" ]; then
                 )
               ]
             end
-          ) | map(. + {index: $idx});
+          ) | map(. + {finding: ($s + "#" + ($idx + 1 | tostring))});
         [ .findings | to_entries[] | issues_for(.value; .key) ] | flatten
       ' "$rfile")"
       FINDINGS_NOTE="ran: checked $FINDINGS_COUNT finding(s)"
 
       # Every well-formed finding in this file feeds the cross-file coverage join in step 6,
-      # tagged with the file it came from, its own index within that file, and its own text
+      # tagged with the file it came from, its own `<search>#<n>`, and its own text
       # (truncated), so an orphaned or unknown-id finding can be pointed at directly rather than
       # only at the file that holds it.
-      THIS_FINDINGS="$(jq -c --arg path "$rfile" --argjson n "$TRUNC_LEN" '
+      THIS_FINDINGS="$(jq -c --arg path "$rfile" --arg s "$(basename -- "$rfile" .json)" --argjson n "$TRUNC_LEN" '
         def trunctext($v; $n):
           if ($v | type) == "string" then
             (if ($v | length) > $n then ($v[0:$n] + "...") else $v end)
           else "(no text recorded)" end;
         [ (.findings // []) | to_entries[] | select((.value | type) == "object")
-          | {path: $path, index: .key, text: trunctext(.value.text?; $n),
+          | {path: $path, finding: ($s + "#" + (.key + 1 | tostring)), text: trunctext(.value.text?; $n),
              criteriaServed: (.value.criteriaServed? // [])} ]
       ' "$rfile")"
       ALL_FINDINGS_JSON="$(printf '%s' "$ALL_FINDINGS_JSON" | jq --argjson add "$THIS_FINDINGS" '. + $add')"
@@ -376,7 +377,7 @@ else
   UNKNOWN_CRITERIA_IDS_JSON="$(jq -c -n --argjson findings "$ALL_FINDINGS_JSON" --argjson known "$CRITERION_IDS_JSON" '
     [ $findings[] | . as $f | ($f.criteriaServed // [])[] as $id
       | select(($known | index($id)) == null)
-      | {path: $f.path, index: $f.index, text: $f.text, id: $id} ]
+      | {path: $f.path, finding: $f.finding, text: $f.text, id: $id} ]
   ')"
 
   CRITERIA_WITH_NO_FINDING_JSON="$(jq -c -n --argjson findings "$ALL_FINDINGS_JSON" --argjson criteria "$CRITERIA_WITH_TEXT_JSON" '
@@ -386,7 +387,7 @@ else
   ')"
 
   FINDINGS_WITH_NO_CRITERION_JSON="$(jq -c -n --argjson findings "$ALL_FINDINGS_JSON" '
-    [ $findings[] | select((.criteriaServed // []) | length == 0) | {path: .path, index: .index, text: .text} ]
+    [ $findings[] | select((.criteriaServed // []) | length == 0) | {path: .path, finding: .finding, text: .text} ]
   ')"
 
   UNKNOWN_COUNT2="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"

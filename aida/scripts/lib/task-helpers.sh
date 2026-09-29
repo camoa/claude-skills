@@ -14,6 +14,9 @@
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
 #   is_blank <value>                      true when the value is empty or only whitespace
+#   parse_finding_ref <action> <ref> <research folder>
+#                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
+#                                         <search>#<n>, counted from 1, or dies
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
@@ -196,6 +199,21 @@ is_blank() {
     *[![:space:]]*) return 1 ;;
   esac
   return 0
+}
+
+# A research finding is named `<search>#<n>`: its search's file under research/, and its place
+# in that file's findings, counted from 1 as research-render.sh numbers it. Research's serve and
+# drop and design's account take this one form, so a person meets one number (gap row 235).
+# $1 the action, $2 the reference, $3 the research folder. Sets FINDING_REF_SEARCH and
+# FINDING_REF_N, or dies 3 on a reference not in that form. Whether the finding exists is the
+# caller's question.
+parse_finding_ref() {
+  local who="$1" ref="$2" dir="$3" search n
+  search="${ref%#*}"; n="${ref##*#}"
+  case "$ref" in *'#'*) ;; *) die3 "$who: --finding must be <search>#<n>, got '${ref:-<nothing>}'" ;; esac
+  case "$search" in ''|*[!a-z0-9-]*) die3 "$who: --finding must be <search>#<n>, got '$ref'" ;; esac
+  case "$n" in ''|0*|*[!0-9]*) die3 "$who: --finding must be <search>#<n>, numbered from 1 as research/$search.md shows it, got '$ref'. $search#1 is: $(jq -r '(.findings // [])[0].text // "" | split("\n")[0]' "$dir/$search.json" 2>/dev/null)" ;; esac
+  FINDING_REF_SEARCH="$search"; FINDING_REF_N="$n"
 }
 
 # Writes $2 (assumed already-valid JSON text) to $1 through a temporary file in the target's own

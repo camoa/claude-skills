@@ -185,7 +185,9 @@ The check refuses on five things:
   looked for, so research serves it with that id. A positive finding attached to nothing is work
   nobody asked for, so research serves it with the criterion it serves or drops it. Serving and
   dropping are their own actions on one finding, because recording again adds a finding and
-  removes none.
+  removes none. Both name the finding `<search>#<n>`, counted from 1, the number the rendered
+  file and design use. A drop names each finding whose text cites the dropped one, or a later
+  one it moved down, so research rewrites those.
 - The spike folder still on disk. Delete it, then check again; nothing else is missing.
 
 Research is done only when the check passes. Every gap is closed one of three ways: recording
