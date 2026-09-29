@@ -1380,25 +1380,12 @@ do_read_projects_base() {
 # the machine and not a verdict on a project.
 # ------------------------------------------------------------------------------------------------
 
-# True when $1, a dotted version, is $2 or later. Three fields, compared as numbers, because
-# `sort -V` is not on every build. A field that is not a number counts as zero.
-version_at_least() {
-  local have="$1" want="$2" hp wp i
-  i=1
-  while [ "$i" -le 3 ]; do
-    hp="$(printf '%s' "$have" | cut -d. -f"$i")"
-    wp="$(printf '%s' "$want" | cut -d. -f"$i")"
-    case "$hp" in ''|*[!0-9]*) hp=0 ;; esac
-    case "$wp" in ''|*[!0-9]*) wp=0 ;; esac
-    [ "$hp" -gt "$wp" ] && return 0
-    [ "$hp" -lt "$wp" ] && return 1
-    i=$((i + 1))
-  done
-  return 0
-}
-
 do_check_machine() {
   local cwd version plugin git_dir common_dir match code name rows listed recorded gone unnamed row id wt
+  # version_at_least and plugin_version live in the task-helper library.
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" \
+    || die3 "check-machine: the library failed to load: task-helpers.sh"
   cwd="$(pwd -P)"
   printf 'Machine check: %s\n' "$cwd"
   printf 'Checked: %s\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -1424,9 +1411,6 @@ do_check_machine() {
     fi
   fi
 
-  # shellcheck source=/dev/null
-  source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" \
-    || die3 "check-machine: the library failed to load: task-helpers.sh"
   plugin="$(plugin_version)"
   printf 'AIDA plugin: %s, at %s\n' "$plugin" "$PLUGIN_ROOT"
   # The session-start hook exports the version it loaded into $CLAUDE_ENV_FILE, which Claude Code

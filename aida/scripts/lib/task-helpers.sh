@@ -17,6 +17,9 @@
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
+#   version_at_least <have> <want>        true when <have> is <want> or later
+#   warn_newer_installed                  one stderr line when a newer copy of this plugin sits
+#                                         beside PLUGIN_ROOT; runs once when this file is sourced
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
@@ -216,12 +219,58 @@ write_atomic() {
 # and nothing on disk said so. Nothing reads the field back; it is for a person or a later
 # reader. A file that is missing, unreadable or malformed prints `unknown`, never an empty
 # string. The record then still says a version was asked for and not found. This is the one jq
-# call on plugin.json in the plugin.
+# call on this plugin's own plugin.json version; warn_newer_installed reads its siblings' copies.
 plugin_version() {
   local version
   version="$(jq -r '.version // empty' "${PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null)"
   [ -n "$version" ] || version="unknown"
   printf '%s' "$version"
+}
+
+# True when $1, a dotted version, is $2 or later. Three fields, compared as numbers, because
+# `sort -V` is not on every build. A field that is not a number counts as zero, so two
+# prereleases of one version compare equal.
+version_at_least() {
+  local have="$1" want="$2" hp wp i
+  i=1
+  while [ "$i" -le 3 ]; do
+    hp="$(printf '%s' "$have" | cut -d. -f"$i")"
+    wp="$(printf '%s' "$want" | cut -d. -f"$i")"
+    case "$hp" in ''|*[!0-9]*) hp=0 ;; esac
+    case "$wp" in ''|*[!0-9]*) wp=0 ;; esac
+    [ "$hp" -gt "$wp" ] && return 0
+    [ "$hp" -lt "$wp" ] && return 1
+    i=$((i + 1))
+  done
+  return 0
+}
+
+# A plugin update keeps the old version's folder in the plugin cache, one folder per version
+# under one parent. A skill loaded before the update still names the old folder's scripts, and
+# they still run (gap row 238). So every script that sources this file says so, once, when a
+# sibling folder holds this plugin at a later version. A sibling counts only when its plugin.json
+# carries this plugin's name, so a marketplace clone, whose siblings are other plugins, stays
+# quiet. It warns and never refuses: the old scripts still work, and the person decides when to
+# reload. stderr, because stdout of several actions is read as data. The export keeps a script
+# that another script started from saying it twice. Nothing is written.
+warn_newer_installed() {
+  local name running newest dir version
+  [ -z "${AIDA_NEWER_WARNED:-}" ] || return 0
+  name="$(jq -r '.name // empty' "${PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null)"
+  running="$(plugin_version)"
+  [ -n "$name" ] && [ "$running" != "unknown" ] || return 0
+  newest="$running"
+  for dir in "$(dirname -- "$PLUGIN_ROOT")"/*/; do
+    [ -f "${dir}.claude-plugin/plugin.json" ] || continue
+    version="$(jq -r --arg n "$name" 'select(.name == $n) | .version // empty' \
+      "${dir}.claude-plugin/plugin.json" 2>/dev/null)"
+    [ -n "$version" ] && ! version_at_least "$newest" "$version" && newest="$version"
+  done
+  [ "$newest" = "$running" ] && return 0
+  printf 'AIDA %s is installed, and this script runs from %s. Run /reload-plugins, load the skill again, then restart the current step on %s.\n' \
+    "$newest" "$running" "$newest" >&2
+  export AIDA_NEWER_WARNED=1
+  return 0
 }
 
 # The run mode of one stage, from task.json (task-schema.json, runMode and runModeStages). The
@@ -535,3 +584,5 @@ active_tree_for() {
     printf '%s' "$code"
   fi
 }
+
+warn_newer_installed
