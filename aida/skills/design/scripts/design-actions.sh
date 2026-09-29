@@ -1737,6 +1737,31 @@ do_check() {
   else
     echo "interfaceUnquoted: none"
   fi
+  # The calls an order's done-when rows and tests make that nothing it declares names (gap row
+  # 231). The test author may not read source, so a signature the brief lacks sent it to a runtime.
+  # A `name()` token is looked for as `name(` in the order's interface, its reuses and the
+  # interfaces of its dependsOn orders. A call a clause denies is named too, so the line never
+  # blocks the close.
+  local undeclared
+  undeclared="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -c 'select(type == "object")' "$f" 2>/dev/null; done | jq -rs '
+      (map({(.id // ""): (.interface // "")}) | add // {}) as $ifaces
+      | .[] | . as $wo
+      | ([ ($wo.interface // "") ] + [ ($wo.reuses // [])[] | .interface // "" ]
+         + [ ($wo.dependsOn // [])[] | $ifaces[.] // "" ] | join("\n")) as $known
+      | [ ($wo.doneWhen // [])[], ($wo.tests // [])[]
+          | if type == "object" then (.description // "") else tostring end
+          | scan("[A-Za-z_][A-Za-z0-9_]*\\(\\)") ]
+      | unique
+      | map(select(rtrimstr("()") as $n | $known | test("(^|[^A-Za-z0-9_])" + $n + "\\(") | not))
+      | select(length > 0)
+      | $wo.id + " " + join(", ")' 2>/dev/null \
+    | paste -s -d ';' - | sed 's/;/; /g')"
+  if [ -n "$undeclared" ]; then
+    echo "callsUndeclared: $undeclared | best effort: each call is in a done-when row or a test, and in no interface this order declares. Add the reuse with dispose --path --interface, or answer why the call needs no signature"
+  else
+    echo "callsUndeclared: none"
+  fi
   if [ "$verdict" -eq 7 ]; then
     printf '%s\n' "$unaccounted" | sed 's/^/unaccounted: /'
     echo "next: account for each finding above, cited by the order it affects or set aside with a reason"

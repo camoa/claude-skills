@@ -2,10 +2,18 @@
 # dispatch-open copies each line into a test author's dispatch record as `denyCommand`, and
 # hooks/deny-prior-source.sh refuses a Bash command holding one as a whole word (gap row 231).
 # One literal form per line, of any language. A line starting with # and a blank line are skipped.
-# The hook holds no language; a new framework's forms are added here.
+# The hook holds no language; a new framework's forms are added here. The forms live in this
+# file and not in a framework's recipe, because the recipes are catalog documents this plugin
+# does not ship.
 php:eval
 php-eval
 drush ev
+drush eval
+php:script
+php-script
+drush scr
+php:cli
+drush php
 php -r
 ReflectionClass
 ReflectionMethod

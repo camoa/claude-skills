@@ -279,6 +279,10 @@ Which of the other three proofs fits is a judgment, so no exit code holds it.
 It also prints `interfaceUnquoted:` with every order whose interface names nothing in backticks.
 A script cannot tell whether prose names a code element, so this does not hold the close either.
 
+It also prints `callsUndeclared:` with each `name()` call a done-when row or a test makes that no
+interface the order declares holds. The test author cannot read source to learn the signature. A
+call a clause denies is named too, so this does not hold the close either.
+
 A clean check says design is finished, subject to your confirmation above. An open item names
 the order it is on and its remedy: the missing test, the owner to reconcile, the dependency to
 add. A dependency points from the owner to the order it needs, never the other way. An order no

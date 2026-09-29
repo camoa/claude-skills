@@ -651,6 +651,13 @@ holds no name in backticks. A script cannot tell whether prose names a code elem
 never blocks the close. Rewrite each such interface with `update --interface`, and quote each
 element it exposes.
 
+`check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
+order's done-when rows and tests that no interface the order declares holds. It reads the order's
+own interface, its reuses and its `dependsOn` orders. The test author may not open source, so a
+missing signature stops the tests. It is best effort, and a call a clause denies is named too. It
+never blocks the close. Answer each one: add the reuse with `dispose --path --interface`, or say
+why the call needs no signature.
+
 Exit 0: nothing to do. Design is finished, subject to the judgment step above.
 
 Exit 7: the design check is clean, but a research finding is in no order's list. Each one prints
