@@ -171,8 +171,8 @@ line of the unit's build and fix commits while one is on the branch, until the u
 A halt that reads none of `attempts spent`, `budget spent`, `design drift` or `test wrong` names
 something a person does outside this script. That is a rejected row, a finding on a non-goal, a
 fixer's scope, a finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with
-findings open halt the same way, and so do a builder's stop and a role that returned no report
-after its resume. A `test wrong` halt is cleared by `retake-tests`, under Rulings
+findings open halt the same way. So do a builder's stop and a role that returned no report after
+its resume. A `test wrong` halt is cleared by `retake-tests`, under Rulings
 in `references/review.md`, and `clear-halt` refuses it. Put the halt and its reason to the person, opening with: "This unit of
 work stopped on something only you can do. It waits until you say you have done it. Do what
 the reason names, then say so, and the build resumes where it stopped." Then say the reason in

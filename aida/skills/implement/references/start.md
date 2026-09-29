@@ -97,9 +97,9 @@ record. A drifted order that has not started is taken fresh from the live design
 nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
 The `resnapshotted:` line names those orders, and the ledger records each with the two hashes.
 A started order that only gained owned files is taken in place the same way, and nothing halts
-for it. So is a started or closed order whose research findings changed through `account`, or
-whose reasoning only grew through `update --append-reasoning`, or whose absence rows design marked
-reviewed. Its frozen tests were written from
+for it. So is a started or closed order whose research findings changed through `account`. So is
+one whose reasoning only grew through `update --append-reasoning`. So is one whose absence rows
+design marked reviewed. Its frozen tests were written from
 fields that did not change. An order already built carries the new findings only into a review it
 has not had yet, never into the build it already had. A removed owned file, or any other change,
 halts it as before. A reasoning whose earlier text changed halts too.

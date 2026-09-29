@@ -3,7 +3,7 @@ name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
 ---
 
 # Task
@@ -375,8 +375,17 @@ That is scope without `records/scope-distill.json`, research without
 `records/research-check.json` at `exitCode` 0, design without `design-closed.json`. A task in state `new`, or whose stage has no
 record on disk yet, skips the distiller: nothing exists to distill. The stage's first record is
 `alignment.json` for scope, `research/*.json` for research, `design/*.json` for design. Say which
-stage it would have been and that none exists, then go on to the list. Otherwise read that
-stage's sidecar, `records/<stage>-distill.json`. When none exists, dispatch the `distiller` role
+stage it would have been and that none exists, then go on to the list. Otherwise, when the
+stage's sidecar `records/<stage>-distill.json` exists, run the stage's own `distill` action from
+the task's worktree, the call started with `cd <worktree> &&`:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
+```
+Scope needs no call, because its sidecar is its close record. The action prints `standsAlone:
+stale` when the sidecar is older than the last change to the stage's records. A stale sidecar
+counts as absent. So does one out of shape: the action sets it aside and exits 4. When none
+exists, dispatch the `distiller` role
 with the run mode, the task folder, the stage, and the stage's record paths, one per line. Then
 read the sidecar it writes. A record path absent mid-stage is normal; the distiller names it as
 a gap.
@@ -395,12 +404,6 @@ It appends the text to `<task_folder>/notes/<date>.md` under a `## <UTC time>` h
 records `savedAt` in `task.json`, commits, and prints `savedAt:` and `note:` with the path. With no text
 it writes no note and prints `savedAt:` only. When the stage had no record, it prints `distill:
 none` naming the stage. Show the lines.
-
-When the sidecar is older than the last change to the stage's records, `save` also prints
-`standsAlone: stale` and a `stale:` line, and none of the sidecar's gaps. The list was then built
-from an old summary. Dispatch the `distiller` again as above and read the new sidecar. Name what
-this conversation decided that neither the new sidecar nor the saved note holds, and ask again. A
-yes runs `save` again.
 
 A note is never a stage record: the stage action that later records the same decision makes it
 stale, and the record wins. The session-start hook names the newest note after `Stage:`, and

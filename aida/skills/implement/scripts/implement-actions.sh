@@ -1320,13 +1320,13 @@ im_next_step() {
          elif $bd.lastStep == "tests-frozen" and ($retake_pending[$bd.id] // false) then
            "tests \($bd.id): the tests were retaken and not frozen again yet"
          else "build \($bd.id)" end)
-      elif $removed != null and $ts != null then "restart: the design removed \($removed.id), and its frozen test record still guards its test files"
+      elif $removed != null and $ts != null then "finish: offer the restart, the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
-      elif $departure != null then "finish: \($departure.id) is halted for a departure from the design, so offer the restart or review-record --accept-deviation"
+      elif $departure != null then "review: \($departure.id) is halted for a departure from the design, so offer review-record --accept-deviation or the restart"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
-      elif $testwrong != null then "retake-tests \($testwrong.id): a frozen test is ruled wrong, and the retake sends the order back to its tests"
+      elif $testwrong != null then "review: offer retake-tests \($testwrong.id), a frozen test is ruled wrong, and the retake sends the order back to its tests"
       elif $halted > 0 then "finish: offer clear-halt, every order that is not closed is halted for a reason a person clears"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
