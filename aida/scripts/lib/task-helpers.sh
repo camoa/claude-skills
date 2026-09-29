@@ -53,6 +53,11 @@
 #   REASONING_JQ                          jq definitions: `struckMark`, and `liveReasoning`,
 #                                         a work order's reasoning with no struck paragraph
 #
+# Every script that sources this file runs warn_newer_installed. These never source it, so
+# they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
+# check-design.sh, and every hook but session-start.sh, which discards the line.
+# project-actions.sh sources it in check-machine alone.
+#
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
 # and is_git_repo from scripts/lib/recipes.sh. Two callers, scope and design, do not source that
 # file, so resolve_task_folder sources it when the function is absent, the way task_worktree
@@ -218,8 +223,8 @@ write_atomic() {
 # record. Live-run row 134 had critics dispatched by beta.15 and the close written by beta.21,
 # and nothing on disk said so. Nothing reads the field back; it is for a person or a later
 # reader. A file that is missing, unreadable or malformed prints `unknown`, never an empty
-# string. The record then still says a version was asked for and not found. This is the one jq
-# call on this plugin's own plugin.json version; warn_newer_installed reads its siblings' copies.
+# string. The record then still says a version was asked for and not found. warn_newer_installed
+# reads the same field in its one scan of this folder and its siblings.
 plugin_version() {
   local version
   version="$(jq -r '.version // empty' "${PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null)"
@@ -251,25 +256,41 @@ version_at_least() {
 # sibling folder holds this plugin at a later version. A sibling counts only when its plugin.json
 # carries this plugin's name, so a marketplace clone, whose siblings are other plugins, stays
 # quiet. It warns and never refuses: the old scripts still work, and the person decides when to
-# reload. stderr, because stdout of several actions is read as data. The export keeps a script
-# that another script started from saying it twice. Nothing is written.
+# reload. stderr, because stdout of several actions is read as data. Nothing is written.
+#
+# One jq call reads every plugin.json and compares inside jq, because a call per folder cost about
+# half a second per script start on a cache of 23 versions. The files are read as raw lines and
+# parsed per file, so one malformed file drops out alone. The key is the first three dotted fields
+# as numbers, a field that is not a number counting as zero, as version_at_least reads them. The
+# export marks the scan done, warned or not, so a script another script started does not scan
+# again.
+#
+# Claude Code leaves `.orphaned_at` in a cache folder it no longer uses. The mirror does not
+# document that file, so this rests on observed behaviour. A sibling carrying it is not installed
+# and is skipped, so a downgrade does not warn. The running folder counts either way. If the
+# marker is renamed, orphaned folders count again, and the scan warns more, not less.
 warn_newer_installed() {
-  local name running newest dir version
-  [ -z "${AIDA_NEWER_WARNED:-}" ] || return 0
-  name="$(jq -r '.name // empty' "${PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null)"
-  running="$(plugin_version)"
-  [ -n "$name" ] && [ "$running" != "unknown" ] || return 0
-  newest="$running"
+  local dir found
+  [ -z "${AIDA_NEWER_CHECKED:-}" ] || return 0
+  export AIDA_NEWER_CHECKED=1
+  set -- "${PLUGIN_ROOT}/.claude-plugin/plugin.json"
   for dir in "$(dirname -- "$PLUGIN_ROOT")"/*/; do
-    [ -f "${dir}.claude-plugin/plugin.json" ] || continue
-    version="$(jq -r --arg n "$name" 'select(.name == $n) | .version // empty' \
-      "${dir}.claude-plugin/plugin.json" 2>/dev/null)"
-    [ -n "$version" ] && ! version_at_least "$newest" "$version" && newest="$version"
+    # The running folder is already $1; named twice, its lines would join into two objects.
+    [ "${dir}.claude-plugin/plugin.json" != "$1" ] && [ -f "${dir}.claude-plugin/plugin.json" ] \
+      && [ ! -e "${dir}.orphaned_at" ] && set -- "$@" "${dir}.claude-plugin/plugin.json"
   done
-  [ "$newest" = "$running" ] && return 0
-  printf 'AIDA %s is installed, and this script runs from %s. Run /reload-plugins, load the skill again, then restart the current step on %s.\n' \
-    "$newest" "$running" "$newest" >&2
-  export AIDA_NEWER_WARNED=1
+  found="$(jq -nrR --arg own "$1" '
+    def key: (split(".")[0:3] | map(tonumber? // 0)) + [0, 0, 0] | .[0:3];
+    [inputs | {f: input_filename, l: .}] | group_by(.f)
+    | map({f: .[0].f, j: (map(.l) | join("\n") | fromjson?)} | select(.j | type == "object"))
+    | (map(select(.f == $own))[0].j // {}) as $me
+    | select(($me.name | type) == "string" and ($me.version | type) == "string")
+    | [.[].j | select(.name == $me.name and (.version | type) == "string") | .version]
+    | max_by(key) as $top
+    | select(($top | key) > ($me.version | key))
+    | "AIDA \($top) is installed, and this script runs from \($me.version). Run /reload-plugins, load the skill again, then restart the current step on \($top)."
+  ' "$@" 2>/dev/null)"
+  [ -z "$found" ] || printf '%s\n' "$found" >&2
   return 0
 }
 
