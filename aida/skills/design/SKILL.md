@@ -830,7 +830,9 @@ of `design/*.json` and `design-closed.json`. Never a summary of this conversatio
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
 ```
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
-`gap:` line; acting on one is an `update` and a second close. Exit 2 means the sidecar was not
+`gap:` line; acting on one is an `update` and a second close. `standsAlone: stale` means the
+orders or the close changed after the distiller read them: dispatch it again, then run the same
+call again. Exit 2 means the sidecar was not
 written. Send the same agent one message: write the file and read it back. An agent has reported
 a write it never made. Dispatch a fresh one only when exit 2 repeats. Exit 4 means the sidecar
 was malformed. The script set it aside at the `setAside:` path it printed. Dispatch a fresh

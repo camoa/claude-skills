@@ -253,7 +253,7 @@ do_read() {
   criteria_json="$(contract_criteria_json)"
   contract_state="absent"
   [ "$(contract_ok)" = "true" ] && contract_state="present"
-  decided="$(jq -r '(.decidedWithoutAPerson // []) | length' "$ALIGNMENT_FILE" 2>/dev/null)"
+  decided="$(jq -r "$DECIDED_OPEN_JQ | length" "$ALIGNMENT_FILE" 2>/dev/null)"
   [ -n "$decided" ] || decided=0
   echo "action: read"
   echo "task: $TASK_PATH"

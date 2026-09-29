@@ -74,8 +74,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not an object, a malformed id, a duplicate id within its own
 #      space, an unknown field inside an entry, a criterion missing verification, a verifiedBy,
 #      author or verdict outside its allowed values, an id counter below 1 or at or below an id
-#      already minted, or a decidedWithoutAPerson entry that is not a string. Each is named in
-#      the JSON on stdout.
+#      already minted, or a decidedWithoutAPerson entry that is neither a string nor a whole
+#      approved entry. Each is named in the JSON on stdout.
 #
 # What this script could not check is always named on stdout, never silently skipped
 # (check-task.sh states the same rule in its own header): schema-check.sh, the shared comparison
@@ -417,8 +417,9 @@ IDS_ISSUE_COUNT=$(( \
 
 # ---------------------------------------------------------------------------
 # 8. Content check, decidedWithoutAPerson: run only when the field itself passed step 4. Each
-#    entry must be a string. The shared comparison reads the array's items too since 2026-09-23,
-#    so this is a second reading of them, kept until something removes it deliberately.
+#    entry must be a string, or an object that approve marked, carrying text, approvedAt and
+#    approvedBy. The shared comparison reads the array's items too since 2026-09-23, but it does
+#    not check `required` below the root, so the three keys are checked here.
 # ---------------------------------------------------------------------------
 
 DWAP_ISSUES_JSON='[]'
@@ -430,8 +431,13 @@ else
   DWAP_COUNT="$(jq '.decidedWithoutAPerson | length' "$ALIGNMENT_FILE")"
 
   DWAP_ISSUES_JSON="$(jq -c '
-    [ .decidedWithoutAPerson | to_entries[] | select((.value | type) != "string")
-      | {index: .key, problem: ("entry is not a string, is a " + (.value | type))} ]
+    [ .decidedWithoutAPerson | to_entries[]
+      | if (.value | type) == "string" then empty
+        elif (.value | type) == "object" then
+          ([ "text", "approvedAt", "approvedBy" ] - (.value | keys)) as $absent
+          | if ($absent | length) == 0 then empty
+            else {index: .key, problem: ("approved entry lacks " + ($absent | join(", ")))} end
+        else {index: .key, problem: ("entry is not a string or an approved entry, is a " + (.value | type))} end ]
   ' "$ALIGNMENT_FILE")"
 
   DWAP_NOTE="ran: checked $DWAP_COUNT entry/entries"

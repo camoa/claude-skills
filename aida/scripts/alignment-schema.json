@@ -54,11 +54,22 @@
     "decidedWithoutAPerson": {
       "type": "array",
       "default": [],
-      "items": { "type": "string", "minLength": 1 },
-      "description": "Each entry names one question an unattended run answered on a person's behalf while drafting or updating this contract. An autonomous run drafts the contract from what is on disk, records every criterion as the designer's, and records which questions it answered without anyone present, so a person reviewing the contract later can see exactly where a judgment call was made for them rather than by them (ideal/scope.md, 'The autonomous branch'). Empty for a run made with a person present, and empty is the only value an interactive run ever writes."
+      "items": { "oneOf": [ { "type": "string", "minLength": 1 }, { "$ref": "#/$defs/approvedDecision" } ] },
+      "description": "Each entry names one question an unattended run answered on a person's behalf while drafting or updating this contract. An autonomous run drafts the contract from what is on disk, records every criterion as the designer's, and records which questions it answered without anyone present, so a person reviewing the contract later can see exactly where a judgment call was made for them rather than by them (ideal/scope.md, 'The autonomous branch'). An interactive run never adds an entry. A string entry is open: nobody has approved it yet. A person's later `approve` turns each string into an object that keeps the text and adds approvedAt and approvedBy (gap row 232). An object entry is history, not an open decision, and a reader never asks for a repair because of it. Only string entries count as decided without a person."
     }
   },
   "$defs": {
+    "approvedDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "approvedAt", "approvedBy"],
+      "description": "One decision an unattended run took, which a person approved later through scope's `approve`. Written by `approve` only.",
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "description": "The entry's own text, unchanged." },
+        "approvedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the approve that marked it." },
+        "approvedBy": { "type": "string", "enum": ["person"], "description": "Who approved it. `approve` refuses an autonomous run, so the value is always person." }
+      }
+    },
     "criterion": {
       "type": "object",
       "additionalProperties": false,

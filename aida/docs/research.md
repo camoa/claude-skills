@@ -201,7 +201,8 @@ After the check, research dispatches a reader, the distiller, over the findings 
 the conversation, and it says whether they stand alone. Each gap it names is one advisory
 line, and acting on one is another recorded finding. It blocks nothing. A malformed distiller
 record is renamed beside its original path, dated, and a fresh distiller runs with the rule it
-broke. A second malformed record stops for you.
+broke. A second malformed record stops for you. A reader's answer older than the last change to the record is stale. The close says so, shows
+none of its old gaps, and asks for the reader again.
 
 **A task with no automated tests.** When the contract says the task has none, the search in
 your own code also asks whether a test runner covers the changed code. When one does, research

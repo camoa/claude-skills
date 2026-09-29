@@ -313,7 +313,9 @@ The contract is final by then. Then run:
   approve "<task_folder>"
 ```
 It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
-Then it commits the task folder and prints `standsAlone:` and one `gap:` line per gap. Show each
+It marks each decision an unattended run took as approved by the person, and prints
+`approved-decisions:` with the count. A marked decision is history, not an open question. Then it
+commits the task folder and prints `standsAlone:` and one `gap:` line per gap. Show each
 `gap:` line. Acting on one is the relevant step above run again; the person then says it is
 right again, and the same call runs again. A second `approve` with nothing left to promote says
 so and is not a fault: it commits any later edit and reads the sidecar again.
@@ -358,6 +360,9 @@ writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous
 ```
 Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show
 each `gap:` line. Acting on one is the relevant step above run again; the check never blocks.
+`standsAlone: stale` means the contract changed after the distiller read it. The call then prints
+a `stale:` line and no gap. Dispatch the distiller again with the same message, then run the
+same call again.
 Exit 2 means the sidecar was not written. Send the same agent one message: write the file and
 read it back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2
 repeats. Then run the same call again. Exit 4 means the sidecar was malformed. The script set it

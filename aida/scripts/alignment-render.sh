@@ -219,12 +219,19 @@ trap 'rm -f "$TMP_FILE"' EXIT
     # An empty list prints nothing at all, the one place this document says less than the others:
     # an attended run always leaves it empty, so a "none" line on every contract is noise.
     printf '\n## Decided without a person\n\n'
-    printf 'Nobody answered these. An unattended run took the recommended answer on each one.\n\n'
+    # An object with a text and a date is an entry approve marked. It prints under its own line
+    # after the open ones. Any other object still gets the placeholder below.
+    APPROVED_JQ='objects | select((.text | type) == "string" and (.approvedAt | type) == "string")'
+    APPROVED_COUNT="$(jq "[.decidedWithoutAPerson[] | $APPROVED_JQ] | length" "$ALIGNMENT_FILE")"
+    OPEN_COUNT=$(( $(jq '.decidedWithoutAPerson | length' "$ALIGNMENT_FILE") - APPROVED_COUNT ))
+    [ "$OPEN_COUNT" -eq 0 ] \
+      || printf 'Nobody answered these. An unattended run took the recommended answer on each one.\n\n'
     DIDX=0
     while IFS= read -r row; do
       [ -n "$row" ] || continue
       DIDX=$((DIDX + 1))
       ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
+      [ -z "$(printf '%s' "$row" | jq -c "$APPROVED_JQ")" ] || continue
       if [ "$ROW_TYPE" != "string" ]; then
         # defect 20's rule, for a list of sentences: assert the entry's type before reading it,
         # and name its position when it is not one.
@@ -233,6 +240,11 @@ trap 'rm -f "$TMP_FILE"' EXIT
       fi
       printf -- '- %s\n' "$(printf '%s' "$row" | jq -r '.')"
     done < <(jq -c '.decidedWithoutAPerson[]' "$ALIGNMENT_FILE")
+    if [ "$APPROVED_COUNT" -gt 0 ]; then
+      [ "$OPEN_COUNT" -eq 0 ] || printf '\n'
+      printf 'An unattended run took these, and a person approved them later with the whole contract.\n\n'
+      jq -r ".decidedWithoutAPerson[] | $APPROVED_JQ"' | "- " + .text + " (approved " + .approvedAt + ")"' "$ALIGNMENT_FILE"
+    fi
   fi
 } > "$TMP_FILE" || die3 "could not write to $TMP_FILE"
 

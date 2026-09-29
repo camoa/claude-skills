@@ -190,7 +190,8 @@ The close shows you each gap. A gap never blocks: acting on one is the relevant 
 conversation above, run again. The close then commits the task folder, names the next command,
 `/aida:research <task-id>`, and stops. A malformed distiller record is renamed beside its
 original path, dated, and a fresh distiller runs with the rule it broke. A second malformed
-record stops for you.
+record stops for you. A reader's answer older than the last change to the record is stale. The close says so, shows
+none of its old gaps, and asks for the reader again.
 
 ## The autonomous run
 
@@ -202,7 +203,9 @@ Set on the task, an autonomous run mode changes four things here. See [Run modes
   its id, since a non-goal carries no author. The blank opening question has no answer
   to take; scope drafts from disk and goes on.
 - Nothing is promoted to yours. A criterion AIDA proposed stays the designer's, since nobody
-  approved it, and the approval itself is recorded as given on your behalf.
+  approved it, and the approval itself is recorded as given on your behalf. When you approve the
+  contract later, each of those decisions is marked as approved by you, with the date. The page
+  then lists them as approved, and no later stage asks you to repair them.
 - The test setup offer is skipped, and scope says so.
 - After the close, scope invokes research itself, once, and stops if research refuses.
 
