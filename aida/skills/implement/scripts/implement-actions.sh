@@ -752,6 +752,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      too, and a revert of a merge needs a person to choose its parent. So nothing is reverted,
 #      moved or written. The message names each such commit, its order and the other files. A
 #      person splits or reverts the commit, then runs restart again.
+# The code the implementer's freeze check added (gap row 267).
+# 114  `dispatch-open` was given the implementer role for an order with no
+#      <task_folder>/implementation/tests-<unit_id>.json. The same fact exit 39 names for
+#      `build-brief`, with the same message. Nothing is written, so no record opens for a build
+#      that has no brief. Run tests-freeze on the order first.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -5765,6 +5770,19 @@ bb_load_unit() {
   [ "$BB_UNIT_JSON" != "null" ] || die 38 "build-brief: $unit_id is not in the frozen copy."
 }
 
+# The frozen tests record of unit $2, which step three writes. Sets IM_TESTS_DOC. $1 names the step
+# in the message, and $3 is the exit code for a missing record: `build-brief` dies 39, and
+# `dispatch-open implementer` dies 114 (gap row 267).
+IM_TESTS_DOC=""
+im_require_tests_record() {
+  local tests_file="$IMPL_DIR/tests-$2.json"
+  [ -f "$tests_file" ] \
+    || die "$3" "$1: $tests_file not found. Step three has not run for $2 yet; run tests-brief and tests-freeze on it first."
+  IM_TESTS_DOC="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  [ -n "$IM_TESTS_DOC" ] \
+    || die 3 "$1: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+}
+
 do_build_brief() {
   [ "$#" -ge 2 ] || die 3 "build-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "build-brief: unrecognized extra argument: $3"
@@ -5788,13 +5806,9 @@ do_build_brief() {
   bb_load_unit "$snapshot_doc" "$unit_id"
 
   # --- exit 39: step three (tests-brief, tests-freeze) must already have run for this unit ---------
-  local tests_file="$IMPL_DIR/tests-$unit_id.json"
-  [ -f "$tests_file" ] \
-    || die 39 "build-brief: $tests_file not found. Step three has not run for $unit_id yet; run tests-brief and tests-freeze on it first."
+  im_require_tests_record "build-brief" "$unit_id" 39
   local tests_doc
-  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
-  [ -n "$tests_doc" ] \
-    || die 3 "build-brief: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  tests_doc="$IM_TESTS_DOC"
 
   # --- the ledger: needed for the dependency check and the attempt count ---------------------------
   local ledger_file="$IMPL_DIR/ledger.json"
@@ -11426,6 +11440,10 @@ do_dispatch_open() {
     [ "$unit_present" = "0" ] \
       && die 22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
     im_refuse_unneeded_role "$role_bare" "$unit_id"
+    # The implementer builds from the brief, and build-brief refuses an order with no frozen tests
+    # record. Refused here too, so no record opens for a build that has no brief (gap row 267). The
+    # fixer and the reviewer need a brief that exists only after a build record.
+    [ "$role_bare" != "implementer" ] || im_require_tests_record "dispatch-open" "$unit_id" 114
   fi
 
   # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause

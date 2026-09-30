@@ -104,7 +104,8 @@ Open it first:
 The script derives the rest itself from the frozen snapshot: this role is denied every other
 order's owned files, and allowed its own. Never type those paths here. It prints both lists, and
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
-write.
+write. An order whose tests were never frozen refuses too (exit 114), the same way `build-brief`
+does. Nothing is written. Freeze the order's tests first.
 
 **Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
 mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.

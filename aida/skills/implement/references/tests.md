@@ -435,7 +435,8 @@ declared pattern, and carries at the end of its name the criterion it claims. A 
 carries the order id there instead. It checks every machine-verified criterion this order owns has
 a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
 serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
-list). A test that names neither a criterion this order serves or owns nor this order's id refuses
+list). A person-verified criterion is different: each order that serves it needs its checklist
+line, owned or not (exit 30). A test that names neither a criterion this order serves or owns nor this order's id refuses
 (exit 31). A name that does not end in what it claims refuses (exit 28). A record that would hold
 no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
