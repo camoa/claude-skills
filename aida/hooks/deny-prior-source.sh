@@ -181,17 +181,15 @@ DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
   || not_enforced "the dispatch open at $DISPATCH_FILE denies no path, so this read was allowed without being checked against anything"
 
 # Every denied path, resolved against codePath and, when it differs, the main checkout. One
-# absolute path per line. The list is read once: a jq per entry cost seconds on a long list.
-DENY_ABS=""
-while IFS= read -r rel; do
-  [ -n "$rel" ] || continue
-  DENY_ABS="$DENY_ABS$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")
+# absolute path per line. One jq call resolves the whole list, by the rules resolve_against and
+# normalize_abs apply: a process per entry cost seconds on a long list.
+DENY_ABS="$(printf '%s' "$DENY_JSON" | jq -r --arg code "$CODE_CANON" --arg main "$MAIN_CANON" '
+  def norm: split("/") | reduce .[] as $c ([];
+    if $c == "" or $c == "." then . elif $c == ".." then .[:-1] else . + [$c] end)
+    | "/" + join("/");
+  def against($b): if startswith("/") then . else $b + "/" + . end | norm;
+  .[] | select(length > 0) | against($code), (select($main != "") | against($main))')
 "
-  [ -z "$MAIN_CANON" ] || DENY_ABS="$DENY_ABS$(normalize_abs "$(resolve_against "$rel" "$MAIN_CANON")")
-"
-done <<DENY_LIST
-$(printf '%s' "$DENY_JSON" | jq -r '.[]')
-DENY_LIST
 
 # Refuses when resolved target $1 falls under a denied path, or, for a search, when a denied path
 # falls under it. A search is the Grep tool, or a Bash segment whose verb is grep or rg (SEARCH).
