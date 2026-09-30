@@ -132,7 +132,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # every record action end with a `next:` line, derived from the ledger the way SKILL.md's routing
 # table reads it. The two exceptions to the summary rule are the bodies a person or a caller has to
 # read verbatim: `tests-freeze`'s checklist rows, and `step`'s own step file. `restart` prints the
-# archive path alone, and `dispatch-open` the worktree, the denied paths and the record path.
+# archive path alone, and `dispatch-open` the worktree, the denied paths and the record path. For
+# a row-checker it also prints the order's tests brief path, when that brief exists.
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -11355,6 +11356,12 @@ TG_ROOTS
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
   echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
+  # The checker is denied every reused path and every other order's files, as the author is. The
+  # author gets their interface text in the tests brief, so the checker is handed the same brief
+  # (gap row 257). An order with no test author has no brief and no line.
+  if [ "$role_bare" = "row-checker" ] && [ -f "$IMPL_DIR/brief-$unit_id-tests.json" ]; then
+    echo "DISPATCH-OPEN: tests brief: $IMPL_DIR/brief-$unit_id-tests.json. Put it in the dispatch message as a path: the role reads the interface text of what a test calls there."
+  fi
   local deny_count main
   main="$(main_checkout "$(project_code_path_value "$RV_PROJECT_FOLDER")" "$(cd "$codepath" && pwd -P)")"
   deny_count="$(printf '%s' "$deny_json" | jq 'length' 2>/dev/null)"

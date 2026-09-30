@@ -315,9 +315,14 @@ checker's own instructions to stay off the implementation are then just words, w
 enforcing them.
 
 **Then dispatch `row-checker`**, on opus, with the message SKILL.md names. Its lines are the
-role, the run mode, the rows built above, the test-authoring recipe's path, and its verdict
-file's path. That path is `implementation/row-check-<order id>.json` under the task folder. The
-rows are the one input typed by hand, because no brief action writes them.
+role, the run mode, the rows built above, the test-authoring recipe's path, the tests brief path
+`dispatch-open` prints, and its verdict file's path. That path is
+`implementation/row-check-<order id>.json` under the task folder. The rows are the one input
+typed by hand, because no brief action writes them. The denial above covers every reused path and
+every other order's files, so a test that calls one would reach the checker with no interface to
+judge the call against. The brief's `reuses` and `dependencyInterfaces` hold the text the author
+tested against. The checker reads the entry for what a test calls, and its note names it (gap row
+257). `dispatch-open` prints no brief line for an order with no test author, which has no brief.
 Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes

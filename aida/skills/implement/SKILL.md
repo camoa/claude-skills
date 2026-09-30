@@ -156,9 +156,9 @@ Where a step names one word beside the paths, such as a lens, that word is a lin
 carry a label. The worktree line is written `worktree: <path>`, from the path `dispatch-open`
 prints and each brief carries. The role works there and starts each shell command with
 `cd <worktree> &&`. A role starts in this session's directory, and without the line it worked in
-the main checkout (gap row 230). The row checker has no brief, so only this line and the hooks
-keep it out of the main checkout. The identifier's process-recipe point is written
-`point: <phase>` and never a bare word. A bare
+the main checkout (gap row 230). The row checker reads only the interface entries of a brief, so
+only this line and the hooks keep it out of the main checkout. The identifier's process-recipe
+point is written `point: <phase>` and never a bare word. A bare
 `implement` reads as a task and not a phase (live-run row 138). Nothing else goes in. The
 role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch.
