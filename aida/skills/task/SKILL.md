@@ -151,7 +151,11 @@ it replaced, and commits nothing. When a line ran and failed, it also names the 
 was cut from. An older task names the branch the code path is on now, and says so. A failed
 commit, or an interrupt before the commit, also removes the written files, their index entries
 and the output file, and says so. Then it commits the written and replaced files alone, so other changed or staged work is
-never taken in. Then
+never taken in. Then it records in `worktree.recipeChanges` each `## Files` path, and each file the
+`## Preconditions` prose names that the branch changed, with the content each holds. No order owns
+them, so the owned-files checks in the build and in review set them aside until an edit changes
+that content. A site brought up before this record existed has none. Run `up` again to write it:
+files already committed are not committed again. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
 `environment`: `state: coming-up`, the recipe, and the time. The record names the site before the

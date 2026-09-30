@@ -120,17 +120,23 @@ cites. It holds the ruling reason too, read from the review record the retake mo
 the rows and the test globs the order already froze, and those rows are keyed by criterion. So
 the criterion the finding names says which rows to correct.
 And it says what the author must do: correct the tests the finding names,
-and leave every other frozen row alone. A record a person removed is named under `absent`, and
-the brief carries what is left. The summary prints a `retake:` line.
+and leave every other frozen row alone. Its `redAgain` list names each frozen test with a red run
+in a file that holds a test of the finding's criterion, the same way `rowsRejected` does below. A
+record a person removed is named under `absent`, and the brief carries what is left. The summary
+prints a `retake:` line.
 
 `rowsRejected`, only while a row a person rejected at the checkpoint below stands. It holds each
-row's key, the person's words verbatim, and the checker's note. The summary prints a
-`rowsRejected:` line.
+row's key, the person's words verbatim, and the checker's note. Its `redAgain` list names each
+test with a red run in a file that holds a rejected row's test. The repair edits that file, so
+each of those tests needs a new red run. The `whatToDo` asks for those runs only when the list is
+not empty. The summary prints a `rowsRejected:` line.
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
 round began. A brief written again for a retake or a rejected row keeps the earlier time, because
-the unchanged tests keep their red runs. It keeps it only while the order and its criteria are
-unchanged. A design change, or a restart that moves the brief aside, starts a new round.
+a test file that the repair does not edit keeps its red runs. A test in an edited file does not,
+because the freeze compares each red with its file. It keeps the time only while the order and
+its criteria are unchanged. A design change, or a restart that moves the brief aside, starts a
+new round.
 
 It prints the brief's path and counts, never the brief.
 
@@ -309,15 +315,25 @@ files and every reused path, less this order's own files that a test glob matche
 readable each test in another order's frozen record that names a criterion this order serves or
 owns, because the checker reads it. Design lists an order's tests under its owned files. The checker
 reads those tests, so the globs decide which owned files stay readable. Without them every owned
-test file is denied, and the script refuses the call (live-run row 106). So `row-checker` cannot
+test file is denied, and the script refuses the call (live-run row 106). The task folder holds
+copies of production code too. So the checker is also denied its diffs, build and fix records,
+review and verify records, briefs, reports and set-aside files. So `row-checker` cannot
 open the production source behind a hook. Without this record open, the hook denies nothing. The
 checker's own instructions to stay off the implementation are then just words, with nothing
 enforcing them.
 
 **Then dispatch `row-checker`**, on opus, with the message SKILL.md names. Its lines are the
-role, the run mode, the rows built above, the test-authoring recipe's path, and its verdict
-file's path. That path is `implementation/row-check-<order id>.json` under the task folder. The
-rows are the one input typed by hand, because no brief action writes them.
+role, the run mode, the rows built above and the test-authoring recipe's path. Then come the
+interface file path `dispatch-open` prints, and the verdict file's path. That path is
+`implementation/row-check-<order id>.json` under the task folder. The rows are the one input
+typed by hand, because no brief action writes them. The denial above covers every reused path and
+every other order's files. A test that calls one would reach the checker with nothing to judge the
+call against. So `dispatch-open` copies the tests brief's `reuses` and `dependencyInterfaces` to
+`implementation/interfaces-<order id>.json`, the text the author tested against (gap row 257).
+It copies only those two keys. The rest of the brief holds the person's words, earlier notes and
+review evidence, and a read returns the whole file. An order with no tests brief gets no file.
+The checker's note names the entry it relied on. No script checks that, because no hook reads an
+agent's answer.
 Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes
@@ -343,9 +359,18 @@ order's ledger entry, with the person's words and the checker's note. Run `tests
 carries those rows under `rowsRejected`. Then open a new dispatch record and dispatch the test
 author fresh, with the same message as before. Do not resume the earlier author with a message: the
 brief is the one carrier. A role that stopped with no report is a different case, in SKILL.md.
-A repaired test goes through the checker again. When an owned criterion's row goes back, put the
-done-when row to the checker again too. Freeze once every row
-for this order reads confirmed; that freeze clears the record. A note may not hold the text
+The refusal ends with a `checkAgain:` line, which names each row the next checker dispatch covers.
+Those are the rejected rows and each confirmed row with a test in a rejected row's file. The
+done-when row is there too when an owned criterion's row went back. The repair edits those files,
+so an earlier verdict on them no longer holds. The refusal records each other confirmed row on the
+order's ledger entry as `rowsConfirmed`. A checker's row keeps the note from the verdict file, so
+the note is the checker's own. The next checker writes the same verdict file, and that file holds
+only the rows put to it. So the next freeze takes a `--row` for each `checkAgain` row alone. It
+carries each recorded row itself and names them on a `rowsCarried:` line (gap row 259). It does
+not carry a recorded row whose test file changed after the verdict file was written. Exit 64 then
+names that row, and it goes to the checker again. Exit 64 for a missing row also records the confirmed rows it was given.
+Their notes then survive the next checker's verdict file. Freeze once every row for this order
+reads confirmed; that freeze clears both records. A note may not hold the text
 `; earlier: `. This stage joins one halt reason to another with that text, so a note
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
 
@@ -420,9 +445,12 @@ is shorter than seven characters, or is not this order's own refuses (exit 101).
 `commit:` prefix is prose and names the existing code.
 A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). So does one written
 before its test file last changed. Either is the run of an earlier test, for example one a restart
-moved aside. The message names each file and both times. Run the test again and pass the new
-output. A brief that holds no `roundStartedAt` is read by its own file time. A freeze with no tests
-brief compares the test files only.
+moved aside. The message names each file and both times. Its last line, `redAgain:`, holds the
+names of those tests as a JSON list. Run each test again and pass the new output. The comparison is
+per file, not per test. Many frameworks keep several tests in one file, so an edit to one test
+makes each red in that file stale. That is on purpose: the edit can change what the other tests
+run, and it moves each line their reds cite. A brief that holds no `roundStartedAt` is read by its
+own file time. A freeze with no tests brief compares the test files only.
 It reads each `--red` file against the markers the
 test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
 A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a

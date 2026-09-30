@@ -1557,6 +1557,28 @@ TA_TOKEN_LIST
     "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
   # The files and the output file are kept from here. A failed commit above ran the EXIT trap first.
   RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""
+  # The recipe's files, and each file its `## Preconditions` prose names in backticks whose content
+  # differs from the commit this branch forked from its base, each with the content it holds now.
+  # No order owns them, and the owned-files checks set them aside while that content stands (gap
+  # row 256). The precondition check has passed here, so a named file that differs already holds
+  # the change the recipe demands, such as a line a person had to delete. A named file the branch
+  # never changed is only mentioned in the prose. With no base to fork from, none is recorded.
+  local recipe_changes changes_doc fork kind n blob
+  fork="$(jq -r '.worktree.base // empty' "$task_json")"
+  [ -z "$fork" ] || fork="$(git -C "$wt" merge-base "${fork#commit:}" HEAD 2>/dev/null)"
+  recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
+      recipe_prose_under "$RECIPE" Preconditions | grep -o '`[^` ]*`' | tr -d '`' | sed "s/^/named$tab/"; } \
+    | while IFS="$tab" read -r kind n; do
+        case "$n" in ''|/*|*..*) continue ;; esac
+        [ -f "$wt/$n" ] || continue
+        blob="$(git -C "$wt" hash-object -- "$n")"
+        [ "$kind" = files ] || { [ -n "$fork" ] && [ "$(git -C "$wt" rev-parse -q --verify "$fork:$n" 2>/dev/null)" != "$blob" ]; } || continue
+        printf '%s\t%s\n' "$n" "$blob"
+      done | jq -Rn '[inputs | split("\t") | {path: .[0], blob: .[1]}] | unique_by(.path)')"
+  [ -n "$recipe_changes" ] || die3 "environment: the list of files the recipe changed could not be built in $wt, so nothing is recorded and nothing was brought up. The output above names the cause. Fix it, then run task environment $id up again. The recipe's files are committed, so the rerun commits nothing"
+  changes_doc="$(jq --argjson c "$recipe_changes" '.worktree.recipeChanges = $c' "$task_json")"
+  [ -n "$changes_doc" ] || die3 "environment: $task_json could not be read, so the files the recipe changed are not recorded and nothing was brought up. Repair $task_json, then run task environment $id up again. The recipe's files are committed, so the rerun commits nothing"
+  write_atomic "$task_json" "$changes_doc"
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"
