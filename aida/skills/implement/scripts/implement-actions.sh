@@ -382,7 +382,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or an implementer
 #      or a fixer on an order that declares none of its own. A role's lists are derived from those
 #      files, so an empty set means the denial the role exists for would apply to nothing, or the
-#      role would be dispatched with nowhere it is meant to write.
+#      role would be dispatched with nowhere it is meant to write. Or a test author on an order
+#      that owns no file a test glob matches and no directory, whose every test the freeze would
+#      refuse (gap row 249).
 #
 # The step-five exit codes. Six actions share these, and each number carries one meaning across all
 # six rather than one number per action per fact.
@@ -4653,7 +4655,7 @@ TF_EOF
 $owned_list
 TF_EOF
     if [ -n "$owned_tests" ]; then
-      owned_tests="The test file design named for it is ${owned_tests%, }. Move the tests there and freeze again."
+      owned_tests="The test file design named for it is ${owned_tests%, }. Run dispatch-open with --resume and resume the test author: it writes the tests into that file and takes a new red run for each. Then freeze again. Do not move the tests here."
     else
       owned_tests="It owns no file a test glob matches, only $(printf '%s' "$owned_list" | paste -sd, - | sed 's/,/, /g'). If the tests belong where they are, design adds that file with add-owned-file and closes again."
     fi
@@ -10760,6 +10762,40 @@ $lo_status
 LO_STATUS
 }
 
+# Prints the test tree path $1 lies in, or nothing when $1 is not a test-tree file. $2 holds the
+# test globs, one per line. A directory a glob names literally, `tests` in `**/tests/**/*Test.php`,
+# makes the tree the path up to its last such segment, because the author writes base classes and
+# fixtures there too (live-run row 67). A glob with no literal directory, Go's `**/*_test.go`,
+# makes the tree the directory of a file the glob matches.
+im_test_tree_root() {
+  local p="${1%/}" g seg pre cand root=""
+  while IFS= read -r g; do
+    [ -n "$g" ] || continue
+    while IFS= read -r seg; do
+      case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
+      case "/$p/" in
+        */"$seg"/*)
+          pre="/$p/"; pre="${pre%/"$seg"/*}"; pre="${pre#/}"
+          cand="${pre:+$pre/}$seg"
+          [ "${#cand}" -le "${#root}" ] || root="$cand" ;;
+      esac
+    done <<TT_SEGS
+$(printf '%s' "${g%/*}" | tr '/' '\n')
+TT_SEGS
+  done <<TT_GLOBS
+$2
+TT_GLOBS
+  if [ -z "$root" ]; then
+    while IFS= read -r g; do
+      [ -n "$g" ] || continue
+      tf_path_matches_catalog_glob "$p" "$g" && { root="$(dirname "$p")"; break; }
+    done <<TT_GLOBS
+$2
+TT_GLOBS
+  fi
+  printf '%s' "$root"
+}
+
 # Exit 102. br_order_needs decides which roles a proof kind needs, and this reads its answer. A
 # role the kind does not need would judge nothing. Examples are a test author on an order that
 # freezes no test, and a row-checker on one with no row. $1 the bare role, $2 the order id.
@@ -10904,24 +10940,16 @@ do_dispatch_open() {
     # and is denied below even where a test glob matches it, so the hook catches an accidental read.
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
       '[.workOrders[]?.ownedFiles[]?] + [.workOrders[]?.reuses[]?.path] | unique')"
+    local roots="" r
     if [ -n "$test_glob_raw" ]; then
       while IFS= read -r f; do
         [ -n "$f" ] || continue
-        is_test=false
-        while IFS= read -r g; do
-          [ -n "$g" ] || continue
-          tf_path_matches_catalog_glob "$f" "$g" && is_test=true
-          while IFS= read -r seg; do
-            case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
-            case "/$f/" in */"$seg"/*) is_test=true ;; esac
-          done <<TG_SEGS
-$(printf '%s' "${g%/*}" | tr '/' '\n')
-TG_SEGS
-        done <<TG_GLOBS
-$test_glob_raw
-TG_GLOBS
-        [ "$is_test" = true ] || kept="$kept$f
+        r="$(im_test_tree_root "$f" "$test_glob_raw")"
+        if [ -z "$r" ]; then kept="$kept$f
 "
+        else roots="$roots$r
+"
+        fi
       done <<TG_OWNED
 $(printf '%s' "$owned_json" | jq -r '.[]')
 TG_OWNED
@@ -10931,6 +10959,27 @@ TG_OWNED
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \
       || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file outside the test globs, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+    # The freeze refuses a test in a file the order does not own (gap row 249). Refused here, before
+    # the author spends its run, when the order owns no file a test glob matches and no directory.
+    if [ "$role_bare" = "test-author" ] && [ -n "$test_glob_raw" ]; then
+      is_test=false
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        case "$f" in */) is_test=true; break ;; esac
+        [ ! -d "$codepath/$f" ] || { is_test=true; break; }
+        while IFS= read -r g; do
+          [ -n "$g" ] || continue
+          tf_path_matches_catalog_glob "$f" "$g" && { is_test=true; break; }
+        done <<TG_GLOBS
+$test_glob_raw
+TG_GLOBS
+        [ "$is_test" = false ] || break
+      done <<TG_OWN
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '.workOrders[]? | select(.id == $u) | .ownedFiles[]?')
+TG_OWN
+      [ "$is_test" = true ] \
+        || die 47 "dispatch-open: $unit_id owns no file a test glob matches, and no directory, so the freeze would refuse every test its author writes. Design adds the order's test file with add-owned-file and closes again. Nothing was dispatched."
+    fi
     # The test-glob filter keeps only this order's own test files readable. A reused file under the
     # test tree, such as a shared kernel base class, shows its shape as surely as source does, and
     # another order's test shows the same shape by its calls (gap rows 248, 249). So every reuse
@@ -10945,6 +10994,27 @@ TG_OWNED
       | map(select(. as $d | ($d | rtrimstr("/")) as $r
           | all($own[]; . != $d and . != $r and (startswith($r + "/") | not))))
       | . + $kept | unique')"
+    # A test no order owns shows a reuse's shape by its calls as well (live task
+    # event-archive-lookahead, four earlier kernel tests). So every tracked file under a test tree
+    # the orders own or reuse from is denied too, less this order's own. The trees are those the
+    # task works in, never the whole repository, so a large tracked vendor test suite elsewhere is
+    # not listed. A file the author writes is untracked, and stays readable.
+    local tracked tracked_json
+    if [ -n "$roots" ]; then
+      tracked="$(printf '%s' "$roots" | sort -u | while IFS= read -r r; do
+          [ -n "$r" ] || continue
+          git -C "$codepath" ls-files -- "$r" || exit 1
+        done)" \
+        || die 3 "dispatch-open: git ls-files failed in $codepath, so the tracked test files could not be listed."
+      tracked_json="$(printf '%s\n' "$tracked" | while IFS= read -r f; do
+          [ -n "$f" ] || continue
+          [ -z "$(im_test_tree_root "$f" "$test_glob_raw")" ] || printf '%s\n' "$f"
+        done | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+      owned_json="$(jq -nc --argjson d "$owned_json" --argjson t "$tracked_json" \
+        --argjson mine "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ]')" '
+        $d + ($t | map(select(. as $f | all($mine[]; (. | rtrimstr("/")) as $o
+            | $f != $o and ($f | startswith($o + "/") | not))))) | unique')"
+    fi
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi

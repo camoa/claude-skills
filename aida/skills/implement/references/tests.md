@@ -162,10 +162,15 @@ role works in. An owned file of this order that matches a test glob is a test, a
 readable, so the author can read back what it writes. So is an owned file under a directory the
 glob names literally, `tests` in `**/tests/**/*Test.php`, because the author also writes base
 classes and fixtures there. The globs decide, not the write path, because a framework may keep
-its tests beside the source; a glob that names no directory adds nothing. Two kinds stay denied
+its tests beside the source; a glob that names no directory adds nothing. Three kinds stay denied
 whatever the globs say. Every path an order reuses is one, because a shared test base class shows
-its shape as surely as source does. Every other order's owned file is the other, because a
-sibling test shows a reuse's shape by its calls (gap rows 248, 249). The test runner still loads
+its shape as surely as source does. Every other order's owned file is the second, because a
+sibling test shows a reuse's shape by its calls (gap rows 248, 249). Every file git tracks under a
+test tree the orders own or reuse from is the third, less this order's own. A test from before
+the task shows the same calls. A file the author writes is untracked, so it stays readable. The
+script refuses the dispatch (exit 47) when this order owns no file a test glob matches and no
+directory. The freeze would refuse every test the author wrote, so design adds the order's test
+file with `add-owned-file` first. The test runner still loads
 a denied base class. The hook judges what the role reads, through Read, Grep and the shell's
 reading verbs. A run command is none of those, so the files the runner opens are not judged.
 Never type the denied paths here. It prints what it denied; read that list, because it is the
@@ -370,7 +375,9 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
 the order's done-when, and its name ends with the order id. A `--test` path must be a file the
-order owns. The freeze refuses any other (exit 27) and names the test file design chose.
+order owns. The freeze refuses any other (exit 27) and names the test file design chose. Do not
+move the tests yourself. Run `dispatch-open` with `--resume` and resume the test author, which
+writes the tests into that file and takes a new red run for each. Then freeze again.
 
 `--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
 at `frameworks[].recipePath`, the same way the build step reads it. It must be the record's path:

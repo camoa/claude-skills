@@ -30,7 +30,8 @@ the units it depends on, and what their reviewers recorded for the person under
 `dependencyInformation`. Its `reuses` list holds the path and the interface of every existing
 thing this unit builds on. Test against that interface text. Do not open the reused source to
 read its shape; the brief is where design put it. A hook refuses that read, and the read of
-another unit's test file. Read the brief first. When it holds
+any committed test file this unit does not own. It also refuses a search of a folder that holds one. So search
+your own test file by its path, never its folder. Read the brief first. When it holds
 `treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
 is suspect: never take it as proof, and answer it the way the green-on-arrival rule below says.
 
