@@ -165,9 +165,11 @@ classes and fixtures there. The globs decide, not the write path, because a fram
 its tests beside the source; a glob that names no directory adds nothing. Three kinds stay denied
 whatever the globs say. Every path an order reuses is one, because a shared test base class shows
 its shape as surely as source does. Every other order's owned file is the second, because a
-sibling test shows a reuse's shape by its calls (gap rows 248, 249). Every test-tree file git
-tracked when the build started is the third, less this order's own test files and the support
-files its frozen record holds. A test from before the task shows the same calls. A file the author
+sibling test shows a reuse's shape by its calls (gap rows 248, 249). Every file git tracked when
+the build started, in a test tree an order owns or reuses from, is the third. This order's own test
+files and the support files its frozen record holds are left out. A test from before the task shows
+the same calls. Tests in other trees stay readable, such as a framework's committed core and
+contrib tests, which are the fair place to look up a framework base class. A file the author
 writes is untracked, so it stays readable. A search of a folder that holds a denied file is
 refused, so the author searches its own test file by its path. The
 script refuses the dispatch (exit 47) when this order owns no file a test glob matches and no

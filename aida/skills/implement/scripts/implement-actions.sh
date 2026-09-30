@@ -10990,35 +10990,36 @@ TG_OWN
           | all($own[]; . != $d and . != $r and (startswith($r + "/") | not))))
       | . + $kept | unique')"
     # A test no order owns shows a reuse's shape by its calls as well (live task
-    # event-archive-lookahead, four earlier kernel tests). So every test-tree file git tracks at
-    # the commit the build started from is denied too. This order's own test files stay readable,
-    # and so do the support files its frozen record holds: after a rejected row the author repairs
-    # its own committed base class. A file the author writes is untracked, and stays readable. The
-    # list covers the whole repository, so a large tracked test suite makes it long.
-    local base tracked tracked_json g_last g_re="" own_support
+    # event-archive-lookahead, four earlier kernel tests). So every file git tracked at the commit
+    # the build started from, in a test tree an order owns or reuses from, is denied too. Only those
+    # trees: a repository that commits its framework's core and contrib holds thousands of tests,
+    # which carry no project reuse's shape and are the fair place to look up a framework base
+    # class. This order's own test files stay readable, and so do the support files its frozen
+    # record holds: after a rejected row the author repairs its own committed base class. A file
+    # the author writes is untracked, and stays readable.
+    local base roots="" r tracked tracked_json='[]' own_support
     if [ -n "$test_glob_raw" ]; then
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        r="$(im_test_tree_root "$f" "$test_glob_raw")"
+        [ -z "$r" ] || roots="$roots$r
+"
+      done <<TG_ROOTS
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.workOrders[]? | (.ownedFiles // [])[], ((.reuses // [])[].path)')
+TG_ROOTS
+    fi
+    if [ -n "$roots" ]; then
       base="$(jq -r '.startedFrom // empty' "$IMPL_DIR/ledger.json" 2>/dev/null)"
       [ -n "$base" ] || die 3 "dispatch-open: $IMPL_DIR/ledger.json holds no startedFrom, so the tests tracked at the build's start could not be listed. Run start again."
-      tracked="$(git -C "$codepath" ls-tree -r --name-only "$base")" \
+      tracked="$(printf '%s' "$roots" | sort -u | while IFS= read -r r; do
+          [ -n "$r" ] || continue
+          git -C "$codepath" ls-tree -r --name-only "$base" -- "$r" || exit 1
+        done)" \
         || die 3 "dispatch-open: git ls-tree failed on $base in $codepath, so the tracked test files could not be listed."
-      # A cheap first pass: a path holding a literal directory of a glob, or whose last part fits a
-      # glob's last segment. im_test_tree_root then decides each path that passed.
-      while IFS= read -r g; do
-        [ -n "$g" ] || continue
-        g_last="$(printf '%s' "${g##*/}" | sed 's/\./\\./g; s/\*/[^\/]*/g; s/?/[^\/]/g')"
-        g_re="$g_re|(^|/)$g_last\$"
-        while IFS= read -r seg; do
-          case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
-          g_re="$g_re|(^|/)$(printf '%s' "$seg" | sed 's/\./\\./g')/"
-        done <<TG_SEGS
-$(printf '%s' "${g%/*}" | tr '/' '\n')
-TG_SEGS
-      done <<TG_GLOBS
-$test_glob_raw
-TG_GLOBS
-      tracked_json="$(printf '%s\n' "$tracked" | grep -E -e "${g_re#|}" | while IFS= read -r f; do
+      tracked_json="$(printf '%s\n' "$tracked" | while IFS= read -r f; do
+          [ -n "$f" ] || continue
           [ -z "$(im_test_tree_root "$f" "$test_glob_raw")" ] || printf '%s\n' "$f"
-        done | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+        done | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')"
       own_support="$(jq -c '[ (.support // [])[].path ]' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
       [ -n "$own_support" ] || own_support='[]'
       owned_json="$(jq -nc --argjson d "$owned_json" --argjson t "$tracked_json" \
