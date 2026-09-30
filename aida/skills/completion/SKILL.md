@@ -13,7 +13,9 @@ one. It reads the records and offers a task per follow up finding. It writes a p
 as a file and its own record, then calls the task skill's `complete` last.
 
 **Completion is not review.** It runs no check, dispatches no model, and re-derives no verdict. It
-creates no code change and repairs no finding. It calls no remote: no GitHub, no push, no merge.
+repairs no finding. Its one code change takes out the files `task environment up` committed for
+the worktree's own site, because trunk must not receive them. It calls no remote: no GitHub, no
+push, no merge.
 The person opens the pull request from the file. Review is a separate skill so a person can run
 their own reviews between the two.
 
@@ -96,7 +98,7 @@ One number never means two things, and none is new to this plugin.
 
 | Code | What it says |
 |---|---|
-| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. |
+| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. A file `task environment up` committed was changed by an order, or holds an uncommitted change. The task records no base. Those files are back while the site is recorded up. |
 | 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |

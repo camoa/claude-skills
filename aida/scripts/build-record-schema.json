@@ -62,6 +62,17 @@
       "minLength": 1,
       "description": "Where the builder's own report lives, copied from `--report` as given. Only the path is kept here, never the report's content: docs/implementation.md refuses the builder's account of what it did as authority, so this record never carries it as though it were evidence."
     },
+    "deviationAccepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["departure", "file", "because"],
+      "properties": {
+        "departure": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "because": { "type": "string", "minLength": 1 }
+      },
+      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). Interactive, `--accept-deviation` records the attempt instead: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason, and `review-record` carries this object to the review record instead of halting on the same line. Present only when a person kept one."
+    },
     "checks": {
       "type": "array",
       "minItems": 8,

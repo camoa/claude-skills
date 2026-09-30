@@ -23,6 +23,7 @@ undeclared | a check the recipe never declared |
 # suite of a task whose every order is proved by its record, which is the condition every
 # writer tests (implement-actions.sh, `all(. == "record")`).
 not-needed | a check the orders it covers did not ask for: today, the suite of a task whose every order is proved by its record |
+warned | a suite check that failed while no test failed: the recipe's warning_line names the lines that failed it. finish refuses on it unless a person accepts it |
 deferred | put off to a later step: a suite check a record step left to finish, or a finding ruled for a later task |
 # A criterion answers in the contract's three words, scripts/alignment-schema.json.
 unanswered | a criterion nobody answered | unresolved

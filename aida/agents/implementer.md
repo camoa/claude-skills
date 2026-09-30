@@ -107,6 +107,7 @@ every recipe rule. After a stop line other than `none`, return, and end the turn
 further written. `build-record` refuses a report with no stop line, and a `Stop: none` report with
 no deviation line. It reads any deviation other than `none` as a stop, in the report or the
 interface record. A heading that starts with "Deviation" is one too. It records no attempt for a
-stop. Never write "proceeding unless told otherwise". Never make a change while
+stop. A person may keep a deviation you declare. That is their decision, so declare each one.
+Never write "proceeding unless told otherwise". Never make a change while
 you wait for an answer. Nobody can answer inside your turn, and a change made while waiting is a
 build the rule forbade.

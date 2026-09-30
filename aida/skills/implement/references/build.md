@@ -104,7 +104,8 @@ Open it first:
 The script derives the rest itself from the frozen snapshot: this role is denied every other
 order's owned files, and allowed its own. Never type those paths here. It prints both lists, and
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
-write.
+write. An order whose tests were never frozen refuses too (exit 114), the same way `build-brief`
+does. Nothing is written. Freeze the order's tests first.
 
 **Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
 mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.
@@ -145,6 +146,13 @@ what the builder's report names. The person, or design, adds a file the unit nee
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
 halt a started order. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. The next `start` sets aside what was left.
+
+A deviation is a stop even when it departs from a play and not from the design. The line has no
+kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
+`build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
+and `haltsCleared` in the ledger hold the reason, and the flag clears the deviation's halt. Review
+carries the answer and does not ask again about that line. A stop line other than `Stop: none`
+has no such route. Unattended, the flag refuses (exit 68), and the halt names the route.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.
@@ -321,6 +329,13 @@ the worktree. A line can run a script the recipe ships. After the lines, it remo
 files, so the tree stays clean. A file that holds the block of an earlier version of the recipe
 is replaced for the run, then put back. Any other file with different content refuses at 3.
 
+The check's output is the log of the lines. Each line that ran starts with `+`, with every
+placeholder filled. A token is in single quotes when it is empty, or when it holds a character
+other than a letter, a digit, or one of `_ . / : = @ % + , -`. A line that did not run shows as
+written. The failure reason quotes the line the same way. The log names each `## Files` path
+written or replaced for the run. It then says which paths were removed or put back after the
+run. So a script absent after the run is expected.
+
 The site must be up before the verify lines run. A site command such as `ddev drush` starts a
 stopped site and prints its start-up text. A `stdout empty` line then fails for a reason that is
 not the check. So before any check runs, the script runs the `## Status` line of the task's
@@ -437,7 +452,9 @@ or fixed. On the whole output, a red baseline on those still reads unmet. A test
 recipe's suite row may declare `failure_line`, a regular expression matching the lines that name
 a failed test. Then only those lines are compared, on both sides, and the record names the
 selector. With the selector, a failure that matches no line reads unknown, because it is not one
-the selector names.
+the selector names. A suite row may also declare `warning_line`, the lines that fail no test.
+Only `finish` reads it, and `references/finish.md` says what follows. A record step still reads
+such a failure unknown.
 
 The subtraction holds no parser, so it cannot see four things. A finding whose text changed
 reads as new. A finding fixed and reintroduced reads as old. A new finding worded like an old

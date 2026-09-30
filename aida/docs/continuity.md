@@ -77,8 +77,8 @@ Once a task is active, `/aida:next` enters its git worktree. Every stage action 
 inside that worktree and refuses from anywhere else, so two sessions on one project never share
 files. The refusal applies only while the recorded worktree is on disk and the window is outside
 it. Every stage command names this refusal, exit 79, and tells the session to enter the tree and
-run the call again. The tree is a sibling of the code checkout, named after the checkout and the
-task.
+run the call again. The tree is in a folder beside the code checkout, `<slug of the checkout
+folder>.worktrees`, and is named after the checkout and the task.
 Entering it asks for your approval. From a session outside the code repository the entry is
 refused. The way in is `/cd <path>`, which moves the session into the tree and keeps the
 conversation; it needs Claude Code 2.1.169 or later. Until then the scripts are still reachable:
@@ -131,8 +131,9 @@ Only you run a save. Nothing in AIDA dispatches it, in either run mode.
 
 ### What "unsaved" means
 
-A task is unsaved when a file in its folder is newer than its last save. A task never saved is
-measured against its newest note instead. With neither, any file counts.
+A task is unsaved when a file in its folder was written in a later second than its last save. The
+save records whole seconds, so a file written in the same second as the save counts as saved. A
+task never saved is measured against its newest note instead. With neither, any file counts.
 
 Four things never count. The two task files. Anything under `notes/`. Anything you carried in,
 under `inputs/`. And anything under `records/`, which holds derived check output the project

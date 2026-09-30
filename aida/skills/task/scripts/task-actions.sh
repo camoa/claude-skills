@@ -1196,7 +1196,9 @@ do_save() {
 # another tree. After the last block, `up` runs the `## Install` blocks of each enabled surfaces
 # kind's setup recipe, given as `--setup-recipe <kind>=<path>`, because a worktree has no
 # node_modules. `up` records `environment: {address, recipe, upAt, <keys>}` in task.json; `down`
-# reads the recipe path and the keys from that record, so it takes no recipe flag.
+# reads the recipe path and the keys from that record, so it takes no recipe flag. Once
+# task_env_restore_commit finds the recorded files back at their fork point content, `up` and
+# `down` refuse and `show` runs no status line (gap row 262).
 # ------------------------------------------------------------------------------------------------
 
 # The line `up` writes into records/environment-up.txt above the address command, and `down` reads
@@ -1402,7 +1404,7 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down|not-applicable) ;; *) die3 "environment: the action is show, up, down or not-applicable, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile addr_mark
+  local task_dir task_json wt outfile addr_mark restored
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
@@ -1460,6 +1462,10 @@ do_environment() {
     # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
     # caller stood. The refusal it already printed is above this one.
     [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
+    # A tear-down after the restore, committed or not, resolves the site by the name the restore
+    # put back, which can be the main checkout's (gap row 262).
+    restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)" \
+      && die3 "environment: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $id is up: ${restored#*"$tab"}. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was torn down. The latest commit on those files is ${restored%%"$tab"*}. Put the change \`up\` recorded back in them, in the working tree or with git revert of the commit that took it out. Then run this again, then put the files back again"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
     cd "$wt" || die3 "environment: could not enter $wt"
     run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
@@ -1529,7 +1535,10 @@ TA_TOKEN_LIST
     environment_cleanup quiet || exit 3
     # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
     # The EXIT trap still stands, so environment_cleanup removes its files on every exit.
-    if [ -n "$wt" ] && [ -d "$wt" ]; then
+    # After the restore, committed or not, a status line resolves the site by the restored name.
+    if [ -n "$wt" ] && [ -d "$wt" ] && restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)"; then
+      printf 'status: not run, %s hold their content where the branch started, so a status line can reach the main checkout'"'"'s site. The latest commit on them is %s\n' "${restored#*"$tab"}" "${restored%%"$tab"*}"
+    elif [ -n "$wt" ] && [ -d "$wt" ]; then
       ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
       files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
       ENV_TMP="$files_dir"
@@ -1548,6 +1557,10 @@ TA_TOKEN_LIST
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
+  # After the restore, committed or not, a site brought up here takes the name the restore put
+  # back, which can be the main checkout's (gap row 262).
+  restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)" \
+    && die3 "environment: $wt holds the files \`task environment up\` changed at their content where the branch started: ${restored#*"$tab"}. A site brought up here can take the main checkout's name. Nothing was brought up. The latest commit on those files is ${restored%%"$tab"*}. To bring the site up again, put the change back first, in the working tree or with git revert of the commit that took it out"
   # The folder of blocks stays until environment_cleanup removes it, because it keeps the earlier
   # versions a failed commit below puts back.
   environment_check up "$wt" "$outfile"
@@ -1563,14 +1576,17 @@ TA_TOKEN_LIST
   # row 256). The precondition check has passed here, so a named file that differs already holds
   # the change the recipe demands, such as a line a person had to delete. A named file the branch
   # never changed is only mentioned in the prose. With no base to fork from, none is recorded.
+  # A file git tracks neither at HEAD nor at the fork point is never recorded, whatever its name:
+  # it cannot reach trunk, and completion's restore would delete it (gap row 262).
   local recipe_changes changes_doc fork kind n blob
-  fork="$(jq -r '.worktree.base // empty' "$task_json")"
-  [ -z "$fork" ] || fork="$(git -C "$wt" merge-base "${fork#commit:}" HEAD 2>/dev/null)"
+  fork="$(task_fork_point "$task_dir" "$wt")"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
       recipe_prose_under "$RECIPE" Preconditions | grep -o '`[^` ]*`' | tr -d '`' | sed "s/^/named$tab/"; } \
     | while IFS="$tab" read -r kind n; do
         case "$n" in ''|/*|*..*) continue ;; esac
         [ -f "$wt/$n" ] || continue
+        git -C "$wt" rev-parse -q --verify "HEAD:$n" >/dev/null 2>&1 \
+          || { [ -n "$fork" ] && git -C "$wt" rev-parse -q --verify "$fork:$n" >/dev/null 2>&1; } || continue
         blob="$(git -C "$wt" hash-object -- "$n")"
         [ "$kind" = files ] || { [ -n "$fork" ] && [ "$(git -C "$wt" rev-parse -q --verify "$fork:$n" 2>/dev/null)" != "$blob" ]; } || continue
         printf '%s\t%s\n' "$n" "$blob"
@@ -1655,6 +1671,7 @@ $capture"
 # and a tree removed too early loses uncommitted work. So with no id it only lists, which is the
 # whole action unattended, and it removes the named trees one at a time: the site down first, so
 # the framework keeps no orphaned registry entry, then the tree, then the branch when it is merged.
+# The group folder that held the tree goes when it is left empty.
 # Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune).
 # ------------------------------------------------------------------------------------------------
 
@@ -1715,7 +1732,7 @@ do_prune() {
 
   # Every named task is checked before any tree goes: a task that is not complete is a reason to
   # remove nothing, because its tree is where its work is.
-  local id task_dir task_json state wt branch said branch_word
+  local id task_dir task_json state wt branch said branch_word group
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
@@ -1746,6 +1763,7 @@ TA_IDS
       said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
         || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
     fi
+    group="$(task_worktree_group "$CODE_PATH" "prune")" && rmdir "$group" 2>/dev/null
     if printf '%s\n' "$merged" | grep -Fqx "$branch"; then
       git -C "$CODE_PATH" branch -d "$branch" >/dev/null 2>&1 && branch_word="removed" || branch_word="kept, git refused to delete it"
     else

@@ -74,7 +74,7 @@
         "file": { "type": "string", "minLength": 1 },
         "because": { "type": "string", "minLength": 1 }
       },
-      "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and halts the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason. Present only when a person accepted one."
+      "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and halts the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason. A person who kept the same line at `build-record --accept-deviation` is not asked again: the build record's own object is carried here (gap row 266). Present only when a person accepted one."
     }
   },
   "$defs": {

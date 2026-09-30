@@ -57,11 +57,13 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
   create --project "<projectPath>" --name "<name>" -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
-It then makes the task's own git worktree beside the code path, at
-`<parent of codePath>/<slug of the code folder>-<name>`, on the branch `feature/<name>`, records
-both in `task.json`, and commits. The folder name is the slug of the code folder plus the task
-name, so a site name is predictable. The tree is a sibling for one reason. A nested worktree is
-invisible to a tool that registers projects by folder, and DDEV hands it to the parent project.
+It then makes the task's own git worktree in one folder per repository beside the code path, at
+`<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`.
+The tree is on the branch `feature/<name>`. The script records both in `task.json` and commits. The folder name is the
+slug of the code folder plus the task name, so a site name is predictable and unique. The tree is
+outside the code path for one reason. A nested worktree is invisible to a tool that registers
+projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
+records on disk stays where it is.
 Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
 the script also enforces, or the worktree could not be made. In the last case the folder is
 removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
@@ -152,7 +154,8 @@ was cut from. An older task names the branch the code path is on now, and says s
 commit, or an interrupt before the commit, also removes the written files, their index entries
 and the output file, and says so. Then it commits the written and replaced files alone, so other changed or staged work is
 never taken in. Then it records in `worktree.recipeChanges` each `## Files` path, and each file the
-`## Preconditions` prose names that the branch changed, with the content each holds. No order owns
+`## Preconditions` prose names that the branch changed, with the content each holds. It skips a
+file git tracks neither at HEAD nor where the branch started. No order owns
 them, so the owned-files checks in the build and in review set them aside until an edit changes
 that content. A site brought up before this record existed has none. Run `up` again to write it:
 files already committed are not committed again. Then
@@ -191,6 +194,18 @@ so `down` reads nothing there. A token nothing fills stops it at 3 and names tha
 Run it before the worktree is removed, or the framework keeps
 an orphaned registry entry; the completion body names it when a site is up or coming up. Review
 and `baseline` read `environment.address` before asking for a base URL.
+
+The files in `worktree.recipeChanges` are for the worktree's own site, and trunk must not
+receive them. Completion takes the site down. Then it commits each file back to its content
+where the branch started. A DDEV worktree then holds the main checkout's `name:` line again. So a
+site command there can reach the main checkout's site. The content decides, not who made the
+commit or its subject. The test reads the changed files that existed where the branch started.
+When HEAD or the working tree holds one of them at that content again, `up` and `down` refuse at
+3. They name the latest commit on those files. `show` then prints `status: not run`. A `## Files`
+script the branch dropped does not count, because it names no site. To work on the site again,
+put the change back first. The test can refuse wrongly: a file the preconditions prose only names,
+changed before `up` and then changed back, counts too. It also misses a recipe that names the
+site in a file absent where the branch started.
 
 ## `prune [<task-id>]...`
 

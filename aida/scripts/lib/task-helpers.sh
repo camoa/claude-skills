@@ -34,6 +34,13 @@
 #                                         commit still holds that content
 #   task_env_rerun_step <folder>          the next step when `environment up` ran before it
 #                                         recorded the recipe's files
+#   task_fork_point <folder> <tree>       prints the commit the task's branch forked from its
+#                                         base, or nothing when the record holds no base
+#   task_env_restore_commit <folder> <tree> [worktree]
+#                                         prints the latest commit on the files `up` changed that
+#                                         are back at their fork point content, a tab and those
+#                                         files; true when one of them is a file the fork point
+#                                         has. `worktree` also reads the working files
 #   automated_tests <folder>              prints yes, no or not-asked: the contract's answer to
 #                                         whether the task has automated tests
 #   mark_task_in_progress <folder> <why> <stage>
@@ -49,6 +56,8 @@
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
 #                                         branch, and repairs worktree.path when git disagrees
+#   task_worktree_group <codePath> <action>
+#                                         prints the folder that holds the repository's task trees
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
@@ -204,7 +213,7 @@ resolve_task_folder() {
     || die79 "$who: task.json records the worktree $wt, and git does not list it as a worktree of $code. Nothing written there reaches the branch. Remove that folder, and the next action that needs the code makes the tree again."
   # The route named is the one that works where this call ran. EnterWorktree takes a worktree of
   # this window's own repository on first entry, and from a worktree session only a target under
-  # .claude/worktrees/ (the mirror's tools reference). A task tree is a sibling of the checkout,
+  # .claude/worktrees/ (the mirror's tools reference). A task tree is outside the checkout,
   # so entry is offered from the checkout alone. The prefix works from anywhere.
   if [ "$top" = "$code" ] && [ "${here#"$code"/}" != "$here" ]; then
     die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree with EnterWorktree, or start the call with: cd $wt &&"
@@ -440,6 +449,54 @@ task_env_rerun_step() {
     else empty end' "$1/task.json" 2>/dev/null
 }
 
+# The commit the branch in the tree $2 forked from worktree.base of the task folder $1. Prints
+# nothing when the record holds no base.
+task_fork_point() {
+  local base
+  base="$(jq -r '.worktree.base // empty' "$1/task.json" 2>/dev/null)"
+  [ -z "$base" ] || git -C "$2" merge-base "${base#commit:}" HEAD 2>/dev/null
+}
+
+# Whether the tree $2 has put back what `task environment up` changed for the task folder $1 (gap
+# row 262). The changed files are those in worktree.recipeChanges whose recorded content differs
+# from the fork point. A changed file is back when HEAD holds it at its fork point content, or
+# lacks it where the fork point does. With $3 `worktree`, a working file at that content is back
+# too: a person may put a line back without a commit, and a site command reads the working file.
+# The content decides, never a commit subject, so a restore a person made under any subject
+# counts. Prints the short id of the latest commit on the files that are back, a tab, and those
+# files joined by ", ". Prints nothing when none is back or the record holds no base.
+# Returns 0 only when a file that is back is one the fork point has. Such a file is where a
+# recipe's demanded change lives, as a DDEV worktree's `.ddev/config.yaml` without its `name:`.
+# Back at the fork point, it names the main checkout's project again, so a site command there can
+# reach the main checkout's site. A file the fork point lacks, such as a `## Files` script, names
+# no site, and a branch may drop one.
+task_env_restore_commit() {
+  local folder="$1" tree="$2" mode="${3:-}" fork one blob base_blob here tab trunk=no
+  tab="$(printf '\t')"
+  fork="$(task_fork_point "$folder" "$tree")"
+  [ -n "$fork" ] || return 1
+  set --
+  while IFS="$tab" read -r one blob; do
+    [ -n "$one" ] || continue
+    base_blob="$(git -C "$tree" rev-parse -q --verify "$fork:$one" 2>/dev/null)"
+    [ "$blob" != "$base_blob" ] || continue
+    if [ "$(git -C "$tree" rev-parse -q --verify "HEAD:$one" 2>/dev/null)" != "$base_blob" ]; then
+      [ "$mode" = worktree ] || continue
+      here=""
+      [ ! -f "$tree/$one" ] || here="$(git -C "$tree" hash-object -- "$one")"
+      [ "$here" = "$base_blob" ] || continue
+    fi
+    [ -z "$base_blob" ] || trunk=yes
+    set -- "$@" "$one"
+  done <<TH_ROWS
+$(jq -r '(.worktree.recipeChanges // [])[] | .path + "\t" + .blob' "$folder/task.json" 2>/dev/null)
+TH_ROWS
+  [ "$#" -gt 0 ] || return 1
+  printf '%s\t' "$(git -C "$tree" log -1 --format=%h -- "$@" 2>/dev/null)"
+  printf '%s\n' "$@" | paste -sd, - | sed 's/,/, /g' | tr -d '\n'
+  [ "$trunk" = yes ]
+}
+
 # The contract's answer to whether this task has automated tests (alignment-schema.json,
 # automatedTests). Prints `no` only when the field is false. `not-asked` when it is absent or the
 # contract cannot be read, which every reader takes as a task with tests. Scope, research and
@@ -672,27 +729,41 @@ task_stage() {
   fi
 }
 
-# The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
-# code path named <slug of the code folder>-<id>: a tree nested under the code path is invisible
-# to a tool that registers projects by folder, and DDEV hands it to the parent project. The
-# folder name becomes a hostname label, so the basename and the id go through pb_slug, the one
-# slug rule. A dot or an underscore in either becomes a hyphen, as the id rule demands: an id made
-# before that rule may still hold one (gap row 251). The branch keeps the id. Prints the
-# path task.json records. When the field is absent it makes the tree and writes the field first; that
-# is the one producer, and running it again is the repair for a task made before the field
-# existed. A recorded tree gone from disk is made again from its branch, after a prune, because
-# git refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path
-# gone from disk is not trusted as an address: it is computed again by the rule above, and the
-# tree is made and recorded there. That is the repair for a task carried to a second machine,
-# and for a folder named before the id was slugged. A recorded tree on disk is kept. The base is
-# HEAD of the directory this action was started from when that directory is inside the code
-# repository, so a follow-up made from its parent's tree stacks on the parent's work; otherwise
-# it is the code path's HEAD. Uncommitted changes in the code path are not in a tree cut from a
-# commit, so their count is said once, on stderr, and nothing asks.
+# The folder that holds every task tree of one repository: <parent of code>/<slug of the code
+# folder>.worktrees. It sits beside the code path, so the trees do not lie loose among the other
+# folders there (gap row 260). task_worktree makes a tree in it, and prune removes it when empty.
+# $1 the code path, $2 the action's own name. Dies through die3.
+task_worktree_group() {
+  local code
+  code="$(cd "$1" && pwd -P)" || die3 "$2: the code path is not on disk: $1"
+  # shellcheck source=/dev/null
+  command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
+    || die3 "$2: the library failed to load: playbooks.sh"
+  printf '%s/%s.worktrees' "$(dirname -- "$code")" "$(pb_slug "$(basename -- "$code")")"
+}
+
+# The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
+# above, named <slug of the code folder>-<id>: a tree nested under the code path is invisible to a
+# tool that registers projects by folder, and DDEV hands it to the parent project. The folder name
+# becomes a hostname label, so the basename and the id go through pb_slug, the one slug rule. The
+# name keeps the code folder because DDEV names a site after its folder, and a site name must be
+# unique on the machine. A dot or an underscore in either becomes a hyphen, as the id rule demands:
+# an id made before that rule may still hold one (gap row 251). The branch keeps the id. Prints the
+# path task.json records. When the field is absent it makes the tree and writes the field first;
+# that is the one producer, and running it again is the repair for a task made before the field
+# existed. A recorded tree gone from disk is made again from its branch, after a prune, because git
+# refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path gone
+# from disk is not trusted as an address: it is computed again by the rule above, and the tree is
+# made and recorded there. That is the repair for a task carried to a second machine, and for a
+# folder named before the id was slugged. A recorded tree on disk is kept. The base is HEAD of the
+# directory this action was started from when that directory is inside the code repository, so a
+# follow-up made from its parent's tree stacks on the parent's work; otherwise it is the code path's
+# HEAD. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
+# said once, on stderr, and nothing asks.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule base_branch
+  local found rule group base_branch
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -708,7 +779,8 @@ task_worktree() {
     || die3 "$who: the library failed to load: playbooks.sh"
   # The path rule, run here rather than read from the record, because the record is an address on
   # the machine that wrote it. One copy serves both branches below.
-  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
+  group="$(task_worktree_group "$code" "$who")" || exit 3
+  rule="$group/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
@@ -743,15 +815,18 @@ task_worktree() {
       || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
   fi
   git -C "$code" worktree prune 2>/dev/null
+  mkdir -p "$group" || die3 "$who: could not make the folder $group. Make it by hand, or let this user write to $(dirname -- "$group"), and run the action again"
   # What the tree is cut from, written whenever this call cuts the branch, over any base the record
   # held. A detached HEAD is `commit:<sha>`: git forbids `:` in a branch name, so the two never
   # meet. A tree made again from a branch that exists keeps the base the record held.
   base_branch=""
   if git -C "$code" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
-    said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" || die3 "$who: git worktree add failed: $said"
+    said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" \
+      || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   else
     base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
-    said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" || die3 "$who: git worktree add failed: $said"
+    said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
+      || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   fi
   wt="$(cd "$wt" && pwd -P)"
   write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" --arg base "$base_branch" \
