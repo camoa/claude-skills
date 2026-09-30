@@ -98,7 +98,7 @@ One number never means two things, and none is new to this plugin.
 
 | Code | What it says |
 |---|---|
-| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. An order changed a file `task environment up` committed. |
+| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. A file `task environment up` committed was changed by an order, or holds an uncommitted change. The task records no base. Those files are back while the site is recorded up. |
 | 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |

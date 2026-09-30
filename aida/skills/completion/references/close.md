@@ -103,9 +103,10 @@ the site still has the worktree's name. Then it makes one commit in the worktree
 puts each file back to its content where the branch started. A file already back needs nothing.
 A task with no such files gets no tear-down and no commit. It refuses at exit 1 when an order
 changed one of those files after `up`, because it never puts that file back silently. Relay its
-line: it names each file and the commit subject a person uses to put them back by hand. It also
-refuses at exit 1 when that commit exists and the site is still up. It keeps a commit with that
-subject that already exists.
+line: it names each file and the content a person puts back by hand. When HEAD already holds
+every such file at its content where the branch started, it makes no commit of its own. The
+subject of the commit that did it does not matter. It refuses at exit 1 when that is so and the
+record still names a site.
 
 Otherwise it writes the pull request body to `<task_folder>/completion/pr-body.md`. The body
 names the restore commit, so a reviewer sees why those files are not in the diff. It writes the record to

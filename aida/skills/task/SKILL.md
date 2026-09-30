@@ -195,12 +195,12 @@ an orphaned registry entry; the completion body names it when a site is up or co
 and `baseline` read `environment.address` before asking for a base URL.
 
 The files in `worktree.recipeChanges` are for the worktree's own site, and trunk must not
-receive them. Completion takes the site down, then commits each file back to its content where
-the branch started, with the subject "Restore the files the worktree environment recipe
-changed". A DDEV worktree then holds the main checkout's `name:` line again. So a site command
-there can reach the main checkout's site. When that commit is the latest change to those files,
-`up` and `down` refuse at 3 and name it, and `show` prints `status: not run`. To work on the site
-again, revert that commit first.
+receive them. Completion takes the site down. Then it commits each file back to its content
+where the branch started. A DDEV worktree then holds the main checkout's `name:` line again. So a
+site command there can reach the main checkout's site. The content decides, not who made the
+commit or its subject. When HEAD holds each changed file at its content where the branch
+started, `up` and `down` refuse at 3. They name the latest commit on those files. `show` then
+prints `status: not run`. To work on the site again, revert that commit first.
 
 ## `prune [<task-id>]...`
 

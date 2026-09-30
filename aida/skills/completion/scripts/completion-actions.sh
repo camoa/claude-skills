@@ -48,7 +48,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      Or, interactive, a criterion a model observed through a browser has no --observed-accepted
 #      answer, or was answered no with no --reason (live-run row 104). Or a file `task environment
 #      up` recorded changed after it, holds an uncommitted change, or has no base to go back to.
-#      Or the restore commit is there and the record still names a site (gap row 262).
+#      Or HEAD already holds those files at their fork point content while the record still names a
+#      site (gap row 262).
 #   3  the script could not do its job: a missing or unrecognized argument, jq not on PATH, the
 #      plugin root or a library that could not be resolved, a project folder that could not be
 #      resolved, a record that is present but unreadable, a record that does not match
@@ -576,24 +577,27 @@ CP_SCHEMA_RESULT2
 # worktree puts each path in worktree.recipeChanges back to its content at the fork point, or
 # removes it where the fork point has none. A path already back needs nothing. A path whose
 # content is no longer the one `up` recorded was changed by an order, and is never put back
-# silently. A restore commit that is already the latest change to those paths is kept as it is,
-# whoever made it. Sets CP_RESTORE_COMMIT and CP_RESTORE_PATHS, or leaves both empty. $1 the action.
+# silently. A tree whose HEAD already holds those paths at their fork point content is kept as it
+# is, whoever put them back and under whatever subject (task_env_restore_commit). Sets
+# CP_RESTORE_COMMIT and CP_RESTORE_PATHS, or leaves both empty. $1 the action.
 CP_RESTORE_COMMIT=""; CP_RESTORE_PATHS=""
+# The subject of the commit this script makes. Nothing reads it back: the content decides.
+CP_RESTORE_SUBJECT="Restore the files the worktree environment recipe changed"
 cp_restore_env_files() {
   local who="$1" wt rows fork tab p blob head_blob said todo="" changed="" dirty="" message commit_text
   tab="$(printf '\t')"
   wt="$(printf '%s' "$CP_TASK_DOC" | jq -r '.worktree.path // empty')"
   rows="$(printf '%s' "$CP_TASK_DOC" | jq -r '(.worktree.recipeChanges // [])[] | .path + "\t" + .blob')"
   [ -n "$wt" ] && [ -n "$rows" ] || return 0
-  if CP_RESTORE_COMMIT="$(task_env_restore_commit "$TASK_PATH" "$wt")"; then
+  if said="$(task_env_restore_commit "$TASK_PATH" "$wt")"; then
+    CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"
     [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] \
-      || die 1 "$who: commit $CP_RESTORE_COMMIT put back the files \`task environment up\` recorded while the site of $CP_TASK_ID was up. A tear-down now can reach the main checkout's site through the name that commit put back. Nothing was written. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then make that commit again, and run close again."
-    CP_RESTORE_PATHS="$(git -C "$wt" diff-tree --no-commit-id --name-only -r "$CP_RESTORE_COMMIT" | paste -sd, - | sed 's/,/, /g')"
+      || die 1 "$who: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $CP_TASK_ID is up: $CP_RESTORE_PATHS. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was written. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then put the files back again, and run close again."
     return 0
   fi
-  message="In $wt, run task environment $CP_TASK_ID down if the site is up. Then put each file \`up\` recorded back to its content on the branch this task merges into, keeping only what an order needs, and commit them in one commit with the subject \"$TASK_ENV_RESTORE_SUBJECT\". Then run close again. The recorded files are: $(printf '%s' "$CP_TASK_DOC" | jq -r '[ .worktree.recipeChanges[].path ] | join(", ")')."
   fork="$(task_fork_point "$TASK_PATH" "$wt")"
-  [ -n "$fork" ] || die 1 "$who: task.json records no base for the worktree of $CP_TASK_ID, so completion cannot tell what to put back the files \`task environment up\` committed to. Nothing was written. $message"
+  [ -n "$fork" ] || die 1 "$who: task.json records no base for the worktree of $CP_TASK_ID, so completion cannot tell what content to put back the files \`task environment up\` changed to. Nothing was written. Set worktree.base in task.json to the branch this task merges into, then run close again."
+  message="In $wt, run task environment $CP_TASK_ID down if the site is up. Then put each file \`up\` recorded back to its content at $(git -C "$wt" rev-parse --short "$fork"), where this branch started, and commit. An order's change to one of these files cannot stay on this branch. Then run close again. The recorded files are: $(printf '%s' "$CP_TASK_DOC" | jq -r '[ .worktree.recipeChanges[].path ] | join(", ")')."
   p=""; blob=""; head_blob=""
   while IFS="$tab" read -r p blob; do
     [ -n "$p" ] || continue
@@ -634,12 +638,13 @@ CP_RECIPE_ROWS
   done <<CP_RESTORE_TODO
 $todo
 CP_RESTORE_TODO
-  commit_text="$TASK_ENV_RESTORE_SUBJECT
+  commit_text="$CP_RESTORE_SUBJECT
 
 \`task environment up\` wrote these files for the site of the worktree of $CP_TASK_ID. Merged, they would change the site of the main checkout."
-  said="$(recipe_commit_if_changed "$wt" "$who" "nothing differed" "$commit_text" "$(printf '%s' "$todo")" 2>&1)" || die 3 "$who: git refused the restore commit in $wt: $said. The files are put back in the tree. Commit them with the subject \"$TASK_ENV_RESTORE_SUBJECT\", then run close again."
-  CP_RESTORE_COMMIT="$(git -C "$wt" rev-parse --short HEAD)"
-  CP_RESTORE_PATHS="$(printf '%s' "$todo" | sort | paste -sd, - | sed 's/,/, /g')"
+  said="$(recipe_commit_if_changed "$wt" "$who" "nothing differed" "$commit_text" "$(printf '%s' "$todo")" 2>&1)" || die 3 "$who: git refused the restore commit in $wt: $said. The files are put back in the tree. Commit them, then run close again."
+  said="$(task_env_restore_commit "$TASK_PATH" "$wt")" \
+    || die 3 "$who: the restore commit in $wt left a file \`task environment up\` changed away from its content where the branch started. The recorded files are listed in $TASK_PATH/task.json."
+  CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"
 }
 
 do_close() {
