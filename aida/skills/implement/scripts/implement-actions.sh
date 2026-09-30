@@ -2652,10 +2652,11 @@ pc_parse_recipe() {
 
 # Who owns a condition that answered no while the task's worktree has no running site (gap row
 # 246). The recipe's owner then sends a person to the wrong fix. The task record decides, never
-# the check's words. No `environment` means the site offer was never answered. A marker with no
-# address means a bring-up did not finish. An address whose `## Status` line exits non-zero means
-# the site is down. Prints the step and the reason, or nothing: no worktree, a person said no
-# site, the site is up, or the recipe has no `## Status` line to ask. Reads TASK_PATH.
+# the check's words. A marker with no address means a bring-up did not finish. An address whose
+# `## Status` line exits non-zero means the site is down. No `environment` says nothing: a project
+# with no environment recipe has none, and `environment down` removes it. Prints the step and the
+# reason, or nothing: no worktree, no record, a person said no site, the site is up, or the recipe
+# has no `## Status` line to ask. Reads TASK_PATH.
 pc_environment_owner() {
   local task_json="$TASK_PATH/task.json" id wt recipe rc
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
@@ -2667,7 +2668,6 @@ pc_environment_owner() {
         elif ($e.address // "") != "" then "up"
         elif $e.state == "coming-up" then "coming-up"
         else "other" end' "$task_json")" in
-    absent)    printf 'task environment %s up: the environment step of this worktree has not run' "$id" ;;
     coming-up) printf 'task environment %s down, then up: the bring-up of this worktree did not finish' "$id" ;;
     up)
       recipe="$(jq -r '.environment.recipe // empty' "$task_json")"
@@ -6708,7 +6708,7 @@ br_seven_checks() {
     if [ "$BR_ORDER_SLOT" = "confirm-at-review" ]; then
       jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is confirmed by a person: its task has no automated tests, so no suite runs."}' >>"$parts_file"
     elif [ "$BR_ORDER_SLOT" = "configuration-gate" ] \
-      && [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.alignment.automatedTests')" = "false" ]; then
+      && [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ noAutomatedTests")" = "true" ]; then
       jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is proved by its configuration gate, and its task has no automated tests, so no suite runs."}' >>"$parts_file"
     else
       br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"

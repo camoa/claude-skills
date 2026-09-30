@@ -101,7 +101,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/proof.sh         sourced, for br_order_facts and
 #                                                       br_proof_facts: what a proof kind means
 #                                                       for a check about to answer, per order
-#                                                       and over the whole snapshot.
+#                                                       and over the whole snapshot. Also
+#                                                       BR_HARNESS_JQ, for the mutation row.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/paths.sh         sourced, for resolve_against, which
 #                                                      sf_surface_path joins a relative registryPath
 #                                                      through.
@@ -896,6 +897,13 @@ rw_run_mutation() {
   local fw_count fwi fw_obj fw row outfile rc tool has_paths
   local detail output survivors score combined mut_file
   verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""; tool=""; has_paths=false
+  # A task with no automated tests has no test for a mutant to fail, so the row does not apply and
+  # the command never runs, the way the build reads its suite row (gap row 246).
+  if [ "$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ noAutomatedTests")" = "true" ]; then
+    RW_MUTATION="$(jq -n '{verdict: "undeclared", score: "", survivors: [],
+      detail: "this task has no automated tests, so no test exists for a mutant to fail, and the mutation command was not run."}')"
+    return 0
+  fi
   # The output of the last framework that ran, kept by file for the record (rw_check_row).
   mut_file="$(mktemp)" || die 3 "a temporary file for the mutation output could not be created"
   fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"

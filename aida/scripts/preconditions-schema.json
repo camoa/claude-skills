@@ -165,7 +165,7 @@
         "owner": {
           "type": "string",
           "minLength": 1,
-          "description": "Who fixes this, by tool or skill name, as the recipe declared it. Absent means the recipe named none. An unmet condition with an owner is an action; without one it is a sentence a person has to interpret, which is how a stage came to improvise an install that a sibling plugin already owned. One exception (gap row 246): on an unmet condition whose task worktree has no running site, per the task record, this names the task's environment step and why, and `recipeOwner` keeps the recipe's owner."
+          "description": "Who fixes this, by tool or skill name, as the recipe declared it. Absent means the recipe named none. An unmet condition with an owner is an action; without one it is a sentence a person has to interpret, which is how a stage came to improvise an install that a sibling plugin already owned. One exception (gap row 246): on an unmet condition whose task record shows the worktree's site is not running (a bring-up that did not finish, or a status line that says down), this names the task's environment step and why, and `recipeOwner` keeps the recipe's owner."
         },
         "recipeOwner": {
           "type": "string",

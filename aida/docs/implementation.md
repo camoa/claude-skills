@@ -80,10 +80,10 @@ in one of four words:
 Undeclared is never reported as conditions that passed. A checker that is not installed says
 nothing about the condition it was meant to probe. A recipe declaring nothing has answered, and
 stopping on it would mean no project on that framework ever builds. On unmet or unknown you
-decide what to do; an autonomous run halts there. When the worktree has no running site, an
-unmet condition names the task's environment step as its owner, not the tool the recipe named.
-The task record decides that: a site never brought up, a bring-up that did not finish, or a
-status line that says down. A command that carries a placeholder, such as
+decide what to do; an autonomous run halts there. When the task record shows the worktree's
+site is not running, an unmet condition names the task's environment step as its owner, not the
+tool the recipe named. Two records show that: a bring-up that did not finish, and a status line
+that says down. A command that carries a placeholder, such as
 the test runner a Python project names, needs a value from you. AIDA never guesses one.
 
 Two refusals end the whole run here rather than later. A framework whose recipe can run neither

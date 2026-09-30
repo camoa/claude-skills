@@ -28,7 +28,7 @@
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
 #                                          and `confirmCriteria` beside it
-#   BR_HARNESS_JQ                          `harnessNeeded` on a snapshot: whether any test runs
+#   BR_HARNESS_JQ                          `noAutomatedTests` and `harnessNeeded` on a snapshot
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
 #
@@ -81,15 +81,18 @@ BR_ORDER_FACTS_JQ='
     elif ((.criteriaOwned // []) | length) > 0 then .criteriaOwned
     else (.criteriaServed // []) end;'
 
-# Whether a build needs the test harness, as a jq definition on the snapshot document: "yes" or
-# "no". A `tests` order runs its tests, and an `observe` order's build runs the suite. A `gate`
-# order runs the suite after its lines only while the task has automated tests (gap row 246). A
-# `record` or `confirm` order runs no test. A snapshot with no order reads yes. `preconditions`
-# and `finish` both read it, so the two never disagree about the suite.
+# Two jq definitions on the snapshot document. `noAutomatedTests` is true when the frozen contract
+# says the task has no automated tests; an absent answer reads as tests. `harnessNeeded` says
+# whether a build needs the test harness: "yes" or "no". A `tests` order runs its tests, and an
+# `observe` order's build runs the suite. A `gate` order runs the suite after its lines only while
+# the task has automated tests (gap row 246). A `record` or `confirm` order runs no test. A
+# snapshot with no order reads yes. `preconditions`, `finish`, the build's suite row and review's
+# mutation row read these, so no two of them disagree.
 # shellcheck disable=SC2034 # read by the sourcing script
 BR_HARNESS_JQ="$BR_ORDER_FACTS_JQ"'
+  def noAutomatedTests: .alignment.automatedTests == false;
   def harnessNeeded:
-    (.alignment.automatedTests == false) as $noTests
+    noAutomatedTests as $noTests
     | [ (.workOrders // [])[] | orderFacts.slot ]
     | if length > 0 and all(. == "done-when" or . == "confirm-at-review"
                              or ($noTests and . == "configuration-gate"))

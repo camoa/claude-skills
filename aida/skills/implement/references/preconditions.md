@@ -25,12 +25,12 @@ dispatch exists so the freeze wall below is named before any order is built.
 
 ## Install the tools the test recipe names
 
-Invoke the tool skill with `require --task <task_folder> <path>` for the `test-execution` recipe
-of each framework. Do this from the worktree, before the checks below run any recipe line. The
-tool skill's section "Tools a recipe names" says what each answer means. Go on only when it exits
-0. Skip this when every order has `proof: record` or `proof: confirm`, because no test runs then.
-Skip it too when the task has no automated tests and every other order has `proof: gate`. The
-`review` recipe's tools are review's to check, not this step's.
+Invoke the tool skill with `require <path>` for the `test-execution` recipe of each framework. Do
+this from the worktree, before the checks below run any recipe line. The tool skill's section
+"Tools a recipe names" says what each answer means. Go on only when it exits 0. Skip this when
+every order has `proof: record` or `proof: confirm`, because no test runs then. Skip it too when
+the task has no automated tests and every other order has `proof: gate`. The `review` recipe's
+tools are review's to check, not this step's.
 
 ## Run the checks
 
@@ -147,8 +147,8 @@ and a row that needs it reads unknown and names it. A recipe with no `## Tokens`
 - **met.** Every declared condition answered yes. The build can go on.
 - **unmet.** A condition answered no. Name it, name the framework, and name the owner the recipe
   gave. An owner is the action; without one the person has to work out what to do. When the
-  worktree has no running site, the owner names the task's environment step and says why. Name
-  that step as the fix, and the recipe's owner after it.
+  task record shows the worktree's site is not running, the owner names the task's environment
+  step and says why. Name that step as the fix, and the recipe's owner after it.
 - **unknown.** Nobody could tell. A checker that is not installed says nothing about the condition
   it was meant to probe, so this is never reported as a failure of the condition.
 - **undeclared.** The recipe named no conditions, or the catalog holds no recipe for this

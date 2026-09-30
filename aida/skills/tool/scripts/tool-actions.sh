@@ -25,7 +25,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #          every tool is present, 4 when one is absent, and 2 when one is unknown, over an absent one.
 #          --advisory prints the same lines and exits 0. It installs nothing: install stays the one
 #          action that needs a person. A tool under requires_tooling_with_tests is named too, except
-#          when --task names a task whose contract says it has no automated tests.
+#          when the task says it has no automated tests. The task is the one whose worktree is this
+#          window's top-level folder, or the one --task names.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
@@ -94,8 +95,9 @@ TOOL="${2:-}"
 # run resolves the tooling recipe, so a name nothing answers reads unknown with run's own reason.
 if [ "$ACTION" = "require" ]; then
   # --advisory prints the same lines and always exits 0, for a caller that goes on either way.
-  # --task names the task folder, so a tool under requires_tooling_with_tests is left out when the
-  # task has no automated tests. With no task, nothing says the tests are off, so it is named.
+  # The task decides a tool under requires_tooling_with_tests: it is left out when the task has no
+  # automated tests. The task is the one whose worktree is this window's top-level folder, and
+  # --task overrides that. With no task, nothing says the tests are off, so the tool is named.
   ADVISORY=no; TASK_ARG=""
   shift
   while [ $# -gt 0 ]; do
@@ -114,13 +116,24 @@ if [ "$ACTION" = "require" ]; then
     printf 'tool-actions: %s holds a requires_tooling value that is not a list, so no tool was checked\n' "$TOOL" >&2
     exit 3
   }
+  # The task lookup and the contract's answer every stage script reads.
+  die1() { die 1 "$1"; }
+  die3() { die 3 "$1"; }
+  die79() { die 79 "$1"; }
+  # shellcheck source=../../../scripts/lib/task-helpers.sh
+  . "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+  if [ -z "$TASK_ARG" ]; then
+    RQ_PROJECT="$(registry_resolve_by_directory "$(pwd -P)" 2>/dev/null | jq -r '.path // empty' 2>/dev/null)"
+    RQ_CODE=""; [ -z "$RQ_PROJECT" ] || RQ_CODE="$(project_code_path_value "$RQ_PROJECT")"
+    if [ -n "$RQ_CODE" ] && [ -d "$RQ_CODE" ] && [ -d "$RQ_PROJECT/tasks" ]; then
+      # find, not a glob: zsh refuses a glob that matches nothing.
+      TASK_ARG="$(find "$RQ_PROJECT/tasks" -mindepth 2 -maxdepth 2 -name task.json \
+        -exec jq -r --arg top "$(active_tree_for "$RQ_CODE" "$(pwd -P)")" \
+        'select(.worktree.path == $top) | input_filename' {} + 2>/dev/null | head -1)"
+      TASK_ARG="${TASK_ARG%/task.json}"
+    fi
+  fi
   if [ -n "$TASK_ARG" ]; then
-    # The task lookup and the contract's answer every stage script reads.
-    die1() { die 1 "$1"; }
-    die3() { die 3 "$1"; }
-    die79() { die 79 "$1"; }
-    # shellcheck source=../../../scripts/lib/task-helpers.sh
-    . "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
     TASK_ARG="$(resolve_task_folder "$TASK_ARG" "require")" || exit $?
     [ "$(automated_tests "$TASK_ARG")" != "no" ] || WITH_TESTS=""
   fi

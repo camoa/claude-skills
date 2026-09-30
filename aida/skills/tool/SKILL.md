@@ -165,9 +165,9 @@ requires_tooling_with_tests:
 ```
 
 A name under `requires_tooling:` is always needed. A name under `requires_tooling_with_tests:` is
-needed unless `--task` names a task whose contract says it has no automated tests. Pass `--task`
-whenever a task is active, so that answer is read. The second list is a key of its own because the
-catalog accepts only tool names under `requires_tooling:`.
+needed unless the task's contract says it has no automated tests. The script finds the task whose
+worktree is this window's folder. `--task` names another task folder instead. The second list is
+a key of its own because the catalog accepts only tool names under `requires_tooling:`.
 
 It runs each named tool as "Run a tool" does, because a tooling recipe's Run command is also its
 presence check. It prints one `TOOLING:` line per tool, or `REQUIRES: none`. It installs nothing.
