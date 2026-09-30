@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # own-scripts-hook-spec.sh: hooks/deny-destructive-commands.sh reads every file a command runs, so
 # a refusal of one of the plugin's own scripts stops the skill that runs it. The review script was
-# refused that way for a message string (live-run row 254). Feeds the hook `bash <script>` for every
-# shell script in the plugin, the way an agent runs one, and names the file and line of each
-# refusal. A refused line is found by feeding the hook each line of that file alone. The hooks
-# folder is left out: the platform runs a hook, never the Bash tool, so this hook never reads one.
+# refused that way for a message string (live-run row 254). This spec feeds the hook
+# `bash <script>` for every shell script in the plugin, the way an agent runs one. It names the
+# file and line of each refusal. It finds a refused line by feeding the hook each line alone.
+# The hooks folder is left out: the platform runs a hook, never the Bash tool, so this hook never
+# reads one.
 set -uo pipefail
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 PLUGIN="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")/.." >/dev/null 2>&1 && pwd -P)"

@@ -47,11 +47,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A Write, Edit or MultiEdit to a `.claude` settings file whose new text holds `disableAllHooks`.
 #
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
-# read. The exception is a command line that also starts a shell or runs a file. The two rules that
-# find a command word, a command word from a variable and a recursive delete, read a quoted string
+# read. The exception is a command line that also starts a shell or runs a file. Two rules find a
+# command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
-# is not a command (live-run row 254). The text of `sh -c` and `eval` is split, because a shell
-# runs it. The other rules read quoted text as commands. A refused phrase
+# is not a command (live-run row 254). A string that spans lines is read as commands. On a line
+# that holds `eval`, a `-c` flag or `<<<`, every string after it is read as commands, because a
+# shell runs it. The other rules read quoted text as commands. A refused phrase
 # anywhere else is refused, for example inside `git commit -m "..."` or `echo "..."`. Closing that
 # needs the shell grammar.
 #
@@ -135,6 +136,10 @@ NAMES
 else
   FORMS="$GUARD_SUFFIXES"
 fi
+# The forms and the names as arrays, read once, so names_guard starts no subshell for each word.
+FORM_LIST=(); NAME_LIST=()
+while IFS= read -r f; do [ -z "$f" ] || FORM_LIST+=("$f"); done <<<"$FORMS"
+while IFS= read -r f; do [ -z "$f" ] || NAME_LIST+=("$f"); done <<<"$GUARD_NAMES"
 
 # True when absolute path $1 is a guard path, or ends with a guard file name when GUARD is empty.
 is_guard() {
@@ -219,28 +224,55 @@ hit() { printf '%s' "$1" | grep -Eq -e "$2"; }
 normalise() { printf '%s' "$1" | tr -d "'\"\\\\" | tr -s ' \t' ' '; }
 # Prints text $1 with one command segment per line. tr, not sed, so BSD and GNU agree.
 segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
-# Prints raw text $1 with each space, tab, `;`, `&` and `|` inside a quoted string replaced by
-# \037, so read_words keeps the string in one word and segments does not split it. A quote counts
-# only when it closes on its own line, so a quote that spans lines cannot hide a command.
+# Prints raw text $1 with some quoted strings joined. A joined string has each space, tab, `;`, `&`
+# and `|` replaced by \037. Then read_words keeps it in one word, and segments does not split it.
+# Only a string that opens and closes on one line is joined. The quote state carries across lines,
+# so the text after a string that spans lines is read where the shell closes it. A comment and a
+# heredoc body are copied and change no quote state. On a line that holds `eval`, a `-c` flag or
+# `<<<`, no later string is joined, because a shell runs its text.
 quoted_words() {
-  printf '%s\n' "$1" | LC_ALL=C awk '{
-    out = ""; n = length($0); i = 1
-    while (i <= n) {
-      c = substr($0, i, 1)
-      if (c == "\\") { out = out substr($0, i, 2); i += 2; continue }
-      if (c == "\047" || c == "\"") {
-        j = i + 1
-        while (j <= n && substr($0, j, 1) != c) { if (c == "\"" && substr($0, j, 1) == "\\") j++; j++ }
-        if (j <= n) {
-          s = substr($0, i, j - i + 1)
-          if (substr($0, 1, i - 1) !~ /(^|[ \t;&|(])(eval|-[A-Za-z]*c)[ \t]+$/) gsub(/[ \t;&|]/, "\037", s)
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    function close_at(s, k, c,   d) {
+      while (k <= length(s)) {
+        d = substr(s, k, 1)
+        if (d == c) return k
+        if (c == "\"" && d == "\\") k++
+        k++
+      }
+      return 0
+    }
+    {
+      line = $0; n = length(line)
+      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print line; next }
+      out = ""; i = 1; pend = ""
+      if (q != "") {
+        j = close_at(line, 1, q)
+        if (j == 0) { print line; next }
+        out = substr(line, 1, j); i = j + 1; q = ""
+      }
+      while (i <= n) {
+        c = substr(line, i, 1)
+        if (c == "\\") { out = out substr(line, i, 2); i += 2; continue }
+        if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t;&|(]/)) { out = out substr(line, i); break }
+        if (substr(line, i, 3) == "<<<") { out = out "<<<"; i += 3; continue }
+        if (substr(line, i, 2) == "<<") {
+          m = substr(line, i + 2); match(m, /^-?[ \t]*["\047]?[^ \t"\047;&|)<>]*["\047]?/)
+          w = substr(m, 1, RLENGTH); out = out "<<" w; i += 2 + RLENGTH
+          gsub(/^-|[ \t"\047]/, "", w); if (pend == "") pend = w
+          continue
+        }
+        if (c == "\047" || c == "\"") {
+          j = close_at(line, i + 1, c)
+          if (j == 0) { out = out substr(line, i); q = c; break }
+          s = substr(line, i, j - i + 1)
+          if (substr(line, 1, i - 1) !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
+        out = out c; i++
       }
-      out = out c; i++
-    }
-    print out
-  }'
+      print out
+      hd = pend
+    }'
 }
 
 # Sets I to the index in w of the first word after the wrappers, options and assignments that can
@@ -259,7 +291,8 @@ skip_wrappers() {
 # Reads normalised text $1 one command segment at a time. Sets RUNS to the files the segments
 # run, one per line. A file run as a command word must be executable, so it carries an `x:`
 # prefix. Sets SHELLISH to true when a segment starts a shell, `eval`, or a command word with a
-# slash.
+# slash. Each loop in this file first drops, with one grep, the segments that cannot hit its rule.
+# A bash loop over every segment of a 256 KiB file took most of a minute (live-run row 255).
 scan_runs() {
   local seg j n c
   RUNS=""; SHELLISH=false
@@ -292,7 +325,7 @@ scan_runs() {
 " ;;
     esac
   done <<SEGMENTS
-$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n')
+$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e '/|sh|source|eval|(^| )\.( |$)')
 SEGMENTS
 }
 
@@ -300,29 +333,24 @@ SEGMENTS
 names_guard() {
   local f
   [ -n "$1" ] || return 1
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
+  for f in "${FORM_LIST[@]}"; do
     case "$1" in *"$f"*) return 0 ;; esac
-  done <<FORMS
-$FORMS
-FORMS
+  done
   if [ "$AT_ROOT" = true ]; then
-    while IFS= read -r f; do
+    for f in "${NAME_LIST[@]}"; do
       case "$1" in "$f"|"$f"/*|./"$f"|./"$f"/*) return 0 ;; esac
-    done <<NAMES
-$GUARD_NAMES
-NAMES
+    done
   fi
   return 1
 }
 
 # True when a segment of normalised text $1 writes to a guard path.
 guard_write() {
-  local seg word k named anywhere t sed perl dd copy
+  local seg word k named anywhere t sed perl dd copy sed_i perl_i
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     [ "${#w[@]}" -gt 0 ] || continue
-    named=false; anywhere=false; sed=false; perl=false; dd=false; copy=false
+    named=false; anywhere=false; sed=false; perl=false; dd=false; copy=false; sed_i=false; perl_i=false
     for word in "${w[@]}"; do
       case "$word" in
         tee|mv|rm|chmod|truncate) anywhere=true ;;
@@ -331,13 +359,17 @@ guard_write() {
         dd) dd=true ;;
         cp|ln|install) copy=true ;;
       esac
+      case "$word" in -i*|--in-place*) sed_i=true ;; esac
+      case "$word" in -*i*) perl_i=true ;; esac
     done
+    [ "$sed$sed_i" != truetrue ] || anywhere=true
+    [ "$perl$perl_i" != truetrue ] || anywhere=true
+    # A segment with no write verb and no `>` cannot write, so its words are not looked up.
+    case "$anywhere$dd$copy:$seg" in falsefalsefalse:*'>'*) ;; falsefalsefalse:*) continue ;; esac
     k=0
     while [ "$k" -lt "${#w[@]}" ]; do
       word="${w[$k]}"
-      ! names_guard "$word" || named=true
-      case "$word" in -i*|--in-place*) [ "$sed" = false ] || anywhere=true ;; esac
-      case "$word" in -*i*) [ "$perl" = false ] || anywhere=true ;; esac
+      [ "$anywhere" = false ] || ! names_guard "$word" || named=true
       case "$word" in of=*) [ "$dd" = false ] || ! names_guard "${word#of=}" || return 0 ;; esac
       case "$word" in
         *'>'*)
@@ -351,7 +383,7 @@ guard_write() {
     # cp, ln and install write only their last word, so reading a guard file passes.
     [ "$copy" = true ] && names_guard "${w[$((${#w[@]} - 1))]}" && return 0
   done <<SEGMENTS
-$(segments "${1//'>|'/>}")
+$(segments "${1//'>|'/>}" | grep -E -e 'tee|mv|rm|chmod|truncate|sed|perl|dd|cp|ln|install|>')
 SEGMENTS
   return 1
 }
@@ -413,7 +445,7 @@ recursive_delete() {
 $targets
 TARGETS
   done <<SEGMENTS
-$(segments "$1")
+$(segments "$1" | grep -e rm)
 SEGMENTS
   return 1
 }
@@ -437,7 +469,7 @@ variable_command() {
     fi
     [ -z "$VAR_VERB" ] || return 0
   done <<SEGMENTS
-$(segments "$1")
+$(segments "$1" | grep -E -e '\$' | grep -E -e 'push|reset|clean|branch')
 SEGMENTS
   return 1
 }
@@ -498,11 +530,13 @@ GHAPI
 
 # Checks command text $1, read $2 files deep. Sets REASON and returns 0 when it is refused.
 check_text() {
-  local text="$1" depth="$2" stripped n line val f p runs need_x
+  local text="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x
   text="${text//"$BSNL"/}"
   if [ "$HAVE_TEXT" = true ]; then
     stripped="$(strip_heredocs "$text" "$HD_TO_FILE")"
-    scan_runs "$(normalise "$stripped")"
+    n0="$(normalise "$stripped")"
+    scan_runs "$n0"
+    runs0="$RUNS"
     [ "$SHELLISH" = true ] || text="$stripped"
   fi
   n="$(normalise "$text")"
@@ -520,8 +554,8 @@ check_text() {
 $(printf '%s\n' "$n" | grep -E -e "${GIT}.*alias\.[^ =]+[ =]")
 ALIASES
   [ "$HAVE_TEXT" = true ] && [ "$HAVE_PATHS" = true ] || return 1
-  scan_runs "$n"
-  runs="$RUNS"
+  # The first scan read the same text when no heredoc body was kept, so its result stands.
+  if [ "$n" = "$n0" ]; then runs="$runs0"; else scan_runs "$n"; runs="$RUNS"; fi
   while IFS= read -r f; do
     need_x=false
     case "$f" in x:*) need_x=true; f="${f#x:}" ;; esac
