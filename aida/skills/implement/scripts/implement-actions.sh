@@ -53,7 +53,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--check-recipe <framework>=<path>]... \
 #                            [--implement-recipe <framework>=<path>]... \
 #                            [--value <name>=<value>]... \
-#                            [--nothing-ran <literal substring>]
+#                            [--nothing-ran <literal substring>] \
+#                            [--accept-deviation <the person's reason>]
 #   implement-actions.sh build-recheck <task_folder> <unit_id> \
 #                            [--interface <path to the interface record the builder wrote>] \
 #                            [--test-recipe <framework>=<path>]... \
@@ -488,7 +489,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not waiting on another attempt.
 #  68  `grant-attempt`, `restart` or `clear-halt` was called on an autonomous run. Each is a
 #      person's judgement, and an unattended run has none to offer. One number, because it is one
-#      fact. `review-record --accept-deviation` is the same fact (gap row 224).
+#      fact. `review-record --accept-deviation` is the same fact (gap row 224), and so is
+#      `build-record --accept-deviation` (gap row 266).
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
 #      restart that reset an order anyway would throw away a build that is fine.
 #  70  `tests-freeze` was given a `--row` judged by a person on an autonomous run. An autonomous run
@@ -696,7 +698,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      names each commit after --started-at. Nothing is recorded and no attempt is spent.
 #      Unattended, the order halts first, and the halt names the commits. A deviation line other
 #      than `Deviation: none`, or a heading that starts with "Deviation", in the report or the
-#      interface record, is a stop too (gap row 221).
+#      interface record, is a stop too (gap row 221). A person keeps a deviation with
+#      --accept-deviation, interactive only (exit 68), and the message and the halt name that
+#      route. A stop line other than `Stop: none` has no such route (gap row 266).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
@@ -916,6 +920,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--check-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
+                            [--accept-deviation <the person's reason>]
        implement-actions.sh build-recheck <task_folder> <unit_id>
                             [--interface <path to the interface record the builder wrote>]
                             [--test-recipe <framework>=<path>]...
@@ -1021,6 +1026,23 @@ halt_refuse_separator() {
 halt_order_in() {
   printf '%s' "$1" | jq -c --arg id "$2" --arg why "$3" "$HALT_MERGE_JQ
     .orders = (.orders | map(if .id == \$id then (.haltedBecause = halt_merge(.haltedBecause; \$why)) else . end))"
+}
+
+# Records a deviation a person kept, for `build-record` and `review-record` --accept-deviation
+# (gap rows 224 and 266). In ledger document $1, removes from order $2 each halt segment that
+# begins with a prefix in JSON array $3, and keeps the rest. It adds one haltsCleared entry: the
+# segments removed, or $4 when the order carried none, and the person's reason $5. Prints the
+# updated document, or nothing when the update failed.
+accept_deviation_in() {
+  local halt kept rest
+  halt="$(printf '%s' "$1" | jq -r --arg id "$2" '[ .orders[] | select(.id == $id) | .haltedBecause // empty ] | .[0] // ""')"
+  kept="$(halt_segments_matching "$halt" "$3" keep)"
+  rest="$(halt_segments_matching "$halt" "$3" drop)"
+  printf '%s' "$1" | jq -c --arg id "$2" --arg reason "${kept:-$4}" --arg rest "$rest" \
+    --arg today "$(date -u +%Y-%m-%d)" --arg because "$5" '
+    .orders = (.orders | map(if .id == $id then
+                 (if $rest == "" then del(.haltedBecause) else .haltedBecause = $rest end) else . end))
+    | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today, because: $because}])'
 }
 
 # Prints one of: missing, unreadable, ok. Never dies. "unreadable" covers every way the file
@@ -7391,6 +7413,10 @@ br_marked_lines() {
     | grep -i "^$2:"
 }
 
+# The front of the halt a builder's stop writes unattended. `build-record --accept-deviation`
+# clears the segments that begin with it.
+BR_STOP_PREFIX="the builder stopped:"
+
 # Prints each deviation a builder's file names, other than none: its deviation lines, and every
 # heading whose text starts with "Deviation". The live builder wrote a section headed "Deviation
 # from the module's DI convention" (gap row 221). $1 the file.
@@ -7403,10 +7429,14 @@ br_deviations() {
 
 do_build_record() {
   local task_arg="" unit_id="" interface_path="" report_path="" started_at="" observed_path=""
-  local nothing_ran="" have_nothing_ran=false
+  local nothing_ran="" have_nothing_ran=false accept=""
   local test_recipes="" check_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --accept-deviation)
+        [ "$#" -ge 2 ] || die 3 "build-record: --accept-deviation needs the person's reason for keeping the deviation"
+        [ -n "$2" ] || die 3 "build-record: --accept-deviation was given an empty reason."
+        accept="$2"; shift 2 ;;
       --interface)
         [ "$#" -ge 2 ] || die 3 "build-record: --interface needs a path to the record the builder wrote"
         [ -n "$2" ] || die 3 "build-record: --interface was given an empty path."
@@ -7478,6 +7508,7 @@ do_build_record() {
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
+  [ -z "$accept" ] || fn_require_interactive "build-record" "keeping a deviation the builder declared"
 
   tt_load_snapshot "build-record"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "build-record"
@@ -7535,7 +7566,12 @@ do_build_record() {
   # that starts with "Deviation" in either file, checked before the count. A stop recorded as an
   # attempt spends the budget on work the rule forbade. The halt reason names the file and the
   # commits, never the builder's text, because that text may hold the halt separator.
+  # A person may keep a deviation, never a stop line: --accept-deviation records the attempt with
+  # the first deviation line and the reason, the way review-record keeps a departure (gap row 266).
+  # A deviation from a play stops too. The line has no kind a script can read, and a kind the
+  # builder writes itself would let it mark any deviation as a play. So a person sees each one.
   local ledger_run_mode stop_lines stop_count stop_value deviation_count stop_file="$report_path"
+  local is_deviation=false accepted_json=""
   # The task's own mode, not the ledger's copy from start (gap row 265).
   ledger_run_mode="$(task_run_mode "$TASK_PATH" implement)"
   stop_lines="$(br_marked_lines "$report_path" stop)"
@@ -7554,9 +7590,18 @@ do_build_record() {
         deviation_count="$(br_marked_lines "$report_path" deviation | grep -c '.')"
         [ "$deviation_count" = "1" ] \
           || die 106 "build-record: the builder's report at $report_path holds $deviation_count deviation lines, and it must hold exactly one: 'Deviation: none', or 'Deviation: <what>: <why>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
+        [ -z "$accept" ] \
+          || die 3 "build-record: --accept-deviation was given, and neither the report nor the interface record of $unit_id names a deviation. Nothing is written."
+      else
+        is_deviation=true
       fi
       ;;
   esac
+  if $is_deviation && [ -n "$accept" ]; then
+    accepted_json="$(jq -cn --arg d "$(printf '%s\n' "$stop_lines" | head -n 1)" --arg f "$stop_file" --arg b "$accept" \
+      '{departure: $d, file: $f, because: $b}')"
+    stop_lines=""
+  fi
   if [ -n "$stop_lines" ]; then
     local stop_commits stop_commit_count stop_commit_text=""
     stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
@@ -7565,15 +7610,18 @@ do_build_record() {
     if [ "$stop_commit_count" -gt 0 ]; then
       stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
     fi
+    local keep_route=""
+    ! $is_deviation || keep_route=" A person keeps the deviation with build-record --accept-deviation <their reason>, interactive only."
     if [ "$ledger_run_mode" = "autonomous" ]; then
       local stop_ledger_doc
-      stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "the builder stopped: a Stop: or Deviation: line says so, at $stop_file.$stop_commit_text")"
+      stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$BR_STOP_PREFIX a Stop: or Deviation: line says so, at $stop_file.$stop_commit_text$keep_route")"
       [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
       write_atomic "$ledger_file" "$stop_ledger_doc"
     fi
     [ -z "$stop_commit_text" ] \
       || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md."
+    ! $is_deviation || keep_route=" Or, interactive only, a person keeps the deviation: run build-record again with --accept-deviation <their reason>."
+    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route"
   fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
@@ -7652,7 +7700,7 @@ do_build_record() {
     --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
-    --argjson executed "$executed_count" \
+    --argjson executed "$executed_count" --argjson accepted "${accepted_json:-null}" \
     '{
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -7665,7 +7713,8 @@ do_build_record() {
       checks: .,
       executed: $executed,
       decidingChecks: { total: 8, ranHere: [ .[] | .id ] }
-    }' "$checks_file")"
+    }
+    + (if $accepted == null then {} else {deviationAccepted: $accepted} end)' "$checks_file")"
   rm -f "$checks_file"
   [ -n "$record_json" ] || die 3 "build-record: could not assemble the record for $unit_id."
 
@@ -7705,6 +7754,13 @@ do_build_record() {
   new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger_doc" ] || die 3 "build-record: the ledger update for $unit_id failed."
+  # A kept deviation clears the stop's own halt, and records the reason in haltsCleared whether or
+  # not the order carried that halt, as review-record does.
+  if [ -n "$accepted_json" ]; then
+    new_ledger_doc="$(accept_deviation_in "$new_ledger_doc" "$unit_id" "$(jq -cn --arg p "$BR_STOP_PREFIX" '[$p]')" \
+      "$BR_STOP_PREFIX a Deviation: line says so, at $stop_file." "$accept")"
+    [ -n "$new_ledger_doc" ] || die 3 "build-record: the ledger update for $unit_id failed."
+  fi
   if [ -n "$halt_why" ]; then
     new_ledger_doc="$(halt_order_in "$new_ledger_doc" "$unit_id" "$halt_why")"
     [ -n "$new_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
@@ -7726,8 +7782,9 @@ do_build_record() {
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ])}
     + (if $criteriaJudged == null then {} else {criteriaJudged: $criteriaJudged} end)
     + {executed: "\(.executed) of 8 ran a command, a diff or a hash",
-     state: $state,
-     halt: $halt,
+     state: $state}
+    + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
+    + {halt: $halt,
      record: $record,
      next: $next}')"
   if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$attempts_allowed" ]; then
@@ -8636,6 +8693,11 @@ do_review_record() {
     rm -f "$iface_file"
     departure_file="the interfaceRecord of $IMPL_DIR/build-$unit_id.json"
   fi
+  # Gap row 266. A person kept this line at build-record, so the review carries that answer and
+  # does not ask again. A departure the reviewer finds is a new fact, and it still halts.
+  local build_accepted
+  build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
+  [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] || departure=""
   [ -z "$departure" ] || halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"
   if [ -z "$departure" ]; then
     departure="$(printf '%s' "$information_json" | jq -r \
@@ -8704,7 +8766,7 @@ do_review_record() {
     --arg findingsPath "$findings_path" --argjson findings "$findings_json" \
     --argjson information "$information_json" --argjson recipes "$RV_RECIPE_ANSWERS" \
     --arg accept "$accept" --arg departure "$departure" \
-    --arg departureFile "$departure_file" '
+    --arg departureFile "$departure_file" --argjson carried "$build_accepted" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -8716,7 +8778,8 @@ do_review_record() {
     }
     + (if ($information | length) == 0 then {} else {information: $information} end)
     + (if ($recipes | length) == 0 then {} else {recipes: $recipes} end)
-    + (if $accept == "" then {} else {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}} end)')"
+    + (if $accept != "" then {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}}
+       elif $carried != null then {deviationAccepted: $carried} else {} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal halts the order with the non-goal
@@ -8733,11 +8796,7 @@ do_review_record() {
   # order carried, or the one this departure would have written. rv_load_state let only that
   # segment through, so the order is no longer halted.
   if [ -n "$accept" ]; then
-    new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --arg reason "$halt_why" \
-      --arg today "$today" --arg because "$accept" '
-      ([ .orders[] | select(.id == $id) | .haltedBecause // empty ] | .[0] // $reason) as $halt
-      | .orders = (.orders | map(if .id == $id then del(.haltedBecause) else . end))
-      | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $halt, clearedAt: $today, because: $because}])')"
+    new_ledger="$(accept_deviation_in "$new_ledger" "$unit_id" "$RR_DEPARTURE_PREFIXES" "$halt_why" "$accept")"
     [ -n "$new_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
   fi
   halt_why=""

@@ -146,6 +146,13 @@ what the builder's report names. The person, or design, adds a file the unit nee
 halt a started order. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. The next `start` sets aside what was left.
 
+A deviation is a stop even when it departs from a play and not from the design. The line has no
+kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
+`build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
+and `haltsCleared` in the ledger hold the reason, and the flag clears the stop's halt. Review
+carries the answer and does not ask again about that line. A stop line other than `Stop: none`
+has no such route. Unattended, the flag refuses (exit 68), and the halt names the route.
+
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.
 
