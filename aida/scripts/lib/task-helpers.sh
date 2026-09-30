@@ -688,23 +688,23 @@ task_worktree_group() {
 }
 
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
-# above, named <slug of the code folder>-<id>: a tree nested under the code path is invisible
-# to a tool that registers projects by folder, and DDEV hands it to the parent project. The
-# folder name becomes a hostname label, so the basename and the id go through pb_slug, the one
-# slug rule. The name keeps the code folder because DDEV names a site after its folder, and a
-# site name must be unique on the machine. A dot or an underscore in either becomes a hyphen, as
-# the id rule demands: an id made before that rule may still hold one (gap row 251). The branch
-# keeps the id. Prints the path task.json records. When the field is absent it makes the tree and
-# writes the field first; that is the one producer, and running it again is the repair for a task made before the field
-# existed. A recorded tree gone from disk is made again from its branch, after a prune, because
-# git refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path
-# gone from disk is not trusted as an address: it is computed again by the rule above, and the
-# tree is made and recorded there. That is the repair for a task carried to a second machine,
-# and for a folder named before the id was slugged. A recorded tree on disk is kept. The base is
-# HEAD of the directory this action was started from when that directory is inside the code
-# repository, so a follow-up made from its parent's tree stacks on the parent's work; otherwise
-# it is the code path's HEAD. Uncommitted changes in the code path are not in a tree cut from a
-# commit, so their count is said once, on stderr, and nothing asks.
+# above, named <slug of the code folder>-<id>: a tree nested under the code path is invisible to a
+# tool that registers projects by folder, and DDEV hands it to the parent project. The folder name
+# becomes a hostname label, so the basename and the id go through pb_slug, the one slug rule. The
+# name keeps the code folder because DDEV names a site after its folder, and a site name must be
+# unique on the machine. A dot or an underscore in either becomes a hyphen, as the id rule demands:
+# an id made before that rule may still hold one (gap row 251). The branch keeps the id. Prints the
+# path task.json records. When the field is absent it makes the tree and writes the field first;
+# that is the one producer, and running it again is the repair for a task made before the field
+# existed. A recorded tree gone from disk is made again from its branch, after a prune, because git
+# refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path gone
+# from disk is not trusted as an address: it is computed again by the rule above, and the tree is
+# made and recorded there. That is the repair for a task carried to a second machine, and for a
+# folder named before the id was slugged. A recorded tree on disk is kept. The base is HEAD of the
+# directory this action was started from when that directory is inside the code repository, so a
+# follow-up made from its parent's tree stacks on the parent's work; otherwise it is the code path's
+# HEAD. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
+# said once, on stderr, and nothing asks.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
@@ -760,16 +760,18 @@ task_worktree() {
       || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
   fi
   git -C "$code" worktree prune 2>/dev/null
-  mkdir -p "$group" || die3 "$who: could not make the folder $group"
+  mkdir -p "$group" || die3 "$who: could not make the folder $group. Make it by hand, or let this user write to $(dirname -- "$group"), and run the action again"
   # What the tree is cut from, written whenever this call cuts the branch, over any base the record
   # held. A detached HEAD is `commit:<sha>`: git forbids `:` in a branch name, so the two never
   # meet. A tree made again from a branch that exists keeps the base the record held.
   base_branch=""
   if git -C "$code" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
-    said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" || die3 "$who: git worktree add failed: $said"
+    said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" \
+      || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   else
     base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
-    said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" || die3 "$who: git worktree add failed: $said"
+    said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
+      || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   fi
   wt="$(cd "$wt" && pwd -P)"
   write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" --arg base "$base_branch" \

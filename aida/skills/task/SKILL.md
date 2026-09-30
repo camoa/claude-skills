@@ -58,8 +58,8 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
-`<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`, on
-the branch `feature/<name>`, records both in `task.json`, and commits. The folder name is the
+`<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`.
+The tree is on the branch `feature/<name>`. The script records both in `task.json` and commits. The folder name is the
 slug of the code folder plus the task name, so a site name is predictable and unique. The tree is
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
