@@ -36,7 +36,7 @@
         "interactive",
         "autonomous"
       ],
-      "description": "The mode this build runs under: the task's own mode for the implement stage, read through task_run_mode and written by every `start`, new or resumed. The steps between two starts read it here and never from task.json, so one run applies one rule from its first dispatch to its last record. A person who changes the task's mode runs `start` again, which is where a resumed run begins anyway, and the change takes from there. Review reads the task, not this copy (nyc defect 20)."
+      "description": "The mode the build started under: the task's own mode for the implement stage, read through task_run_mode and written by every `start`, new or resumed. It is a record, and no step decides from it. Every step reads task_run_mode itself, the producer clear-halt also reads. Two sources disagreed when a person set the task interactive after a halt: clear-halt ran and the ruling after it was refused as unattended (gap row 265). Review reads the task too (nyc defect 20)."
     },
     "snapshotHash": {
       "type": "string",

@@ -395,7 +395,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  48  the ledger records this order at a step the action cannot follow. `review-brief` and
 #      `review-record` follow `checks-passed`; `fix-brief` and `fix-record` follow `reviewed` or
 #      `fixed`; `verify-brief` and `verify-record` follow `fixed`; `verify-record` with --ruling and
-#      no --verdicts also follows `reviewed` (gap row 265); `close` follows `reviewed` or `fixed`. The message names the step found and the steps allowed.
+#      no --verdicts also follows `reviewed` (gap row 265); `close` follows `reviewed` or `fixed`.
+#      The message names the step found and the steps allowed.
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the halt's own recorded reason.
 #  50  a review record already exists for this order, and an order gets one review, ever
@@ -407,7 +408,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the reviewed code is a refusal here, never a finding later.
 #  52  a findings or verdict file named on the command line is missing, is empty, or does not hold
 #      the shape the action reads. The message names the entry and what was wrong with it. A file
-#      this script half understands is worse than no file at all.
+#      this script half understands is worse than no file at all. `review-record` also refuses a
+#      finding that cites a file the order owns, or one its diff changes, with an empty or missing
+#      fixScope: an empty fix scope skips the fix rounds (gap row 265).
 #  53  `fix-brief` or `fix-record` found no open actionable finding for this order, so there is
 #      nothing for a fixer to do. `verify-brief` shares it: nothing open means nothing to verify.
 #      `fix-brief` also refuses when every open finding has an empty fix scope, and names the
@@ -4895,20 +4898,19 @@ TF_EOF
     || die 31 "tests-freeze: a --test names criteria $unit_id does not serve or own: $bad_criteria"
 
   # --- the run's own mode, read once: the row checks below and the rejected-row halt both use it ---
-  # A ledger that is present and unreadable refuses here rather than further down. The mode decides
-  # whether a person's row may stand, so reading it as interactive because the file would not parse
-  # would accept a person's row on an autonomous run, a claim nobody made. A ledger that is absent
-  # is a different fact, left to the steps below, which refuse on it by name.
+  # The mode is the task's own for this stage, the one producer clear-halt reads too, so a person
+  # who sets the task interactive is heard at once (gap row 265). A ledger that is present and
+  # unreadable refuses here rather than further down, because the rejected-row halt writes into it.
+  # A ledger that is absent is a different fact, left to the steps below, which refuse on it by name.
   local tf_ledger_file tf_ledger_doc tf_run_mode
   tf_ledger_file="$IMPL_DIR/ledger.json"
   tf_ledger_doc=""
   if [ -f "$tf_ledger_file" ]; then
     tf_ledger_doc="$(jq -c '.' "$tf_ledger_file" 2>/dev/null)"
     [ -n "$tf_ledger_doc" ] \
-      || die 3 "tests-freeze: $tf_ledger_file exists but could not be read as JSON. This step reads the run's own mode from it, and every row below is judged against that mode. Repair or remove it by hand before running this again."
+      || die 3 "tests-freeze: $tf_ledger_file exists but could not be read as JSON. A rejected row halts the order in it. Repair or remove it by hand before running this again."
   fi
-  tf_run_mode="interactive"
-  [ -n "$tf_ledger_doc" ] && tf_run_mode="$(printf '%s' "$tf_ledger_doc" | jq -r '.runMode // "interactive"')"
+  tf_run_mode="$(task_run_mode "$TASK_PATH" implement)"
 
   # --- 64: a criterion whose frozen verifiedBy is neither word answers nothing ----------------------
   # Such a criterion needs no test (exit 29 reads machine), no checklist (exit 30 reads person) and
@@ -7520,7 +7522,8 @@ do_build_record() {
   # attempt spends the budget on work the rule forbade. The halt reason names the file and the
   # commits, never the builder's text, because that text may hold the halt separator.
   local ledger_run_mode stop_lines stop_count stop_value deviation_count stop_file="$report_path"
-  ledger_run_mode="$(printf '%s' "$ledger_doc" | jq -r '.runMode // "interactive"')"
+  # The task's own mode, not the ledger's copy from start (gap row 265).
+  ledger_run_mode="$(task_run_mode "$TASK_PATH" implement)"
   stop_lines="$(br_marked_lines "$report_path" stop)"
   stop_count="$(printf '%s' "$stop_lines" | grep -c '.')"
   [ "$stop_count" = "1" ] \
@@ -7969,8 +7972,10 @@ rv_load_state() {
   [ "$RV_ORDER_ENTRY" != "null" ] \
     || die 3 "$who: $unit_id has no entry in $RV_LEDGER_FILE, though start opens one entry per snapshot work order."
 
-  RV_RUN_MODE="$(printf '%s' "$RV_LEDGER_DOC" | jq -r '.runMode // "interactive"')"
-  [ -n "$RV_RUN_MODE" ] || RV_RUN_MODE="interactive"
+  # The task's own mode for this stage, the producer clear-halt reads, not the ledger's copy from
+  # start. With two sources, a person who set the task interactive cleared a halt and was then
+  # refused a ruling as unattended (gap row 265).
+  RV_RUN_MODE="$(task_run_mode "$TASK_PATH" implement)"
   # A light task gets one fix round, and the halt after it logs the rounds it skipped.
   ! task_is_light "$TASK_PATH" || FIX_ROUNDS_ALLOWED=1
 
@@ -8641,12 +8646,28 @@ do_review_record() {
     die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
   fi
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
+  # Gap row 265. An empty fix scope routes a finding to a ruling with no fix round, so the script
+  # checks the reviewer's claim. A finding that cites a file the order owns, or a file its diff
+  # changes, is about code, and its fix scope names the files a fix changes. A finding that cites
+  # a record, not code, may name none. The diff paths are read once, from the build's own diff.
+  local diff_paths empty_file empty_abs empty_rel
+  diff_paths="$(sed -n -e 's#^+++ b/##p' -e 's#^--- a/##p' "$IMPL_DIR/diff-$unit_id.patch" 2>/dev/null | sort -u)"
   findings_json='[]'
   count="$(printf '%s' "$raw_findings" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$raw_findings" | jq -c --argjson i "$i" '.[$i]')"
     built="$(rv_finding_record "$one" "$alignment" "review")"
+    empty_file="$(printf '%s' "$built" | jq -r 'if (.fixScope | length) == 0 then .file else "" end')"
+    if [ -n "$empty_file" ]; then
+      empty_abs="$(normalize_abs "$(resolve_against "$empty_file" "$RV_CODEPATH")")"
+      empty_rel="${empty_abs#"$RV_CODEPATH"/}"
+      if ! is_under "$empty_abs" "$TASK_PATH" \
+        && { [ -z "$(rv_scope_outside "$(jq -nc --arg p "$empty_file" '[$p]')" "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')" "$RV_CODEPATH" "$TASK_PATH")" ] \
+             || printf '%s\n' "$diff_paths" | grep -qxF -- "$empty_rel"; }; then
+        die 52 "review-record: finding $(printf '%s' "$built" | jq -r '.id') in $findings_path cites $empty_file, a file $unit_id owns or its diff changes, and its fixScope is empty or missing. A finding about code names the files a fix changes in fixScope. Only a finding about a record, not code, has an empty fix scope. Nothing is written."
+      fi
+    fi
     # Live-run row 116. The paths of the finding's fixScope outside the order's own ownedFiles are
     # stored on the finding, when there are any, and printed before the summary. Nothing is ruled
     # here: fix-brief withholds them, and a person allows one there.
@@ -8818,17 +8839,22 @@ do_fix_brief() {
   # Gap row 265. A finding with an empty fix scope asks for no code change, so a fixer can change
   # nothing and fix-record refuses the empty range. When every open finding is one, no brief is
   # written, and a person rules each one at verify-record with no round. Unattended halts first.
-  local empty_ids empty_route empty_ledger
+  local empty_ids empty_why empty_who empty_call empty_ledger
   empty_ids="$(printf '%s' "$open_json" | jq -r 'if all(.[]; (.fixScope // []) | length == 0) then [ .[].id ] | join(", ") else "" end')"
   if [ -n "$empty_ids" ]; then
-    empty_route="no fix round can change $empty_ids, because each has an empty fix scope. A person rules each one: verify-record $TASK_PATH $unit_id --ruling ${empty_ids%%,*}=<wrong|deferred|load-bearing|test-wrong>::<reason>"
+    case "$empty_ids" in
+      *,*) empty_why="no fix round can change $empty_ids, because each has an empty fix scope"; empty_who="each one" ;;
+      *) empty_why="no fix round can change $empty_ids, because its fix scope is empty"; empty_who="it" ;;
+    esac
+    empty_call="verify-record $TASK_PATH $unit_id --ruling ${empty_ids%%,*}=<wrong|deferred|load-bearing|test-wrong>::<reason>"
     if [ "$RV_RUN_MODE" = "autonomous" ]; then
-      empty_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$empty_route")"
+      empty_why="$empty_why. A person runs task set-run-mode interactive on this task, then clear-halt, then rules $empty_who: $empty_call"
+      empty_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$empty_why")"
       [ -n "$empty_ledger" ] || die 3 "fix-brief: the halt on $unit_id could not be written."
       write_atomic "$RV_LEDGER_FILE" "$empty_ledger"
-      die 53 "fix-brief: $unit_id is halted, and nobody is present to rule. After clear-halt, $empty_route."
+      die 53 "fix-brief: $unit_id is halted, and nobody is present to rule: $empty_why."
     fi
-    die 53 "fix-brief: $empty_route."
+    die 53 "fix-brief: $empty_why. A person rules $empty_who: $empty_call."
   fi
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
   owned_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"

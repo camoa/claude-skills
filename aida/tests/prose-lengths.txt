@@ -10,7 +10,7 @@ agents/implementer.md 112
 agents/internal-searcher.md 51
 agents/outward-searcher.md 41
 agents/playbook-loader.md 85
-agents/reviewer.md 134
+agents/reviewer.md 140
 agents/row-checker.md 94
 agents/test-author.md 147
 skills/completion/SKILL.md 106
@@ -20,7 +20,7 @@ skills/implement/SKILL.md 255
 skills/implement/references/build.md 483
 skills/implement/references/finish.md 220
 skills/implement/references/preconditions.md 229
-skills/implement/references/review.md 415
+skills/implement/references/review.md 417
 skills/implement/references/start.md 131
 skills/implement/references/tests.md 533
 skills/next/SKILL.md 192

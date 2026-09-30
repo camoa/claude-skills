@@ -318,7 +318,9 @@ the evidence that no round can reach it. When the round was verified first, the 
 same call with the rulings and no verdicts file, and the round's verdicts stand. With no round:
 a finding whose fix scope is empty may be ruled at `reviewed`, with the rulings and no verdicts
 file. It asks for no code change, so no round can reach it. No round is recorded. Unattended,
-`fix-brief` halts the order and the halt names this call. A person runs `clear-halt`, then rules.
+`fix-brief` halts the order and the halt names this call. A person runs `task set-run-mode
+interactive` on the task, then `clear-halt`, then rules. No `start` is needed: every step reads
+the run mode from the task itself.
 Any other finding before the cap refuses (exit 3), and the message names the findings that may be
 ruled now. Unattended refuses every ruling (exit 55).
 

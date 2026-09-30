@@ -49,11 +49,10 @@ command with `interactive`. That removes both fields, because an absent field al
 interactive. A task that has never been given a mode is interactive, the safer of the two
 guesses when nobody said otherwise.
 
-Every stage reads the mode from the task when it starts. Implementation reads it at every
-`start`, new or resumed, and writes it into its ledger. The steps of one run read that copy, so
-one run applies one rule. The grant, the restart and the clearing of a halt read the task, so a
-mode you change after a halt takes at once. Review reads the task too, never the ledger's copy,
-so a mode scoped to the build leaves review to you. Then invoke the stage the task is at,
+Every stage reads the mode from the task. Implementation also writes it into its ledger at
+every `start`, as a record of the mode the build began under. No step reads that copy. Every
+step reads the task, so a mode you change after a halt takes at once, with no `start`. Review
+reads the task too, so a mode scoped to the build leaves review to you. Then invoke the stage the task is at,
 `/aida:scope <task-id>` for a new task, and let it run.
 
 A task can carry a ceiling on its build, in either mode. Set it with

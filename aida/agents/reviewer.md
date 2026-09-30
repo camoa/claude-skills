@@ -54,6 +54,12 @@ findings to the path the brief gives, in this shape:
 Use `{ "findings": [] }` when you find nothing. `information` is optional: leave it out when you
 have none.
 
+**`fixScope` names the files a fix changes.** A finding about code always names at least one.
+An empty `fixScope` is right only when no code change can answer the finding. An example is a
+finding about recorded evidence, such as a check output in a record. That finding goes to a
+person's ruling and skips the fix rounds. `review-record` refuses an empty `fixScope` on a finding
+whose `file` the order owns or its diff changes.
+
 **Judge the order's own proof.** The order record's `verify` list holds what design carried from
 the source that covers the order. Each `run` entry already ran in the first check. Read its
 output there. A `run` entry with `binding: false` and no `approved` never ran: judge it as a
