@@ -49,6 +49,7 @@
 #   pc_unquote <text>                         the text with one layer of matching outer quotes removed
 #   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
 #   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
+#   br_selector_misses <selector> <run>  true when the run printed output and the selector matches none of it
 #   br_warnings_only <selector> <warning> <run>  true when the run names no failed test and some warnings
 #   br_subtract_baseline <base> <now> <label> <how> [<selector>] [<warning selector>]  met, unmet, unknown or warned into BR_SUB_*
 #   git_status_of <repo> [<pathspecs>]        the porcelain status, whole tree or the pathspecs alone
@@ -1083,6 +1084,14 @@ br_lines_not_in() {
   rm -f "$base_keys" "$now_keys"
 }
 
+# True when the run at $2 printed output and the selector $1 matches no line of it. False when the
+# selector is empty or does not compile.
+br_selector_misses() {
+  [ -n "$1" ] && [ -s "$2" ] || return 1
+  grep -a -q -E -e "$1" "$2" 2>/dev/null
+  [ "$?" -eq 1 ]
+}
+
 # True when the run at $3 names no failed test and holds runner warnings (gap row 261): the suite
 # row's failure_line selector $1 matches no line of it, and its warning_line expression $2 matches
 # at least one. False when either is empty, or the selector does not compile. Sets BR_WARN_LINES,
@@ -1093,9 +1102,8 @@ BR_WARN_LINES="[]"; BR_WARN_DETAIL=""
 br_warnings_only() {
   local selector="$1" warning="$2" run="$3" hits count
   BR_WARN_LINES="[]"; BR_WARN_DETAIL=""
-  [ -n "$selector" ] && [ -n "$warning" ] || return 1
-  grep -a -q -E -e "$selector" "$run" 2>/dev/null
-  [ "$?" -eq 1 ] || return 1
+  [ -n "$warning" ] || return 1
+  br_selector_misses "$selector" "$run" || return 1
   hits="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
   grep -a -E -e "$warning" "$run" >"$hits" 2>/dev/null
   count="$(grep -c '' "$hits")"
@@ -1120,11 +1128,12 @@ br_warnings_only() {
 # line of the run now and br_warnings_only holds, the verdict is warned, not unknown.
 # BR_SUB_WARNINGS holds the first 20 warning lines, and the warnings are never subtracted, because
 # a new test file can add one more of the same kind without failing.
-BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"
+# BR_SUB_UNSELECTED is true when the verdict is unknown because the selector matched no line.
+BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"; BR_SUB_UNSELECTED=""
 # shellcheck disable=SC2034 # read by the sourcing script
 br_subtract_baseline() {
   local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" warning="${6:-}" new_file base_sel now_sel with are they
-  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"
+  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"; BR_SUB_UNSELECTED=""
   if [ -z "$base" ] || [ ! -s "$base" ]; then
     BR_SUB_VERDICT="unknown"
     BR_SUB_DETAIL="the $label command $how, and the baseline recorded it unmet at the commit the build started from but kept no output to subtract (a baseline taken before outputs were kept, or its file removed), so this cannot tell an old finding from a new one."
@@ -1155,7 +1164,7 @@ br_subtract_baseline() {
     fi
     if [ ! -s "$now_sel" ]; then
       rm -f "$base_sel" "$now_sel"
-      BR_SUB_VERDICT="unknown"
+      BR_SUB_VERDICT="unknown"; BR_SUB_UNSELECTED="true"
       BR_SUB_DETAIL="the $label command $how, and no line of its output matches the recipe's failure_line selector ($selector), so the failure is not one the selector names; read the output."
       return 0
     fi

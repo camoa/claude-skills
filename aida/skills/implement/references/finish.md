@@ -37,13 +37,6 @@ framework's own verdict. It never passes on warnings by itself, because the proj
 configuration made them fail the run. A `warning_line` with no `failure_line` is not read, and
 the suite's detail says so.
 
-A project's own copy of the test-execution recipe can lack `warning_line`. The same red then
-reads `unknown`. When no line matches `failure_line`, the refusal names the recipe file, the
-missing key, and what the key reads. No action writes a project's recipe. A person adds the key
-to the suite row, under `failure_line`, and runs `finish` again. `finish` reads that file on each
-run, so `recipe-refresh` is not needed. Without the key, `--accept-warnings` does not pass. An
-`unknown` suite can hide a failure that prints no test line.
-
 The message names three routes, and a person picks one. Put them to the person in these words:
 "Accept the warnings: run finish again with --accept-warnings <the person's reason>, interactive
 only. Change the suite row's command in the project's copy of the test-execution recipe, so these
@@ -54,6 +47,17 @@ outside this task."
 passed. It refuses on an autonomous implement stage (exit 68). The record keeps the suite
 `warned`, with the warning lines, the reason, and `judgedBy: person`. Review reports the suite row
 met and says it is that person's answer.
+
+A recipe can lack `warning_line`. Then the same red reads `unknown` over a red baseline, and
+`unmet` over a green or absent one. When no line matches `failure_line`, the detail names the
+recipe file, the missing key, and what the key reads. No action writes a recipe. For a file in
+a recipe folder the project declares, a person adds the key to the suite row, under
+`failure_line`, and runs `finish` again. `finish` reads that file on each run. Any other file is
+a catalog copy, and a refresh replaces it. The person copies it to
+`<folder>/process-recipes/<framework>/test-execution.md` and adds the key there. A folder the
+project does not declare yet is declared first, with the project skill's `add-source`. Then
+`recipe-refresh` points the task at the copy, and `finish` runs again. Without the key,
+`--accept-warnings` does not pass. An `unknown` suite can hide a failure that prints no test line.
 
 On success it writes `implementation/finished.json`: the commit range this stage produced, and
 each order's own range and rounds used. The suite's verdict is under `suite`, with its output in

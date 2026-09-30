@@ -6266,6 +6266,36 @@ br_tool_check() {
   [ -z "$outfile" ] || rm -f "$outfile"
 }
 
+# The clause a finish suite detail ends with when no line matched the selector and the row has no
+# warning_line (gap row 268). $1 the row's warning_line, $2 the framework entry. Prints nothing
+# outside finish or with a key. A recipe outside the project's own recipe folders is a catalog
+# copy a refresh replaces, so the person copies it into a folder and points the task at the copy.
+br_warning_hint() {
+  local warning="$1" fw_obj="$2" recipe fw line loc="" own="" name tab
+  [ "$BRC_END_OF_TASK" = "true" ] && [ -z "$warning" ] && [ -n "${RV_PROJECT_FOLDER:-}" ] || return 0
+  recipe="$(printf '%s' "$fw_obj" | jq -r '.testRecipe')"
+  fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
+  tab="$(printf '\t')"
+  while IFS= read -r line; do
+    [ "${line%%"$tab"*}" = "folder" ] || continue
+    [ -n "$loc" ] || loc="${line#*"$tab"}"
+    case "$recipe" in "${line#*"$tab"}"/*) own="yes" ;; esac
+  done <<BWH_LINES
+$(sw_source_lines "$RV_PROJECT_FOLDER/project.json" processRecipes)
+BWH_LINES
+  printf ' The suite row in %s declares no warning_line, so finish cannot read this red as runner warnings. warning_line is a regular expression for the lines a runner prints that fail no test.' "$recipe"
+  if [ -n "$own" ]; then
+    printf ' If the output holds no failed test, only runner warnings, a person adds warning_line to that row, under failure_line, and runs finish again.'
+  else
+    name="$(jq -r '.name // empty' "$RV_PROJECT_FOLDER/project.json" 2>/dev/null)"
+    printf ' That file is not in a recipe folder this project declares, and a catalog refresh replaces it.'
+    printf ' If the output holds no failed test, only runner warnings, a person copies it to %s/process-recipes/%s/test-execution.md and adds warning_line to its suite row, under failure_line.' "${loc:-<folder>}" "$fw"
+    [ -n "$loc" ] || printf ' Declare that folder first, with project-actions.sh add-source %s processRecipes <folder>.' "$name"
+    printf ' Then point this task at the copy, with implement-actions.sh recipe-refresh %s --recipe %s=<the copy>, and run finish again.' "$TASK_PATH" "$fw"
+  fi
+  printf ' finish then names the routes.'
+}
+
 # One commanded test check: order-tests or suite-regression. $1 the check id, $2 the field of each
 # framework entry holding the command (`orderTests` or `suite`), $3 a word for the message. The
 # command comes from the recipe, and it runs once per framework the task resolved one for, because
@@ -6402,14 +6432,6 @@ br_test_check() {
                 br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw" "$selector" "$warning"
                 verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
                 new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"; warn_json="$BR_SUB_WARNINGS"
-                # The one unknown a warning_line can turn into warned: a finish run where the
-                # selector matches no line and the row has no key. Name the key and its file,
-                # because the project's copy of the recipe may predate the key (gap row 268).
-                if [ "$BRC_END_OF_TASK" = "true" ] && [ "$verdict" = "unknown" ] && [ -n "$selector" ] \
-                  && [ -z "$warning" ] && [ -s "$outfile" ] && [ -s "$baseline_output" ]; then
-                  grep -a -q -E -e "$selector" "$outfile" 2>/dev/null
-                  [ "$?" -ne 1 ] || detail="$detail The suite row in $(printf '%s' "$fw_obj" | jq -r '.testRecipe') declares no warning_line, so finish cannot read this red as runner warnings. warning_line is a regular expression for the lines a runner prints that fail no test. If the output holds no failed test, only runner warnings, a person adds warning_line to that row, under failure_line, and runs finish again. The suite then reads warned, and finish names three routes: accept the warnings, change the suite row's command, or repair the project configuration."
-                fi
                 ;;
               unknown)
                 verdict="unknown"
@@ -6425,13 +6447,19 @@ br_test_check() {
                 ;;
             esac
             # A baseline with no red to subtract, and a run red only on runner warnings: warned,
-            # the same test the subtraction makes, never a failure this order introduced.
+            # the same test the subtraction makes, never a failure this order introduced. A run
+            # the selector names no line of, on a row with no warning_line, gets the hint.
             case "$baseline_verdict" in
-              unmet|unknown) ;;
+              unmet)
+                [ "$BR_SUB_UNSELECTED" != "true" ] || detail="$detail$(br_warning_hint "$warning" "$fw_obj")"
+                ;;
+              unknown) ;;
               *)
                 if br_warnings_only "$selector" "$warning" "$outfile"; then
                   verdict="warned"; warn_json="$BR_WARN_LINES"
                   detail="the suite exited $rc on $fw, where the baseline recorded no failure, and $BR_WARN_DETAIL"
+                elif br_selector_misses "$selector" "$outfile"; then
+                  detail="$detail$(br_warning_hint "$warning" "$fw_obj")"
                 fi
                 ;;
             esac

@@ -193,7 +193,8 @@ runner warnings and no failed test, give the routes `finish` offers, in its word
 warnings: run finish again with --accept-warnings <the person's reason>, interactive only. Change
 the suite row's command in the project's copy of the test-execution recipe, so these warnings do
 not fail the run. Or repair the project configuration that raises them, in a change outside this
-task." A failed test is repaired outside this task. In an unattended run the build goes on, and a
+task." A suite row with no `warning_line` needs the key first, or `--accept-warnings` does not
+pass (`references/finish.md`). A failed test is repaired outside this task. In an unattended run the build goes on, and a
 person meets the red at `finish`.
 
 What each run printed is kept whole, one file per run under `implementation/baseline-output/`,
