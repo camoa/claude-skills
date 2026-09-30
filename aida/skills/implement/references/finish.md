@@ -31,11 +31,22 @@ route. A recipe with no suite row passes with `undeclared`, and the record says 
 
 A suite row may also declare `warning_line`, the lines a runner prints that fail no test. A
 failing suite where no line matches `failure_line` and at least one matches `warning_line` reads
-`warned`. No test failed, so a fix commit is not the route. `finish` still refuses (exit 86) and
-lists the warning lines. It never passes on them by itself, because the project's own
-configuration made them fail the run. The message names two routes, and a person picks one.
-One is to change the suite row's command in the project's copy of the recipe. The other is to
-repair the project configuration that raises the warnings, outside this task.
+`warned`. That holds whether the baseline was red, green or absent. No test failed, so a fix
+commit is not the route. `finish` refuses (exit 86), lists the warning lines, and names each
+framework's own verdict. It never passes on warnings by itself, because the project's own
+configuration made them fail the run. A `warning_line` with no `failure_line` is not read, and
+the suite's detail says so.
+
+The message names three routes, and a person picks one. Put them to the person in these words:
+"Accept the warnings: run finish again with --accept-warnings <the person's reason>, interactive
+only. Change the suite row's command in the project's copy of the test-execution recipe, so these
+warnings do not fail the run. Or repair the project configuration that raises them, in a change
+outside this task."
+
+`--accept-warnings` passes only a suite that reads `warned`, and only when every other framework
+passed. It refuses on an autonomous implement stage (exit 68). The record keeps the suite
+`warned`, with the warning lines, the reason, and `judgedBy: person`. Review reports the suite row
+met and says it is that person's answer.
 
 On success it writes `implementation/finished.json`: the commit range this stage produced, and
 each order's own range and rounds used. The suite's verdict is under `suite`, with its output in

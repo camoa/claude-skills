@@ -49,6 +49,7 @@
 #   pc_unquote <text>                         the text with one layer of matching outer quotes removed
 #   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
 #   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
+#   br_warnings_only <selector> <warning> <run>  true when the run names no failed test and some warnings
 #   br_subtract_baseline <base> <now> <label> <how> [<selector>] [<warning selector>]  met, unmet, unknown or warned into BR_SUB_*
 #   git_status_of <repo> [<pathspecs>]        the porcelain status, whole tree or the pathspecs alone
 #   git_diff_of <repo> <from> <to> [<scope>] [<options>]...  the diff, whole tree or under one path
@@ -1067,6 +1068,28 @@ br_lines_not_in() {
   rm -f "$base_keys" "$now_keys"
 }
 
+# True when the run at $3 names no failed test and holds runner warnings (gap row 261): the suite
+# row's failure_line selector $1 matches no line of it, and its warning_line expression $2 matches
+# at least one. False when either is empty, or the selector does not compile. Sets BR_WARN_LINES,
+# a JSON array of the first 20 warning lines, and BR_WARN_DETAIL, the clause a caller's detail
+# ends with. A suite with a red baseline and one without read the same test here.
+BR_WARN_LINES="[]"; BR_WARN_DETAIL=""
+# shellcheck disable=SC2034 # read by the sourcing script
+br_warnings_only() {
+  local selector="$1" warning="$2" run="$3" hits count
+  BR_WARN_LINES="[]"; BR_WARN_DETAIL=""
+  [ -n "$selector" ] && [ -n "$warning" ] || return 1
+  grep -a -q -E -e "$selector" "$run" 2>/dev/null
+  [ "$?" -eq 1 ] || return 1
+  hits="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+  grep -a -E -e "$warning" "$run" >"$hits" 2>/dev/null
+  count="$(grep -c '' "$hits")"
+  if [ "$count" -eq 0 ]; then rm -f "$hits"; return 1; fi
+  BR_WARN_LINES="$(head -20 "$hits" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  rm -f "$hits"
+  BR_WARN_DETAIL="no line of its output matches the recipe's failure_line selector ($selector), and $count of its lines match its warning_line ($warning), so no test failed and the exit came from those runner warnings."
+}
+
 # Subtracts the baseline run at $1 from the run now at $2, for a check whose baseline row was
 # unmet. $3 a word for the message, $4 how the command failed, $5 an optional selector: a regular
 # expression the recipe's suite row declared as `failure_line`, and only the lines matching it,
@@ -1078,16 +1101,14 @@ br_lines_not_in() {
 # (the failure is not one the selector names), or a selector grep cannot compile. It cannot see a
 # finding whose text changed, which reads as new, or one fixed and reintroduced, which reads as
 # old, or a new finding worded like an old one in another file, which reads as old too.
-# $6 an optional second expression, the suite row's `warning_line`: lines a runner prints that
-# fail no test. It is read only where the selector matches no line of the run now. When it matches
-# at least one, the verdict is warned, not unknown: no line names a failed test, so the exit reads
-# as coming from those warnings. BR_SUB_WARNINGS holds the first 20 of them, and the warnings are
-# never subtracted, because a new test file can add one more of the same kind without failing.
+# $6 an optional second expression, the suite row's `warning_line`. Where the selector matches no
+# line of the run now and br_warnings_only holds, the verdict is warned, not unknown.
+# BR_SUB_WARNINGS holds the first 20 warning lines, and the warnings are never subtracted, because
+# a new test file can add one more of the same kind without failing.
 BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"
 # shellcheck disable=SC2034 # read by the sourcing script
 br_subtract_baseline() {
   local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" warning="${6:-}" new_file base_sel now_sel with are they
-  local warn_count
   BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"
   if [ -z "$base" ] || [ ! -s "$base" ]; then
     BR_SUB_VERDICT="unknown"
@@ -1111,16 +1132,11 @@ br_subtract_baseline() {
     now_sel="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
     grep -a -E -e "$selector" "$base" >"$base_sel" 2>/dev/null
     grep -a -E -e "$selector" "$now" >"$now_sel" 2>/dev/null
-    if [ ! -s "$now_sel" ] && [ -n "$warning" ]; then
-      grep -a -E -e "$warning" "$now" >"$now_sel" 2>/dev/null
-      warn_count="$(grep -c '' "$now_sel")"
-      if [ "$warn_count" -gt 0 ]; then
-        BR_SUB_WARNINGS="$(head -20 "$now_sel" | jq -Rsc 'split("\n") | map(select(length > 0))')"
-        rm -f "$base_sel" "$now_sel"
-        BR_SUB_VERDICT="warned"
-        BR_SUB_DETAIL="the $label command $how, no line of its output matches the recipe's failure_line selector ($selector), and $warn_count of its lines match its warning_line ($warning), so no test failed and the exit came from those runner warnings."
-        return 0
-      fi
+    if [ ! -s "$now_sel" ] && br_warnings_only "$selector" "$warning" "$now"; then
+      rm -f "$base_sel" "$now_sel"
+      BR_SUB_VERDICT="warned"; BR_SUB_WARNINGS="$BR_WARN_LINES"
+      BR_SUB_DETAIL="the $label command $how, $BR_WARN_DETAIL"
+      return 0
     fi
     if [ ! -s "$now_sel" ]; then
       rm -f "$base_sel" "$now_sel"

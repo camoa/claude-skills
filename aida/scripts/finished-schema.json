@@ -99,9 +99,10 @@
           "enum": [
             "met",
             "undeclared",
-            "not-needed"
+            "not-needed",
+            "warned"
           ],
-          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. met: every framework's suite exited 0, or failed only on lines the baseline already held. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136)."
+          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. warned: a suite failed with no failed test, only on lines its recipe's warning_line names, and a person accepted that with `finish --accept-warnings`; warningsAccepted is then present (gap row 261). met: every framework's suite exited 0, or failed only on lines the baseline already held. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136)."
         },
         "detail": {
           "type": "string",
@@ -127,7 +128,8 @@
                 "enum": [
                   "met",
                   "undeclared",
-                  "not-needed"
+                  "not-needed",
+                  "warned"
                 ]
               },
               "failureLine": {
@@ -142,6 +144,23 @@
         "exitCode": {
           "type": "integer",
           "description": "The worst exit across the frameworks whose suite ran. Absent when nothing ran."
+        },
+        "warningLines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "type": "string" },
+          "description": "Present only when the verdict is warned: the first 20 lines the recipe's warning_line matched, in the runner's own words."
+        },
+        "warningsAccepted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["because", "judgedBy"],
+          "properties": {
+            "because": { "type": "string", "minLength": 1, "description": "The person's reason, as `--accept-warnings` gave it." },
+            "judgedBy": { "type": "string", "enum": ["person"], "description": "Always person: finish refuses the flag on an autonomous implement stage (exit 68)." }
+          },
+          "description": "Present only when the verdict is warned. A person answered the suite in place of its exit status, and review reports the row as that person's answer."
         },
         "outputFile": {
           "type": "string",

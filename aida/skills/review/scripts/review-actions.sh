@@ -1144,9 +1144,11 @@ rw_tool_row_check() {
 #
 # When finished.json holds a `suite`, finish already ran the whole suite once at this same commit
 # (do_checks refuses any other HEAD), so this row reads that result and runs nothing (nyc defect
-# 18). Its verdict can only be met or undeclared, because finish refused unmet and unknown; the
-# sidecar is inlined the way this row inlines its own run. The loop below stays for a record with
-# no `suite` key.
+# 18). Its verdict can only be met, undeclared or not-needed, because finish refused unmet and
+# unknown, or warned when a person accepted runner warnings at finish. That warned reads met here,
+# and the detail says it is the person's answer and gives their reason (gap row 261). The sidecar
+# is inlined the way this row inlines its own run. The loop below stays for a record with no
+# `suite` key.
 rw_check_suite() {
   local fw_count fwi fw_obj fw cmd outfile rc selector
   local verdict detail marker combined outputs_file exit_max
@@ -1155,9 +1157,14 @@ rw_check_suite() {
   finished_suite="$(printf '%s' "$RW_FINISHED_DOC" | jq -c '.suite // {}')"
   if [ "$(printf '%s' "$finished_suite" | jq -r '.verdict // ""')" != "" ]; then
     combined="$(printf '%s' "$finished_suite" | jq -r '.verdict')"
+    detail="finish ran the suite once at this commit: $(printf '%s' "$finished_suite" | jq -r '.detail')"
+    if [ "$combined" = "warned" ] && [ "$(printf '%s' "$finished_suite" | jq -r 'has("warningsAccepted")')" = "true" ]; then
+      combined="met"
+      detail="$detail This row is a person's answer, not the suite's: at finish a person accepted the runner warnings, because: $(printf '%s' "$finished_suite" | jq -r '.warningsAccepted.because')"
+    fi
     combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
     combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
-    detail="finish ran the suite once at this commit: $(printf '%s' "$finished_suite" | jq -r '.detail') $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
+    detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
     outfile="$(printf '%s' "$finished_suite" | jq -r 'if .outputFile == null then "" else .outputFile end')"
     [ -z "$outfile" ] || outfile="$IMPL_DIR/$outfile"
     selectors="$(printf '%s' "$finished_suite" | jq -r '[ (.runs // [])[] | select(.failureLine != null) | .framework + ": " + .failureLine ] | join("\n")')"

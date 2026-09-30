@@ -80,7 +80,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            (--verdicts is required until the round is on the record; after that,
 #                            --ruling alone rules on the round's open findings)
 #   implement-actions.sh close <task_folder> <unit_id>
-#   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
+#   implement-actions.sh finish <task_folder> [--value <name>=<value>]... \
+#                            [--accept-warnings <the person's reason>]
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text>
 #   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
@@ -934,6 +935,7 @@ usage: implement-actions.sh read  <task_folder>
                             --ruling alone rules on the round's open findings)
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
+                            [--accept-warnings <the person's reason>]
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text>
        implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
@@ -6369,11 +6371,24 @@ br_test_check() {
                 detail="the suite exited $rc on $fw, and the baseline holds no suite entry for $fw, so nothing there predates this failure; this order introduced it."
                 ;;
             esac
+            # A baseline with no red to subtract, and a run red only on runner warnings: warned,
+            # the same test the subtraction makes, never a failure this order introduced.
+            case "$baseline_verdict" in
+              unmet|unknown) ;;
+              *)
+                if br_warnings_only "$selector" "$warning" "$outfile"; then
+                  verdict="warned"; warn_json="$BR_WARN_LINES"
+                  detail="the suite exited $rc on $fw, where the baseline recorded no failure, and $BR_WARN_DETAIL"
+                fi
+                ;;
+            esac
           else
             verdict="unknown"
             detail="the suite exited $rc on $fw, and $BRC_BASELINE_FILE could not be read to tell whether this failure predates this order."
           fi
         fi
+        [ -z "$warning" ] || [ -n "$selector" ] \
+          || detail="$detail The recipe's suite row declares warning_line without failure_line, so warning_line was not read."
         printf '%s' "$runs" >"$runs_file"
         runs="$(jq -nc --slurpfile r "$runs_file" --arg fw "$fw" --arg v "$verdict" \
           --arg d "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
@@ -9969,10 +9984,14 @@ fn_require_interactive() {
 # stage next, and finished.json is what that stage receives.
 do_finish() {
   [ "$#" -ge 1 ] || die 3 "finish: a task folder is required"
-  local task_arg="$1" values="" resolve_rc
+  local task_arg="$1" values="" resolve_rc accept_warnings=""
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --accept-warnings)
+        [ "$#" -ge 2 ] || die 3 "finish: --accept-warnings needs the person's reason for accepting the runner warnings"
+        [ -n "$2" ] || die 3 "finish: --accept-warnings was given an empty reason."
+        accept_warnings="$2"; shift 2 ;;
       --value)
         [ "$#" -ge 2 ] || die 3 "finish: --value needs <name>=<value>"
         case "$2" in *=*) ;; *) die 3 "finish: --value takes <name>=<value>, got: $2" ;; esac
@@ -9989,6 +10008,7 @@ do_finish() {
   IMPL_DIR="$TASK_PATH/implementation"
 
   fn_load_task_state "finish"
+  [ -z "$accept_warnings" ] || fn_require_interactive "finish" "accepting a suite that failed on runner warnings alone"
 
   # --- exit 66: every order closed, and every machine-verified criterion confirmed ----------------
   local open_orders unconfirmed
@@ -10102,7 +10122,10 @@ FN_RECIPES
   [ -n "$suite_json" ] || die 3 "finish: could not assemble the suite result."
   suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
   case "$suite_verdict" in
-    met|undeclared|not-needed) ;;
+    met|undeclared|not-needed)
+      [ -z "$accept_warnings" ] \
+        || die 3 "finish: --accept-warnings was given, and the suite reads $suite_verdict at $head_now, not warned. There are no runner warnings to accept. Nothing was recorded."
+      ;;
     unmet)
       # The new lines go to standard error as their own block, the way the clean-tree refusal
       # lists its paths, so the message stays one line a reader can act on.
@@ -10115,12 +10138,24 @@ FN_RECIPES
       die 86 "finish: the suite is unmet at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. A fix commit on the branch and a second finish is the route."
       ;;
     warned)
-      # No test failed, so a fix commit on the branch is not the route. Passing would decide for
-      # the project that its runner's own exit status does not count, and that is a person's call.
-      printf 'finish: the runner warning lines (first %s) are:\n%s\n' \
-        "$(printf '%s' "$suite_json" | jq -r '.warningLines | length')" \
-        "$(printf '%s' "$suite_json" | jq -r '.warningLines[]')" >&2
-      die 86 "finish: the suite failed at $head_now on runner warnings alone: $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. finish does not pass on runner warnings, because the project's own configuration makes them fail the run. A person picks one of two routes. Change the suite row's command in the project's copy of the test-execution recipe, so these warnings do not fail the run. Or repair the project configuration that raises them, in a change outside this task. Then run finish again."
+      # No test failed, so a fix commit on the branch is not the route. Passing on its own would
+      # decide for the project that its runner's exit status does not count. That is a person's
+      # call, so only --accept-warnings passes it, and the record names the person and the reason.
+      local not_warned
+      not_warned="$(printf '%s' "$suite_json" | jq -r '[ (.runs // [])[]
+        | select(.verdict != "warned" and .verdict != "met" and .verdict != "undeclared" and .verdict != "not-needed")
+        | .framework + "=" + .verdict ] | join(", ")')"
+      [ -z "$accept_warnings" ] || [ -z "$not_warned" ] \
+        || die 86 "finish: --accept-warnings accepts runner warnings only, and these frameworks read otherwise at $head_now: $not_warned. $(printf '%s' "$suite_json" | jq -r '.detail') Nothing was recorded."
+      if [ -n "$accept_warnings" ]; then
+        suite_json="$(printf '%s' "$suite_json" | jq -c --arg because "$accept_warnings" \
+          '. + {warningsAccepted: {because: $because, judgedBy: "person"}}')"
+      else
+        printf 'finish: the runner warning lines (first %s) are:\n%s\n' \
+          "$(printf '%s' "$suite_json" | jq -r '.warningLines | length')" \
+          "$(printf '%s' "$suite_json" | jq -r '.warningLines[]')" >&2
+        die 86 "finish: the suite reads warned at $head_now ($(printf '%s' "$suite_json" | jq -r '[ (.runs // [])[] | .framework + "=" + .verdict ] | join(", ")')): $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. finish does not pass on runner warnings by itself, because the project's own configuration makes them fail the run. A person picks one of three routes. Accept the warnings: run finish again with --accept-warnings <the person's reason>, interactive only. Change the suite row's command in the project's copy of the test-execution recipe, so these warnings do not fail the run. Or repair the project configuration that raises them, in a change outside this task."
+      fi
       ;;
     *)
       die 86 "finish: the suite could not be decided at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.} Nothing was recorded. Repair what the detail names, then run finish again."

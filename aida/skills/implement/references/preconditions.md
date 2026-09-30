@@ -188,9 +188,13 @@ A red suite is also a question for the person. `finish` meets the same red at th
 refuses unless the baseline subtraction clears it. The summary's `baselineRed:` line names each
 framework whose suite read unmet or unknown. When that line is not `none`, put it to the person
 before the first order. Interactive, open with: "The suite already fails before this build
-starts. Finish will refuse on that failure at the end unless it is decided now. Repair it outside
-this task, have the recipe name the lines that are not failures, or build knowing finish will
-stop." In an unattended run the build goes on, and a person meets the red at `finish`.
+starts. Finish will refuse on that failure at the end unless it is decided now." When the red is
+runner warnings and no failed test, give the routes `finish` offers, in its words: "Accept the
+warnings: run finish again with --accept-warnings <the person's reason>, interactive only. Change
+the suite row's command in the project's copy of the test-execution recipe, so these warnings do
+not fail the run. Or repair the project configuration that raises them, in a change outside this
+task." A failed test is repaired outside this task. In an unattended run the build goes on, and a
+person meets the red at `finish`.
 
 What each run printed is kept whole, one file per run under `implementation/baseline-output/`,
 and the baseline names each file. The build step subtracts those lines from a later run, so a
