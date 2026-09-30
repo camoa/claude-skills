@@ -687,6 +687,13 @@ holds no name in backticks. A script cannot tell whether prose names a code elem
 never blocks the close. Rewrite each such interface with `update --interface`, and quote each
 element it exposes.
 
+`check` also prints `interfaceUnowned:`, at every exit code. It names each path an order's
+interface holds in backticks that the order does not own and no reuse of it declares. The
+build's interface check wants every backticked name repeated in the builder's record. A builder
+leaves out a path it did not touch, and the build stops. It is best effort, and it never blocks
+the close. Answer each one: write the path as plain text with `update --interface`, or add the
+reuse with `dispose --path --interface`.
+
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's
 own interface, its reuses and its `dependsOn` orders. The test author may not open source, so a

@@ -340,32 +340,39 @@ that marker and this flag is not read.
 
 An attempt can fail on the three tool rows alone: coding-standards, static-analysis and
 security. A tool refusing a path it was handed is the plugin's fault, not the implementer's.
-Such an attempt needs no second build. `build-brief` would hand over a brief with nothing to
-build. `build-record` would refuse the empty range (exit 71) or the unmoved head (exit 45).
+An attempt can also fail on interface-record, alone or with the tool rows. The fix is a line in
+the interface record, which is a record file and not code. Amend the record first, with each
+element the check names. Such an attempt needs no second build. `build-brief` would hand over
+a brief with nothing to build. `build-record` would refuse the empty range (exit 71) or the
+unmoved head (exit 45).
 Run the checks again over the recorded range instead:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-recheck "<task_folder>" <order id> \
+  [--interface <path to the interface record>] \
   --test-recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
-The recipe flags are `build-record`'s. The range, the interface record and the report path are
-read from the build record, so none is passed. No implementer is dispatched and no attempt is
+The recipe flags and `--interface` are `build-record`'s. The range and the report path are read
+from the build record, so neither is passed. The interface record is read again from its file,
+so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
-the tool rows alone.
+the tool rows or interface-record alone.
 
 It refuses (exit 88) in four cases, each with its own message. No build record exists for the
 order. The code repository's HEAD is not the record's own commit, because the code moved, and
-the route is `build`. Or a check outside the three tool rows stopped the attempt. A test or a
-suite that failed is the implementer's work, so a re-check is not a free retry, and the route is
-`build`. Or no check stopped the attempt, so it passed and the order is past the build. A
-halted order refuses (exit 49), and `references/finish.md` names the grant. The
-clean-tree rule applies (exit 61).
+the route is `build`. Or a check outside the three tool rows and interface-record stopped the
+attempt. A test or a suite that failed is the implementer's work, so a re-check is not a free
+retry, and the route is `build`. Or no check stopped the attempt, so it passed and the order is
+past the build. A halted order refuses (exit 49), and `references/finish.md` names the grant.
+The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
+(exit 44).
 
-It rewrites the record with the new checks and keeps the attempt, its range and its date. The
-replaced checks stay under `checksBefore`, id and verdict only, beside `recheckedAt`. The
+It rewrites the record with the new checks and the interface record's text. It keeps the
+attempt, its range and its date. The replaced checks stay under `checksBefore`, id and verdict
+only, beside `recheckedAt`. The
 attempt counter does not move. The order goes to `checks-passed` when the checks pass and stays
 at `code-written` otherwise. The summary has `build-record`'s shape plus a `recheck:` line.
 

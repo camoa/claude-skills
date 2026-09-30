@@ -55,6 +55,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh build-recheck <task_folder> <unit_id> \
+#                            [--interface <path to the interface record the builder wrote>] \
 #                            [--test-recipe <framework>=<path>]... \
 #                            [--check-recipe <framework>=<path>]... \
 #                            [--implement-recipe <framework>=<path>]... \
@@ -356,10 +357,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      repository, or, for an order whose proof is record, in the project folder: such an order's
 #      deliverable lives in the task folder, so its range, its tree and its diff are read there
 #      (nyc defect 17). Exits 45, 51, 61, 63 and 71 read the same repository for such an order.
-#  44  `build-record` found the interface record file missing or empty while the given unit
-#      declares a non-empty interface. The file is the one --interface names, or without that flag
-#      the one the brief's `interfacePath` names (live-run row 102). A file present for a unit that
-#      declares no interface is read and recorded without complaint; nothing here judges its content.
+#  44  `build-record` or `build-recheck` found the interface record file missing or empty while
+#      the given unit declares a non-empty interface. The file is the one --interface names, or
+#      without that flag the one the brief's `interfacePath` names (live-run row 102). A file
+#      present for a unit that declares no interface is read and recorded without complaint;
+#      nothing here judges its content.
 #  45  a record for this attempt or this round already exists, so the call would write it twice.
 #      `build-record` found build-<unit_id>.json already recorded at the same commit and the same
 #      attempt number; `fix-record` found fix-<unit_id>-<round>.json already recorded at the same
@@ -570,10 +572,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      each named in its own message. No build record exists for the order, so there is no range.
 #      The repository's HEAD is not the record's own `commit`, so the code moved and the route is
 #      `build`. Or the record's stopping checks include one outside `coding-standards`,
-#      `static-analysis` and `security`. A test or a suite that failed is the implementer's work,
-#      so a re-check would be a free retry, and the route is `build`. Or no check stopped the
-#      attempt, so it passed and the order is past the build. A halted order refuses at exit 49
-#      like every step-five action, and `grant-attempt` is its route.
+#      `static-analysis`, `security` and `interface-record`. A test or a suite that failed is the
+#      implementer's work, so a re-check would be a free retry, and the route is `build`. Or no
+#      check stopped the attempt, so it passed and the order is past the build. A halted order
+#      refuses at exit 49 like every step-five action, and `grant-attempt` is its route.
 #
 # The code the support files added (live-run row 90).
 #  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
@@ -884,6 +886,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
        implement-actions.sh build-recheck <task_folder> <unit_id>
+                            [--interface <path to the interface record the builder wrote>]
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
                             [--implement-recipe <framework>=<path>]...
@@ -1285,7 +1288,7 @@ im_next_step() {
     file="$impl/build-$id.json"
     n=false
     if [ -f "$file" ]; then
-      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | (stoppers | length > 0) and (outside_tools | length == 0)' "$file" 2>/dev/null)"
+      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | (stoppers | length > 0) and (outside_recheck | length == 0)' "$file" 2>/dev/null)"
       [ "$n" = "true" ] || n=false
     fi
     tools_only="$(printf '%s' "$tools_only" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
@@ -6770,17 +6773,48 @@ br_first_stopper() {
 
 # The checks that stopped a build attempt, as a jq function two readers prepend to their own
 # program: the selection br_first_stopper makes, with interface-record's unknown exempt, over a
-# record's own `checks`. `stoppers` is their ids; `outside_tools` is those ids minus the three tool
-# rows. A re-check answers an attempt stopped by the tool rows alone (live-run row 87): a tool
-# refusing a path is the plugin's fault, and a test or a suite failing is the implementer's work.
+# record's own `checks`. `stoppers` is their ids; `outside_recheck` is those ids minus the three
+# tool rows and interface-record. A re-check answers an attempt only those rows stopped (live-run
+# row 87): a tool refusing a path is the plugin's fault, and an interface record is a record file
+# the builder amends without moving the code (gap row 253). A test or a suite failing is the
+# implementer's work.
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
                  or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
                  or (.id == "confirm-at-review" and .verdict != "deferred"))
     | .id ];
-def outside_tools: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security"));
+def outside_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "interface-record"));
 '
+
+# The interface record's path, for `build-record` and `build-recheck`. $1 the action, $2 the unit
+# id, $3 the --interface path, empty when none was passed. Without the flag the path is the brief's
+# own interfacePath, the one the implementer was told to write to. The flag stays for a record a
+# person put somewhere else (live-run row 102). Sets BR_INTERFACE_PATH and BR_INTERFACE_FROM.
+BR_INTERFACE_PATH=""; BR_INTERFACE_FROM=""
+br_interface_path() {
+  BR_INTERFACE_PATH="$3"
+  BR_INTERFACE_FROM="named by --interface"
+  [ -z "$BR_INTERFACE_PATH" ] || return 0
+  BR_INTERFACE_PATH="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$2-build.json" 2>/dev/null)"
+  [ -n "$BR_INTERFACE_PATH" ] \
+    || die 3 "$1: --interface was not given, and $IMPL_DIR/brief-$2-build.json names no interfacePath. Run build-brief on $2 again, or pass --interface."
+  BR_INTERFACE_FROM="the brief's interfacePath"
+}
+
+# Exit 44, and the record's text. $1 the action, $2 the unit id, $3 the interface the order
+# declares. Reads BR_INTERFACE_PATH and BR_INTERFACE_FROM. The record is required only when the
+# order declares a non-empty interface. Sets BR_INTERFACE_TEXT, empty when there is no file.
+BR_INTERFACE_TEXT=""
+br_interface_text() {
+  BR_INTERFACE_TEXT=""
+  if [ -n "$3" ]; then
+    [ -s "$BR_INTERFACE_PATH" ] \
+      || die 44 "$1: $2 declares a non-empty interface, and the interface record at $BR_INTERFACE_PATH ($BR_INTERFACE_FROM) is missing or empty."
+  fi
+  [ -f "$BR_INTERFACE_PATH" ] && BR_INTERFACE_TEXT="$(cat "$BR_INTERFACE_PATH" 2>/dev/null)"
+  return 0
+}
 
 # Check eight, the interface record, and the countable half of it only. $1 the interface this order
 # declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
@@ -7156,15 +7190,8 @@ do_build_record() {
   [ -n "$current_commit" ] \
     || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
 
-  # Without --interface the path is the brief's own interfacePath, the one the implementer was told
-  # to write to. The flag stays for a record a person put somewhere else (live-run row 102).
-  local interface_from="named by --interface"
-  if [ -z "$interface_path" ]; then
-    interface_path="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$unit_id-build.json" 2>/dev/null)"
-    [ -n "$interface_path" ] \
-      || die 3 "build-record: --interface was not given, and $IMPL_DIR/brief-$unit_id-build.json names no interfacePath. Run build-brief on $unit_id again, or pass --interface."
-    interface_from="the brief's interfacePath"
-  fi
+  br_interface_path "build-record" "$unit_id" "$interface_path"
+  interface_path="$BR_INTERFACE_PATH"
 
   # --- exits 105 and 106: the builder's stop and deviation lines, read before anything is judged ---
   # A builder once named a misfit in prose and then built around it (gap row 219). So every report
@@ -7238,13 +7265,10 @@ do_build_record() {
   fi
 
   # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
-  local unit_interface_declared interface_text=""
+  local unit_interface_declared interface_text
   unit_interface_declared="$(printf '%s' "$UNIT_JSON" | jq -r '.interface // ""')"
-  if [ -n "$unit_interface_declared" ]; then
-    [ -s "$interface_path" ] \
-      || die 44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path ($interface_from) is missing or empty."
-  fi
-  [ -f "$interface_path" ] && interface_text="$(cat "$interface_path" 2>/dev/null)"
+  br_interface_text "build-record" "$unit_id" "$unit_interface_declared"
+  interface_text="$BR_INTERFACE_TEXT"
 
   # --- exits 92 to 96: an order whose proof is observe needs the observed record, checked here ------
   # The record is the orchestrator's account of what a model saw at each surface and viewport
@@ -7384,12 +7408,14 @@ do_build_record() {
 # were the tool rows refusing had no route back: `build-brief` hands over a brief with nothing to
 # build, and `build-record` refuses an empty range (exit 71) or an unmoved head (exit 45). Both
 # refusals are right, so this action is the route. It takes the recipe flags `build-record` takes
-# and none of its record flags: the range, the interface record and the report path are the
-# record's own. It is not a free retry: an attempt a test or a suite stopped is the implementer's
-# work, and it refuses (exit 88).
+# and its --interface, and none of its other record flags: the range and the report path are the
+# record's own. The interface record is read again from its file, because an attempt that
+# interface-record stopped is answered by amending that file, which moves no code (gap row 253).
+# It is not a free retry: an attempt a test or a suite stopped is the implementer's work, and it
+# refuses (exit 88).
 # ------------------------------------------------------------------------------------------------
 do_build_recheck() {
-  local task_arg="" unit_id=""
+  local task_arg="" unit_id="" interface_path=""
   local nothing_ran="" have_nothing_ran=false
   local test_recipes="" check_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
@@ -7419,6 +7445,10 @@ do_build_recheck() {
         values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
+      --interface)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --interface needs a path to the record the builder wrote"
+        [ -n "$2" ] || die 3 "build-recheck: --interface was given an empty path."
+        interface_path="$2"; shift 2 ;;
       --nothing-ran)
         [ "$#" -ge 2 ] || die 3 "build-recheck: --nothing-ran needs a literal substring"
         [ -n "$2" ] || die 3 "build-recheck: --nothing-ran was given an empty substring, which every output holds."
@@ -7474,16 +7504,16 @@ do_build_recheck() {
   [ "$current_commit" = "$record_commit" ] \
     || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds attempt $record_attempt at $record_commit, so the code has moved since that attempt. A re-check runs over the recorded range alone; the route is build."
 
-  # --- exit 88, three: a check outside the tool rows stopped the attempt, which is the
-  # implementer's work to answer, so a re-check would be a free retry. An attempt nothing stopped
-  # is past the build, and there is nothing to run again -----------------------------------------
+  # --- exit 88, three: a check outside the tool rows and interface-record stopped the attempt,
+  # which is the implementer's work to answer, so a re-check would be a free retry. An attempt
+  # nothing stopped is past the build, and there is nothing to run again -------------------------
   local stoppers outside
   stoppers="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
   [ -n "$stoppers" ] \
     || die 88 "build-recheck: attempt $record_attempt at $unit_id passed its checks, so there is nothing to run again. The order is past the build."
-  outside="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_tools | join(", ")')"
+  outside="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
   [ -z "$outside" ] \
-    || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows. A re-check answers only an attempt the tool rows alone stopped; the route is build."
+    || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows or interface-record. A re-check answers only an attempt those rows alone stopped; the route is build."
 
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
@@ -7493,6 +7523,11 @@ do_build_recheck() {
     || die 3 "build-recheck: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
+
+  local unit_interface_declared
+  unit_interface_declared="$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')"
+  br_interface_path "build-recheck" "$unit_id" "$interface_path"
+  br_interface_text "build-recheck" "$unit_id" "$unit_interface_declared"
 
   # --- the eight deciding checks, the same half build-record runs, over the recorded range --------
   BRC_WHO="build-recheck"
@@ -7511,20 +7546,21 @@ do_build_recheck() {
   BRC_GATE_RECIPES="$gate_recipes"
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
-  br_eight_checks "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')" \
-    "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')"
+  br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT"
 
-  # The record keeps the attempt, its range and its date, and takes the new checks. The checks it
+  # The record keeps the attempt, its range and its date, and takes the new checks and the interface
+  # record's text as read now. The checks it
   # replaces stay under checksBefore, id and verdict only, so a reader can see what the re-check
   # answered differently. Both check sets carry whole tool outputs, so both are read from a file.
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
-    --slurpfile before "$record_file" '
+    --arg interfaceRecord "$BR_INTERFACE_TEXT" --slurpfile before "$record_file" '
     . as $new
     | $before[0]
     | .checksBefore = ((.checks // []) | map({id, verdict}))
     | .checks = $new
+    | .interfaceRecord = $interfaceRecord
     | .executed = $executed
     | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
     | .recheckedAt = $recheckedAt' "$BR_CHECKS_FILE")"
