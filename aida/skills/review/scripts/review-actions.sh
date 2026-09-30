@@ -805,6 +805,8 @@ rw_check_serves() {
     [ -n "$one" ] || continue
     # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
     [ "$light" = "true" ] && [ "$one" = "$COMPROMISES_FILE" ] && continue
+    # A file `task environment up` recorded, still as it recorded it (gap row 256).
+    task_env_recipe_change "$TASK_PATH" "$one" "$RV_CODEPATH" "${RW_RANGE##*..}" && continue
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do

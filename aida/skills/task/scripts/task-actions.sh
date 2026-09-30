@@ -1557,6 +1557,19 @@ TA_TOKEN_LIST
     "Files the worktree environment recipe declares for ${id}, written through the task skill" "$(printf '%s' "$file_list" | cut -f2)"
   # The files and the output file are kept from here. A failed commit above ran the EXIT trap first.
   RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; ENV_DIRS=""; ENV_OUT=""
+  # The recipe's files, and each file its `## Preconditions` prose names in backticks, with the
+  # content each holds now. No order owns them, and the owned-files checks set them aside while
+  # that content stands (gap row 256). The precondition check has passed here, so a named file
+  # already holds the change the recipe demands, such as a line a person had to delete.
+  local recipe_changes changes_doc
+  recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2; recipe_prose_under "$RECIPE" Preconditions | grep -o '`[^` ]*`' | tr -d '`'; } \
+    | sort -u | while IFS= read -r n; do
+        case "$n" in ''|/*|*..*) continue ;; esac
+        [ -f "$wt/$n" ] && printf '%s\t%s\n' "$n" "$(git -C "$wt" hash-object -- "$n")"
+      done | jq -Rn '[inputs | split("\t") | {path: .[0], blob: .[1]}]')"
+  changes_doc="$(jq --argjson c "$recipe_changes" '.worktree.recipeChanges = $c' "$task_json")"
+  [ -n "$changes_doc" ] || die3 "environment: $task_json could not be read, so the files the recipe changed are not recorded. The commit keeps the recipe's files. Nothing was brought up"
+  write_atomic "$task_json" "$changes_doc"
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
   capture="$(mktemp)" || die3 "environment: could not create a temporary file"

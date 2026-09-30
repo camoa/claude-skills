@@ -6735,6 +6735,8 @@ br_seven_checks() {
     [ -n "$p" ] || continue
     # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
     [ "$light" = "true" ] && [ "$p" = "$COMPROMISES_FILE" ] && continue
+    # A file `task environment up` recorded, still as it recorded it (gap row 256).
+    task_env_recipe_change "$TASK_PATH" "$p" "$BRC_CODEPATH" "$BRC_CURRENT" && continue
     # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
