@@ -85,9 +85,9 @@ if [ -n "$SAVED_AT" ]; then
   # A file stamped one second after savedAt is the reference. savedAt holds whole seconds and a
   # file time holds fractions. A stage file written just before the save, in the same second, would
   # otherwise read as newer (live-run row 263). The rule errs the other way: a file written after
-  # the save, in that same second, reads as saved. A stage write after a save is its own command,
-  # and a refusal only asks for one more save, so a missed refusal in that one second costs less
-  # than a false refusal after every quick save. touch -t takes YYYYMMDDhhmm.SS, so the stamp is
+  # the save, in that same second, reads as saved. A stage write after a save is its own command.
+  # A refusal only asks for one more save. So a missed refusal in that one second costs less than a
+  # false refusal after every quick save. touch -t takes YYYYMMDDhhmm.SS, so the stamp is
   # reshaped. task.json is excluded because the save writes it a moment after the stamp it holds.
   REF="$(mktemp)"
   TZ=UTC touch -t "$(jq -rn --arg t "$SAVED_AT" '$t | fromdateiso8601 + 1 | strftime("%Y%m%d%H%M.%S")' 2>/dev/null)" "$REF"
