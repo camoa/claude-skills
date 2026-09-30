@@ -10662,11 +10662,31 @@ do_restart() {
   # take other work with it, so the restart stops before it changes anything and names the files.
   # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
   # history, and AIDA's own command hook refuses the hard reset that would drop it.
-  local revert_json='[]' mixed="" one_id owned rec freezes from gone c paths p g own_n outside merge
+  local revert_json='[]' mixed="" stale="" one_id owned rec freezes from gone c paths p g own_n outside merge s l
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     owned="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0].ownedFiles // [] | .[]')"
     rec="$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .kind + " " + .commit')"
     freezes="$(printf '%s' "$rec" | sed -n 's/^freeze //p')"
+    # A test file a superseded freeze created, that no later freeze touched, is a test a person
+    # ruled wrong left at an old path. Restart reverts nothing for it, and names it.
+    for s in $(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$one_id" \
+        '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty'); do
+      printf '%s\n' "$freezes" | grep -Fqx "$s" || continue
+      while IFS= read -r p; do
+        [ -n "$p" ] && git -C "$RV_CODEPATH" cat-file -e "HEAD:$p" 2>/dev/null || continue
+        while IFS= read -r l; do
+          [ -n "$l" ] && [ "$l" != "$s" ] && git -C "$RV_CODEPATH" merge-base --is-ancestor "$s" "$l" 2>/dev/null \
+            && git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$l" | grep -Fqx "$p" \
+            && continue 2
+        done <<RS_LATER
+$freezes
+RS_LATER
+        stale="${stale}staleTest: $p (from superseded freeze $(git -C "$RV_CODEPATH" rev-parse --short "$s"))
+"
+      done <<RS_ADDED
+$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames --diff-filter=A "$s" 2>/dev/null)
+RS_ADDED
+    done
     from="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null | grep -F -x -f <(
       jq -r '.commit // empty' "$IMPL_DIR/tests-$one_id.json" 2>/dev/null
       printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$one_id" \
@@ -10788,6 +10808,7 @@ RS_PATHS
   else
     printf '%s' "$reverted_json" | jq -r '.[] | "reverted: " + .commit[0:7] + " " + .order + " by " + .revert[0:7]'
   fi
+  printf '%s' "$stale"
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"
   exit 0

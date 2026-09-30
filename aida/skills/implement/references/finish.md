@@ -160,7 +160,10 @@ When each such commit changes only the order's owned files, the script reverts e
 `git revert --no-edit`, newest first. Each revert is a commit of its own. It prints one
 `reverted:` line per commit, with the order and the revert commit, and writes them into
 `restarted.json`. `reverted: none` means that no commit of a halted order was in the tree. Tell
-the person which commits were reverted. The history keeps them, so no hard reset is needed.
+the person which commits were reverted. The history keeps them, so no hard reset is needed. A
+test file that a superseded freeze created, and that no later freeze touched, gets one
+`staleTest:` line with its path and that freeze. The restart reverts nothing for it. Tell the
+person that a test ruled wrong may still sit at that path.
 
 When a commit also changes a file the order does not own, the restart stops with exit 113. It
 names the commit, the order and the other files. A merge that changes the order's files stops it

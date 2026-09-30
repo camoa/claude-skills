@@ -709,6 +709,13 @@ task_worktree() {
   base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" || die3 "$who: $base_dir has no commit to cut a worktree from"
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
+  # Two old ids such as a_b and a-b slug to one folder. The tree there is the other task's.
+  if [ -e "$wt" ]; then
+    found="$(find "$project/tasks" -name task.json -exec jq -r --arg p "$wt" --arg id "$id" \
+      'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null | head -1)"
+    [ -z "$found" ] \
+      || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
+  fi
   git -C "$code" worktree prune 2>/dev/null
   # What the tree is cut from, written whenever this call cuts the branch, over any base the record
   # held. A detached HEAD is `commit:<sha>`: git forbids `:` in a branch name, so the two never
