@@ -577,8 +577,9 @@ CP_SCHEMA_RESULT2
 # worktree puts each path in worktree.recipeChanges back to its content at the fork point, or
 # removes it where the fork point has none. A path already back needs nothing. A path whose
 # content is no longer the one `up` recorded was changed by an order, and is never put back
-# silently. A tree whose HEAD already holds those paths at their fork point content is kept as it
-# is, whoever put them back and under whatever subject (task_env_restore_commit). Sets
+# silently. Paths a person already put back, under whatever subject, are kept as they are, and
+# task_env_restore_commit names the commit that did it. While that test holds, a site still
+# recorded up is a refusal, since its tear-down can reach the main checkout's site. Sets
 # CP_RESTORE_COMMIT and CP_RESTORE_PATHS, or leaves both empty. $1 the action.
 CP_RESTORE_COMMIT=""; CP_RESTORE_PATHS=""
 # The subject of the commit this script makes. Nothing reads it back: the content decides.
@@ -593,7 +594,6 @@ cp_restore_env_files() {
     CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"
     [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] \
       || die 1 "$who: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $CP_TASK_ID is up: $CP_RESTORE_PATHS. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was written. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then put the files back again, and run close again."
-    return 0
   fi
   fork="$(task_fork_point "$TASK_PATH" "$wt")"
   [ -n "$fork" ] || die 1 "$who: task.json records no base for the worktree of $CP_TASK_ID, so completion cannot tell what content to put back the files \`task environment up\` changed to. Nothing was written. Set worktree.base in task.json to the branch this task merges into, then run close again."
@@ -642,9 +642,14 @@ CP_RESTORE_TODO
 
 \`task environment up\` wrote these files for the site of the worktree of $CP_TASK_ID. Merged, they would change the site of the main checkout."
   said="$(recipe_commit_if_changed "$wt" "$who" "nothing differed" "$commit_text" "$(printf '%s' "$todo")" 2>&1)" || die 3 "$who: git refused the restore commit in $wt: $said. The files are put back in the tree. Commit them, then run close again."
-  said="$(task_env_restore_commit "$TASK_PATH" "$wt")" \
-    || die 3 "$who: the restore commit in $wt left a file \`task environment up\` changed away from its content where the branch started. The recorded files are listed in $TASK_PATH/task.json."
-  CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"
+  # The restore test names every file now back, including one a person put back earlier. A task
+  # whose recipe changed no file the fork point has gets no such answer, and lists its own.
+  CP_RESTORE_COMMIT="$(git -C "$wt" rev-parse --short HEAD)"
+  if said="$(task_env_restore_commit "$TASK_PATH" "$wt")"; then
+    CP_RESTORE_PATHS="${said#*"$tab"}"
+  else
+    CP_RESTORE_PATHS="$(printf '%s' "$todo" | sort | paste -sd, - | sed 's/,/, /g')"
+  fi
 }
 
 do_close() {

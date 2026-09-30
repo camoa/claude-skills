@@ -199,9 +199,11 @@ The files in `worktree.recipeChanges` are for the worktree's own site, and trunk
 receive them. Completion takes the site down. Then it commits each file back to its content
 where the branch started. A DDEV worktree then holds the main checkout's `name:` line again. So a
 site command there can reach the main checkout's site. The content decides, not who made the
-commit or its subject. When HEAD holds each changed file at its content where the branch
-started, `up` and `down` refuse at 3. They name the latest commit on those files. `show` then
-prints `status: not run`. To work on the site again, revert that commit first.
+commit or its subject. The test reads the changed files that existed where the branch started.
+When HEAD holds one of them at that content again, `up` and `down` refuse at 3. They name the
+latest commit on those files. `show` then prints `status: not run`. A `## Files` script the
+branch dropped does not count, because it names no site. To work on the site again, revert that
+commit first.
 
 ## `prune [<task-id>]...`
 

@@ -37,9 +37,10 @@
 #   task_fork_point <folder> <tree>       prints the commit the task's branch forked from its
 #                                         base, or nothing when the record holds no base
 #   task_env_restore_commit <folder> <tree>
-#                                         when HEAD holds every recorded file at its fork point
-#                                         content, prints the latest commit on them, a tab and
-#                                         the files; else returns 1
+#                                         when HEAD holds a file the fork point has and `up`
+#                                         changed at its fork point content, prints the latest
+#                                         commit on the files back there, a tab and those
+#                                         files; else returns 1
 #   automated_tests <folder>              prints yes, no or not-asked: the contract's answer to
 #                                         whether the task has automated tests
 #   mark_task_in_progress <folder> <why> <stage>
@@ -458,14 +459,17 @@ task_fork_point() {
 
 # Whether the tree $2 has put back what `task environment up` changed for the task folder $1 (gap
 # row 262). The changed files are those in worktree.recipeChanges whose recorded content differs
-# from the fork point. The tree counts as restored when HEAD holds each of them at its fork point
-# content, or lacks it where the fork point does. The content decides, never a commit subject, so
-# a restore a person made under any subject counts. Then a DDEV worktree's `.ddev/config.yaml`
-# holds the main checkout's `name:` again, and a site command there can reach the main checkout's
-# project. Prints the short id of the latest commit on those files, a tab, and the files joined
-# by ", ". Returns 1 when no file differed, or one still differs, or the record holds no base.
+# from the fork point. The tree counts as restored when HEAD holds one of them that the fork point
+# has at its fork point content. Such a file is where a recipe's demanded change lives, as a DDEV
+# worktree's `.ddev/config.yaml` without its `name:`. Back at the fork point, that file names the
+# main checkout's project again, so a site command there can reach the main checkout's site. A
+# file the fork point lacks, such as a `## Files` script, names no site, and a branch may drop one.
+# The content decides, never a commit subject, so a restore a person made under any subject
+# counts. Prints the short id of the latest commit on the changed files HEAD holds at their fork
+# point content, a tab, and those files joined by ", ". Returns 1 when no such file the fork point
+# has is back, or the record holds no base.
 task_env_restore_commit() {
-  local folder="$1" tree="$2" fork one blob base_blob tab
+  local folder="$1" tree="$2" fork one blob base_blob tab trunk=no
   tab="$(printf '\t')"
   fork="$(task_fork_point "$folder" "$tree")"
   [ -n "$fork" ] || return 1
@@ -474,12 +478,13 @@ task_env_restore_commit() {
     [ -n "$one" ] || continue
     base_blob="$(git -C "$tree" rev-parse -q --verify "$fork:$one" 2>/dev/null)"
     [ "$blob" != "$base_blob" ] || continue
-    [ "$(git -C "$tree" rev-parse -q --verify "HEAD:$one" 2>/dev/null)" = "$base_blob" ] || return 1
+    [ "$(git -C "$tree" rev-parse -q --verify "HEAD:$one" 2>/dev/null)" = "$base_blob" ] || continue
+    [ -z "$base_blob" ] || trunk=yes
     set -- "$@" "$one"
   done <<TH_ROWS
 $(jq -r '(.worktree.recipeChanges // [])[] | .path + "\t" + .blob' "$folder/task.json" 2>/dev/null)
 TH_ROWS
-  [ "$#" -gt 0 ] || return 1
+  [ "$trunk" = yes ] || return 1
   printf '%s\t' "$(git -C "$tree" log -1 --format=%h -- "$@" 2>/dev/null)"
   printf '%s\n' "$@" | paste -sd, - | sed 's/,/, /g' | tr -d '\n'
 }
