@@ -47,7 +47,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A Write, Edit or MultiEdit to a `.claude` settings file whose new text holds `disableAllHooks`.
 #
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
-# read. The exception is a command line that also starts a shell or runs a file. A refused phrase
+# read. The exception is a command line that also starts a shell or runs a file. The two rules that
+# find a command word, a command word from a variable and a recursive delete, read a quoted string
+# that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
+# is not a command (live-run row 254). The text of `sh -c` and `eval` is split, because a shell
+# runs it. The other rules read quoted text as commands. A refused phrase
 # anywhere else is refused, for example inside `git commit -m "..."` or `echo "..."`. Closing that
 # needs the shell grammar.
 #
@@ -215,6 +219,29 @@ hit() { printf '%s' "$1" | grep -Eq -e "$2"; }
 normalise() { printf '%s' "$1" | tr -d "'\"\\\\" | tr -s ' \t' ' '; }
 # Prints text $1 with one command segment per line. tr, not sed, so BSD and GNU agree.
 segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
+# Prints raw text $1 with each space, tab, `;`, `&` and `|` inside a quoted string replaced by
+# \037, so read_words keeps the string in one word and segments does not split it. A quote counts
+# only when it closes on its own line, so a quote that spans lines cannot hide a command.
+quoted_words() {
+  printf '%s\n' "$1" | LC_ALL=C awk '{
+    out = ""; n = length($0); i = 1
+    while (i <= n) {
+      c = substr($0, i, 1)
+      if (c == "\\") { out = out substr($0, i, 2); i += 2; continue }
+      if (c == "\047" || c == "\"") {
+        j = i + 1
+        while (j <= n && substr($0, j, 1) != c) { if (c == "\"" && substr($0, j, 1) == "\\") j++; j++ }
+        if (j <= n) {
+          s = substr($0, i, j - i + 1)
+          if (substr($0, 1, i - 1) !~ /(^|[ \t;&|(])(eval|-[A-Za-z]*c)[ \t]+$/) gsub(/[ \t;&|]/, "\037", s)
+          out = out s; i = j + 1; continue
+        }
+      }
+      out = out c; i++
+    }
+    print out
+  }'
+}
 
 # Sets I to the index in w of the first word after the wrappers, options and assignments that can
 # come before a command word. I equals the word count when there is none.
@@ -415,16 +442,17 @@ SEGMENTS
   return 1
 }
 
-# The command rules, on normalised text $1. Sets REASON and returns 0 on the first rule that hits.
+# The command rules, on normalised text $1, and on $2, the same text normalised after quoted_words.
+# Sets REASON and returns 0 on the first rule that hits.
 rules() {
-  local t="$1" line
+  local t="$1" q="$2" line
   hit "$t" "${GIT}push$ARGS +(-[a-zA-Z]*[fd][a-zA-Z]*|$FORCE|$MIRROR|$DELETE|\+[^ ;&|]+|:[^ ;&|]+)$END" \
     && { REASON="is a force push, a mirror push, or a delete of a remote branch"; return 0; }
   if ! push_gate_open; then
     hit "$t" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes. To let this session push, the person opens the gate: sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push"; return 0; }
   fi
   hit "$t" "${GIT}([\$\`]|[^- ;&|][^ ;&|]*[\$\`{])" && { REASON="puts a variable, a brace or a command substitution in the git verb, so this hook cannot read the verb"; return 0; }
-  if [ "$HAVE_TEXT" = true ] && variable_command "$t"; then
+  if [ "$HAVE_TEXT" = true ] && variable_command "$q"; then
     REASON="takes its command word from a variable or a substitution, followed by $VAR_VERB, so this hook cannot read the command"; return 0
   fi
   hit "$t" "${GIT}reset$ARGS +$HARD$END" && { REASON="is a hard reset"; return 0; }
@@ -444,7 +472,7 @@ rules() {
   done <<RESTORE
 $(printf '%s\n' "$t" | grep -E -e "${GIT}restore$ARGS +(\.|\./|:/)$END")
 RESTORE
-  if [ "$HAVE_TEXT" = true ] && recursive_delete "$t"; then
+  if [ "$HAVE_TEXT" = true ] && recursive_delete "$q"; then
     REASON="deletes root, the home directory, the working directory, or a folder above them, recursively"; return 0
   fi
   hit "$t" "${GH}repo +sync$END" && { REASON="runs gh repo sync, which publishes to a remote branch"; return 0; }
@@ -478,7 +506,7 @@ check_text() {
     [ "$SHELLISH" = true ] || text="$stripped"
   fi
   n="$(normalise "$text")"
-  rules "$n" && return 0
+  rules "$n" "$(normalise "$(quoted_words "$text")")" && return 0
   [ "$depth" -lt "$MAX_DEPTH" ] || return 1
   while IFS= read -r line; do
     [ -n "$line" ] || continue
