@@ -467,8 +467,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      rejected row, each confirmed row with a test in a rejected row's file, and the doneWhen row
 #      when an owned row is rejected. Each other confirmed row lands on the ledger entry as
 #      `rowsConfirmed`, with its note, and the next freeze carries it when no `--row` gives it and
-#      its test files did not change since. A repair round's checker judges only the rows put to
-#      it, so those notes are on disk nowhere else (gap row 259).
+#      its test files did not change since. A freeze that then writes prints a
+#      `rowsCarried: <row key>, ...` line naming the rows it carried. A repair round's checker
+#      judges only the rows put to it, so those notes are on disk nowhere else (gap row 259).
 #  66  `finish` found implementation is not finished for this task: an order that is not closed, an
 #      order carrying a halt whether or not it closed, or a machine-verified criterion whose row
 #      state is not confirmed. The message names every one of them.
@@ -3872,16 +3873,37 @@ RED_AGAIN_JQ='def red_again($tests; $key):
 # tf_record_confirmed <ledger file> <ledger doc> <unit id> <rows>: puts the confirmed rows among
 # <rows> on the order's ledger entry as rowsConfirmed, with their notes, and replaces what an earlier
 # refusal put there. A refused freeze calls it, because a repair round's checker judges only the rows
-# put to it and writes the same verdict file (gap row 259). Prints the document it wrote.
+# put to it and writes the same verdict file (gap row 259). A model's row takes its note from that
+# verdict file when the file confirms the row, so the note is the checker's own and not a copy.
+# recordedAt is the file's time when that is earlier than now: an edit after the checker read the
+# test and before this freeze is then seen as a change. Sets TF_CONFIRMED_DOC to the document
+# written, and TF_CARRY_NEXT to a sentence naming the rows recorded, or to nothing.
 tf_record_confirmed() {
-  local doc
-  doc="$(printf '%s' "$2" | jq -c --arg id "$3" --argjson rows "$4" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
-      [ $rows[] | select(.verdict == "confirmed") | {criterion, judgedBy, note, recordedAt: $at} ] as $kept
+  local check_file check_doc='{}' check_epoch at
+  check_file="$(dirname -- "$1")/row-check-$3.json"
+  at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -f "$check_file" ]; then
+    check_doc="$(jq -c '.' "$check_file" 2>/dev/null)"
+    [ -n "$check_doc" ] \
+      || die 3 "tests-freeze: $check_file exists but could not be read as JSON. The confirmed rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
+    check_epoch="$(im_mtime "$check_file")"
+    [ -n "$check_epoch" ] || die 3 "tests-freeze: could not read when $check_file was written."
+    [ "$check_epoch" -lt "$(date -u +%s)" ] && at="$(im_iso_of "$check_epoch")"
+  fi
+  TF_CONFIRMED_DOC="$(printf '%s' "$2" | jq -c --arg id "$3" --argjson rows "$4" --argjson check "$check_doc" \
+      --arg at "$at" '
+      [ $rows[] | select(.verdict == "confirmed") | .criterion as $c
+        | ([ ($check.rows // [])[] | select(.criterion == $c and .verdict == "confirmed") | .note ][0]) as $own
+        | {criterion, judgedBy, note: (if .judgedBy == "model" and $own != null then $own else .note end),
+           recordedAt: $at} ] as $kept
       | .orders = (.orders | map(if .id != $id then .
-          elif $kept == [] then del(.rowsConfirmed) else .rowsConfirmed = $kept end))')"
-  [ -n "$doc" ] || die 3 "tests-freeze: the ledger update for $3 failed."
-  write_atomic "$1" "$doc"
-  printf '%s' "$doc"
+          elif $kept == [] then del(.rowsConfirmed) else .rowsConfirmed = $kept end))' 2>/dev/null)"
+  [ -n "$TF_CONFIRMED_DOC" ] \
+    || die 3 "tests-freeze: the ledger update for $3 failed. When $check_file exists, it must be in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}."
+  write_atomic "$1" "$TF_CONFIRMED_DOC"
+  TF_CARRY_NEXT="$(printf '%s' "$TF_CONFIRMED_DOC" | jq -r --arg id "$3" '
+      [ (.orders // [])[] | select(.id == $id) | (.rowsConfirmed // [])[] | .criterion ]
+      | if length == 0 then "" else " The ledger holds the confirmed rows \(join(", ")), and the next freeze carries them with no --row." end')"
 }
 
 do_tests_brief() {
@@ -4930,6 +4952,7 @@ TF_EOF
   # give is carried from there. A row whose test file changed after it was recorded is not carried,
   # because the checker judged the file as it was then.
   local tf_rec_src tf_recorded tf_rec_key tf_rec_at tf_rec_path tf_rec_keep tf_carried='[]' tf_changed=""
+  local tf_test_epoch TF_CONFIRMED_DOC TF_CARRY_NEXT=""
   tf_rec_src="$tf_ledger_doc"
   [ -n "$tf_rec_src" ] || tf_rec_src='{}'
   while IFS= read -r tf_recorded; do
@@ -4940,7 +4963,9 @@ TF_EOF
     tf_rec_keep=true
     while IFS= read -r tf_rec_path; do
       [ -n "$tf_rec_path" ] || continue
-      [ "$(im_mtime "$tf_rec_path")" -gt "$tf_rec_at" ] && tf_rec_keep=false
+      tf_test_epoch="$(im_mtime "$tf_rec_path")"
+      [ -n "$tf_test_epoch" ] || die 3 "tests-freeze: could not read when $tf_rec_path was written."
+      [ "$tf_test_epoch" -gt "$tf_rec_at" ] && tf_rec_keep=false
     done <<TF_REC_PATHS
 $(printf '%s' "$tf_red_entries" | jq -r --arg k "$tf_rec_key" '[ .[] | select(.key == $k) | .path ] | unique | .[]')
 TF_REC_PATHS
@@ -4970,9 +4995,9 @@ TF_RECORDED
     if [ -n "$tf_ledger_doc" ]; then
       tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" \
         "$(printf '%s' "$rows_meta_json" | jq -c --argjson expected "$rows_expected_json" \
-          'map(select(.criterion as $k | ($expected | index($k)) != null))')" >/dev/null || exit $?
+          'map(select(.criterion as $k | ($expected | index($k)) != null))')"
     fi
-    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. The confirmed rows given are on $unit_id's ledger entry, and the next freeze carries them.$tf_changed"
+    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. Put the missing rows to the checker, then run tests-freeze again with a --row for each.$TF_CARRY_NEXT$tf_changed"
   fi
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
@@ -5034,9 +5059,10 @@ TF_RECORDED
     fi
     # The confirmed rows the checker need not judge again are recorded. The next freeze carries them.
     if [ -n "$tf_ledger_doc" ]; then
-      tf_ledger_doc="$(tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" \
+      tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" \
         "$(printf '%s' "$rows_meta_json" | jq -c --argjson again "$tf_check_again" \
-          'map(select(.criterion as $k | ($again | index($k)) == null))')")" || exit $?
+          'map(select(.criterion as $k | ($again | index($k)) == null))')"
+      tf_ledger_doc="$TF_CONFIRMED_DOC"
     fi
     # A row a person rejected goes back to the test author, and the person's words existed only in
     # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
@@ -5065,11 +5091,11 @@ TF_RECORDED
         '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
-      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker. The next freeze carries each other confirmed row from the ledger.
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker.$TF_CARRY_NEXT
 checkAgain: $tf_check_again"
     fi
     # No ledger record carries this rejection, so the refusal names the tests to run again.
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks. The next freeze carries each other confirmed row from the ledger.
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks.$TF_CARRY_NEXT
 checkAgain: $tf_check_again
 redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"

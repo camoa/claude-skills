@@ -221,8 +221,8 @@
             "properties": {
               "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, or the order id for the done-when row."},
               "judgedBy": { "$ref": "#/$defs/judgement/properties/judgedBy" },
-              "note": { "$ref": "#/$defs/judgement/properties/note" },
-              "recordedAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "The UTC time the refused freeze recorded the row. Set by the script, never typed. The next freeze carries the row only when none of its test files changed after this time."}
+              "note": { "$ref": "#/$defs/judgement/properties/note", "description": "For a model's row, the checker's own note from `implementation/row-check-<order id>.json` when that file confirms the row. Otherwise the note on the row's `--row` flag." },
+              "recordedAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "The UTC time the checker's verdict file was last written, when it exists and is older than the refusal. Otherwise the time of the refusal. Set by the script, never typed. The next freeze carries the row only when none of its test files changed after this time."}
             }
           },
           "description": "The confirmed rows a freeze held when it refused, with their notes: on exit 65 less the rows its `checkAgain` line names, and on exit 64 for missing rows all of them. Written by `tests-freeze` on each such refusal and replaced by the next one. Removed by the next freeze that writes. A repair round's checker judges only the rows put to it and writes the same verdict file, so these notes are on disk nowhere else. The next freeze carries each one that no `--row` gives (gap row 259)."

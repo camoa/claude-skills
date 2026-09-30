@@ -363,11 +363,12 @@ The refusal ends with a `checkAgain:` line, which names each row the next checke
 Those are the rejected rows and each confirmed row with a test in a rejected row's file. The
 done-when row is there too when an owned criterion's row went back. The repair edits those files,
 so an earlier verdict on them no longer holds. The refusal records each other confirmed row on the
-order's ledger entry as `rowsConfirmed`, with its note. The next checker writes the same verdict
-file, and that file holds only the rows put to it. So the next freeze takes a `--row` for each
-`checkAgain` row alone, and it carries each recorded row itself (gap row 259). It does not carry a
-recorded row whose test file changed after the refusal. Exit 64 then names that row, and it goes
-to the checker again. Exit 64 for a missing row also records the confirmed rows it was given.
+order's ledger entry as `rowsConfirmed`. A checker's row keeps the note from the verdict file, so
+the note is the checker's own. The next checker writes the same verdict file, and that file holds
+only the rows put to it. So the next freeze takes a `--row` for each `checkAgain` row alone. It
+carries each recorded row itself and names them on a `rowsCarried:` line (gap row 259). It does
+not carry a recorded row whose test file changed after the verdict file was written. Exit 64 then
+names that row, and it goes to the checker again. Exit 64 for a missing row also records the confirmed rows it was given.
 Their notes then survive the next checker's verdict file. Freeze once every row for this order
 reads confirmed; that freeze clears both records. A note may not hold the text
 `; earlier: `. This stage joins one halt reason to another with that text, so a note
