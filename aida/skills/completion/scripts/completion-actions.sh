@@ -504,7 +504,9 @@ cp_render_body() {
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
             # So a reviewer sees why the files the site needed are absent from the diff (gap row 262).
             + (if $restore == "" then [] else
-                ["Commit " + $restore + " puts back the files `task environment up` changed for the site of this worktree, so trunk keeps its own: " + $restorePaths + "."] end)
+                ($restore | split(" ")) as $ids
+                | [(if ($ids | length) == 1 then "Commit " + $ids[0] + " puts" else "Commits " + ($ids | join(" and ")) + " put" end)
+                   + " back the files `task environment up` changed for the site of this worktree, so trunk keeps its own: " + $restorePaths + "."] end)
             + (if ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
                else [(if ($taskDoc.environment.address // null) == null
@@ -578,20 +580,23 @@ CP_SCHEMA_RESULT2
 # removes it where the fork point has none. A path already back needs nothing. A path whose
 # content is no longer the one `up` recorded was changed by an order, and is never put back
 # silently. Paths a person already put back, under whatever subject, are kept as they are, and
-# task_env_restore_commit names the commit that did it. While that test holds, a site still
-# recorded up is a refusal, since its tear-down can reach the main checkout's site. Sets
-# CP_RESTORE_COMMIT and CP_RESTORE_PATHS, or leaves both empty. $1 the action.
+# task_env_restore_commit names the commit that did it. When one of them is a file the fork point
+# has, a site still recorded up is a refusal, since its tear-down can reach the main checkout's
+# site. Sets CP_RESTORE_COMMIT to the commits that put files back, the person's and this one's,
+# separated by a space, and CP_RESTORE_PATHS to every file back. Both stay empty when no file is
+# back. $1 the action.
 CP_RESTORE_COMMIT=""; CP_RESTORE_PATHS=""
 # The subject of the commit this script makes. Nothing reads it back: the content decides.
 CP_RESTORE_SUBJECT="Restore the files the worktree environment recipe changed"
 cp_restore_env_files() {
-  local who="$1" wt rows fork tab p blob head_blob said todo="" changed="" dirty="" message commit_text
+  local who="$1" wt rows fork tab p blob head_blob said fired todo="" changed="" dirty="" message commit_text
   tab="$(printf '\t')"
   wt="$(printf '%s' "$CP_TASK_DOC" | jq -r '.worktree.path // empty')"
   rows="$(printf '%s' "$CP_TASK_DOC" | jq -r '(.worktree.recipeChanges // [])[] | .path + "\t" + .blob')"
   [ -n "$wt" ] && [ -n "$rows" ] || return 0
-  if said="$(task_env_restore_commit "$TASK_PATH" "$wt")"; then
-    CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"
+  said="$(task_env_restore_commit "$TASK_PATH" "$wt")"; fired=$?
+  [ -z "$said" ] || { CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"; }
+  if [ "$fired" -eq 0 ]; then
     [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] \
       || die 1 "$who: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $CP_TASK_ID is up: $CP_RESTORE_PATHS. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was written. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then put the files back again, and run close again."
   fi
@@ -642,14 +647,11 @@ CP_RESTORE_TODO
 
 \`task environment up\` wrote these files for the site of the worktree of $CP_TASK_ID. Merged, they would change the site of the main checkout."
   said="$(recipe_commit_if_changed "$wt" "$who" "nothing differed" "$commit_text" "$(printf '%s' "$todo")" 2>&1)" || die 3 "$who: git refused the restore commit in $wt: $said. The files are put back in the tree. Commit them, then run close again."
-  # The restore test names every file now back, including one a person put back earlier. A task
-  # whose recipe changed no file the fork point has gets no such answer, and lists its own.
-  CP_RESTORE_COMMIT="$(git -C "$wt" rev-parse --short HEAD)"
-  if said="$(task_env_restore_commit "$TASK_PATH" "$wt")"; then
-    CP_RESTORE_PATHS="${said#*"$tab"}"
-  else
-    CP_RESTORE_PATHS="$(printf '%s' "$todo" | sort | paste -sd, - | sed 's/,/, /g')"
-  fi
+  # The restore test now names every file back, including one a person put back earlier, so the
+  # body names that person's commit beside this one.
+  CP_RESTORE_COMMIT="${CP_RESTORE_COMMIT:+$CP_RESTORE_COMMIT }$(git -C "$wt" rev-parse --short HEAD)"
+  said="$(task_env_restore_commit "$TASK_PATH" "$wt")"
+  CP_RESTORE_PATHS="${said#*"$tab"}"
 }
 
 do_close() {

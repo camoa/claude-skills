@@ -1462,10 +1462,10 @@ do_environment() {
     # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
     # caller stood. The refusal it already printed is above this one.
     [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
-    # A tear-down after the restore commit resolves the site by the name that commit put back,
-    # which can be the main checkout's (gap row 262).
-    restored="$(task_env_restore_commit "$task_dir" "$wt")" \
-      && die3 "environment: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $id is up: ${restored#*"$tab"}. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was torn down. In $wt, run git revert ${restored%%"$tab"*}, run this again, then put the files back again"
+    # A tear-down after the restore, committed or not, resolves the site by the name the restore
+    # put back, which can be the main checkout's (gap row 262).
+    restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)" \
+      && die3 "environment: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $id is up: ${restored#*"$tab"}. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was torn down. The latest commit on those files is ${restored%%"$tab"*}. Put the change \`up\` recorded back in them, in the working tree or with git revert of the commit that took it out. Then run this again, then put the files back again"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
     cd "$wt" || die3 "environment: could not enter $wt"
     run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
@@ -1535,9 +1535,9 @@ TA_TOKEN_LIST
     environment_cleanup quiet || exit 3
     # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
     # The EXIT trap still stands, so environment_cleanup removes its files on every exit.
-    # After the restore commit a status line resolves the site by the name that commit put back.
-    if [ -n "$wt" ] && [ -d "$wt" ] && restored="$(task_env_restore_commit "$task_dir" "$wt")"; then
-      printf 'status: not run, commit %s put back the files up recorded, so a status line can reach the main checkout'"'"'s site\n' "${restored%%"$tab"*}"
+    # After the restore, committed or not, a status line resolves the site by the restored name.
+    if [ -n "$wt" ] && [ -d "$wt" ] && restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)"; then
+      printf 'status: not run, %s hold their content where the branch started, so a status line can reach the main checkout'"'"'s site. The latest commit on them is %s\n' "${restored#*"$tab"}" "${restored%%"$tab"*}"
     elif [ -n "$wt" ] && [ -d "$wt" ]; then
       ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
       files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
@@ -1557,10 +1557,10 @@ TA_TOKEN_LIST
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
-  # After the restore commit, a site brought up here takes the name that commit put back, which
-  # can be the main checkout's (gap row 262).
-  restored="$(task_env_restore_commit "$task_dir" "$wt")" \
-    && die3 "environment: commit ${restored%%"$tab"*} put back the files \`task environment up\` recorded: ${restored#*"$tab"}. A site brought up here can take the main checkout's name. Nothing was brought up. To bring the site up again, run git revert ${restored%%"$tab"*} in $wt first"
+  # After the restore, committed or not, a site brought up here takes the name the restore put
+  # back, which can be the main checkout's (gap row 262).
+  restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)" \
+    && die3 "environment: $wt holds the files \`task environment up\` changed at their content where the branch started: ${restored#*"$tab"}. A site brought up here can take the main checkout's name. Nothing was brought up. The latest commit on those files is ${restored%%"$tab"*}. To bring the site up again, put the change back first, in the working tree or with git revert of the commit that took it out"
   # The folder of blocks stays until environment_cleanup removes it, because it keeps the earlier
   # versions a failed commit below puts back.
   environment_check up "$wt" "$outfile"

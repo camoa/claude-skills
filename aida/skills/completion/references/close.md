@@ -109,7 +109,7 @@ own. It refuses at exit 1 when a file that existed where the branch started is b
 record still names a site.
 
 Otherwise it writes the pull request body to `<task_folder>/completion/pr-body.md`. The body
-names the restore commit, so a reviewer sees why those files are not in the diff. It writes the record to
+names each restore commit, a person's and its own, so a reviewer sees why those files are not in the diff. It writes the record to
 `<task_folder>/completion/completed.json`. Then it calls `task complete` last. That call commits
 the record and the body with the state.
 

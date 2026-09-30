@@ -200,10 +200,12 @@ receive them. Completion takes the site down. Then it commits each file back to 
 where the branch started. A DDEV worktree then holds the main checkout's `name:` line again. So a
 site command there can reach the main checkout's site. The content decides, not who made the
 commit or its subject. The test reads the changed files that existed where the branch started.
-When HEAD holds one of them at that content again, `up` and `down` refuse at 3. They name the
-latest commit on those files. `show` then prints `status: not run`. A `## Files` script the
-branch dropped does not count, because it names no site. To work on the site again, revert that
-commit first.
+When HEAD or the working tree holds one of them at that content again, `up` and `down` refuse at
+3. They name the latest commit on those files. `show` then prints `status: not run`. A `## Files`
+script the branch dropped does not count, because it names no site. To work on the site again,
+put the change back first. The test can refuse wrongly: a file the preconditions prose only names,
+changed before `up` and then changed back, counts too. It also misses a recipe that names the
+site in a file absent where the branch started.
 
 ## `prune [<task-id>]...`
 
