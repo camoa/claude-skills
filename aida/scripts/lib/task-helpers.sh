@@ -649,8 +649,9 @@ task_stage() {
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
 # code path named <slug of the code folder>-<id>: a tree nested under the code path is invisible
 # to a tool that registers projects by folder, and DDEV hands it to the parent project. The
-# folder name becomes a hostname label, so the basename goes through pb_slug, the one slug
-# rule. A dot or an underscore in it becomes a hyphen, as the id rule demands. Prints the
+# folder name becomes a hostname label, so the basename and the id go through pb_slug, the one
+# slug rule. A dot or an underscore in either becomes a hyphen, as the id rule demands: an id made
+# before that rule may still hold one (gap row 251). The branch keeps the id. Prints the
 # path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
@@ -681,7 +682,7 @@ task_worktree() {
     || die3 "$who: the library failed to load: playbooks.sh"
   # The path rule, run here rather than read from the record, because the record is an address on
   # the machine that wrote it. One copy serves both branches below.
-  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$id"
+  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
