@@ -60,9 +60,9 @@ undeclared, with a reason saying no check recipe was resolved.
 
 **A task whose orders are all proved by their records runs no test, so it needs no harness.**
 The same holds for an order a person confirms, whose task has no automated tests. On such a task
-a `gate` order runs its own lines and no suite, so it needs no harness either. When no order in
-the snapshot needs the harness, the script records each framework's conditions and its smoke row
-as `not-needed`, with the reason, and runs neither. The verdict is
+a `gate` order runs its own lines and no suite, so it needs no harness either. Then no order in
+the snapshot needs the harness. The script records the conditions and the smoke row of each
+framework as `not-needed`, with the reason, and runs neither. The verdict is
 `not-needed` and the build goes on. The recipe is still resolved and recorded, because the freeze
 reads its path. The baseline runs no suite and records `not-needed` per framework there too. The
 `## Check commands` tools still run where an order owns a file under the code path, and read

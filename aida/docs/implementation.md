@@ -96,8 +96,8 @@ A task whose every order is proved by its record, or confirmed by you, runs no t
 conditions and its smoke command are recorded as not needed and never run. No suite baseline is taken, and the build
 goes on. The review tools still run over any file an order owns under the code path. One order
 proved by a test, by a configuration gate or by a look at a page brings the whole harness back.
-That one order runs the suite. The configuration gate is the exception on a task with no
-automated tests: it runs its own lines and no suite, so it brings nothing back.
+That one order runs the suite. On a task with no automated tests, the configuration gate is the
+exception. It runs its own lines and no suite, so it brings nothing back.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist

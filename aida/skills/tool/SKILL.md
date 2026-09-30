@@ -186,9 +186,9 @@ not stop it.
 | 0 | Every named tool is present, or the recipe names none. | Go on with the stage. |
 | 4 | A tool reads absent. | Install each absent tool as "Install a tool" says, then run `require` again. |
 | 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Ask the catalog as above. Still unknown: name the tool and the reason, and stop. Never read it as present. |
-| 1 | No project owns this directory, or `--task` names no task folder. | Say so in one line and name the project skill. Stop. |
+| 1 | No project owns this directory, or the task folder is missing or holds no `task.json`. | Name which in one line. For a task folder, check the path given to `--task`. Otherwise name the project skill. Stop. |
 | 3 | The path is not a readable file, or one of its two lists is not a list. | Show the error text and stop. |
-| 79 | `--task` names a task that builds in its worktree, and this window is elsewhere. | Run the call again from that worktree. |
+| 79 | The task builds in its worktree and this window is elsewhere, or git no longer lists the worktree the task records. | Show the error text. For the first, run the call again from that worktree. For the second, follow the repair the text names. |
 
 Exit 2 wins over exit 4, so read every `TOOLING:` line. An absent tool on the same run still
 needs its install. On an autonomous run the install refuses at 70, so the stage halts there.
