@@ -322,10 +322,11 @@ files, so the tree stays clean. A file that holds the block of an earlier versio
 is replaced for the run, then put back. Any other file with different content refuses at 3.
 
 The check's output is the log of the lines. Each line that ran starts with `+`, with every
-placeholder filled. A value with a space or a quote is in single quotes. A line that did not run
-shows as written. The log names each `## Files` path written or replaced for the run. It then
-says which paths were removed or put back after the run. So a script absent after the run is
-expected.
+placeholder filled. A token is in single quotes when it is empty, or when it holds a character
+other than a letter, a digit, or one of `_ . / : = @ % + , -`. A line that did not run shows as
+written. The failure reason quotes the line the same way. The log names each `## Files` path
+written or replaced for the run. It then says which paths were removed or put back after the
+run. So a script absent after the run is expected.
 
 The site must be up before the verify lines run. A site command such as `ddev drush` starts a
 stopped site and prints its start-up text. A `stdout empty` line then fails for a reason that is

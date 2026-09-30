@@ -6578,9 +6578,9 @@ BR_RUN_TOKENS
     while IFS= read -r value; do
       if [ -n "$multi_name" ]; then
         values="$multi_name$tab$value
-$BRC_VALUES"; shown=" [{$multi_name}=$value]"
+$BRC_VALUES"
       else
-        values="$BRC_VALUES"; shown=""
+        values="$BRC_VALUES"
       fi
       : >"$run_out"
       case "$pass" in
@@ -6591,32 +6591,34 @@ $BRC_VALUES"; shown=" [{$multi_name}=$value]"
       payload="$(printf '%s' "$result" | cut -f2-)"
       # br_run_resolved logs a line only when it runs it, so a line that did not run is logged as written.
       [ "$kind" = "RAN" ] || printf '+ %s\n' "$BRL_LINE" >>"$outfile"
+      # A reason quotes the line as the log shows it, so the two never differ.
+      shown="$(tail -n 1 "$outfile")"; shown="${shown#+ }"
       cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
       if [ "$kind" = "UNRESOLVED" ]; then
         BRL_VERDICT="unknown"; BRL_RC=""
-        BRL_WHY="the token {$payload} in gate line $i ($BRL_LINE) has no supplied value; pass --value $payload=<value>."
+        BRL_WHY="the token {$payload} in gate line $i ($shown) has no supplied value; pass --value $payload=<value>."
         break
       fi
       BRL_RC="$payload"
       if [ "$BRL_RC" != "0" ]; then
-        BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE$shown) exited $BRL_RC"
+        BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($shown) exited $BRL_RC"
         break
       fi
       case "$pass" in
         'exit 0') ;;
         'stdout empty')
           if grep -q '[^[:space:]]' "$run_out"; then
-            BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE$shown) exited 0 and printed to standard output, and its pass is stdout empty"
+            BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($shown) exited 0 and printed to standard output, and its pass is stdout empty"
             break
           fi ;;
         'stdout contains '?*)
           literal="$(pc_unquote "${pass#stdout contains }")"
           if ! pc_output_holds "$run_out" "$literal"; then
-            BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($BRL_LINE$shown) exited 0, and its standard output does not hold $literal"
+            BRL_VERDICT="unmet"; BRL_WHY="gate line $i ($shown) exited 0, and its standard output does not hold $literal"
             break
           fi ;;
         *)
-          BRL_VERDICT="unknown"; BRL_WHY="gate line $i ($BRL_LINE) names a pass this runner does not read: $pass"
+          BRL_VERDICT="unknown"; BRL_WHY="gate line $i ($shown) names a pass this runner does not read: $pass"
           break ;;
       esac
     done <<BR_RUN_VALUES
