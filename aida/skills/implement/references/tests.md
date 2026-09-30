@@ -309,20 +309,25 @@ files and every reused path, less this order's own files that a test glob matche
 readable each test in another order's frozen record that names a criterion this order serves or
 owns, because the checker reads it. Design lists an order's tests under its owned files. The checker
 reads those tests, so the globs decide which owned files stay readable. Without them every owned
-test file is denied, and the script refuses the call (live-run row 106). So `row-checker` cannot
+test file is denied, and the script refuses the call (live-run row 106). The task folder holds
+copies of production code too. So the checker is also denied its diffs, build and fix records,
+review and verify records, briefs, reports and set-aside files. So `row-checker` cannot
 open the production source behind a hook. Without this record open, the hook denies nothing. The
 checker's own instructions to stay off the implementation are then just words, with nothing
 enforcing them.
 
 **Then dispatch `row-checker`**, on opus, with the message SKILL.md names. Its lines are the
-role, the run mode, the rows built above, the test-authoring recipe's path, the tests brief path
-`dispatch-open` prints, and its verdict file's path. That path is
+role, the run mode, the rows built above and the test-authoring recipe's path. Then come the
+interface file path `dispatch-open` prints, and the verdict file's path. That path is
 `implementation/row-check-<order id>.json` under the task folder. The rows are the one input
 typed by hand, because no brief action writes them. The denial above covers every reused path and
-every other order's files, so a test that calls one would reach the checker with no interface to
-judge the call against. The brief's `reuses` and `dependencyInterfaces` hold the text the author
-tested against. The checker reads the entry for what a test calls, and its note names it (gap row
-257). `dispatch-open` prints no brief line for an order with no test author, which has no brief.
+every other order's files. A test that calls one would reach the checker with nothing to judge the
+call against. So `dispatch-open` copies the tests brief's `reuses` and `dependencyInterfaces` to
+`implementation/interfaces-<order id>.json`, the text the author tested against (gap row 257).
+It copies only those two keys. The rest of the brief holds the person's words, earlier notes and
+review evidence, and a read returns the whole file. An order with no tests brief gets no file.
+The checker's note names the entry it relied on. No script checks that, because no hook reads an
+agent's answer.
 Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes

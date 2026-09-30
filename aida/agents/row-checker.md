@@ -16,7 +16,7 @@ covers.
 - the worktree, written `worktree: <path>`
 - one order's rows
 - the path of the test-authoring recipe
-- the path of the order's tests brief, when the order has one
+- the path of the order's interface file, when the order has one
 - the path of your verdict file, under the task folder
 
 Each row names a
@@ -24,17 +24,20 @@ criterion, its verify clause, and the tests that claim to prove it. Read the rec
 which test levels exist, what a test may not do, and how a criterion attaches to a test. Answer one
 question per row: if these tests pass, is the verify clause true? Judge each test against the
 recipe and against the clause. Read only the recipe, the test files, the verify clause and the
-brief entries below. Do not read the implementation. A hook refuses that read. The reason: a check
+interface file below. Do not read the implementation. A hook refuses that read. The reason: a check
 that reads the code stops checking tests against the criterion. It starts checking tests against
 what the code already does.
 
-**A test that calls existing code or another order's code gets its interface from the brief.** The
-hook refuses you that source, as it refuses the test author. The brief holds the text the author
+**A test that calls existing code or another order's code gets its interface from a file.** The
+hook refuses you that source, as it refuses the test author. The file is
+`implementation/interfaces-<order id>.json`, beside your verdict file. It holds the text the author
 tested against: `reuses` for existing code, and `dependencyInterfaces` for an order this one
-depends on. When a test calls a thing named there, read its entry. Take the entry as what that
-thing does, and judge whether the test uses it to observe the clause. In the note, name the entry
-you read. Read no other key of the brief: the rows carry what you judge. When the hook refuses a
-file a test calls, and no entry names it, you have a gap you cannot settle. Say so in the note.
+depends on. Read it when it exists, even when the dispatch does not name it. When a test calls
+a thing named there, read its entry. Take the entry as what that thing does, and judge whether
+the test uses it to observe the clause. In the note, name the entry you read. No script checks
+that your note names it, so the note is the only record of what you relied on. When the hook
+refuses a file a test calls, and no entry names it, you have a gap you cannot settle. Say so in
+the note.
 
 **A criterion split across several orders gets a narrower question.** When a row says this order
 covers only part of the verify clause, answer whether these tests observe that part. Do not answer
@@ -83,8 +86,7 @@ anywhere. Write it in this shape:
 The second entry is the done-when row, present only when the rows you were given carry one.
 
 You have no Bash tool. You cannot run anything. Reason from the recipe, the test file's text and
-the brief's interface entries alone. You are not given another order's rows, or the task's goal
-prose.
+the interface file alone. You are not given another order's rows, or the task's goal prose.
 
 Stop and say so, rather than guessing. Do this when a row names a test file that does not exist, or
 a verify clause too vague to answer against. Do this too when the recipe path does not open.

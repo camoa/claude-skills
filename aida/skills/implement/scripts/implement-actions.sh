@@ -133,7 +133,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # table reads it. The two exceptions to the summary rule are the bodies a person or a caller has to
 # read verbatim: `tests-freeze`'s checklist rows, and `step`'s own step file. `restart` prints the
 # archive path alone, and `dispatch-open` the worktree, the denied paths and the record path. For
-# a row-checker it also prints the order's tests brief path, when that brief exists.
+# a row-checker it also writes and prints implementation/interfaces-<unit_id>.json, when a tests
+# brief exists.
 #
 # `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
 # one belonging to this point and this framework, or reads a source the project configured itself,
@@ -11190,6 +11191,13 @@ TG_ROOTS
           '[ .[] | (.rows // [])[] | select(.criterion as $k | $c | index($k)) | (.tests // [])[].path ] | unique')"
       [ -n "$named_json" ] || named_json='[]'
       owned_json="$(jq -nc --argjson d "$owned_json" --argjson n "$named_json" '$d - $n')"
+      # The task folder holds copies of production code and other roles' judgements: diffs, build
+      # and fix records, review and verify records, every brief, every report, and the files a
+      # restart set aside. The hook resolves an absolute entry as it is. The checker's own inputs,
+      # interfaces-<unit>.json and the frozen test records, match none of these names.
+      owned_json="$(find "$IMPL_DIR" -maxdepth 1 \( -name 'diff-*' -o -name 'build-*' -o -name 'fix-*' \
+          -o -name 'review-*' -o -name 'verify-*' -o -name 'brief-*' -o -name '*answers-*' -o -name 'set-aside' \) 2>/dev/null \
+        | jq -R -s -c --argjson d "$owned_json" '$d + (split("\n") | map(select(length > 0))) | unique')"
     fi
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
@@ -11353,15 +11361,30 @@ TG_ROOTS
   # A reopened record carries the one resume already, so a second return with no report halts.
   [ "$resume" = false ] || record_json="$(printf '%s' "$record_json" | jq -c '.resumedAt = .openedAt')"
 
+  # The checker is denied every reused path and every other order's files, as the author is. The
+  # author gets their interface text in the tests brief, so the checker gets that text too (gap
+  # row 257). Only those two keys: the rest of the brief holds the person's words, earlier notes and
+  # review evidence, and a Read returns the whole file. An order with no tests brief has no file,
+  # and an earlier one is removed so a stale copy is never read.
+  local interfaces_file="" interfaces_json
+  if [ "$role_bare" = "row-checker" ]; then
+    interfaces_file="$IMPL_DIR/interfaces-$unit_id.json"
+    if [ -f "$IMPL_DIR/brief-$unit_id-tests.json" ]; then
+      interfaces_json="$(jq -c '{reuses: (.reuses // []), dependencyInterfaces: (.dependencyInterfaces // [])}' \
+        "$IMPL_DIR/brief-$unit_id-tests.json" 2>/dev/null)" \
+        || die 3 "dispatch-open: $IMPL_DIR/brief-$unit_id-tests.json could not be read as JSON, so the checker's interface file was not written."
+      write_atomic "$interfaces_file" "$interfaces_json"
+    else
+      rm -f "$interfaces_file" || die 3 "dispatch-open: could not remove the earlier $interfaces_file"
+      interfaces_file=""
+    fi
+  fi
+
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
   echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
-  # The checker is denied every reused path and every other order's files, as the author is. The
-  # author gets their interface text in the tests brief, so the checker is handed the same brief
-  # (gap row 257). An order with no test author has no brief and no line.
-  if [ "$role_bare" = "row-checker" ] && [ -f "$IMPL_DIR/brief-$unit_id-tests.json" ]; then
-    echo "DISPATCH-OPEN: tests brief: $IMPL_DIR/brief-$unit_id-tests.json. Put it in the dispatch message as a path: the role reads the interface text of what a test calls there."
-  fi
+  [ -z "$interfaces_file" ] \
+    || echo "DISPATCH-OPEN: interfaces: $interfaces_file. Put it in the dispatch message as a path: the role reads the interface text of what a test calls there."
   local deny_count main
   main="$(main_checkout "$(project_code_path_value "$RV_PROJECT_FOLDER")" "$(cd "$codepath" && pwd -P)")"
   deny_count="$(printf '%s' "$deny_json" | jq 'length' 2>/dev/null)"
