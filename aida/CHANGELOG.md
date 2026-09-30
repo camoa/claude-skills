@@ -4,6 +4,43 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.9] - 2026-09-30
+
+Four fixes from two live runs on 6.0.8, the event archive task and the
+Drupal site task, and from the checks of this release's own builds.
+
+### Fixed
+
+- `task environment up` records the files it committed and the files the
+  recipe's preconditions name that differ from the worktree base, each with
+  its content id, under `worktree.recipeChanges`. Review's
+  `serves-a-criterion` check and the build's owned-files check set those
+  files aside while their content still matches. A later edit is judged.
+  Both checks name the files they set aside. A task brought up before this
+  record existed is told to run `up` again.
+- The row checker gets `implementation/interfaces-<unit>.json`, which holds
+  only the tests brief's `reuses` and `dependencyInterfaces`. It reads the
+  interface text the test author tested against, and nothing else from the
+  brief. Its deny list now also covers the task folder's copies of
+  production code: diffs, build, fix, review and verify records, briefs and
+  answer reports.
+- A repair that edits a shared test file names every test in that file that
+  needs a new red. The ledger's rejected rows, the tests brief, the retake
+  brief, exit 65 and exit 109 carry the list as `redAgain`.
+- A refused freeze records the confirmed rows it was given, with the row
+  checker's own note, and prints `checkAgain:` with the rows the next
+  checker dispatch must cover. The next freeze fills a recorded row itself
+  unless its test file changed after the checker's verdict, and prints
+  `rowsCarried:`. Exit 64 names the rows still owed and the next step.
+
+### Known limits
+
+- The staleness checks read file times, so a `touch` passes as a rerun.
+- When every test of an order sits in one file, no confirmed row survives a
+  rejection, because the rule works per file.
+- No script checks that the row checker's note names the interface entry it
+  used, because no hook reads an agent's answer.
+
 ## [6.0.8] - 2026-09-30
 
 Seventeen fixes from two live runs on 6.0.7, the event archive task and
