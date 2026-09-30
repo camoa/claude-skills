@@ -10940,16 +10940,11 @@ do_dispatch_open() {
     # and is denied below even where a test glob matches it, so the hook catches an accidental read.
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
       '[.workOrders[]?.ownedFiles[]?] + [.workOrders[]?.reuses[]?.path] | unique')"
-    local roots="" r
     if [ -n "$test_glob_raw" ]; then
       while IFS= read -r f; do
         [ -n "$f" ] || continue
-        r="$(im_test_tree_root "$f" "$test_glob_raw")"
-        if [ -z "$r" ]; then kept="$kept$f
+        [ -n "$(im_test_tree_root "$f" "$test_glob_raw")" ] || kept="$kept$f
 "
-        else roots="$roots$r
-"
-        fi
       done <<TG_OWNED
 $(printf '%s' "$owned_json" | jq -r '.[]')
 TG_OWNED
@@ -10995,25 +10990,54 @@ TG_OWN
           | all($own[]; . != $d and . != $r and (startswith($r + "/") | not))))
       | . + $kept | unique')"
     # A test no order owns shows a reuse's shape by its calls as well (live task
-    # event-archive-lookahead, four earlier kernel tests). So every tracked file under a test tree
-    # the orders own or reuse from is denied too, less this order's own. The trees are those the
-    # task works in, never the whole repository, so a large tracked vendor test suite elsewhere is
-    # not listed. A file the author writes is untracked, and stays readable.
-    local tracked tracked_json
-    if [ -n "$roots" ]; then
-      tracked="$(printf '%s' "$roots" | sort -u | while IFS= read -r r; do
-          [ -n "$r" ] || continue
-          git -C "$codepath" ls-files -- "$r" || exit 1
-        done)" \
-        || die 3 "dispatch-open: git ls-files failed in $codepath, so the tracked test files could not be listed."
-      tracked_json="$(printf '%s\n' "$tracked" | while IFS= read -r f; do
-          [ -n "$f" ] || continue
+    # event-archive-lookahead, four earlier kernel tests). So every test-tree file git tracks at
+    # the commit the build started from is denied too. This order's own test files stay readable,
+    # and so do the support files its frozen record holds: after a rejected row the author repairs
+    # its own committed base class. A file the author writes is untracked, and stays readable. The
+    # list covers the whole repository, so a large tracked test suite makes it long.
+    local base tracked tracked_json g_last g_re="" own_support
+    if [ -n "$test_glob_raw" ]; then
+      base="$(jq -r '.startedFrom // empty' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+      [ -n "$base" ] || die 3 "dispatch-open: $IMPL_DIR/ledger.json holds no startedFrom, so the tests tracked at the build's start could not be listed. Run start again."
+      tracked="$(git -C "$codepath" ls-tree -r --name-only "$base")" \
+        || die 3 "dispatch-open: git ls-tree failed on $base in $codepath, so the tracked test files could not be listed."
+      # A cheap first pass: a path holding a literal directory of a glob, or whose last part fits a
+      # glob's last segment. im_test_tree_root then decides each path that passed.
+      while IFS= read -r g; do
+        [ -n "$g" ] || continue
+        g_last="$(printf '%s' "${g##*/}" | sed 's/\./\\./g; s/\*/[^\/]*/g; s/?/[^\/]/g')"
+        g_re="$g_re|(^|/)$g_last\$"
+        while IFS= read -r seg; do
+          case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
+          g_re="$g_re|(^|/)$(printf '%s' "$seg" | sed 's/\./\\./g')/"
+        done <<TG_SEGS
+$(printf '%s' "${g%/*}" | tr '/' '\n')
+TG_SEGS
+      done <<TG_GLOBS
+$test_glob_raw
+TG_GLOBS
+      tracked_json="$(printf '%s\n' "$tracked" | grep -E -e "${g_re#|}" | while IFS= read -r f; do
           [ -z "$(im_test_tree_root "$f" "$test_glob_raw")" ] || printf '%s\n' "$f"
         done | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+      own_support="$(jq -c '[ (.support // [])[].path ]' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
+      [ -n "$own_support" ] || own_support='[]'
       owned_json="$(jq -nc --argjson d "$owned_json" --argjson t "$tracked_json" \
-        --argjson mine "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ]')" '
-        $d + ($t | map(select(. as $f | all($mine[]; (. | rtrimstr("/")) as $o
-            | $f != $o and ($f | startswith($o + "/") | not))))) | unique')"
+        --argjson own "$own_tests_json" --argjson sup "$own_support" '
+        $d + ($t | map(select(. as $f | ($sup | index($f)) == null
+            and all($own[]; (. | rtrimstr("/")) as $o
+              | $f != $o and ($f | startswith($o + "/") | not))))) | unique')"
+    fi
+    # The row checker reads the tests its rows name. A criterion this order serves is proved by
+    # its owner, so that test sits in another order's frozen file and stays readable to it.
+    if [ "$role_bare" = "row-checker" ]; then
+      local served_json named_json
+      served_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
+        '[ .workOrders[]? | select(.id == $u) | ((.criteriaServed // []) + (.criteriaOwned // []))[] ] | unique')"
+      named_json="$(find "$IMPL_DIR" -maxdepth 1 -name 'tests-wo*.json' ! -name "tests-$unit_id.json" -exec cat {} + 2>/dev/null \
+        | jq -s -c --argjson c "$served_json" \
+          '[ .[] | (.rows // [])[] | select(.criterion as $k | $c | index($k)) | (.tests // [])[].path ] | unique')"
+      [ -n "$named_json" ] || named_json='[]'
+      owned_json="$(jq -nc --argjson d "$owned_json" --argjson n "$named_json" '$d - $n')"
     fi
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "

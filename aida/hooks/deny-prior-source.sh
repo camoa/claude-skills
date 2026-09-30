@@ -181,17 +181,17 @@ DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
   || not_enforced "the dispatch open at $DISPATCH_FILE denies no path, so this read was allowed without being checked against anything"
 
 # Every denied path, resolved against codePath and, when it differs, the main checkout. One
-# absolute path per line.
+# absolute path per line. The list is read once: a jq per entry cost seconds on a long list.
 DENY_ABS=""
-i=0
-while [ "$i" -lt "$DENY_COUNT" ]; do
-  rel="$(printf '%s' "$DENY_JSON" | jq -r --argjson i "$i" '.[$i]')"
+while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
   DENY_ABS="$DENY_ABS$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")
 "
   [ -z "$MAIN_CANON" ] || DENY_ABS="$DENY_ABS$(normalize_abs "$(resolve_against "$rel" "$MAIN_CANON")")
 "
-  i=$((i + 1))
-done
+done <<DENY_LIST
+$(printf '%s' "$DENY_JSON" | jq -r '.[]')
+DENY_LIST
 
 # Refuses when resolved target $1 falls under a denied path, or, for a search, when a denied path
 # falls under it. A search is the Grep tool, or a Bash segment whose verb is grep or rg (SEARCH).
@@ -209,6 +209,10 @@ deny_if_listed() {
       # denied path outside it is not, so pointing at an interface record would be wrong advice.
       if is_under "$target_abs" "$CODE_CANON"; then
         reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it, or the brief's reuses entry for it, instead. It states what that unit exposes, not how it works."
+        # A search of a folder is refused for a denied file inside it, and the author's own test
+        # file is often beside one (gap row 248).
+        is_under "$target_abs" "$deny_abs" \
+          || reason="$reason To search this order's own test file, name that file by its path, not the folder."
       elif [ -n "$MAIN_CANON" ] && is_under "$target_abs" "$MAIN_CANON"; then
         reason="$ROLE_BARE may not read $target_abs: it is or holds $deny_abs, which this dispatch denies this role, in the main checkout $MAIN_CANON. This role works in the task's worktree $CODE_CANON: start each shell command with cd $CODE_CANON &&."
       else

@@ -165,9 +165,11 @@ classes and fixtures there. The globs decide, not the write path, because a fram
 its tests beside the source; a glob that names no directory adds nothing. Three kinds stay denied
 whatever the globs say. Every path an order reuses is one, because a shared test base class shows
 its shape as surely as source does. Every other order's owned file is the second, because a
-sibling test shows a reuse's shape by its calls (gap rows 248, 249). Every file git tracks under a
-test tree the orders own or reuse from is the third, less this order's own. A test from before
-the task shows the same calls. A file the author writes is untracked, so it stays readable. The
+sibling test shows a reuse's shape by its calls (gap rows 248, 249). Every test-tree file git
+tracked when the build started is the third, less this order's own test files and the support
+files its frozen record holds. A test from before the task shows the same calls. A file the author
+writes is untracked, so it stays readable. A search of a folder that holds a denied file is
+refused, so the author searches its own test file by its path. The
 script refuses the dispatch (exit 47) when this order owns no file a test glob matches and no
 directory. The freeze would refuse every test the author wrote, so design adds the order's test
 file with `add-owned-file` first. The test runner still loads
@@ -196,9 +198,10 @@ a shell command that names a runtime form in `scripts/introspection-forms.txt`, 
 does not hold. Its reply ends with `Stop: missing-signature: <class or method>: <test>`, and its
 report holds the same line. No script reads either, so the route below is yours to take. The brief
 carries every reuse and dependency design declared, so the order did not declare what its tests
-call. A sibling test that calls the method is not a source for its signature either. Do not give the signature in the dispatch. Put it to the person: design adds the reuse, and
-the build takes the order fresh, as `references/finish.md` says for design drift. A run nobody attends cannot change the design, so it reports the stop and
-the author's words.
+call. A sibling test that calls the method is not a source for its signature either. Do not give
+the signature in the dispatch. Put it to the person: design adds the reuse, and the build takes
+the order fresh, as `references/finish.md` says for design drift. A run nobody attends cannot
+change the design, so it reports the stop and the author's words.
 
 **It may not write production code.** It writes the test, watches it fail, and stops.
 
@@ -300,7 +303,9 @@ gets one:
 ```
 One `--test-glob` per pattern, the same values the freeze below takes. The script derives the
 denied reads itself, the same way it does for the test author. It denies every order's owned
-files and every reused path, less this order's own files that a test glob matches. Design lists an order's tests under its owned files. The checker
+files and every reused path, less this order's own files that a test glob matches. It keeps
+readable each test in another order's frozen record that names a criterion this order serves or
+owns, because the checker reads it. Design lists an order's tests under its owned files. The checker
 reads those tests, so the globs decide which owned files stay readable. Without them every owned
 test file is denied, and the script refuses the call (live-run row 106). So `row-checker` cannot
 open the production source behind a hook. Without this record open, the hook denies nothing. The

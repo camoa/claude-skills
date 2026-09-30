@@ -540,9 +540,10 @@ whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
 A test is what a test author writes as a file, red before the code and green after it. Add that
 file to the order with `add-owned-file`. The test author writes into it, and the freeze refuses a
-test in a file the order does not own. The review stage's surface row is not a test, so `add-test` refuses a description naming one of a
-`tests` order's own surfaces. A machine criterion only a surface can prove is proved by a spec
-described by what it observes, or reads `person` after scope reopens.
+test in a file the order does not own. The review stage's surface row is not a test, so `add-test`
+refuses a description naming one of a `tests` order's own surfaces. A machine criterion only a
+surface can prove is proved by a spec described by what it observes, or reads `person` after scope
+reopens.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:
