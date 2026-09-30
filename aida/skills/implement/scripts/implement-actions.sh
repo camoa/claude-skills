@@ -6467,12 +6467,19 @@ BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 # then removes the folders made for them and the temporary folder. RF_WRITTEN_PATHS and
 # RF_REPLACED_PATHS are read too, because a refusal or an interrupt inside recipe_files_write
 # leaves that recipe's paths there alone. RF_NEW_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
-# is named, and the tree is then not what it was.
+# is named, and the tree is then not what it was. $1, when given, is the verify log, which then
+# names each path put back and each path removed.
 br_verify_files_remove() {
-  local left=""
+  local left="" took="" back="" gone=""
   if [ -n "$BRV_TREE" ]; then
-    left="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
-      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RF_NEW_DIRS" | sed -n 3p)"
+    took="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RF_NEW_DIRS")"
+    back="$(printf '%s\n' "$took" | sed -n 1p)"; gone="$(printf '%s\n' "$took" | sed -n 2p)"
+    left="$(printf '%s\n' "$took" | sed -n 3p)"
+    if [ -n "${1:-}" ]; then
+      [ -z "$back" ] || printf 'put back after the run:%s\n' "$back" >>"$1"
+      [ -z "$gone" ] || printf 'removed after the run:%s\n' "$gone" >>"$1"
+    fi
     [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
@@ -6505,18 +6512,21 @@ br_run_verify_lines() {
 "
     recipe_files_write "$BRC_WHO" "$list" "$dir" "$BRV_FILES_DIR" >/dev/null
     BRV_WRITTEN="$BRV_WRITTEN$RF_WRITTEN_PATHS"; BRV_REPLACED="$BRV_REPLACED$RF_REPLACED_PATHS"
+    # The log names each file the run wrote, because nothing written is in the tree after the run.
+    [ -z "$RF_WRITTEN_PATHS" ] || printf 'written for this run: %s (from %s)\n' "$(printf '%s' "$RF_WRITTEN_PATHS" | paste -s -d ' ' -)" "$recipe" >>"$outfile"
+    [ -z "$RF_REPLACED_PATHS" ] || printf 'replaced for this run: %s (from %s)\n' "$(printf '%s' "$RF_REPLACED_PATHS" | paste -s -d ' ' -)" "$recipe" >>"$outfile"
   done <<BRV_RECIPES
 $BRV_SOURCES
 BRV_RECIPES
   br_run_lines "$BRV_RUNS" "$BRV_CITES" "$dir" "$outfile" "the verify line above, from $BRV_CITES, is refused."
-  br_verify_files_remove
+  br_verify_files_remove "$outfile"
   trap - EXIT INT TERM
 }
 
 # Runs a list of lines through the one gate runner, the `## Configuration gate` block's and a work
 # order's own `verify` lines alike. $1 a JSON array of {run, pass}, $2 the source a refusal names,
 # $3 the folder every line runs from, $4 the file that receives each command line and its output,
-# $5 the words a refusal ends on.
+# $5 the words a refusal ends on. A line that ran is logged with every token filled (gap row 264).
 # Each line is refused on a shell character, split on spaces and run as argv through
 # br_run_resolved, so `{paths}` expands to this order's owned files and every other token comes
 # from --value. A name given several --value rows runs its line once per value, in the order
@@ -6572,14 +6582,16 @@ $BRC_VALUES"; shown=" [{$multi_name}=$value]"
       else
         values="$BRC_VALUES"; shown=""
       fi
-      printf '+ %s%s\n' "$BRL_LINE" "$shown" >>"$outfile"
+      : >"$run_out"
       case "$pass" in
-        stdout*) result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$values" "$run_err")" ;;
-        *)       result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$values")" ;;
+        stdout*) result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$values" "$run_err" "$outfile")" ;;
+        *)       result="$(br_run_resolved "$argv_json" "$dir" "$run_out" "$owned_json" "$values" "" "$outfile")" ;;
       esac
-      cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
       kind="$(printf '%s' "$result" | cut -f1)"
       payload="$(printf '%s' "$result" | cut -f2-)"
+      # br_run_resolved logs a line only when it runs it, so a line that did not run is logged as written.
+      [ "$kind" = "RAN" ] || printf '+ %s\n' "$BRL_LINE" >>"$outfile"
+      cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
       if [ "$kind" = "UNRESOLVED" ]; then
         BRL_VERDICT="unknown"; BRL_RC=""
         BRL_WHY="the token {$payload} in gate line $i ($BRL_LINE) has no supplied value; pass --value $payload=<value>."

@@ -42,7 +42,7 @@
 #   tf_sha256_of <file>                       the sha256 of that file, lowercase hex
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
-#   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>]   runs one resolved command
+#   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command
 #   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
 #   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
@@ -930,6 +930,9 @@ tf_path_matches_catalog_glob() {
 # list lacks is read from the tokens preconditions recorded (br_recorded_token). A name that
 # ends in `:json` and has no value reads JSON null. $6, when
 # given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
+# $7, when given, receives `+ ` and the command as it runs, every token filled (gap row 264). A
+# token that is empty or holds a character outside [A-Za-z0-9_./:=@%+,-] is in single quotes, so a
+# reader can tell the tokens apart.
 #
 # Prints one of three tab-separated results and never dies:
 #   UNRESOLVED<TAB><name>  a placeholder token nothing supplied a value for, naming it
@@ -937,7 +940,7 @@ tf_path_matches_catalog_glob() {
 #                          without replacing the shell, so this is a refusal and never a run
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
 br_run_resolved() {
-  local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}"
+  local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}" logfile="${7:-}"
   local count i tok name list_json pcount pi rc
   set --
   count="$(printf '%s' "$argv_json" | jq 'length' 2>/dev/null)"
@@ -986,6 +989,18 @@ br_run_resolved() {
   if [ "$#" -eq 0 ]; then
     printf 'EMPTY\t'
     return 0
+  fi
+  if [ -n "$logfile" ]; then
+    {
+      printf '+'
+      for tok in "$@"; do
+        case "$tok" in
+          ''|*[!A-Za-z0-9_./:=@%+,-]*) printf " '%s'" "$(printf '%s' "$tok" | sed "s/'/'\\\\''/g")" ;;
+          *) printf ' %s' "$tok" ;;
+        esac
+      done
+      printf '\n'
+    } >>"$logfile"
   fi
   if [ -n "$errfile" ]; then
     ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
