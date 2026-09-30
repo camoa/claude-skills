@@ -705,7 +705,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 109  `tests-freeze` was given a --red file written before the order's test round began, the
 #      tests brief's `roundStartedAt`, or before its own test file last changed. It is a run of
 #      earlier tests, such as those a restart set aside. The message names each file and both
-#      times. Nothing is frozen.
+#      times, and a last line `redAgain: [<test name>, ...]` names each test to run again, as
+#      JSON (gap row 258). Nothing is frozen.
 # The codes the turn cap added (gap row 228).
 # 110  `dispatch-close --no-report` found the open record already carries `resumedAt`: the role
 #      was resumed once and returned with no report again. The order halts with a reason naming
@@ -4036,17 +4037,18 @@ do_tests_brief() {
   rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '
     ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
     | if length == 0 then null
-      else {rows: .,
-            whatToDo: "A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone."} end')"
+      else {rows: ., redAgain: ([ .[] | (.redAgain // [])[] ] | unique),
+            whatToDo: "A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone. Then run again each test that redAgain names, and write each new red run. Each shares a test file with a repaired test, so its earlier red is older than that file."} end')"
 
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
   # `roundStartedAt` is when this order's test round began, and `tests-freeze` refuses a red run
   # older than it (exit 109). A brief written again in the same round, for a retake or a rejected
-  # row, keeps the first time, because the unchanged tests keep their red runs. The round is the
-  # same only while the order and its criteria are. A restart moves the brief aside, so the next
-  # brief starts a new round.
+  # row, keeps the first time, because a test file the repair leaves alone keeps its red runs. A
+  # red older than its own test file still refuses, so each test in an edited file runs again
+  # (gap row 258). The round is the same only while the order and its criteria are. A restart
+  # moves the brief aside, so the next brief starts a new round.
   local brief_file brief_json round_started_at=""
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
   if [ -f "$brief_file" ] && [ "$(jq -c --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
@@ -4933,10 +4935,19 @@ TF_EOF
         [ -n "$tf_check_doc" ] \
           || die 3 "tests-freeze: $tf_check_file exists but could not be read as JSON. The rejected rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
       fi
-      tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" '
-          [ .[] | .criterion as $c
+      # `redAgain` names every test with a red in a file that holds one of the row's tests (gap row
+      # 258). The repair changes that file, so each of those reds is then older than it (exit 109).
+      # A --locks-in test has no red to go stale.
+      tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" \
+          --argjson tests "$tests_json" --argjson reds "$reds_json" --arg unit "$unit_id" '
+          ($reds | map(.name)) as $red_names
+          | [ .[] | .criterion as $c
+            | ([ $tests[] | select((.criteria | index($c)) != null
+                                   or ($c == $unit and .provesDoneWhen == true)) | .absPath ]) as $files
             | {criterion: $c, personWords: .note,
-               checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null)} ]' 2>/dev/null)"
+               checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null),
+               redAgain: ([ $tests[] | select(.absPath as $p | $files | index($p)) | .name
+                            | select(. as $n | $red_names | index($n)) ] | unique)} ]' 2>/dev/null)"
       [ -n "$tf_person_rejected" ] \
         || die 3 "tests-freeze: $tf_check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. Repair or remove it by hand before running this again."
       tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
@@ -4973,8 +4984,13 @@ TF_EOF
   # The round began at the tests brief's `roundStartedAt`. A restart moves the brief aside, and a
   # changed order or criterion restamps it, so the time is never older than either. A brief from
   # before the stamp is read by its file time. With no brief, only the test files are compared.
-  # A red names its test by name, and every --test row of that name is the file it ran.
+  # A red names its test by name, and every --test row of that name is the file it ran. The file
+  # time is per file, not per test: a framework that keeps several tests in one file makes each
+  # red in it stale when one test changes (gap row 258). That is kept on purpose. An edit to one
+  # test can change what the others run, and it moves every line their reds cite. The refusal
+  # prints the names on a `redAgain:` line, as JSON, so whoever runs them again need not guess.
   local tf_brief tf_round_at="" tf_round_epoch="" tf_red_epoch tf_test_path tf_test_epoch stale_reds=""
+  local stale_names=""
   tf_brief="$IMPL_DIR/brief-$unit_id-tests.json"
   if [ "$red_count" -gt 0 ] && [ -f "$tf_brief" ]; then
     tf_round_at="$(jq -r '.roundStartedAt // empty' "$tf_brief" 2>/dev/null)"
@@ -4995,20 +5011,26 @@ TF_EOF
     [ -n "$tf_red_epoch" ] || die 3 "tests-freeze: could not read when $red_path was written."
     if [ -n "$tf_round_epoch" ] && [ "$tf_red_epoch" -lt "$tf_round_epoch" ]; then
       stale_reds="$stale_reds$red_name ($red_path, written $(im_iso_of "$tf_red_epoch"), before the round began at $tf_round_at), "
+      stale_names="$stale_names$red_name
+"
     fi
     while IFS= read -r tf_test_path; do
       [ -n "$tf_test_path" ] || continue
       tf_test_epoch="$(im_mtime "$tf_test_path")"
       [ -n "$tf_test_epoch" ] || die 3 "tests-freeze: could not read when $tf_test_path was written."
-      [ "$tf_red_epoch" -ge "$tf_test_epoch" ] \
-        || stale_reds="$stale_reds$red_name ($red_path, written $(im_iso_of "$tf_red_epoch"), before its test file $tf_test_path changed at $(im_iso_of "$tf_test_epoch")), "
+      if [ "$tf_red_epoch" -lt "$tf_test_epoch" ]; then
+        stale_reds="$stale_reds$red_name ($red_path, written $(im_iso_of "$tf_red_epoch"), before its test file $tf_test_path changed at $(im_iso_of "$tf_test_epoch")), "
+        stale_names="$stale_names$red_name
+"
+      fi
     done <<TF_RED_TESTS
 $(printf '%s' "$tests_json" | jq -r --arg n "$red_name" '[ .[] | select(.name == $n) | .absPath ] | unique | .[]')
 TF_RED_TESTS
     ri=$((ri + 1))
   done
   [ -z "$stale_reds" ] \
-    || die 109 "tests-freeze: these --red files are runs of earlier tests: ${stale_reds%, }. Run each test again and pass the new output."
+    || die 109 "tests-freeze: these --red files are runs of earlier tests: ${stale_reds%, }. Run each test again and pass the new output.
+redAgain: $(printf '%s' "$stale_names" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')"
 
   # --- 91: the reds are read against the recipe preconditions recorded (live-run row 99) -----------
   # The record is the one producer of a test-execution recipe path, and build-record reads it from
