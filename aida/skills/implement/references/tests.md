@@ -229,15 +229,15 @@ in, and the reason is recorded with `--locks-in`. Still green with no existing c
 reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
 deleted quietly and never weakened into failing.
 
-**A test of the order's own work names a commit, not code.** After a restart or a retake the tree
-can still hold this order's earlier build, so a test of its done-when arrives green. The code that
+**A test of the order's own work names a commit, not code.** After a retake the tree still holds
+this order's earlier build, so a test of its done-when arrives green. The code that
 satisfies it is the order's own, which the author may not read, and no interface record of this
 order exists yet. So the author gives `--locks-in` one of the build or fix commits the brief carries
 under `treeHolds`, written `commit:<id>`. The prefix is what marks a commit, so a reason without it
 stays prose whatever it looks like. The freeze checks the commit is this order's own and is on the
 branch, and refuses anything else (exit 101). The author reads no source. It names a commit the
-brief already printed. This is honest. The code is on the branch for one of two reasons. A person
-chose to carry it, or a retake kept the build and corrected only the test.
+brief already printed. This is honest. The code is on the branch because a retake kept the build
+and corrected only the test.
 
 **A done-when clause that asserts an absence gets no test, and goes to review.** Such a clause says
 the change added nothing of a named kind. No second engine for one job. No new dependency. No

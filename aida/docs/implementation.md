@@ -536,14 +536,13 @@ so they still hold. Once design has closed again, the next run takes the live or
 keeps its step and attempts. The next build brief carries the new findings. The orders that
 depend on it are left alone. A removed owned file, or any other change, halts as above.
 
-A restart moves records, not commits. The halted order's frozen tests and its build attempts are
-still on the branch. A test author sent against them could write a test that passes at once. So the
-restart lists those commits, and says one of two things about the tree. When nothing later depends
-on them, it names the commit to take the branch back to. That is a hard reset, and you run it. When
-other commits sit after them, they are carried. The unit's own code stays in the tree, so its next
-tests cannot go red. Either way the next run names the unit's build and fix commits while they are
-there. It stops once the unit is built again. A retake names them the same way, because it keeps the
-build and corrects only the test. They come in the order the branch holds them, oldest first. They
+A restart moves the records and reverts the code. The halted order's build attempts are still on
+the branch, recorded or not. A test author sent against them could write a test that passes at once.
+So the restart reverts each commit made after the order's freeze that changes only its owned files.
+It reverts the newest first, one revert commit each, and the frozen tests stay. When a commit also
+changes a file the order does not own, nothing is reverted. The restart names the commit and the
+files, and you separate them. A retake keeps the build and corrects only the test. The next run then
+names the unit's build and fix commits while they are there. It stops once the unit is built again. They come in the order the branch holds them, oldest first. They
 are worked out again each time, from the unit's own records, wherever a retake or an earlier restart
 moved them. After a rebase, each is found again by its change and its author, date and subject. One
 whose diff the rebase changed is named as not found, with the reason, and cannot be cited. The test

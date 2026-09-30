@@ -722,6 +722,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
 #      without --resume removes the role's earlier report, so an old complete one cannot pass.
 #      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
+# The code the reverting restart added (gap row 252).
+# 113  `restart` found a commit of a halted order that also changes a file the order does not own.
+#      A revert of it would undo that other work too, so nothing is reverted, moved or written.
+#      The message names each such commit, its order and the other files. A person splits or
+#      reverts the commit, then runs restart again.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -2366,9 +2371,9 @@ LO_MOVE
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
-  # After a restart or a retake, the order's own build and fix commits may still be on the branch;
-  # one line per order names them while they are. Not a refusal: the person may have chosen to
-  # carry them (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  # After a retake, or a restart that did not revert them, the order's own build and fix commits
+  # may still be on the branch; one line per order names them while they are. Not a refusal: a
+  # retake keeps them on purpose (live-run row 94). The line is dropped when there is none, the way `removed:` is.
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
     st_partial_json="$(rs_carried_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
@@ -10310,6 +10315,25 @@ rs_on_branch() {
       else "?no commit on this branch carries its change with its author, date and subject, so the rebase dropped it or rewrote it" end'
 }
 
+# rs_reverted <codepath> <span>: the full ids, one per line, of every commit in <span> that a later
+# commit there reverts, and of that reverting commit. The pair leaves the tree as it was, so neither
+# is code the tree holds. A revert is read by the line `git revert` writes, "This reverts commit
+# <id>.", whoever ran it: `restart` runs it, and a person may. A revert that is itself reverted
+# puts the change back, so its pair does not count.
+rs_reverted() {
+  local r t pairs=""
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    t="$(git -C "$1" log -1 --format=%B "$r" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)\.$/\1/p' | head -1)"
+    [ -z "$t" ] || pairs="$pairs$r $t
+"
+  done <<RS_REVERTS
+$(git -C "$1" log --format=%H --grep='^This reverts commit ' "$2" 2>/dev/null)
+RS_REVERTS
+  printf '%s' "$pairs" | jq -Rrs '[ split("\n")[] | select(length > 0) | split(" ") ] as $p
+    | ($p | map(.[1])) as $t | $p[] | select(.[0] as $r | $t | index($r) | not) | .[0], .[1]'
+}
+
 # The commits one order's records name that HEAD still holds, as a JSON array of
 # {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
 # ledger document.
@@ -10462,6 +10486,12 @@ RS_PRIOR
   done <<RS_ARCHIVES
 $(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null | sort)
 RS_ARCHIVES
+  # A commit reverted on this branch, by `restart` or by a person, is code the tree no longer holds
+  # (gap row 252).
+  if [ "$(printf '%s' "$out" | jq 'length')" -gt 0 ]; then
+    out="$(jq -cn --argjson have "$out" --arg gone "$(rs_reverted "$codepath" "$span")" \
+      '($gone | split("\n")) as $g | [ $have[] | select(.commit as $c | $g | index($c) | not) ]')"
+  fi
   # The blocks above read the records wherever they sit, and a restart moves them, so one order's
   # commits came out in one order before a restart and another after. They are sorted into the
   # order the branch holds them, oldest first, so `restart` and `start` print one list and a
@@ -10500,7 +10530,7 @@ RS_ARCHIVES
 #
 # Which commits. A build or a fix commit only, since those are what a commit: reason may cite. A
 # freeze holds tests, and no reader of this list acts on one: the test author reads no source, and
-# `restart` computes its reset commit from rs_order_commits, which keeps every freeze.
+# `restart` leaves every freeze commit in the tree.
 #
 # When. An order rebuilt since it was sent back is left out. `restart` resets the entry to not
 # started and `retake-tests` to tests-frozen, so a build step on the entry came later. Rebuilt means
@@ -10610,36 +10640,60 @@ do_restart() {
   [ ! -e "$target" ] \
     || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
 
-  # The records move aside; the commits they name stay on the branch. "Start over from the live
-  # design" is true of the records and false of the tree, so the tree is read here, before the
-  # records move, and the person is told what to do with it (live-run row 94). Every commit from
-  # the earliest of them to HEAD is a halted order's: nothing later depends on them, and the
-  # branch can go back to the parent of the earliest. Anything else in that span is carried, and
-  # `start` and `tests-brief` say so until the commits are gone. The restart changes nothing in
-  # the tree.
-  local commits_json tree_json one_id earliest parent span_count own_count
-  commits_json='[]'
+  # The records move aside, and the code a halted order committed must leave the tree too, or its
+  # next test author writes against it and its rebuild finds nothing to do (gap row 252). A record
+  # names only the attempts that reached build-record, so the branch is read. Every commit after
+  # the order's first freeze that changes its owned files is the order's, recorded or not. Without
+  # a freeze, the span opens at the ledger's startedFrom. The freeze commits stay: they hold the
+  # tests, which the next test author rewrites. A commit a record names that changes no owned file
+  # is the order's as well. A commit that is the order's and changes a file it does not own would
+  # take other work with it, so the restart stops before it changes anything and names the files.
+  # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
+  # history, and AIDA's own command hook refuses the hard reset that would drop it.
+  local revert_json='[]' mixed="" one_id owned rec freezes from gone c paths p g own_n outside
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
-    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" \
-      '$have + [ $more[] | select(has("missing") | not) ]')"
+    owned="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0].ownedFiles // [] | .[]')"
+    rec="$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .kind + " " + .commit')"
+    freezes="$(printf '%s' "$rec" | sed -n 's/^freeze //p')"
+    from="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null | grep -F -x -f <(
+      jq -r '.commit // empty' "$IMPL_DIR/tests-$one_id.json" 2>/dev/null
+      printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$one_id" \
+        '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty') | head -1)"
+    [ -n "$from" ] || from="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // empty')"
+    git -C "$RV_CODEPATH" merge-base --is-ancestor "$from" HEAD >/dev/null 2>&1 \
+      || die 3 "restart: $one_id has no freeze commit and no startedFrom on this branch, so the commits made for it cannot be told apart."
+    gone="$(rs_reverted "$RV_CODEPATH" "$from..HEAD")"
+    for c in $(git -C "$RV_CODEPATH" rev-list --reverse --no-merges "$from..HEAD" 2>/dev/null); do
+      printf '%s\n%s\n' "$gone" "$freezes" | grep -Fqx "$c" && continue
+      paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
+      own_n=0; outside=""
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        while IFS= read -r g; do
+          [ -n "$g" ] || continue
+          if tf_path_matches_catalog_glob "$p" "$g"; then own_n=$((own_n + 1)); continue 2; fi
+        done <<RS_OWNED
+$owned
+RS_OWNED
+        outside="$outside $p"
+      done <<RS_PATHS
+$paths
+RS_PATHS
+      [ "$own_n" -gt 0 ] || printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c" || continue
+      if [ "$own_n" -gt 0 ] && [ -z "$outside" ]; then
+        revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
+          'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
+      else
+        mixed="$mixed; $(git -C "$RV_CODEPATH" rev-parse --short "$c") ($one_id) also changes$outside"
+      fi
+    done
   done
-  tree_json='null'
-  if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then
-    earliest="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null \
-      | grep -F -x -f <(printf '%s' "$commits_json" | jq -r '.[].commit') | head -1)"
-    parent="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "${earliest}^" 2>/dev/null)"
-    if [ -n "$parent" ]; then
-      span_count="$(git -C "$RV_CODEPATH" rev-list --count "$parent..HEAD" 2>/dev/null)"
-    else
-      span_count="$(git -C "$RV_CODEPATH" rev-list --count HEAD 2>/dev/null)"
-    fi
-    own_count="$(printf '%s' "$commits_json" | jq 'length')"
-    if [ -n "$parent" ] && [ "$span_count" = "$own_count" ]; then
-      tree_json="$(jq -cn --arg c "$parent" '{resetTo: $c}')"
-    else
-      tree_json="$(jq -cn --argjson n "$((span_count - own_count))" '{carry: true, count: $n}')"
-    fi
-  fi
+  [ -z "$mixed" ] \
+    || die 113 "restart: these commits change the halted order's files and files it does not own, so a revert would undo other work too: ${mixed#; }. Nothing was reverted or moved. A person splits or reverts them, then runs restart again."
+  # Newest first, so each revert applies to the tree its commit left.
+  revert_json="$(jq -cn --argjson have "$revert_json" --argjson order "$(git -C "$RV_CODEPATH" rev-list --topo-order HEAD 2>/dev/null \
+    | grep -F -x -f <(printf '%s' "$revert_json" | jq -r '.[].commit') | jq -R -s 'split("\n") | map(select(length > 0))')" \
+    '[ $order[] as $c | $have[] | select(.commit == $c) ]')"
 
   local new_snapshot new_hash new_ledger
   # The removed orders leave the document before the helper runs, so the one hash it re-derives
@@ -10667,15 +10721,26 @@ do_restart() {
     | .resnapshots = ((.resnapshots // []) + [ $retaken[] | {id: ., from: $from, to: $to, at: $at} ])')"
   [ -n "$new_ledger" ] || die 3 "restart: the ledger update failed."
 
+  # A revert that stops on a conflict is taken back, so the tree is clean again. The reverts before
+  # it stay committed, and a second restart skips them, because rs_reverted reads them.
+  local reverted_json='[]' said
+  for c in $(printf '%s' "$revert_json" | jq -r '.[].commit'); do
+    said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)" || {
+      git -C "$RV_CODEPATH" revert --abort >/dev/null 2>&1
+      die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed, and was taken back: $said. The reverts before it are committed, and no record moved. A person resolves it, then runs restart again."
+    }
+    reverted_json="$(printf '%s' "$reverted_json" | jq -c --argjson e "$(printf '%s' "$revert_json" | jq -c --arg c "$c" '.[] | select(.commit == $c)')" \
+      --arg r "$(git -C "$RV_CODEPATH" rev-parse HEAD)" '. + [$e + {revert: $r}]')"
+  done
+
   mkdir -p "$target" || die 3 "restart: could not create $target"
   # The reason is written beside the records moved aside, because they are what it explains.
-  # `start` and `tests-brief` read `commits` back while HEAD still holds any of them.
   local restart_json
   restart_json="$(jq -n --arg restartedAt "$today" --arg reason "$reason" --arg head "$head_short" \
     --argjson drifted "$drifted_ids_json" --argjson removed "$removed_ids_json" \
-    --argjson commits "$commits_json" --argjson tree "$tree_json" \
+    --argjson reverted "$reverted_json" \
     '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
-      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, commits: $commits, tree: $tree}')"
+      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, reverted: $reverted}')"
   write_atomic "$target/restarted.json" "$restart_json"
   # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
   # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
@@ -10698,18 +10763,10 @@ do_restart() {
     || echo "RESTART: the design removed $removed; each leaves the snapshot and the ledger and is not taken fresh."
   [ -z "$retaken" ] \
     || echo "RESTART: $retaken start over from the live design."
-  if [ "$tree_json" = "null" ]; then
-    echo "commits: none"
-    echo "tree: no commit of a halted order is in the tree"
+  if [ "$reverted_json" = "[]" ]; then
+    echo "reverted: none, no commit of a halted order is in the tree"
   else
-    printf '%s' "$commits_json" | jq -r '.[] | "commits: " + .commit[0:7] + " " + .order + " " + .kind'
-    printf '%s' "$tree_json" | jq -r '
-      if has("resetTo") then "tree: reset the branch to " + .resetTo[0:7] + " (a hard reset, which a person runs; this session'"'"'s hook refuses it)"
-      elif .count == 1 then "tree: 1 later commit depends on them; carry them, and the test author is told"
-      else "tree: " + (.count | tostring) + " later commits depend on them; carry them, and the test author is told" end'
-    if [ "$(printf '%s' "$tree_json" | jq -r '.carry // false')" = "true" ]; then
-      echo "carried: each restarted order keeps its own code in the tree, so its next tests cannot go red"
-    fi
+    printf '%s' "$reverted_json" | jq -r '.[] | "reverted: " + .commit[0:7] + " " + .order + " by " + .revert[0:7]'
   fi
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"

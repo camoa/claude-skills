@@ -148,23 +148,26 @@ depended on. A halted order the live design no longer holds is dropped from the 
 ledger. Its records move aside with the rest, and the summary names it. The next `start` is a
 resumed run.
 
-The records move; the commits they name stay on the branch. The restart reads each halted
-order's freeze commits and its build and fix ranges. A retake supersedes one freeze commit and
-records it, so a retaken order has more than one. The test a person ruled wrong sits in the
-earlier one. It finds the build and fix records wherever
-a retake or an earlier restart moved them. An order's own commits are then never counted as
-later ones. It lists the ones still on the branch, one
-`commits:` line each, with the order and the kind. It writes them into `restarted.json` too.
-It changes nothing in the tree. The `tree:` line then says one of two things. Put it to
-the person, opening with: "The tests and code written for this unit are still on the branch.
-Its next test author would write against them, and a test that passes at once would prove
-nothing. You choose what happens to those commits." Then say the line. When it names a commit
-to reset to, nothing later depends on those commits. Say: "Take the branch back to that commit
-and they are gone. That is a hard reset, which you run; this session cannot." When it says to
-carry them, other commits sit after them. Say: "They stay. This unit's own code stays in the
-tree, so its next tests cannot go red. The next start names its build and fix commits, and the
-test author is told the tree holds them." Either way the next `start` prints a `partialBuild`
-line of the unit's build and fix commits while one is on the branch, until the unit is built again.
+The records move, and the code of the halted orders leaves the tree. The restart reads the
+branch after each halted order's first freeze commit. A retake supersedes one freeze commit and
+records it, so the first freeze can be an earlier one. An order with no freeze is read from the
+ledger's `startedFrom`. A commit that changes the order's owned files is the order's, whether or
+not a build record names it. A commit that a build or fix record names is the order's too. The
+freeze commits stay, because they hold the tests, and the next test author rewrites them. A
+commit that a later commit reverts is skipped, and so is that revert, whoever ran it.
+
+When each such commit changes only the order's owned files, the script reverts each one with
+`git revert --no-edit`, newest first. Each revert is a commit of its own. It prints one
+`reverted:` line per commit, with the order and the revert commit, and writes them into
+`restarted.json`. `reverted: none` means that no commit of a halted order was in the tree. Tell
+the person which commits were reverted. The history keeps them, so no hard reset is needed.
+
+When a commit also changes a file the order does not own, the restart stops with exit 113. It
+names the commit, the order and the other files. Nothing is reverted, moved or written. Put it
+to the person, opening with: "This unit's code sits in a commit that also changes other files.
+A revert would undo that other work too, so only you can separate them." When they say it is
+done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
+The reverts before it stay committed, and the next restart skips them.
 
 ## Clear any other halt, once the person has acted on it
 
