@@ -536,18 +536,19 @@ so they still hold. Once design has closed again, the next run takes the live or
 keeps its step and attempts. The next build brief carries the new findings. The orders that
 depend on it are left alone. A removed owned file, or any other change, halts as above.
 
-A restart moves the records and reverts the code. The halted order's build attempts are still on
-the branch, recorded or not. A test author sent against them could write a test that passes at once.
-So the restart reverts each commit made after the order's freeze that changes only its owned files.
-It reverts the newest first, one revert commit each, and the frozen tests stay. When a commit also
+A restart moves the records and reverts the code. The halted order's build attempts are still on the
+branch, recorded or not. A test author sent against them could write a test that passes at once. So
+the restart reverts each commit made after the order's freeze that changes only its owned files. It
+reverts the newest first, one revert commit each, and the frozen tests stay. When a commit also
 changes a file the order does not own, nothing is reverted. The restart names the commit and the
 files, and you separate them. A retake keeps the build and corrects only the test. The next run then
-names the unit's build and fix commits while they are there. It stops once the unit is built again. They come in the order the branch holds them, oldest first. They
-are worked out again each time, from the unit's own records, wherever a retake or an earlier restart
-moved them. After a rebase, each is found again by its change and its author, date and subject. One
-whose diff the rebase changed is named as not found, with the reason, and cannot be cited. The test
-author's brief then carries those commits and says the tree holds the unit's earlier code. A test
-green on arrival is never taken as proof.
+names the unit's build and fix commits while they are there. It stops once the unit is built again.
+They come in the order the branch holds them, oldest first. They are worked out again each time,
+from the unit's own records, wherever a retake or an earlier restart moved them. After a rebase,
+each is found again by its change and its author, date and subject. One whose diff the rebase
+changed is named as not found, with the reason, and cannot be cited. The test author's brief then
+carries those commits and says the tree holds the unit's earlier code. A test green on arrival is
+never taken as proof.
 
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a

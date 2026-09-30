@@ -723,10 +723,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      without --resume removes the role's earlier report, so an old complete one cannot pass.
 #      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
 # The code the reverting restart added (gap row 252).
-# 113  `restart` found a commit of a halted order that also changes a file the order does not own.
-#      A revert of it would undo that other work too, so nothing is reverted, moved or written.
-#      The message names each such commit, its order and the other files. A person splits or
-#      reverts the commit, then runs restart again.
+# 113  `restart` found a commit of a halted order that also changes a file the order does not own,
+#      or a merge that changes the order's files. A revert of the first would undo that other work
+#      too, and a revert of a merge needs a person to choose its parent. So nothing is reverted,
+#      moved or written. The message names each such commit, its order and the other files. A
+#      person splits or reverts the commit, then runs restart again.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -2371,9 +2372,10 @@ LO_MOVE
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
-  # After a retake, or a restart that did not revert them, the order's own build and fix commits
-  # may still be on the branch; one line per order names them while they are. Not a refusal: a
-  # retake keeps them on purpose (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  # After a retake, or a restart from before restart reverted (gap row 252), the order's own build
+  # and fix commits may still be on the branch; one line per order names them while they are. Not
+  # a refusal: a retake keeps them on purpose (live-run row 94). The line is dropped when there is
+  # none, the way `removed:` is.
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
     st_partial_json="$(rs_carried_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
@@ -10315,16 +10317,35 @@ rs_on_branch() {
       else "?no commit on this branch carries its change with its author, date and subject, so the rebase dropped it or rewrote it" end'
 }
 
-# rs_reverted <codepath> <span>: the full ids, one per line, of every commit in <span> that a later
-# commit there reverts, and of that reverting commit. The pair leaves the tree as it was, so neither
-# is code the tree holds. A revert is read by the line `git revert` writes, "This reverts commit
-# <id>.", whoever ran it: `restart` runs it, and a person may. A revert that is itself reverted
-# puts the change back, so its pair does not count.
+# rs_rebase_table <codepath> <span> <ledger>: the table rs_on_branch reads, or nothing when the
+# ledger holds no startedFromBefore. `start --rebased-onto` keeps each rewritten start there, so a
+# ledger holding one is a branch whose ids may have moved since the records were written. The
+# table lists the span's commits oldest first, each with its stable patch id and its author, date
+# and subject. A commit with no diff has no patch id and is listed with an empty one.
+rs_rebase_table() {
+  [ "$(printf '%s' "$3" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null || return 0
+  git -C "$1" log --reverse --no-color -p "$2" 2>/dev/null | git patch-id --stable 2>/dev/null \
+    | jq -Rsc --arg who "$(git -C "$1" log --reverse --format='%H %at %ae %s' "$2" 2>/dev/null)" '
+      ([ split("\n")[] | select(length > 0) | split(" ") | {key: .[1], value: .[0]} ] | from_entries) as $pid
+      | [ $who | split("\n")[] | select(length > 0)
+          | {commit: .[0:40], pid: ($pid[.[0:40]] // ""), who: .[41:]} ]'
+}
+
+# rs_reverted <codepath> <span> [<table>]: the full ids, one per line, of every commit in <span>
+# that a later commit there reverts, and of that reverting commit. The pair leaves the tree as it
+# was, so neither is code the tree holds. A revert is read by the line `git revert` writes, "This
+# reverts commit <id>.", whoever ran it: `restart` runs it, and a person may. A revert that is
+# itself reverted puts the change back, so its pair does not count. After a rebase the line names
+# the old id, so a target HEAD does not hold is found again through rs_on_branch and <table>.
 rs_reverted() {
-  local r t pairs=""
+  local r t on pairs=""
   while IFS= read -r r; do
     [ -n "$r" ] || continue
     t="$(git -C "$1" log -1 --format=%B "$r" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)\.$/\1/p' | head -1)"
+    if [ -n "$t" ] && ! git -C "$1" merge-base --is-ancestor "$t" HEAD >/dev/null 2>&1; then
+      on="$(rs_on_branch "$1" "$t" "${3:-}")"
+      case "$on" in ""|"?"*) t="" ;; *) t="$on" ;; esac
+    fi
     [ -z "$t" ] || pairs="$pairs$r $t
 "
   done <<RS_REVERTS
@@ -10342,12 +10363,12 @@ RS_REVERTS
 # order's only when its subject is the one the freeze writes for this order.
 # One record holds one commit, and the freeze after a retake overwrites it. So each `retakes`
 # entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
-# the same subject test decides it. Without them the reset answer stops at the superseded freeze
-# and leaves the wrong test standing in the tree (live-run row 147). A build record holds
+# the same subject test decides it. `restart` keeps every freeze these name and opens its span at
+# the first of them, so the build before a retake is reverted too (live-run row 147). A build record holds
 # the last attempt's range; a fix record each round's. A record whose commits git no longer has
 # names nothing (live-run row 94). An earlier attempt is in no record, so a build record's
 # commits are read from `startedFrom` to its commit, and im_order_commits keeps this order's own.
-# Another order's commit is never listed, so no reset advice drops it (gap row 222).
+# Another order's commit is never listed, so no restart reverts it (gap row 222).
 # A build and fix record does not stay at the top of the implementation folder. `retake-tests`
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
@@ -10381,17 +10402,7 @@ rs_order_commits() {
   if [ -n "$started" ] && git -C "$codepath" merge-base --is-ancestor "$started" HEAD >/dev/null 2>&1; then
     span="$started..HEAD"
   fi
-  # `start --rebased-onto` keeps each rewritten start under startedFromBefore, so a ledger holding
-  # one is a branch whose ids may have moved since the records were written. The table lists the
-  # span's commits oldest first, each with its stable patch id and its author, date and subject,
-  # for rs_on_branch. A commit with no diff has no patch id and is listed with an empty one.
-  if [ "$(printf '%s' "$ledger" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
-    table="$(git -C "$codepath" log --reverse --no-color -p "$span" 2>/dev/null | git patch-id --stable 2>/dev/null \
-      | jq -Rsc --arg who "$(git -C "$codepath" log --reverse --format='%H %at %ae %s' "$span" 2>/dev/null)" '
-        ([ split("\n")[] | select(length > 0) | split(" ") | {key: .[1], value: .[0]} ] | from_entries) as $pid
-        | [ $who | split("\n")[] | select(length > 0)
-            | {commit: .[0:40], pid: ($pid[.[0:40]] // ""), who: .[41:]} ]')"
-  fi
+  table="$(rs_rebase_table "$codepath" "$span" "$ledger")"
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     c="$(rs_on_branch "$codepath" "$c" "$table")"
@@ -10460,9 +10471,10 @@ RS_RANGE
   done <<RS_FILES
 $files
 RS_FILES
-  # An earlier restart left this order's commits on the branch when the person answered carry.
-  # Its own `restarted.json` names them, with the kind, so they are read from there rather than
-  # from the records it moved, which is the one place the freeze commit of that build survives.
+  # A restart from before restart reverted (gap row 252) left this order's commits on the branch
+  # when the person answered carry. Its own `restarted.json` names them under `commits`, with the
+  # kind, which is the one place the freeze commit of that build survives. A restart now writes
+  # `reverted` instead, so this reads only those older records.
   while IFS= read -r file; do
     [ -f "$file" ] || continue
     while IFS= read -r c; do
@@ -10489,7 +10501,7 @@ RS_ARCHIVES
   # A commit reverted on this branch, by `restart` or by a person, is code the tree no longer holds
   # (gap row 252).
   if [ "$(printf '%s' "$out" | jq 'length')" -gt 0 ]; then
-    out="$(jq -cn --argjson have "$out" --arg gone "$(rs_reverted "$codepath" "$span")" \
+    out="$(jq -cn --argjson have "$out" --arg gone "$(rs_reverted "$codepath" "$span" "$table")" \
       '($gone | split("\n")) as $g | [ $have[] | select(.commit as $c | $g | index($c) | not) ]')"
   fi
   # The blocks above read the records wherever they sit, and a restart moves them, so one order's
@@ -10650,7 +10662,7 @@ do_restart() {
   # take other work with it, so the restart stops before it changes anything and names the files.
   # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
   # history, and AIDA's own command hook refuses the hard reset that would drop it.
-  local revert_json='[]' mixed="" one_id owned rec freezes from gone c paths p g own_n outside
+  local revert_json='[]' mixed="" one_id owned rec freezes from gone c paths p g own_n outside merge
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     owned="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0].ownedFiles // [] | .[]')"
     rec="$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .kind + " " + .commit')"
@@ -10662,10 +10674,18 @@ do_restart() {
     [ -n "$from" ] || from="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // empty')"
     git -C "$RV_CODEPATH" merge-base --is-ancestor "$from" HEAD >/dev/null 2>&1 \
       || die 3 "restart: $one_id has no freeze commit and no startedFrom on this branch, so the commits made for it cannot be told apart."
-    gone="$(rs_reverted "$RV_CODEPATH" "$from..HEAD")"
-    for c in $(git -C "$RV_CODEPATH" rev-list --reverse --no-merges "$from..HEAD" 2>/dev/null); do
+    gone="$(rs_reverted "$RV_CODEPATH" "$from..HEAD" "$(rs_rebase_table "$RV_CODEPATH" "$from..HEAD" "$FN_LEDGER_DOC")")"
+    for c in $(git -C "$RV_CODEPATH" rev-list --reverse --first-parent "$from..HEAD" 2>/dev/null); do
       printf '%s\n%s\n' "$gone" "$freezes" | grep -Fqx "$c" && continue
-      paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
+      # A merge is read by what it brought to the first parent. A revert of a merge needs a
+      # person to choose the parent, so a merge that touches an owned file stops the restart.
+      merge=""
+      if git -C "$RV_CODEPATH" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1; then
+        merge=" merge"
+        paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c^1" "$c" 2>/dev/null)"
+      else
+        paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
+      fi
       own_n=0; outside=""
       while IFS= read -r p; do
         [ -n "$p" ] || continue
@@ -10680,11 +10700,11 @@ RS_OWNED
 $paths
 RS_PATHS
       [ "$own_n" -gt 0 ] || printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c" || continue
-      if [ "$own_n" -gt 0 ] && [ -z "$outside" ]; then
+      if [ "$own_n" -gt 0 ] && [ -z "$outside" ] && [ -z "$merge" ]; then
         revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
           'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
       else
-        mixed="$mixed; $(git -C "$RV_CODEPATH" rev-parse --short "$c") ($one_id) also changes$outside"
+        mixed="$mixed; $(git -C "$RV_CODEPATH" rev-parse --short "$c") ($one_id)$(if [ -n "$merge" ]; then printf ' is a merge that changes its files'; fi)$(if [ -n "$outside" ]; then printf ' also changes%s' "$outside"; fi)"
       fi
     done
   done
@@ -10747,7 +10767,7 @@ RS_PATHS
   # interface record. find, not a glob: zsh stops on a glob with no match. A folder whose name
   # carries the id is the order's too, such as the test author's <id>-red-runs/, so a red run of a
   # test that no longer exists leaves with its order (gap row 229).
-  local one_id moved
+  local moved
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     while IFS= read -r moved; do
       [ -n "$moved" ] || continue

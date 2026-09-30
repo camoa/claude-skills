@@ -163,7 +163,8 @@ When each such commit changes only the order's owned files, the script reverts e
 the person which commits were reverted. The history keeps them, so no hard reset is needed.
 
 When a commit also changes a file the order does not own, the restart stops with exit 113. It
-names the commit, the order and the other files. Nothing is reverted, moved or written. Put it
+names the commit, the order and the other files. A merge that changes the order's files stops it
+the same way, because a revert of a merge needs a person to choose its parent. Nothing is reverted, moved or written. Put it
 to the person, opening with: "This unit's code sits in a commit that also changes other files.
 A revert would undo that other work too, so only you can separate them." When they say it is
 done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.

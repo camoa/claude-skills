@@ -69,8 +69,9 @@ segment is no longer halted and resumes at its own step. An order carrying anoth
 halted for that one. The ledger records each clearing under `haltsCleared`, with the halt text as
 it stood. Tell the person which orders cleared, and which are still halted and why.
 
-After a retake, or a restart that did not revert them, a `partialBuild(<order>):` line can name
-an order sent back to its tests step. It names the order while its build or fix commits are still on the branch. It lists
+After a retake, or a restart from before restart reverted a halted order's commits, a
+`partialBuild(<order>):` line can name an order sent back to its tests step. It names the order
+while its build or fix commits are still on the branch. It lists
 those commits with their kinds, and they are exactly what a `commit:` reason may cite. It prints
 only while one is there. It stops once the order is built again: its ledger entry reads code-written
 or later. It is not a refusal: a retake keeps the build on purpose. Tell the person the tree

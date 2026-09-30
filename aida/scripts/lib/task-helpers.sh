@@ -655,10 +655,10 @@ task_stage() {
 # path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
-# git refuses a path it still registers; a branch gone too starts from HEAD again. The recorded
-# path is not trusted as an address: a path that is not beside this machine's code path is
-# computed again by the rule above, and the tree is made and recorded there. That is the repair
-# for a task carried to a second machine, which records the first machine's path. The base is
+# git refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path
+# gone from disk is not trusted as an address: it is computed again by the rule above, and the
+# tree is made and recorded there. That is the repair for a task carried to a second machine,
+# and for a folder named before the id was slugged. A recorded tree on disk is kept. The base is
 # HEAD of the directory this action was started from when that directory is inside the code
 # repository, so a follow-up made from its parent's tree stacks on the parent's work; otherwise
 # it is the code path's HEAD. Uncommitted changes in the code path are not in a tree cut from a
@@ -666,7 +666,7 @@ task_stage() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule parent base_branch
+  local found rule base_branch
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -687,13 +687,12 @@ task_worktree() {
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
     if [ -n "$found" ]; then printf '%s' "$found"; return 0; fi
-    # A recorded path is usable here when its folder is the code path's own folder, which is what
-    # the rule computes. Another machine's home fails that test, and so does a folder this machine
-    # does not have. Then the producer runs again: the path is computed, made, and recorded.
-    parent="$(cd "$(dirname -- "$wt")" 2>/dev/null && pwd -P)" || parent=""
-    if [ "$parent" != "$(dirname -- "$rule")" ]; then
-      printf '%s: task.json records the worktree %s, which is not beside the code path %s here. The tree is made at %s instead.\n' \
-        "$who" "$wt" "$code" "$rule" >&2
+    # A recorded path gone from disk is not kept. It may be another machine's home, or a folder
+    # named from an id before the slug (gap row 251). The producer runs again: the path is
+    # computed, made, and recorded.
+    if [ "$wt" != "$rule" ]; then
+      printf '%s: task.json records the worktree %s, which is not on disk here. The tree is made at %s instead.\n' \
+        "$who" "$wt" "$rule" >&2
       wt="$rule"
     fi
     printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
