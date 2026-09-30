@@ -208,7 +208,7 @@ deny_if_listed() {
       # A denied path under codePath is production source, and there is somewhere else to look. A
       # denied path outside it is not, so pointing at an interface record would be wrong advice.
       if is_under "$target_abs" "$CODE_CANON"; then
-        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
+        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it, or the brief's reuses entry for it, instead. It states what that unit exposes, not how it works."
       elif [ -n "$MAIN_CANON" ] && is_under "$target_abs" "$MAIN_CANON"; then
         reason="$ROLE_BARE may not read $target_abs: it is or holds $deny_abs, which this dispatch denies this role, in the main checkout $MAIN_CANON. This role works in the task's worktree $CODE_CANON: start each shell command with cd $CODE_CANON &&."
       else

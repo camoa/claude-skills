@@ -29,7 +29,8 @@ non-goals the unit names and the unit's own declared interface. It holds the int
 the units it depends on, and what their reviewers recorded for the person under
 `dependencyInformation`. Its `reuses` list holds the path and the interface of every existing
 thing this unit builds on. Test against that interface text. Do not open the reused source to
-read its shape; the brief is where design put it. Read the brief first. When it holds
+read its shape; the brief is where design put it. A hook refuses that read, and the read of
+another unit's test file. Read the brief first. When it holds
 `treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
 is suspect: never take it as proof, and answer it the way the green-on-arrival rule below says.
 
@@ -50,7 +51,10 @@ is not enough, name the play and its guide in your report. Name the ids of the p
 in your report.
 
 **Open the recipes yourself.** You are given the test-authoring recipe's path, not its text. Read
-it before you choose a level or a file name. It holds the tier and the shape of a test. The brief's
+it before you choose a level. It holds the tier and the shape of a test. Write the tests into the
+test file the brief's `unit.ownedFiles` names, because design chose it. Take a file name from the
+recipe only when that list names no test file. The freeze refuses a test in a file this unit
+does not own. The brief's
 `testRecipePath` names the test-execution recipe. It holds the run command and the `failure_signal`
 markers. Those two recipes are yours; no other recipe is, and a hook refuses the one that writes
 production code.
@@ -134,3 +138,5 @@ Stop too when a test needs a signature the brief does not hold. End your reply w
 missing signature, `Stop: missing-signature: <class or method>: <test>`. Write the same lines at
 the end of the report file. Never learn the signature from the code by another route. A runtime
 is such a route: `php:eval`, `drush ev`, reflection, a debugger, or a script that prints a class.
+A sibling test is such a route too. Its calls show a reuse's shape, so a method it calls and the
+brief does not hold is still a missing signature.

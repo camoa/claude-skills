@@ -538,8 +538,9 @@ test, and a model judges its done-when rows against its surfaces after the build
 is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
 whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
-A test is what a test author writes as a file, red before the code and green after it. The
-review stage's surface row is not a test, so `add-test` refuses a description naming one of a
+A test is what a test author writes as a file, red before the code and green after it. Add that
+file to the order with `add-owned-file`. The test author writes into it, and the freeze refuses a
+test in a file the order does not own. The review stage's surface row is not a test, so `add-test` refuses a description naming one of a
 `tests` order's own surfaces. A machine criterion only a surface can prove is proved by a spec
 described by what it observes, or reads `person` after scope reopens.
 

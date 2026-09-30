@@ -302,6 +302,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  26  `tests-freeze` was given a --test whose path does not exist on disk.
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
+#      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.
 #  28  `tests-freeze` was given a --test whose test name does not carry, at its own end, the
 #      criterion id (or ids, chained from the right) it claims, or the unit's own id when the test
 #      proves the unit's doneWhen instead of a criterion.
@@ -3900,9 +3901,10 @@ do_tests_brief() {
   local criteria_out
   criteria_out="$(printf '%s' "$CRITERIA_JSON" | jq -c \
     '[ .[] | {id, text, verification, verifiedBy} ]')"
+  # ownedFiles names the test file design chose, so the author writes there (gap row 249).
   unit_out="$(printf '%s' "$UNIT_JSON" | jq -c \
     '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), criteriaOwned: (.criteriaOwned // []),
-      interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
+      ownedFiles: (.ownedFiles // []), interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
 
   # `reuses` is the existing code design's dispose recorded on this order, with the interface the
   # design stage read from it. It sits beside the dependency interfaces because it answers the same
@@ -4619,6 +4621,44 @@ $unique_rel_paths
 TF_EOF
   [ -z "$unmatched_paths" ] \
     || die 27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
+
+  # --- 27 also: every --test path must be a file this order owns. Design names the order's test
+  # file, and a test written anywhere else sits in a file no order owns, which nothing saw before
+  # review (gap row 249).
+  local unowned_paths="" owned_list owned_tests="" o
+  owned_list="$(printf '%s' "$UNIT_JSON" | jq -r '(.ownedFiles // [])[]')"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    matched=false
+    while IFS= read -r o; do
+      [ -n "$o" ] || continue
+      tf_path_matches_catalog_glob "$p" "$o" && { matched=true; break; }
+    done <<TF_EOF
+$owned_list
+TF_EOF
+    [ "$matched" = "true" ] || unowned_paths="$unowned_paths$p, "
+  done <<TF_EOF
+$unique_rel_paths
+TF_EOF
+  if [ -n "$unowned_paths" ]; then
+    while IFS= read -r o; do
+      [ -n "$o" ] || continue
+      gi=0
+      while [ "$gi" -lt "$glob_count" ]; do
+        g="$(printf '%s' "$test_globs_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+        tf_path_matches_catalog_glob "$o" "$g" && { owned_tests="$owned_tests$o, "; break; }
+        gi=$((gi + 1))
+      done
+    done <<TF_EOF
+$owned_list
+TF_EOF
+    if [ -n "$owned_tests" ]; then
+      owned_tests="The test file design named for it is ${owned_tests%, }. Move the tests there and freeze again."
+    else
+      owned_tests="It owns no file a test glob matches, only $(printf '%s' "$owned_list" | paste -sd, - | sed 's/,/, /g'). If the tests belong where they are, design adds that file with add-owned-file and closes again."
+    fi
+    die 27 "tests-freeze: these --test paths are files $unit_id does not own: ${unowned_paths%, }. $owned_tests"
+  fi
 
   # --- 89: a --support path is a base class or a fixture the author wrote beside the tests -------
   # It is resolved, checked and hashed the way a --test path is, and refused when it is missing
@@ -10861,7 +10901,7 @@ do_dispatch_open() {
     # is a test-tree file too. A glob with no literal directory, Go's `**/*_test.go`, adds none.
     # A path an order reuses is production source that no order owns, and the brief carries its
     # interface so the author never needs the file (live-run row 69). It joins the owned files here
-    # and takes the same test-glob filter, so the hook catches an accidental read of it.
+    # and is denied below even where a test glob matches it, so the hook catches an accidental read.
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
       '[.workOrders[]?.ownedFiles[]?] + [.workOrders[]?.reuses[]?.path] | unique')"
     if [ -n "$test_glob_raw" ]; then
@@ -10891,6 +10931,20 @@ TG_OWNED
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \
       || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file outside the test globs, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+    # The test-glob filter keeps only this order's own test files readable. A reused file under the
+    # test tree, such as a shared kernel base class, shows its shape as surely as source does, and
+    # another order's test shows the same shape by its calls (gap rows 248, 249). So every reuse
+    # path and every other order's owned file is denied whatever the globs say. An entry that is
+    # or holds one of this order's own test files stays readable, or the hook would deny that too.
+    local own_tests_json
+    own_tests_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" --argjson kept "$owned_json" \
+      '[ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] - $kept')"
+    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" --argjson kept "$owned_json" \
+      --argjson own "$own_tests_json" '
+      ([ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] + [ .workOrders[]?.reuses[]?.path ])
+      | map(select(. as $d | ($d | rtrimstr("/")) as $r
+          | all($own[]; . != $d and . != $r and (startswith($r + "/") | not))))
+      | . + $kept | unique')"
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi

@@ -90,7 +90,8 @@ Run:
 It reads the frozen copy and never the live files. It writes exactly eight things to
 `implementation/brief-<order id>-tests.json`:
 
-- this order's own record, with the criteria it owns named in `criteriaOwned`;
+- this order's own record, with the criteria it owns named in `criteriaOwned` and its files in
+  `ownedFiles`. The author writes its tests into the test file named there;
 - the criteria it serves and owns, with their verification and who verifies each;
 - the boundaries it names;
 - the declared interface of every order it depends on;
@@ -157,12 +158,18 @@ One `--test-glob` per pattern, the same ones the freeze below takes. The script 
 name that matches no agent this plugin ships, and for this role it adds the production source to
 the denied reads itself, taken from the owned files every work order in the frozen snapshot
 declares. The script denies those paths in the main checkout too, and prints the worktree the
-role works in. An owned file that matches a test glob is a test, and it stays readable, so the author
-can read back what it writes. So is an owned file under a directory the glob names literally,
-`tests` in `**/tests/**/*Test.php`, because the author also writes base classes and fixtures
-there. The globs decide, not the write path, because a framework may keep its tests beside the
-source; a glob that names no directory adds nothing. Never type the denied paths here. It prints what it denied; read
-that list, because it is the whole of what separates the tests from the code they judge.
+role works in. An owned file of this order that matches a test glob is a test, and it stays
+readable, so the author can read back what it writes. So is an owned file under a directory the
+glob names literally, `tests` in `**/tests/**/*Test.php`, because the author also writes base
+classes and fixtures there. The globs decide, not the write path, because a framework may keep
+its tests beside the source; a glob that names no directory adds nothing. Two kinds stay denied
+whatever the globs say. Every path an order reuses is one, because a shared test base class shows
+its shape as surely as source does. Every other order's owned file is the other, because a
+sibling test shows a reuse's shape by its calls (gap rows 248, 249). The test runner still loads
+a denied base class. The hook judges what the role reads, through Read, Grep and the shell's
+reading verbs. A run command is none of those, so the files the runner opens are not judged.
+Never type the denied paths here. It prints what it denied; read that list, because it is the
+whole of what separates the tests from the code they judge.
 
 Close the dispatch record as soon as the role returns, per SKILL.md. A record left open makes the
 next dispatch refuse, and it names the role and order still holding it.
@@ -184,7 +191,7 @@ a shell command that names a runtime form in `scripts/introspection-forms.txt`, 
 does not hold. Its reply ends with `Stop: missing-signature: <class or method>: <test>`, and its
 report holds the same line. No script reads either, so the route below is yours to take. The brief
 carries every reuse and dependency design declared, so the order did not declare what its tests
-call. Do not give the signature in the dispatch. Put it to the person: design adds the reuse, and
+call. A sibling test that calls the method is not a source for its signature either. Do not give the signature in the dispatch. Put it to the person: design adds the reuse, and
 the build takes the order fresh, as `references/finish.md` says for design drift. A run nobody attends cannot change the design, so it reports the stop and
 the author's words.
 
@@ -288,7 +295,7 @@ gets one:
 ```
 One `--test-glob` per pattern, the same values the freeze below takes. The script derives the
 denied reads itself, the same way it does for the test author. It denies every order's owned
-files, less the ones a test glob matches. Design lists an order's tests under its owned files. The checker
+files and every reused path, less this order's own files that a test glob matches. Design lists an order's tests under its owned files. The checker
 reads those tests, so the globs decide which owned files stay readable. Without them every owned
 test file is denied, and the script refuses the call (live-run row 106). So `row-checker` cannot
 open the production source behind a hook. Without this record open, the hook denies nothing. The
@@ -362,7 +369,8 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
-the order's done-when, and its name ends with the order id.
+the order's done-when, and its name ends with the order id. A `--test` path must be a file the
+order owns. The freeze refuses any other (exit 27) and names the test file design chose.
 
 `--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
 at `frameworks[].recipePath`, the same way the build step reads it. It must be the record's path:
