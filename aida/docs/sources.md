@@ -59,7 +59,9 @@ framework. A stage asks for a recipe at the moment it needs one, and never earli
 - **`e2e-setup`** and **`visual-regression`**, read by the surfaces skill when you accept a
   stage's offer to set a harness up.
 - **`worktree-environment`**, read by the task skill when a task's worktree is made, or at its
-  start, to give the worktree a running site.
+  start, to give the worktree a running site. The files it has the task commit are for that site
+  alone. Completion takes the site down and commits those files back to their content where the
+  branch started, so trunk never receives them.
 
 The stage that needs the body reads it from a path on disk. A role dispatched to write tests or
 code is given the path to its recipe and opens it itself. A body that runs past a hundred lines

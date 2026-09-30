@@ -31,7 +31,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # and nothing else; unattended it creates every follow up task still missing. `close` writes the
 # body and the record, then calls task-actions.sh complete, which is the one writer of
 # `state: complete`. That call stages everything under tasks/, so its commit carries the record and
-# the body, and this script commits nothing itself.
+# the body. Before the body, `close` takes out of the task branch the files `task environment up`
+# committed for the worktree's own site: the site goes down through task-actions.sh, then one
+# commit in the worktree puts each file back to its content at the fork point (gap row 262). That
+# commit is the one this script makes itself.
 #
 # The run mode is the task's own for this stage, through task_run_mode in task-helpers.sh: runMode
 # in task.json, absent meaning interactive, scoped by runModeStages when that names stages.
@@ -43,21 +46,26 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      child. Or a high severity follow up finding has no task and no --leave. Or the review did
 #      not pass and no --reason was given: unattended, that is the halt, naming the verdict read.
 #      Or, interactive, a criterion a model observed through a browser has no --observed-accepted
-#      answer, or was answered no with no --reason (live-run row 104).
+#      answer, or was answered no with no --reason (live-run row 104). Or a file `task environment
+#      up` recorded changed after it, holds an uncommitted change, or has no base to go back to.
+#      Or the restore commit is there and the record still names a site (gap row 262).
 #   3  the script could not do its job: a missing or unrecognized argument, jq not on PATH, the
 #      plugin root or a library that could not be resolved, a project folder that could not be
 #      resolved, a record that is present but unreadable, a record that does not match
 #      scripts/completed-schema.json, or a file that could not be written. A task name collision
-#      comes back from task-actions.sh at 3 too, and its own line is relayed as printed.
+#      comes back from task-actions.sh at 3 too, and its own line is relayed as printed. So does
+#      a tear-down task-actions.sh refused, and a restore commit git refused.
 #  70  --reason, --leave or --observed-accepted was passed on a run with nobody present. The number
 #      tests-freeze and review already give a person's answer arriving on an autonomous run.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Depends on, shipped by other builders of this same project and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh   sourced, for resolve_task_folder,
-#                                                       write_atomic, looks_like_flag and is_blank.
+#                                                       write_atomic, looks_like_flag, is_blank,
+#                                                       task_fork_point and task_env_restore_commit.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh        sourced, for resolve_project_folder,
-#                                                       json_file_state and md_basenames_in. Not
+#                                                       json_file_state, md_basenames_in and
+#                                                       recipe_commit_if_changed. Not
 #                                                       rv_load_codepath: it refuses when the code
 #                                                       folder is gone, and completion never opens
 #                                                       that folder.
@@ -65,7 +73,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                       against completed-schema.json before it
 #                                                       lands.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/completed-schema.json the shape of the record this script writes.
-#   ${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh   every task write: create, complete.
+#   ${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh   every task write: create, complete,
+#                                                       and environment down.
 #   ${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh  `audit`, the list the body carries.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk. The
@@ -450,7 +459,7 @@ CP_WANTED
 cp_render_body() {
   jq -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
     --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" \
-    --argjson observed "$CP_OBSERVED" '
+    --argjson observed "$CP_OBSERVED" --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
     # A criterion a model observed through a browser says so beside its verdict, with the
@@ -492,6 +501,9 @@ cp_render_body() {
         # and an absent key name no recipe and no site.
         + (if ($taskDoc.worktree // null) == null then [] else
             ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
+            # So a reviewer sees why the files the site needed are absent from the diff (gap row 262).
+            + (if $restore == "" then [] else
+                ["Commit " + $restore + " puts back the files `task environment up` changed for the site of this worktree, so trunk keeps its own: " + $restorePaths + "."] end)
             + (if ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
                else [(if ($taskDoc.environment.address // null) == null
@@ -555,6 +567,79 @@ CP_SCHEMA_RESULT2
   fi
   rm -f "$tmp"
   write_atomic "$RECORD_FILE" "$doc"
+}
+
+# The files `task environment up` committed serve the worktree's own site, and trunk must not
+# receive them. Merged, the `name:` line a DDEV recipe has a person delete renames the main
+# checkout's site, which then opens an empty database (gap row 262). So the site goes down
+# through task-actions.sh first, while the name is still the worktree's. Then one commit in the
+# worktree puts each path in worktree.recipeChanges back to its content at the fork point, or
+# removes it where the fork point has none. A path already back needs nothing. A path whose
+# content is no longer the one `up` recorded was changed by an order, and is never put back
+# silently. A restore commit that is already the latest change to those paths is kept as it is,
+# whoever made it. Sets CP_RESTORE_COMMIT and CP_RESTORE_PATHS, or leaves both empty. $1 the action.
+CP_RESTORE_COMMIT=""; CP_RESTORE_PATHS=""
+cp_restore_env_files() {
+  local who="$1" wt rows fork tab p blob head_blob said todo="" changed="" dirty="" message commit_text
+  tab="$(printf '\t')"
+  wt="$(printf '%s' "$CP_TASK_DOC" | jq -r '.worktree.path // empty')"
+  rows="$(printf '%s' "$CP_TASK_DOC" | jq -r '(.worktree.recipeChanges // [])[] | .path + "\t" + .blob')"
+  [ -n "$wt" ] && [ -n "$rows" ] || return 0
+  if CP_RESTORE_COMMIT="$(task_env_restore_commit "$TASK_PATH" "$wt")"; then
+    [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] \
+      || die 1 "$who: commit $CP_RESTORE_COMMIT put back the files \`task environment up\` recorded while the site of $CP_TASK_ID was up. A tear-down now can reach the main checkout's site through the name that commit put back. Nothing was written. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then make that commit again, and run close again."
+    CP_RESTORE_PATHS="$(git -C "$wt" diff-tree --no-commit-id --name-only -r "$CP_RESTORE_COMMIT" | paste -sd, - | sed 's/,/, /g')"
+    return 0
+  fi
+  message="In $wt, run task environment $CP_TASK_ID down if the site is up. Then put each file \`up\` recorded back to its content on the branch this task merges into, keeping only what an order needs, and commit them in one commit with the subject \"$TASK_ENV_RESTORE_SUBJECT\". Then run close again. The recorded files are: $(printf '%s' "$CP_TASK_DOC" | jq -r '[ .worktree.recipeChanges[].path ] | join(", ")')."
+  fork="$(task_fork_point "$TASK_PATH" "$wt")"
+  [ -n "$fork" ] || die 1 "$who: task.json records no base for the worktree of $CP_TASK_ID, so completion cannot tell what to put back the files \`task environment up\` committed to. Nothing was written. $message"
+  p=""; blob=""; head_blob=""
+  while IFS="$tab" read -r p blob; do
+    [ -n "$p" ] || continue
+    head_blob="$(git -C "$wt" rev-parse -q --verify "HEAD:$p" 2>/dev/null)"
+    [ "$head_blob" != "$(git -C "$wt" rev-parse -q --verify "$fork:$p" 2>/dev/null)" ] || continue
+    if [ "$head_blob" != "$blob" ]; then
+      changed="$changed, $p"
+    elif [ -n "$(git -C "$wt" status --porcelain -- "$p")" ]; then
+      dirty="$dirty, $p"
+    else
+      todo="$todo$p
+"
+    fi
+  done <<CP_RECIPE_ROWS
+$rows
+CP_RECIPE_ROWS
+  [ -z "$changed" ] \
+    || die 1 "$who: an order changed ${changed#, } after \`task environment up\` recorded it, so completion does not put it back on its own. Nothing was written. $message"
+  [ -z "$dirty" ] \
+    || die 1 "$who: ${dirty#, } holds an uncommitted change in $wt, and putting it back would lose that change. Nothing was written. Commit or remove the change, then run close again."
+  [ -n "$todo" ] || return 0
+
+  # Down before the commit: after it, the worktree's site would resolve by the restored name.
+  if [ -n "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ]; then
+    said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
+        environment --project "$PROJECT_DIR" "$CP_TASK_ID" down 2>&1)" \
+      || { printf '%s\n' "$said" >&2; die 3 "$who: task environment down refused $CP_TASK_ID, so the site is still up and nothing was put back. Its own line is above."; }
+    CP_TASK_DOC="$(jq -c '.' "$TASK_PATH/task.json" 2>/dev/null)"
+    [ -n "$CP_TASK_DOC" ] || die 3 "$who: $TASK_PATH/task.json could not be read after the site went down."
+  fi
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if git -C "$wt" cat-file -e "$fork:$p" 2>/dev/null; then
+      git -C "$wt" checkout -q "$fork" -- "$p" || die 3 "$who: git could not put $p back to its content at $fork in $wt."
+    else
+      rm -f -- "$wt/$p" || die 3 "$who: could not remove $wt/$p."
+    fi
+  done <<CP_RESTORE_TODO
+$todo
+CP_RESTORE_TODO
+  commit_text="$TASK_ENV_RESTORE_SUBJECT
+
+\`task environment up\` wrote these files for the site of the worktree of $CP_TASK_ID. Merged, they would change the site of the main checkout."
+  said="$(recipe_commit_if_changed "$wt" "$who" "nothing differed" "$commit_text" "$(printf '%s' "$todo")" 2>&1)" || die 3 "$who: git refused the restore commit in $wt: $said. The files are put back in the tree. Commit them with the subject \"$TASK_ENV_RESTORE_SUBJECT\", then run close again."
+  CP_RESTORE_COMMIT="$(git -C "$wt" rev-parse --short HEAD)"
+  CP_RESTORE_PATHS="$(printf '%s' "$todo" | sort | paste -sd, - | sed 's/,/, /g')"
 }
 
 do_close() {
@@ -683,6 +768,8 @@ CP_LEAVES2
   [ -z "$blocking" ] \
     || die 1 "close: the high severity follow up finding $blocking has no task. Create it with follow-ups --create, or say why not with --leave $(printf '%s' "$blocking" | cut -d, -f1)=<reason>. Leaving a queued fault unnamed ships it."
   CP_FOLLOW_UPS="$rows"
+  # Last of the refusals, because it takes the site down and commits.
+  cp_restore_env_files "close"
 
   local closed_by record
   case "$CP_RUN_MODE" in
@@ -729,7 +816,9 @@ CP_LEAVES2
   CP_STATE="$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)"
 
   cp_print_summary "close" "$(jq -nc --arg closedBy "$closed_by" --arg reason "$reason" --arg body "$BODY_FILE" --arg record "$RECORD_FILE" \
-    '{closedBy: $closedBy, reason: (if $reason == "" then "none" else $reason end), prBody: $body, record: $record}')"
+    --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" \
+    '{closedBy: $closedBy, reason: (if $reason == "" then "none" else $reason end),
+      restoreCommit: (if $restore == "" then "none" else $restore + " " + $restorePaths end), prBody: $body, record: $record}')"
 
   local parent siblings_open
   parent="$(printf '%s' "$CP_TASK_DOC" | jq -r '.parent // ""')"

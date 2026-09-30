@@ -1196,7 +1196,9 @@ do_save() {
 # another tree. After the last block, `up` runs the `## Install` blocks of each enabled surfaces
 # kind's setup recipe, given as `--setup-recipe <kind>=<path>`, because a worktree has no
 # node_modules. `up` records `environment: {address, recipe, upAt, <keys>}` in task.json; `down`
-# reads the recipe path and the keys from that record, so it takes no recipe flag.
+# reads the recipe path and the keys from that record, so it takes no recipe flag. Once the
+# commit task_env_restore_commit finds is the latest change to the recorded files, `up` and `down`
+# refuse and `show` runs no status line (gap row 262).
 # ------------------------------------------------------------------------------------------------
 
 # The line `up` writes into records/environment-up.txt above the address command, and `down` reads
@@ -1402,7 +1404,7 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down|not-applicable) ;; *) die3 "environment: the action is show, up, down or not-applicable, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile addr_mark
+  local task_dir task_json wt outfile addr_mark restored
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
@@ -1460,6 +1462,10 @@ do_environment() {
     # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
     # caller stood. The refusal it already printed is above this one.
     [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
+    # A tear-down after the restore commit resolves the site by the name that commit put back,
+    # which can be the main checkout's (gap row 262).
+    restored="$(task_env_restore_commit "$task_dir" "$wt")" \
+      && die3 "environment: commit $restored put back the files \`task environment up\` recorded while the site of $id was up. A tear-down now can reach the main checkout's site through the name that commit put back. Nothing was torn down. In $wt, run git revert $restored, run this again, then make that commit again"
     mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"; : >"$outfile"
     cd "$wt" || die3 "environment: could not enter $wt"
     run_recipe_lines down "$RECIPE" "$(sh_blocks_under "$RECIPE" "Tear down")" "$outfile" "environment: down" fill_line_or_refuse
@@ -1529,7 +1535,10 @@ TA_TOKEN_LIST
     environment_cleanup quiet || exit 3
     # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
     # The EXIT trap still stands, so environment_cleanup removes its files on every exit.
-    if [ -n "$wt" ] && [ -d "$wt" ]; then
+    # After the restore commit a status line resolves the site by the name that commit put back.
+    if [ -n "$wt" ] && [ -d "$wt" ] && restored="$(task_env_restore_commit "$task_dir" "$wt")"; then
+      printf 'status: not run, commit %s put back the files up recorded, so a status line can reach the main checkout'"'"'s site\n' "$restored"
+    elif [ -n "$wt" ] && [ -d "$wt" ]; then
       ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"
       files_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
       ENV_TMP="$files_dir"
@@ -1548,6 +1557,10 @@ TA_TOKEN_LIST
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
+  # After the restore commit, a site brought up here takes the name that commit put back, which
+  # can be the main checkout's (gap row 262).
+  restored="$(task_env_restore_commit "$task_dir" "$wt")" \
+    && die3 "environment: commit $restored put back the files \`task environment up\` recorded, so a site brought up here can take the main checkout's name. Nothing was brought up. To bring the site up again, run git revert $restored in $wt first"
   # The folder of blocks stays until environment_cleanup removes it, because it keeps the earlier
   # versions a failed commit below puts back.
   environment_check up "$wt" "$outfile"
@@ -1564,8 +1577,7 @@ TA_TOKEN_LIST
   # the change the recipe demands, such as a line a person had to delete. A named file the branch
   # never changed is only mentioned in the prose. With no base to fork from, none is recorded.
   local recipe_changes changes_doc fork kind n blob
-  fork="$(jq -r '.worktree.base // empty' "$task_json")"
-  [ -z "$fork" ] || fork="$(git -C "$wt" merge-base "${fork#commit:}" HEAD 2>/dev/null)"
+  fork="$(task_fork_point "$task_dir" "$wt")"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
       recipe_prose_under "$RECIPE" Preconditions | grep -o '`[^` ]*`' | tr -d '`' | sed "s/^/named$tab/"; } \
     | while IFS="$tab" read -r kind n; do

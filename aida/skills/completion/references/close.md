@@ -94,8 +94,21 @@ Run:
 ```
 It refuses at exit 1 in four cases. A child is open. A high severity follow up has no task and
 no `--leave`. The review did not pass and no `--reason` was given. Interactive, an observed
-criterion has no answer, or was answered no with no `--reason`. Otherwise it writes the
-pull request body to `<task_folder>/completion/pr-body.md`. It writes the record to
+criterion has no answer, or was answered no with no `--reason`.
+
+Then it takes out of the task branch the files `task environment up` changed for the worktree's
+own site. Merged, they would change the main checkout's site. It reads them from
+`worktree.recipeChanges`. First it takes the site down through `task environment down`, while
+the site still has the worktree's name. Then it makes one commit in the worktree. That commit
+puts each file back to its content where the branch started. A file already back needs nothing.
+A task with no such files gets no tear-down and no commit. It refuses at exit 1 when an order
+changed one of those files after `up`, because it never puts that file back silently. Relay its
+line: it names each file and the commit subject a person uses to put them back by hand. It also
+refuses at exit 1 when that commit exists and the site is still up. It keeps a commit with that
+subject that already exists.
+
+Otherwise it writes the pull request body to `<task_folder>/completion/pr-body.md`. The body
+names the restore commit, so a reviewer sees why those files are not in the diff. It writes the record to
 `<task_folder>/completion/completed.json`. Then it calls `task complete` last. That call commits
 the record and the body with the state.
 
@@ -105,7 +118,8 @@ run `close` again with the same arguments; that is the repair.
 ## Report
 
 Give the person the body path and the record path from the summary. Say the verdict the record
-holds and who closed it. Name each follow up task created and each finding left, with its reason.
+holds and who closed it. Name the restore commit and its files from the `restoreCommit` line,
+or say there was none. Name each follow up task created and each finding left, with its reason.
 Name each play captured by its id, or say "no play captured". Name each observed criterion
 with the person's answer, or say nobody was asked.
 Say the person opens the pull request from the body file by hand, changing nothing in it first.

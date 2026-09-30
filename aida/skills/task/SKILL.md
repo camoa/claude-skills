@@ -194,6 +194,14 @@ Run it before the worktree is removed, or the framework keeps
 an orphaned registry entry; the completion body names it when a site is up or coming up. Review
 and `baseline` read `environment.address` before asking for a base URL.
 
+The files in `worktree.recipeChanges` are for the worktree's own site, and trunk must not
+receive them. Completion takes the site down, then commits each file back to its content where
+the branch started, with the subject "Restore the files the worktree environment recipe
+changed". A DDEV worktree then holds the main checkout's `name:` line again. So a site command
+there can reach the main checkout's site. When that commit is the latest change to those files,
+`up` and `down` refuse at 3 and name it, and `show` prints `status: not run`. To work on the site
+again, revert that commit first.
+
 ## `prune [<task-id>]...`
 
 The worktrees of complete tasks. A worktree kept after completion costs disk and a DDEV project

@@ -34,6 +34,12 @@
 #                                         commit still holds that content
 #   task_env_rerun_step <folder>          the next step when `environment up` ran before it
 #                                         recorded the recipe's files
+#   task_fork_point <folder> <tree>       prints the commit the task's branch forked from its
+#                                         base, or nothing when the record holds no base
+#   task_env_restore_commit <folder> <tree>
+#                                         prints the commit that put the recorded files back
+#                                         when it is their latest change, else returns 1
+#   TASK_ENV_RESTORE_SUBJECT              the fixed subject of that commit
 #   automated_tests <folder>              prints yes, no or not-asked: the contract's answer to
 #                                         whether the task has automated tests
 #   mark_task_in_progress <folder> <why> <stage>
@@ -440,6 +446,39 @@ task_env_rerun_step() {
   jq -r 'if (.environment.recipe // "") != "" and .worktree.recipeChanges == null
     then " The site of this task came up before `task environment up` recorded the files its recipe changed, so none of them was set aside. Run `task environment \(.id) up` again to record them, then run this step again."
     else empty end' "$1/task.json" 2>/dev/null
+}
+
+# The commit the branch in the tree $2 forked from worktree.base of the task folder $1. Prints
+# nothing when the record holds no base.
+task_fork_point() {
+  local base
+  base="$(jq -r '.worktree.base // empty' "$1/task.json" 2>/dev/null)"
+  [ -z "$base" ] || git -C "$2" merge-base "${base#commit:}" HEAD 2>/dev/null
+}
+
+# The subject of the commit that puts every path in worktree.recipeChanges back to its content at
+# the fork point (gap row 262). Completion makes it, and a person may make it by hand. The subject
+# is fixed, so a reader finds that commit by it.
+TASK_ENV_RESTORE_SUBJECT="Restore the files the worktree environment recipe changed"
+
+# Prints the short id of the commit that made the latest change to any path in
+# worktree.recipeChanges of the task folder $1, in the tree $2, when its subject is
+# TASK_ENV_RESTORE_SUBJECT. Returns 1 otherwise. After that commit the `.ddev/config.yaml` of a
+# DDEV worktree holds the main checkout's `name:` again, so a site command in that tree would
+# resolve the main checkout's project.
+task_env_restore_commit() {
+  local folder="$1" tree="$2" one latest tab
+  tab="$(printf '\t')"
+  set --
+  while IFS= read -r one; do
+    [ -z "$one" ] || set -- "$@" "$one"
+  done <<TH_PATHS
+$(jq -r '(.worktree.recipeChanges // [])[].path' "$folder/task.json" 2>/dev/null)
+TH_PATHS
+  [ "$#" -gt 0 ] || return 1
+  latest="$(git -C "$tree" log -1 --format="%h$tab%s" -- "$@" 2>/dev/null)"
+  [ "${latest#*"$tab"}" = "$TASK_ENV_RESTORE_SUBJECT" ] || return 1
+  printf '%s' "${latest%%"$tab"*}"
 }
 
 # The contract's answer to whether this task has automated tests (alignment-schema.json,

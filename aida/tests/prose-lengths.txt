@@ -13,8 +13,8 @@ agents/playbook-loader.md 85
 agents/reviewer.md 134
 agents/row-checker.md 94
 agents/test-author.md 147
-skills/completion/SKILL.md 104
-skills/completion/references/close.md 116
+skills/completion/SKILL.md 106
+skills/completion/references/close.md 130
 skills/design/SKILL.md 889
 skills/implement/SKILL.md 255
 skills/implement/references/build.md 483
@@ -35,6 +35,6 @@ skills/review/references/surfaces.md 85
 skills/scope/SKILL.md 462
 skills/surfaces/SKILL.md 130
 skills/surfaces/references/discover.md 57
-skills/task/SKILL.md 416
+skills/task/SKILL.md 424
 skills/tool/SKILL.md 209
 skills/tool/references/reading-a-recipe.md 53
