@@ -120,19 +120,23 @@ cites. It holds the ruling reason too, read from the review record the retake mo
 the rows and the test globs the order already froze, and those rows are keyed by criterion. So
 the criterion the finding names says which rows to correct.
 And it says what the author must do: correct the tests the finding names,
-and leave every other frozen row alone. A record a person removed is named under `absent`, and
-the brief carries what is left. The summary prints a `retake:` line.
+and leave every other frozen row alone. Its `redAgain` list names each frozen test with a red run
+in a file that holds a test of the finding's criterion, the same way `rowsRejected` does below. A
+record a person removed is named under `absent`, and the brief carries what is left. The summary
+prints a `retake:` line.
 
 `rowsRejected`, only while a row a person rejected at the checkpoint below stands. It holds each
 row's key, the person's words verbatim, and the checker's note. Its `redAgain` list names each
-test with a red run in a file that holds a rejected row's test. The repair edits that file, so each of those
-tests needs a new red run. The summary prints a `rowsRejected:` line.
+test with a red run in a file that holds a rejected row's test. The repair edits that file, so
+each of those tests needs a new red run. The `whatToDo` asks for those runs only when the list is
+not empty. The summary prints a `rowsRejected:` line.
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
 round began. A brief written again for a retake or a rejected row keeps the earlier time, because
 a test file that the repair does not edit keeps its red runs. A test in an edited file does not,
-because the freeze compares each red with its file. It keeps the time only while the order and its
-criteria are unchanged. A design change, or a restart that moves the brief aside, starts a new round.
+because the freeze compares each red with its file. It keeps the time only while the order and
+its criteria are unchanged. A design change, or a restart that moves the brief aside, starts a
+new round.
 
 It prints the brief's path and counts, never the brief.
 

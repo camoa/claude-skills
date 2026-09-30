@@ -460,7 +460,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      itself rejected halts the order first, because a refusal nobody is there to read leaves the
 #      order in flight with no reason on it. A row a person rejected never halts anything: the
 #      person is already there. It lands on the order's ledger entry as `rowsRejected`, which the
-#      next `tests-brief` carries to the test author.
+#      next `tests-brief` carries to the test author. A rejection that lands on no ledger entry
+#      ends with a `redAgain: [<test name>, ...]` line instead, as JSON (gap row 258).
 #  66  `finish` found implementation is not finished for this task: an order that is not closed, an
 #      order carrying a halt whether or not it closed, or a machine-verified criterion whose row
 #      state is not confirmed. The message names every one of them.
@@ -3851,6 +3852,16 @@ im_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
 # im_iso_of <seconds>: that time as an ISO 8601 UTC string, or nothing.
 im_iso_of() { jq -rn --arg e "$1" '$e | tonumber | todate' 2>/dev/null; }
 
+# The tests a repair of one row makes stale (gap row 258). `tests-freeze` compares each red run
+# with its test file, so a repair makes stale every red in each file that holds one of the row's
+# tests. $tests holds one entry per test and row key, {name, path, key, red}. The key is a
+# criterion id, or the order id for a done-when test. `red` is false for a --locks-in test, which
+# has no red run to go stale. The rejected-row freeze and the retake brief both call it.
+RED_AGAIN_JQ='def red_again($tests; $key):
+  ([ $tests[] | select(.key == $key) | .path ]) as $files
+  | [ $tests[] | select(.red and (.path as $p | $files | index($p))) | .name ] | unique;
+'
+
 do_tests_brief() {
   [ "$#" -ge 2 ] || die 3 "tests-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "tests-brief: unrecognized extra argument: $3"
@@ -4022,12 +4033,19 @@ do_tests_brief() {
       retake_absent_json="$(printf '%s' "$retake_absent_json" | jq -c --arg p "$IMPL_DIR/tests-$unit_id.json" \
         '. + ["the frozen test record at \($p) is not there or could not be read, so the rows this order already has are not here"]')"
     fi
+    # A correction edits a test file just as a repair does, so the finding's criterion names the
+    # reds it makes stale the same way (gap row 258). No criterion, or no frozen rows, names none.
     retake_json="$(jq -cn --argjson entry "$retake_entry" --argjson finding "$retake_finding_json" \
       --argjson frozenTests "$retake_frozen_json" --argjson absent "$retake_absent_json" \
-      --arg reviewRecord "$retake_review_file" '
-      {at: $entry.at, finding: $finding, reviewRecord: $reviewRecord, frozenTests: $frozenTests,
-       absent: $absent,
-       whatToDo: "This order already has frozen tests. Correct the tests the finding names, and leave every other frozen row alone. Write no new test for a criterion the frozen rows already cover."}')"
+      --arg reviewRecord "$retake_review_file" --arg unit "$unit_id" "$RED_AGAIN_JQ"'
+      ([ ($frozenTests.rows // [])[] | (.criterion // $unit) as $k | (.tests // [])[]
+         | {name, path, key: $k, red: has("red")} ]) as $entries
+      | (if ($finding.linkedTo // null) == null then [] else red_again($entries; $finding.linkedTo) end) as $again
+      | {at: $entry.at, finding: $finding, reviewRecord: $reviewRecord, frozenTests: $frozenTests,
+         absent: $absent, redAgain: $again,
+         whatToDo: ("This order already has frozen tests. Correct the tests the finding names, and leave every other frozen row alone. Write no new test for a criterion the frozen rows already cover."
+                    + (if ($again | length) == 0 then ""
+                       else " Then run again each test that redAgain names, and write each new run. Each shares a test file with a corrected test, so its earlier red is older than that file." end))}')"
     [ -n "$retake_json" ] || die 3 "tests-brief: could not assemble the retake key for $unit_id."
   fi
 
@@ -4037,8 +4055,11 @@ do_tests_brief() {
   rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '
     ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
     | if length == 0 then null
-      else {rows: ., redAgain: ([ .[] | (.redAgain // [])[] ] | unique),
-            whatToDo: "A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone. Then run again each test that redAgain names, and write each new red run. Each shares a test file with a repaired test, so its earlier red is older than that file."} end')"
+      else ([ .[] | (.redAgain // [])[] ] | unique) as $again
+        | {rows: ., redAgain: $again,
+           whatToDo: ("A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone."
+                      + (if ($again | length) == 0 then ""
+                         else " Then run again each test that redAgain names, and write each new red run. Each shares a test file with a repaired test, so its earlier red is older than that file." end))} end')"
 
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
@@ -4907,6 +4928,15 @@ TF_EOF
   rejected_rows="$(printf '%s' "$rows_meta_json" | jq -r '
       [ .[] | select(.verdict == "rejected") | .criterion + " (" + .judgedBy + "): " + .note ] | join("; ")')"
   if [ -n "$rejected_rows" ]; then
+    # Each rejected row is repaired, which edits its test file and makes the other reds in it
+    # stale (gap row 258). These entries are what red_again reads to name them.
+    local tf_red_entries
+    tf_red_entries="$(jq -nc --argjson tests "$tests_json" --argjson reds "$reds_json" --arg unit "$unit_id" '
+        ($reds | map(.name)) as $red_names
+        | [ $tests[] | . as $t
+            | (if .provesDoneWhen == true then [$unit] else .criteria end)[]
+            | {name: $t.name, path: $t.absPath, key: ., red: (($red_names | index($t.name)) != null)} ]')"
+    [ -n "$tf_red_entries" ] || die 3 "tests-freeze: could not list the tests of $unit_id's rejected rows."
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
           | .criterion + ": " + .note ] | join("; ")')"
@@ -4935,19 +4965,12 @@ TF_EOF
         [ -n "$tf_check_doc" ] \
           || die 3 "tests-freeze: $tf_check_file exists but could not be read as JSON. The rejected rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
       fi
-      # `redAgain` names every test with a red in a file that holds one of the row's tests (gap row
-      # 258). The repair changes that file, so each of those reds is then older than it (exit 109).
-      # A --locks-in test has no red to go stale.
       tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" \
-          --argjson tests "$tests_json" --argjson reds "$reds_json" --arg unit "$unit_id" '
-          ($reds | map(.name)) as $red_names
-          | [ .[] | .criterion as $c
-            | ([ $tests[] | select((.criteria | index($c)) != null
-                                   or ($c == $unit and .provesDoneWhen == true)) | .absPath ]) as $files
+          --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
+          [ .[] | .criterion as $c
             | {criterion: $c, personWords: .note,
                checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null),
-               redAgain: ([ $tests[] | select(.absPath as $p | $files | index($p)) | .name
-                            | select(. as $n | $red_names | index($n)) ] | unique)} ]' 2>/dev/null)"
+               redAgain: red_again($entries; $c)} ]' 2>/dev/null)"
       [ -n "$tf_person_rejected" ] \
         || die 3 "tests-freeze: $tf_check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. Repair or remove it by hand before running this again."
       tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
@@ -4956,7 +4979,10 @@ TF_EOF
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
       die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Run tests-freeze again once the checker confirms the repaired test."
     fi
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks."
+    # No ledger record carries this rejection, so the refusal names the tests to run again.
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks.
+redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
+    [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
   fi
 
   # --- 32: a --red file must exist, hold something, and name a test that has a --test row ----------
