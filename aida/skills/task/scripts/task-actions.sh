@@ -1576,6 +1576,8 @@ TA_TOKEN_LIST
   # row 256). The precondition check has passed here, so a named file that differs already holds
   # the change the recipe demands, such as a line a person had to delete. A named file the branch
   # never changed is only mentioned in the prose. With no base to fork from, none is recorded.
+  # A file git tracks neither at HEAD nor at the fork point is never recorded, whatever its name:
+  # it cannot reach trunk, and completion's restore would delete it (gap row 262).
   local recipe_changes changes_doc fork kind n blob
   fork="$(task_fork_point "$task_dir" "$wt")"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
@@ -1583,6 +1585,8 @@ TA_TOKEN_LIST
     | while IFS="$tab" read -r kind n; do
         case "$n" in ''|/*|*..*) continue ;; esac
         [ -f "$wt/$n" ] || continue
+        git -C "$wt" rev-parse -q --verify "HEAD:$n" >/dev/null 2>&1 \
+          || { [ -n "$fork" ] && git -C "$wt" rev-parse -q --verify "$fork:$n" >/dev/null 2>&1; } || continue
         blob="$(git -C "$wt" hash-object -- "$n")"
         [ "$kind" = files ] || { [ -n "$fork" ] && [ "$(git -C "$wt" rev-parse -q --verify "$fork:$n" 2>/dev/null)" != "$blob" ]; } || continue
         printf '%s\t%s\n' "$n" "$blob"

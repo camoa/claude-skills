@@ -154,7 +154,8 @@ was cut from. An older task names the branch the code path is on now, and says s
 commit, or an interrupt before the commit, also removes the written files, their index entries
 and the output file, and says so. Then it commits the written and replaced files alone, so other changed or staged work is
 never taken in. Then it records in `worktree.recipeChanges` each `## Files` path, and each file the
-`## Preconditions` prose names that the branch changed, with the content each holds. No order owns
+`## Preconditions` prose names that the branch changed, with the content each holds. It skips a
+file git tracks neither at HEAD nor where the branch started. No order owns
 them, so the owned-files checks in the build and in review set them aside until an edit changes
 that content. A site brought up before this record existed has none. Run `up` again to write it:
 files already committed are not committed again. Then
