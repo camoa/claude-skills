@@ -6721,7 +6721,7 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
-  local own_count allowed_hit="" light=false
+  local own_count allowed_hit="" env_aside="" rerun_step="" light=false
   task_is_light "$TASK_PATH" && light=true
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
@@ -6735,8 +6735,6 @@ br_seven_checks() {
     [ -n "$p" ] || continue
     # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
     [ "$light" = "true" ] && [ "$p" = "$COMPROMISES_FILE" ] && continue
-    # A file `task environment up` recorded, still as it recorded it (gap row 256).
-    task_env_recipe_change "$TASK_PATH" "$p" "$BRC_CODEPATH" "$BRC_CURRENT" && continue
     # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
@@ -6746,6 +6744,10 @@ br_seven_checks() {
         continue
       fi
       p="$BRC_CODEPATH/$p"
+    # A file `task environment up` recorded in the code tree, still as it recorded it (gap row 256).
+    elif task_env_recipe_change "$TASK_PATH" "$p" "$BRC_CODEPATH" "$BRC_CURRENT"; then
+      env_aside="$env_aside$p, "
+      continue
     fi
     matched=false
     gi=0
@@ -6766,10 +6768,16 @@ BR_DIFF
     ofc_verdict="unmet"
     ofc_detail="these changed files match none of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')'s own ownedFiles: ${unmatched%, }"
     [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
+    rerun_step="$(task_env_rerun_step "$TASK_PATH")"
+    [ -z "$rerun_step" ] || ofc_detail="${ofc_detail%.}.$rerun_step"
+  elif [ -n "$env_aside" ]; then
+    ofc_verdict="met"
+    ofc_detail="every other file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   else
     ofc_verdict="met"
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   fi
+  [ -z "$env_aside" ] || ofc_detail="$ofc_detail Set aside as files \`task environment up\` recorded: ${env_aside%, }."
   [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     aside_noun="files"

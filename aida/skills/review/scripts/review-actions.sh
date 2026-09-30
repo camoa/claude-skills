@@ -784,7 +784,7 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched="" light=false
+  local owned owned_count one matched gi glob unmatched="" env_aside="" aside_line="" extra="" light=false
   owned="$(rw_owned_files)"
   task_is_light "$TASK_PATH" && light=true
   owned_count="$(printf '%s' "$owned" | jq 'length')"
@@ -806,7 +806,9 @@ rw_check_serves() {
     # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
     [ "$light" = "true" ] && [ "$one" = "$COMPROMISES_FILE" ] && continue
     # A file `task environment up` recorded, still as it recorded it (gap row 256).
-    task_env_recipe_change "$TASK_PATH" "$one" "$RV_CODEPATH" "${RW_RANGE##*..}" && continue
+    if task_env_recipe_change "$TASK_PATH" "$one" "$RV_CODEPATH" "${RW_RANGE##*..}"; then
+      env_aside="$env_aside$one, "; continue
+    fi
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
@@ -819,8 +821,13 @@ rw_check_serves() {
   done <<RW_CHANGED
 $(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
 RW_CHANGED
+  [ -z "$env_aside" ] || aside_line=" Set aside as files \`task environment up\` recorded: ${env_aside%, }."
   if [ -n "$unmatched" ]; then
-    rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }"
+    extra="$aside_line$(task_env_rerun_step "$TASK_PATH")"
+    [ -z "$extra" ] || extra=".$extra"
+    rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }$extra"
+  elif [ -n "$env_aside" ]; then
+    rw_check_row "$CHECK_SERVES" "met" "every other changed file in $RW_RANGE matches some order's own ownedFiles.$aside_line"
   else
     rw_check_row "$CHECK_SERVES" "met" "every one of the $RW_CHANGED_COUNT changed files in $RW_RANGE matches some order's own ownedFiles."
   fi

@@ -32,6 +32,8 @@
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
+#   task_env_rerun_step <folder>          the next step when `environment up` ran before it
+#                                         recorded the recipe's files
 #   automated_tests <folder>              prints yes, no or not-asked: the contract's answer to
 #                                         whether the task has automated tests
 #   mark_task_in_progress <folder> <why> <stage>
@@ -427,6 +429,15 @@ task_env_recipe_change() {
   local blob
   blob="$(jq -r --arg p "$2" '[ (.worktree.recipeChanges // [])[] | select(.path == $p) | .blob ][0] // empty' "$1/task.json" 2>/dev/null)"
   [ -n "$blob" ] && [ "$(git -C "$3" rev-parse -q --verify "$4:$2" 2>/dev/null)" = "$blob" ]
+}
+
+# The next step an owned-files check adds when it reads unmet on a task whose site came up before
+# `up` wrote worktree.recipeChanges, so nothing was set aside. Prints nothing otherwise. Running
+# `up` again writes the field and commits nothing for files already committed. $1 the task folder.
+task_env_rerun_step() {
+  jq -r 'if (.environment.recipe // "") != "" and .worktree.recipeChanges == null
+    then " The site of this task came up before `task environment up` recorded the files its recipe changed, so none of them was set aside. Run `task environment \(.id) up` again to record them, then run this step again."
+    else empty end' "$1/task.json" 2>/dev/null
 }
 
 # The contract's answer to whether this task has automated tests (alignment-schema.json,
