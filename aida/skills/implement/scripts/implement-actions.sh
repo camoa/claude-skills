@@ -7413,9 +7413,10 @@ br_marked_lines() {
     | grep -i "^$2:"
 }
 
-# The front of the halt a builder's stop writes unattended. `build-record --accept-deviation`
-# clears the segments that begin with it.
+# The fronts of the halts a builder's stop line and a builder's deviation write unattended.
+# `build-record --accept-deviation` clears the deviation segments only, so a stop line still halts.
 BR_STOP_PREFIX="the builder stopped:"
+BR_DEVIATION_PREFIX="the builder declared a deviation:"
 
 # Prints each deviation a builder's file names, other than none: its deviation lines, and every
 # heading whose text starts with "Deviation". The live builder wrote a section headed "Deviation
@@ -7610,17 +7611,19 @@ do_build_record() {
     if [ "$stop_commit_count" -gt 0 ]; then
       stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
     fi
-    local keep_route=""
-    ! $is_deviation || keep_route=" A person keeps the deviation with build-record --accept-deviation <their reason>, interactive only."
+    local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so"
+    if $is_deviation; then
+      keep_route=" Or, interactive only, a person keeps the deviation: run build-record again with --accept-deviation <their reason>."
+      halt_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
+    fi
     if [ "$ledger_run_mode" = "autonomous" ]; then
       local stop_ledger_doc
-      stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$BR_STOP_PREFIX a Stop: or Deviation: line says so, at $stop_file.$stop_commit_text$keep_route")"
+      stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$halt_front, at $stop_file.$stop_commit_text$keep_route")"
       [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
       write_atomic "$ledger_file" "$stop_ledger_doc"
     fi
     [ -z "$stop_commit_text" ] \
       || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-    ! $is_deviation || keep_route=" Or, interactive only, a person keeps the deviation: run build-record again with --accept-deviation <their reason>."
     die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route"
   fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
@@ -7754,11 +7757,11 @@ do_build_record() {
   new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger_doc" ] || die 3 "build-record: the ledger update for $unit_id failed."
-  # A kept deviation clears the stop's own halt, and records the reason in haltsCleared whether or
-  # not the order carried that halt, as review-record does.
+  # A kept deviation clears the deviation's own halt, and records the reason in haltsCleared whether
+  # or not the order carried that halt, as review-record does.
   if [ -n "$accepted_json" ]; then
-    new_ledger_doc="$(accept_deviation_in "$new_ledger_doc" "$unit_id" "$(jq -cn --arg p "$BR_STOP_PREFIX" '[$p]')" \
-      "$BR_STOP_PREFIX a Deviation: line says so, at $stop_file." "$accept")"
+    new_ledger_doc="$(accept_deviation_in "$new_ledger_doc" "$unit_id" "$(jq -cn --arg p "$BR_DEVIATION_PREFIX" '[$p]')" \
+      "$BR_DEVIATION_PREFIX a Deviation: line or heading says so, at $stop_file." "$accept")"
     [ -n "$new_ledger_doc" ] || die 3 "build-record: the ledger update for $unit_id failed."
   fi
   if [ -n "$halt_why" ]; then
