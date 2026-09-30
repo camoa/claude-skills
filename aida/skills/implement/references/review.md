@@ -153,7 +153,9 @@ Run:
 It refuses when nothing is open, when the rounds are spent, when the order is halted, or when the
 last fix round has not been verified yet. A resumed run hits that last refusal most. A round
 recorded but never carried through `verify-record` still counts as open, so the next round may not
-start over it. It writes `implementation/brief-<order id>-fix-<round>.json`:
+start over it. It also refuses (exit 53) when every open finding has an empty fix scope. Such a
+finding asks for no code change, so a fixer could change nothing. The message names the route, a
+ruling with no round, under Rulings below. It writes `implementation/brief-<order id>-fix-<round>.json`:
 
 - the open findings in severity order, with their evidence, each with `withheld`, the paths of
   its fix scope the fixer does not get;
@@ -306,19 +308,22 @@ open findings instead, under Rulings below.
 
 ## Rulings
 
-A ruling is a person's answer on an open finding, and there are two cases. At the cap: once the
+A ruling is a person's answer on an open finding, and there are three cases. At the cap: once the
 rounds are spent, `verify-record` above refuses when a finding is still open and no ruling names
 it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
 finding needs a ruling. Once that round is on the record, the ruling is the same call with the
 rulings and no verdicts file. Before the cap: a finding the last fixer reported under
 `--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
 the evidence that no round can reach it. When the round was verified first, the ruling is the
-same call with the rulings and no verdicts file, and the round's verdicts stand. Any other
-finding before the cap refuses (exit 3), and the message names the findings that may be ruled
-now. Unattended refuses every ruling (exit 55).
+same call with the rulings and no verdicts file, and the round's verdicts stand. With no round:
+a finding whose fix scope is empty may be ruled at `reviewed`, with the rulings and no verdicts
+file. It asks for no code change, so no round can reach it. No round is recorded. Unattended,
+`fix-brief` halts the order and the halt names this call. A person runs `clear-halt`, then rules.
+Any other finding before the cap refuses (exit 3), and the message names the findings that may be
+ruled now. Unattended refuses every ruling (exit 55).
 
 The words are `wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. Put the
-findings to the person and ask, opening the same way in both cases: "The reviewer found problems
+findings to the person and ask, opening the same way in every case: "The reviewer found problems
 the fix rounds cannot repair. You decide what each one is. Wrong: the reviewer was mistaken,
 and the work is accepted as it is. Deferred: the problem is real but put off to a later task,
 and the work is accepted. Load-bearing: the work cannot be accepted with it, so this unit of
@@ -334,7 +339,7 @@ Run the same call again, with one `--ruling` flag added per finding ruled:
   --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason> \
   --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>
 ```
-When the round is already on the record, leave the verdicts file out:
+When the round is already on the record, or no round ran, leave the verdicts file out:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-record "<task_folder>" <order id> \
   --ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>

@@ -78,7 +78,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>] \
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
 #                            (--verdicts is required until the round is on the record; after that,
-#                            --ruling alone rules on the round's open findings)
+#                            --ruling alone rules on the round's open findings, or at reviewed on
+#                            findings whose fix scope is empty)
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]... \
 #                            [--accept-warnings <the person's reason>]
@@ -393,8 +394,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # six rather than one number per action per fact.
 #  48  the ledger records this order at a step the action cannot follow. `review-brief` and
 #      `review-record` follow `checks-passed`; `fix-brief` and `fix-record` follow `reviewed` or
-#      `fixed`; `verify-brief` and `verify-record` follow `fixed`; `close` follows `reviewed` or
-#      `fixed`. The message names the step found and the steps allowed.
+#      `fixed`; `verify-brief` and `verify-record` follow `fixed`; `verify-record` with --ruling and
+#      no --verdicts also follows `reviewed` (gap row 265); `close` follows `reviewed` or `fixed`. The message names the step found and the steps allowed.
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the halt's own recorded reason.
 #  50  a review record already exists for this order, and an order gets one review, ever
@@ -409,6 +410,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      this script half understands is worse than no file at all.
 #  53  `fix-brief` or `fix-record` found no open actionable finding for this order, so there is
 #      nothing for a fixer to do. `verify-brief` shares it: nothing open means nothing to verify.
+#      `fix-brief` also refuses when every open finding has an empty fix scope, and names the
+#      ruling route; unattended, it halts the order first (gap row 265).
 #  54  `fix-brief` or `fix-record` found this order's fix rounds already spent (roundsUsed at
 #      FIX_ROUNDS_ALLOWED). Every open finding needs a ruling now, not another round. The mirror of
 #      exit 41 for the build attempts.
@@ -419,8 +422,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      never throws away the verdicts it already read.
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
 #      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
-#      finding a fixer reported out of its scope (`scopeInsufficientInRound`); any other is exit 3
-#      with the findings that may be ruled now named (live-run row 110).
+#      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
+#      scope is empty (gap row 265); any other is exit 3 with the findings that may be ruled now
+#      named (live-run row 110).
 #  58  `verify-record`'s verdict file and this order's open findings do not correspond: a verdict is
 #      missing for an open finding, or a verdict names something that is not open on this order.
 #  59  `close` found open actionable findings on this order. An order closes with nothing open.
@@ -932,7 +936,8 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>]
                             [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
                             (--verdicts is required until the round is on the record; after that,
-                            --ruling alone rules on the round's open findings)
+                            --ruling alone rules on the round's open findings, or at reviewed on
+                            findings whose fix scope is empty)
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
                             [--accept-warnings <the person's reason>]
@@ -8809,6 +8814,22 @@ do_fix_brief() {
     [ (.findings // [])[] | select(.actionable == true and .status == "open") ]
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin})')"
+
+  # Gap row 265. A finding with an empty fix scope asks for no code change, so a fixer can change
+  # nothing and fix-record refuses the empty range. When every open finding is one, no brief is
+  # written, and a person rules each one at verify-record with no round. Unattended halts first.
+  local empty_ids empty_route empty_ledger
+  empty_ids="$(printf '%s' "$open_json" | jq -r 'if all(.[]; (.fixScope // []) | length == 0) then [ .[].id ] | join(", ") else "" end')"
+  if [ -n "$empty_ids" ]; then
+    empty_route="no fix round can change $empty_ids, because each has an empty fix scope. A person rules each one: verify-record $TASK_PATH $unit_id --ruling ${empty_ids%%,*}=<wrong|deferred|load-bearing|test-wrong>::<reason>"
+    if [ "$RV_RUN_MODE" = "autonomous" ]; then
+      empty_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$empty_route")"
+      [ -n "$empty_ledger" ] || die 3 "fix-brief: the halt on $unit_id could not be written."
+      write_atomic "$RV_LEDGER_FILE" "$empty_ledger"
+      die 53 "fix-brief: $unit_id is halted, and nobody is present to rule. After clear-halt, $empty_route."
+    fi
+    die 53 "fix-brief: $empty_route."
+  fi
   tests_json="$(rv_frozen_test_paths_json "$unit_id")"
   owned_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
 
@@ -9408,13 +9429,19 @@ do_verify_record() {
   IMPL_DIR="$TASK_PATH/implementation"
 
   rv_load_state "verify-record" "$unit_id"
-  rv_require_step "verify-record" "$unit_id" "fixed"
+  # Rulings alone also follow `reviewed`, before any round, for a finding with an empty fix scope
+  # (gap row 265). rv_apply_rulings refuses any other finding there.
+  if [ -n "$rulings_raw" ] && [ -z "$verdicts_path" ]; then
+    rv_require_step "verify-record" "$unit_id" "reviewed fixed"
+  else
+    rv_require_step "verify-record" "$unit_id" "fixed"
+  fi
   rv_load_review_record "verify-record" "$unit_id"
 
   local rounds_used
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
-  [ "$rounds_used" -gt 0 ] 2>/dev/null \
+  [ "$rounds_used" -gt 0 ] 2>/dev/null || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep')" = "reviewed" ] \
     || die 3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
 
   # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
@@ -9437,12 +9464,12 @@ do_verify_record() {
     echo "VERIFY-RECORD: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing was verified twice." >&2
     exit 0
   fi
-  if [ "$already" != "0" ]; then
+  if [ "$already" != "0" ] || [ "$rounds_used" = "0" ]; then
     # A ruling after the round is on the record (live-run row 111). The round's verdicts stand,
     # and the rulings land on its open findings through the gates the first-call path uses. No
     # second round entry is written, so roundsUsed and lastStep do not move. A --verdicts file
     # given here is not read. The person who re-ran the whole command with the rulings added is
-    # told so below, not sent back.
+    # told so below, not sent back. Round 0 is a ruling at `reviewed`, before any round.
     rv_apply_rulings "$unit_id" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')" "$rounds_used" "$rulings_raw"
     ruled_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson f "$RV_RULED_FINDINGS" '.findings = $f')"
     [ -n "$ruled_doc" ] || die 3 "verify-record: the review record update for $unit_id failed."
@@ -9454,7 +9481,11 @@ do_verify_record() {
       write_atomic "$RV_LEDGER_FILE" "$ruled_ledger"
       RV_LEDGER_DOC="$ruled_ledger"
     fi
-    rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
+    if [ "$rounds_used" = "0" ]; then
+      rv_print_verification 0 "ruled before any fix round, because no round can change a finding with an empty fix scope" "${RV_RULING_HALT:-none}"
+    else
+      rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
+    fi
     [ -z "$verdicts_path" ] || echo "verdicts: ignored, round $rounds_used was already on the record and its verdicts stand"
     [ -z "$RV_RULING_HALT" ] || echo "VERIFY-RECORD: $unit_id is halted. $RV_RULING_HALT" >&2
     exit 0
@@ -9629,21 +9660,22 @@ rv_apply_rulings() {
 $rulings_raw
 RV_RULINGS
 
-  # Before the cap, a ruling is taken on one kind of finding alone: one a fixer reported out of
-  # its scope, which fix-record marked scopeInsufficientInRound. The fixer's own report is the
+  # Before the cap, a ruling is taken on two kinds of finding alone. One a fixer reported out of
+  # its scope, which fix-record marked scopeInsufficientInRound: the fixer's own report is the
   # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
-  # nothing (live-run row 110). Any other finding waits for the cap, as before.
+  # nothing (live-run row 110). And one whose fix scope is empty: it asks for no code change, so
+  # no round can reach it either (gap row 265). Any other finding waits for the cap, as before.
   rulable_now="$(printf '%s' "$updated_findings" | jq -r \
-    '[ .[] | select(.actionable == true and .status == "open" and has("scopeInsufficientInRound")) | .id ] | join(", ")')"
+    '[ .[] | select(.actionable == true and .status == "open" and (has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0))) | .id ] | join(", ")')"
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
     early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
     early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" \
-      '[ $r[].id ] as $ids | [ .[] | select(has("scopeInsufficientInRound") and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
+      '[ $r[].id ] as $ids | [ .[] | select((has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0)) and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
     if [ "$early_ok" != "true" ]; then
       if [ -n "$rulable_now" ]; then
-        die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope: $rulable_now. The ruling named: $early_ids."
+        die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope or their fix scope is empty: $rulable_now. The ruling named: $early_ids."
       fi
-      die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope."
+      die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, and none has an empty fix scope."
     fi
   fi
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one
