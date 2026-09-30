@@ -453,7 +453,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      a row naming a criterion no --test claims or the doneWhen with no doneWhen test, a row
 #      naming a criterion a person verifies, or two rows naming one thing. The message names
 #      which. A row set this script half understands would put a judgement on the wrong criterion,
-#      which nothing later could tell from a real one.
+#      which nothing later could tell from a real one. On missing rows the confirmed rows given
+#      are recorded as `rowsConfirmed` first, the same way exit 65 records them (gap row 259).
 #  65  `tests-freeze` was given a `--row` that answers rejected. Not a defect in the script: the
 #      freeze stops, writes no test record, and the row goes back to the test author, the same way
 #      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
@@ -461,7 +462,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order in flight with no reason on it. A row a person rejected never halts anything: the
 #      person is already there. It lands on the order's ledger entry as `rowsRejected`, which the
 #      next `tests-brief` carries to the test author. A rejection that lands on no ledger entry
-#      ends with a `redAgain: [<test name>, ...]` line instead, as JSON (gap row 258).
+#      ends with a `redAgain: [<test name>, ...]` line instead, as JSON (gap row 258). Either way a
+#      `checkAgain: [<row key>, ...]` line names the rows the next checker dispatch covers: each
+#      rejected row, each confirmed row with a test in a rejected row's file, and the doneWhen row
+#      when an owned row is rejected. Each other confirmed row lands on the ledger entry as
+#      `rowsConfirmed`, with its note, and the next freeze carries it when no `--row` gives it and
+#      its test files did not change since. A repair round's checker judges only the rows put to
+#      it, so those notes are on disk nowhere else (gap row 259).
 #  66  `finish` found implementation is not finished for this task: an order that is not closed, an
 #      order carrying a halt whether or not it closed, or a machine-verified criterion whose row
 #      state is not confirmed. The message names every one of them.
@@ -3862,6 +3869,21 @@ RED_AGAIN_JQ='def red_again($tests; $key):
   | [ $tests[] | select(.red and (.path as $p | $files | index($p))) | .name ] | unique;
 '
 
+# tf_record_confirmed <ledger file> <ledger doc> <unit id> <rows>: puts the confirmed rows among
+# <rows> on the order's ledger entry as rowsConfirmed, with their notes, and replaces what an earlier
+# refusal put there. A refused freeze calls it, because a repair round's checker judges only the rows
+# put to it and writes the same verdict file (gap row 259). Prints the document it wrote.
+tf_record_confirmed() {
+  local doc
+  doc="$(printf '%s' "$2" | jq -c --arg id "$3" --argjson rows "$4" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+      [ $rows[] | select(.verdict == "confirmed") | {criterion, judgedBy, note, recordedAt: $at} ] as $kept
+      | .orders = (.orders | map(if .id != $id then .
+          elif $kept == [] then del(.rowsConfirmed) else .rowsConfirmed = $kept end))')"
+  [ -n "$doc" ] || die 3 "tests-freeze: the ledger update for $3 failed."
+  write_atomic "$1" "$doc"
+  printf '%s' "$doc"
+}
+
 do_tests_brief() {
   [ "$#" -ge 2 ] || die 3 "tests-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "tests-brief: unrecognized extra argument: $3"
@@ -4894,12 +4916,64 @@ TF_EOF
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
         + (if $dw or $slot == "done-when" then [$unit] else [] end)
     ')"
+  # One entry per test and row key, {name, path, key, red}: what red_again reads, and the files
+  # each row's tests sit in.
+  local tf_red_entries
+  tf_red_entries="$(jq -nc --argjson tests "$tests_json" --argjson reds "$reds_json" --arg unit "$unit_id" '
+      ($reds | map(.name)) as $red_names
+      | [ $tests[] | . as $t
+          | (if .provesDoneWhen == true then [$unit] else .criteria end)[]
+          | {name: $t.name, path: $t.absPath, key: ., red: (($red_names | index($t.name)) != null)} ]')"
+  [ -n "$tf_red_entries" ] || die 3 "tests-freeze: could not list the tests of $unit_id's rows."
+  # A repair round's checker judges only the rows put to it, and writes the same verdict file, so a
+  # row confirmed in an earlier round is on the ledger alone (gap row 259). Each one a --row does not
+  # give is carried from there. A row whose test file changed after it was recorded is not carried,
+  # because the checker judged the file as it was then.
+  local tf_rec_src tf_recorded tf_rec_key tf_rec_at tf_rec_path tf_rec_keep tf_carried='[]' tf_changed=""
+  tf_rec_src="$tf_ledger_doc"
+  [ -n "$tf_rec_src" ] || tf_rec_src='{}'
+  while IFS= read -r tf_recorded; do
+    [ -n "$tf_recorded" ] || continue
+    tf_rec_key="$(printf '%s' "$tf_recorded" | jq -r '.criterion')"
+    tf_rec_at="$(printf '%s' "$tf_recorded" | jq -r '.recordedAt | fromdateiso8601' 2>/dev/null)"
+    [ -n "$tf_rec_at" ] || die 3 "tests-freeze: could not read when $unit_id's recorded row $tf_rec_key was confirmed."
+    tf_rec_keep=true
+    while IFS= read -r tf_rec_path; do
+      [ -n "$tf_rec_path" ] || continue
+      [ "$(im_mtime "$tf_rec_path")" -gt "$tf_rec_at" ] && tf_rec_keep=false
+    done <<TF_REC_PATHS
+$(printf '%s' "$tf_red_entries" | jq -r --arg k "$tf_rec_key" '[ .[] | select(.key == $k) | .path ] | unique | .[]')
+TF_REC_PATHS
+    if [ "$tf_rec_keep" = true ]; then
+      tf_carried="$(printf '%s' "$tf_carried" | jq -c --argjson r "$tf_recorded" \
+        '. + [{criterion: $r.criterion, verdict: "confirmed", judgedBy: $r.judgedBy, note: $r.note}]')"
+    else
+      tf_changed="$tf_changed$tf_rec_key, "
+    fi
+  done <<TF_RECORDED
+$(printf '%s' "$tf_rec_src" | jq -c --arg id "$unit_id" --argjson expected "$rows_expected_json" \
+    --argjson rows "$rows_meta_json" '
+    ($rows | map(.criterion)) as $given
+    | ([ (.orders // [])[] | select(.id == $id) ][0].rowsConfirmed // [])[]
+    | select(.criterion as $k | ($expected | index($k)) != null and ($given | index($k)) == null)')
+TF_RECORDED
+  rows_meta_json="$(printf '%s' "$rows_meta_json" | jq -c --argjson c "$tf_carried" '. + $c')"
   rows_missing="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
       ($rows | map(.criterion)) as $named
       | [ $expected[] as $k | select(($named | index($k)) == null) | $k ] | join(", ")
     ')"
-  [ -z "$rows_missing" ] \
-    || die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen."
+  [ -z "$tf_changed" ] \
+    || tf_changed=" These recorded rows are not carried, because a test file changed after the checker confirmed it: ${tf_changed%, }. Put them to the checker again."
+  # The confirmed rows this freeze holds are recorded first. The checker dispatch for the missing
+  # rows writes the same verdict file, and would take the notes of these rows with it.
+  if [ -n "$rows_missing" ]; then
+    if [ -n "$tf_ledger_doc" ]; then
+      tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" \
+        "$(printf '%s' "$rows_meta_json" | jq -c --argjson expected "$rows_expected_json" \
+          'map(select(.criterion as $k | ($expected | index($k)) != null))')" >/dev/null || exit $?
+    fi
+    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. The confirmed rows given are on $unit_id's ledger entry, and the next freeze carries them.$tf_changed"
+  fi
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
       | [ $rows[] | .criterion as $cid | select(($people | index($cid)) != null) | $cid ]
@@ -4929,14 +5003,21 @@ TF_EOF
       [ .[] | select(.verdict == "rejected") | .criterion + " (" + .judgedBy + "): " + .note ] | join("; ")')"
   if [ -n "$rejected_rows" ]; then
     # Each rejected row is repaired, which edits its test file and makes the other reds in it
-    # stale (gap row 258). These entries are what red_again reads to name them.
-    local tf_red_entries
-    tf_red_entries="$(jq -nc --argjson tests "$tests_json" --argjson reds "$reds_json" --arg unit "$unit_id" '
-        ($reds | map(.name)) as $red_names
-        | [ $tests[] | . as $t
-            | (if .provesDoneWhen == true then [$unit] else .criteria end)[]
-            | {name: $t.name, path: $t.absPath, key: ., red: (($red_names | index($t.name)) != null)} ]')"
-    [ -n "$tf_red_entries" ] || die 3 "tests-freeze: could not list the tests of $unit_id's rejected rows."
+    # stale (gap row 258). red_again reads tf_red_entries to name them. The repair also moves what
+    # a confirmed row in that file was judged on, so the next checker dispatch covers it too. It
+    # covers the doneWhen row when an owned row is rejected, because that row names the owned
+    # verdicts it rests on.
+    local tf_check_again
+    tf_check_again="$(jq -nc --argjson rows "$rows_meta_json" --argjson entries "$tf_red_entries" \
+        --argjson owned "$owned_ids_json" --arg unit "$unit_id" '
+        ($rows | map(.criterion)) as $keys
+        | ([ $rows[] | select(.verdict == "rejected") | .criterion ]) as $rej
+        | ([ $entries[] | select(.key as $k | ($rej | index($k)) != null) | .path ] | unique) as $files
+        | $rej
+          + [ $entries[] | select(.path as $p | ($files | index($p)) != null) | .key ]
+          + (if [ $rej[] | select(. as $k | ($owned | index($k)) != null) ] == [] then [] else [$unit] end)
+        | map(select(. as $k | ($keys | index($k)) != null)) | unique')"
+    [ -n "$tf_check_again" ] || die 3 "tests-freeze: could not list the rows of $unit_id the checker judges again."
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
           | .criterion + ": " + .note ] | join("; ")')"
@@ -4947,8 +5028,15 @@ TF_EOF
         tf_halted_doc="$(halt_order_in "$tf_ledger_doc" "$unit_id" "$tf_why")"
         [ -n "$tf_halted_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
         write_atomic "$tf_ledger_file" "$tf_halted_doc"
+        tf_ledger_doc="$tf_halted_doc"
         echo "TESTS-FREEZE: $unit_id is halted. $tf_why" >&2
       fi
+    fi
+    # The confirmed rows the checker need not judge again are recorded. The next freeze carries them.
+    if [ -n "$tf_ledger_doc" ]; then
+      tf_ledger_doc="$(tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" \
+        "$(printf '%s' "$rows_meta_json" | jq -c --argjson again "$tf_check_again" \
+          'map(select(.criterion as $k | ($again | index($k)) == null))')")" || exit $?
     fi
     # A row a person rejected goes back to the test author, and the person's words existed only in
     # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
@@ -4977,10 +5065,12 @@ TF_EOF
         '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
-      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Run tests-freeze again once the checker confirms the repaired test."
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker. The next freeze carries each other confirmed row from the ledger.
+checkAgain: $tf_check_again"
     fi
     # No ledger record carries this rejection, so the refusal names the tests to run again.
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author, and run tests-freeze again once the test observes what the criterion asks.
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks. The next freeze carries each other confirmed row from the ledger.
+checkAgain: $tf_check_again
 redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
   fi
@@ -5520,13 +5610,15 @@ TF_EOF
              else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
-            | del(.rowsRejected))
+            | del(.rowsRejected, .rowsConfirmed))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
   write_atomic "$ledger_file_now" "$ledger_with_judgements"
   printf 'absenceClauses: %s (routed to review, on %s'"'"'s ledger entry)\n' \
     "$(printf '%s' "$absence_json" | jq 'length')" "$unit_id"
+  [ "$tf_carried" = "[]" ] \
+    || printf 'rowsCarried: %s\n' "$(printf '%s' "$tf_carried" | jq -r 'map(.criterion) | join(", ")')"
 
   if [ -n "$tf_unchanged_at" ]; then
     echo "TESTS-FREEZE: unchanged (already frozen at commit $tf_unchanged_at with the same tests)"

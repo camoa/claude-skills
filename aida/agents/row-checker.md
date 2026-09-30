@@ -84,6 +84,8 @@ anywhere. Write it in this shape:
 ```
 
 The second entry is the done-when row, present only when the rows you were given carry one.
+Write only the rows you were given. A repair round gives you only the rows to judge again. The
+script keeps the earlier confirmed rows on the ledger, so their absence from your file loses nothing.
 
 You have no Bash tool. You cannot run anything. Reason from the recipe, the test file's text and
 the interface file alone. You are not given another order's rows, or the task's goal prose.
