@@ -228,32 +228,58 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # and `|` replaced by \037. Then read_words keeps it in one word, and segments does not split it.
 # Only a string that opens and closes on one line is joined. The quote state carries across lines,
 # so the text after a string that spans lines is read where the shell closes it. A comment and a
-# heredoc body are copied and change no quote state. On a line that holds `eval`, a `-c` flag or
-# `<<<`, no later string is joined, because a shell runs its text.
+# heredoc body change no quote state. On a line that holds `eval`, a `-c` flag or `<<<`, no later
+# string is joined, because a shell runs its text. The shell runs the text of each `$(...)` and
+# each backtick pair outside single quotes, also inside a double-quoted string. So that text
+# follows its line again, as lines of its own.
 quoted_words() {
   printf '%s\n' "$1" | LC_ALL=C awk '
-    function close_at(s, k, c,   d) {
+    function close_at(s, k, c,   d, depth) {
+      depth = 0
       while (k <= length(s)) {
         d = substr(s, k, 1)
-        if (d == c) return k
-        if (c == "\"" && d == "\\") k++
+        if (c == "\"" && d == "\\") { k += 2; continue }
+        if (c == "\"" && substr(s, k, 2) == "$(") { depth++; k += 2; continue }
+        if (depth > 0 && d == ")") { depth--; k++; continue }
+        if (d == c && depth == 0) return k
         k++
       }
       return 0
     }
+    function subs(s,   r, i, d, depth, st, sq, dq, bt, inner) {
+      r = ""; depth = 0; sq = 0; dq = 0; bt = 0
+      for (i = 1; i <= length(s); i++) {
+        d = substr(s, i, 1)
+        if (d == "\\" && !sq) { i++; continue }
+        if (depth == 0 && !bt && !dq && d == "\047") { sq = !sq; continue }
+        if (sq) continue
+        if (depth == 0 && !bt && d == "\"") { dq = !dq; continue }
+        if (!bt && substr(s, i, 2) == "$(") { if (depth == 0) st = i + 2; depth++; i++; continue }
+        if (depth > 0 && d == "(") { depth++; continue }
+        if (depth > 0 && d == ")") {
+          if (--depth == 0) { inner = substr(s, st, i - st); r = r "\n" inner subs(inner) }
+          continue
+        }
+        if (depth == 0 && d == "`") {
+          if (bt) { inner = substr(s, st, i - st); r = r "\n" inner subs(inner) } else st = i + 1
+          bt = !bt
+        }
+      }
+      return r
+    }
     {
       line = $0; n = length(line)
-      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print line; next }
-      out = ""; i = 1; pend = ""
+      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print line subs(line); next }
+      out = ""; i = 1; pend = ""; code = n
       if (q != "") {
         j = close_at(line, 1, q)
-        if (j == 0) { print line; next }
+        if (j == 0) { print line subs(line); next }
         out = substr(line, 1, j); i = j + 1; q = ""
       }
       while (i <= n) {
         c = substr(line, i, 1)
         if (c == "\\") { out = out substr(line, i, 2); i += 2; continue }
-        if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t;&|(]/)) { out = out substr(line, i); break }
+        if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t;&|(]/)) { out = out substr(line, i); code = i - 1; break }
         if (substr(line, i, 3) == "<<<") { out = out "<<<"; i += 3; continue }
         if (substr(line, i, 2) == "<<") {
           m = substr(line, i + 2); match(m, /^-?[ \t]*["\047]?[^ \t"\047;&|)<>]*["\047]?/)
@@ -270,7 +296,7 @@ quoted_words() {
         }
         out = out c; i++
       }
-      print out
+      print out subs(substr(line, 1, code))
       hd = pend
     }'
 }
