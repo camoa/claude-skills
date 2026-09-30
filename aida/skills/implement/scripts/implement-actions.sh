@@ -705,11 +705,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 111  a plain `dispatch-close` on a reviewer's record found the file its brief names missing, or
 #      no newer than the record: `findingsPath` in review mode, `verdictsPath` in verify mode after
 #      the ledger's `fixed`. The record stays open. The message names `--no-report`.
-# The code the completion line added (gap row 248).
+# The code the completion line added (gap row 250).
 # 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
-#      pins missing, no newer than the record, or not ending with the line `Report: complete`. The
-#      role stopped before its last act, so the close runs as `--no-report` does: the record stays
-#      open and takes `resumedAt`. A second such close halts the order at exit 110.
+#      pins missing, no newer than the record, not ending with the line `Report: complete`, or
+#      holding nothing but that line. A fixer's report must also be no older than the last commit
+#      in codePath, because the fixer commits and then writes the line. A test author commits
+#      nothing, so its report is read by the line alone. The role stopped before its last act, so
+#      the close runs as `--no-report` does: the record stays open and takes `resumedAt`. A second
+#      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
+#      without --resume removes the role's earlier report, so an old complete one cannot pass.
+#      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -838,7 +843,7 @@ attempts_allowed_for() {
 FIX_ROUNDS_ALLOWED=2
 
 # The last line a fixer and a test author write in the report their brief pins, as their last act
-# (gap row 248). dispatch-close reads its absence as a stop before the role finished.
+# (gap row 250). dispatch-close reads its absence as a stop before the role finished.
 IM_REPORT_DONE="Report: complete"
 
 # A light task allows a fake off the demo path, marked in the code with this text. The build brief
@@ -8642,6 +8647,14 @@ do_fix_record() {
   rv_require_round_verified "fix-record" "$unit_id" "$rounds_used"
   round_number=$((rounds_used + 1))
 
+  # The report is the one the round's fix brief pins, the file dispatch-close read (gap row 250). A
+  # report written elsewhere was never checked there, so it is refused. A brief from before the
+  # key existed pins none.
+  local pinned_report
+  pinned_report="$(jq -r '.reportPath // ""' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
+  [ -z "$pinned_report" ] || [ "$report_path" -ef "$pinned_report" ] \
+    || die 3 "fix-record: --report names $report_path, and the fix brief for round $round_number pins $pinned_report. The fixer writes its report there. Move the report there, or have the fixer write it there, then run fix-record again with that path."
+
   # Every --scope-insufficient is read and checked here, before a single check runs. A report that
   # names nothing open, or carries no reason, is a caller fault, and refusing it after the tools
   # have run would leave a fix record on disk that the ledger never learned about. What it changes
@@ -10937,11 +10950,37 @@ TG_OWNED
     [ "$(printf '%s' "$owned_extra" | jq '.denyCommand | length' 2>/dev/null)" -gt 0 ] 2>/dev/null \
       || die 3 "dispatch-open: $forms_file holds no form or could not be read. This plugin's own files are incomplete; nothing about the task is wrong."
   fi
+  # The file the role's brief pins, which dispatch-close checks (gap rows 228 and 250): the
+  # reviewer's findings or verdicts, the fixer's and the test author's report. The last two end
+  # theirs with IM_REPORT_DONE, so their record carries that line too. A fresh dispatch removes an
+  # earlier report of theirs, so a complete one from before cannot close this one. A resume keeps it.
+  local report_brief="" report_path="" report_extra='{}'
+  case "$role_bare" in
+    fixer) report_brief="$fx_brief" ;;
+    test-author) report_brief="$TASK_PATH/implementation/brief-$unit_id-tests.json" ;;
+    reviewer)
+      report_brief="$TASK_PATH/implementation/brief-$unit_id-$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]
+          | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
+        "$TASK_PATH/implementation/ledger.json" 2>/dev/null).json" ;;
+  esac
+  if [ "$role_bare" = "reviewer" ]; then
+    report_path="$(jq -r '.findingsPath // .verdictsPath // ""' "$report_brief" 2>/dev/null)"
+  elif [ -n "$report_brief" ]; then
+    report_path="$(jq -r '.reportPath // ""' "$report_brief" 2>/dev/null)"
+  fi
+  if [ -n "$report_path" ]; then
+    case "$role_bare" in
+      fixer|test-author)
+        report_extra="$(jq -nc --arg p "$report_path" --arg l "$IM_REPORT_DONE" '{reportPath: $p, completionLine: $l}')"
+        [ "$resume" = true ] || rm -f "$report_path" || die 3 "dispatch-open: could not remove the earlier report $report_path" ;;
+      *) report_extra="$(jq -nc --arg p "$report_path" '{reportPath: $p}')" ;;
+    esac
+  fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
-    --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" \
+    --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" --argjson report "$report_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
-      openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
+      openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra + $report')"
   # A reopened record carries the one resume already, so a second return with no report halts.
   [ "$resume" = false ] || record_json="$(printf '%s' "$record_json" | jq -c '.resumedAt = .openedAt')"
 
@@ -11004,29 +11043,38 @@ do_dispatch_close() {
   # The record lives under the task's own folder, so a close can only reach this task's record
   # and another task's stays open (live-run row 139).
   local dispatch_file="$TASK_PATH/implementation/dispatch.json"
-  # A fixer and a test author end the report their brief pins with IM_REPORT_DONE, as their last
-  # act (gap row 248). A plain close that finds the report missing, older than the record, or
-  # without that line takes the --no-report path itself, so a cut-off role never closes as done.
-  # A brief written before the brief pinned a path names none, and nothing is checked.
-  local cut_off=""
+  # dispatch-open stores the file the role's brief pins under `reportPath` (gap rows 228 and 250).
+  # One block checks it for every role that has one. A missing file, or one no newer than the
+  # record, is a previous run's or none. A fixer and a test author also end theirs with
+  # `completionLine` as their last act, after at least one line of report. A fixer's must be no
+  # older than the last commit in the code path, because it commits and then writes the line. A
+  # test author's is read by the line alone. The reviewer's file refuses at 111. The other two take
+  # the --no-report path unasked, so a cut-off role never closes as finished. A record from before
+  # the key existed names no file, and nothing is checked.
+  local cut_off="" rp_path rp_line rp_cause="" rp_last rp_head
   if [ "$no_report" = false ] && [ -f "$dispatch_file" ]; then
-    local co_role co_unit co_brief="" co_report
-    co_role="$(jq -r '.role // "" | split(":") | last' "$dispatch_file" 2>/dev/null)"
-    co_unit="$(jq -r '.unit // ""' "$dispatch_file" 2>/dev/null)"
-    case "$co_role" in
-      fixer)
-        co_brief="$TASK_PATH/implementation/brief-$co_unit-fix-$(jq -r --arg id "$co_unit"           '(.orders // [])[] | select(.id == $id) | (.roundsUsed // 0) + 1' "$TASK_PATH/implementation/ledger.json" 2>/dev/null).json" ;;
-      test-author) co_brief="$TASK_PATH/implementation/brief-$co_unit-tests.json" ;;
-    esac
-    co_report="$(jq -r '.reportPath // ""' "$co_brief" 2>/dev/null)"
-    if [ -n "$co_report" ]; then
-      if [ ! -f "$co_report" ] || [ ! "$co_report" -nt "$dispatch_file" ]; then
-        cut_off="$co_report is missing or older than its dispatch record"
-      elif [ "$(grep -v '^[[:space:]]*$' "$co_report" | tail -n 1 | sed 's/[[:space:]]*$//')" != "$IM_REPORT_DONE" ]; then
-        cut_off="$co_report does not end with the line '$IM_REPORT_DONE'"
+    rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
+    rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
+    if [ -z "$rp_path" ]; then
+      :
+    elif [ ! -f "$rp_path" ] || [ ! "$rp_path" -nt "$dispatch_file" ]; then
+      rp_cause="$rp_path is missing or older than its dispatch record"
+    elif [ -n "$rp_line" ]; then
+      rp_last="$(grep -v '^[[:space:]]*$' "$rp_path" | tail -n 1 | sed 's/[[:space:]]*$//')"
+      if [ "$rp_last" != "$rp_line" ]; then
+        rp_cause="$rp_path does not end with the line '$rp_line'"
+      elif [ "$(grep -v '^[[:space:]]*$' "$rp_path" | grep -c -v -x -F -e "$rp_line")" -eq 0 ]; then
+        rp_cause="$rp_path holds nothing but the line '$rp_line'"
+      elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
+        rp_head="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" log -1 --format=%ct 2>/dev/null)"
+        [ -z "$rp_head" ] || [ "$(im_mtime "$rp_path")" -ge "$rp_head" ] \
+          || rp_cause="$rp_path is older than the last commit in its code path, so the line was written before the fixer's commit"
       fi
     fi
-    [ -z "$cut_off" ] || no_report=true
+    if [ -n "$rp_cause" ] && [ -z "$rp_line" ]; then
+      die 111 "dispatch-close: the $(jq -r '.role // "" | split(":") | last' "$dispatch_file") on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open. If it stopped at its turn limit, run dispatch-close again with --no-report."
+    fi
+    [ -z "$rp_cause" ] || { cut_off="$rp_cause"; no_report=true; }
   fi
   # A role with no report is resumed once, not dispatched fresh: its brief is unchanged and its
   # work is unfinished, and a fresh role meets its half-written files (gap row 228). The record
@@ -11051,28 +11099,14 @@ do_dispatch_close() {
     nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
     nr_ledger="$(jq -c '.' "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: $TASK_PATH/implementation/ledger.json could not be read as JSON, so the halt on $nr_unit could not be written."
+    local nr_what="returned no report twice"
+    [ -z "$cut_off" ] || nr_what="stopped before it finished twice, the second time because $cut_off"
     nr_ledger="$(halt_order_in "$nr_ledger" "$nr_unit" \
-      "turn cap: ${nr_role##*:} returned no report twice, after one resume; its cap is ${nr_cap:-unknown} turns")"
+      "turn cap: ${nr_role##*:} $nr_what, after one resume; its cap is ${nr_cap:-unknown} turns")"
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: the halt on $nr_unit could not be written."
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
-    die 110 "dispatch-close: $nr_unit is halted. $nr_role returned no report twice, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
-  fi
-  # The reviewer's file is named by its brief, so the script can see it is missing. A file older
-  # than the record is a previous run's. The fixer's and the test author's reports are pinned too,
-  # and are checked above. The row-checker returns its answer as text, so for it the flag is the
-  # only signal.
-  if [ -f "$dispatch_file" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file" 2>/dev/null)" = "reviewer" ]; then
-    local rc_unit rc_brief rc_expected
-    rc_unit="$(jq -r '.unit // ""' "$dispatch_file")"
-    rc_brief="$(jq -r --arg id "$rc_unit" '[ (.orders // [])[] | select(.id == $id) ][0]
-        | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
-      "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
-    [ -z "$rc_brief" ] || rc_brief="$TASK_PATH/implementation/brief-$rc_unit-$rc_brief.json"
-    rc_expected="$(jq -r '.findingsPath // .verdictsPath // ""' "$rc_brief" 2>/dev/null)"
-    if [ -n "$rc_expected" ] && { [ ! -f "$rc_expected" ] || [ ! "$rc_expected" -nt "$dispatch_file" ]; }; then
-      die 111 "dispatch-close: the reviewer on $rc_unit returned, and $rc_expected is missing or older than its dispatch record. The record stays open. If the reviewer stopped at its turn limit, run dispatch-close again with --no-report."
-    fi
+    die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
   fi
   if [ -f "$dispatch_file" ]; then
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"

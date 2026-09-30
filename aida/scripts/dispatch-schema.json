@@ -32,6 +32,16 @@
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
       "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A second `--no-report` on a record carrying it halts the order and removes the record (exit 110)."
     },
+    "reportPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Present when the role's brief pins a file (gap rows 228 and 250): the reviewer's findingsPath or verdictsPath, or the fixer's or test author's reportPath. `dispatch-open` copies it from the brief. A plain `dispatch-close` refuses the reviewer's record while the file is missing or no newer than the record (exit 111), and runs the fixer's or test author's as `--no-report` does (exit 112)."
+    },
+    "completionLine": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Present beside reportPath on a fixer's or test author's record (gap row 250): the line the role writes last in its report. A plain `dispatch-close` needs the report to end with it and to hold one other line, and a fixer's report to be no older than the last commit in codePath."
+    },
     "unit": {
       "type": "string",
       "pattern": "^wo[1-9][0-9]*$",

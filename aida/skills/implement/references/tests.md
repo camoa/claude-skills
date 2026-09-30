@@ -181,11 +181,11 @@ a shell command that names a runtime form in `scripts/introspection-forms.txt`, 
 `php:eval` or `ReflectionClass`. A runtime shows the code's shape as surely as its source does.
 
 **A missing signature is design's gap.** The author stops when a test needs a signature the brief
-does not hold. Its reply and its report end with `Stop: missing-signature: <class or method>: <test>`. No script
-reads the reply, so the route below is yours to take. The brief carries every reuse and dependency design declared, so the
-order did not declare what its tests call. Do not give the signature in the dispatch. Put it to
-the person: design adds the reuse, and the build takes the order fresh, as `references/finish.md`
-says for design drift. A run nobody attends cannot change the design, so it reports the stop and
+does not hold. Its reply ends with `Stop: missing-signature: <class or method>: <test>`, and its
+report holds the same line. No script reads either, so the route below is yours to take. The brief
+carries every reuse and dependency design declared, so the order did not declare what its tests
+call. Do not give the signature in the dispatch. Put it to the person: design adds the reuse, and
+the build takes the order fresh, as `references/finish.md` says for design drift. A run nobody attends cannot change the design, so it reports the stop and
 the author's words.
 
 **It may not write production code.** It writes the test, watches it fail, and stops.

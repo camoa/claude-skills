@@ -71,3 +71,4 @@ report without it tells the build you stopped before you finished.
 
 Stop and say so, rather than working around it, when a finding needs a test to change, or when no
 scope would hold the fix it needs. Name the finding and the reason, and let a person decide.
+Write the completion line when you stop too, as the last line of the report.
