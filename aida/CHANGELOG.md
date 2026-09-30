@@ -4,6 +4,68 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.10] - 2026-09-30
+
+Seven changes from two live runs on 6.0.9, the event archive task and the
+Drupal site task, and one layout change the owner asked for.
+
+### Changed
+
+- A new task worktree goes in one folder per repository, beside it:
+  `<parent>/<repo>.worktrees/<repo>-<task>`. A tree already on disk at its
+  recorded path stays where it is. `prune` removes the group folder when it
+  is left empty.
+- Every implement step reads the run mode from the task record, as
+  `clear-halt` does. A change of run mode takes effect at the next step,
+  not at the next `start`.
+
+### Fixed
+
+- A test recipe can name runner lines that do not fail a test, under
+  `warning_line:`. A suite that fails only on those lines reads `warned`,
+  and `finish` names the routes. `finish --accept-warnings <reason>` lets a
+  person accept it in an attended run, and review shows it as that person's
+  answer. Preconditions says when the baseline suite already fails.
+- Completion takes the worktree's site down, then restores in one commit
+  every file `task environment up` changed, so they never reach trunk. A
+  restore is decided by content, whatever the commit's subject, and the
+  working tree counts. `up`, `down` and `show` run no site command after a
+  restore. `up` records no file git does not track.
+- The pre-compact hook counts a stage file written in the same second as a
+  save as saved.
+- `build-record`'s verify log and its failure reasons show each line as it
+  ran, with every token filled and quoted. The log says when a recipe's
+  `## Files` script was written and removed.
+- A review finding with an empty fix scope can be ruled by a person with no
+  fix round, and an unattended run halts naming that route. `review-record`
+  refuses an empty fix scope on a finding that names a file the order owns
+  or changed.
+- `build-record --accept-deviation <reason>` lets a person keep a deviation
+  the builder declared, in an attended run. Review shows it as that
+  person's answer. A deviation still stops the build until a person keeps
+  it or reverts it.
+- `dispatch-open` refuses to open a builder for an order with no frozen
+  tests, and a reviewer for an order with no review brief. It writes
+  nothing. The tests step says that a criterion a person checks needs its
+  checklist line from every order that serves it.
+
+### Known limits
+
+- The restore check refuses when any recorded file that existed at the
+  fork is back. A file the recipe's preconditions only mention, edited
+  before `up` and changed back, is refused wrongly. A recipe that names the
+  site in a file absent at the fork is not covered.
+- A suite read by the build step on every attempt still reads the
+  warnings-only shape as unknown. One warning line with no failure line
+  reads `warned`, so a run that stops after printing warnings reads it too.
+- A single `--value` now appears in the build record, so a secret passed
+  that way is written to disk.
+- A deviation halt written before 6.0.10 is not cleared by
+  `--accept-deviation`. A person clears it with `clear-halt`.
+- The dev-guides Drupal recipes need two catalog changes, sent as asks: a
+  `warning_line:` for PHPUnit, and a seed snapshot the worktree recipe
+  deletes itself.
+
 ## [6.0.9] - 2026-09-30
 
 Four fixes from two live runs on 6.0.8, the event archive task and the
