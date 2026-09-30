@@ -568,14 +568,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the grant: there is nothing to resume.
 #
 # The code the re-check added (live-run row 87).
-#  88  `build-recheck` cannot run the checks again over the recorded range, for one of four facts,
+#  88  `build-recheck` cannot run the checks again over the recorded range, for one of five facts,
 #      each named in its own message. No build record exists for the order, so there is no range.
 #      The repository's HEAD is not the record's own `commit`, so the code moved and the route is
 #      `build`. Or the record's stopping checks include one outside `coding-standards`,
 #      `static-analysis`, `security` and `interface-record`. A test or a suite that failed is the
 #      implementer's work, so a re-check would be a free retry, and the route is `build`. Or no
-#      check stopped the attempt, so it passed and the order is past the build. A halted order
-#      refuses at exit 49 like every step-five action, and `grant-attempt` is its route.
+#      check stopped the attempt, so it passed and the order is past the build. Or a path the
+#      interface check named does not exist at the recorded commit, so no amended record can
+#      answer it (gap row 253). A halted order refuses at exit 49 like every step-five action, and
+#      `grant-attempt` is its route.
 #
 # The code the support files added (live-run row 90).
 #  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
@@ -1269,9 +1271,9 @@ im_next_step() {
 # retake's freezeCommit until the freeze after the retake rewrites it, the predicate the
 # freeze's own exemption reads, so the line names the author and not a build against the
 # wrong test (live-run row 110).
-  local opens ids count i id file n tools_only retake_pending
+  local opens ids count i id file n recheck_route retake_pending
   opens='{}'
-  tools_only='{}'
+  recheck_route='{}'
   retake_pending='{}'
   ids="$(printf '%s' "$ledger" | jq -c '[ (.orders // [])[] | .id ]')"
   count="$(printf '%s' "$ids" | jq 'length')"
@@ -1285,18 +1287,28 @@ im_next_step() {
       case "$n" in ''|*[!0-9]*) n=0 ;; esac
     fi
     opens="$(printf '%s' "$opens" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    # The re-check route, when the recheck rows alone stopped the attempt. An attempt that
+    # interface-record stopped is answered by amending the record first, so the route names its
+    # file, the brief's interfacePath (gap row 253).
     file="$impl/build-$id.json"
-    n=false
+    n=""
     if [ -f "$file" ]; then
-      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | (stoppers | length > 0) and (outside_recheck | length == 0)' "$file" 2>/dev/null)"
-      [ "$n" = "true" ] || n=false
+      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | if (stoppers | length > 0) and (outside_recheck | length == 0)
+        then (if (stoppers | index("interface-record")) != null then "interface" else "tools" end) else "" end' "$file" 2>/dev/null)"
+      case "$n" in
+        tools) n="build-recheck" ;;
+        interface)
+          n="$(jq -r '.interfacePath // ""' "$impl/brief-$id-build.json" 2>/dev/null)"
+          n="amend ${n:-the interface record} with the elements interface-record names, then build-recheck" ;;
+        *) n="" ;;
+      esac
     fi
-    tools_only="$(printf '%s' "$tools_only" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    recheck_route="$(printf '%s' "$recheck_route" | jq -c --arg id "$id" --arg n "$n" '. + {($id): $n}')"
     n="$(im_retake_pending "$ledger" "$impl" "$id")"
     retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
-  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson tools_only "$tools_only" --argjson snap "$snapshot" \
+  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson recheck_route "$recheck_route" --argjson snap "$snapshot" \
     --argjson retake_pending "$retake_pending" --argjson departure_prefixes "$RR_DEPARTURE_PREFIXES" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
@@ -1323,8 +1335,8 @@ im_next_step() {
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
       elif $bd != null then
-        (if $bd.lastStep == "code-written" and ($tools_only[$bd.id] // false) then
-           "build \($bd.id), or build-recheck \($bd.id) when the code has not moved"
+        (if $bd.lastStep == "code-written" and (($recheck_route[$bd.id] // "") != "") then
+           "build \($bd.id), or \($recheck_route[$bd.id]) \($bd.id) when the code has not moved"
          elif $bd.lastStep == "tests-frozen" and ($retake_pending[$bd.id] // false) then
            "tests \($bd.id): the tests were retaken and not frozen again yet"
          else "build \($bd.id)" end)
@@ -7515,6 +7527,24 @@ do_build_recheck() {
   [ -z "$outside" ] \
     || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows or interface-record. A re-check answers only an attempt those rows alone stopped; the route is build."
 
+  # --- exit 88, four: a path the interface check named is not in the code at the recorded commit.
+  # An amended record can name a path the code never had, and the check would pass on words
+  # alone. The paths are the declaration's backticked tokens the recorded interface record left
+  # out, read as paths by `ifacePath` ---------------------------------------------------------
+  local unit_interface_declared missing_paths="" named_path
+  unit_interface_declared="$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')"
+  while IFS= read -r named_path; do
+    [ -n "$named_path" ] || continue
+    git -C "$codepath" cat-file -e "$record_commit:$named_path" 2>/dev/null \
+      || missing_paths="${missing_paths:+$missing_paths, }$named_path"
+  done <<EOF_PATHS
+$(jq -rn --arg d "$unit_interface_declared" --arg r "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" "$IFACE_PATH_JQ"'
+  [ $d | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`") | select(. as $t | $r | contains($t) | not) | ifacePath ]
+  | unique | .[]')
+EOF_PATHS
+  [ -z "$missing_paths" ] \
+    || die 88 "build-recheck: the interface check at $unit_id named $missing_paths, and no such path exists at $record_commit. Amending the record cannot make a path real; the route is build, or a design change."
+
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die 3 "build-recheck: $tests_file not found, though a build record implies tests-freeze already ran for $unit_id."
@@ -7524,8 +7554,6 @@ do_build_recheck() {
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
-  local unit_interface_declared
-  unit_interface_declared="$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')"
   br_interface_path "build-recheck" "$unit_id" "$interface_path"
   br_interface_text "build-recheck" "$unit_id" "$unit_interface_declared"
 
@@ -7549,7 +7577,8 @@ do_build_recheck() {
   br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT"
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
-  # record's text as read now. The checks it
+  # record's text as read now. When that text changed, the attempt's own text stays under
+  # interfaceRecordBefore, so review reads both. The checks it
   # replaces stay under checksBefore, id and verdict only, so a reader can see what the re-check
   # answered differently. Both check sets carry whole tool outputs, so both are read from a file.
   local today record_json
@@ -7560,6 +7589,8 @@ do_build_recheck() {
     | $before[0]
     | .checksBefore = ((.checks // []) | map({id, verdict}))
     | .checks = $new
+    | (if $interfaceRecord != (.interfaceRecord // "")
+       then .interfaceRecordBefore = (.interfaceRecordBefore // .interfaceRecord // "") else . end)
     | .interfaceRecord = $interfaceRecord
     | .executed = $executed
     | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
@@ -8121,7 +8152,9 @@ RB_PATHS
       locksIn: $locksIn,
       reportPath: $reportPath,
       checks: ($build[0].checks // []),
-      interface: { declared: $interfaceDeclared, record: $interfaceRecord },
+      interface: ({ declared: $interfaceDeclared, record: $interfaceRecord }
+                  + (if $build[0] | has("interfaceRecordBefore")
+                     then { recordBefore: $build[0].interfaceRecordBefore } else {} end)),
       findingsPath: $findingsPath,
       playbooksPath: $playbooksPath,
       recipes: ($recipes | split("\n") | map(select(. != "")))

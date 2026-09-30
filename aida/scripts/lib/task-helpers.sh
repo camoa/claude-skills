@@ -57,6 +57,8 @@
 #                                         a work order's reasoning with no struck paragraph
 #   CITES_JQ                              a jq definition, `citations($known)`, the findings
 #                                         a finding's text cites
+#   IFACE_PATH_JQ                         a jq definition, `ifacePath`, a backticked interface
+#                                         token as a repository path, or empty
 #
 # Every script that sources this file runs warn_newer_installed. These never source it, so
 # they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
@@ -108,6 +110,16 @@ CITES_JQ='
     | select(.[1] != null or .[2] != null or (($known | index($s)) != null))
     | (if .[2] != null then .[2] else (.[3] | scan("[0-9]+")) end)
     | {search: $s, n: tonumber};'
+
+# A backticked token from an order's interface, read as a repository path (gap row 253). Design's
+# check compares it with the order's owned and known paths, and build-recheck asks git whether it
+# exists, so both read a token alike. A leading ./ goes, and so does everything from the first
+# colon, so `src/Foo.php::bar()` and `src/Foo.php:12` read as src/Foo.php. What is left is a path
+# when it holds a slash, and is neither absolute nor a URL. Anything else yields empty.
+# shellcheck disable=SC2034 # read by the sourcing script
+IFACE_PATH_JQ='
+  def ifacePath: select(test("\\s|://") | not) | ltrimstr("./") | sub(":.*$"; "")
+    | select(test("/") and (startswith("/") | not));'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
 # task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree

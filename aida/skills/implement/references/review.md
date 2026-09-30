@@ -35,7 +35,7 @@ It writes `implementation/brief-<order id>-review.json`:
   is `record` the diff is the project folder's whole, and `deliverables` names
   each owned file by path. The reviewer reads the document whole rather than a patch;
 - the eight check results;
-- both interface texts;
+- both interface texts, and `recordBefore` when a re-check read an amended record;
 - the path the reviewer's findings go to;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
 - `recipes`, the implement recipe for each framework, which the reviewer answers one by one.
@@ -50,6 +50,10 @@ reviewer reads the declared interface and the builder's record. If they disagree
 cites the criterion." The brief carries both texts, unchanged, and the reviewer is told
 nothing else. A person shown the two texts would be making the comparison the reviewer is about
 to make, from the same texts (live-run row 88).
+
+After a re-check read an amended interface record, the brief's `interface` also holds
+`recordBefore`, the text the attempt recorded. The reviewer reads both records beside the
+declaration. An amendment that names an element the diff does not expose is a finding.
 
 A met verdict only means every backticked element is present verbatim. It does not rule out a
 deeper disagreement between the two texts. Catching that is the reviewer's job, from both texts

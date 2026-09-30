@@ -688,7 +688,8 @@ never blocks the close. Rewrite each such interface with `update --interface`, a
 element it exposes.
 
 `check` also prints `interfaceUnowned:`, at every exit code. It names each path an order's
-interface holds in backticks that the order does not own and no reuse of it declares. The
+interface holds in backticks that the order does not own, no reuse of it declares, and no order
+in its `dependsOn` owns. A `./` prefix and a `:line` or `::member` suffix are ignored. The
 build's interface check wants every backticked name repeated in the builder's record. A builder
 leaves out a path it did not touch, and the build stops. It is best effort, and it never blocks
 the close. Answer each one: write the path as plain text with `update --interface`, or add the

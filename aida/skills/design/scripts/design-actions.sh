@@ -1871,27 +1871,27 @@ do_check() {
   else
     echo "interfaceUnquoted: none"
   fi
-  # The paths an order's interface names in backticks that it does not own and no reuse of it
-  # declares (gap row 253). The build's interface check wants each backticked name repeated in the
-  # builder's record, and a builder leaves out a path it never touched. A token is a path when it
-  # holds a slash and no space, and is neither absolute nor a URL. It is owned or declared when it
-  # is an ownedFiles or reuse path, or lies under one. A script cannot tell a path from prose, so
-  # the line never blocks the close.
+  # The paths an order's interface names in backticks that it does not own, that no reuse of it
+  # declares and that no order it depends on owns (gap row 253). The build's interface check wants
+  # each backticked name repeated in the builder's record, and a builder leaves out a path it never
+  # touched. `ifacePath` decides what a token is as a path. It is known when it is one of those
+  # paths, or lies under one. A script cannot tell a path from prose, so the line never blocks the
+  # close.
   local unowned
   unowned="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
-    | while IFS= read -r f; do jq -r '
-        select(type == "object" and (.interface | type) == "string")
-        | . as $wo
-        | ([ ($wo.ownedFiles // [])[], ($wo.reuses // [])[].path ] | map(rtrimstr("/"))) as $have
-        | [ $wo.interface | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`")
-            | select(test("/") and (test("\\s|://") | not) and (startswith("/") | not))
-            | select(. as $t | any($have[]; . as $h | $t == $h or ($t | startswith($h + "/"))) | not) ]
-        | unique
-        | select(length > 0)
-        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done \
+    | while IFS= read -r f; do jq -c 'select(type == "object")' "$f" 2>/dev/null; done | jq -rs "$IFACE_PATH_JQ"'
+      (map({(.id // ""): (.ownedFiles // [])}) | add // {}) as $owned
+      | .[] | select((.interface | type) == "string") | . as $wo
+      | ([ ($wo.ownedFiles // [])[], ($wo.reuses // [])[].path, (($wo.dependsOn // [])[] | $owned[.] // [] | .[]) ]
+         | map(ltrimstr("./") | rtrimstr("/"))) as $have
+      | [ $wo.interface | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`") | ifacePath
+          | select(. as $t | any($have[]; . as $h | $t == $h or ($t | startswith($h + "/"))) | not) ]
+      | unique
+      | select(length > 0)
+      | $wo.id + " " + join(", ")' 2>/dev/null \
     | paste -s -d ';' - | sed 's/;/; /g')"
   if [ -n "$unowned" ]; then
-    echo "interfaceUnowned: $unowned | best effort: each path is in backticks in the order's interface, and the order neither owns it nor reuses it. The builder's record must repeat it. Write it as plain text with update --interface, or add the reuse with dispose --path --interface"
+    echo "interfaceUnowned: $unowned | best effort: each path is in backticks in the order's interface, and no owned path, reuse or dependency owner covers it. The builder's record must repeat it. Write it as plain text with update --interface, or add the reuse with dispose --path --interface"
   else
     echo "interfaceUnowned: none"
   fi

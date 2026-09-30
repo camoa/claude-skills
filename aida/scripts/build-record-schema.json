@@ -53,6 +53,10 @@
       "type": "string",
       "description": "The text at the path `--interface` named, copied verbatim. Check eight compares the countable half of it against the unit's own declared interface: every backtick-quoted token in the declaration must appear verbatim here. The rest of both texts is prose a person wrote, and the reviewer reads that. Required to be present and non-empty only when the unit's own frozen interface is non-empty (exit 44); otherwise this may be empty, including when no file was there to read."
     },
+    "interfaceRecordBefore": {
+      "type": "string",
+      "description": "Present only after a re-check read an interface record whose text differs from the attempt's own: the text the attempt recorded, kept when a later re-check reads another. Review reads it beside interfaceRecord, so an amendment is compared with what the builder first wrote (gap row 253)."
+    },
     "reportPath": {
       "type": "string",
       "minLength": 1,

@@ -359,19 +359,22 @@ The recipe flags and `--interface` are `build-record`'s. The range and the repor
 from the build record, so neither is passed. The interface record is read again from its file,
 so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
-the tool rows or interface-record alone.
+the tool rows or interface-record alone. When interface-record is among them, the line names
+the record's file to amend first.
 
-It refuses (exit 88) in four cases, each with its own message. No build record exists for the
+It refuses (exit 88) in five cases, each with its own message. No build record exists for the
 order. The code repository's HEAD is not the record's own commit, because the code moved, and
 the route is `build`. Or a check outside the three tool rows and interface-record stopped the
 attempt. A test or a suite that failed is the implementer's work, so a re-check is not a free
 retry, and the route is `build`. Or no check stopped the attempt, so it passed and the order is
-past the build. A halted order refuses (exit 49), and `references/finish.md` names the grant.
-The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
+past the build. Or a path the interface check named does not exist at the recorded commit, so
+no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
+names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
 (exit 44).
 
-It rewrites the record with the new checks and the interface record's text. It keeps the
-attempt, its range and its date. The replaced checks stay under `checksBefore`, id and verdict
+It rewrites the record with the new checks and the interface record's text. When that text
+changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its
+range and its date. The replaced checks stay under `checksBefore`, id and verdict
 only, beside `recheckedAt`. The
 attempt counter does not move. The order goes to `checks-passed` when the checks pass and stays
 at `code-written` otherwise. The summary has `build-record`'s shape plus a `recheck:` line.
