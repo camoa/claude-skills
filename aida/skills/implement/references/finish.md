@@ -37,6 +37,13 @@ framework's own verdict. It never passes on warnings by itself, because the proj
 configuration made them fail the run. A `warning_line` with no `failure_line` is not read, and
 the suite's detail says so.
 
+A project's own copy of the test-execution recipe can lack `warning_line`. The same red then
+reads `unknown`. When no line matches `failure_line`, the refusal names the recipe file, the
+missing key, and what the key reads. No action writes a project's recipe. A person adds the key
+to the suite row, under `failure_line`, and runs `finish` again. `finish` reads that file on each
+run, so `recipe-refresh` is not needed. Without the key, `--accept-warnings` does not pass. An
+`unknown` suite can hide a failure that prints no test line.
+
 The message names three routes, and a person picks one. Put them to the person in these words:
 "Accept the warnings: run finish again with --accept-warnings <the person's reason>, interactive
 only. Change the suite row's command in the project's copy of the test-execution recipe, so these

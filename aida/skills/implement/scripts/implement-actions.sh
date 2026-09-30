@@ -6402,6 +6402,14 @@ br_test_check() {
                 br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw" "$selector" "$warning"
                 verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
                 new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"; warn_json="$BR_SUB_WARNINGS"
+                # The one unknown a warning_line can turn into warned: a finish run where the
+                # selector matches no line and the row has no key. Name the key and its file,
+                # because the project's copy of the recipe may predate the key (gap row 268).
+                if [ "$BRC_END_OF_TASK" = "true" ] && [ "$verdict" = "unknown" ] && [ -n "$selector" ] \
+                  && [ -z "$warning" ] && [ -s "$outfile" ] && [ -s "$baseline_output" ]; then
+                  grep -a -q -E -e "$selector" "$outfile" 2>/dev/null
+                  [ "$?" -ne 1 ] || detail="$detail The suite row in $(printf '%s' "$fw_obj" | jq -r '.testRecipe') declares no warning_line, so finish cannot read this red as runner warnings. warning_line is a regular expression for the lines a runner prints that fail no test. If the output holds no failed test, only runner warnings, a person adds warning_line to that row, under failure_line, and runs finish again. The suite then reads warned, and finish names three routes: accept the warnings, change the suite row's command, or repair the project configuration."
+                fi
                 ;;
               unknown)
                 verdict="unknown"
