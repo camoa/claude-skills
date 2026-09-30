@@ -85,21 +85,27 @@ change that. A tool that runs no test, such as a coding standards checker, insta
 "${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> install <tool>
 ```
 
+The install writes the files under the recipe's `## Files` heading before its first command, and
+the files stay after the install. The install commits nothing, so those files and its other
+changes, such as a changed `composer.json`, stay uncommitted. The person commits them before the
+next build step, or the clean-tree check refuses.
+
 `install` and `show` take no `--` arguments. They read every command from the recipe, so there is
 nowhere to put one. Passing any refuses at 3, rather than dropping what the person typed. Only
 `run` takes them.
 
-Interactive: run `show <tool>` first, print its commands, and wait for a plain yes before you run
-`install`. Autonomous: halt here and say the install needs a person, because an install changes the
-project and nobody is there to approve it. Before you ask, name the files the recipe's commands
-change and check them against the active order's untouched list.
+Interactive: run `show <tool>` first, print its commands and the files it ships, and wait for a
+plain yes before you run `install`. Autonomous: halt here and say the install needs a person,
+because an install changes the project and nobody is there to approve it. Before you ask, name
+the files the recipe ships and the files its commands change. Check both against the active
+order's untouched list.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran. | Run the tool once to confirm it works. |
 | 70 | The run is autonomous, and an install needs a person. | Say the install waits for a person. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
-| 3 | A command was refused, the recipe has no install steps, or arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. The third is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
+| 3 | A command was refused, or the recipe has no install steps. A shipped file differs from the file on disk. Arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. A differing file may be a person's edit or a stale recipe, so name the file and ask the person which. The last is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
 | 4 | A step failed. | The `first:` line quotes the step's first line of output, and the file at `output:` holds the rest. Show what it said; it says what is missing better than a guess would. |
 
 Do not install by hand when a step fails. A missing package manager or a wrong version is the
@@ -134,8 +140,9 @@ as permission to guess.
 "${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh show <tool>
 ```
 
-Prints the recipe's path, the framework it matched, and the commands it holds. Runs nothing. Use it
-when someone asks what would happen, or when an install failed and you want to show the steps.
+Prints the recipe's path, the framework it matched, the commands it holds, and the files it ships.
+Runs nothing. Use it when someone asks what would happen, or when an install failed and you want
+to show the steps.
 
 ## Tools a recipe names
 
@@ -144,8 +151,23 @@ frontmatter. A stage that resolved such a recipe runs this before the recipe's l
 per recipe path:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] <recipe path>
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] [--task <task folder>] <recipe path>
 ```
+
+A recipe can also name a tool that it needs only on a task with automated tests. That tool goes
+in a second list, `requires_tooling_with_tests:`, beside the first:
+
+```yaml
+requires_tooling:
+  - phpcs
+requires_tooling_with_tests:
+  - phpunit
+```
+
+A name under `requires_tooling:` is always needed. A name under `requires_tooling_with_tests:` is
+needed unless the task's contract says it has no automated tests. The script finds the task whose
+worktree is this window's folder. `--task` names another task folder instead. The second list is
+a key of its own because the catalog accepts only tool names under `requires_tooling:`.
 
 It runs each named tool as "Run a tool" does, because a tooling recipe's Run command is also its
 presence check. It prints one `TOOLING:` line per tool, or `REQUIRES: none`. It installs nothing.
@@ -164,8 +186,9 @@ not stop it.
 | 0 | Every named tool is present, or the recipe names none. | Go on with the stage. |
 | 4 | A tool reads absent. | Install each absent tool as "Install a tool" says, then run `require` again. |
 | 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Ask the catalog as above. Still unknown: name the tool and the reason, and stop. Never read it as present. |
-| 1 | No project owns this directory. | Say so in one line and name the project skill. Stop. |
-| 3 | The path is not a readable file, or its `requires_tooling:` value is not a list. | Show the error text and stop. |
+| 1 | No project owns this directory, or the task folder is missing or holds no `task.json`. | Name which in one line. For a task folder, check the path given to `--task`. Otherwise name the project skill. Stop. |
+| 3 | The path is not a readable file, or one of its two lists is not a list. | Show the error text and stop. |
+| 79 | The task builds in its worktree and this window is elsewhere, or git no longer lists the worktree the task records. | Show the error text. For the first, run the call again from that worktree. For the second, follow the repair the text names. |
 
 Exit 2 wins over exit 4, so read every `TOOLING:` line. An absent tool on the same run still
 needs its install. On an autonomous run the install refuses at 70, so the stage halts there.

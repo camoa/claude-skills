@@ -142,13 +142,18 @@ corrects rather than starting from nothing. The opening question of "explore ope
 exception, for the reason given there.
 
 **Autonomous:** nobody answers. Take the draft as it is, and take the recommended answer on every
-single question. For each one, run:
+single question. `set-tests` and `add-non-goal` record their own answer under an autonomous run.
+For each other question, run:
   ```
   "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
-    record-decision "<task_folder>" --text "<the question, and the recommended answer taken>"
+    record-decision "<task_folder>" --text "<the question, and the recommended answer taken>" \
+    [--field <the field the answer set>]
   ```
   to mark it as decided on the person's behalf, and continue. Never treat silence as the owner's
-  own answer.
+  own answer. Give `--field` when the answer set a field: `goal`, `expectedResult`, or the
+  criterion ids, comma-separated, one entry each. A later interactive `set-goal`, `update` or
+  `remove` that changes that field then marks its entry superseded. So `approve` never approves
+  an answer the person reversed.
 
 ### The goal and the expected result
 
@@ -239,14 +244,10 @@ Ask a probe on its own, one per turn, only when its recommended answer is in or 
 of it. A single cheap question costs less than one missed criterion. On "out", write it with
 `add-non-goal` above. On "in", it becomes a criterion instead.
 
-**Autonomous:** take the recommended answer on each probe. The draft already wrote each out-probe;
-read its id from that `ADDED:` line. Then run:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
-  record-decision "<task_folder>" --text "<the probe, its id, and the recommended answer taken>"
-```
-to record that this run decided it. A non-goal carries no author field; only criteria do. So the
-id in that entry is the only mark a non-goal this run wrote itself carries.
+**Autonomous:** take the recommended answer on each probe. The draft already wrote each out-probe
+with `add-non-goal`, which records the decision itself, with the non-goal's id. Do not run
+`record-decision` for a probe. A non-goal carries no author field; only criteria do. So the id
+in that entry is the only mark a non-goal this run wrote itself carries.
 
 ## Automated tests
 
@@ -261,7 +262,8 @@ each order's done-when sentences at review. Write the answer:
 The answer is part of the contract, so `approve` signs it with the rest. Research checks it
 later, and the person may change it there.
 
-**Autonomous:** take the recommended answer, write it, and mark it with `record-decision`.
+**Autonomous:** take the recommended answer and write it with `set-tests`. It records the
+decision itself, so do not run `record-decision` for it.
 
 **Light:** do not ask, and do not run `set-tests`. `init` wrote no on a light task and logged the
 skip. `set-tests` refuses yes there.
@@ -314,11 +316,25 @@ The contract is final by then. Then run:
 ```
 It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
 It marks each decision an unattended run took as approved by the person, and prints
-`approved-decisions:` with the count. A marked decision is history, not an open question. Then it
+`approved-decisions:` with the count. A marked decision is history, not an open question. A
+decision marked superseded is history too, and `approve` leaves it as it is. Then it
 commits the task folder and prints `standsAlone:` and one `gap:` line per gap. Show each
 `gap:` line. Acting on one is the relevant step above run again; the person then says it is
 right again, and the same call runs again. A second `approve` with nothing left to promote says
 so and is not a fault: it commits any later edit and reads the sidecar again.
+
+When `set-goal`, `set-tests`, `update` or `remove` prints `superseded-decisions:`, tell the
+person which unattended answer their change replaced.
+
+A decision can stop holding after it was approved, or name no field at all. When the person
+says one no longer holds, run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
+  retire "<task_folder>" --entry <n> --reason "<the person's reason>"
+```
+`--entry` counts from 1 in the list. The entry becomes history with the reason. `retire` commits
+nothing, so run the distill check and `approve` again after it. It refuses an entry that does
+not exist, and one already superseded or retired.
 
 An earlier version of this skill rendered the whole document after every correction and asked
 for a yes on it, even for one small change. On one task it asked five times in a

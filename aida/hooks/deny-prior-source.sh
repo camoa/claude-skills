@@ -43,7 +43,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # directory, which is often the project's main checkout, and every file the worktree holds is
 # there as well. So each denied path is also resolved against the project's own codePath, and a
 # role in that checkout finds its record by its type (scripts/lib/paths.sh,
-# dispatch_record_for).
+# dispatch_record_for). Gap row 243 adds the forms that read that checkout without a reading verb:
+# git run there, through -C, --git-dir or --work-tree too, and cp, rsync, install, mv and tar with
+# a source there. judge_git and judge_copy below say what each form reads, and which forms are
+# judged in the main checkout only.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, or a tool that is
 # none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
@@ -178,17 +181,15 @@ DENY_COUNT="$(printf '%s' "$DENY_JSON" | jq 'length' 2>/dev/null)"
   || not_enforced "the dispatch open at $DISPATCH_FILE denies no path, so this read was allowed without being checked against anything"
 
 # Every denied path, resolved against codePath and, when it differs, the main checkout. One
-# absolute path per line.
-DENY_ABS=""
-i=0
-while [ "$i" -lt "$DENY_COUNT" ]; do
-  rel="$(printf '%s' "$DENY_JSON" | jq -r --argjson i "$i" '.[$i]')"
-  DENY_ABS="$DENY_ABS$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")
+# absolute path per line. One jq call resolves the whole list, by the rules resolve_against and
+# normalize_abs apply: a process per entry cost seconds on a long list.
+DENY_ABS="$(printf '%s' "$DENY_JSON" | jq -r --arg code "$CODE_CANON" --arg main "$MAIN_CANON" '
+  def norm: split("/") | reduce .[] as $c ([];
+    if $c == "" or $c == "." then . elif $c == ".." then .[:-1] else . + [$c] end)
+    | "/" + join("/");
+  def against($b): if startswith("/") then . else $b + "/" + . end | norm;
+  .[] | select(length > 0) | against($code), (select($main != "") | against($main))')
 "
-  [ -z "$MAIN_CANON" ] || DENY_ABS="$DENY_ABS$(normalize_abs "$(resolve_against "$rel" "$MAIN_CANON")")
-"
-  i=$((i + 1))
-done
 
 # Refuses when resolved target $1 falls under a denied path, or, for a search, when a denied path
 # falls under it. A search is the Grep tool, or a Bash segment whose verb is grep or rg (SEARCH).
@@ -205,9 +206,13 @@ deny_if_listed() {
       # A denied path under codePath is production source, and there is somewhere else to look. A
       # denied path outside it is not, so pointing at an interface record would be wrong advice.
       if is_under "$target_abs" "$CODE_CANON"; then
-        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it instead. It states what that unit exposes, not how it works."
+        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role $deny_abs. Read the interface record of the unit that owns it, or the brief's reuses entry for it, instead. It states what that unit exposes, not how it works."
+        # A search of a folder is refused for a denied file inside it, and the author's own test
+        # file is often beside one (gap row 248).
+        is_under "$target_abs" "$deny_abs" \
+          || reason="$reason To search this order's own test file, name that file by its path, not the folder."
       elif [ -n "$MAIN_CANON" ] && is_under "$target_abs" "$MAIN_CANON"; then
-        reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role that path in the main checkout $MAIN_CANON, as in the task's worktree $CODE_CANON. Work in the worktree: start each shell command with cd $CODE_CANON &&."
+        reason="$ROLE_BARE may not read $target_abs: it is or holds $deny_abs, which this dispatch denies this role, in the main checkout $MAIN_CANON. This role works in the task's worktree $CODE_CANON: start each shell command with cd $CODE_CANON &&."
       else
         reason="$ROLE_BARE may not read $target_abs: this dispatch denies this role that path. It lies outside the code repository and this role has no reason to open it."
       fi
@@ -218,6 +223,91 @@ deny_if_listed() {
   done <<DENY_EOF
 $DENY_ABS
 DENY_EOF
+}
+
+# deny_if_listed, for a target $1 in the main checkout and not in the worktree only. The git
+# whole-tree reads and the copy forms below are judged there alone (gap row 243).
+deny_if_main() {
+  [ -n "$MAIN_CANON" ] && is_under "$1" "$MAIN_CANON" && ! is_under "$1" "$CODE_CANON" || return 0
+  deny_if_listed "$1"
+}
+
+# A git segment, in the words w. git reads a file through its history, its diff or its index. In
+# either tree, a <rev>:<path> in git show or git cat-file reads that path from the tree's top, and
+# git grep searches from where git works, as rg with no path does. A diff, a patch log, a show of a
+# commit, a blame or an archive reads the whole tree. That set is judged in the main checkout
+# only, so git diff and git log -p in the worktree stay the role's view of its own work.
+judge_git() {
+  local whole=false t p top
+  git_tree_of "$RUN_DIR" "${w[@]:1}"
+  top="$GIT_TREE"
+  if is_under "$GIT_TREE" "$CODE_CANON"; then top="$CODE_CANON"
+  elif [ -n "$MAIN_CANON" ] && is_under "$GIT_TREE" "$MAIN_CANON"; then top="$MAIN_CANON"; fi
+  case "${w[$GIT_SUB_AT]:-}" in
+    grep) SEARCH=true; deny_if_listed "$GIT_TREE"; return 0 ;;
+    diff|blame|archive) whole=true ;;
+    log) for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
+           case "$t" in -p|-u|--patch|--patch-with-*) whole=true ;; esac
+         done ;;
+    show|cat-file)
+      [ "${w[$GIT_SUB_AT]}" = cat-file ] || whole=true
+      for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
+        case "$t" in -*|*:) continue ;; *:*) ;; *) continue ;; esac
+        whole=false
+        p="${t#*:}"
+        case "$p" in ./*|../*) ;; *) p="$top/$p" ;; esac
+        deny_if_listed "$(normalize_abs "$(resolve_against "$p" "$GIT_TREE")")"
+      done ;;
+  esac
+  SEARCH=true
+  [ "$whole" = false ] || deny_if_main "$GIT_TREE"
+}
+
+# A copy segment, in the words w. A copy out of the main checkout reads it. Each source there is
+# judged as a search root, so a folder holding a denied path is a hit. The last operand of cp,
+# rsync, install and mv is where the copy lands, unless -t names that (rsync's -t keeps times).
+# tar reads its operands only when it creates, appends or updates, each from the folder the last
+# -C before it names.
+judge_copy() {
+  local i=1 t pend="" dest_named=false from="$RUN_DIR" tar_ops="" reads=false
+  SEARCH=true
+  while [ "$i" -lt "${#w[@]}" ]; do
+    t="${w[$i]}"; i=$((i + 1))
+    if [ "${w[0]}" = tar ]; then
+      case "$t" in
+        --create|--append|--update) reads=true ;;
+        --directory=*) from="$(shell_dir_after "$from" cd "${t#*=}")" ;;
+        -C|--directory) from="$(shell_dir_after "$from" cd "${w[$i]:-}")"; i=$((i + 1)) ;;
+        --file) i=$((i + 1)) ;;
+        --*) ;;
+        *)
+          # A flag cluster, or the first word in the old form without a dash, such as czf. Its f
+          # takes the next word, the archive.
+          if [ "${t#-}" != "$t" ] || [ "$i" -eq 2 ]; then
+            case "$t" in *[cru]*) reads=true ;; esac
+            case "$t" in *f*) i=$((i + 1)) ;; esac
+          else
+            tar_ops="$tar_ops$(normalize_abs "$(resolve_against "$t" "$from")")
+"
+          fi ;;
+      esac
+      continue
+    fi
+    case "$t" in
+      -t|--target-directory) [ "${w[0]}" = rsync ] || { dest_named=true; i=$((i + 1)); } ;;
+      --target-directory=*) dest_named=true ;;
+      -*) ;;
+      *) [ -z "$pend" ] || deny_if_main "$pend"
+         pend="$(normalize_abs "$(resolve_against "$t" "$RUN_DIR")")" ;;
+    esac
+  done
+  [ "$dest_named" = false ] || [ -z "$pend" ] || deny_if_main "$pend"
+  [ "$reads" = true ] || return 0
+  while IFS= read -r t; do
+    [ -z "$t" ] || deny_if_main "$t"
+  done <<TAR_EOF
+$tar_ops
+TAR_EOF
 }
 
 if [ "$TOOL" = "Bash" ]; then
@@ -244,6 +334,8 @@ if [ "$TOOL" = "Bash" ]; then
     SEARCH=false; script_skip=false; recursive=false
     case "${w[0]}" in
       cd|pushd) RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")"; continue ;;
+      git) judge_git; continue ;;
+      cp|rsync|install|mv|tar) judge_copy; continue ;;
       cat|head|tail|less|more|nl) ;;
       grep|rg) SEARCH=true; script_skip=true ;;
       sed|awk) script_skip=true ;;

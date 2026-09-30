@@ -7,13 +7,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
-#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] <process recipe path>
+#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] [--task <task folder>] <process recipe path>
 #
 # Every form also takes `--tooling <tool>=<path>` before the action, once per tool: a catalog
 # recipe catalog-identifier found. A folder source ranked before the catalog still wins.
 #
-# show     prints where the recipe is and the commands it holds, and runs nothing.
-# install  runs every command in the recipe's Install block, in order.
+# show     prints where the recipe is, the commands it holds and its files, and runs nothing.
+# install  writes the recipe's `## Files` into this directory where absent, and keeps them, so an
+#          install line can run a script the recipe ships. A file there that differs refuses at 3,
+#          before any command runs. Then it runs every command in the Install block, in order.
 # run      runs the recipe's Run command. A missing tool is that command failing. What follows
 #          `--` reaches that command as arguments. show and install refuse the form at 3, because
 #          they take their commands from the recipe and would otherwise drop what a caller typed.
@@ -22,7 +24,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #          check exited 127, command not found; any other exit means the tool ran. It exits 0 when
 #          every tool is present, 4 when one is absent, and 2 when one is unknown, over an absent one.
 #          --advisory prints the same lines and exits 0. It installs nothing: install stays the one
-#          action that needs a person.
+#          action that needs a person. A tool under requires_tooling_with_tests is named too, except
+#          when the task says it has no automated tests. The task is the one whose worktree is this
+#          window's top-level folder, or the one --task names.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
@@ -33,11 +37,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Exit codes:
 #   0  did what was asked
-#   1  no project owns this directory
+#   1  no project owns this directory, or require's --task names no task folder
 #   2  no recipe for this tool and this project's frameworks
 #   3  the script could not do its job (bad arguments, unreadable file, refused command)
 #   4  a command from the recipe ran and failed; its own output, in the file, is the answer
 #  70  the action needs a person and this run is autonomous
+#  79  require's --task names a task that builds in its worktree, and this window is elsewhere
 #
 # A command from a recipe runs as arguments, never through a shell. A command carrying a
 # shell metacharacter is refused, because a recipe is data written elsewhere and a
@@ -90,14 +95,49 @@ TOOL="${2:-}"
 # run resolves the tooling recipe, so a name nothing answers reads unknown with run's own reason.
 if [ "$ACTION" = "require" ]; then
   # --advisory prints the same lines and always exits 0, for a caller that goes on either way.
-  ADVISORY=no
-  if [ "$TOOL" = "--advisory" ]; then ADVISORY=yes; shift 2; set -- require "$@"; TOOL="${2:-}"; fi
-  [ $# -eq 2 ] || { printf 'tool-actions: require takes one recipe path and nothing after it\n' >&2; exit 3; }
+  # The task decides a tool under requires_tooling_with_tests: it is left out when the task has no
+  # automated tests. The task is the one whose worktree is this window's top-level folder, and
+  # --task overrides that. With no task, nothing says the tests are off, so the tool is named.
+  ADVISORY=no; TASK_ARG=""
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --advisory) ADVISORY=yes; shift ;;
+      --task) [ $# -ge 2 ] || { printf 'tool-actions: --task needs a task folder\n' >&2; exit 3; }
+              TASK_ARG="$2"; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  [ $# -eq 1 ] || { printf 'tool-actions: require takes one recipe path and nothing after it\n' >&2; exit 3; }
+  TOOL="$1"
   [ -f "$TOOL" ] && [ -r "$TOOL" ] || { printf 'tool-actions: the recipe %s is not a readable file\n' "$TOOL" >&2; exit 3; }
-  NAMES="$(recipe_requires_tooling_of "$TOOL")" || {
+  NAMES="$(recipe_requires_tooling_of "$TOOL")" \
+    && WITH_TESTS="$(recipe_requires_tooling_of "$TOOL" requires_tooling_with_tests)" || {
     printf 'tool-actions: %s holds a requires_tooling value that is not a list, so no tool was checked\n' "$TOOL" >&2
     exit 3
   }
+  # The task lookup and the contract's answer every stage script reads.
+  die1() { die 1 "$1"; }
+  die3() { die 3 "$1"; }
+  die79() { die 79 "$1"; }
+  # shellcheck source=../../../scripts/lib/task-helpers.sh
+  . "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
+  if [ -z "$TASK_ARG" ]; then
+    RQ_PROJECT="$(registry_resolve_by_directory "$(pwd -P)" 2>/dev/null | jq -r '.path // empty' 2>/dev/null)"
+    RQ_CODE=""; [ -z "$RQ_PROJECT" ] || RQ_CODE="$(project_code_path_value "$RQ_PROJECT")"
+    if [ -n "$RQ_CODE" ] && [ -d "$RQ_CODE" ] && [ -d "$RQ_PROJECT/tasks" ]; then
+      # find, not a glob: zsh refuses a glob that matches nothing.
+      TASK_ARG="$(find "$RQ_PROJECT/tasks" -mindepth 2 -maxdepth 2 -name task.json \
+        -exec jq -r --arg top "$(active_tree_for "$RQ_CODE" "$(pwd -P)")" \
+        'select(.worktree.path == $top) | input_filename' {} + 2>/dev/null | head -1)"
+      TASK_ARG="${TASK_ARG%/task.json}"
+    fi
+  fi
+  if [ -n "$TASK_ARG" ]; then
+    TASK_ARG="$(resolve_task_folder "$TASK_ARG" "require")" || exit $?
+    [ "$(automated_tests "$TASK_ARG")" != "no" ] || WITH_TESTS=""
+  fi
+  NAMES="$(printf '%s\n%s\n' "$NAMES" "$WITH_TESTS" | grep -v '^$')"
   if [ -z "$NAMES" ]; then printf 'REQUIRES: none\n'; exit 0; fi
   WORST=0
   while IFS= read -r NAME; do
@@ -270,6 +310,10 @@ case "$ACTION" in
     else
       sh_blocks_under "$RECIPE" Install | sed 's/^/  /'
     fi
+    FILES_DIR="$(mktemp -d)" || { printf 'tool-actions: could not create a temporary folder\n' >&2; exit 3; }
+    printf 'FILES:\n'
+    recipe_files_into "$RECIPE" Files "$FILES_DIR" | cut -f2 | sed 's/^/  /'
+    rm -rf "$FILES_DIR"
     printf 'RUN:\n'
     NRUN="$(sh_block_count_under Run)"
     NCMD="$(sh_command_count_under Run)"
@@ -300,6 +344,17 @@ case "$ACTION" in
       printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"
       printf '%s\n' "$STEPS" | sed 's/^/  /'
     fi
+    # Every line is checked before a file is written, so a recipe that would be refused writes nothing.
+    while IFS= read -r LINE; do
+      [ -n "$LINE" ] || continue
+      refuse_if_unsafe tool-actions "$RECIPE" "$LINE" || exit 3
+    done <<TOOL_STEPS
+$STEPS
+TOOL_STEPS
+    FILES_DIR="$(mktemp -d)" || { printf 'tool-actions: could not create a temporary folder\n' >&2; exit 3; }
+    # shellcheck disable=SC2064 # the path is fixed when the trap is set
+    trap "rm -rf '$FILES_DIR'" EXIT
+    recipe_files_place install "$RECIPE" "$(pwd -P)" "$FILES_DIR"; rm -rf "$FILES_DIR"
     mkdir -p "$PROJECT_DIR/records" || { printf 'tool-actions: could not create %s/records\n' "$PROJECT_DIR" >&2; exit 3; }
     OUTFILE="$PROJECT_DIR/records/tool-${TOOL}-install.txt"
     : >"$OUTFILE"

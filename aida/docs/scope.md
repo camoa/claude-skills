@@ -205,7 +205,10 @@ Set on the task, an autonomous run mode changes four things here. See [Run modes
 - Nothing is promoted to yours. A criterion AIDA proposed stays the designer's, since nobody
   approved it, and the approval itself is recorded as given on your behalf. When you approve the
   contract later, each of those decisions is marked as approved by you, with the date. The page
-  then lists them as approved, and no later stage asks you to repair them.
+  then lists them as approved, and no later stage asks you to repair them. You can change an
+  answer first, for example set automated tests to no after the run took yes. Scope then marks
+  that decision superseded, and never approves it. To close a decision that no longer holds after
+  you approved it, run `retire` with a reason.
 - The test setup offer is skipped, and scope says so.
 - After the close, scope invokes research itself, once, and stops if research refuses.
 

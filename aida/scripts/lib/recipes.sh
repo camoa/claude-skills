@@ -81,8 +81,8 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
-#   recipe_requires_tooling_of <recipe>       the names its requires_tooling: list holds; 2 on
-#                                             a value it cannot read
+#   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
+#                                             the list under <key>; 2 on a value it cannot read
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
 #                                             sets RF_EARLIER
@@ -90,6 +90,8 @@
 #   recipe_files_write <who> <list> <tree> <dir>  writes the absent files and replaces the earlier
 #                                             versions; sets RF_WRITTEN, RF_KEPT, RF_REPLACED,
 #                                             RF_WRITTEN_PATHS, RF_REPLACED_PATHS, RF_SAVED_IN
+#   recipe_files_place <who> <recipe> <tree> <dir>  the ## Files blocks into the tree: refuses a
+#                                             differing file, then writes; sets RF_NEW_DIRS
 #   recipe_files_take_out <tree> <saved> <written> <replaced> <dirs>  puts back, removes and
 #                                             removes the empty folders; prints what it did
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
@@ -1619,19 +1621,22 @@ recipe_name_of() {
 }
 
 # The names under the requires_tooling: list of the frontmatter of the recipe $1, one per line.
+# $2 names another list key instead: requires_tooling_with_tests, the tools a recipe needs only on
+# a task with automated tests (gap row 247). A key of its own, because the catalog refuses any
+# requires_tooling entry that is not one tool name.
 # Items may sit at column 0, and a blank line or a comment inside the list does not end it.
 # Nothing when the key is absent or reads `[]`. Returns 2 on any other value after the colon,
 # because a list this reader cannot see would otherwise read as a recipe that needs no tool.
 recipe_requires_tooling_of() {
-  awk 'NR == 1 && !/^---[ \t\r]*$/ { exit }
+  awk -v key="${2:-requires_tooling}:" 'NR == 1 && !/^---[ \t\r]*$/ { exit }
        NR > 1 && /^---[ \t\r]*$/ { exit }
        inList && /^[ \t]*#/ { next }
        inList && /^[ \t\r]*$/ { next }
        inList && /^[ \t]*-[ \t]/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v)
                                   sub(/[ \t\r]+$/, "", v); if (v != "") print v; next }
        inList { exit }
-       NR > 1 && /^requires_tooling:/ { v = $0; sub(/[ \t]+#.*$/, "", v); sub(/^requires_tooling:[ \t]*/, "", v)
-                                       sub(/[ \t\r]+$/, "", v)
+       NR > 1 && index($0, key) == 1 { v = substr($0, length(key) + 1); sub(/[ \t]+#.*$/, "", v)
+                                       sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
                                        if (v == "") { inList = 1; next }
                                        if (v != "[]") bad = 1
                                        exit }
@@ -1663,8 +1668,8 @@ RF_EARLIER_LIST
   return "$found"
 }
 
-# Set by the two functions below, and read by the callers' cleanup, which may run before either.
-RF_EARLIER=""; RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_SAVED_IN=""
+# Set by the functions below, and read by the callers' cleanup, which may run before any of them.
+RF_EARLIER=""; RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_SAVED_IN=""; RF_NEW_DIRS=""
 
 # Refuses at 3 a file the recipe $2 declares that sits in $4 with other content, or that names a
 # path outside the tree. $1 the action, $3 the `<n><TAB><path>` list recipe_files_into printed,
@@ -1736,6 +1741,18 @@ $list
 RF_FILES
 }
 
+# Writes the `## Files` blocks of the recipe $2 into the tree $3 where absent, through the folder $4.
+# It refuses at 3, under the name $1, before it writes anything, when a file there differs.
+# RF_NEW_DIRS holds the folders it makes, set before the first write, for a caller's cleanup.
+recipe_files_place() {
+  local list
+  list="$(recipe_files_into "$2" Files "$4")"
+  recipe_files_refuse_differing "$1" "$2" "$list" "$3" "$4"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  RF_NEW_DIRS="$(recipe_files_new_dirs "$3" "$list")"
+  recipe_files_write "$1" "$list" "$3" "$4"
+}
+
 # Takes the recipe files a run wrote back out of the tree $1. It puts back each path of $4 from the
 # saved folder $2, removes each path of $3, then removes each folder of $5 that is empty, deepest
 # first. Each list holds one path per line, and a path may appear twice. A caller that keeps a file
@@ -1777,22 +1794,19 @@ RF_TAKE_DIRS
 # unfilled, exits 3 under the name $1 before any file is written. The `## Files` blocks then go
 # into the tree where absent, with $5 as the folder of blocks, so the line may run a script the
 # recipe ships. The caller takes them out again through its own cleanup. That cleanup reads
-# RF_WRITTEN_PATHS, RF_REPLACED_PATHS and RS_DIRS, the folders made for them, which is set before
+# RF_WRITTEN_PATHS, RF_REPLACED_PATHS and RF_NEW_DIRS, the folders made for them, which is set before
 # the first write. Nothing goes to standard output. RS_FIRST holds the command's first line.
-RS_FIRST=""; RS_DIRS=""
-# shellcheck disable=SC2034 # RS_FIRST and RS_DIRS are read by the sourcing script
+RS_FIRST=""
+# shellcheck disable=SC2034 # RS_FIRST is read by the sourcing script
 recipe_status_run() {
-  local who="$1" recipe="$2" tree="$3" dir="$5" line list rest rc
+  local who="$1" recipe="$2" tree="$3" dir="$5" line rest rc
   RS_FIRST=""
   line="$(sh_blocks_under "$recipe" Status | sed -n '/[^ ]/{p;q;}')"
   [ -n "$line" ] || return 2
   line="$(fill_tokens_from "$(jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$4" 2>/dev/null)" "$line")"
   refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
   case "$line" in *'{'*'}'*) rest="${line#*\{}"; die 3 "$who: the ## Status line of $recipe holds a token nothing fills: {${rest%%\}*}}. A status line may hold only the keys the task record keeps under environment." ;; esac
-  list="$(recipe_files_into "$recipe" Files "$dir")"
-  recipe_files_refuse_differing "$who" "$recipe" "$list" "$tree" "$dir"
-  RS_DIRS="$(recipe_files_new_dirs "$tree" "$list")"
-  recipe_files_write "$who" "$list" "$tree" "$dir" >/dev/null
+  recipe_files_place "$who" "$recipe" "$tree" "$dir" >/dev/null
   run_recipe_capture "$who" "$recipe" "$line" "$tree" "$dir/out" "$dir/capture" >/dev/null; rc=$?
   RS_FIRST="$(sed -n 2p "$dir/out")"
   [ "$rc" -eq 0 ] || return 1

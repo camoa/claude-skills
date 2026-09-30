@@ -35,8 +35,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   scope-actions.sh [--run-mode <interactive|autonomous>] set-mechanism  <task_folder> \
 #                      --approach <text> --status <suggested|required>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] record-decision <task_folder> \
-#                      --text <text>
+#                      --text <text> [--field <automatedTests|goal|expectedResult|id>[,...]]
 #   scope-actions.sh [--run-mode <interactive|autonomous>] approve        <task_folder>
+#   scope-actions.sh [--run-mode <interactive|autonomous>] retire         <task_folder> \
+#                      --entry <n> --reason <text>
 #   scope-actions.sh [--run-mode <interactive|autonomous>] distill        <task_folder>
 #
 # `add` records `author` as `designer` in both run modes. Only an explicit `--author owner`, or
@@ -65,8 +67,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # retired id is part of the contract's own history, so its high-water mark freezes with the
 # contract instead of living somewhere that can be lost or reset independently of it. There is no
 # alignment-ids.json; this script never writes one, and one found on disk is not read.
-# decidedWithoutAPerson holds a string per question an unattended run answered on the person's
-# behalf (ideal/scope.md, "The autonomous branch"); only `record-decision` appends to it.
+# decidedWithoutAPerson holds an entry per question an unattended run answered on the person's
+# behalf (ideal/scope.md, "The autonomous branch"). `record-decision` appends to it, and so do
+# set-tests and add-non-goal under an autonomous run, with the field they set.
+# scripts/lib/decided.sh states what an entry holds. Under an interactive run, set-goal,
+# set-tests, update and remove mark an entry superseded when they change a field it names, and
+# print `superseded-decisions: <count>`. approve and retire mark the rest.
 #
 # Every write is atomic: a temporary file in the task folder itself, then a rename over the
 # target, so a write that fails partway never leaves a half-written alignment.json or task.json
@@ -90,7 +96,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   2  the target of this action is not present: alignment.json does not exist yet, for an action
 #      that needs one already (every action but `read`, `init`, `set-mechanism` and `distill`);
 #      or, for `update` and `remove`, the given --id names no criterion and no non-goal in an
-#      alignment.json that does exist; or, for `approve` and `distill`, records/scope-distill.json
+#      alignment.json that does exist; or, for `record-decision`, an id in --field names none;
+#      or, for `retire`, no entry is at the given --entry; or, for `approve` and `distill`, records/scope-distill.json
 #      does not exist yet, so the distiller has not been dispatched. `approve` has promoted and
 #      committed by then; run it again once the sidecar exists.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
@@ -102,8 +109,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
 #      autonomous; a given --automated that is not yes or no, or yes on a light task; a missing
-#      or unusable nextCriterionId or nextNonGoalId; the plugin root could not be resolved; or a
-#      write that failed.
+#      or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
+#      `retire` under --run-mode autonomous, or on an entry already superseded or retired; the
+#      plugin root could not be resolved; or a write that failed.
 #   4  a script this action calls ran and failed. `render`, and every action that writes
 #      alignment.json, call alignment-render.sh; that script's own stderr is the answer, printed
 #      here rather than duplicated. For `approve` and `distill`, the sidecar exists but fails
@@ -177,8 +185,10 @@ usage: scope-actions.sh read            <task_folder>
        scope-actions.sh remove          <task_folder> --id <id>
        scope-actions.sh render          <task_folder>
        scope-actions.sh set-mechanism   <task_folder> --approach <text> --status <suggested|required>
-       scope-actions.sh record-decision <task_folder> --text <text>
+       scope-actions.sh record-decision <task_folder> --text <text> \
+                                         [--field <automatedTests|goal|expectedResult|id>[,...]]
        scope-actions.sh approve         <task_folder>
+       scope-actions.sh retire          <task_folder> --entry <n> --reason <text>
        scope-actions.sh distill         <task_folder>
 EOF
 }
@@ -260,6 +270,42 @@ contract_summary() {
     "decided-without-a-person: " + (decidedOpen | length | tostring)' \
     "$ALIGNMENT_FILE"
   echo "automated-tests: $(automated_tests "$TASK_PATH")"
+}
+
+# Writes $2 as the contract, for $1, an action that can change a field a decided entry names.
+# Under an interactive run, each entry with a field it changes is marked superseded first
+# (decidedSupersede in scripts/lib/decided.sh), and a superseded-decisions line says how many. An
+# autonomous run never supersedes an answer: no person has seen it yet.
+write_contract() {
+  if [ "$RUN_MODE" != "interactive" ]; then
+    write_atomic "$ALIGNMENT_FILE" "$2"
+    return
+  fi
+  local count="$DECIDED_JQ"' [(.decidedWithoutAPerson // [])[] | objects | select(decidedState == "superseded")] | length'
+  local before after updated
+  before="$(jq "$count" "$ALIGNMENT_FILE")" || die3 "$1: could not read $ALIGNMENT_FILE"
+  updated="$(printf '%s' "$2" | jq --slurpfile old "$ALIGNMENT_FILE" --arg by "$1" \
+      --arg at "$(date -u +%Y-%m-%d)" "$DECIDED_JQ"' decidedSupersede($old[0]; $by; $at)')" \
+    || die3 "$1: could not update $ALIGNMENT_FILE"
+  write_atomic "$ALIGNMENT_FILE" "$updated"
+  after="$(jq "$count" "$ALIGNMENT_FILE")"
+  [ "$after" -eq "$before" ] || echo "superseded-decisions: $((after - before))"
+}
+
+# Appends one decidedWithoutAPerson entry: a string, or {text, field} when $2, the field the
+# answer set, is given. It prints the entry's text, the one text this script prints, so the run
+# that wrote it can say what it decided without opening the contract.
+append_decision() {
+  local entry updated
+  if [ -z "${2:-}" ]; then
+    entry="$(jq -n --arg t "$1" '$t')"
+  else
+    entry="$(jq -n --arg t "$1" --arg f "$2" '{text: $t, field: $f}')"
+  fi
+  updated="$(jq --argjson e "$entry" '.decidedWithoutAPerson = ((.decidedWithoutAPerson // []) + [$e])' "$ALIGNMENT_FILE")" \
+    || die3 "could not record the decision in $ALIGNMENT_FILE"
+  write_atomic "$ALIGNMENT_FILE" "$updated"
+  echo "decided: $1"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -349,7 +395,7 @@ do_set_goal() {
     updated="$(jq --arg g "$goal" '.goal = $g' "$ALIGNMENT_FILE")" \
       || die3 "set-goal: could not update $ALIGNMENT_FILE"
   fi
-  write_atomic "$ALIGNMENT_FILE" "$updated"
+  write_contract set-goal "$updated"
 
   echo "GOAL SET"
   contract_summary
@@ -387,7 +433,9 @@ do_set_tests() {
   local updated
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \
     || die3 "set-tests: could not update $ALIGNMENT_FILE"
-  write_atomic "$ALIGNMENT_FILE" "$updated"
+  write_contract set-tests "$updated"
+  [ "$RUN_MODE" = "interactive" ] \
+    || append_decision "Automated tests: $automated, the recommended answer, taken" automatedTests
 
   echo "TESTS SET"
   contract_summary
@@ -497,6 +545,8 @@ do_add_non_goal() {
        | .nextNonGoalId = $next' "$ALIGNMENT_FILE")" \
     || die3 "add-non-goal: could not add the new non-goal to $ALIGNMENT_FILE"
   write_atomic "$ALIGNMENT_FILE" "$updated"
+  [ "$RUN_MODE" = "interactive" ] \
+    || append_decision "Non-goal $id, $text: the recommended answer, out, taken" "$id"
 
   echo "ADDED: $id"
   contract_summary
@@ -592,7 +642,7 @@ do_update() {
             | (if $setAuthor then .author = $author else . end)
           else . end
         ))' "$ALIGNMENT_FILE")" || die3 "update: could not update $ALIGNMENT_FILE"
-  write_atomic "$ALIGNMENT_FILE" "$updated"
+  write_contract update "$updated"
 
   echo "UPDATED: $id"
   local fields_set=""
@@ -641,7 +691,7 @@ do_remove() {
   local updated
   updated="$(jq --arg arr "$arrfield" --arg id "$id" '.[$arr] |= map(select(.id != $id))' "$ALIGNMENT_FILE")" \
     || die3 "remove: could not update $ALIGNMENT_FILE"
-  write_atomic "$ALIGNMENT_FILE" "$updated"
+  write_contract remove "$updated"
 
   echo "REMOVED: $id"
   echo "This id is retired. It is never minted again for this task."
@@ -722,17 +772,24 @@ do_set_mechanism() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# record-decision: appends to alignment.json's own decidedWithoutAPerson, one string per question
+# record-decision: appends to alignment.json's own decidedWithoutAPerson, one entry per question
 # an unattended run answered on the person's behalf (ideal/scope.md, "The autonomous branch").
+# With --field, the entry is an object that names the field the answer set, so a later
+# interactive action that changes that field marks it superseded (gap row 244). --field takes a
+# comma-separated list: every name is checked first, then one entry per name is appended, each
+# with the same text, since each name is one question answered. Without it, the entry is a string.
 # ------------------------------------------------------------------------------------------------
 
 do_record_decision() {
-  local text=""
+  local text="" field=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --text)
         need_value "record-decision" "--text" "$#" "${2:-}"
         text="$2"; shift 2 ;;
+      --field)
+        need_value "record-decision" "--field" "$#" "${2:-}"
+        field="$2"; shift 2 ;;
       *) die3 "record-decision: unrecognized argument: $1" ;;
     esac
   done
@@ -740,16 +797,26 @@ do_record_decision() {
 
   require_alignment_exists "record-decision"
 
-  local updated
-  updated="$(jq --arg text "$text" \
-      '.decidedWithoutAPerson = ((.decidedWithoutAPerson // []) + [$text])' "$ALIGNMENT_FILE")" \
-    || die3 "record-decision: could not update $ALIGNMENT_FILE"
-  write_atomic "$ALIGNMENT_FILE" "$updated"
+  local names='' name
+  if [ -n "$field" ]; then
+    names="$(jq -rn --arg f "$field" '$f | split(",") | .[]')"
+    while IFS= read -r name; do
+      case "$name" in
+        automatedTests|goal|expectedResult) continue ;;
+      esac
+      [ -n "$(id_kind "$name")" ] \
+        || die3 "record-decision: each --field name must be automatedTests, goal, expectedResult, or a criterion or non-goal id, got '$name'"
+      [ "$(jq -r --arg id "$name" '[(.criteria // [])[], (.nonGoals // [])[] | .id?] | index($id) != null' "$ALIGNMENT_FILE")" = "true" ] \
+        || die2 "record-decision: no criterion or non-goal with id $name in $ALIGNMENT_FILE"
+    done < <(printf '%s\n' "$names")
+    while IFS= read -r name; do
+      append_decision "$text" "$name"
+    done < <(printf '%s\n' "$names")
+  else
+    append_decision "$text"
+  fi
 
   echo "DECISION RECORDED"
-  # The one text this script prints: the entry just written, so the run that wrote it can say
-  # what it decided without opening the contract. contract_summary below keeps to the count.
-  echo "decided: $text"
   contract_summary
   render_alignment
   exit 0
@@ -789,7 +856,8 @@ close_scope() {
 # `distill` does. Nothing left to promote is not a refusal. The contract was already approved,
 # and the call says so, still commits any later edit, and reads the sidecar again. It also marks
 # each open decidedWithoutAPerson entry as approved by the person today, so no later reader takes
-# an approved contract for an unapproved one (gap row 232).
+# an approved contract for an unapproved one (gap row 232). A superseded entry is not open, so it
+# is never marked approved (gap row 244).
 # ------------------------------------------------------------------------------------------------
 
 do_approve() {
@@ -813,8 +881,9 @@ do_approve() {
   fi
   marked="$(jq "$DECIDED_JQ decidedOpen | length" "$ALIGNMENT_FILE")"
   if [ "$marked" -gt 0 ]; then
-    updated="$(jq --arg at "$(date -u +%Y-%m-%d)" '.decidedWithoutAPerson |= map(
-        if type == "string" then {text: ., approvedAt: $at, approvedBy: "person"} else . end)' "$ALIGNMENT_FILE")" \
+    updated="$(jq --arg at "$(date -u +%Y-%m-%d)" "$DECIDED_JQ"' .decidedWithoutAPerson |= map(
+        if decidedIsOpen then (if type == "string" then {text: .} else . end)
+          + {approvedAt: $at, approvedBy: "person"} else . end)' "$ALIGNMENT_FILE")" \
       || die3 "approve: could not update $ALIGNMENT_FILE"
     write_atomic "$ALIGNMENT_FILE" "$updated"
   fi
@@ -825,6 +894,55 @@ do_approve() {
   # Rendered before the commit, so the committed folder carries the page as promoted.
   render_alignment
   close_scope "$stale"
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# retire: a person closes one decidedWithoutAPerson entry with a reason. It is for an entry no
+# field names, or one approved before its answer was reversed, which nothing else can close (gap
+# row 244). --entry counts from 1, in the list's own order. Like the other mid-stage edits, it
+# commits nothing; the next approve commits it.
+# ------------------------------------------------------------------------------------------------
+
+do_retire() {
+  local entry="" reason=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --entry)
+        need_value "retire" "--entry" "$#" "${2:-}"
+        entry="$2"; shift 2 ;;
+      --reason)
+        need_value "retire" "--reason" "$#" "${2:-}"
+        reason="$2"; shift 2 ;;
+      *) die3 "retire: unrecognized argument: $1" ;;
+    esac
+  done
+  [ "$RUN_MODE" = "interactive" ] \
+    || die3 "retire: only a person retires a decision. An autonomous run leaves it for the person"
+  case "$entry" in
+    ''|0*|*[!0-9]*) die3 "retire: --entry must be a whole number from 1, got '${entry:-<nothing>}'" ;;
+  esac
+  is_blank "$reason" && die3 "retire: --reason is required and must not be blank"
+
+  require_alignment_exists "retire"
+
+  local state updated
+  state="$(jq -r --argjson i "$((entry - 1))" "$DECIDED_JQ"' (.decidedWithoutAPerson // [])[$i] // empty
+      | if decidedWhole then decidedState else "malformed" end' "$ALIGNMENT_FILE")"
+  case "$state" in
+    '') die2 "retire: no entry $entry in decidedWithoutAPerson of $ALIGNMENT_FILE" ;;
+    open|approved) ;;
+    *) die3 "retire: entry $entry is $state, not open or approved, so there is nothing to retire" ;;
+  esac
+  updated="$(jq --argjson i "$((entry - 1))" --arg at "$(date -u +%Y-%m-%d)" --arg why "$reason" \
+      '.decidedWithoutAPerson[$i] |= (if type == "string" then {text: .} else . end)
+        + {retiredAt: $at, retiredBy: "person", retiredReason: $why}' "$ALIGNMENT_FILE")" \
+    || die3 "retire: could not update $ALIGNMENT_FILE"
+  write_atomic "$ALIGNMENT_FILE" "$updated"
+
+  echo "RETIRED: $entry"
+  contract_summary
+  render_alignment
   exit 0
 }
 
@@ -874,6 +992,7 @@ case "$ACTION" in
   set-mechanism)    do_set_mechanism    "$@" ;;
   record-decision)  do_record_decision  "$@" ;;
   approve)          do_approve          "$@" ;;
+  retire)           do_retire           "$@" ;;
   distill)          do_distill          "$@" ;;
   *) usage; die3 "unknown action: $ACTION" ;;
 esac

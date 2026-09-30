@@ -69,10 +69,14 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
 | `finished: recorded` | The review stage is next. After a failed review, fix what it found and take `finish` again | `finish` |
-| An `order(...)` line whose halt holds a `design drift...` segment, anywhere in it | Offer the restart, or the design put back and `start` run again | `finish` |
 | An `order(...)` line whose halt says `the design removed` it, and an order `not started` that could move | Offer the restart before those tests are written: the removed order's frozen record still guards its test files | `finish` |
+| An `order(...)` line whose only drift segments begin `design drift: the builder declared a departure` or `design drift: the reviewer answered`, a person present | Offer `review-record --accept-deviation` to keep the departure, or the restart once design amends the order | `review` |
+| An `order(...)` line whose halt holds any other `design drift...` segment, a person present | Offer the restart. A segment about the order's own design file also clears when the design is put back and `start` runs again | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
-| An `order(...)` line whose halt holds none of those three segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
+| An `order(...)` line whose halt begins `test wrong`, a person present | Offer `retake-tests`, which sends the order back to its tests | `review` |
+| An `order(...)` line whose halt holds none of those segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
+
+A refusal writes no halt, so no row above routes it. Its message names the route. Take that route.
 
 A recipe the catalog republished after `preconditions` ran is not a step the table derives. Run
 `recipe-refresh` before the next freeze, as `references/preconditions.md` says.
@@ -99,11 +103,8 @@ can still be retaken. After the build, the route is `retake-tests` under Rulings
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
 
-A halt beginning `attempts spent`, `budget spent` or `design drift` has its own next step in
-`references/finish.md`. The first takes the grant of one more attempt. The second takes the same
-grant, after the run's budget is raised. The third takes the restart after a design change. Every
-other halt takes `clear-halt`, after the person has done what the reason names. Offer any of them
-only when a person is present to decide it.
+Each halt takes the route of its row in the table above, and the `next:` line from `read` names
+it. Offer any of them only when a person is present to decide it.
 
 A run has a ceiling when the task sets `budget` in its own record, in dispatches or in minutes.
 `dispatch-open` recomputes what was spent from the ledger before every dispatch and halts the
@@ -196,9 +197,12 @@ that never returned leaves one.
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. The signal is the runtime's own mark that the role stopped at its turn limit.
 For the reviewer the script also sees it: a plain close refuses (exit 111) when the findings or
-verdicts file its brief names is missing. For the other roles only the mark tells, so watch for it.
-Close with `--no-report` added. The record stays open, so both hooks keep applying. Then send one
-message to the same agent: finish the work and write the report. Do not dispatch a fresh role. The
+verdicts file its brief names is missing. The fixer and the test author end the report their brief
+pins with `Report: complete`. A plain close whose report lacks that line takes the step below
+itself (exit 112). After a 112, do not close again: resume the agent. A `--no-report` close after
+a 112 spends the one resume. For the row-checker only the mark tells, so watch for it. Close with
+`--no-report` added. The record stays open, so both hooks keep applying. Then send one message to
+the same agent: finish the work and write the report. Do not dispatch a fresh role. The
 brief is unchanged and the work is unfinished, and a fresh role meets the half-written files. This
 differs from a row a person rejects, where the brief changes and the role is dispatched fresh.
 When the resumed role returns, close again, with `--no-report` if it stopped again. The second
@@ -223,9 +227,9 @@ The message they send when they cannot find the record has not run live, so do n
 part as proven.
 
 While a record is open, both hooks also guard the project's main checkout, the code path the
-project registers. There the role is refused each denied read and every write. A role in that
-checkout is matched to the record by its type. A shell command that builds a path at run time
-still passes, and so does a `git commit` run there.
+project registers. There the role is refused each denied read and every write, also through git
+and through a copy in or out. A role in that checkout is matched to the record by its type. A
+shell command that builds a path at run time still passes.
 
 The read denial covers Read, Grep and the plain shell reads: `cat`, `head`, `tail`, `less`,
 `more`, `sed`, `awk`, `grep`, `rg` and `nl`. A path a shell assembles at run time passes. That

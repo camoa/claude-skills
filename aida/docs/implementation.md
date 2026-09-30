@@ -80,7 +80,10 @@ in one of four words:
 Undeclared is never reported as conditions that passed. A checker that is not installed says
 nothing about the condition it was meant to probe. A recipe declaring nothing has answered, and
 stopping on it would mean no project on that framework ever builds. On unmet or unknown you
-decide what to do; an autonomous run halts there. A command that carries a placeholder, such as
+decide what to do; an autonomous run halts there. When the task record shows the worktree's
+site is not running, an unmet condition names the task's environment step as its owner, not the
+tool the recipe named. Two records show that: a bring-up that did not finish, and a status line
+that says down. A command that carries a placeholder, such as
 the test runner a Python project names, needs a value from you. AIDA never guesses one.
 
 Two refusals end the whole run here rather than later. A framework whose recipe can run neither
@@ -93,7 +96,8 @@ A task whose every order is proved by its record, or confirmed by you, runs no t
 conditions and its smoke command are recorded as not needed and never run. No suite baseline is taken, and the build
 goes on. The review tools still run over any file an order owns under the code path. One order
 proved by a test, by a configuration gate or by a look at a page brings the whole harness back.
-That one order runs the suite.
+That one order runs the suite. On a task with no automated tests, the configuration gate is the
+exception. It runs its own lines and no suite, so it brings nothing back.
 
 Then AIDA runs each framework's cheapest test command, the one that proves the harness reports at
 all, and takes the baseline. The whole suite runs once, because the orders' tests do not exist
@@ -536,19 +540,19 @@ so they still hold. Once design has closed again, the next run takes the live or
 keeps its step and attempts. The next build brief carries the new findings. The orders that
 depend on it are left alone. A removed owned file, or any other change, halts as above.
 
-A restart moves records, not commits. The halted order's frozen tests and its build attempts are
-still on the branch. A test author sent against them could write a test that passes at once. So the
-restart lists those commits, and says one of two things about the tree. When nothing later depends
-on them, it names the commit to take the branch back to. That is a hard reset, and you run it. When
-other commits sit after them, they are carried. The unit's own code stays in the tree, so its next
-tests cannot go red. Either way the next run names the unit's build and fix commits while they are
-there. It stops once the unit is built again. A retake names them the same way, because it keeps the
-build and corrects only the test. They come in the order the branch holds them, oldest first. They
-are worked out again each time, from the unit's own records, wherever a retake or an earlier restart
-moved them. After a rebase, each is found again by its change and its author, date and subject. One
-whose diff the rebase changed is named as not found, with the reason, and cannot be cited. The test
-author's brief then carries those commits and says the tree holds the unit's earlier code. A test
-green on arrival is never taken as proof.
+A restart moves the records and reverts the code. The halted order's build attempts are still on the
+branch, recorded or not. A test author sent against them could write a test that passes at once. So
+the restart reverts each commit made after the order's freeze that changes only its owned files. It
+reverts the newest first, one revert commit each, and the frozen tests stay. When a commit also
+changes a file the order does not own, nothing is reverted. The restart names the commit and the
+files, and you separate them. A retake keeps the build and corrects only the test. The next run then
+names the unit's build and fix commits while they are there. It stops once the unit is built again.
+They come in the order the branch holds them, oldest first. They are worked out again each time,
+from the unit's own records, wherever a retake or an earlier restart moved them. After a rebase,
+each is found again by its change and its author, date and subject. One whose diff the rebase
+changed is named as not found, with the reason, and cannot be cited. The test author's brief then
+carries those commits and says the tree holds the unit's earlier code. A test green on arrival is
+never taken as proof.
 
 **Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
@@ -597,8 +601,10 @@ partway through a long build. That is how grants work, not a fault in the build.
 
 A dispatched role works in the task's worktree. Each brief and each dispatch message names it.
 While a dispatch is open, the hooks refuse that role a denied read and any write in the project's
-main checkout. The role would otherwise start there. A path a shell assembles at run time still
-passes. So does a `git commit` run in the main checkout.
+main checkout. The role would otherwise start there. This covers git run there, also through its
+-C option, and a copy out of the checkout or into it. A path a shell assembles at run time still
+passes. In the worktree, git diff, git log with patches and git show of a commit still show the
+changes to a denied file.
 
 The read denials and the frozen-test refusal are hooks the runtime applies. The read denial covers
 the Read and Grep tools and the plain shell reads, `cat`, `head`, `sed`, `grep` and their kin. A

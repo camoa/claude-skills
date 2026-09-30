@@ -55,6 +55,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--value <name>=<value>]... \
 #                            [--nothing-ran <literal substring>]
 #   implement-actions.sh build-recheck <task_folder> <unit_id> \
+#                            [--interface <path to the interface record the builder wrote>] \
 #                            [--test-recipe <framework>=<path>]... \
 #                            [--check-recipe <framework>=<path>]... \
 #                            [--implement-recipe <framework>=<path>]... \
@@ -105,7 +106,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
 #   implement-actions.sh dispatch-close <task_folder> [--no-report]
 #
-# `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. The
+# `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
+# fixer or test author whose pinned report lacks its completion line takes that path unasked (112). The
 # first time, the record stays open and takes `resumedAt`, and the role is resumed once by message.
 # The second time, the order halts and the record is removed (exit 110, gap row 228). For a
 # reviewer, a plain close also refuses when its brief's findings or verdicts file is missing (111).
@@ -251,8 +253,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      re-derived from the live alignment.json and design/*.json. Design changed after it closed,
 #      without closing again. Close design again. A resumed run answers the same when a drifted
 #      order that has not started would take its live copy, or a started or closed order that
-#      only gained owned files, findings or an appended reason would take its copy in place, and
-#      `restart` when the halted orders would: a live copy design did not close on is never frozen.
+#      changed only in fields its frozen tests were not written from would take its copy in place.
+#      The message names each such order and what changed in it. `restart` answers the same when
+#      the halted orders would take their copies: a live copy design did not close on is never frozen.
 #  14  the task's own project.json exists but is not valid JSON, so its codePath cannot be read.
 #      A different fact from exit 3's "no usable codePath", which is a valid file with the field
 #      absent or empty.
@@ -299,6 +302,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  26  `tests-freeze` was given a --test whose path does not exist on disk.
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
+#      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.
 #  28  `tests-freeze` was given a --test whose test name does not carry, at its own end, the
 #      criterion id (or ids, chained from the right) it claims, or the unit's own id when the test
 #      proves the unit's doneWhen instead of a criterion.
@@ -354,10 +358,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      repository, or, for an order whose proof is record, in the project folder: such an order's
 #      deliverable lives in the task folder, so its range, its tree and its diff are read there
 #      (nyc defect 17). Exits 45, 51, 61, 63 and 71 read the same repository for such an order.
-#  44  `build-record` found the interface record file missing or empty while the given unit
-#      declares a non-empty interface. The file is the one --interface names, or without that flag
-#      the one the brief's `interfacePath` names (live-run row 102). A file present for a unit that
-#      declares no interface is read and recorded without complaint; nothing here judges its content.
+#  44  `build-record` or `build-recheck` found the interface record file missing or empty while
+#      the given unit declares a non-empty interface. The file is the one --interface names, or
+#      without that flag the one the brief's `interfacePath` names (live-run row 102). A file
+#      present for a unit that declares no interface is read and recorded without complaint;
+#      nothing here judges its content.
 #  45  a record for this attempt or this round already exists, so the call would write it twice.
 #      `build-record` found build-<unit_id>.json already recorded at the same commit and the same
 #      attempt number; `fix-record` found fix-<unit_id>-<round>.json already recorded at the same
@@ -377,7 +382,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or an implementer
 #      or a fixer on an order that declares none of its own. A role's lists are derived from those
 #      files, so an empty set means the denial the role exists for would apply to nothing, or the
-#      role would be dispatched with nowhere it is meant to write.
+#      role would be dispatched with nowhere it is meant to write. Or a test author on an order
+#      that owns no file a test glob matches and no directory, whose every test the freeze would
+#      refuse (gap row 249).
 #
 # The step-five exit codes. Six actions share these, and each number carries one meaning across all
 # six rather than one number per action per fact.
@@ -564,14 +571,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the grant: there is nothing to resume.
 #
 # The code the re-check added (live-run row 87).
-#  88  `build-recheck` cannot run the checks again over the recorded range, for one of four facts,
+#  88  `build-recheck` cannot run the checks again over the recorded range, for one of five facts,
 #      each named in its own message. No build record exists for the order, so there is no range.
 #      The repository's HEAD is not the record's own `commit`, so the code moved and the route is
 #      `build`. Or the record's stopping checks include one outside `coding-standards`,
-#      `static-analysis` and `security`. A test or a suite that failed is the implementer's work,
-#      so a re-check would be a free retry, and the route is `build`. Or no check stopped the
-#      attempt, so it passed and the order is past the build. A halted order refuses at exit 49
-#      like every step-five action, and `grant-attempt` is its route.
+#      `static-analysis`, `security` and `interface-record`. A test or a suite that failed is the
+#      implementer's work, so a re-check would be a free retry, and the route is `build`. Or no
+#      check stopped the attempt, so it passed and the order is past the build. Or a path the
+#      interface check named does not exist at the recorded commit, so no amended record can
+#      answer it (gap row 253). A halted order refuses at exit 49 like every step-five action, and
+#      `grant-attempt` is its route.
 #
 # The code the support files added (live-run row 90).
 #  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
@@ -703,6 +712,22 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 111  a plain `dispatch-close` on a reviewer's record found the file its brief names missing, or
 #      no newer than the record: `findingsPath` in review mode, `verdictsPath` in verify mode after
 #      the ledger's `fixed`. The record stays open. The message names `--no-report`.
+# The code the completion line added (gap row 250).
+# 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
+#      pins missing, no newer than the record, not ending with the line `Report: complete`, or
+#      holding nothing but that line. A fixer's report must also be no older than the last commit
+#      in codePath, because the fixer commits and then writes the line. A test author commits
+#      nothing, so its report is read by the line alone. The role stopped before its last act, so
+#      the close runs as `--no-report` does: the record stays open and takes `resumedAt`. A second
+#      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
+#      without --resume removes the role's earlier report, so an old complete one cannot pass.
+#      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
+# The code the reverting restart added (gap row 252).
+# 113  `restart` found a commit of a halted order that also changes a file the order does not own,
+#      or a merge that changes the order's files. A revert of the first would undo that other work
+#      too, and a revert of a merge needs a person to choose its parent. So nothing is reverted,
+#      moved or written. The message names each such commit, its order and the other files. A
+#      person splits or reverts the commit, then runs restart again.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -830,6 +855,10 @@ attempts_allowed_for() {
 # read and changed in one place.
 FIX_ROUNDS_ALLOWED=2
 
+# The last line a fixer and a test author write in the report their brief pins, as their last act
+# (gap row 250). dispatch-close reads its absence as a stop before the role finished.
+IM_REPORT_DONE="Report: complete"
+
 # A light task allows a fake off the demo path, marked in the code with this text. The build brief
 # names it, and `close` logs every added line that carries it (gap row 197).
 FAKE_MARKER="AIDA-FAKE:"
@@ -868,6 +897,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
        implement-actions.sh build-recheck <task_folder> <unit_id>
+                            [--interface <path to the interface record the builder wrote>]
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
                             [--implement-recipe <framework>=<path>]...
@@ -1250,9 +1280,9 @@ im_next_step() {
 # retake's freezeCommit until the freeze after the retake rewrites it, the predicate the
 # freeze's own exemption reads, so the line names the author and not a build against the
 # wrong test (live-run row 110).
-  local opens ids count i id file n tools_only retake_pending
+  local opens ids count i id file n recheck_route retake_pending
   opens='{}'
-  tools_only='{}'
+  recheck_route='{}'
   retake_pending='{}'
   ids="$(printf '%s' "$ledger" | jq -c '[ (.orders // [])[] | .id ]')"
   count="$(printf '%s' "$ids" | jq 'length')"
@@ -1266,18 +1296,28 @@ im_next_step() {
       case "$n" in ''|*[!0-9]*) n=0 ;; esac
     fi
     opens="$(printf '%s' "$opens" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    # The re-check route, when the recheck rows alone stopped the attempt. An attempt that
+    # interface-record stopped is answered by amending the record first, so the route names its
+    # file, the brief's interfacePath (gap row 253).
     file="$impl/build-$id.json"
-    n=false
+    n=""
     if [ -f "$file" ]; then
-      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | (stoppers | length > 0) and (outside_tools | length == 0)' "$file" 2>/dev/null)"
-      [ "$n" = "true" ] || n=false
+      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | if (stoppers | length > 0) and (outside_recheck | length == 0)
+        then (if (stoppers | index("interface-record")) != null then "interface" else "tools" end) else "" end' "$file" 2>/dev/null)"
+      case "$n" in
+        tools) n="build-recheck" ;;
+        interface)
+          n="$(jq -r '.interfacePath // ""' "$impl/brief-$id-build.json" 2>/dev/null)"
+          n="amend ${n:-the interface record} with the elements interface-record names, then build-recheck" ;;
+        *) n="" ;;
+      esac
     fi
-    tools_only="$(printf '%s' "$tools_only" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    recheck_route="$(printf '%s' "$recheck_route" | jq -c --arg id "$id" --arg n "$n" '. + {($id): $n}')"
     n="$(im_retake_pending "$ledger" "$impl" "$id")"
     retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
-  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson tools_only "$tools_only" --argjson snap "$snapshot" \
+  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson recheck_route "$recheck_route" --argjson snap "$snapshot" \
     --argjson retake_pending "$retake_pending" --argjson departure_prefixes "$RR_DEPARTURE_PREFIXES" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
@@ -1304,18 +1344,18 @@ im_next_step() {
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
       elif $bd != null then
-        (if $bd.lastStep == "code-written" and ($tools_only[$bd.id] // false) then
-           "build \($bd.id), or build-recheck \($bd.id) when the code has not moved"
+        (if $bd.lastStep == "code-written" and (($recheck_route[$bd.id] // "") != "") then
+           "build \($bd.id), or \($recheck_route[$bd.id]) \($bd.id) when the code has not moved"
          elif $bd.lastStep == "tests-frozen" and ($retake_pending[$bd.id] // false) then
            "tests \($bd.id): the tests were retaken and not frozen again yet"
          else "build \($bd.id)" end)
-      elif $removed != null and $ts != null then "restart: the design removed \($removed.id), and its frozen test record still guards its test files"
+      elif $removed != null and $ts != null then "finish: offer the restart, the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
-      elif $departure != null then "finish: \($departure.id) is halted for a departure from the design, so offer the restart or review-record --accept-deviation"
+      elif $departure != null then "review: \($departure.id) is halted for a departure from the design, so offer review-record --accept-deviation or the restart"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
-      elif $testwrong != null then "retake-tests \($testwrong.id): a frozen test is ruled wrong, and the retake sends the order back to its tests"
+      elif $testwrong != null then "review: offer retake-tests \($testwrong.id), a frozen test is ruled wrong, and the retake sends the order back to its tests"
       elif $halted > 0 then "finish: offer clear-halt, every order that is not closed is halted for a reason a person clears"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
@@ -1754,7 +1794,7 @@ do_start() {
   local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
-  local widened_ids_json='[]'
+  local widened_ids_json='[]' widened_json='[]'
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -1886,7 +1926,9 @@ do_start() {
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
       # build brief then carries the new findings. Any other difference, a removed owned file, a
       # reasoning whose earlier text changed, or a changed criterion it serves, halts as before.
-      widened_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
+      # The program also lists what changed in each order, and a refusal names that list (gap row
+      # 241), so the cause a person reads is the one this comparison found.
+      widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
@@ -1897,9 +1939,14 @@ do_start() {
               | select(($l | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
-              | select(((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 or $l.findings != $s.findings or $l.reasoning != $s.reasoning or $l.absenceReviewed != $s.absenceReviewed)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
-              | $d ]')"
+              | [ (if ((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 then "gained owned files" else empty end),
+                  (if $l.findings != $s.findings then "findings changed" else empty end),
+                  (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
+                  (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end) ] as $why
+              | select(($why | length) > 0)
+              | {id: $d, why: $why} ]')"
+      widened_ids_json="$(printf '%s' "$widened_json" | jq -c 'map(.id)')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
       # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
       # still has to be the frozen copy the next order's tests are written from.
@@ -1909,7 +1956,7 @@ do_start() {
       fi
       if [ "$(printf '%s' "$widened_ids_json" | jq 'length')" -gt 0 ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
-        drift_what="${drift_what}these started work orders gained owned files, findings or an appended reason and changed nothing else: $(printf '%s' "$widened_ids_json" | jq -r 'join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
+        drift_what="${drift_what}these started work orders changed only in fields their frozen tests were not written from: $(printf '%s' "$widened_json" | jq -r 'map(.id + " (" + (.why | join(", ")) + ")") | join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
         resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$widened_ids_json" '$a + $b')"
       fi
       if [ "$contract_changed" = "true" ]; then
@@ -2325,9 +2372,10 @@ LO_MOVE
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
   st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
-  # After a restart or a retake, the order's own build and fix commits may still be on the branch;
-  # one line per order names them while they are. Not a refusal: the person may have chosen to
-  # carry them (live-run row 94). The line is dropped when there is none, the way `removed:` is.
+  # After a retake, or a restart from before restart reverted (gap row 252), the order's own build
+  # and fix commits may still be on the branch; one line per order names them while they are. Not
+  # a refusal: a retake keeps them on purpose (live-run row 94). The line is dropped when there is
+  # none, the way `removed:` is.
   local st_partial_json='[]'
   if [ "$run_kind" = "resumed" ]; then
     st_partial_json="$(rs_carried_commits_in_head "$TASK_PATH" "$code_path" "" "$st_ledger_now" | jq -c '
@@ -2600,6 +2648,34 @@ pc_parse_recipe() {
   rm -f "$block_file"
 
   if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'declared-empty'; fi
+}
+
+# Who owns a condition that answered no while the task's worktree has no running site (gap row
+# 246). The recipe's owner then sends a person to the wrong fix. The task record decides, never
+# the check's words. A marker with no address means a bring-up did not finish. An address whose
+# `## Status` line exits non-zero means the site is down. No `environment` says nothing: a project
+# with no environment recipe has none, and `environment down` removes it. Prints the step and the
+# reason, or nothing: no worktree, no record, a person said no site, the site is up, or the recipe
+# has no `## Status` line to ask. Reads TASK_PATH.
+pc_environment_owner() {
+  local task_json="$TASK_PATH/task.json" id wt recipe rc
+  wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
+  [ -n "$wt" ] && [ -d "$wt" ] || return 0
+  id="$(jq -r '.id' "$task_json")"
+  case "$(jq -r '.environment as $e
+      | if ($e | type) != "object" then "absent"
+        elif ($e["not-applicable"] // "") != "" then "not-applicable"
+        elif ($e.address // "") != "" then "up"
+        elif $e.state == "coming-up" then "coming-up"
+        else "other" end' "$task_json")" in
+    coming-up) printf 'task environment %s down, then up: the bring-up of this worktree did not finish' "$id" ;;
+    up)
+      recipe="$(jq -r '.environment.recipe // empty' "$task_json")"
+      [ -f "$recipe" ] || return 0
+      BRC_WHO="preconditions" br_site_status "$recipe" "$wt"; rc=$?
+      [ "$rc" -ne 1 ] \
+        || printf 'task environment %s up: the ## Status line of %s says the site is down' "$id" "$recipe" ;;
+  esac
 }
 
 # The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared
@@ -3012,7 +3088,7 @@ do_preconditions() {
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
-  local harness_needed harness_reason
+  local harness_needed harness_reason env_asked=no env_owner=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3081,14 +3157,11 @@ do_preconditions() {
   # A task whose every order is proved by its record writes no test and runs none, so the test
   # harness is not needed. Its conditions and its smoke row are recorded `not-needed` and never
   # run, and the baseline runs no suite (live-run row 136). An order a person confirms runs no
-  # test either: its task has no automated tests (gap row 196). Any other proof needs the harness.
-  # A `tests` order runs its tests. A `gate` order runs the recipe's lines in the same environment.
-  # An `observe` order's build runs the suite against the baseline. The recipe is still
-  # resolved and recorded, because the freeze and finish read its path.
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
-    [ (.workOrders // [])[] | orderFacts.slot ]
-    | if length > 0 and all(. == "done-when" or . == "confirm-at-review") then "no" else "yes" end')"
-  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record or confirm, so no test is written or run"
+  # test either: its task has no automated tests (gap row 196). On such a task a `gate` order runs
+  # its own lines and no suite, so it needs no harness (gap row 246). BR_HARNESS_JQ holds the rule.
+  # The recipe is still resolved and recorded, because the freeze and finish read its path.
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ harnessNeeded")"
+  harness_reason="no order in the snapshot is proved by a test. Every order's proof is record or confirm, or a configuration gate on a task with no automated tests, so no test is written or run"
 
   # Every commanded check the build runs later comes from a recipe, resolved once here so a
   # framework that can never answer is named now rather than at the first build-record. An order
@@ -3220,6 +3293,13 @@ PC_RECIPES
     fi
 
     entries_json="$(jq -s '.' "$entries_file" 2>/dev/null)" || entries_json="[]"
+    # A condition that answered no names the environment step as its owner when the worktree has
+    # no running site. The recipe's owner stays beside it, as recipeOwner. Asked once per run.
+    if printf '%s' "$entries_json" | jq -e 'any(.[]; .verdict == "unmet")' >/dev/null; then
+      [ "$env_asked" = "yes" ] || { env_owner="$(pc_environment_owner)"; env_asked=yes; }
+      [ -z "$env_owner" ] || entries_json="$(printf '%s' "$entries_json" | jq --arg o "$env_owner" '
+        map(if .verdict == "unmet" then . + {owner: $o} + (if .owner then {recipeOwner: .owner} else {} end) else . end)')"
+    fi
     tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
     if [ "$section_state" = "ok" ]; then
       fw_verdict="$(jq -r '
@@ -3862,9 +3942,10 @@ do_tests_brief() {
   local criteria_out
   criteria_out="$(printf '%s' "$CRITERIA_JSON" | jq -c \
     '[ .[] | {id, text, verification, verifiedBy} ]')"
+  # ownedFiles names the test file design chose, so the author writes there (gap row 249).
   unit_out="$(printf '%s' "$UNIT_JSON" | jq -c \
     '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), criteriaOwned: (.criteriaOwned // []),
-      interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
+      ownedFiles: (.ownedFiles // []), interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
 
   # `reuses` is the existing code design's dispose recorded on this order, with the interface the
   # design stage read from it. It sits beside the dependency interfaces because it answers the same
@@ -3980,10 +4061,11 @@ do_tests_brief() {
         --argjson rowsRejected "$rows_rejected_json" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
+        --arg reportPath "$IMPL_DIR/answers-$unit_id-tests.md" \
     '{unit: $unit, criteria: $criteria, nonGoals: $nonGoals, dependencyInterfaces: $dependencyInterfaces,
       dependencyInformation: $dependencyInformation, reuses: $reuses,
       testRecipePath: (if $testRecipePath == "" then null else $testRecipePath end),
-      playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt}
+      playbooksPath: $playbooksPath, roundStartedAt: $roundStartedAt, reportPath: $reportPath}
      | if $treeHolds == null then . else .treeHolds = $treeHolds end
      | if $retake == null then . else .retake = $retake end
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
@@ -3995,6 +4077,7 @@ do_tests_brief() {
     {order: .unit.id,
      brief: $brief,
      worktree: .worktree,
+     reportPath: .reportPath,
      criteria: ([ .criteria[] | .id + " (" + .verifiedBy + ")" ]),
      nonGoals: (.nonGoals | length),
      declaredTests: (.unit.tests | length),
@@ -4579,6 +4662,44 @@ $unique_rel_paths
 TF_EOF
   [ -z "$unmatched_paths" ] \
     || die 27 "tests-freeze: these --test paths (relative to $codepath_canon) match none of the given --test-glob patterns: ${unmatched_paths%, }"
+
+  # --- 27 also: every --test path must be a file this order owns. Design names the order's test
+  # file, and a test written anywhere else sits in a file no order owns, which nothing saw before
+  # review (gap row 249).
+  local unowned_paths="" owned_list owned_tests="" o
+  owned_list="$(printf '%s' "$UNIT_JSON" | jq -r '(.ownedFiles // [])[]')"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    matched=false
+    while IFS= read -r o; do
+      [ -n "$o" ] || continue
+      tf_path_matches_catalog_glob "$p" "$o" && { matched=true; break; }
+    done <<TF_EOF
+$owned_list
+TF_EOF
+    [ "$matched" = "true" ] || unowned_paths="$unowned_paths$p, "
+  done <<TF_EOF
+$unique_rel_paths
+TF_EOF
+  if [ -n "$unowned_paths" ]; then
+    while IFS= read -r o; do
+      [ -n "$o" ] || continue
+      gi=0
+      while [ "$gi" -lt "$glob_count" ]; do
+        g="$(printf '%s' "$test_globs_json" | jq -r --argjson gi "$gi" '.[$gi]')"
+        tf_path_matches_catalog_glob "$o" "$g" && { owned_tests="$owned_tests$o, "; break; }
+        gi=$((gi + 1))
+      done
+    done <<TF_EOF
+$owned_list
+TF_EOF
+    if [ -n "$owned_tests" ]; then
+      owned_tests="The test file design named for it is ${owned_tests%, }. Run dispatch-open with --resume and resume the test author: it writes the tests into that file and takes a new red run for each. Then freeze again. Do not move the tests here."
+    else
+      owned_tests="It owns no file a test glob matches, only $(printf '%s' "$owned_list" | paste -sd, - | sed 's/,/, /g'). If the tests belong where they are, design adds that file with add-owned-file and closes again."
+    fi
+    die 27 "tests-freeze: these --test paths are files $unit_id does not own: ${unowned_paths%, }. $owned_tests"
+  fi
 
   # --- 89: a --support path is a base class or a fixture the author wrote beside the tests -------
   # It is resolved, checked and hashed the way a --test path is, and refused when it is missing
@@ -6141,18 +6262,18 @@ BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
 # Removes each file the verify lines' recipes wrote, puts back each earlier version they replaced,
 # then removes the folders made for them and the temporary folder. RF_WRITTEN_PATHS and
 # RF_REPLACED_PATHS are read too, because a refusal or an interrupt inside recipe_files_write
-# leaves that recipe's paths there alone. RS_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
+# leaves that recipe's paths there alone. RF_NEW_DIRS holds the folders a `## Status` run made. It is safe to run twice. A path it could not take out
 # is named, and the tree is then not what it was.
 br_verify_files_remove() {
   local left=""
   if [ -n "$BRV_TREE" ]; then
     left="$(recipe_files_take_out "$BRV_TREE" "$BRV_FILES_DIR/was" "$BRV_WRITTEN$RF_WRITTEN_PATHS" \
-      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RS_DIRS" | sed -n 3p)"
+      "$BRV_REPLACED$RF_REPLACED_PATHS" "$BRV_DIRS$RF_NEW_DIRS" | sed -n 3p)"
     [ -z "$left" ] || printf '%s: could not take the recipe files back out of %s:%s. Remove them by hand.\n' "$BRC_WHO" "$BRV_TREE" "$left" >&2
   fi
   [ -z "$BRV_FILES_DIR" ] || rm -rf "$BRV_FILES_DIR"
   BRV_TREE=""; BRV_FILES_DIR=""; BRV_WRITTEN=""; BRV_REPLACED=""; BRV_DIRS=""
-  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RS_DIRS=""
+  RF_WRITTEN_PATHS=""; RF_REPLACED_PATHS=""; RF_NEW_DIRS=""
 }
 
 # Runs the order's own verify lines through br_run_lines from the folder $1, output into $2. A line
@@ -6513,6 +6634,23 @@ br_aida_writes_in_project() {
   return 1
 }
 
+# Runs the `## Status` line of the environment recipe $1 in the worktree $2, and returns what
+# recipe_status_run returns: 0 up, 1 down, 2 no such block. The status script's files go out
+# through br_verify_files_remove, on every exit. Its callers run it before their temporary files
+# exist. br_require_site_up and preconditions both ask it. Reads TASK_PATH and BRC_WHO.
+br_site_status() {
+  local rc
+  trap 'br_verify_files_remove' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  BRV_TREE="$2"
+  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
+  recipe_status_run "$BRC_WHO" "$1" "$2" "$TASK_PATH/task.json" "$BRV_FILES_DIR"; rc=$?
+  br_verify_files_remove
+  trap - EXIT INT TERM
+  return "$rc"
+}
+
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
 # command such as `ddev drush` starts a stopped site and prints its start-up text. So every
 # `stdout empty` line would fail for a reason that is not the check. The test runs when the task
@@ -6520,9 +6658,7 @@ br_aida_writes_in_project() {
 # gate. The recipe must also carry a `## Status` block. No line kind says that a line leaves the
 # site alone, so every such order is tested. The refusal holds in both run modes, because
 # `task environment up` is a person's answer and refuses unattended. No attempt is spent, so the
-# same step runs again once the site is up. The status script's files go out through
-# br_verify_files_remove, on every exit. Its callers run it before their temporary files exist.
-# Reads TASK_PATH, BRC_WHO and BRC_UNIT_JSON.
+# same step runs again once the site is up. Reads TASK_PATH, BRC_WHO and BRC_UNIT_JSON.
 br_require_site_up() {
   local task_json="$TASK_PATH/task.json" recipe wt rc
   [ -n "$(jq -r '.environment.address // empty' "$task_json" 2>/dev/null)" ] || return 0
@@ -6531,14 +6667,7 @@ br_require_site_up() {
   [ -f "$recipe" ] && [ -d "$wt" ] || return 0
   br_verify_runs; br_order_facts "$BRC_UNIT_JSON"
   [ "$BRV_RUNS" != "[]" ] || [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
-  trap 'br_verify_files_remove' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  BRV_TREE="$wt"
-  BRV_FILES_DIR="$(mktemp -d)" || die 3 "$BRC_WHO: could not create a temporary folder"
-  recipe_status_run "$BRC_WHO" "$recipe" "$wt" "$task_json" "$BRV_FILES_DIR"; rc=$?
-  br_verify_files_remove
-  trap - EXIT INT TERM
+  br_site_status "$recipe" "$wt"; rc=$?
   [ "$rc" -ne 1 ] \
     || die 103 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then run the same step again once the site is up."
 }
@@ -6550,7 +6679,8 @@ br_require_site_up() {
 # folder is nothing a suite or a tool reads (nyc defect 17). On one whose proof is observe it
 # holds observed, and the rest run as they do for a code order (live-run row 104). On one whose
 # proof is confirm it holds confirm-at-review, the suite reads undeclared, and the three tool rows
-# run (gap row 196). Prints the JSON array.
+# run (gap row 196). A gate order on a task with no automated tests reads its suite undeclared
+# too (gap row 246). Prints the JSON array.
 br_seven_checks() {
   local parts_file rc_id
   parts_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
@@ -6577,6 +6707,9 @@ br_seven_checks() {
   else
     if [ "$BR_ORDER_SLOT" = "confirm-at-review" ]; then
       jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is confirmed by a person: its task has no automated tests, so no suite runs."}' >>"$parts_file"
+    elif [ "$BR_ORDER_SLOT" = "configuration-gate" ] \
+      && [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ noAutomatedTests")" = "true" ]; then
+      jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is proved by its configuration gate, and its task has no automated tests, so no suite runs."}' >>"$parts_file"
     else
       br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
     fi
@@ -6745,17 +6878,48 @@ br_first_stopper() {
 
 # The checks that stopped a build attempt, as a jq function two readers prepend to their own
 # program: the selection br_first_stopper makes, with interface-record's unknown exempt, over a
-# record's own `checks`. `stoppers` is their ids; `outside_tools` is those ids minus the three tool
-# rows. A re-check answers an attempt stopped by the tool rows alone (live-run row 87): a tool
-# refusing a path is the plugin's fault, and a test or a suite failing is the implementer's work.
+# record's own `checks`. `stoppers` is their ids; `outside_recheck` is those ids minus the three
+# tool rows and interface-record. A re-check answers an attempt only those rows stopped (live-run
+# row 87): a tool refusing a path is the plugin's fault, and an interface record is a record file
+# the builder amends without moving the code (gap row 253). A test or a suite failing is the
+# implementer's work.
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
                  or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
                  or (.id == "confirm-at-review" and .verdict != "deferred"))
     | .id ];
-def outside_tools: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security"));
+def outside_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "interface-record"));
 '
+
+# The interface record's path, for `build-record` and `build-recheck`. $1 the action, $2 the unit
+# id, $3 the --interface path, empty when none was passed. Without the flag the path is the brief's
+# own interfacePath, the one the implementer was told to write to. The flag stays for a record a
+# person put somewhere else (live-run row 102). Sets BR_INTERFACE_PATH and BR_INTERFACE_FROM.
+BR_INTERFACE_PATH=""; BR_INTERFACE_FROM=""
+br_interface_path() {
+  BR_INTERFACE_PATH="$3"
+  BR_INTERFACE_FROM="named by --interface"
+  [ -z "$BR_INTERFACE_PATH" ] || return 0
+  BR_INTERFACE_PATH="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$2-build.json" 2>/dev/null)"
+  [ -n "$BR_INTERFACE_PATH" ] \
+    || die 3 "$1: --interface was not given, and $IMPL_DIR/brief-$2-build.json names no interfacePath. Run build-brief on $2 again, or pass --interface."
+  BR_INTERFACE_FROM="the brief's interfacePath"
+}
+
+# Exit 44, and the record's text. $1 the action, $2 the unit id, $3 the interface the order
+# declares. Reads BR_INTERFACE_PATH and BR_INTERFACE_FROM. The record is required only when the
+# order declares a non-empty interface. Sets BR_INTERFACE_TEXT, empty when there is no file.
+BR_INTERFACE_TEXT=""
+br_interface_text() {
+  BR_INTERFACE_TEXT=""
+  if [ -n "$3" ]; then
+    [ -s "$BR_INTERFACE_PATH" ] \
+      || die 44 "$1: $2 declares a non-empty interface, and the interface record at $BR_INTERFACE_PATH ($BR_INTERFACE_FROM) is missing or empty."
+  fi
+  [ -f "$BR_INTERFACE_PATH" ] && BR_INTERFACE_TEXT="$(cat "$BR_INTERFACE_PATH" 2>/dev/null)"
+  return 0
+}
 
 # Check eight, the interface record, and the countable half of it only. $1 the interface this order
 # declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
@@ -7131,15 +7295,8 @@ do_build_record() {
   [ -n "$current_commit" ] \
     || die 3 "build-record: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
 
-  # Without --interface the path is the brief's own interfacePath, the one the implementer was told
-  # to write to. The flag stays for a record a person put somewhere else (live-run row 102).
-  local interface_from="named by --interface"
-  if [ -z "$interface_path" ]; then
-    interface_path="$(jq -r '.interfacePath // ""' "$IMPL_DIR/brief-$unit_id-build.json" 2>/dev/null)"
-    [ -n "$interface_path" ] \
-      || die 3 "build-record: --interface was not given, and $IMPL_DIR/brief-$unit_id-build.json names no interfacePath. Run build-brief on $unit_id again, or pass --interface."
-    interface_from="the brief's interfacePath"
-  fi
+  br_interface_path "build-record" "$unit_id" "$interface_path"
+  interface_path="$BR_INTERFACE_PATH"
 
   # --- exits 105 and 106: the builder's stop and deviation lines, read before anything is judged ---
   # A builder once named a misfit in prose and then built around it (gap row 219). So every report
@@ -7213,13 +7370,10 @@ do_build_record() {
   fi
 
   # --- exit 44: the interface record is required only when the unit declares a non-empty interface -
-  local unit_interface_declared interface_text=""
+  local unit_interface_declared interface_text
   unit_interface_declared="$(printf '%s' "$UNIT_JSON" | jq -r '.interface // ""')"
-  if [ -n "$unit_interface_declared" ]; then
-    [ -s "$interface_path" ] \
-      || die 44 "build-record: $unit_id declares a non-empty interface, and the interface record at $interface_path ($interface_from) is missing or empty."
-  fi
-  [ -f "$interface_path" ] && interface_text="$(cat "$interface_path" 2>/dev/null)"
+  br_interface_text "build-record" "$unit_id" "$unit_interface_declared"
+  interface_text="$BR_INTERFACE_TEXT"
 
   # --- exits 92 to 96: an order whose proof is observe needs the observed record, checked here ------
   # The record is the orchestrator's account of what a model saw at each surface and viewport
@@ -7359,12 +7513,14 @@ do_build_record() {
 # were the tool rows refusing had no route back: `build-brief` hands over a brief with nothing to
 # build, and `build-record` refuses an empty range (exit 71) or an unmoved head (exit 45). Both
 # refusals are right, so this action is the route. It takes the recipe flags `build-record` takes
-# and none of its record flags: the range, the interface record and the report path are the
-# record's own. It is not a free retry: an attempt a test or a suite stopped is the implementer's
-# work, and it refuses (exit 88).
+# and its --interface, and none of its other record flags: the range and the report path are the
+# record's own. The interface record is read again from its file, because an attempt that
+# interface-record stopped is answered by amending that file, which moves no code (gap row 253).
+# It is not a free retry: an attempt a test or a suite stopped is the implementer's work, and it
+# refuses (exit 88).
 # ------------------------------------------------------------------------------------------------
 do_build_recheck() {
-  local task_arg="" unit_id=""
+  local task_arg="" unit_id="" interface_path=""
   local nothing_ran="" have_nothing_ran=false
   local test_recipes="" check_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
@@ -7394,6 +7550,10 @@ do_build_recheck() {
         values="$values$(printf '%s' "$2" | sed 's/=/\t/')
 "
         shift 2 ;;
+      --interface)
+        [ "$#" -ge 2 ] || die 3 "build-recheck: --interface needs a path to the record the builder wrote"
+        [ -n "$2" ] || die 3 "build-recheck: --interface was given an empty path."
+        interface_path="$2"; shift 2 ;;
       --nothing-ran)
         [ "$#" -ge 2 ] || die 3 "build-recheck: --nothing-ran needs a literal substring"
         [ -n "$2" ] || die 3 "build-recheck: --nothing-ran was given an empty substring, which every output holds."
@@ -7449,16 +7609,34 @@ do_build_recheck() {
   [ "$current_commit" = "$record_commit" ] \
     || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds attempt $record_attempt at $record_commit, so the code has moved since that attempt. A re-check runs over the recorded range alone; the route is build."
 
-  # --- exit 88, three: a check outside the tool rows stopped the attempt, which is the
-  # implementer's work to answer, so a re-check would be a free retry. An attempt nothing stopped
-  # is past the build, and there is nothing to run again -----------------------------------------
+  # --- exit 88, three: a check outside the tool rows and interface-record stopped the attempt,
+  # which is the implementer's work to answer, so a re-check would be a free retry. An attempt
+  # nothing stopped is past the build, and there is nothing to run again -------------------------
   local stoppers outside
   stoppers="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
   [ -n "$stoppers" ] \
     || die 88 "build-recheck: attempt $record_attempt at $unit_id passed its checks, so there is nothing to run again. The order is past the build."
-  outside="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_tools | join(", ")')"
+  outside="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
   [ -z "$outside" ] \
-    || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows. A re-check answers only an attempt the tool rows alone stopped; the route is build."
+    || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows or interface-record. A re-check answers only an attempt those rows alone stopped; the route is build."
+
+  # --- exit 88, four: a path the interface check named is not in the code at the recorded commit.
+  # An amended record can name a path the code never had, and the check would pass on words
+  # alone. The paths are the declaration's backticked tokens the recorded interface record left
+  # out, read as paths by `ifacePath` ---------------------------------------------------------
+  local unit_interface_declared missing_paths="" named_path
+  unit_interface_declared="$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')"
+  while IFS= read -r named_path; do
+    [ -n "$named_path" ] || continue
+    git -C "$codepath" cat-file -e "$record_commit:$named_path" 2>/dev/null \
+      || missing_paths="${missing_paths:+$missing_paths, }$named_path"
+  done <<EOF_PATHS
+$(jq -rn --arg d "$unit_interface_declared" --arg r "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" "$IFACE_PATH_JQ"'
+  [ $d | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`") | select(. as $t | $r | contains($t) | not) | ifacePath ]
+  | unique | .[]')
+EOF_PATHS
+  [ -z "$missing_paths" ] \
+    || die 88 "build-recheck: the interface check at $unit_id named $missing_paths, and no such path exists at $record_commit. Amending the record cannot make a path real; the route is build, or a design change."
 
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
@@ -7468,6 +7646,9 @@ do_build_recheck() {
     || die 3 "build-recheck: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
+
+  br_interface_path "build-recheck" "$unit_id" "$interface_path"
+  br_interface_text "build-recheck" "$unit_id" "$unit_interface_declared"
 
   # --- the eight deciding checks, the same half build-record runs, over the recorded range --------
   BRC_WHO="build-recheck"
@@ -7486,20 +7667,24 @@ do_build_recheck() {
   BRC_GATE_RECIPES="$gate_recipes"
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
-  br_eight_checks "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')" \
-    "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')"
+  br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT"
 
-  # The record keeps the attempt, its range and its date, and takes the new checks. The checks it
+  # The record keeps the attempt, its range and its date, and takes the new checks and the interface
+  # record's text as read now. When that text changed, the attempt's own text stays under
+  # interfaceRecordBefore, so review reads both. The checks it
   # replaces stay under checksBefore, id and verdict only, so a reader can see what the re-check
   # answered differently. Both check sets carry whole tool outputs, so both are read from a file.
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
-    --slurpfile before "$record_file" '
+    --arg interfaceRecord "$BR_INTERFACE_TEXT" --slurpfile before "$record_file" '
     . as $new
     | $before[0]
     | .checksBefore = ((.checks // []) | map({id, verdict}))
     | .checks = $new
+    | (if $interfaceRecord != (.interfaceRecord // "")
+       then .interfaceRecordBefore = (.interfaceRecordBefore // .interfaceRecord // "") else . end)
+    | .interfaceRecord = $interfaceRecord
     | .executed = $executed
     | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
     | .recheckedAt = $recheckedAt' "$BR_CHECKS_FILE")"
@@ -8060,7 +8245,9 @@ RB_PATHS
       locksIn: $locksIn,
       reportPath: $reportPath,
       checks: ($build[0].checks // []),
-      interface: { declared: $interfaceDeclared, record: $interfaceRecord },
+      interface: ({ declared: $interfaceDeclared, record: $interfaceRecord }
+                  + (if $build[0] | has("interfaceRecordBefore")
+                     then { recordBefore: $build[0].interfaceRecordBefore } else {} end)),
       findingsPath: $findingsPath,
       playbooksPath: $playbooksPath,
       recipes: ($recipes | split("\n") | map(select(. != "")))
@@ -8621,6 +8808,14 @@ do_fix_record() {
     || die 54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
   rv_require_round_verified "fix-record" "$unit_id" "$rounds_used"
   round_number=$((rounds_used + 1))
+
+  # The report is the one the round's fix brief pins, the file dispatch-close read (gap row 250). A
+  # report written elsewhere was never checked there, so it is refused. A brief from before the
+  # key existed pins none.
+  local pinned_report
+  pinned_report="$(jq -r '.reportPath // ""' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
+  [ -z "$pinned_report" ] || [ "$report_path" -ef "$pinned_report" ] \
+    || die 3 "fix-record: --report names $report_path, and the fix brief for round $round_number pins $pinned_report. The fixer writes its report there. Move the report there, or have the fixer write it there, then run fix-record again with that path."
 
   # Every --scope-insufficient is read and checked here, before a single check runs. A report that
   # names nothing open, or carries no reason, is a caller fault, and refusing it after the tools
@@ -9664,13 +9859,11 @@ do_finish() {
   # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
   # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
   # more than an argument or a reader can carry. A task whose every order is proved by its
-  # record, or confirmed by a person, ran no test and took no suite baseline. So the suite is
-  # recorded not-needed and never run, the same reading preconditions makes of the snapshot
-  # (live-run row 136, gap row 196).
+  # record, or confirmed by a person, ran no test and took no suite baseline. So did a task with
+  # no automated tests whose other orders are gates. The suite is then recorded not-needed and
+  # never run, the same reading preconditions makes of the snapshot (BR_HARNESS_JQ).
   local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
-  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_ORDER_FACTS_JQ"'
-    [ (.workOrders // [])[] | orderFacts.slot ]
-    | if length > 0 and all(. == "done-when" or . == "confirm-at-review") then "no" else "yes" end')"
+  harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ harnessNeeded")"
   pre_file="$IMPL_DIR/preconditions.json"
   if [ "$harness_needed" = "no" ]; then
     :
@@ -9701,7 +9894,7 @@ FN_RECIPES
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
   if [ "$harness_needed" = "no" ]; then
     jq -nc '{id: "suite-regression", verdict: "not-needed",
-             detail: "the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, so no test exists and no suite baseline was taken."}' >"$suite_file"
+             detail: "the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, or is a configuration gate on a task with no automated tests, so no test exists and no suite baseline was taken."}' >"$suite_file"
   else
     br_test_check "suite-regression" "suite" "suite" >"$suite_file"
   fi
@@ -10005,7 +10198,7 @@ do_clear_halt() {
     || drift_route=" Or run start again: it clears a halt about this order's own design file once the design no longer differs from the snapshot."
   case "$halt" in
     *"$RR_DEPARTURE_PREFIX"*|*"$RR_REVIEWER_PREFIX"*)
-      drift_route=" Or a person keeps the departure: run review-record again with --accept-deviation <their reason>, in references/finish.md." ;;
+      drift_route=" Or a person keeps the departure: run review-record again with --accept-deviation <their reason>, in references/review.md." ;;
   esac
   [ -z "$other_action" ] \
     || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead.$drift_route Nothing is written."
@@ -10166,6 +10359,44 @@ rs_on_branch() {
       else "?no commit on this branch carries its change with its author, date and subject, so the rebase dropped it or rewrote it" end'
 }
 
+# rs_rebase_table <codepath> <span> <ledger>: the table rs_on_branch reads, or nothing when the
+# ledger holds no startedFromBefore. `start --rebased-onto` keeps each rewritten start there, so a
+# ledger holding one is a branch whose ids may have moved since the records were written. The
+# table lists the span's commits oldest first, each with its stable patch id and its author, date
+# and subject. A commit with no diff has no patch id and is listed with an empty one.
+rs_rebase_table() {
+  [ "$(printf '%s' "$3" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null || return 0
+  git -C "$1" log --reverse --no-color -p "$2" 2>/dev/null | git patch-id --stable 2>/dev/null \
+    | jq -Rsc --arg who "$(git -C "$1" log --reverse --format='%H %at %ae %s' "$2" 2>/dev/null)" '
+      ([ split("\n")[] | select(length > 0) | split(" ") | {key: .[1], value: .[0]} ] | from_entries) as $pid
+      | [ $who | split("\n")[] | select(length > 0)
+          | {commit: .[0:40], pid: ($pid[.[0:40]] // ""), who: .[41:]} ]'
+}
+
+# rs_reverted <codepath> <span> [<table>]: the full ids, one per line, of every commit in <span>
+# that a later commit there reverts, and of that reverting commit. The pair leaves the tree as it
+# was, so neither is code the tree holds. A revert is read by the line `git revert` writes, "This
+# reverts commit <id>.", whoever ran it: `restart` runs it, and a person may. A revert that is
+# itself reverted puts the change back, so its pair does not count. After a rebase the line names
+# the old id, so a target HEAD does not hold is found again through rs_on_branch and <table>.
+rs_reverted() {
+  local r t on pairs=""
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    t="$(git -C "$1" log -1 --format=%B "$r" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)\.$/\1/p' | head -1)"
+    if [ -n "$t" ] && ! git -C "$1" merge-base --is-ancestor "$t" HEAD >/dev/null 2>&1; then
+      on="$(rs_on_branch "$1" "$t" "${3:-}")"
+      case "$on" in ""|"?"*) t="" ;; *) t="$on" ;; esac
+    fi
+    [ -z "$t" ] || pairs="$pairs$r $t
+"
+  done <<RS_REVERTS
+$(git -C "$1" log --format=%H --grep='^This reverts commit ' "$2" 2>/dev/null)
+RS_REVERTS
+  printf '%s' "$pairs" | jq -Rrs '[ split("\n")[] | select(length > 0) | split(" ") ] as $p
+    | ($p | map(.[1])) as $t | $p[] | select(.[0] as $r | $t | index($r) | not) | .[0], .[1]'
+}
+
 # The commits one order's records name that HEAD still holds, as a JSON array of
 # {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
 # ledger document.
@@ -10174,12 +10405,12 @@ rs_on_branch() {
 # order's only when its subject is the one the freeze writes for this order.
 # One record holds one commit, and the freeze after a retake overwrites it. So each `retakes`
 # entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
-# the same subject test decides it. Without them the reset answer stops at the superseded freeze
-# and leaves the wrong test standing in the tree (live-run row 147). A build record holds
+# the same subject test decides it. `restart` keeps every freeze these name and opens its span at
+# the first of them, so the build before a retake is reverted too (live-run row 147). A build record holds
 # the last attempt's range; a fix record each round's. A record whose commits git no longer has
 # names nothing (live-run row 94). An earlier attempt is in no record, so a build record's
 # commits are read from `startedFrom` to its commit, and im_order_commits keeps this order's own.
-# Another order's commit is never listed, so no reset advice drops it (gap row 222).
+# Another order's commit is never listed, so no restart reverts it (gap row 222).
 # A build and fix record does not stay at the top of the implementation folder. `retake-tests`
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
@@ -10213,17 +10444,7 @@ rs_order_commits() {
   if [ -n "$started" ] && git -C "$codepath" merge-base --is-ancestor "$started" HEAD >/dev/null 2>&1; then
     span="$started..HEAD"
   fi
-  # `start --rebased-onto` keeps each rewritten start under startedFromBefore, so a ledger holding
-  # one is a branch whose ids may have moved since the records were written. The table lists the
-  # span's commits oldest first, each with its stable patch id and its author, date and subject,
-  # for rs_on_branch. A commit with no diff has no patch id and is listed with an empty one.
-  if [ "$(printf '%s' "$ledger" | jq '(.startedFromBefore // []) | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
-    table="$(git -C "$codepath" log --reverse --no-color -p "$span" 2>/dev/null | git patch-id --stable 2>/dev/null \
-      | jq -Rsc --arg who "$(git -C "$codepath" log --reverse --format='%H %at %ae %s' "$span" 2>/dev/null)" '
-        ([ split("\n")[] | select(length > 0) | split(" ") | {key: .[1], value: .[0]} ] | from_entries) as $pid
-        | [ $who | split("\n")[] | select(length > 0)
-            | {commit: .[0:40], pid: ($pid[.[0:40]] // ""), who: .[41:]} ]')"
-  fi
+  table="$(rs_rebase_table "$codepath" "$span" "$ledger")"
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     c="$(rs_on_branch "$codepath" "$c" "$table")"
@@ -10292,9 +10513,10 @@ RS_RANGE
   done <<RS_FILES
 $files
 RS_FILES
-  # An earlier restart left this order's commits on the branch when the person answered carry.
-  # Its own `restarted.json` names them, with the kind, so they are read from there rather than
-  # from the records it moved, which is the one place the freeze commit of that build survives.
+  # A restart from before restart reverted (gap row 252) left this order's commits on the branch
+  # when the person answered carry. Its own `restarted.json` names them under `commits`, with the
+  # kind, which is the one place the freeze commit of that build survives. A restart now writes
+  # `reverted` instead, so this reads only those older records.
   while IFS= read -r file; do
     [ -f "$file" ] || continue
     while IFS= read -r c; do
@@ -10318,6 +10540,12 @@ RS_PRIOR
   done <<RS_ARCHIVES
 $(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null | sort)
 RS_ARCHIVES
+  # A commit reverted on this branch, by `restart` or by a person, is code the tree no longer holds
+  # (gap row 252).
+  if [ "$(printf '%s' "$out" | jq 'length')" -gt 0 ]; then
+    out="$(jq -cn --argjson have "$out" --arg gone "$(rs_reverted "$codepath" "$span" "$table")" \
+      '($gone | split("\n")) as $g | [ $have[] | select(.commit as $c | $g | index($c) | not) ]')"
+  fi
   # The blocks above read the records wherever they sit, and a restart moves them, so one order's
   # commits came out in one order before a restart and another after. They are sorted into the
   # order the branch holds them, oldest first, so `restart` and `start` print one list and a
@@ -10356,7 +10584,7 @@ RS_ARCHIVES
 #
 # Which commits. A build or a fix commit only, since those are what a commit: reason may cite. A
 # freeze holds tests, and no reader of this list acts on one: the test author reads no source, and
-# `restart` computes its reset commit from rs_order_commits, which keeps every freeze.
+# `restart` leaves every freeze commit in the tree.
 #
 # When. An order rebuilt since it was sent back is left out. `restart` resets the entry to not
 # started and `retake-tests` to tests-frozen, so a build step on the entry came later. Rebuilt means
@@ -10466,36 +10694,88 @@ do_restart() {
   [ ! -e "$target" ] \
     || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
 
-  # The records move aside; the commits they name stay on the branch. "Start over from the live
-  # design" is true of the records and false of the tree, so the tree is read here, before the
-  # records move, and the person is told what to do with it (live-run row 94). Every commit from
-  # the earliest of them to HEAD is a halted order's: nothing later depends on them, and the
-  # branch can go back to the parent of the earliest. Anything else in that span is carried, and
-  # `start` and `tests-brief` say so until the commits are gone. The restart changes nothing in
-  # the tree.
-  local commits_json tree_json one_id earliest parent span_count own_count
-  commits_json='[]'
+  # The records move aside, and the code a halted order committed must leave the tree too, or its
+  # next test author writes against it and its rebuild finds nothing to do (gap row 252). A record
+  # names only the attempts that reached build-record, so the branch is read. Every commit after
+  # the order's first freeze that changes its owned files is the order's, recorded or not. Without
+  # a freeze, the span opens at the ledger's startedFrom. The freeze commits stay: they hold the
+  # tests, which the next test author rewrites. A commit a record names that changes no owned file
+  # is the order's as well. A commit that is the order's and changes a file it does not own would
+  # take other work with it, so the restart stops before it changes anything and names the files.
+  # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
+  # history, and AIDA's own command hook refuses the hard reset that would drop it.
+  local revert_json='[]' mixed="" stale="" one_id owned rec freezes from gone c paths p g own_n outside merge s l
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
-    commits_json="$(jq -cn --argjson have "$commits_json" --argjson more "$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC")" \
-      '$have + [ $more[] | select(has("missing") | not) ]')"
+    owned="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0].ownedFiles // [] | .[]')"
+    rec="$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .kind + " " + .commit')"
+    freezes="$(printf '%s' "$rec" | sed -n 's/^freeze //p')"
+    # A test file a superseded freeze created, that no later freeze touched, is a test a person
+    # ruled wrong left at an old path. Restart reverts nothing for it, and names it.
+    for s in $(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$one_id" \
+        '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty'); do
+      printf '%s\n' "$freezes" | grep -Fqx "$s" || continue
+      while IFS= read -r p; do
+        [ -n "$p" ] && git -C "$RV_CODEPATH" cat-file -e "HEAD:$p" 2>/dev/null || continue
+        while IFS= read -r l; do
+          [ -n "$l" ] && [ "$l" != "$s" ] && git -C "$RV_CODEPATH" merge-base --is-ancestor "$s" "$l" 2>/dev/null \
+            && git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$l" | grep -Fqx "$p" \
+            && continue 2
+        done <<RS_LATER
+$freezes
+RS_LATER
+        stale="${stale}staleTest: $p (from superseded freeze $(git -C "$RV_CODEPATH" rev-parse --short "$s"))
+"
+      done <<RS_ADDED
+$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames --diff-filter=A "$s" 2>/dev/null)
+RS_ADDED
+    done
+    from="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null | grep -F -x -f <(
+      jq -r '.commit // empty' "$IMPL_DIR/tests-$one_id.json" 2>/dev/null
+      printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$one_id" \
+        '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty') | head -1)"
+    [ -n "$from" ] || from="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // empty')"
+    git -C "$RV_CODEPATH" merge-base --is-ancestor "$from" HEAD >/dev/null 2>&1 \
+      || die 3 "restart: $one_id has no freeze commit and no startedFrom on this branch, so the commits made for it cannot be told apart."
+    gone="$(rs_reverted "$RV_CODEPATH" "$from..HEAD" "$(rs_rebase_table "$RV_CODEPATH" "$from..HEAD" "$FN_LEDGER_DOC")")"
+    for c in $(git -C "$RV_CODEPATH" rev-list --reverse --first-parent "$from..HEAD" 2>/dev/null); do
+      printf '%s\n%s\n' "$gone" "$freezes" | grep -Fqx "$c" && continue
+      # A merge is read by what it brought to the first parent. A revert of a merge needs a
+      # person to choose the parent, so a merge that touches an owned file stops the restart.
+      merge=""
+      if git -C "$RV_CODEPATH" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1; then
+        merge=" merge"
+        paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c^1" "$c" 2>/dev/null)"
+      else
+        paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
+      fi
+      own_n=0; outside=""
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        while IFS= read -r g; do
+          [ -n "$g" ] || continue
+          if tf_path_matches_catalog_glob "$p" "$g"; then own_n=$((own_n + 1)); continue 2; fi
+        done <<RS_OWNED
+$owned
+RS_OWNED
+        outside="$outside $p"
+      done <<RS_PATHS
+$paths
+RS_PATHS
+      [ "$own_n" -gt 0 ] || printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c" || continue
+      if [ "$own_n" -gt 0 ] && [ -z "$outside" ] && [ -z "$merge" ]; then
+        revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
+          'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
+      else
+        mixed="$mixed; $(git -C "$RV_CODEPATH" rev-parse --short "$c") ($one_id)$(if [ -n "$merge" ]; then printf ' is a merge that changes its files'; fi)$(if [ -n "$outside" ]; then printf ' also changes%s' "$outside"; fi)"
+      fi
+    done
   done
-  tree_json='null'
-  if [ "$(printf '%s' "$commits_json" | jq 'length')" -gt 0 ]; then
-    earliest="$(git -C "$RV_CODEPATH" rev-list --reverse --topo-order HEAD 2>/dev/null \
-      | grep -F -x -f <(printf '%s' "$commits_json" | jq -r '.[].commit') | head -1)"
-    parent="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "${earliest}^" 2>/dev/null)"
-    if [ -n "$parent" ]; then
-      span_count="$(git -C "$RV_CODEPATH" rev-list --count "$parent..HEAD" 2>/dev/null)"
-    else
-      span_count="$(git -C "$RV_CODEPATH" rev-list --count HEAD 2>/dev/null)"
-    fi
-    own_count="$(printf '%s' "$commits_json" | jq 'length')"
-    if [ -n "$parent" ] && [ "$span_count" = "$own_count" ]; then
-      tree_json="$(jq -cn --arg c "$parent" '{resetTo: $c}')"
-    else
-      tree_json="$(jq -cn --argjson n "$((span_count - own_count))" '{carry: true, count: $n}')"
-    fi
-  fi
+  [ -z "$mixed" ] \
+    || die 113 "restart: these commits change the halted order's files and files it does not own, so a revert would undo other work too: ${mixed#; }. Nothing was reverted or moved. A person splits or reverts them, then runs restart again."
+  # Newest first, so each revert applies to the tree its commit left.
+  revert_json="$(jq -cn --argjson have "$revert_json" --argjson order "$(git -C "$RV_CODEPATH" rev-list --topo-order HEAD 2>/dev/null \
+    | grep -F -x -f <(printf '%s' "$revert_json" | jq -r '.[].commit') | jq -R -s 'split("\n") | map(select(length > 0))')" \
+    '[ $order[] as $c | $have[] | select(.commit == $c) ]')"
 
   local new_snapshot new_hash new_ledger
   # The removed orders leave the document before the helper runs, so the one hash it re-derives
@@ -10523,22 +10803,33 @@ do_restart() {
     | .resnapshots = ((.resnapshots // []) + [ $retaken[] | {id: ., from: $from, to: $to, at: $at} ])')"
   [ -n "$new_ledger" ] || die 3 "restart: the ledger update failed."
 
+  # A revert that stops on a conflict is taken back, so the tree is clean again. The reverts before
+  # it stay committed, and a second restart skips them, because rs_reverted reads them.
+  local reverted_json='[]' said
+  for c in $(printf '%s' "$revert_json" | jq -r '.[].commit'); do
+    said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)" || {
+      git -C "$RV_CODEPATH" revert --abort >/dev/null 2>&1
+      die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed, and was taken back: $said. The reverts before it are committed, and no record moved. A person resolves it, then runs restart again."
+    }
+    reverted_json="$(printf '%s' "$reverted_json" | jq -c --argjson e "$(printf '%s' "$revert_json" | jq -c --arg c "$c" '.[] | select(.commit == $c)')" \
+      --arg r "$(git -C "$RV_CODEPATH" rev-parse HEAD)" '. + [$e + {revert: $r}]')"
+  done
+
   mkdir -p "$target" || die 3 "restart: could not create $target"
   # The reason is written beside the records moved aside, because they are what it explains.
-  # `start` and `tests-brief` read `commits` back while HEAD still holds any of them.
   local restart_json
   restart_json="$(jq -n --arg restartedAt "$today" --arg reason "$reason" --arg head "$head_short" \
     --argjson drifted "$drifted_ids_json" --argjson removed "$removed_ids_json" \
-    --argjson commits "$commits_json" --argjson tree "$tree_json" \
+    --argjson reverted "$reverted_json" \
     '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
-      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, commits: $commits, tree: $tree}')"
+      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, reverted: $reverted}')"
   write_atomic "$target/restarted.json" "$restart_json"
   # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
   # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
   # interface record. find, not a glob: zsh stops on a glob with no match. A folder whose name
   # carries the id is the order's too, such as the test author's <id>-red-runs/, so a red run of a
   # test that no longer exists leaves with its order (gap row 229).
-  local one_id moved
+  local moved
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     while IFS= read -r moved; do
       [ -n "$moved" ] || continue
@@ -10554,19 +10845,12 @@ do_restart() {
     || echo "RESTART: the design removed $removed; each leaves the snapshot and the ledger and is not taken fresh."
   [ -z "$retaken" ] \
     || echo "RESTART: $retaken start over from the live design."
-  if [ "$tree_json" = "null" ]; then
-    echo "commits: none"
-    echo "tree: no commit of a halted order is in the tree"
+  if [ "$reverted_json" = "[]" ]; then
+    echo "reverted: none, no commit of a halted order is in the tree"
   else
-    printf '%s' "$commits_json" | jq -r '.[] | "commits: " + .commit[0:7] + " " + .order + " " + .kind'
-    printf '%s' "$tree_json" | jq -r '
-      if has("resetTo") then "tree: reset the branch to " + .resetTo[0:7] + " (a hard reset, which a person runs; this session'"'"'s hook refuses it)"
-      elif .count == 1 then "tree: 1 later commit depends on them; carry them, and the test author is told"
-      else "tree: " + (.count | tostring) + " later commits depend on them; carry them, and the test author is told" end'
-    if [ "$(printf '%s' "$tree_json" | jq -r '.carry // false')" = "true" ]; then
-      echo "carried: each restarted order keeps its own code in the tree, so its next tests cannot go red"
-    fi
+    printf '%s' "$reverted_json" | jq -r '.[] | "reverted: " + .commit[0:7] + " " + .order + " by " + .revert[0:7]'
   fi
+  printf '%s' "$stale"
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"
   exit 0
@@ -10616,6 +10900,40 @@ LO_ORDERS
   done <<LO_STATUS
 $lo_status
 LO_STATUS
+}
+
+# Prints the test tree path $1 lies in, or nothing when $1 is not a test-tree file. $2 holds the
+# test globs, one per line. A directory a glob names literally, `tests` in `**/tests/**/*Test.php`,
+# makes the tree the path up to its last such segment, because the author writes base classes and
+# fixtures there too (live-run row 67). A glob with no literal directory, Go's `**/*_test.go`,
+# makes the tree the directory of a file the glob matches.
+im_test_tree_root() {
+  local p="${1%/}" g seg pre cand root=""
+  while IFS= read -r g; do
+    [ -n "$g" ] || continue
+    while IFS= read -r seg; do
+      case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
+      case "/$p/" in
+        */"$seg"/*)
+          pre="/$p/"; pre="${pre%/"$seg"/*}"; pre="${pre#/}"
+          cand="${pre:+$pre/}$seg"
+          [ "${#cand}" -le "${#root}" ] || root="$cand" ;;
+      esac
+    done <<TT_SEGS
+$(printf '%s' "${g%/*}" | tr '/' '\n')
+TT_SEGS
+  done <<TT_GLOBS
+$2
+TT_GLOBS
+  if [ -z "$root" ]; then
+    while IFS= read -r g; do
+      [ -n "$g" ] || continue
+      tf_path_matches_catalog_glob "$p" "$g" && { root="$(dirname "$p")"; break; }
+    done <<TT_GLOBS
+$2
+TT_GLOBS
+  fi
+  printf '%s' "$root"
 }
 
 # Exit 102. br_order_needs decides which roles a proof kind needs, and this reads its answer. A
@@ -10759,26 +11077,13 @@ do_dispatch_open() {
     # is a test-tree file too. A glob with no literal directory, Go's `**/*_test.go`, adds none.
     # A path an order reuses is production source that no order owns, and the brief carries its
     # interface so the author never needs the file (live-run row 69). It joins the owned files here
-    # and takes the same test-glob filter, so the hook catches an accidental read of it.
+    # and is denied below even where a test glob matches it, so the hook catches an accidental read.
     owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c \
       '[.workOrders[]?.ownedFiles[]?] + [.workOrders[]?.reuses[]?.path] | unique')"
     if [ -n "$test_glob_raw" ]; then
       while IFS= read -r f; do
         [ -n "$f" ] || continue
-        is_test=false
-        while IFS= read -r g; do
-          [ -n "$g" ] || continue
-          tf_path_matches_catalog_glob "$f" "$g" && is_test=true
-          while IFS= read -r seg; do
-            case "$seg" in *'*'*|*'?'*|*'['*|'') continue ;; esac
-            case "/$f/" in */"$seg"/*) is_test=true ;; esac
-          done <<TG_SEGS
-$(printf '%s' "${g%/*}" | tr '/' '\n')
-TG_SEGS
-        done <<TG_GLOBS
-$test_glob_raw
-TG_GLOBS
-        [ "$is_test" = true ] || kept="$kept$f
+        [ -n "$(im_test_tree_root "$f" "$test_glob_raw")" ] || kept="$kept$f
 "
       done <<TG_OWNED
 $(printf '%s' "$owned_json" | jq -r '.[]')
@@ -10789,6 +11094,92 @@ TG_OWNED
     [ -n "$owned_count" ] || owned_count=0
     [ "$owned_count" -gt 0 ] 2>/dev/null \
       || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file outside the test globs, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
+    # The freeze refuses a test in a file the order does not own (gap row 249). Refused here, before
+    # the author spends its run, when the order owns no file a test glob matches and no directory.
+    if [ "$role_bare" = "test-author" ] && [ -n "$test_glob_raw" ]; then
+      is_test=false
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        case "$f" in */) is_test=true; break ;; esac
+        [ ! -d "$codepath/$f" ] || { is_test=true; break; }
+        while IFS= read -r g; do
+          [ -n "$g" ] || continue
+          tf_path_matches_catalog_glob "$f" "$g" && { is_test=true; break; }
+        done <<TG_GLOBS
+$test_glob_raw
+TG_GLOBS
+        [ "$is_test" = false ] || break
+      done <<TG_OWN
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '.workOrders[]? | select(.id == $u) | .ownedFiles[]?')
+TG_OWN
+      [ "$is_test" = true ] \
+        || die 47 "dispatch-open: $unit_id owns no file a test glob matches, and no directory, so the freeze would refuse every test its author writes. Design adds the order's test file with add-owned-file and closes again. Nothing was dispatched."
+    fi
+    # The test-glob filter keeps only this order's own test files readable. A reused file under the
+    # test tree, such as a shared kernel base class, shows its shape as surely as source does, and
+    # another order's test shows the same shape by its calls (gap rows 248, 249). So every reuse
+    # path and every other order's owned file is denied whatever the globs say. An entry that is
+    # or holds one of this order's own test files stays readable, or the hook would deny that too.
+    local own_tests_json
+    own_tests_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" --argjson kept "$owned_json" \
+      '[ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] - $kept')"
+    owned_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" --argjson kept "$owned_json" \
+      --argjson own "$own_tests_json" '
+      ([ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] + [ .workOrders[]?.reuses[]?.path ])
+      | map(select(. as $d | ($d | rtrimstr("/")) as $r
+          | all($own[]; . != $d and . != $r and (startswith($r + "/") | not))))
+      | . + $kept | unique')"
+    # A test no order owns shows a reuse's shape by its calls as well (live task
+    # event-archive-lookahead, four earlier kernel tests). So every file git tracked at the commit
+    # the build started from, in a test tree an order owns or reuses from, is denied too. Only those
+    # trees: a repository that commits its framework's core and contrib holds thousands of tests,
+    # which carry no project reuse's shape and are the fair place to look up a framework base
+    # class. This order's own test files stay readable, and so do the support files its frozen
+    # record holds: after a rejected row the author repairs its own committed base class. A file
+    # the author writes is untracked, and stays readable.
+    local base roots="" r tracked tracked_json='[]' own_support
+    if [ -n "$test_glob_raw" ]; then
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        r="$(im_test_tree_root "$f" "$test_glob_raw")"
+        [ -z "$r" ] || roots="$roots$r
+"
+      done <<TG_ROOTS
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.workOrders[]? | (.ownedFiles // [])[], ((.reuses // [])[].path)')
+TG_ROOTS
+    fi
+    if [ -n "$roots" ]; then
+      base="$(jq -r '.startedFrom // empty' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+      [ -n "$base" ] || die 3 "dispatch-open: $IMPL_DIR/ledger.json holds no startedFrom, so the tests tracked at the build's start could not be listed. Run start again."
+      tracked="$(printf '%s' "$roots" | sort -u | while IFS= read -r r; do
+          [ -n "$r" ] || continue
+          git -C "$codepath" ls-tree -r --name-only "$base" -- "$r" || exit 1
+        done)" \
+        || die 3 "dispatch-open: git ls-tree failed on $base in $codepath, so the tracked test files could not be listed."
+      tracked_json="$(printf '%s\n' "$tracked" | while IFS= read -r f; do
+          [ -n "$f" ] || continue
+          [ -z "$(im_test_tree_root "$f" "$test_glob_raw")" ] || printf '%s\n' "$f"
+        done | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')"
+      own_support="$(jq -c '[ (.support // [])[].path ]' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
+      [ -n "$own_support" ] || own_support='[]'
+      owned_json="$(jq -nc --argjson d "$owned_json" --argjson t "$tracked_json" \
+        --argjson own "$own_tests_json" --argjson sup "$own_support" '
+        $d + ($t | map(select(. as $f | ($sup | index($f)) == null
+            and all($own[]; (. | rtrimstr("/")) as $o
+              | $f != $o and ($f | startswith($o + "/") | not))))) | unique')"
+    fi
+    # The row checker reads the tests its rows name. A criterion this order serves is proved by
+    # its owner, so that test sits in another order's frozen file and stays readable to it.
+    if [ "$role_bare" = "row-checker" ]; then
+      local served_json named_json
+      served_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
+        '[ .workOrders[]? | select(.id == $u) | ((.criteriaServed // []) + (.criteriaOwned // []))[] ] | unique')"
+      named_json="$(find "$IMPL_DIR" -maxdepth 1 -name 'tests-wo*.json' ! -name "tests-$unit_id.json" -exec cat {} + 2>/dev/null \
+        | jq -s -c --argjson c "$served_json" \
+          '[ .[] | (.rows // [])[] | select(.criterion as $k | $c | index($k)) | (.tests // [])[].path ] | unique')"
+      [ -n "$named_json" ] || named_json='[]'
+      owned_json="$(jq -nc --argjson d "$owned_json" --argjson n "$named_json" '$d - $n')"
+    fi
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi
@@ -10917,11 +11308,37 @@ TG_OWNED
     [ "$(printf '%s' "$owned_extra" | jq '.denyCommand | length' 2>/dev/null)" -gt 0 ] 2>/dev/null \
       || die 3 "dispatch-open: $forms_file holds no form or could not be read. This plugin's own files are incomplete; nothing about the task is wrong."
   fi
+  # The file the role's brief pins, which dispatch-close checks (gap rows 228 and 250): the
+  # reviewer's findings or verdicts, the fixer's and the test author's report. The last two end
+  # theirs with IM_REPORT_DONE, so their record carries that line too. A fresh dispatch removes an
+  # earlier report of theirs, so a complete one from before cannot close this one. A resume keeps it.
+  local report_brief="" report_path="" report_extra='{}'
+  case "$role_bare" in
+    fixer) report_brief="$fx_brief" ;;
+    test-author) report_brief="$TASK_PATH/implementation/brief-$unit_id-tests.json" ;;
+    reviewer)
+      report_brief="$TASK_PATH/implementation/brief-$unit_id-$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]
+          | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
+        "$TASK_PATH/implementation/ledger.json" 2>/dev/null).json" ;;
+  esac
+  if [ "$role_bare" = "reviewer" ]; then
+    report_path="$(jq -r '.findingsPath // .verdictsPath // ""' "$report_brief" 2>/dev/null)"
+  elif [ -n "$report_brief" ]; then
+    report_path="$(jq -r '.reportPath // ""' "$report_brief" 2>/dev/null)"
+  fi
+  if [ -n "$report_path" ]; then
+    case "$role_bare" in
+      fixer|test-author)
+        report_extra="$(jq -nc --arg p "$report_path" --arg l "$IM_REPORT_DONE" '{reportPath: $p, completionLine: $l}')"
+        [ "$resume" = true ] || rm -f "$report_path" || die 3 "dispatch-open: could not remove the earlier report $report_path" ;;
+      *) report_extra="$(jq -nc --arg p "$report_path" '{reportPath: $p}')" ;;
+    esac
+  fi
   record_json="$(jq -n --arg role "$role" --arg task "$task_id" --arg unit "$unit_id" \
     --arg codePath "$codepath" --argjson denyRead "$deny_json" --argjson allowWrite "$allow_json" \
-    --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" \
+    --arg openedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson extra "$owned_extra" --argjson report "$report_extra" \
     '{schemaVersion: 1, role: $role, task: $task, unit: $unit, codePath: $codePath,
-      openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra')"
+      openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra + $report')"
   # A reopened record carries the one resume already, so a second return with no report halts.
   [ "$resume" = false ] || record_json="$(printf '%s' "$record_json" | jq -c '.resumedAt = .openedAt')"
 
@@ -10984,6 +11401,39 @@ do_dispatch_close() {
   # The record lives under the task's own folder, so a close can only reach this task's record
   # and another task's stays open (live-run row 139).
   local dispatch_file="$TASK_PATH/implementation/dispatch.json"
+  # dispatch-open stores the file the role's brief pins under `reportPath` (gap rows 228 and 250).
+  # One block checks it for every role that has one. A missing file, or one no newer than the
+  # record, is a previous run's or none. A fixer and a test author also end theirs with
+  # `completionLine` as their last act, after at least one line of report. A fixer's must be no
+  # older than the last commit in the code path, because it commits and then writes the line. A
+  # test author's is read by the line alone. The reviewer's file refuses at 111. The other two take
+  # the --no-report path unasked, so a cut-off role never closes as finished. A record from before
+  # the key existed names no file, and nothing is checked.
+  local cut_off="" rp_path rp_line rp_cause="" rp_last rp_head
+  if [ "$no_report" = false ] && [ -f "$dispatch_file" ]; then
+    rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
+    rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
+    if [ -z "$rp_path" ]; then
+      :
+    elif [ ! -f "$rp_path" ] || [ ! "$rp_path" -nt "$dispatch_file" ]; then
+      rp_cause="$rp_path is missing or older than its dispatch record"
+    elif [ -n "$rp_line" ]; then
+      rp_last="$(grep -v '^[[:space:]]*$' "$rp_path" | tail -n 1 | sed 's/[[:space:]]*$//')"
+      if [ "$rp_last" != "$rp_line" ]; then
+        rp_cause="$rp_path does not end with the line '$rp_line'"
+      elif [ "$(grep -v '^[[:space:]]*$' "$rp_path" | grep -c -v -x -F -e "$rp_line")" -eq 0 ]; then
+        rp_cause="$rp_path holds nothing but the line '$rp_line'"
+      elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
+        rp_head="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" log -1 --format=%ct 2>/dev/null)"
+        [ -z "$rp_head" ] || [ "$(im_mtime "$rp_path")" -ge "$rp_head" ] \
+          || rp_cause="$rp_path is older than the last commit in its code path, so the line was written before the fixer's commit"
+      fi
+    fi
+    if [ -n "$rp_cause" ] && [ -z "$rp_line" ]; then
+      die 111 "dispatch-close: the $(jq -r '.role // "" | split(":") | last' "$dispatch_file") on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open. If it stopped at its turn limit, run dispatch-close again with --no-report."
+    fi
+    [ -z "$rp_cause" ] || { cut_off="$rp_cause"; no_report=true; }
+  fi
   # A role with no report is resumed once, not dispatched fresh: its brief is unchanged and its
   # work is unfinished, and a fresh role meets its half-written files (gap row 228). The record
   # stays open so both hooks keep applying while it finishes.
@@ -10998,6 +11448,8 @@ do_dispatch_close() {
     if [ "$(jq -r 'has("resumedAt")' "$dispatch_file")" != "true" ]; then
       write_atomic "$dispatch_file" "$(jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '.resumedAt = $at' "$dispatch_file")"
+      [ -z "$cut_off" ] \
+        || die 112 "dispatch-close: $nr_role on $nr_unit returned, and $cut_off, so it stopped before it finished, most likely at its turn limit. The record stays open for one resume. Resume the same $nr_role agent by message: finish the work and end the report with '$IM_REPORT_DONE'. Then run dispatch-close again."
       echo "DISPATCH-CLOSE: $nr_role on $nr_unit returned no report; the record stays open for one resume"
       echo "next: resume the same $nr_role agent by message: finish the work and write the report. Then run dispatch-close again, with --no-report if it returns none."
       exit 0
@@ -11005,27 +11457,14 @@ do_dispatch_close() {
     nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
     nr_ledger="$(jq -c '.' "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: $TASK_PATH/implementation/ledger.json could not be read as JSON, so the halt on $nr_unit could not be written."
+    local nr_what="returned no report twice"
+    [ -z "$cut_off" ] || nr_what="stopped before it finished twice, the second time because $cut_off"
     nr_ledger="$(halt_order_in "$nr_ledger" "$nr_unit" \
-      "turn cap: ${nr_role##*:} returned no report twice, after one resume; its cap is ${nr_cap:-unknown} turns")"
+      "turn cap: ${nr_role##*:} $nr_what, after one resume; its cap is ${nr_cap:-unknown} turns")"
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: the halt on $nr_unit could not be written."
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
-    die 110 "dispatch-close: $nr_unit is halted. $nr_role returned no report twice, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
-  fi
-  # The reviewer's file is named by its brief, so the script can see it is missing. A file older
-  # than the record is a previous run's. The fixer, the test author and the row-checker return
-  # their report as text or a file no script pins, so for them the flag is the only signal.
-  if [ -f "$dispatch_file" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file" 2>/dev/null)" = "reviewer" ]; then
-    local rc_unit rc_brief rc_expected
-    rc_unit="$(jq -r '.unit // ""' "$dispatch_file")"
-    rc_brief="$(jq -r --arg id "$rc_unit" '[ (.orders // [])[] | select(.id == $id) ][0]
-        | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
-      "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
-    [ -z "$rc_brief" ] || rc_brief="$TASK_PATH/implementation/brief-$rc_unit-$rc_brief.json"
-    rc_expected="$(jq -r '.findingsPath // .verdictsPath // ""' "$rc_brief" 2>/dev/null)"
-    if [ -n "$rc_expected" ] && { [ ! -f "$rc_expected" ] || [ ! "$rc_expected" -nt "$dispatch_file" ]; }; then
-      die 111 "dispatch-close: the reviewer on $rc_unit returned, and $rc_expected is missing or older than its dispatch record. The record stays open. If the reviewer stopped at its turn limit, run dispatch-close again with --no-report."
-    fi
+    die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, after one resume. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
   fi
   if [ -f "$dispatch_file" ]; then
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"

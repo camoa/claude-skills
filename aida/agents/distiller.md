@@ -46,16 +46,23 @@ belongs. A record path that does not exist is absent, and named in `gaps`; it is
 to stop.
 
 For scope, `alignment.json` carries `decidedWithoutAPerson`. Each entry names one question an
-unattended run answered on a person's behalf. A string entry is open: nobody has approved it
-yet. An object entry carries `approvedAt`, because a person approved it later. It is history,
-so never ask for a repair because of it. An empty list is not a gap. The approval itself lives
-in each criterion's `author`.
+unattended run answered on a person's behalf. A string entry, or an object with only `text` and
+`field`, is open: nobody has approved it yet. Every other object is history, so never ask for a
+repair because of it. It carries `approvedAt` when a person approved it later. It carries
+`supersededAt` when a later action changed its field, and `retiredAt` when a person retired
+it. A superseded or retired entry that disagrees with the contract is no gap: the contract holds the
+answer now. An empty list is not a gap. The approval itself lives in each criterion's `author`.
 
 A non-empty list is a decision the record holds, so name it in `decisions`. It is never a gap:
 the fact is written down, and nothing is missing. `decisions` takes five sentences at most, so
 write one that says how many questions an unattended run answered on the person's behalf. Say
-how many of them a person approved later. An approved entry beside `owner` criteria is no
-contradiction. The person approved the contract after the unattended run.
+how many of them a person approved later, and how many no longer hold. An approved entry beside
+`owner` criteria is no contradiction. The person approved the contract after the unattended run.
+
+For design, `design-closed.json` carries `removed`. Each entry names an order that `remove`
+deleted or `merge` folded, with the reason. A folded order also names its survivor in
+`mergedInto`. An id missing from `design/` that `removed` names is accounted for, so it is never
+a gap.
 
 ## What you write
 

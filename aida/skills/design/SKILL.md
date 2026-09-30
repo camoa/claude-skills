@@ -83,8 +83,10 @@ A reopen that changes only owned files, done-when rows or accounted findings on 
 order may skip the research and guide reading below. Those calls are `add-owned-file`,
 `remove-owned-file`, `add-done-when`, `remove-done-when` and `account`. The reading informs an
 order's shape, not its file list. The route is the change, then `check`, `close` with the verdict the last
-`design-closed.json` records, and `distill`. A reopen that creates, merges or removes an order, or changes
-an order's interface, criteria or dependencies, reads as a first run does.
+`design-closed.json` records, and `distill`. A reopen that creates or merges an order, removes
+one with `remove --id --reason`, or changes an order's interface, criteria or dependencies, reads
+as a first run does. Recording an old merge with `remove --merged-into` changes no order, so it
+takes the cheap route above.
 
 Four changes do not halt an order that implementation already started: an added owned file, an
 `account` call, a reason added with `update --append-reasoning`, and a row marked with
@@ -391,16 +393,17 @@ mix phases. Merge two orders when each has fewer than three steps, they address 
 component, and they cannot run in parallel anyway. The script folds one into the other:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh merge "<task_folder>" \
-  --into <woId> --from <woId>
+  --into <woId> --from <woId> --reason "<why the two are one order>"
 ```
 Every list on the folded order joins the survivor's, without duplicates. The folded order's
 `interface` and `reasoning` are appended to the survivor's, each under a line `From <woId>:`.
 The title and the diff budget stay the survivor's; the output says `carried:` and `dropped:` so
 nothing goes unseen. Retitle with `update` when the survivor's title no longer covers what it
 owns. The folded order's file is removed, and every `dependsOn` that named it now names the
-survivor. The two proofs must agree; set one order's `--proof` first when they do not. Never
-remove or edit an order file by any other means. A write outside the script prints nothing, so
-nothing records that it happened.
+survivor. The folded id, the survivor and the reason go into `design-removed.json`, the same
+record `remove` writes. The two proofs must agree; set one order's `--proof` first when they do
+not. Never remove or edit an order file by any other means. A write outside the script prints
+nothing, so nothing records that it happened.
 
 An order that no longer earns its place, for example after the contract changed, leaves
 through the script with its reason:
@@ -416,6 +419,17 @@ records aside. It also refuses an order that another order depends on. It also r
 order that serves or owns a criterion of the contract. Move the dependency or the criterion
 with `update` first. A finding that the removed order accounted for shows in `check`. Account
 for it again.
+
+An order folded before `merge` wrote that record left no entry, so the design shows a gap in its
+numbers. Record it with the survivor and a reason:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove "<task_folder>" \
+  --id <woId> --merged-into <woId> --reason "<why the order was folded>"
+```
+The script refuses an id that is still an order, and an id the record already holds. `check`
+lists each such id under `unrecordedIds:`. Recording changes no order, so it halts nothing. Then
+run `check`, `close` with the verdict the last `design-closed.json` records, and `distill`, as for
+an owned-file reopen. The close copies the entry into its record.
 
 A test that no longer belongs on an order leaves through the script too. The merge may have
 doubled it, or the order became a `gate`:
@@ -524,10 +538,12 @@ test, and a model judges its done-when rows against its surfaces after the build
 is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
 whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
-A test is what a test author writes as a file, red before the code and green after it. The
-review stage's surface row is not a test, so `add-test` refuses a description naming one of a
-`tests` order's own surfaces. A machine criterion only a surface can prove is proved by a spec
-described by what it observes, or reads `person` after scope reopens.
+A test is what a test author writes as a file, red before the code and green after it. Add that
+file to the order with `add-owned-file`. The test author writes into it, and the freeze refuses a
+test in a file the order does not own. The review stage's surface row is not a test, so `add-test`
+refuses a description naming one of a `tests` order's own surfaces. A machine criterion only a
+surface can prove is proved by a spec described by what it observes, or reads `person` after scope
+reopens.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:
@@ -672,6 +688,14 @@ named again.
 holds no name in backticks. A script cannot tell whether prose names a code element, so the line
 never blocks the close. Rewrite each such interface with `update --interface`, and quote each
 element it exposes.
+
+`check` also prints `interfaceUnowned:`, at every exit code. It names each path an order's
+interface holds in backticks that the order does not own, no reuse of it declares, and no order
+in its `dependsOn` owns. A `./` prefix and a `:line` or `::member` suffix are ignored. The
+build's interface check wants every backticked name repeated in the builder's record. A builder
+leaves out a path it did not touch, and the build stops. It is best effort, and it never blocks
+the close. Answer each one: write the path as plain text with `update --interface`, or add the
+reuse with `dispose --path --interface`.
 
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's

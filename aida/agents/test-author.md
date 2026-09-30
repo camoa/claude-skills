@@ -29,7 +29,9 @@ non-goals the unit names and the unit's own declared interface. It holds the int
 the units it depends on, and what their reviewers recorded for the person under
 `dependencyInformation`. Its `reuses` list holds the path and the interface of every existing
 thing this unit builds on. Test against that interface text. Do not open the reused source to
-read its shape; the brief is where design put it. Read the brief first. When it holds
+read its shape; the brief is where design put it. A hook refuses that read, and the read of
+any committed test file this unit does not own. It also refuses a search of a folder that holds one. So search
+your own test file by its path, never its folder. Read the brief first. When it holds
 `treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
 is suspect: never take it as proof, and answer it the way the green-on-arrival rule below says.
 
@@ -50,7 +52,10 @@ is not enough, name the play and its guide in your report. Name the ids of the p
 in your report.
 
 **Open the recipes yourself.** You are given the test-authoring recipe's path, not its text. Read
-it before you choose a level or a file name. It holds the tier and the shape of a test. The brief's
+it before you choose a level. It holds the tier and the shape of a test. Write the tests into the
+test file the brief's `unit.ownedFiles` names, because design chose it. Take a file name from the
+recipe only when that list names no test file. The freeze refuses a test in a file this unit
+does not own. The brief's
 `testRecipePath` names the test-execution recipe. It holds the run command and the `failure_signal`
 markers. Those two recipes are yours; no other recipe is, and a hook refuses the one that writes
 production code.
@@ -115,16 +120,24 @@ build or fix commits the brief lists there, written `commit:<id>`, as the `locks
 prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
 decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
 
-Return one row per test: the path, the test's name, and the criterion its name carries. The row
-also holds the path of the file holding its red run, or its `locks-in` reason. A done-when test
-returns the order id in place of a criterion. Then each checklist line, each absence clause, the
-path of each support file you wrote or changed, and anything that passed on arrival.
+Write what you return to the report file the brief names under `reportPath`, and name that path
+in your reply. Return one row per test: the path, the test's name, and the criterion its name
+carries. The row also holds the path of the file holding its red run, or its `locks-in` reason. A
+done-when test returns the order id in place of a criterion. Then each checklist line, each
+absence clause, the path of each support file you wrote or changed, and anything that passed on
+arrival.
+
+**End the report file with the line `Report: complete` as your last action.** Write it also when
+you stop, after your `Stop:` lines. A report without it tells the build you stopped before you
+finished.
 
 Stop and say so, rather than working around it, when a criterion has no interface to test against,
 when a criterion cannot be tested as written, or when you cannot make a test fail. Never skip a
 criterion silently.
 
 Stop too when a test needs a signature the brief does not hold. End your reply with one line per
-missing signature, `Stop: missing-signature: <class or method>: <test>`. Never learn the signature
-from the code by another route. A runtime is such a route: `php:eval`, `drush ev`, reflection, a
-debugger, or a script that prints a class.
+missing signature, `Stop: missing-signature: <class or method>: <test>`. Write the same lines at
+the end of the report file. Never learn the signature from the code by another route. A runtime
+is such a route: `php:eval`, `drush ev`, reflection, a debugger, or a script that prints a class.
+A sibling test is such a route too. Its calls show a reuse's shape, so a method it calls and the
+brief does not hold is still a missing signature.

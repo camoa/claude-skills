@@ -24,6 +24,9 @@
 #                               true when the two name the same role
 #   shell_dir_after <dir> <cd|pushd> <operand>...
 #                               prints where the shell stands after that cd or pushd
+#   git_tree_of <dir> <word after git>...
+#                               sets GIT_TREE to the tree a git command works in, and GIT_SUB_AT
+#                               to the place of its subcommand in the words after git
 
 # Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
 # drops a trailing slash. Never touches the filesystem, so it works on a path that does not exist.
@@ -145,4 +148,42 @@ shell_dir_after() {
     esac
   done
   if [ "$verb" = cd ]; then printf '%s' "$HOME"; else printf '%s' "$dir"; fi
+}
+
+# The tree a git command run from $1 works in, from its global options $2... (gap row 243).
+# `-C` moves the directory as `cd` does. `--work-tree` names the tree. `--git-dir` names the
+# repository, and its tree is the folder that holds `.git`. A linked worktree's own git folder,
+# under `.git/worktrees/`, names no tree, so the directory stands. Sets GIT_TREE, and GIT_SUB_AT
+# to the 1-based place of the subcommand among $2..., past the words the options took. Two
+# globals, for the reason dispatch_record_for gives.
+GIT_TREE=""; GIT_SUB_AT=1
+git_tree_of() {
+  local dir="$1" tree="" gitdir="" a
+  shift
+  GIT_SUB_AT=1
+  while [ $# -gt 0 ]; do
+    a="$1"
+    case "$a" in
+      -C) [ $# -gt 1 ] && dir="$(shell_dir_after "$dir" cd "$2")"; shift; GIT_SUB_AT=$((GIT_SUB_AT + 1)) ;;
+      --work-tree=*) tree="${a#*=}" ;;
+      --git-dir=*) gitdir="${a#*=}" ;;
+      --work-tree) tree="${2:-}"; shift; GIT_SUB_AT=$((GIT_SUB_AT + 1)) ;;
+      --git-dir) gitdir="${2:-}"; shift; GIT_SUB_AT=$((GIT_SUB_AT + 1)) ;;
+      -c|--namespace) shift; GIT_SUB_AT=$((GIT_SUB_AT + 1)) ;;
+      -*) ;;
+      *) break ;;
+    esac
+    [ $# -gt 0 ] && shift
+    GIT_SUB_AT=$((GIT_SUB_AT + 1))
+  done
+  if [ -n "$tree" ]; then
+    dir="$(shell_dir_after "$dir" cd "$tree")"
+  elif [ -n "$gitdir" ]; then
+    case "$gitdir" in
+      */.git/worktrees/*|.git/worktrees/*) ;;
+      *) dir="$(shell_dir_after "$dir" cd "$gitdir")"; dir="${dir%/.git}" ;;
+    esac
+  fi
+  # shellcheck disable=SC2034 # read by the sourcing hook
+  GIT_TREE="$dir"
 }

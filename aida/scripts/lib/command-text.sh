@@ -45,12 +45,15 @@ strip_heredocs() {
 
 # Reads whitespace-separated words from $1 into array w. bash's read takes -a for an array
 # target; zsh's own read refuses -a ("bad option") and takes -A instead. The caller sets
-# KSH_ARRAYS under zsh so w is indexed from 0 the bash way.
+# KSH_ARRAYS under zsh so w is indexed from 0 the bash way. bash splits the unquoted expansion
+# instead of a herestring, which costs a temporary file per call: the destructive-command hook
+# calls this for every segment of a file a command runs (live-run row 255). Every caller turns
+# globbing off first, and IFS is the default, so the words are the same.
 read_words() {
   if [ -n "${ZSH_VERSION:-}" ]; then
     read -r -A w <<<"$1"
   else
-    # shellcheck disable=SC2034 # read by the sourcing hook
-    read -r -a w <<<"$1"
+    # shellcheck disable=SC2034,SC2206 # read by the sourcing hook; the split is the point
+    w=($1)
   fi
 }

@@ -222,10 +222,12 @@ trap 'rm -f "$TMP_FILE"' EXIT
     # An empty list prints nothing at all, the one place this document says less than the others:
     # an attended run always leaves it empty, so a "none" line on every contract is noise.
     printf '\n## Decided without a person\n\n'
-    # An entry approve marked prints under its own line after the open ones. Any other object
-    # still gets the placeholder below.
+    # Open entries print first, then the approved ones, then the ones that no longer hold
+    # (scripts/lib/decided.sh names the states). An entry of no state gets the placeholder below.
+    OPEN_COUNT="$(jq "$DECIDED_JQ decidedOpen | length" "$ALIGNMENT_FILE")"
     APPROVED_COUNT="$(jq "$DECIDED_JQ [.decidedWithoutAPerson[] | decidedApproved] | length" "$ALIGNMENT_FILE")"
-    OPEN_COUNT=$(( $(jq '.decidedWithoutAPerson | length' "$ALIGNMENT_FILE") - APPROVED_COUNT ))
+    CLOSED_COUNT="$(jq "$DECIDED_JQ"' [.decidedWithoutAPerson[] | objects | select(decidedWhole)
+      | select(decidedState == "superseded" or decidedState == "retired")] | length' "$ALIGNMENT_FILE")"
     [ "$OPEN_COUNT" -eq 0 ] \
       || printf 'Nobody answered these. An unattended run took the recommended answer on each one.\n\n'
     DIDX=0
@@ -233,19 +235,26 @@ trap 'rm -f "$TMP_FILE"' EXIT
       [ -n "$row" ] || continue
       DIDX=$((DIDX + 1))
       ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
-      [ -z "$(printf '%s' "$row" | jq -c "$DECIDED_JQ decidedApproved")" ] || continue
-      if [ "$ROW_TYPE" != "string" ]; then
+      if [ "$(printf '%s' "$row" | jq "$DECIDED_JQ decidedWhole")" != "true" ]; then
         # defect 20's rule, for a list of sentences: assert the entry's type before reading it,
         # and name its position when it is not one.
         printf -- '- (entry %d is not a sentence, is a %s: it cannot be rendered)\n' "$((DIDX - 1))" "$ROW_TYPE"
         continue
       fi
-      printf -- '- %s\n' "$(printf '%s' "$row" | jq -r '.')"
+      printf '%s' "$row" | jq -r "$DECIDED_JQ"' select(decidedIsOpen) | "- " + (if type == "string" then . else .text end)'
     done < <(jq -c '.decidedWithoutAPerson[]' "$ALIGNMENT_FILE")
     if [ "$APPROVED_COUNT" -gt 0 ]; then
       [ "$OPEN_COUNT" -eq 0 ] || printf '\n'
       printf 'An unattended run took these, and a person approved them later with the whole contract.\n\n'
       jq -r "$DECIDED_JQ"' .decidedWithoutAPerson[] | decidedApproved | "- " + .text + " (approved " + .approvedAt + ")"' "$ALIGNMENT_FILE"
+    fi
+    if [ "$CLOSED_COUNT" -gt 0 ]; then
+      [ $((OPEN_COUNT + APPROVED_COUNT)) -eq 0 ] || printf '\n'
+      printf 'An unattended run took these, and they no longer hold. They are history.\n\n'
+      jq -r "$DECIDED_JQ"' .decidedWithoutAPerson[] | objects | select(decidedWhole)
+        | if decidedState == "superseded" then "- " + .text + " (superseded by " + .supersededBy + ", " + .supersededAt + ")"
+          elif decidedState == "retired" then "- " + .text + " (retired " + .retiredAt + ": " + .retiredReason + ")"
+          else empty end' "$ALIGNMENT_FILE"
     fi
   fi
 } > "$TMP_FILE" || die3 "could not write to $TMP_FILE"

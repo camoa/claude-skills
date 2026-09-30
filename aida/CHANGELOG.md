@@ -4,6 +4,91 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.8] - 2026-09-30
+
+Seventeen fixes from two live runs on 6.0.7, the event archive task and
+the Drupal site task, and from the checks of this release's own builds.
+
+### Fixed
+
+- The tool install writes a tooling recipe's `## Files` before its first
+  install line, so an install line can run a script the recipe ships. It
+  refuses a file that differs, writes the absent ones, and keeps them.
+  `show` lists them under `FILES:`. Every install line is checked before
+  any file is written.
+- The implement skill routes each halt by its own cause. Every `next:` line
+  begins with the step that holds its action. A "test wrong" halt goes to
+  `retake-tests`, and a departure goes to review.
+- `start`'s refusal of a started order names what changed in each order,
+  including a reviewed absence mark.
+- The task skill's `save` runs the stage's own `distill` action before it
+  builds the list, so a stale summary is refreshed first.
+- The main-checkout guard reads git and copy commands: `git -C`,
+  `--git-dir`, `--work-tree`, `git show <rev>:<path>`, `git cat-file`,
+  `git grep`, and `cp`, `mv`, `rsync`, `install` and `tar`. A git read of a
+  denied file is refused in the worktree too. A git command that writes in
+  the main checkout is refused.
+- A scope action that changes a field an unattended answer set marks that
+  answer superseded, and `approve` never marks it approved. Only a person's
+  change supersedes. An unattended `set-tests` or `add-non-goal` records its
+  own answer with its field. `retire --entry <n> --reason` closes an answer
+  that was approved before it was reversed. `--field` takes a list and
+  writes one entry per id.
+- `merge` records the absorbed order's id, its survivor and a reason, as
+  `remove` does. `remove --merged-into` records an older merge. Design
+  `check` lists order numbers with no file and no record under
+  `unrecordedIds:`.
+- On a task with no automated tests, a configuration-gate order needs no
+  test harness. Preconditions, the build's suite row and review's mutation
+  row read it as not declared. A failing condition names the worktree's
+  environment step only when the site is coming up or its status says down.
+- A process recipe can list opt-in tools under
+  `requires_tooling_with_tests:`. `require` names them only when the task
+  has automated tests. It finds the task from the window, and `--task`
+  overrides it.
+- A test author is refused every reused file, every other order's owned
+  file, and every committed test in the task's own test folders except its
+  own. The tests brief carries the order's owned files. A test author is
+  refused at dispatch when its order owns no test file, and the freeze
+  refuses a test in a file the order does not own.
+- The fixer and the test author end their pinned report with
+  `Report: complete`. `dispatch-close` treats a missing, stale or unfinished
+  report as a stop at the turn limit, without the orchestrator's flag: exit
+  112 once, then a halt. `fix-record` refuses a report at any other path.
+- The worktree folder is named from the task id with characters the task
+  name rule forbids turned into hyphens. Two ids that give one folder are
+  refused by name.
+- `restart` finds a halted order's commits, recorded or not, and reverts
+  them itself with `git revert`. It never asks for a hard reset. A commit
+  that also changes files the order does not own stops with exit 113. It
+  follows rebases and first-parent history, and names a test file a
+  retake left at an old path.
+- After a failed interface-record check, `build-recheck` re-runs it on the
+  amended record without spending an attempt. It keeps the original text
+  and refuses a named path the code lacks. Design `check` warns under
+  `interfaceUnowned:` about a backticked path an order does not own.
+- The command hook no longer refuses AIDA's own scripts: text inside a
+  quoted string is not read as a command. Text a shell runs, inside `eval`,
+  `sh -c`, a here-string or `$(...)`, still is. A spec runs the hook over
+  every shipped script.
+- The command hook vets one call to a stage script in about two seconds,
+  down from a minute or more.
+- The read hook resolves its whole deny list in one pass.
+
+### Known limits
+
+- A path built at run time, a script written and run later, and a file
+  written through `python -c` still get past the hooks.
+- In the task worktree, `git diff`, `git log -p` and `git show` of a commit
+  still show a denied file's changes.
+- A test that calls a method the brief does not describe stops with
+  `missing-signature` only because the role's text says so.
+- The row checker still depends on `dispatch-close --no-report`, because
+  it answers in text.
+- Recording which field an unattended answer set depends on the skill for
+  goal and criterion answers.
+- A live role writing `Report: complete` last is a prose instruction.
+
 ## [6.0.7] - 2026-09-29
 
 Nine fixes from two live runs: the event archive task on 6.0.6, and a

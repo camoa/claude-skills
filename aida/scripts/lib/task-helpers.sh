@@ -57,6 +57,8 @@
 #                                         a work order's reasoning with no struck paragraph
 #   CITES_JQ                              a jq definition, `citations($known)`, the findings
 #                                         a finding's text cites
+#   IFACE_PATH_JQ                         a jq definition, `ifacePath`, a backticked interface
+#                                         token as a repository path, or empty
 #
 # Every script that sources this file runs warn_newer_installed. These never source it, so
 # they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
@@ -108,6 +110,16 @@ CITES_JQ='
     | select(.[1] != null or .[2] != null or (($known | index($s)) != null))
     | (if .[2] != null then .[2] else (.[3] | scan("[0-9]+")) end)
     | {search: $s, n: tonumber};'
+
+# A backticked token from an order's interface, read as a repository path (gap row 253). Design's
+# check compares it with the order's owned and known paths, and build-recheck asks git whether it
+# exists, so both read a token alike. A leading ./ goes, and so does everything from the first
+# colon, so `src/Foo.php::bar()` and `src/Foo.php:12` read as src/Foo.php. What is left is a path
+# when it holds a slash, and is neither absolute nor a URL. Anything else yields empty.
+# shellcheck disable=SC2034 # read by the sourcing script
+IFACE_PATH_JQ='
+  def ifacePath: select(test("\\s|://") | not) | ltrimstr("./") | sub(":.*$"; "")
+    | select(test("/") and (startswith("/") | not));'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
 # task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree
@@ -637,15 +649,16 @@ task_stage() {
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
 # code path named <slug of the code folder>-<id>: a tree nested under the code path is invisible
 # to a tool that registers projects by folder, and DDEV hands it to the parent project. The
-# folder name becomes a hostname label, so the basename goes through pb_slug, the one slug
-# rule. A dot or an underscore in it becomes a hyphen, as the id rule demands. Prints the
+# folder name becomes a hostname label, so the basename and the id go through pb_slug, the one
+# slug rule. A dot or an underscore in either becomes a hyphen, as the id rule demands: an id made
+# before that rule may still hold one (gap row 251). The branch keeps the id. Prints the
 # path task.json records. When the field is absent it makes the tree and writes the field first; that
 # is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
-# git refuses a path it still registers; a branch gone too starts from HEAD again. The recorded
-# path is not trusted as an address: a path that is not beside this machine's code path is
-# computed again by the rule above, and the tree is made and recorded there. That is the repair
-# for a task carried to a second machine, which records the first machine's path. The base is
+# git refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path
+# gone from disk is not trusted as an address: it is computed again by the rule above, and the
+# tree is made and recorded there. That is the repair for a task carried to a second machine,
+# and for a folder named before the id was slugged. A recorded tree on disk is kept. The base is
 # HEAD of the directory this action was started from when that directory is inside the code
 # repository, so a follow-up made from its parent's tree stacks on the parent's work; otherwise
 # it is the code path's HEAD. Uncommitted changes in the code path are not in a tree cut from a
@@ -653,7 +666,7 @@ task_stage() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule parent base_branch
+  local found rule base_branch
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -669,18 +682,17 @@ task_worktree() {
     || die3 "$who: the library failed to load: playbooks.sh"
   # The path rule, run here rather than read from the record, because the record is an address on
   # the machine that wrote it. One copy serves both branches below.
-  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$id"
+  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
     if [ -n "$found" ]; then printf '%s' "$found"; return 0; fi
-    # A recorded path is usable here when its folder is the code path's own folder, which is what
-    # the rule computes. Another machine's home fails that test, and so does a folder this machine
-    # does not have. Then the producer runs again: the path is computed, made, and recorded.
-    parent="$(cd "$(dirname -- "$wt")" 2>/dev/null && pwd -P)" || parent=""
-    if [ "$parent" != "$(dirname -- "$rule")" ]; then
-      printf '%s: task.json records the worktree %s, which is not beside the code path %s here. The tree is made at %s instead.\n' \
-        "$who" "$wt" "$code" "$rule" >&2
+    # A recorded path gone from disk is not kept. It may be another machine's home, or a folder
+    # named from an id before the slug (gap row 251). The producer runs again: the path is
+    # computed, made, and recorded.
+    if [ "$wt" != "$rule" ]; then
+      printf '%s: task.json records the worktree %s, which is not on disk here. The tree is made at %s instead.\n' \
+        "$who" "$wt" "$rule" >&2
       wt="$rule"
     fi
     printf '%s: the worktree %s is gone from disk and is made again from %s\n' "$who" "$wt" "$branch" >&2
@@ -697,6 +709,13 @@ task_worktree() {
   base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" || die3 "$who: $base_dir has no commit to cut a worktree from"
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
+  # Two old ids such as a_b and a-b slug to one folder. The tree there is the other task's.
+  if [ -e "$wt" ]; then
+    found="$(find "$project/tasks" -name task.json -exec jq -r --arg p "$wt" --arg id "$id" \
+      'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null | head -1)"
+    [ -z "$found" ] \
+      || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
+  fi
   git -C "$code" worktree prune 2>/dev/null
   # What the tree is cut from, written whenever this call cuts the branch, over any base the record
   # held. A detached HEAD is `commit:<sha>`: git forbids `:` in a branch name, so the two never

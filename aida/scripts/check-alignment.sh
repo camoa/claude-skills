@@ -74,8 +74,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not an object, a malformed id, a duplicate id within its own
 #      space, an unknown field inside an entry, a criterion missing verification, a verifiedBy,
 #      author or verdict outside its allowed values, an id counter below 1 or at or below an id
-#      already minted, or a decidedWithoutAPerson entry that is neither a string nor a whole
-#      approved entry. Each is named in the JSON on stdout.
+#      already minted, or a decidedWithoutAPerson entry that is neither a string nor an object
+#      whose state keys are whole. Each is named in the JSON on stdout.
 #
 # What this script could not check is always named on stdout, never silently skipped
 # (check-task.sh states the same rule in its own header): schema-check.sh, the shared comparison
@@ -419,7 +419,7 @@ IDS_ISSUE_COUNT=$(( \
 
 # ---------------------------------------------------------------------------
 # 8. Content check, decidedWithoutAPerson: run only when the field itself passed step 4. Each
-#    entry must be an open string, or a whole approved object as decidedApproved in
+#    entry must be a string, or an object whose state keys are whole, as decidedWhole in
 #    scripts/lib/decided.sh reads it. The shared comparison reads the array's items too since
 #    2026-09-23, but it does not check `required` below the root, so the object is checked here.
 # ---------------------------------------------------------------------------
@@ -434,11 +434,11 @@ else
 
   DWAP_ISSUES_JSON="$(jq -c "$DECIDED_JQ"'
     [ .decidedWithoutAPerson | to_entries[]
-      | select((.value | type) != "string" and ([.value | decidedApproved] | length) == 0)
-      | {index: .key, problem: ("entry is neither a string nor an approved entry with text, approvedAt and approvedBy, is a " + (.value | type))} ]
+      | select(.value | decidedWhole | not)
+      | {index: .key, problem: ("entry is neither a string nor an object with text and whole approved, superseded or retired keys, is a " + (.value | type))} ]
   ' "$ALIGNMENT_FILE")"
 
-  DWAP_NOTE="ran: checked $DWAP_COUNT entry/entries"
+  if [ "$DWAP_COUNT" -eq 1 ]; then DWAP_NOTE="ran: checked 1 entry"; else DWAP_NOTE="ran: checked $DWAP_COUNT entries"; fi
 fi
 
 DWAP_ISSUE_COUNT="$(printf '%s' "$DWAP_ISSUES_JSON" | jq 'length')"
