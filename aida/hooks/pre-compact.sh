@@ -15,8 +15,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # that owns cwd, read off next-actions.sh's report. With several in progress, the one whose
 # worktree holds cwd. No such task: silent, exit 0.
 #
-# "Unsaved" is the one test a hook can make on disk: a file under the task folder written after
-# the last save. `task save` stamps savedAt in task.json on every call, even with nothing to say.
+# "Unsaved" is the one test a hook can make on disk: a file under the task folder written in a
+# later second than the last save. `task save` stamps savedAt in task.json on every call, even
+# with nothing to say.
 # A task with no savedAt is compared against its newest note under notes/, the file a save with
 # text appends to. A task never saved is unsaved only once it holds a version 6 record: task.json,
 # task.md and the .v5 files a version 5 repair keeps
@@ -81,10 +82,15 @@ SAVED_AT="$(jq -r '.savedAt // empty' "$TASK_PATH/task.json" 2>/dev/null)"
 NOTE=""
 [ -n "$SAVED_AT" ] || NOTE="$(find "$TASK_PATH/notes" -maxdepth 1 -name '[0-9-]*.md' 2>/dev/null | sort | tail -1)"
 if [ -n "$SAVED_AT" ]; then
-  # A file stamped at savedAt is the reference. touch -t takes YYYYMMDDhhmm.SS, so the stamp is
+  # A file stamped one second after savedAt is the reference. savedAt holds whole seconds and a
+  # file time holds fractions. A stage file written just before the save, in the same second, would
+  # otherwise read as newer (live-run row 263). The rule errs the other way: a file written after
+  # the save, in that same second, reads as saved. A stage write after a save is its own command,
+  # and a refusal only asks for one more save, so a missed refusal in that one second costs less
+  # than a false refusal after every quick save. touch -t takes YYYYMMDDhhmm.SS, so the stamp is
   # reshaped. task.json is excluded because the save writes it a moment after the stamp it holds.
   REF="$(mktemp)"
-  TZ=UTC touch -t "$(printf '%s' "$SAVED_AT" | sed 's/[-:T]//g; s/Z$//; s/\(..\)$/.\1/')" "$REF"
+  TZ=UTC touch -t "$(jq -rn --arg t "$SAVED_AT" '$t | fromdateiso8601 + 1 | strftime("%Y%m%d%H%M.%S")' 2>/dev/null)" "$REF"
   NEWER="$(find "$TASK_PATH" -type f -newer "$REF" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null | head -1)"
   rm -f "$REF"
 elif [ -n "$NOTE" ]; then

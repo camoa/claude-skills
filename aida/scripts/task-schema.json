@@ -111,7 +111,7 @@
     "savedAt": {
       "type": "string",
       "minLength": 1,
-      "description": "When `task save` last ran for this task, as a UTC timestamp, stamped on every call whether or not a note was written. hooks/pre-compact.sh treats a file under the task folder newer than this as unsaved work. Absent until the first save; the hook then falls back to the newest note."
+      "description": "When `task save` last ran for this task, as a UTC timestamp, stamped on every call whether or not a note was written. hooks/pre-compact.sh treats a file under the task folder written in a later second than this as unsaved work. Absent until the first save; the hook then falls back to the newest note."
     },
     "recipesDeclined": {
       "type": "array",

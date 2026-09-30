@@ -131,8 +131,9 @@ Only you run a save. Nothing in AIDA dispatches it, in either run mode.
 
 ### What "unsaved" means
 
-A task is unsaved when a file in its folder is newer than its last save. A task never saved is
-measured against its newest note instead. With neither, any file counts.
+A task is unsaved when a file in its folder was written in a later second than its last save. The
+save records whole seconds, so a file written in the same second as the save counts as saved. A
+task never saved is measured against its newest note instead. With neither, any file counts.
 
 Four things never count. The two task files. Anything under `notes/`. Anything you carried in,
 under `inputs/`. And anything under `records/`, which holds derived check output the project
