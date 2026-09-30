@@ -757,6 +757,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      <task_folder>/implementation/tests-<unit_id>.json. The same fact exit 39 names for
 #      `build-brief`, with the same message. Nothing is written, so no record opens for a build
 #      that has no brief. Run tests-freeze on the order first.
+# 115  `dispatch-open` was given the reviewer role for an order with no reviewer brief:
+#      brief-<unit_id>-review.json, or brief-<unit_id>-verify-<round>.json after a fix round. The
+#      message names the step that writes it. Nothing is written. Kept apart from 114 because the
+#      repair differs: a missing brief needs review-brief or verify-brief, not tests-freeze.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -5807,8 +5811,6 @@ do_build_brief() {
 
   # --- exit 39: step three (tests-brief, tests-freeze) must already have run for this unit ---------
   im_require_tests_record "build-brief" "$unit_id" 39
-  local tests_doc
-  tests_doc="$IM_TESTS_DOC"
 
   # --- the ledger: needed for the dependency check and the attempt count ---------------------------
   local ledger_file="$IMPL_DIR/ledger.json"
@@ -5894,7 +5896,7 @@ do_build_brief() {
       findings: [ (.findings // [])[] | select(has("setAside") | not) | {ref, text} ]}')"
   # One entry per (row, test): a test naming several criteria appears once in each criterion's own
   # row in the frozen record, and this keeps that same shape rather than collapsing it.
-  tests_out="$(printf '%s' "$tests_doc" | jq -c \
+  tests_out="$(printf '%s' "$IM_TESTS_DOC" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | .criterion as $c | (.tests // [])[]
        | {path, name, criterion: $c} ]')"
 
@@ -11442,8 +11444,21 @@ do_dispatch_open() {
     im_refuse_unneeded_role "$role_bare" "$unit_id"
     # The implementer builds from the brief, and build-brief refuses an order with no frozen tests
     # record. Refused here too, so no record opens for a build that has no brief (gap row 267). The
-    # fixer and the reviewer need a brief that exists only after a build record.
+    # fixer needs a fix brief, which a review writes after a build record.
     [ "$role_bare" != "implementer" ] || im_require_tests_record "dispatch-open" "$unit_id" 114
+  fi
+
+  # The reviewer reads the brief review-brief writes, or verify-brief after a fix round. Without it
+  # the record opens with no reportPath, and dispatch-close has nothing to check (gap row 267).
+  local rv_brief="" rv_step
+  if [ "$role_bare" = "reviewer" ]; then
+    rv_step="$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]
+        | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
+      "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
+    [ -n "$rv_step" ] || rv_step="review"
+    rv_brief="$TASK_PATH/implementation/brief-$unit_id-$rv_step.json"
+    [ -f "$rv_brief" ] \
+      || die 115 "dispatch-open: $rv_brief not found, so a reviewer of $unit_id has no brief. Run ${rv_step%%-*}-brief on $unit_id first. Nothing was dispatched."
   fi
 
   # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause
@@ -11710,10 +11725,7 @@ TG_ROOTS
   case "$role_bare" in
     fixer) report_brief="$fx_brief" ;;
     test-author) report_brief="$TASK_PATH/implementation/brief-$unit_id-tests.json" ;;
-    reviewer)
-      report_brief="$TASK_PATH/implementation/brief-$unit_id-$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]
-          | if .lastStep == "fixed" then "verify-\(.roundsUsed // 0)" else "review" end' \
-        "$TASK_PATH/implementation/ledger.json" 2>/dev/null).json" ;;
+    reviewer) report_brief="$rv_brief" ;;
   esac
   if [ "$role_bare" = "reviewer" ]; then
     report_path="$(jq -r '.findingsPath // .verdictsPath // ""' "$report_brief" 2>/dev/null)"
