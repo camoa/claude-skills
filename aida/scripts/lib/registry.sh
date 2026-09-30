@@ -58,7 +58,7 @@
 #     Deepest matching codePath wins: among every registered project whose codePath is <dir> itself
 #     or an ancestor of it, the one with the longest codePath, so a sibling named like a prefix
 #     (/srv/site2 against /srv/site) never matches. A directory under no codePath that is a git
-#     worktree of a registered checkout, a task's sibling tree, resolves to that checkout's project.
+#     worktree of a registered checkout, a task's tree, resolves to that checkout's project.
 #     Prints that project row as one JSON object on
 #     stdout and exits 0; prints nothing and exits 1 when no project matches. Ported from version
 #     5's scripts/project-for-cwd.sh, which carried this algorithm correctly.
@@ -303,7 +303,7 @@ registry_resolve_by_directory() {
   ' 2>/dev/null)" || return 1
 
   if [ -z "$match" ]; then
-    # A task's worktree is a sibling of its checkout, so no codePath is its ancestor. Its git
+    # A task's worktree is outside its checkout, so no codePath is its ancestor. Its git
     # common dir is the checkout's own .git, and the checkout is what the registry holds.
     local common
     common="$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null)" || return 1

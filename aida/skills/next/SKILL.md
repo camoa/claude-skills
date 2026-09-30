@@ -111,7 +111,7 @@ machine. It needs no approval and no version. The shell forgets the directory be
 every call carries the prefix.
 
 **Entry.** From a window inside the code checkout, call the `EnterWorktree` tool with the task's
-`worktree` path, a sibling folder of the checkout. The tool asks for approval, because the path
+`worktree` path, a folder outside the checkout. The tool asks for approval, because the path
 sits outside `.claude/worktrees/`. No permission rule and no "don't ask again" stops that prompt.
 
 Entry fails in two different ways. Key on the kind of outcome, never on the words of a message.

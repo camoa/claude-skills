@@ -38,10 +38,12 @@ the work will be checked; that conversation belongs to scope, the first stage, a
 own after the task exists. Creating a task only needs two things from you: a short name, and a
 sentence or two on what it is for. That writes the folder, the task file with a fresh id and its
 state set to new, and the goal file carrying what you said. It also makes the task's own git
-worktree beside the code checkout, named `<slug of the checkout folder>-<task-id>`, on the
-task's branch, `feature/<task-id>`. The slug is the folder name lowercased, with every run of
-other characters made one hyphen and the end hyphens trimmed. So `sfup.newyorkcares` gives
-`sfup-newyorkcares-<task-id>`, and the site name is predictable.
+worktree in a folder beside the code checkout, `<slug of the checkout folder>.worktrees`, which
+holds every task tree of that repository. The tree is named `<slug of the checkout
+folder>-<task-id>`, on the task's branch, `feature/<task-id>`. The slug is the folder name
+lowercased, with every run of other characters made one hyphen and the end hyphens trimmed. So
+`sfup.newyorkcares` gives `sfup-newyorkcares.worktrees/sfup-newyorkcares-<task-id>`, and the site
+name is predictable. A tree made before this rule stays where it is.
 
 Every stage action of the task runs inside that worktree, and refuses from anywhere else. AIDA
 can move this session into the tree, which asks for your approval, or start each call with

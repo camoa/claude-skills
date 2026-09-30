@@ -1655,6 +1655,7 @@ $capture"
 # and a tree removed too early loses uncommitted work. So with no id it only lists, which is the
 # whole action unattended, and it removes the named trees one at a time: the site down first, so
 # the framework keeps no orphaned registry entry, then the tree, then the branch when it is merged.
+# The group folder that held the tree goes when it is left empty.
 # Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune).
 # ------------------------------------------------------------------------------------------------
 
@@ -1715,7 +1716,7 @@ do_prune() {
 
   # Every named task is checked before any tree goes: a task that is not complete is a reason to
   # remove nothing, because its tree is where its work is.
-  local id task_dir task_json state wt branch said branch_word
+  local id task_dir task_json state wt branch said branch_word group
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
@@ -1746,6 +1747,7 @@ TA_IDS
       said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
         || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
     fi
+    group="$(task_worktree_group "$CODE_PATH" "prune")" && rmdir "$group" 2>/dev/null
     if printf '%s\n' "$merged" | grep -Fqx "$branch"; then
       git -C "$CODE_PATH" branch -d "$branch" >/dev/null 2>&1 && branch_word="removed" || branch_word="kept, git refused to delete it"
     else

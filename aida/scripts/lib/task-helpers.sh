@@ -49,6 +49,8 @@
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
 #                                         branch, and repairs worktree.path when git disagrees
+#   task_worktree_group <codePath> <action>
+#                                         prints the folder that holds the repository's task trees
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
@@ -204,7 +206,7 @@ resolve_task_folder() {
     || die79 "$who: task.json records the worktree $wt, and git does not list it as a worktree of $code. Nothing written there reaches the branch. Remove that folder, and the next action that needs the code makes the tree again."
   # The route named is the one that works where this call ran. EnterWorktree takes a worktree of
   # this window's own repository on first entry, and from a worktree session only a target under
-  # .claude/worktrees/ (the mirror's tools reference). A task tree is a sibling of the checkout,
+  # .claude/worktrees/ (the mirror's tools reference). A task tree is outside the checkout,
   # so entry is offered from the checkout alone. The prefix works from anywhere.
   if [ "$top" = "$code" ] && [ "${here#"$code"/}" != "$here" ]; then
     die79 "$who: this task builds in its worktree $wt, and this window is at ${here%/}. Enter the tree with EnterWorktree, or start the call with: cd $wt &&"
@@ -672,14 +674,28 @@ task_stage() {
   fi
 }
 
-# The task's own git worktree (ideal/task.md, "A worktree per task, always"), a sibling of the
-# code path named <slug of the code folder>-<id>: a tree nested under the code path is invisible
+# The folder that holds every task tree of one repository: <parent of code>/<slug of the code
+# folder>.worktrees. It sits beside the code path, so the trees do not lie loose among the other
+# folders there (gap row 260). task_worktree makes a tree in it, and prune removes it when empty.
+# $1 the code path, $2 the action's own name. Dies through die3.
+task_worktree_group() {
+  local code
+  code="$(cd "$1" && pwd -P)" || die3 "$2: the code path is not on disk: $1"
+  # shellcheck source=/dev/null
+  command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
+    || die3 "$2: the library failed to load: playbooks.sh"
+  printf '%s/%s.worktrees' "$(dirname -- "$code")" "$(pb_slug "$(basename -- "$code")")"
+}
+
+# The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
+# above, named <slug of the code folder>-<id>: a tree nested under the code path is invisible
 # to a tool that registers projects by folder, and DDEV hands it to the parent project. The
 # folder name becomes a hostname label, so the basename and the id go through pb_slug, the one
-# slug rule. A dot or an underscore in either becomes a hyphen, as the id rule demands: an id made
-# before that rule may still hold one (gap row 251). The branch keeps the id. Prints the
-# path task.json records. When the field is absent it makes the tree and writes the field first; that
-# is the one producer, and running it again is the repair for a task made before the field
+# slug rule. The name keeps the code folder because DDEV names a site after its folder, and a
+# site name must be unique on the machine. A dot or an underscore in either becomes a hyphen, as
+# the id rule demands: an id made before that rule may still hold one (gap row 251). The branch
+# keeps the id. Prints the path task.json records. When the field is absent it makes the tree and
+# writes the field first; that is the one producer, and running it again is the repair for a task made before the field
 # existed. A recorded tree gone from disk is made again from its branch, after a prune, because
 # git refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path
 # gone from disk is not trusted as an address: it is computed again by the rule above, and the
@@ -692,7 +708,7 @@ task_stage() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule base_branch
+  local found rule group base_branch
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -708,7 +724,8 @@ task_worktree() {
     || die3 "$who: the library failed to load: playbooks.sh"
   # The path rule, run here rather than read from the record, because the record is an address on
   # the machine that wrote it. One copy serves both branches below.
-  rule="$(dirname -- "$code")/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
+  group="$(task_worktree_group "$code" "$who")" || exit 3
+  rule="$group/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
@@ -743,6 +760,7 @@ task_worktree() {
       || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
   fi
   git -C "$code" worktree prune 2>/dev/null
+  mkdir -p "$group" || die3 "$who: could not make the folder $group"
   # What the tree is cut from, written whenever this call cuts the branch, over any base the record
   # held. A detached HEAD is `commit:<sha>`: git forbids `:` in a branch name, so the two never
   # meet. A tree made again from a branch that exists keeps the base the record held.
