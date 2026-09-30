@@ -184,6 +184,14 @@ with no `--check-recipe` records each tool undeclared instead. A suite that is a
 recorded, never refused. Knowing it is the point: a builder chasing a failure it did not cause
 spends every attempt it has.
 
+A red suite is also a question for the person. `finish` meets the same red at the end, and it
+refuses unless the baseline subtraction clears it. The summary's `baselineRed:` line names each
+framework whose suite read unmet or unknown. When that line is not `none`, put it to the person
+before the first order. Interactive, open with: "The suite already fails before this build
+starts. Finish will refuse on that failure at the end unless it is decided now. Repair it outside
+this task, have the recipe name the lines that are not failures, or build knowing finish will
+stop." In an unattended run the build goes on, and a person meets the red at `finish`.
+
 What each run printed is kept whole, one file per run under `implementation/baseline-output/`,
 and the baseline names each file. The build step subtracts those lines from a later run, so a
 red suite or a red tool does not block every order. The subtraction compares lines with numbers

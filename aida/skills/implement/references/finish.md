@@ -29,6 +29,14 @@ or unknown refuses (exit 86). The message names the first twenty new lines and t
 `implementation/finished-suite.txt`. A fix commit on the branch and a second `finish` is the
 route. A recipe with no suite row passes with `undeclared`, and the record says so.
 
+A suite row may also declare `warning_line`, the lines a runner prints that fail no test. A
+failing suite where no line matches `failure_line` and at least one matches `warning_line` reads
+`warned`. No test failed, so a fix commit is not the route. `finish` still refuses (exit 86) and
+lists the warning lines. It never passes on them by itself, because the project's own
+configuration made them fail the run. The message names two routes, and a person picks one.
+One is to change the suite row's command in the project's copy of the recipe. The other is to
+repair the project configuration that raises the warnings, outside this task.
+
 On success it writes `implementation/finished.json`: the commit range this stage produced, and
 each order's own range and rounds used. The suite's verdict is under `suite`, with its output in
 the sidecar. The record is committed when the stage closes: `finish` commits

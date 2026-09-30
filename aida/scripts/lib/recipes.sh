@@ -49,7 +49,7 @@
 #   pc_unquote <text>                         the text with one layer of matching outer quotes removed
 #   br_line_keys <file>                       each line of a run as a key: digits, dots and spaces squeezed
 #   br_lines_not_in <base> <now> <out>        the lines of <now> whose key <base> lacks; count in BR_NEW_COUNT
-#   br_subtract_baseline <base> <now> <label> <how> [<selector>]  met, unmet or unknown into BR_SUB_*
+#   br_subtract_baseline <base> <now> <label> <how> [<selector>] [<warning selector>]  met, unmet, unknown or warned into BR_SUB_*
 #   git_status_of <repo> [<pathspecs>]        the porcelain status, whole tree or the pathspecs alone
 #   git_diff_of <repo> <from> <to> [<scope>] [<options>]...  the diff, whole tree or under one path
 #   br_require_clean_tree <action> <repo> [<unit> <run mode> <ledger file> <ledger doc>]  exit 61
@@ -264,7 +264,7 @@ recipe_block_into() {
 }
 
 # The entry being read, held between lines, the same reason PC_* is held between lines above.
-TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
+TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""; TC_WARNING_LINE=""
 
 # Appends one JSON object to $1 for the held row and clears it, so a second call with nothing held
 # writes nothing. `argv` and `nearest` are read as JSON, through jq, never split by hand; a value
@@ -275,6 +275,8 @@ TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE
 # `failure_line` is a regular expression a suite row may declare, one per row: the lines of the
 # suite's output that name a failed test. It lands as `failureLine`, as written, quotes and all;
 # the caller that runs the row strips them, the way it strips a precondition's expected string.
+# `warning_line` is a second expression beside it, read the same way and landing as
+# `warningLine`: the lines a runner prints that fail no test, such as a runner warning.
 tc_flush_entry() {
   local out="$1"
   [ -n "$TC_ID" ] || return 0
@@ -298,16 +300,17 @@ tc_flush_entry() {
   jq -n --arg id "$TC_ID" --argjson argv "$argv_json" --arg cost "$cost" \
         --argjson absent "$([ "$TC_ABSENT" = "1" ] && printf true || printf false)" \
         --argjson nearest "$nearest_json" --argjson unreadable "$unreadable" \
-        --arg failureLine "$TC_FAILURE_LINE" '
+        --arg failureLine "$TC_FAILURE_LINE" --arg warningLine "$TC_WARNING_LINE" '
     {id: $id}
     + (if $argv       == null  then {} else {argv: $argv} end)
     + (if $cost       == ""    then {} else {cost: $cost} end)
     + (if $absent     == false then {} else {absent: true} end)
     + (if $nearest    == null  then {} else {nearest: $nearest} end)
     + (if $failureLine == ""   then {} else {failureLine: $failureLine} end)
+    + (if $warningLine == ""   then {} else {warningLine: $warningLine} end)
     + (if ($unreadable | length) == 0 then {} else {unreadable: $unreadable} end)
   ' >>"$out" || die 3 "preconditions: could not record the test-command row $TC_ID"
-  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""; TC_WARNING_LINE=""
 }
 
 # Reads the `## Test commands` section of the recipe at $1, appending one JSON object per row to
@@ -324,7 +327,7 @@ tc_parse_recipe() {
   RECIPE_STATE="$(recipe_block_into "$recipe_file" "Test commands" "test_commands" "$block_file")"
   [ "$RECIPE_STATE" = "ok" ] || return 0
 
-  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""
+  TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""; TC_WARNING_LINE=""
   skip_indent=-1; skip_key=""
   while IFS= read -r line; do
     trimmed="$(pc_trim "$line")"
@@ -332,13 +335,14 @@ tc_parse_recipe() {
     # line indented further than the key that opened it. Those lines are prose for a person and a
     # model reading the recipe itself; they are skipped here, never parsed as a new field or a new
     # row. A blank line inside or around the block stays in skip mode rather than ending it, since
-    # a folded scalar may carry a paragraph break. `failure_line:` is the one fold kept, the way
-    # cc_parse_recipe keeps `silent_pass:`, because its text is a value something runs.
+    # a folded scalar may carry a paragraph break. `failure_line:` and `warning_line:` are the folds
+    # kept, the way cc_parse_recipe keeps `silent_pass:`, because their text is a value something runs.
     if [ "$skip_indent" -ge 0 ]; then
       [ -n "$trimmed" ] || continue
       indent="$(tc_indent "$line")"
       if [ "$indent" -gt "$skip_indent" ]; then
         [ "$skip_key" != "failure_line" ] || TC_FAILURE_LINE="${TC_FAILURE_LINE:+$TC_FAILURE_LINE }$trimmed"
+        [ "$skip_key" != "warning_line" ] || TC_WARNING_LINE="${TC_WARNING_LINE:+$TC_WARNING_LINE }$trimmed"
         continue
       fi
       skip_indent=-1; skip_key=""
@@ -356,6 +360,11 @@ tc_parse_recipe() {
         TC_FAILURE_LINE="$(pc_trim "${trimmed#failure_line:}")"
         case "$TC_FAILURE_LINE" in '>-'|'>'|'|-'|'|') TC_FAILURE_LINE="" ;; esac
         case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")"; skip_key="failure_line" ;; esac
+        ;;
+      'warning_line:'*)
+        TC_WARNING_LINE="$(pc_trim "${trimmed#warning_line:}")"
+        case "$TC_WARNING_LINE" in '>-'|'>'|'|-'|'|') TC_WARNING_LINE="" ;; esac
+        case "$trimmed" in *'>-'|*'>'|*'|-'|*'|') skip_indent="$(tc_indent "$line")"; skip_key="warning_line" ;; esac
         ;;
       'absent:'*)
         TC_ABSENT=1
@@ -771,8 +780,8 @@ CR_LOOKUP
 
 # The command one test-command row declares, as the object cr_resolve records. $1 the parsed rows,
 # $2 the row id to read, $3 a word for the message. Prints one of three shapes: a command, an
-# absent row with its own reason, or missing with why. A command carries the row's `failureLine`
-# and its `cost` when the row declared them; the cost is what lets a record step leave an
+# absent row with its own reason, or missing with why. A command carries the row's `failureLine`,
+# `warningLine` and `cost` when the row declared them; the cost is what lets a record step leave an
 # end-of-task row to `finish` (nyc defect 18).
 cr_row_command() {
   local rows="$1" row_id="$2" label="$3" row argv
@@ -796,8 +805,10 @@ cr_row_command() {
   fi
   jq -nc --argjson argv "$argv" --arg r "$row_id" \
     --arg failureLine "$(printf '%s' "$row" | jq -r '.failureLine // ""')" \
+    --arg warningLine "$(printf '%s' "$row" | jq -r '.warningLine // ""')" \
     --arg cost "$(printf '%s' "$row" | jq -r '.cost // ""')" '
     {row: $r, argv: $argv} + (if $failureLine == "" then {} else {failureLine: $failureLine} end)
+    + (if $warningLine == "" then {} else {warningLine: $warningLine} end)
     + (if $cost == "" then {} else {cost: $cost} end)'
 }
 
@@ -1067,11 +1078,17 @@ br_lines_not_in() {
 # (the failure is not one the selector names), or a selector grep cannot compile. It cannot see a
 # finding whose text changed, which reads as new, or one fixed and reintroduced, which reads as
 # old, or a new finding worded like an old one in another file, which reads as old too.
-BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+# $6 an optional second expression, the suite row's `warning_line`: lines a runner prints that
+# fail no test. It is read only where the selector matches no line of the run now. When it matches
+# at least one, the verdict is warned, not unknown: no line names a failed test, so the exit reads
+# as coming from those warnings. BR_SUB_WARNINGS holds the first 20 of them, and the warnings are
+# never subtracted, because a new test file can add one more of the same kind without failing.
+BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"
 # shellcheck disable=SC2034 # read by the sourcing script
 br_subtract_baseline() {
-  local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" new_file base_sel now_sel with are they
-  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  local base="$1" now="$2" label="$3" how="$4" selector="${5:-}" warning="${6:-}" new_file base_sel now_sel with are they
+  local warn_count
+  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0; BR_SUB_WARNINGS="[]"
   if [ -z "$base" ] || [ ! -s "$base" ]; then
     BR_SUB_VERDICT="unknown"
     BR_SUB_DETAIL="the $label command $how, and the baseline recorded it unmet at the commit the build started from but kept no output to subtract (a baseline taken before outputs were kept, or its file removed), so this cannot tell an old finding from a new one."
@@ -1094,6 +1111,17 @@ br_subtract_baseline() {
     now_sel="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
     grep -a -E -e "$selector" "$base" >"$base_sel" 2>/dev/null
     grep -a -E -e "$selector" "$now" >"$now_sel" 2>/dev/null
+    if [ ! -s "$now_sel" ] && [ -n "$warning" ]; then
+      grep -a -E -e "$warning" "$now" >"$now_sel" 2>/dev/null
+      warn_count="$(grep -c '' "$now_sel")"
+      if [ "$warn_count" -gt 0 ]; then
+        BR_SUB_WARNINGS="$(head -20 "$now_sel" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+        rm -f "$base_sel" "$now_sel"
+        BR_SUB_VERDICT="warned"
+        BR_SUB_DETAIL="the $label command $how, no line of its output matches the recipe's failure_line selector ($selector), and $warn_count of its lines match its warning_line ($warning), so no test failed and the exit came from those runner warnings."
+        return 0
+      fi
+    fi
     if [ ! -s "$now_sel" ]; then
       rm -f "$base_sel" "$now_sel"
       BR_SUB_VERDICT="unknown"
@@ -1230,8 +1258,9 @@ br_require_clean_tree() {
 # The verdict that wins when several frameworks answer one check. Undeclared ranks lowest, so a
 # framework that declared nothing never drags down one that ran and passed; unmet ranks highest,
 # because a definite failure outranks a question. Deferred sits above met: a suite one framework
-# left to `finish` has not answered yet, so met would claim more than ran. $1 the JSON array of
-# per-framework verdicts.
+# left to `finish` has not answered yet, so met would claim more than ran. Warned sits between
+# unknown and unmet: it is a red with no failed test, so a failed test on another framework wins.
+# $1 the JSON array of per-framework verdicts.
 #
 # This is deliberately not pc_rank's order, which puts met below undeclared. There the question is
 # what a whole run may report, and a recipe declaring nothing must not read as a pass. Here the
@@ -1247,7 +1276,7 @@ br_require_clean_tree() {
 br_worst_verdict() {
   printf '%s' "$1" | jq -r '
     def rank: if . == "undeclared" then 0 elif . == "not-needed" then 1 elif . == "met" then 2
-              elif . == "deferred" then 3 elif . == "unknown" then 4 else 5 end;
+              elif . == "deferred" then 3 elif . == "unknown" then 4 elif . == "warned" then 5 else 6 end;
     (. + ["undeclared"]) | max_by(rank)'
 }
 

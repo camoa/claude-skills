@@ -437,7 +437,9 @@ or fixed. On the whole output, a red baseline on those still reads unmet. A test
 recipe's suite row may declare `failure_line`, a regular expression matching the lines that name
 a failed test. Then only those lines are compared, on both sides, and the record names the
 selector. With the selector, a failure that matches no line reads unknown, because it is not one
-the selector names.
+the selector names. A suite row may also declare `warning_line`, the lines that fail no test.
+Only `finish` reads it, and `references/finish.md` says what follows. A record step still reads
+such a failure unknown.
 
 The subtraction holds no parser, so it cannot see four things. A finding whose text changed
 reads as new. A finding fixed and reintroduced reads as old. A new finding worded like an old

@@ -245,6 +245,11 @@
           "items": { "type": "string" },
           "description": "The nearest command the recipe offers in place of one it says this framework does not have, present only when the row also carried `absent` and its own `nearest:` parsed as a JSON array of strings. Its placeholders are kept verbatim, the same as `argv`'s."
         },
+        "warningLine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The regular expression a suite row declared as `warning_line`, as written, quotes and all: the lines the runner prints that fail no test, such as a runner warning. `finish` reads it only when no line of a failing suite matches `failure_line`, and the suite then reads warned rather than unknown (gap row 261)."
+        },
         "unreadable": {
           "type": "array",
           "items": { "type": "string", "enum": ["argv", "nearest"] },

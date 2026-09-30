@@ -3589,6 +3589,8 @@ EOF
   # row 206). The first line that command printed takes the `failedOutput:` line. The install
   # advice takes the `nextAdvice:` line, and only for an absent condition tool. Each is a line of
   # its own, so the 240-character cut of a long argv never takes the cause or the instruction.
+  # A suite the baseline recorded unmet or unknown takes the `baselineRed:` line (gap row 261):
+  # the build goes on, but finish meets that red again, and only a person can decide it.
   local pc_next pc_advice="none" pc_failed="none" pc_cause
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
@@ -3649,6 +3651,11 @@ EOF
      baselineCommit: (if $baselineCommit == "" then "none" else $baselineCommit end),
      baselineSuite: (if $baselineSummary == null then "none"
                      else ([ $baselineSummary.suite[] | .framework + "=" + .verdict ] | if length == 0 then "none" else join(" ") end) end),
+     baselineRed: (if $baselineSummary == null then "none"
+                   else ([ $baselineSummary.suite[] | select(.verdict == "unmet" or .verdict == "unknown")
+                           | .framework + "=" + .verdict ]
+                         | if length == 0 then "none"
+                           else join(" ") + ": the suite already fails before the build. finish refuses on this red at the end unless the baseline subtraction clears it. Put it to the person now, before the first order." end) end),
      baselineTools: (if $baselineSummary == null then "none"
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
@@ -6225,12 +6232,16 @@ br_tool_check() {
 # order (nyc defect 18). The check is recorded deferred, which passes the way undeclared does, and
 # `finish` runs the same row once with BRC_END_OF_TASK set. order-tests already runs this order's
 # own frozen tests every attempt, so the evidence about this order's code is not lost.
+#
+# The suite row's `warning_line` is read under `finish` alone, and a suite red only on those
+# lines reads warned (gap row 261). A record step's pass and stop rules know five verdicts, and a
+# sixth there would stop an attempt without naming a stopper; `finish` refuses on it by name.
 br_test_check() {
   local check_id="$1" field="$2" label="$3"
   local fw_count fwi fw_obj fw cmd argv_json paths_json result kind payload
   local runs='[]' verdicts='[]' verdict detail outfile rc marker_json markers_len mi marker
   local nothing_ran_hit baseline_doc baseline_verdict baseline_output new_json new_count selector
-  local runs_file
+  local runs_file warning warn_json
 
   fw_count="$(printf '%s' "$BRC_RECIPES" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
@@ -6246,8 +6257,9 @@ br_test_check() {
     fw_obj="$(printf '%s' "$BRC_RECIPES" | jq -c --argjson i "$fwi" '.frameworks[$i]')"
     fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
     cmd="$(printf '%s' "$fw_obj" | jq -c --arg f "$field" '.[$f] // {}')"
-    verdict=""; detail=""; rc=""; new_json="[]"; new_count=0
+    verdict=""; detail=""; rc=""; new_json="[]"; new_count=0; warn_json="[]"; warning=""
     selector="$(pc_unquote "$(printf '%s' "$cmd" | jq -r '.failureLine // ""')")"
+    [ "$BRC_END_OF_TASK" != "true" ] || warning="$(pc_unquote "$(printf '%s' "$cmd" | jq -r '.warningLine // ""')")"
     if [ "$(printf '%s' "$cmd" | jq -r 'has("absent")')" = "true" ]; then
       verdict="undeclared"
       detail="$(printf '%s' "$cmd" | jq -r '.absent')"
@@ -6340,9 +6352,9 @@ br_test_check() {
             [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BRC_BASELINE_FILE")/$baseline_output"
             case "$baseline_verdict" in
               unmet)
-                br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw" "$selector"
+                br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw" "$selector" "$warning"
                 verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
-                new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
+                new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"; warn_json="$BR_SUB_WARNINGS"
                 ;;
               unknown)
                 verdict="unknown"
@@ -6365,12 +6377,13 @@ br_test_check() {
         printf '%s' "$runs" >"$runs_file"
         runs="$(jq -nc --slurpfile r "$runs_file" --arg fw "$fw" --arg v "$verdict" \
           --arg d "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
-          --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
+          --argjson newLines "$new_json" --argjson newLineCount "$new_count" --argjson warn "$warn_json" \
           --arg failureLine "$([ "$check_id" = "suite-regression" ] && printf '%s' "$selector")" \
           '$r[0] as $runs
            | $runs + [{framework: $fw, verdict: $v, detail: $d, exitCode: $rc, output: $out,
                        newLines: $newLines, newLineCount: $newLineCount}
-                      + (if $failureLine == "" then {} else {failureLine: $failureLine} end)]')"
+                      + (if $failureLine == "" then {} else {failureLine: $failureLine} end)
+                      + (if ($warn | length) == 0 then {} else {warningLines: $warn} end)]')"
       fi
       rm -f "$outfile"
     fi
@@ -6403,6 +6416,7 @@ br_test_check() {
              output:   ([ $runs[] | select(has("output")) | .output ] | join("\n"))} end)
     + (if $newCount == 0 then {}
        else {newLines: ([ $runs[] | (.newLines // [])[] ] | .[:20]), newLineCount: $newCount} end)
+    + ([ $runs[] | (.warningLines // [])[] ] | if length == 0 then {} else {warningLines: .[:20]} end)
   '
   rm -f "$runs_file"
 }
@@ -10099,6 +10113,14 @@ FN_RECIPES
           "$(printf '%s' "$suite_json" | jq -r '.newLines[]')" >&2
       fi
       die 86 "finish: the suite is unmet at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. A fix commit on the branch and a second finish is the route."
+      ;;
+    warned)
+      # No test failed, so a fix commit on the branch is not the route. Passing would decide for
+      # the project that its runner's own exit status does not count, and that is a person's call.
+      printf 'finish: the runner warning lines (first %s) are:\n%s\n' \
+        "$(printf '%s' "$suite_json" | jq -r '.warningLines | length')" \
+        "$(printf '%s' "$suite_json" | jq -r '.warningLines[]')" >&2
+      die 86 "finish: the suite failed at $head_now on runner warnings alone: $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. finish does not pass on runner warnings, because the project's own configuration makes them fail the run. A person picks one of two routes. Change the suite row's command in the project's copy of the test-execution recipe, so these warnings do not fail the run. Or repair the project configuration that raises them, in a change outside this task. Then run finish again."
       ;;
     *)
       die 86 "finish: the suite could not be decided at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.} Nothing was recorded. Repair what the detail names, then run finish again."
