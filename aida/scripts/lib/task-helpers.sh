@@ -170,7 +170,7 @@ GIT_WORKTREES
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
 # one). Prints the canonical path on success.
 resolve_task_folder() {
-  local arg="$1" who="$2" p wt project code here top found
+  local arg="$1" who="$2" p wt project code here top found held branch
   [ -n "$arg" ] || die3 "$who: a task folder is required"
   p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
   [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
@@ -206,7 +206,15 @@ resolve_task_folder() {
   # directory alone, and a tree moved while the window stands elsewhere is invisible to it.
   found="$(task_tree_from_git "$p" "$code" "$who")"
   [ -z "$found" ] || wt="$found"
-  [ "$top" != "$wt" ] || { printf '%s' "$p"; return 0; }
+  if [ "$top" = "$wt" ]; then
+    # A chain made with --in-tree shares one tree, and the branch checked out there says which task
+    # builds in it now (gap row 302). A detached HEAD names no task, so it is not refused.
+    held="$(git -C "$wt" symbolic-ref -q --short HEAD 2>/dev/null)"
+    branch="$(jq -r '.worktree.branch // empty' "$p/task.json" 2>/dev/null)"
+    [ -z "$held" ] || [ -z "$branch" ] || [ "$held" = "$branch" ] \
+      || die3 "$who: the worktree $wt holds the branch $held, and this task builds on $branch. Another task of its chain builds in this tree now. Nothing was written. Commit the work there, then run: git -C $wt switch $branch"
+    printf '%s' "$p"; return 0
+  fi
   # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
   # makes it again names it.
   [ -d "$wt" ] || { printf '%s' "$p"; return 0; }
@@ -819,7 +827,8 @@ task_worktree_group() {
 # folder named before the id was slugged. A recorded tree on disk is kept. The base is HEAD of the
 # directory this action was started from when that directory is inside the code repository, so a
 # follow-up made from its parent's tree stacks on the parent's work; otherwise it is the code path's
-# HEAD. A task whose record names `after` is cut from that task's branch instead. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
+# HEAD. A task whose record names `after` is cut from that task's branch instead, or with `inTree`
+# takes over that task's tree. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
 # said once, on stderr, and nothing asks.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
@@ -859,6 +868,25 @@ task_worktree() {
         || die3 "$who: task $id builds on task ${after% *}. That task records no branch, or its branch is not in $code. Nothing was made."
       after_branch=""
     fi
+  fi
+  # A task made with --in-tree takes over that task's tree, on a new branch from its tip, so a chain
+  # pays one checkout and one dependency sync (gap row 302). The tree goes only when it is clean and
+  # still holds that task's branch, so no work and no other task's turn is carried over. The earlier
+  # task keeps its record, and the tree check refuses it while this branch is checked out.
+  if [ -n "$after_branch" ] && [ "$(jq -r '.inTree // false' "$task_json" 2>/dev/null)" = true ]; then
+    found="$(task_tree_from_git "$(dirname -- "$pred")" "$code" "$who")"
+    if [ -n "$found" ]; then
+      [ -z "$(git -C "$found" status --porcelain 2>/dev/null)" ] \
+        || die3 "$who: task $id takes over the worktree $found of task ${after% *}, and that tree has uncommitted changes. Nothing was made. Commit them on $after_branch, then run this again."
+      said="$(git -C "$found" switch -q -c "feature/$id" 2>&1)" \
+        || die3 "$who: git could not make the branch feature/$id in $found: $said"
+      write_atomic "$task_json" "$(jq --arg p "$found" --arg b "feature/$id" --arg base "$after_branch" \
+        '.worktree = ((.worktree // {}) + {path: $p, branch: $b, base: $base})' "$task_json")"
+      printf 'worktree: %s, taken over from task %s\n' "$found" "${after% *}" >&2
+      printf '%s' "$found"
+      return 0
+    fi
+    printf '%s: no tree on disk holds the branch of task %s, so a new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
   fi
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.

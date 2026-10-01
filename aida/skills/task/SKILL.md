@@ -55,7 +55,7 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  create --project "<projectPath>" --name "<name>" [--after <task-id>] -- <goal...>
+  create --project "<projectPath>" --name "<name>" [--after <task-id> [--in-tree]] -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
@@ -72,9 +72,15 @@ that task's branch, and `task.json` records `after`. Use it for a chain of tasks
 because a tree cut now from trunk holds none of the earlier builds. While that task's build is
 unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
 steps 4 and 5 then. `start` makes the tree once that build is finished.
-Show the whole output. Exit code 3 has four causes. The name collided with an existing task,
-or it failed the name rule. `--after` named a task this project does not hold, or the worktree
-could not be made. In the last case the folder is removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
+Add `--in-tree` with `--after` when the person runs the chain one task after another. The task
+then takes over that task's tree, on the new branch `feature/<name>` from its tip. So the chain
+pays one checkout and one dependency sync. That tree must hold no uncommitted change. Both tasks
+then record one tree, and the branch checked out there says which task builds in it now. A stage
+action of the other task exits 3, and its message names the `git switch` that gives it the tree.
+When no tree holds that task's branch, a new tree is cut as with `--after` alone.
+Show the whole output. Exit code 3 has five causes. The name collided with an existing task,
+or it failed the name rule. `--after` named a task this project does not hold, or `--in-tree`
+came without `--after`. Or the worktree could not be made. In the last case the folder is removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
@@ -242,7 +248,8 @@ tree goes, the branch stays.
 `--all` when every tree got one. For each tree the script tears the site down when one is up,
 then removes the tree. It deletes the branch when it is merged. It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
-happened to the branch. Show them. Exit 3 names the tree it stopped at and why. The task is not
+happened to the branch. A tree that another task also records stays, and its line says `kept`:
+a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is not
 complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
 that tree was touched, and nothing is ever forced. Say what it printed and stop.
 

@@ -43,6 +43,11 @@
       "minLength": 1,
       "description": "The id of the task in this project that this task builds on, written by `task create --after <task-id>` and present only then. task_worktree cuts this task's tree from that task's `worktree.branch` instead of from HEAD, and `start` refuses while that task's build is unfinished. The build is finished when that task holds a readable implementation/finished.json or reads complete. Until then `create` makes no tree, and `start` makes it. task_after_state in scripts/lib/task-helpers.sh is the one reader, and the next skill's report prints it (gap row 291)."
     },
+    "inTree": {
+      "type": "boolean",
+      "enum": [true],
+      "description": "Written by `task create --after <task-id> --in-tree` and present only then. task_worktree, the one reader, makes this task's branch in the tree of the `after` task, from that task's tip, instead of cutting a new tree. A tree with uncommitted changes is refused. When no tree holds that task's branch, it cuts a new tree as `after` alone does. Both records then name one tree, and the branch checked out there says which task builds in it now: resolve_task_folder refuses the other, and prune keeps a tree another task records (gap row 302)."
+    },
     "runMode": {
       "type": "string",
       "enum": ["autonomous", "light"],

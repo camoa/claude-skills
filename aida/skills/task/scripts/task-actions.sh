@@ -32,7 +32,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
-#                    [--after <task-id>] -- <goal...>
+#                    [--after <task-id> [--in-tree]] -- <goal...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] repair --project <path> <old-task-folder>
 #   task-actions.sh [--run-mode <interactive|autonomous>] start --project <path> <task-id> \
 #                    -- <why...>
@@ -115,7 +115,7 @@ done
 
 usage() {
   cat <<'EOF' >&2
-usage: task-actions.sh create   --project <path> --name <id> [--after <task-id>] -- <goal...>
+usage: task-actions.sh create   --project <path> --name <id> [--after <task-id> [--in-tree]] -- <goal...>
        task-actions.sh repair   --project <path> <old-task-folder>
        task-actions.sh start    --project <path> <task-id> -- <why...>
        task-actions.sh complete --project <path> <task-id> -- <summary...>
@@ -197,12 +197,13 @@ task_summary() {
 # ------------------------------------------------------------------------------------------------
 
 do_create() {
-  local project_path="" id="" after=""
+  local project_path="" id="" after="" in_tree=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
       --name) id="${2:?--name needs a value}"; shift 2 ;;
       --after) after="${2:?--after needs a value}"; shift 2 ;;
+      --in-tree) in_tree=true; shift ;;
       --) shift; break ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
@@ -216,6 +217,7 @@ do_create() {
   require_project_folder "$project_path" "create"
   validate_task_id "$id" "create"
   [ -n "$goal" ] || die3 "create: a goal is required after --"
+  [ "$in_tree" = false ] || [ -n "$after" ] || die3 "create: --in-tree takes over the tree of the task --after names, so it needs --after"
 
   local task_dir
   task_dir="$(task_dir_for "$project_path" "$id")"
@@ -228,7 +230,7 @@ do_create() {
 
   mkdir -p "$task_dir" || die3 "create: cannot create $task_dir"
 
-  jq -n --arg id "$id" --arg after "$after" '{
+  jq -n --arg id "$id" --arg after "$after" --argjson inTree "$in_tree" '{
       schemaVersion: 1,
       id: $id,
       state: "new",
@@ -236,7 +238,7 @@ do_create() {
       children: [],
       mechanismHints: [],
       externalIds: {}
-    } + (if $after == "" then {} else {after: $after} end)' > "$task_dir/task.json" \
+    } + (if $after == "" then {} else {after: $after} end) + (if $inTree then {inTree: true} else {} end)' > "$task_dir/task.json" \
     || die3 "create: could not write $task_dir/task.json"
 
   {
@@ -1801,7 +1803,7 @@ do_prune() {
 
   # Every named task is checked before any tree goes: a task that is not complete is a reason to
   # remove nothing, because its tree is where its work is.
-  local id task_dir task_json state wt branch said branch_word group
+  local id task_dir task_json state wt branch said branch_word group held
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
@@ -1820,15 +1822,18 @@ TA_IDS
     [ -n "$id" ] || continue
     task_dir="$(task_dir_for "$project_path" "$id")"; task_json="$task_dir/task.json"
     wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
+    # A later task made with --in-tree builds in this tree now, so the tree stays (gap row 302).
+    held="$(find "$project_path/tasks" -name task.json -exec jq -r --arg p "$wt" --arg id "$id" \
+      'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null | head -1)"
     # Git's refusal is checked first, so a dirty tree loses nothing: not its site, not its record.
-    [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
+    [ -n "$held" ] || [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
       || die3 "prune: $wt has uncommitted changes. Commit or stash there first; prune never forces"
     # The tear-down runs in a subshell: its own cd into the tree must not be where the remove runs.
     if [ -n "$(jq -r '.environment.recipe // empty' "$task_json")" ]; then
       ( do_environment --project "$project_path" "$id" down ) \
         || die3 "prune: the tear-down of $id failed, so $wt stays. See $task_dir/records/environment-down.txt"
     fi
-    if [ -d "$wt" ]; then
+    if [ -z "$held" ] && [ -d "$wt" ]; then
       said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
         || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
     fi
@@ -1841,6 +1846,7 @@ TA_IDS
     write_atomic "$task_json" "$(jq 'del(.worktree, .environment)' "$task_json")"
     commit_task_change "$project_path" "Prune the worktree of ${id}" "the task is complete and a person chose this tree" "" "" "$id" "prune" \
       || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    [ -z "$held" ] || wt="$wt kept, task $held builds in it,"
     printf 'pruned: %s %s branch %s %s\n' "$id" "$wt" "$branch" "$branch_word"
   done <<TA_IDS
 $ids

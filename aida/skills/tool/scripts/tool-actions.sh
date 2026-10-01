@@ -130,10 +130,12 @@ if [ "$ACTION" = "require" ]; then
     RQ_PROJECT="$(registry_resolve_by_directory "$(pwd -P)" 2>/dev/null | jq -r '.path // empty' 2>/dev/null)"
     RQ_CODE=""; [ -z "$RQ_PROJECT" ] || RQ_CODE="$(project_code_path_value "$RQ_PROJECT")"
     if [ -n "$RQ_CODE" ] && [ -d "$RQ_CODE" ] && [ -d "$RQ_PROJECT/tasks" ]; then
-      # find, not a glob: zsh refuses a glob that matches nothing.
+      # find, not a glob: zsh refuses a glob that matches nothing. A chain made with --in-tree
+      # shares one tree, so the branch checked out there names the task (gap row 302).
       TASK_ARG="$(find "$RQ_PROJECT/tasks" -mindepth 2 -maxdepth 2 -name task.json \
         -exec jq -r --arg top "$(active_tree_for "$RQ_CODE" "$(pwd -P)")" \
-        'select(.worktree.path == $top) | input_filename' {} + 2>/dev/null | head -1)"
+        --arg br "$(git symbolic-ref -q --short HEAD 2>/dev/null)" \
+        'select(.worktree.path == $top and ($br == "" or .worktree.branch == $br)) | input_filename' {} + 2>/dev/null | head -1)"
       TASK_ARG="${TASK_ARG%/task.json}"
     fi
   fi
