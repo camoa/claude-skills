@@ -10159,7 +10159,7 @@ do_verify_record() {
   outofscope_json="$(printf '%s' "$verdicts_doc" | jq -c 'if (.outOfScope | type) == "array" then .outOfScope else [] end')"
   breakage_rows='[]'
   if [ "$(printf '%s' "$verdicts_doc" | jq -r 'if (.newBreakage | type) == "array" then "yes" else "no" end')" = "yes" ]; then
-    rv_read_findings_array "$verdicts_path" "newBreakage" "verify-record"
+    rv_read_findings_array "$verdicts_path" "newBreakage" "verify-record" minted
     breakage_rows="$RV_FINDINGS_ARRAY"
   fi
 

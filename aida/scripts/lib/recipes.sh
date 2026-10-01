@@ -2034,6 +2034,8 @@ rv_is_finding_id() {
 # Reads $1, a file the reviewer wrote, and sets RV_FINDINGS_ARRAY to the array under key $2 after
 # checking every entry's own shape. $3 the action's own name. Dies (exit 52) on anything it cannot
 # read as that shape, because a findings file this script half understands is worse than none.
+# $4, when given, says the caller mints each entry's id, so the id the file carries is not read.
+# verify-record does that for new breakage (gap row 297).
 #
 # It sets a global rather than printing, and every caller calls it as a plain statement. A function
 # that refuses must never be called with `$(...)`: a command substitution runs in a subshell, so the
@@ -2066,7 +2068,7 @@ rv_refuse_duplicate_keys() {
 }
 
 rv_read_findings_array() {
-  local file="$1" key="$2" who="$3" doc arr count i one id severity evidence seen_ids=""
+  local file="$1" key="$2" who="$3" minted="${4:-}" doc arr count i one id severity evidence seen_ids=""
   [ -f "$file" ] || die 52 "$who: $file not found. The file named on the command line has to exist."
   [ -s "$file" ] || die 52 "$who: $file is empty. An empty file is not an empty findings list; write { \"$key\": [] } instead."
   doc="$(jq -c '.' "$file" 2>/dev/null)"
@@ -2081,9 +2083,13 @@ rv_read_findings_array() {
     one="$(printf '%s' "$arr" | jq -c --argjson i "$i" '.[$i]')"
     [ "$(printf '%s' "$one" | jq -r 'type')" = "object" ] \
       || die 52 "$who: entry $i of $key in $file is not an object."
-    id="$(printf '%s' "$one" | jq -r '.id // ""')"
-    rv_is_finding_id "$id" \
-      || die 52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
+    if [ -n "$minted" ]; then
+      id="entry $i of $key"
+    else
+      id="$(printf '%s' "$one" | jq -r '.id // ""')"
+      rv_is_finding_id "$id" \
+        || die 52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
+    fi
     severity="$(printf '%s' "$one" | jq -r '.severity // ""')"
     case "$severity" in
       high|medium|low) ;;
