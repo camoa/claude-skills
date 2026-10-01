@@ -147,7 +147,8 @@ say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
 halt a started order. Unattended, run `build-record` as after any return. It halts the order
-itself, so do not halt it again. The next `start` sets aside what was left.
+itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
+(exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run

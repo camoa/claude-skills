@@ -135,7 +135,7 @@
     "verdict": {
       "type": "string",
       "enum": ["passed", "failed"],
-      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: a check reading unmet fails, a check reading unknown fails, met and undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the checks said. The rows say which check or criterion caused a fail. An absent verdict is a review that has not closed, never a review that passed."
+      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: a check reading unmet fails, a check reading unknown fails, met and undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the checks said. The rows say which check or criterion caused a fail. An absent verdict is a review that has not closed, never a review that passed. `close` also leaves it absent while a `decision-` check reads unknown, so a later close answers that check with no fresh pass (gap row 279)."
     },
     "catalogNotes": {
       "type": "array",
@@ -244,7 +244,12 @@
         "answeredBy": {
           "type": "string",
           "enum": ["person", "nobody"],
-          "description": "Present only on a lens check whose findings are all low, which a person decides rather than the script. `nobody` before the person answers, when the check reads unknown, or on a run with nobody present, when it reads met. `person` once `close --row` took the answer."
+          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision an unattended build left in finished.json `pendingDecisions` (gap row 279). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
+        },
+        "answer": {
+          "type": "string",
+          "enum": ["wrong", "deferred", "load-bearing", "test-wrong", "keep", "rebuild"],
+          "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, or keep or rebuild for a departure. wrong, deferred and keep read met; load-bearing, test-wrong and rebuild read unmet. Completion offers a follow up task for each deferred one."
         },
         "scriptHalf": {
           "type": "object",

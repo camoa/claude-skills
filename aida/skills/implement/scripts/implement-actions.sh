@@ -402,7 +402,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      no --verdicts also follows `reviewed` (gap row 265); `close` follows `reviewed` or `fixed`.
 #      The message names the step found and the steps allowed.
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
-#      message carries the halt's own recorded reason.
+#      message carries the halt's own recorded reason. `build-record` refuses on it too, so a
+#      halted order records no attempt; --accept-deviation lets the deviation's own halt through.
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
 #      second brief and `review-record` refuses to write a second record.
@@ -1571,7 +1572,7 @@ do_read() {
   # order with open findings is waiting for a fixer. One row per order in the ledger, in the
   # ledger's own order, so a reader never has to open six files to learn where a task stands. A
   # ledger that could not be read leaves the list empty rather than guessing at it.
-  local reviews_json order_ids order_count oi one_id one_file one_exists one_open one_note
+  local reviews_json order_ids order_count oi one_id one_file one_exists one_open one_note one_pending
   reviews_json='[]'
   if [ "$ledger_readable" = "true" ]; then
     order_ids="$(jq -c '[ (.orders // [])[] | .id ]' "$LEDGER_FILE" 2>/dev/null)"
@@ -1581,20 +1582,23 @@ do_read() {
     while [ "$oi" -lt "$order_count" ]; do
       one_id="$(printf '%s' "$order_ids" | jq -r --argjson i "$oi" '.[$i]')"
       one_file="$IMPL_DIR/review-$one_id.json"
-      one_exists=false; one_open=0; one_note="no review record"
+      one_exists=false; one_open=0; one_pending=0; one_note="no review record"
       if [ -f "$one_file" ]; then
         one_exists=true
         if jq empty "$one_file" 2>/dev/null; then
           one_open="$(jq '[ (.findings // [])[] | select(.actionable == true and .status == "open") ] | length' "$one_file" 2>/dev/null)"
           case "$one_open" in ''|*[!0-9]*) one_open=0 ;; esac
+          # What waits for the person at the task review (gap row 279).
+          one_pending="$(jq '([ (.findings // [])[] | select(.status == "pending") ] | length) + (if has("deviationPending") then 1 else 0 end)' "$one_file" 2>/dev/null)"
+          case "$one_pending" in ''|*[!0-9]*) one_pending=0 ;; esac
           one_note="ok"
         else
           one_note="present but could not be read as JSON"
         fi
       fi
       reviews_json="$(printf '%s' "$reviews_json" | jq -c --arg unit "$one_id" \
-        --argjson exists "$one_exists" --argjson open "$one_open" --arg note "$one_note" \
-        '. + [{unit: $unit, reviewRecordExists: $exists, openActionableFindings: $open, note: $note}]')"
+        --argjson exists "$one_exists" --argjson open "$one_open" --argjson pending "$one_pending" --arg note "$one_note" \
+        '. + [{unit: $unit, reviewRecordExists: $exists, openActionableFindings: $open, pendingForReview: $pending, note: $note}]')"
       oi=$((oi + 1))
     done
   fi
@@ -1638,7 +1642,7 @@ do_read() {
              halt: ("halt: " + (.haltedBecause // "none")),
              attempts: ("attempts=" + ((.attemptsUsed // 0) | tostring)),
              rounds: ("rounds=" + ((.roundsUsed // 0) | tostring)),
-             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end),
+             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings) pending=\($rv[$o.id].pendingForReview)" else "review: none" end),
              needs: ($needs[$o.id] // "unknown: no readable snapshot names this order")} ]' \
       "$LEDGER_FILE")"
     criteria_line="$(printf '%s' "$ledger_summary" | jq -r \
@@ -7738,6 +7742,13 @@ do_build_record() {
   attempt_number=$((attempts_used_before + 1))
   local attempts_allowed
   attempts_allowed="$(attempts_allowed_for "$order_entry")"
+  # Exit 49. A halted order records no attempt, or a build after a Stop: line halt records over it.
+  # --accept-deviation answers the deviation's own halt, so only that segment lets the step through.
+  local br_halted
+  br_halted="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  [ -z "$accept" ] || br_halted="$(halt_segments_matching "$br_halted" "$(jq -cn --arg p "$BR_DEVIATION_PREFIX" '[$p]')" drop)"
+  [ -z "$br_halted" ] \
+    || die 49 "build-record: $unit_id is halted, so this step refuses. The ledger records the reason: $br_halted"
 
   # --- the task's own project, through the one reader every step-five action already uses ---------
   # The range lives in the code worktree, or in the project folder for an order whose proof is
@@ -9913,6 +9924,12 @@ do_verify_record() {
   # loop, the two gates and the per-ruling loop live there.
   rv_apply_rulings "$unit_id" "$updated_findings" "$rounds_used" "$rulings_raw"
   updated_findings="$RV_RULED_FINDINGS"
+  # Gap row 279. Unattended at the cap, a finding with an empty fix scope waits for the task
+  # review as fix-brief marks it, so only a finding with a fix scope still halts the order.
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    updated_findings="$(printf '%s' "$updated_findings" | jq -c '
+      map(if .actionable == true and .status == "open" and ((.fixScope // []) | length == 0) then .status = "pending" else . end)')"
+  fi
   local open_now unruled
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
@@ -10286,7 +10303,7 @@ CLOSE_FAKES
   # The model-judged count is over the whole ledger, not this order alone: it is what a person
   # returning to a finished run reads to list every row no person ever looked at.
   im_print_summary "close" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --argjson served "$served_json" \
-    --arg ledger "$RV_LEDGER_FILE" --arg earlier "${earlier_own% }" \
+    --arg ledger "$RV_LEDGER_FILE" --arg earlier "${earlier_own% }" --argjson review "$RV_REVIEW_DOC" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
     | {order: $id,
@@ -10301,6 +10318,8 @@ CLOSE_FAKES
                        judgedBy: ("judgedBy=" + (([ (.judgements // [])[] | .judgedBy ] | unique) | if length == 0 then "nobody" else join(",") end))} ],
        rowsJudgedByModel: (([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
                            + ([ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length)),
+       pendingForReview: ([ ($review.findings // [])[] | select(.status == "pending") | .id ]
+                          + (if $review | has("deviationPending") then ["departure"] else [] end)),
        ledger: $ledger,
        next: $next}')"
   exit 0

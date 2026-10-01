@@ -1706,6 +1706,7 @@ RW_GUIDES
      research: $research,
      guideBodies: $guideBodies,
      deferredFindings: ($finished.deferred // []),
+     pendingDecisions: ($finished.pendingDecisions // []),
      checks: [ ($record.checks // [])[]
                | select(.id != "serves-a-criterion")
                | {id, verdict, detail, framework: (.framework // ""), output: (.output // "")} ],
@@ -1739,7 +1740,8 @@ RW_GUIDES
       line("researchUrls"; ([ .research[].findings[].urls[] ] | unique | length)),
       line("guideBodies(onDisk)"; ([ .guideBodies[] | select(.onDisk) ] | length)),
       line("guideBodies(notOnDisk)"; ([ .guideBodies[] | select(.onDisk | not) ] | length)),
-      line("deferredFindings"; (.deferredFindings | length)) ] | .[]'
+      line("deferredFindings"; (.deferredFindings | length)),
+      line("pendingDecisions"; (.pendingDecisions | length)) ] | .[]'
   local skip_reason
   skip_reason="$(rw_reviewer_skip_reason)"
   if [ -n "$skip_reason" ]; then
@@ -1977,9 +1979,8 @@ RW_RESEARCH_FILES
     | ("decision-" + .unit + "-" + (.finding // "departure")) as $id
     | {id: $id, verdict: "unknown", answeredBy: "nobody",
        detail: ((if .kind == "ruling"
-                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because its fix scope is empty and nobody was present: " + .text + ". The person keeps the work as built with --row " + $id + "=met"
-                 else .unit + " departs from the design, found while nobody was present: " + .text + ". The person keeps the departure with --row " + $id + "=met" end)
-                + ", or fails the review with --row " + $id + "=unmet.")}' >>"$rows_file"
+                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because its fix scope is empty and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
+                 else .unit + " departs from the design, found while nobody was present: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
   # --- the done-when clauses the tests step routed here, one verdict each ------------------------
   # Such a clause asserts the change added nothing of a named kind, and no test of it can be watched
   # failing, so the reviewer judges it against the diff (live-run row 184). The verdicts ride in the
@@ -2634,8 +2635,10 @@ do_close() {
         case "$2" in *=*) ;; *) die 3 "close: --row takes <criterion>=met|unmet, got: $2" ;; esac
         cid="${2%%=*}"; value="${2#*=}"
         [ -n "$cid" ] || die 3 "close: --row was given no criterion id: $2"
+        # A decision an unattended build left takes the ruling words, or keep and rebuild for a
+        # departure; the check below holds each word to its own kind of row (gap row 279).
         case "$value" in
-          met|unmet) ;;
+          met|unmet|wrong|deferred|load-bearing|test-wrong|keep|rebuild) ;;
           *) die 3 "close: --row takes met or unmet, not: $value. A row nobody could answer is left out, and it reads unanswered." ;;
         esac
         rows="$rows$(printf '%s\t%s' "$cid" "$value")
@@ -2791,20 +2794,41 @@ RW_ROWS
   # A check holding only low findings takes the person's --row (gap row 274), and so does a
   # decision an unattended build left (gap row 279).
   local check_rows
+  local wrong_words
+  wrong_words="$(jq -Rrn --rawfile given /dev/stdin '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
+      | select(if ($id | startswith("decision-") and endswith("-departure")) then (["keep", "rebuild"] | index($w)) == null
+               elif ($id | startswith("decision-")) then (["wrong", "deferred", "load-bearing", "test-wrong"] | index($w)) == null
+               else (["met", "unmet"] | index($w)) == null end)
+      | $id + "=" + $w ] | join(", ")' <<RW_ROWS
+$rows
+RW_ROWS
+)"
+  [ -z "$wrong_words" ] \
+    || die 3 "close: --row gave $wrong_words. A ruling takes wrong, deferred, load-bearing or test-wrong; a departure takes keep or rebuild; every other row takes met or unmet."
   check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
-      | {id: .[0], verdict: .[1]} ]' <<RW_ROWS
+      | .[1] as $w
+      | {id: .[0], word: $w,
+         verdict: (if (["met", "wrong", "deferred", "keep"] | index($w)) != null then "met" else "unmet" end)} ]' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" '
     .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
       | if $g == null then $c
+        elif ($c.id | startswith("decision-")) then
+          $c | .verdict = $g.verdict | .answeredBy = "person" | .answer = $g.word
+          | .detail = ((.detail | sub(" The person (ruled|deferred|kept|did not keep) .*$"; ""))
+                       + ({"wrong": " The person ruled it wrong, so the work stands as built.",
+                           "deferred": " The person deferred it, so completion offers it as a follow up task.",
+                           "load-bearing": " The person ruled it load-bearing, so the check reads unmet. Fix it on the task branch, then finish and review again.",
+                           "test-wrong": " The person ruled a frozen test wrong, so the check reads unmet. Correct the test on the task branch, then finish and review again.",
+                           "keep": " The person kept the departure.",
+                           "rebuild": " The person did not keep the departure, so the check reads unmet. Rebuild the order on the task branch, then finish and review again."}[$g.word]))
         else $c | .verdict = $g.verdict | .answeredBy = "person"
-          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet|kept it|did not keep it, so the check reads unmet)\\.$"; ""))
-                       + (if ($c.id | startswith("decision-")) then
-                            (if $g.verdict == "met" then " The person kept it." else " The person did not keep it, so the check reads unmet." end)
-                          elif $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
+          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet)\\.$"; ""))
+                       + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
                                   else " The person rejected them, so the check reads unmet." end)) end ]')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
   # The absence check is read again off the rows the record holds, so a row stored before
@@ -2814,6 +2838,17 @@ RW_ROWS
       --argjson row "$(rw_absence_check_row "$(printf '%s' "$updated" | jq -c '.absences')")" '
       .checks = [ .checks[] | if .id == "absence-clauses" then $row else . end ]')"
     [ -n "$updated" ] || die 3 "close: could not read the absence check again off the record's rows."
+  fi
+
+  # A decision an unattended build left, still unanswered, holds the verdict back (gap row 279).
+  # The record keeps every row without one, so a later close answers it with --row, no fresh pass.
+  local waiting
+  waiting="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select((.id | startswith("decision-")) and .verdict == "unknown") | .id ] | join(", ")')"
+  if [ -n "$waiting" ]; then
+    rw_write_record "close" "$(printf '%s' "$updated" | jq -c 'del(.verdict)')"
+    rw_print_summary "$updated" "close"
+    echo "CLOSE: no verdict yet. These decisions wait for the person: $waiting. Run close again with one --row per decision, as close.md says, with a person present." >&2
+    exit 0
   fi
 
   # The verdict rules. A check reading unmet fails, a check reading unknown fails, met and

@@ -17,7 +17,8 @@ frozen contract, and every work order. It holds the path to `review/diff.patch`.
 research records. Each finding carries the paths its source names, each marked on disk or not,
 and its URLs apart. It holds `guideBodies`, the guide bodies design opened, each marked on disk
 or not. It holds the results of checks 4 to 8, with every tool row and every mutation
-survivor. It holds the findings implementation ruled deferred. It holds
+survivor. It holds the findings implementation ruled deferred. It holds `pendingDecisions`: the
+findings and departures an unattended build left for the person. It holds
 `playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
 `absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 

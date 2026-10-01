@@ -331,7 +331,8 @@ and the work is accepted. Load-bearing: the work cannot be accepted with it, so 
 work stops until you act. Test-wrong: the problem is real and the fix needs a frozen test
 changed, so the tests are retaken. A model may not make these calls with nobody watching." Then
 say each finding in plain words, with what it cites. At the cap, unattended, `verify-record`
-already halted the order instead.
+marks each open finding with an empty fix scope pending, as `fix-brief` does. It halts the order
+only for an open finding that has a fix scope.
 
 Run the same call again, with one `--ruling` flag added per finding ruled:
 ```

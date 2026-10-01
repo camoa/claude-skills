@@ -32,14 +32,15 @@ open it.
 The brief holds the criteria and the non-goals from the frozen contract. Every work order. The path
 to the diff file. The research records, and the paths they cite. The results of checks 4 to 8,
 including every tool row and every mutation survivor. The findings implementation ruled deferred at
-its fix round cap, each with its reason and the id it cited. It holds `absenceClauses`: the
+its fix round cap, each with its reason and the id it cited. It holds `pendingDecisions`: the
+findings and departures an unattended build left for the person. It holds `absenceClauses`: the
 done-when clauses the tests step routed to you, each with the order it belongs to.
 
 Open the diff file, the paths the research records cite, and the playbook record `playbooksPath`
 names, yourself. You hold Read for exactly that.
 
 **A deferred finding is not a settled one.** Implementation ruled it not now, which is never a person
-saying it is fine. Judge each one again against the code as it stands, under the lens that fits it.
+saying it is fine. A pending decision is not settled either: nobody has ruled on it yet. Judge each one again against the code as it stands, under the lens that fits it.
 Raise it as your own finding where it still holds, citing the id it cites and the evidence you saw.
 The reason recorded beside it is a claim like any other, and it never lowers a severity.
 
