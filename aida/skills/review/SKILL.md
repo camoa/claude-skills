@@ -166,6 +166,7 @@ order: the id, the verdict, and one word for how the verdict came about.
 | `read` | a record field decided it, and nothing ran |
 | `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent |
 | `could-not-look` | a recipe, a row, a file or a tool was absent, so the verdict is unknown or undeclared |
+| `awaiting-person` | a lens check holds only low findings, and the person answers it at close |
 
 Then one line per surface: run, or not run with the reason, `disabled`, `unaffected` or `no harness`.
 Then one line with the counts per word. Exit 3 with no record, naming the file. Run it at any step

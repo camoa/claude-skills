@@ -2697,7 +2697,8 @@ RW_ROWS
     .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
       | if $g == null then $c
         else $c | .verdict = $g.verdict | .answeredBy = "person"
-          | .detail = (.detail + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
+          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet)\\.$"; ""))
+                       + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
                                   else " The person rejected them, so the check reads unmet." end)) end ]')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
   # The absence check is read again off the rows the record holds, so a row stored before
@@ -2745,11 +2746,12 @@ RW_ROWS
     "the review $verdict_word${failing:+: $failing}"
   rw_print_summary "$updated" "close"
   printf 'contract: %s\n' "$ALIGNMENT_FILE"
-  local undeclared_list unknown_list note_count
+  local undeclared_list unknown_list awaiting_list note_count
   undeclared_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "undeclared") | .id ] | join(", ")')"
-  unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown") | .id ] | join(", ")')"
+  unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy != "nobody") | .id ] | join(", ")')"
+  awaiting_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | .id ] | join(", ")')"
   note_count="$(printf '%s' "$updated" | jq '(.catalogNotes // []) | length')"
-  echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
+  echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Checks awaiting the person: ${awaiting_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
   case "$live_state" in
     ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, so the next start reports the contract as changed; the drift is review's own and it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
     *)  echo "CLOSE: $ALIGNMENT_FILE is $live_state, so no criterion verdict was written into the contract. The record holds them." >&2 ;;
@@ -2788,6 +2790,8 @@ do_audit() {
         # A lens reading undeclared had no source and no diff to judge, so it looked at nothing.
         # Calling that `ran` contradicted the floors this stage applies before a lens verdict, and
         # completion prints these lines into the pull request body (live-run row 154).
+        # A lens check holding only low findings waits for the person at close (gap row 274).
+        elif $v == "unknown" and .answeredBy == "nobody" then "awaiting-person"
         elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" or $v == "undeclared" then "could-not-look" else "ran" end)
         elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
         elif $id == "test-and-mutation" then
@@ -2818,7 +2822,7 @@ do_audit() {
             elif ($disabled | index($sid)) != null then "not run: disabled"
             elif ($unaffected | index($sid)) != null then "not run: unaffected"
             else "not run: no harness" end) ]
-      + [ "audit: " + ([ "ran", "read", "could-not-look", "off" ] | map(. as $w | $w + "=" + ([ $rows[] | select(.how == $w) ] | length | tostring)) | join(" ")) ]
+      + [ "audit: " + ([ "ran", "read", "could-not-look", "awaiting-person", "off" ] | map(. as $w | $w + "=" + ([ $rows[] | select(.how == $w) ] | length | tostring)) | join(" ")) ]
     | .[]' || die 3 "audit: $RECORD_FILE could not be read as a review record."
   exit 0
 }

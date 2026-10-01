@@ -183,6 +183,7 @@ After the close, review prints one line per check: its name, its answer, and how
 | read | a record decided it, and nothing ran |
 | off | the project turned it off, the recipe declares the row absent, or no order asked for the check |
 | could-not-look | a recipe, a row, a file or a tool was missing, so the answer is unknown or undeclared |
+| awaiting-person | a lens check holds only low findings, and you answer it at close |
 
 Then one line per surface, and a line of counts. You see this before the verdict word, so what
 did not run is in front of you first. Completion puts the same list in the pull request body.
@@ -221,7 +222,8 @@ low. Then it cites one criterion or one non-goal, or neither, and that decides w
 - **It cites a non-goal.** The task did what it said it would not do.
 - **It cites neither, or it is low and cites a criterion.** It is work nobody has a task for.
   Interactively, review offers one follow up task per finding, and a yes creates it from the
-  evidence. Autonomously, it is recorded and named, and no task is created. Folding such work in silently is what scope exists to prevent.
+  evidence. Autonomously, it is recorded and
+  named, and no task is created. Folding such work in silently is what scope exists to prevent.
 
 Severity overrides the third case only: a high severity security fault is raised to you at once,
 because leaving it queued ships it. A finding implementation deferred at its fix round cap is not
