@@ -7060,7 +7060,7 @@ BR_DIFF
     ofc_verdict="unmet"
     ofc_detail="these changed files match none of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')'s own ownedFiles: ${unmatched%, }"
     [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
-    rerun_step="$(task_env_rerun_step "$TASK_PATH")"
+    rerun_step="$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$rerun_step" ] || ofc_detail="${ofc_detail%.}.$rerun_step"
   elif [ -n "$env_aside" ]; then
     ofc_verdict="met"

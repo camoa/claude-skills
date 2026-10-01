@@ -1581,7 +1581,7 @@ TA_TOKEN_LIST
   local recipe_changes changes_doc fork kind n blob
   fork="$(task_fork_point "$task_dir" "$wt")"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
-      recipe_prose_under "$RECIPE" Preconditions | grep -o '`[^` ]*`' | tr -d '`' | sed "s/^/named$tab/"; } \
+      recipe_precondition_names "$RECIPE" | sed "s/^/named$tab/"; } \
     | while IFS="$tab" read -r kind n; do
         case "$n" in ''|/*|*..*) continue ;; esac
         [ -f "$wt/$n" ] || continue

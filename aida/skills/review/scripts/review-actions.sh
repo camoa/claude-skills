@@ -411,13 +411,14 @@ rw_owned_files() {
   printf '%s' "$RW_SNAPSHOT_DOC" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique'
 }
 
-# Every frozen test row, across every order's own tests-<unit>.json, as one JSON array. Walked with
-# `find` and a while loop rather than a glob, so a task with no frozen record at all reads as an
-# empty list instead of a literal pattern. $1 the action.
-RW_TEST_ROWS="[]"
+# Every frozen test row, across every order's own tests-<unit>.json, as one JSON array, and every
+# support path those records froze as another. Walked with `find` and a while loop rather than a
+# glob, so a task with no frozen record at all reads as an empty list instead of a literal pattern.
+# $1 the action.
+RW_TEST_ROWS="[]"; RW_TEST_SUPPORT="[]"
 rw_load_test_rows() {
   local who="$1" list one doc
-  RW_TEST_ROWS='[]'
+  RW_TEST_ROWS='[]'; RW_TEST_SUPPORT='[]'
   list="$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)"
   while IFS= read -r one; do
     [ -n "$one" ] || continue
@@ -426,6 +427,7 @@ rw_load_test_rows() {
       || die 3 "$who: $one exists but could not be read as JSON. Repair or remove it by hand before running this again."
     RW_TEST_ROWS="$(jq -nc --argjson have "$RW_TEST_ROWS" --argjson doc "$doc" \
       '$have + [ ($doc.rows // [])[] | . + {unit: ($doc.unit // "")} ]')"
+    RW_TEST_SUPPORT="$(jq -nc --argjson have "$RW_TEST_SUPPORT" --argjson doc "$doc" '$have + [ ($doc.support // [])[].path ]')"
   done <<RW_TEST_FILES
 $list
 RW_TEST_FILES
@@ -784,7 +786,7 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched="" env_aside="" aside_line="" extra="" light=false
+  local owned owned_count one matched gi glob unmatched="" env_aside="" support_aside="" aside_line="" extra="" light=false
   owned="$(rw_owned_files)"
   task_is_light "$TASK_PATH" && light=true
   owned_count="$(printf '%s' "$owned" | jq 'length')"
@@ -809,6 +811,11 @@ rw_check_serves() {
     if task_env_recipe_change "$TASK_PATH" "$one" "$RV_CODEPATH" "${RW_RANGE##*..}"; then
       env_aside="$env_aside$one, "; continue
     fi
+    # A support file an order's tests froze. The freeze hashed it and the write hook guards it, so
+    # a later change to it is refused there and is not this check's finding (gap row 269).
+    if printf '%s' "$RW_TEST_SUPPORT" | jq -e --arg p "$one" 'index($p) != null' >/dev/null; then
+      support_aside="$support_aside$one, "; continue
+    fi
     matched=false
     gi=0
     while [ "$gi" -lt "$owned_count" ]; do
@@ -822,11 +829,12 @@ rw_check_serves() {
 $(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
 RW_CHANGED
   [ -z "$env_aside" ] || aside_line=" Set aside as files \`task environment up\` recorded: ${env_aside%, }."
+  [ -z "$support_aside" ] || aside_line="$aside_line Set aside as support files an order's tests froze: ${support_aside%, }."
   if [ -n "$unmatched" ]; then
-    extra="$aside_line$(task_env_rerun_step "$TASK_PATH")"
+    extra="$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$extra" ] || extra=".$extra"
     rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }$extra"
-  elif [ -n "$env_aside" ]; then
+  elif [ -n "$aside_line" ]; then
     rw_check_row "$CHECK_SERVES" "met" "every other changed file in $RW_RANGE matches some order's own ownedFiles.$aside_line"
   else
     rw_check_row "$CHECK_SERVES" "met" "every one of the $RW_CHANGED_COUNT changed files in $RW_RANGE matches some order's own ownedFiles."

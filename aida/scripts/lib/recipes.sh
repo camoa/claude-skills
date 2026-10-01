@@ -82,6 +82,7 @@
 #                                             stops at the first that fails, named in RT_FAILED
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
+#   recipe_precondition_names <recipe>        each name its ## Preconditions prose puts in backticks
 #   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
 #   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
 #                                             the list under <key>; 2 on a value it cannot read
@@ -1682,6 +1683,10 @@ RL_STEPS
 
 # The prose under the H2 $2 of the recipe $1, indented, the way show prints it.
 recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/d; s/^/  /'; }
+
+# Each name the `## Preconditions` prose of the recipe $1 puts in backticks, one per line. `task
+# environment up` records the ones that are files the branch changed.
+recipe_precondition_names() { recipe_prose_under "$1" Preconditions | grep -o '`[^` ]*`' | tr -d '`'; }
 
 # The name: field of the frontmatter of the recipe $1, or empty when it has none.
 recipe_name_of() {
