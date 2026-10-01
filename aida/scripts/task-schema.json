@@ -125,7 +125,7 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": { "type": "string", "enum": ["e2e", "visual-regression"] },
-      "description": "The surface kinds a person answered `not this task` to at review's setup offer, written by `task defer-surface`, one kind per answer. Present only after the first such answer. Review reads it and does not offer that kind again in this task, so a second review pass does not repeat the offer. The answer is per task, and the next task may ask again (gap row 278)."
+      "description": "The surface kinds a person answered `not this task` to at a surface setup offer, at scope, design or review, written by `task defer-surface`, one kind per answer. Present only after the first such answer. Scope's and design's `read` print it as `surfaces-deferred:`, review's `surfaces` reads it, and none of the three offers that kind again in this task. The answer is per task, and the next task may ask again (gap row 278)."
     }
   },
   "$defs": {

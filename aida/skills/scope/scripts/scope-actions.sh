@@ -318,6 +318,7 @@ do_read() {
 
   echo "action: read"
   echo "task: $TASK_PATH"
+  echo "surfaces-deferred: $(jq -r '(.surfacesDeferred // []) | if length == 0 then "none" else join(" ") end' "$TASK_PATH/task.json" 2>/dev/null)"
   if [ ! -f "$ALIGNMENT_FILE" ]; then
     echo "contract: absent"
     exit 0

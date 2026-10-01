@@ -28,7 +28,8 @@
 #   0  did what was asked, including `install` printing not-applicable when no framework has a recipe
 #   1  no project owns this directory
 #   3  could not do its job: a bad argument, a refused command, a differing file, a recipe with no
-#      block, a lookup nobody completed, an id registered with different fields, an absent accept row
+#      block, a lookup nobody completed, an id registered with different fields, an absent accept row,
+#      a surface file another branch holds
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
 #  61  the tree is dirty, so an install, register or baseline commit would sweep other work in
 #  62  `register` or `baseline` before `install` wrote the surface file
@@ -143,7 +144,7 @@ SA_VIEWPORTS
 
 # --------------------------------------------------------- show and install
 do_show_or_install() {
-  local steps files_dir list doc
+  local steps files_dir list doc branch
   KIND="${1:-}"
   kind_key "$KIND"
   shift; cr_resolve_recipe "$@"
@@ -165,6 +166,11 @@ do_show_or_install() {
     rm -rf "$files_dir"; exit 0
   fi
   recipe_files_refuse_differing install "$RECIPE" "$list" "$TREE" "$files_dir"
+  # A surface file another branch holds would collide with this one at merge (gap row 278).
+  if [ ! -f "$SURFACE_FILE" ]; then
+    branch="$(sf_branch_with "$TREE" "$SURFACE_REL")"
+    [ -z "$branch" ] || die 3 "install: branch $branch holds $SURFACE_REL, and a new one here would collide with it. The file reaches this tree once that branch lands on the trunk. If that branch is abandoned, deleting it, local and remote, lets install run."
+  fi
   br_require_clean_tree install "$TREE"
   load_viewports
   [ "$RUN_MODE" = "interactive" ] && { printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"; printf '%s\n' "$steps" | sed 's/^/  /'; }
@@ -304,6 +310,8 @@ do_read() {
   printf 'surfaces-field: %s\n' "$(jq -r 'if .surfaces == null then "none" else "e2e=\(if .surfaces.e2e.enabled then "on" elif .surfaces.e2e.declined then "declined" else "off" end) visual-regression=\(if .surfaces.visualRegression.enabled then "on" elif .surfaces.visualRegression.declined then "declined" else "off" end)" end' "$PROJECT_FILE")"
   sf_load_surfaces "$SURFACE_FILE"
   printf 'surface-file: %s (%s)\n' "$SURFACE_FILE" "$SF_STATE"
+  # Every setup offer reads this line first: scope's, design's and this skill's own (gap row 278).
+  [ "$SF_STATE" != "missing" ] || printf 'surface-branch: %s\n' "$(sf_branch_with "$TREE" "$SURFACE_REL" | grep . || echo none)"
   [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) url=\(.url) masks=\(.masks | length) paths=\(.paths | length) critical=\(.critical)"'
   # A version 5 project holds a YAML registry beside the file. It is named, left in place, and its
   # ids and URLs are candidates for discovery.

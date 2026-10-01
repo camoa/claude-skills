@@ -2162,7 +2162,7 @@ rw_surface_kind() {
     return 0
   fi
   if [ "$enabled" = "on with its surface file on a branch" ]; then
-    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree. Branch $RW_SURFACE_BRANCH holds it, and the file reaches this task once that branch lands on the trunk. Until then it reads as off here, and review ran nothing for it." >>"$checks_out"
+    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree. Branch $RW_SURFACE_BRANCH holds it, and the file reaches this task once that branch lands on the trunk. Until then it reads as off here, and review ran nothing for it. If that branch is abandoned, deleting it, local and remote, brings the setup offer back." >>"$checks_out"
     return 0
   fi
   if [ "$enabled" = "on with no surface file" ]; then
@@ -2880,9 +2880,11 @@ do_audit() {
       (named("Disabled and not run: ")) as $disabled
     | (named("touched none of their declared paths: ")) as $unaffected
     # A check a person answered, or one nobody was present to answer, carries its detail here,
-    # because completion prints these lines into the pull request body (gap row 274).
+    # because completion prints these lines into the pull request body (gap row 274). So does a
+    # surface check whose file another branch holds, so the body names that branch (gap row 278).
     | ([ .checks[] | {id, verdict, how: how,
-          note: (if has("answeredBy") then " answeredBy=" + .answeredBy + ": " + .detail else "" end)} ]) as $rows
+          note: (if has("answeredBy") then " answeredBy=" + .answeredBy + ": " + .detail
+                 elif (.detail | test("Branch [^ ]+ holds it")) then ": " + .detail else "" end)} ]) as $rows
     | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)\(.note)" ]
       + [ .surfaces[] | .id as $sid | "surface(\($sid)): " + (if .ran then "run"
             elif ($disabled | index($sid)) != null then "not run: disabled"

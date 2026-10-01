@@ -23,14 +23,16 @@ take one and refuse the other.
 When another branch holds the surface file, offer no setup, because it would collide with that
 file. Do not tell the person to merge that branch. It is often another task's unfinished work, and
 a merge puts that work into this task. A kind marked on reads as off here, in both run modes. The
-file reaches this task once that branch lands on the trunk. Name the branch, and say that.
+file reaches this task once that branch lands on the trunk. Name the branch, and say that. If that
+branch is abandoned, deleting it, local and remote, brings the offer back.
 
 Ask once per kind, with a recommended answer per kind. Give three answers per kind: yes, not this
 task, or no. Say the difference between "not this task" and "no" in the ask itself, so the person
 knows what a "no" silences. A yes on a kind invokes the `surfaces` skill through the Skill tool,
 naming that kind. "Not this task" on a kind runs
 `"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh defer-surface --project "<projectPath>" <task-id> <e2e|visual-regression>`.
-A later review pass of this task then does not ask again, and the next task may ask.
+No later stage or review pass of this task then asks again, and the next task may ask. A kind that
+scope or design deferred is not offered here either.
 A no on a kind runs `decline <kind>`, project-wide, and that kind is never asked again. An offer
 repeated every task is a nag, and a nag gets clicked through. Autonomous, the offer is not made,
 and the record says it was not offered.

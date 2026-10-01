@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
 ---
 
 # Design
@@ -496,12 +496,17 @@ Name a `--surface` when the order changes a page or a screen a person sees, by i
 surface registry. Most orders name none.
 
 Before naming one: this order changes a page, and `<projectPath>/project.json` has `surfaces` null
-or a kind that is off and not declined. Interactive only, offer the setup once per task, naming
-every such kind. Say so in one line. Ask whether to set the surfaces up now, per kind, with a
+or a kind that is off and not declined. Skip a kind that `read` names under `surfaces-deferred:`.
+Before you ask, run `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh read`.
+When its `surface-branch:` names a branch, offer nothing. Name that branch, and say the surface
+file reaches this task once that branch lands on the trunk. Interactive only, offer the setup once
+per task, naming every such kind. Say so in one line. Ask whether to set the surfaces up now, per kind, with a
 recommended answer per kind. Give three answers per kind: yes, not this task, or no. Say in the ask
 that "no" is project-wide and "not this task" is not. A yes on a kind invokes the `surfaces` skill
 through the Skill tool, naming that kind. Do this once per kind said yes to. This order then
-names the id the setup registered. "Not this task" records nothing for that kind. A no on a kind
+names the id the setup registered. "Not this task" on a kind runs
+`"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh defer-surface --project "<projectPath>" <task-id> <kind>`,
+and no later stage of this task asks again. A no on a kind
 runs `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>`,
 project-wide, and that kind is never asked again. Autonomous: nothing is offered. A page scope did
 not see is often first named here.

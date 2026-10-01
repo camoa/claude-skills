@@ -3,7 +3,7 @@ name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
 argument-hint: "[approve] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
 ---
 
 # Scope
@@ -287,14 +287,19 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
   designer`, whatever the person says to the draft. It stays `designer` until `approve` promotes
   it at "Approval" below; a yes on the draft alone does not promote it.
 - **A kind is off and not declined, or `surfaces` is null.** The decline is that kind's
-  `declined` field in `project.json`. Interactive only. Look at the goal once, at this same point.
+  `declined` field in `project.json`. Interactive only. Skip a kind that `read` names under
+  `surfaces-deferred:`. Look at the goal once, at this same point. Before you ask, run
+  `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh read`. When its
+  `surface-branch:` names a branch, offer nothing. Name that branch, and say the surface file
+  reaches this task once that branch lands on the trunk.
   When it names something a person opens in a browser, a page, a form, a screen, a journey, say so
   in one line. Ask once, naming every kind still open, with a recommended answer per kind. Give
   three answers per kind: yes, not this task, or no. Say the difference between "not this task"
   and "no" in the ask itself, so the person knows what a "no" silences. A yes on a kind invokes the
   `surfaces` skill through the Skill tool, naming that kind. Do this once per kind said yes to.
-  Then read `project.json` again, so the two bullets above apply to this task. "Not this task"
-  records nothing for that kind; the next stage that names a page may ask again. A no on a kind
+  Then read `project.json` again, so the two bullets above apply to this task. "Not this task" on
+  a kind runs `"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh defer-surface --project
+  "<projectPath>" <task-id> <kind>`, and no later stage of this task asks again. A no on a kind
   runs `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>`,
   project-wide, and that kind is never asked again. Name `/aida:surfaces` as the way to turn it on
   later. A goal that names nothing a person sees gets no question. Autonomous: nothing is offered,

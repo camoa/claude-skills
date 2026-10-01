@@ -36,6 +36,11 @@ It prints the project, the `surfaces` field, and the surface file with its state
 line per surface, and a version 5 `registry.yml` when one sits beside the file. That registry is
 left in place. Its ids and URLs are candidates for discovery, below.
 
+When the surface file is missing, `read` prints `surface-branch:`, the branch that holds the file,
+or `none`. When it names a branch, offer no setup, and `install` refuses. A new file would collide
+with that branch's file. Say the file reaches this tree once that branch lands on the trunk. If
+that branch is abandoned, deleting it, local and remote, lets setup run.
+
 A stage's offer names the kind in its invocation. Run by hand with no kind, ask which kind after
 `read`, naming each kind's state, and then work that kind only.
 
