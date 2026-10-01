@@ -12590,21 +12590,30 @@ do_dispatch_close() {
   if [ "$no_report" = true ]; then
     [ -f "$dispatch_file" ] \
       || die 3 "dispatch-close: --no-report needs an open dispatch record, and $dispatch_file is absent. If the role's record was already closed, run dispatch-open with the same role and unit and --resume, then resume the same agent by message. If that agent cannot be reached, as from another session, run dispatch-open without --resume and dispatch the role fresh."
-    local nr_role nr_unit nr_cap nr_ledger nr_used nr_allowed nr_after="after one resume"
+    local nr_role nr_unit nr_cap nr_ledger nr_used nr_allowed nr_after="after one resume" nr_dirty=""
     nr_role="$(jq -r '.role // ""' "$dispatch_file" 2>/dev/null)"
     nr_unit="$(jq -r '.unit // ""' "$dispatch_file" 2>/dev/null)"
     [ -n "$nr_role" ] && [ -n "$nr_unit" ] \
       || die 3 "dispatch-close: $dispatch_file names no role or unit. Repair or remove it by hand."
-    # A record from before `resumes` counts the one resume its `resumedAt` marks.
-    nr_used="$(jq -r '.resumes // (if has("resumedAt") then 1 else 0 end)' "$dispatch_file")"
-    nr_allowed="$(jq -r '.resumesAllowed // 1' "$dispatch_file")"
+    # A record from before `resumes` counts the one resume its `resumedAt` marks. A count that is
+    # not a whole number, such as one edited by hand, reads as the default.
+    nr_used="$(jq -r '.resumes // (if has("resumedAt") then 1 else 0 end)
+      | if type == "number" and . >= 0 and . == floor then . else 1 end' "$dispatch_file")"
+    nr_allowed="$(jq -r '.resumesAllowed
+      | if type == "number" and . >= 1 and . == floor then . else 1 end' "$dispatch_file")"
     [ "$nr_allowed" -eq 1 ] || nr_after="after $nr_allowed resumes"
+    # An implementer commits each numbered part, so what it left uncommitted is the work a stop
+    # puts at risk (gap row 301). The count is named, never refused: the runtime stopped the role.
+    if [ "${nr_role##*:}" = "implementer" ]; then
+      nr_dirty="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" status --porcelain 2>/dev/null | grep -c .)"
+      nr_dirty=" It left $nr_dirty uncommitted files in $(jq -r '.codePath // ""' "$dispatch_file")."
+    fi
     if [ "$nr_used" -lt "$nr_allowed" ]; then
       write_atomic "$dispatch_file" "$(jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson n "$((nr_used + 1))" \
         '.resumedAt = $at | .resumes = $n' "$dispatch_file")"
       [ -z "$cut_off" ] \
         || die 112 "dispatch-close: $nr_role on $nr_unit returned, and $cut_off, so it stopped before it finished, most likely at its turn limit. The record stays open for resume $((nr_used + 1)) of $nr_allowed. Resume the same $nr_role agent by message: finish the work and end the report with '$IM_REPORT_DONE'. Then run dispatch-close again."
-      echo "DISPATCH-CLOSE: $nr_role on $nr_unit returned no report; the record stays open for resume $((nr_used + 1)) of $nr_allowed"
+      echo "DISPATCH-CLOSE: $nr_role on $nr_unit returned no report; the record stays open for resume $((nr_used + 1)) of $nr_allowed.$nr_dirty"
       echo "next: resume the same $nr_role agent by message: finish the work and write the report. Then run dispatch-close again, with --no-report if it returns none."
       exit 0
     fi
@@ -12620,7 +12629,7 @@ do_dispatch_close() {
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: the halt on $nr_unit could not be written."
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
-    die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, $nr_after. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md. A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
+    die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, $nr_after. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
   fi
   if [ -f "$dispatch_file" ]; then
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
