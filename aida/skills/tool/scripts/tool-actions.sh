@@ -7,7 +7,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
-#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] [--task <task folder>] <process recipe path>
+#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] [--task <task folder>] [--only <tool>]... <process recipe path>
 #
 # Every form also takes `--tooling <tool>=<path>` before the action, once per tool: a catalog
 # recipe catalog-identifier found. A folder source ranked before the catalog still wins.
@@ -26,7 +26,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #          --advisory prints the same lines and exits 0. It installs nothing: install stays the one
 #          action that needs a person. A tool under requires_tooling_with_tests is named too, except
 #          when the task says it has no automated tests. The task is the one whose worktree is this
-#          window's top-level folder, or the one --task names.
+#          window's top-level folder, or the one --task names. --only checks only the named tools
+#          of the recipe's lists, for a caller that knows which of them its own commands run.
 #
 # What reaches stdout is what reaches the orchestrator's context. A command's own output never
 # does. install and run write it to <project>/records/tool-<tool>-<action>.txt, the ignored
@@ -98,11 +99,14 @@ if [ "$ACTION" = "require" ]; then
   # The task decides a tool under requires_tooling_with_tests: it is left out when the task has no
   # automated tests. The task is the one whose worktree is this window's top-level folder, and
   # --task overrides that. With no task, nothing says the tests are off, so the tool is named.
-  ADVISORY=no; TASK_ARG=""
+  ADVISORY=no; TASK_ARG=""; ONLY=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --advisory) ADVISORY=yes; shift ;;
+      --only) [ $# -ge 2 ] || { printf 'tool-actions: --only needs a tool name\n' >&2; exit 3; }
+              ONLY="$ONLY$2
+"; shift 2 ;;
       --task) [ $# -ge 2 ] || { printf 'tool-actions: --task needs a task folder\n' >&2; exit 3; }
               TASK_ARG="$2"; shift 2 ;;
       *) break ;;
@@ -138,6 +142,8 @@ if [ "$ACTION" = "require" ]; then
     [ "$(automated_tests "$TASK_ARG")" != "no" ] || WITH_TESTS=""
   fi
   NAMES="$(printf '%s\n%s\n' "$NAMES" "$WITH_TESTS" | grep -v '^$')"
+  [ -z "$ONLY" ] || NAMES="$(printf '%s\n' "$NAMES" | while IFS= read -r NAME; do
+    printf '%s' "$ONLY" | grep -qxF -e "$(pc_unquote "$NAME")" && printf '%s\n' "$NAME"; done)"
   if [ -z "$NAMES" ]; then printf 'REQUIRES: none\n'; exit 0; fi
   WORST=0
   while IFS= read -r NAME; do
@@ -247,6 +253,9 @@ if [ -z "$RECIPE" ]; then
   if [ -n "$UNREACHABLE" ]; then
     printf 'tool-actions: not searched, this script reads folder sources only: %s\n' "$UNREACHABLE" >&2
   fi
+  # The catalog names a tooling recipe by tool and framework, and only the navigator reads it
+  # (gap row 285). catalog-identifier asks it, so the caller never needs the recipe's full name.
+  printf 'tool-actions: the catalog was not asked. Dispatch catalog-identifier with tooling: %s, the framework and the project folder, then run this again with --tooling %s=<path>\n' "$TOOL" "$TOOL" >&2
   exit 2
 fi
 

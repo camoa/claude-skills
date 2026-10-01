@@ -159,7 +159,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "The entry's own id, as the recipe wrote it. Not minted here and not renamed, so a person reading a refusal can find the line in the recipe. A tool the recipe names under requires_tooling is the one exception: its id is `requires_tooling: <tool>`, and `requires_tooling` alone when the tool check could not run (gap row 271)."
+          "description": "The entry's own id, as the recipe wrote it. Not minted here and not renamed, so a person reading a refusal can find the line in the recipe. A tool the recipe names under requires_tooling is the one exception: its id is `requires_tooling: <tool>`, and `requires_tooling` alone when the tool check could not run (gap row 271). The review recipe's tools that a check build-record runs take the same id, and their `what` names that recipe (gap row 285)."
         },
         "what": {
           "type": "string",

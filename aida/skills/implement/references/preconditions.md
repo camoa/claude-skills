@@ -47,8 +47,17 @@ row of another cost also runs still stops the run.
 
 A tool that reads unknown with "no recipe" goes to the catalog first, as the tool skill's "No
 recipe" section says. The `nextAdvice:` line names this step. Pass each path the catalog returns
-as `--tooling <tool>=<path>` and run this step again. Nothing is checked when no order needs the harness, as the next section says. The `review`
-recipe's tools are review's to check, not this step's.
+as `--tooling <tool>=<path>` and run this step again. Nothing is checked when no order needs the harness, as the next section says.
+
+The script also checks the tools that the build's own checks run. It reads the `review` recipe's
+`requires_tooling`. It keeps each tool whose name is in the argv of a `## Check commands` row that
+`build-record` runs. A row that reads files counts only when an order owns a file of a type the
+row reads, inside the code repository. The file need not exist yet. Each tool kept is one
+condition, read as above, so an absent tool stops the run with the install advice. This holds
+when no order needs the harness too. Such a task runs no test, but `build-record` runs these
+checks on every order. Without this check, the first order is built and paid for, and then its
+checks cannot run. The review recipe's other tools, such as a duplication tool, are review's to
+check.
 
 ## Run the checks
 
