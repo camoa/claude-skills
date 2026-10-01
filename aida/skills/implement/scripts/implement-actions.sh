@@ -7556,13 +7556,16 @@ br_interface_names() {
 # declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
 #
 # Every backtick-quoted token in the declaration must appear in the record. It appears when the
-# record holds it verbatim, or holds a shortened form of it in backticks. A shortened form is a name
-# the token ends with after a `.` or `::`, and no other declared token ends with it. So `load_rules`
-# names `periplus.engine.packload.load_rules`, and a `run_all` that two declared names end with
-# names neither (gap row 299). A token holding a slash or a space is a path or a phrase. A token
-# whose last segment holds only lowercase letters and digits may be a file name, such as `a.php`.
-# None of these is ever shortened. The detail lists each shortened form for the reviewer. Any
-# token still missing is unmet, naming them. All present is met. A declaration naming no element in backticks has
+# record holds it verbatim, or holds a shortened form of it in backticks. A record token is read up
+# to its first `(`, so a signature names its function. A shortened form is a name the token ends
+# with after a `.` or `::`, and no other declared token ends with it. So `load_rules` names
+# `periplus.engine.packload.load_rules`, and a `run_all` that two declared names end with names
+# neither (gap row 299). A record token that is itself a declared name stands for that name only.
+# A declared token holding a slash or a space is a path or a phrase, and is never shortened. A
+# declared token whose last segment holds only lowercase letters and digits may be a file name,
+# such as `a.php`. Its shortened form must keep a `.` or `::`, so `map.run` counts and `php` does
+# not. The detail lists each shortened form for the reviewer. Any token still missing is unmet,
+# naming them. All present is met. A declaration naming no element in backticks has
 # nothing countable in it, so this answers unknown and the reviewer reads both texts instead. That
 # unknown is the one unknown in this stage that does not spend an attempt (ideal/implementation.md).
 # `build-record` runs this check; `fix-record` never does.
@@ -7583,9 +7586,11 @@ br_interface_check() {
     short_json="$(jq -n --argjson toks "$tokens_json" --argjson miss "$missing_json" \
       --argjson recs "$(br_interface_names "$record")" '
       def ends($r): endswith("." + $r) or endswith("::" + $r);
-      [ $miss[] as $d | select($d | test("[/\\s]|[.:][a-z0-9]+$") | not)
-        | [ $recs[] | select(test("^[A-Za-z_]\\S*$")) | . as $r
+      [ $miss[] as $d | select($d | test("[/\\s]") | not)
+        | [ $recs[] | sub("\\(.*$"; "") | select(test("^[A-Za-z_]\\S*$")) | . as $r
+            | select(($toks | index([$r])) == null)
             | select($d | ends($r))
+            | select(($d | test("[.:][a-z0-9]+$") | not) or ($r | test("\\.|::")))
             | select([ $toks[] | select(ends($r)) ] | length == 1) ]
         | select(length > 0) | {declared: $d, record: .[0]} ]' 2>/dev/null)"
     [ -n "$short_json" ] || short_json='[]'

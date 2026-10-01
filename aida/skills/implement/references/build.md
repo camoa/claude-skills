@@ -476,8 +476,9 @@ This step runs all eight deciding checks. The record holds every one.
   not count it.
 - **interface-record.** Does the interface record name every element the order's own declared
   interface names in backticks. A shortened name in backticks counts when it ends the declared
-  name after a `.` or `::`, and ends no other declared name. A path or a file name such as
-  `a.php` is never shortened. The detail lists each shortened name.
+  name after a `.` or `::`, ends no other declared name, and is not itself declared. A path is
+  never shortened. A name ending in lowercase only, such as `a.php`, needs a shortened form that
+  keeps a `.` or `::`. The detail lists each shortened name.
 
 A suite or a tool the baseline recorded red does not fail these checks by itself. The check
 subtracts the baseline's own output from the run now, line by line. Numbers and dots are set
