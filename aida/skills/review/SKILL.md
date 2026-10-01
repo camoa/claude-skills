@@ -125,7 +125,7 @@ branch is recorded rather than assumed.
 |---|---|---|
 | A person verified criterion | the person answers met or unmet | `unanswered`, and no sign off |
 | The walk of the surfaces | the person walks every one | recorded as not done, and checks 13 to 15 read unknown |
-| A finding citing neither a criterion nor a non-goal | a follow up task is offered | recorded, and no task is created |
+| A finding citing neither a criterion nor a non-goal, or a low one citing a criterion | a follow up task is offered | recorded, and no task is created |
 | A new baseline for a surface | plan, show, confirm, then write | refused, and recorded as refused |
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 

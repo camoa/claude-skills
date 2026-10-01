@@ -1869,7 +1869,7 @@ RW_RESEARCH_FILES
     # never a clean one, which is why every one of the six is written whatever the file held. A
     # finding beats both floors below it: a lens that raised one judged something.
     hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
-      '[ .[] | select(.lens == $l) | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
+      '[ .[] | select(.lens == $l) | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
     if [ "$lens_word" = "practices" ] && [ -n "$playbooks_floor" ]; then
       rw_check_row "$check_id" "unknown" "$playbooks_floor" >>"$rows_file"
     elif [ -n "$hits" ]; then
@@ -1977,7 +1977,7 @@ RW_RESEARCH_FILES
         then (.verdict = "unmet"
               | .detail = (.detail + " The mutation lens raised "
                            + ($hits | length | tostring) + " finding(s) on surviving mutants: "
-                           + ([ $hits[] | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
+                           + ([ $hits[] | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
         else . end))')"
   fi
 
@@ -1992,7 +1992,7 @@ RW_RESEARCH_FILES
         then (.verdict = "unmet"
               | .detail = (.detail + " The purpose lens raised "
                            + ($hits | length | tostring) + " finding(s) on hunks the purpose lens faulted: "
-                           + ([ $hits[] | (.id + " at " + .file + ":" + .lines + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
+                           + ([ $hits[] | (.id + " (" + .severity + ") at " + .file + ":" + .lines + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
         else . end))')"
   fi
 
@@ -2546,7 +2546,7 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
-  local observe_owner observed_file confirm_owned failed_by cited_by=""
+  local observe_owner observed_file confirm_owned failed_by cited_by="" stale_low
   alignment="$(rw_alignment)"
   # The criteria an order proved by confirm puts to the person, confirmCriteria in
   # scripts/lib/proof.sh. The person answers each one with --row, the way a person-verified
@@ -2645,10 +2645,14 @@ RW_ROWS
   [ -z "$bad_rows" ] \
     || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm puts it to a person. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
+  # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
+  # not judge severity, so it names them and sends the person back to the producer.
+  stale_low="$(printf '%s' "$RW_RECORD_DOC" | jq -r \
+    '[ (.findings // [])[] | select(.disposition == "criterion" and .severity == "low") | .id ] | join(", ")')"
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then
     check_one_verdict="unmet"
-    check_one_detail="$unmet_count criterion row(s) read unmet, so the task is not done.${cited_by:+ A finding fails each of these:${cited_by%;}.}"
+    check_one_detail="$unmet_count criterion row(s) read unmet, so the task is not done.${cited_by:+ A finding fails each of these:${cited_by%;}.}${stale_low:+ These low findings carry disposition criterion from an older findings step, so run findings again: $stale_low.}"
   elif [ "$unanswered" -gt 0 ]; then
     check_one_verdict="unknown"
     check_one_detail="$unanswered criterion row(s) read unanswered, and a criterion nobody could reach is never a pass."
