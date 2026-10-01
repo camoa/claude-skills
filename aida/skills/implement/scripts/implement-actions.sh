@@ -8514,12 +8514,14 @@ rv_read_recipe_answers() {
       in_diff=no
       while IFS= read -r p; do
         [ -n "$p" ] || continue
-        case "$evidence" in *"$p"*) in_diff=yes ;; esac
+        case " $evidence " in
+          *[!A-Za-z0-9_./-]"$p"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$p".[!A-Za-z0-9_./-]*) in_diff=yes ;;
+        esac
       done <<RR_DIFF
 $diff_paths
 RR_DIFF
       [ "$in_diff" = "yes" ] \
-        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files a departure in how files were produced made. The recipe's own line is not enough."
+        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files that a departure in how files were produced made or changed. The recipe's own line is not enough."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \

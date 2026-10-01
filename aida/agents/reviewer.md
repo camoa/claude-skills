@@ -90,8 +90,8 @@ under `recipes` covers is a high finding linked to the criterion the order owns.
 one and judge the diff against its rules. Write one entry per item under `recipes`, in the shape
 above, with `evidence` on one line. `departed` names the file and the line of the diff in
 `evidence`, whether or not the builder declared it. The recipe's own line is not enough. A
-departure in how files were produced, such as YAML written by hand in place of a generator, names
-each file it made by its path in the diff, with no line.
+departure in how files were produced has no one line, such as YAML written by hand in place of a
+generator. Name each file it made or changed by its path in the diff.
 `not-applicable` gives its reason in `evidence`. A script refuses a list that skips an item or
 adds one, and a departure sends the order back to design. Leave `recipes` out when the brief's
 list is empty.
