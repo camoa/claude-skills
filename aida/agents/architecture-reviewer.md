@@ -75,7 +75,8 @@ neutral, and the layer names are not.
 For `guides` and `practices`, open the paths the research records cite. Each research finding carries
 its text, its source sentence, its `paths` and its `urls`, and the criteria it served. Each path is
 marked `onDisk`. The text says whether the source is a guide or an agentic recipe. A body that is not
-on disk is named as unread, and you answer from the text. A URL is never on disk.
+on disk is named as unread, and you answer from the text. A URL is never on disk. The brief's
+`guideBodies` lists each guide body design opened, marked `onDisk`. Open each one on disk.
 Ask no catalog for anything; you have no way to reach one and no need.
 
 For `practices` the brief also carries `playbooksPath`: the playbook record that research loaded,

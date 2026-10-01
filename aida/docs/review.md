@@ -70,9 +70,9 @@ accepted, including the plays in your [playbook](playbooks.md). The same reviewe
 non-goal check whole. Mutation testing makes small changes to the code and runs the tests; a
 change no test catches is a survivor. The reviewer also judges every hunk for purpose and reads
 those survivors, so two of the contract checks are half script and half reviewer. The guides
-check reads unknown, not met, when no file research cites is on disk, because the reviewer then
-had only the finding text. A URL is not a file on disk. The practices check follows the same rule
-unless the playbook record holds a loaded source.
+check reads unknown, not met, when no guide body design opened is on disk, because the reviewer
+then had only the research text. Research names guides and never opens them. The practices check
+follows the same rule unless the playbook record holds a loaded source.
 
 The same reviewer answers one more check, which exists only when the build sent it something. A
 done-when clause that asserts an absence says the change added nothing of a named kind. No second

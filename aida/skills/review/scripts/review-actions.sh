@@ -1600,7 +1600,7 @@ RW_RESEARCH
   while IFS= read -r src; do
     [ -n "$src" ] || continue
     case "$src" in /*) where="$src" ;; *) where="$RV_CODEPATH/$src" ;; esac
-    if [ -e "$where" ]; then
+    if [ -e "$where" ] || { [ "${src#/}" = "$src" ] && [ -e "$TASK_PATH/$src" ]; }; then
       on_disk="$(jq -nc --argjson have "$on_disk" --arg s "$src" '$have + [$s]')"
     fi
   done <<RW_SOURCES
@@ -1609,11 +1609,26 @@ RW_SOURCES
   research_json="$(printf '%s' "$research_json" | jq -c --argjson found "$on_disk" '
     [ .[] | .findings = [ .findings[]
       | .paths = [ .paths[] | . as $p | {path: $p, onDisk: (($found | index($p)) != null)} ] ] ]')"
+  # The guide bodies design opened. Research names a guide and never opens it, so design's read
+  # is the only record of a guide body, and the guides lens opens these (live-run row 272).
+  local guide_bodies='[]' guide_path
+  if [ -f "$TASK_PATH/design-guides-read.json" ]; then
+    while IFS= read -r guide_path; do
+      [ -n "$guide_path" ] || continue
+      guide_bodies="$(jq -nc --argjson have "$guide_bodies" --arg p "$guide_path" \
+        --arg name "$(jq -r --arg p "$guide_path" '[ (.guides // [])[] | select(.path == $p) | (.name // "") ][0]' "$TASK_PATH/design-guides-read.json")" \
+        --argjson on "$([ -f "$guide_path" ] && echo true || echo false)" \
+        '$have + [{path: $p, name: $name, onDisk: $on}]')"
+    done <<RW_GUIDES
+$(jq -r '(.guides // [])[] | (.path // empty)' "$TASK_PATH/design-guides-read.json" 2>/dev/null)
+RW_GUIDES
+  fi
 
   brief_json="$(jq -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
+    --argjson guideBodies "$guide_bodies" \
     --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
     --argjson absenceClauses "$RW_ABSENCE_CLAUSES" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" "$REASONING_JQ"'
@@ -1632,6 +1647,7 @@ RW_SOURCES
      workOrders: [ ($snap.workOrders // [])[] | .reasoning = liveReasoning ],
      absenceClauses: $absenceClauses,
      research: $research,
+     guideBodies: $guideBodies,
      deferredFindings: ($finished.deferred // []),
      checks: [ ($record.checks // [])[]
                | select(.id != "serves-a-criterion")
@@ -1661,6 +1677,8 @@ RW_SOURCES
       line("researchPaths(onDisk)"; ([ .research[].findings[].paths[] | select(.onDisk) | .path ] | unique | length)),
       line("researchPaths(notOnDisk)"; ([ .research[].findings[].paths[] | select(.onDisk | not) | .path ] | unique | length)),
       line("researchUrls"; ([ .research[].findings[].urls[] ] | unique | length)),
+      line("guideBodies(onDisk)"; ([ .guideBodies[] | select(.onDisk) ] | length)),
+      line("guideBodies(notOnDisk)"; ([ .guideBodies[] | select(.onDisk | not) ] | length)),
       line("deferredFindings"; (.deferredFindings | length)) ] | .[]'
   local skip_reason
   skip_reason="$(rw_reviewer_skip_reason)"
@@ -1823,16 +1841,17 @@ RW_RESEARCH_FILES
   [ "$RW_COMMITS_IN_CODE" = "yes" ] \
     || diff_floor="no order in this task commits in the code repository, so the diff this lens reads holds nothing the task produced. Each deliverable is a document in the project folder, which this stage does not hand the reviewer."
 
-  # The research records cite sources, and none of them is a body on disk: the brief marked every
-  # path it took out of them off disk, or found only URLs. Then the guides lens judged the finding
-  # text alone, and met would say it judged a guide (live-run row 272). The brief decides this, not
-  # the reviewer's report. The practices lens also reads the playbook record, so a loaded source
-  # there is a body it opened.
+  # A guide body is one design opened, listed in design-guides-read.json, which the brief marks on
+  # disk or not. Research never opens a guide, and a code file research cites is no guide. With no
+  # guide body on disk the guides lens judged the finding text alone, and met would say it judged
+  # a guide (live-run row 272). The brief decides this, not the reviewer's report. The practices
+  # lens reads the same bodies, since design opens the agentic recipes too, and also the playbook
+  # record, so a loaded source there is a body it opened.
   local body_floor practices_body bodies_on_disk
   body_floor=""; practices_body=""
-  bodies_on_disk="$(jq -r '[ (.research // [])[] | (.findings // [])[] | (.paths // [])[] | select(.onDisk == true) ] | length' "$BRIEF_FILE" 2>/dev/null)"
+  bodies_on_disk="$(jq -r '[ (.guideBodies // [])[] | select(.onDisk == true) ] | length' "$BRIEF_FILE" 2>/dev/null)"
   [ "${bodies_on_disk:-0}" != "0" ] \
-    || body_floor="no source the research cites is a body on disk: $BRIEF_FILE names no cited path on disk, and URLs and prose are not bodies, so this lens judged the finding text alone. Record the path of each body research read, with /aida:research on this task, then run brief and findings again."
+    || body_floor="no guide body is on disk: $BRIEF_FILE lists none from $TASK_PATH/design-guides-read.json, so this lens judged the research finding text alone. Design records each guide body it opens with design-actions.sh read-guide; once one is recorded and on disk, run brief and findings again."
   [ ! -f "$playbooks_record" ] \
     || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
     || practices_body="loaded"
