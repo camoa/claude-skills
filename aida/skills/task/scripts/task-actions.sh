@@ -994,7 +994,7 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}${stages_note}"
-  # Light keeps one script that walks the demo path in a browser. It is the project's end to end
+  # Light keeps one script that walks the demo path. It is the project's end to end
   # setup, which a person installs (gap row 197).
   if [ "$value" = "light" ]; then
     if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then

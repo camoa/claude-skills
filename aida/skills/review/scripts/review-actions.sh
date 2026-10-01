@@ -2220,6 +2220,10 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "the project record says $gate is $enabled, so review ran nothing for it. Review runs nothing that is off." >>"$checks_out"
     return 0
   fi
+  if [ "$(printf '%s' "$mine" | jq '[ .[] | select(has("command")) ] | length')" -gt 0 ]; then
+    rw_command_surfaces "$check_id" "$mine" "$off" "$checks_out" "$surfaces_out"
+    return 0
+  fi
   if [ "$RW_SURFACE_BLOCK_STATE" = "unparseable" ]; then
     # The heading is there and the key never opens under it. Nobody looked, rather than a framework
     # that declared nothing, so the word is unknown and it fails the review.
@@ -2374,6 +2378,47 @@ RW_SURFACE_KIND
   fi
   rw_check_row "$check_id" "$worst" "$detail" "$rc" "$RW_RUN_OUTFILE" "$(printf '%s' "$row" | jq -r '.framework // ""')" >>"$checks_out"
   rw_run_done
+}
+
+# The e2e surfaces that carry their own command, for a project with no page to drive (gap row 289).
+# Each command runs in the task's tree through the runner every recipe row uses, never a shell, and
+# only exit 0 reads met. No recipe row and no walk apply, since the exit status is the whole answer.
+# Register refuses a page surface beside a command one. A hand-edited file that holds both reads
+# unknown for the page, since nothing here runs the recipe's suite. $1 the check id, $2 the enabled
+# surfaces of the kind, $3 the disabled ones, $4 the check rows file, $5 the surface rows file.
+rw_command_surfaces() {
+  local check_id="$1" mine="$2" off="$3" checks_out="$4" surfaces_out="$5"
+  local count i one sid verdict ran worst="" detail="" rc="" outfile=""
+  count="$(printf '%s' "$mine" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$mine" | jq -c --argjson i "$i" '.[$i]')"
+    sid="$(printf '%s' "$one" | jq -r '.id')"
+    i=$((i + 1))
+    ran=false
+    if [ "$(printf '%s' "$one" | jq 'has("command")')" = "false" ]; then
+      verdict="unknown"; detail="$detail The $sid surface is a page beside command surfaces, so it did not run."
+    else
+      rw_run_row "$(printf '%s' "$one" | jq -c '.command')" '[]' "$RW_VALUES" ""
+      rw_run_fault "$sid"
+      verdict="$RW_RUN_VERDICT"
+      if [ -n "$verdict" ]; then detail="$detail $RW_RUN_DETAIL"
+      else
+        ran=true
+        if [ "$RW_RUN_RC" = "0" ]; then verdict="met"; else verdict="unmet"; fi
+        detail="$detail The $sid command exited $RW_RUN_RC in $RV_CODEPATH."
+        # With one command, the record keeps its exit code and output, as for any other row.
+        [ "$count" -ne 1 ] || { rc="$RW_RUN_RC"; outfile="$(mktemp)" && cp "$RW_RUN_OUTFILE" "$outfile"; }
+      fi
+      rw_run_done
+    fi
+    jq -nc --arg id "$sid" --arg v "$verdict" --argjson ran "$ran" \
+      '{id: $id, verdict: $v, ran: $ran, walked: false, reportPath: ""}' >>"$surfaces_out"
+    worst="$(rw_worse "$worst" "$verdict")"
+  done
+  [ "$off" = "[]" ] || detail="$detail Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')."
+  rw_check_row "$check_id" "$worst" "${detail# }" "$rc" "$outfile" >>"$checks_out"
+  [ -z "$outfile" ] || rm -f "$outfile"
 }
 
 # Runs one surface row and prints its check row: the wording rw_run_fault gives a run that decided
@@ -2551,7 +2596,7 @@ do_surfaces() {
       || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
   fi
   if [ "$path_scripts" = "0" ]; then
-    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface." >>"$checks_file"
+    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface: a page, or a command that exits 0 when the path works." >>"$checks_file"
   else
     rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
   fi

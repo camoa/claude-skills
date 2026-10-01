@@ -475,8 +475,9 @@ work is split wrong, not a sign both should claim it.
 **Light:** the first order, `wo1`, is the walking skeleton. It is a tiny version that links the
 input, the logic and the output end to end along the demo path. Every other order depends on it,
 directly or through its chain, and `check` refuses one that does not. When end to end is on,
-`wo1` also owns the script that walks the demo path in a browser, where the harness reads its
-tests. That script is the one test a light run keeps.
+`wo1` also owns the script that walks the demo path. For a page, it sits where the harness reads
+its tests. For a command surface, it is the file the command runs. That script is the one test a
+light run keeps.
 
 Create it:
 ```

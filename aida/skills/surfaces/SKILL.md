@@ -44,6 +44,19 @@ that branch is abandoned, deleting it, local and remote, lets setup run.
 A stage's offer names the kind in its invocation. Run by hand with no kind, ask which kind after
 `read`, naming each kind's state, and then work that kind only.
 
+## A command as the end to end surface
+
+A project with no page to drive, such as a command-line tool, has no setup recipe for `e2e`. Its
+end to end surface is a command. It needs no recipe and no install:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --command "<line>" --kind e2e --critical --enable
+```
+The line is the command that walks the path, such as a script in the code repository. Exit 0
+means the path works. The line is split at spaces and runs without a shell. So a quote or a shell
+character is refused at 3. With no surface file, `register` writes one and turns end to end on in
+the project record, and commits both. Review runs the command in the task's tree, and nobody walks
+it. Exit 3 also means the file holds an e2e page surface already, because a project uses one form.
+
 ## Resolve the recipes
 
 Dispatch `catalog-identifier`, naming the role, once per point. The points are `e2e-setup` for

@@ -376,7 +376,7 @@ absence already means that. Show the whole output.
 
 `light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
 Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
-whether end to end is on. Light keeps one script that walks the demo path in a browser, and review
+whether end to end is on. Light keeps one script that walks the demo path, and review
 fails the task without it. When end to end is off, say that a person sets it up with
 `/aida:surfaces e2e` before the run.
 
