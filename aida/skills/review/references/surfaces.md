@@ -15,7 +15,8 @@ the path the record holds, so this step resolves no recipe and runs no lookup.
 
 ## Offer the setup once
 
-Offer setup for each kind that is off, not declined, and carries surface rows in the recipe. Name
+Offer setup for each kind that is off, not declined, and carries surface rows in the recipe. A kind
+marked on whose surface file is missing counts as off, for the offer and for its check. Name
 every such kind on its own, and take an answer per kind. The two are separate capabilities, so a
 person may take one and refuse the other.
 

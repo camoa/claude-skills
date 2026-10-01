@@ -2357,6 +2357,15 @@ do_surfaces() {
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
+  # A kind marked on with no surface file was set up by half. It reads as off, so it gets the off
+  # kind's offer and verdict, not an unknown that nothing here repairs (gap row 275). The project
+  # record keeps its word: the surfaces skill writes that field, and its yes writes the file.
+  case "$SF_STATE" in
+    missing|absent)
+      [ "$e2e_on" != "on" ] || e2e_on="on with no surface file"
+      [ "$vr_on" != "on" ] || vr_on="on with no surface file"
+      ;;
+  esac
 
   # Per kind: off, not declined, and the recipe carries its surface row. Rows that are not absent
   # are how review knows the framework has that kind at all. The two are separate capabilities, so
@@ -2406,7 +2415,7 @@ do_surfaces() {
   fi
   # A light task runs no visual regression. Implementation's start logged the skip, because a
   # commit here would move the code under this review (gap row 197).
-  if [ "$vr_on" = "on" ] && task_is_light "$TASK_PATH"; then
+  if [ "${vr_on%% *}" = "on" ] && task_is_light "$TASK_PATH"; then
     rw_check_row "$CHECK_VR" "undeclared" "a light run skips visual regression, so review ran nothing for it. COMPROMISES.md in the code repository records the skip." >>"$checks_file"
   else
     rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"

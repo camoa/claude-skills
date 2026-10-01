@@ -29,6 +29,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/lib/project-findings.sh: the retired fields and the version 5 task rule
 #   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json): the registry, if it exists
 #   whether the directory named by project.json's codePath still exists
+#   <plugin root>/scripts/lib/surfaces.sh and paths.sh: whether the surface file of a kind marked on exists
 #   $HOME, to apply the code-path safety rules
 #   git -C <path> status --porcelain=v1 --ignored: repository state and ignored files
 #
@@ -209,6 +210,10 @@ FINDINGS_LIB="$PLUGIN_ROOT/scripts/lib/project-findings.sh"
 source "$SCHEMA_CHECK_LIB" || die3 "the comparison library failed to load: $SCHEMA_CHECK_LIB"
 # shellcheck source=/dev/null
 source "$FINDINGS_LIB" 2>/dev/null || die3 "the findings library failed to load: $FINDINGS_LIB"
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/paths.sh" 2>/dev/null || die3 "the paths library failed to load: $PLUGIN_ROOT/scripts/lib/paths.sh"
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/surfaces.sh" 2>/dev/null || die3 "the surfaces library failed to load: $PLUGIN_ROOT/scripts/lib/surfaces.sh"
 
 [ -f "$PROJECT_SCHEMA_FILE" ] || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE not found"
 jq empty "$PROJECT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE is not valid JSON"
@@ -848,6 +853,30 @@ if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
     echo "  Repair: task-rule $REPAIR_NAME rewrites it in place. task-rule $REPAIR_NAME --decline keeps it and records the answer."
   fi
   echo
+fi
+
+# A surface kind marked on whose surface file is missing was set up by half, and review would
+# offer its setup as for a kind that is off. Named here so it is seen before review (gap row 275).
+# No exit code moves: a stage that uses no surfaces is not blocked by it.
+SURFACE_KINDS_ON=""
+[ "$CODEPATH_EXISTS_JSON" = "true" ] && SURFACE_KINDS_ON="$(jq -r '
+  [ (if .surfaces.e2e.enabled == true then "e2e" else empty end),
+    (if .surfaces.visualRegression.enabled == true then "visual-regression" else empty end) ] | .[]' \
+  "$PROJECT_FILE" 2>/dev/null)"
+if [ -n "$SURFACE_KINDS_ON" ]; then
+  SURFACE_FILE="$(sf_surface_path "$(jq -r '.surfaces.registryPath // ""' "$PROJECT_FILE")" "$CODEPATH_VALUE")"
+  sf_load_surfaces "$SURFACE_FILE"
+  case "$SF_STATE" in
+    missing|absent)
+      while IFS= read -r kind; do
+        echo "Surfaces: $kind is on, and the surface file is $SF_STATE${SURFACE_FILE:+ at $SURFACE_FILE}."
+        echo "  Review offers its setup as for a kind that is off. Repair: /aida:surfaces $kind writes the file."
+      done <<SURFACE_KINDS
+$SURFACE_KINDS_ON
+SURFACE_KINDS
+      echo
+      ;;
+  esac
 fi
 
 echo "Ready for work: $READY_JSON"
