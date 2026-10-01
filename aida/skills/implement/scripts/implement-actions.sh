@@ -7781,9 +7781,13 @@ BR_SHOTS
 # Prints each line of a builder's file that starts with one key, such as `stop`, in any case.
 # Markdown emphasis and a list marker are dropped first, so `- **Stop:** none` counts. A heading
 # never counts, so a `# stop:` comment in a code block is not the stop line. $1 the file, $2 the key.
+# A value of none followed by a mark and more text prints as none alone: the live builder wrote
+# "Deviation: none. The three changes are named by design paragraph (17)" (gap row 298). A comma
+# keeps the text, because "none, except" names a deviation.
 br_marked_lines() {
   sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^-[[:space:]]*//' "$1" 2>/dev/null \
-    | grep -i "^$2:"
+    | grep -i "^$2:" \
+    | sed -e 's/^\([^:]*:\)[[:space:]]*\([Nn][Oo][Nn][Ee]\)[[:space:]]*[^[:alnum:][:space:],].*$/\1 \2/'
 }
 
 # The fronts of the halts a builder's stop line and a builder's deviation write unattended.
