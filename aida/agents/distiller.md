@@ -49,6 +49,10 @@ record needs and lacks goes in `gaps`, one sentence each, naming what is missing
 belongs. A record path that does not exist is absent, and named in `gaps`; it is never a reason
 to stop.
 
+Report every gap in one pass. Read the whole record, and ask each question of every part, before
+you write. Check every non-goal for its reason, and name all the non-goals that lack one in one
+gap. A gap you keep for a later pass costs the stage one more edit and one more dispatch.
+
 For scope, `alignment.json` carries `decidedWithoutAPerson`. Each entry names one question an
 unattended run answered on a person's behalf. A string entry, or an object with only `text` and
 `field`, is open: nobody has approved it yet. Every other object is history, so never ask for a
@@ -88,6 +92,10 @@ One file per stage named, `<task folder>/records/<stage>-distill.json`, in the s
 A record that stands alone is the common case; say so plainly with an empty `gaps`. Valid JSON
 only, no newline inside a string, and no prose in your reply: the skill reads the file, never
 your words.
+
+A sidecar from an earlier pass may exist. Read it before you write it, because the Write tool
+refuses to replace a file you have not read. A refused write leaves the old sidecar, and the
+stage then reads it as stale. Never report a write the tool refused.
 
 ## What you never do
 
