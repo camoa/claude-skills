@@ -521,8 +521,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      recipe compares one tool's output against another tool's baseline. The baseline is not
 #      retaken mid-task: it reads the tree before the task, and the tree now holds this task's own
 #      code. Run again with the recipe body the baseline read. `recipe-refresh --check-recipe`
-#      refuses with this code too, when a tool row of the new body does not read met on the
-#      current tree (gap row 295). The message names each such row. Nothing is written.
+#      refuses with this code too, when a tool row of the new body reads neither met nor
+#      undeclared on the current tree (gap row 295). The message names each such row.
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
@@ -3919,12 +3919,16 @@ PC_CATALOG
 # review body only when every tool row of it reads met or undeclared on the current tree (gap row
 # 295). Such a baseline subtracts nothing, so no finding of this task is hidden. Any other reading
 # refuses at exit 73 and names the row. The adoption replaces the pin and the baseline fields of
-# the rows it ran, and records both hashes under `recipeRefreshes`. Every refusal runs before the
-# first write, so a refused call leaves the records as they were.
+# the rows it ran, and records both hashes under `recipeRefreshes`. Every refusal but one runs
+# before the first write, so a refused call leaves the records as they were. The one after is a
+# failed move into baseline-output/, which runs after the old output of that row was removed.
+# The staging folder is a global, because zsh runs the EXIT trap after the locals are gone.
+RR_STAGE=""
+rr_stage_remove() { [ -z "$RR_STAGE" ] || rm -rf "$RR_STAGE"; RR_STAGE=""; }
 do_recipe_refresh() {
   local task_folder="" recipes="" fw rp line from kind resolve_rc
   local record_file record_doc today refreshed=""
-  local check_recipes="" baseline_doc="" scope_json stage was_path was_sha now_sha cc_state
+  local check_recipes="" baseline_doc="" scope_json was_path was_sha now_sha cc_state
   local tool_id result verdict failed adopted="" unchanged="" reads="" moves="" field
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4000,13 +4004,16 @@ RR_EOF
     baseline_doc="$(jq -c '.' "$BASELINE_FILE")"
     rv_load_codepath "recipe-refresh"
     scope_json="$(printf '%s' "$baseline_doc" | jq -c '.scope // []')"
-    stage="$(mktemp -d "$IMPL_DIR/.recipe-refresh.XXXXXX")" || die 3 "recipe-refresh: could not create a temporary folder"
+    trap 'rr_stage_remove' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    RR_STAGE="$(mktemp -d "$IMPL_DIR/.recipe-refresh.XXXXXX")" || die 3 "recipe-refresh: could not create a temporary folder"
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       fw="${line%%	*}"; rp="${line#*	}"
       was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
       was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
-      [ -n "$was_sha" ] || { rm -rf "${stage:?}"; die 90 "recipe-refresh: $BASELINE_FILE pins no review recipe for framework $fw, so there is none to replace. A first one is preconditions' to pin, with --check-recipe $fw=<path>. Nothing was written."; }
+      [ -n "$was_sha" ] || { die 90 "recipe-refresh: $BASELINE_FILE pins no review recipe for framework $fw, so there is none to replace. A first one is preconditions' to pin, with --check-recipe $fw=<path>. Nothing was written."; }
       CR_WHO="recipe-refresh"; CR_TEST_RECIPES=""; CR_CHECK_RECIPES="$line"; PC_VALUES=""
       # shellcheck disable=SC2034 # read by the sourced library
       CR_TOOL_IDS_ALL=true
@@ -4019,15 +4026,20 @@ RR_EOF
       fi
       cc_state="$(printf '%s' "$CR_DOC" | jq -r '.frameworks[0].checkCommandsState')"
       [ "$cc_state" = "ok" ] \
-        || { rm -rf "${stage:?}"; die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted: its Check commands block could not be read (state: $cc_state). Nothing was written."; }
+        || { die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted: its Check commands block could not be read (state: $cc_state). Nothing was written."; }
       failed=""
       while IFS= read -r tool_id; do
         [ -n "$tool_id" ] || continue
-        result="$(bl_tool_result "$tool_id" "$tool_id" "$RV_CODEPATH" "$scope_json" "$stage/$fw")"
-        [ -n "$result" ] || { rm -rf "${stage:?}"; die 3 "recipe-refresh: the $tool_id run produced no result. Nothing was written."; }
+        result="$(bl_tool_result "$tool_id" "$tool_id" "$RV_CODEPATH" "$scope_json" "$RR_STAGE/$fw")"
+        [ -n "$result" ] || { die 3 "recipe-refresh: the $tool_id run produced no result. Nothing was written."; }
         verdict="$(printf '%s' "$result" | jq -r '.verdict')"
         reads="$reads$fw	$tool_id	$verdict
 "
+        # An undeclared row passes when the recipe declares it absent or the scope holds no file it
+        # reads. A row the recipe holds but whose argv did not parse is `missing`, and refuses.
+        [ "$verdict" != "undeclared" ] \
+          || ! printf '%s' "$CR_DOC" | jq -e --arg id "$tool_id" 'any((.tools // [])[]; .id == $id and has("missing"))' >/dev/null \
+          || verdict="unknown"
         case "$verdict" in
           met|undeclared) ;;
           *) failed="$failed $tool_id reads $verdict ($(printf '%s' "$result" | jq -r 'if .reason then .reason else "exit \(.exitCode)" end'))." ;;
@@ -4041,7 +4053,7 @@ RR_EOF
 $(printf '%s' "$CR_DOC" | jq -r '(.tools // [])[].id')
 RR_TOOLS
       [ -z "$failed" ] \
-        || { rm -rf "${stage:?}"; die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted, because not every tool row of it reads met on the current tree:$failed A new baseline would subtract that finding from every later check. Finish the task with the pinned body, sha256 $was_sha, or repair the finding and run this again. Nothing was written."; }
+        || { die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted, because not every tool row of it reads met or undeclared on the current tree:$failed A new baseline would subtract that finding from every later check. Finish the task with the pinned body, sha256 $was_sha, or repair the finding and run this again. Nothing was written."; }
       baseline_doc="$(printf '%s' "$baseline_doc" | jq -c --arg f "$fw" --arg p "$rp" --arg sha "$now_sha" \
         '.checkRecipes |= map(if .framework == $f then .path = $p | .sha256 = $sha else . end)')"
       record_doc="$(printf '%s' "$record_doc" | jq -c --arg f "$fw" --arg from "$was_path" --arg to "$rp" \
@@ -4049,7 +4061,7 @@ RR_TOOLS
         .recipeRefreshes = ((.recipeRefreshes // []) + [{framework: $f, kind: "review", from: $from, to: $to,
           fromSha256: $fromSha, toSha256: $toSha, at: $at}])')"
       [ -n "$baseline_doc" ] && [ -n "$record_doc" ] \
-        || { rm -rf "${stage:?}"; die 3 "recipe-refresh: the record update for $fw failed. Nothing was written."; }
+        || { die 3 "recipe-refresh: the record update for $fw failed. Nothing was written."; }
       adopted="$adopted$fw	$was_path	$was_sha	$rp	$now_sha
 "
     done <<RR_CHECK
@@ -4060,14 +4072,14 @@ RR_CHECK
     while IFS='	' read -r fw tool_id; do
       [ -n "$fw" ] || continue
       rm -f "${IMPL_DIR:?}/${BL_OUTPUT_DIR:?}/${tool_id:?}.txt"
-      [ ! -f "$stage/$fw/$BL_OUTPUT_DIR/$tool_id.txt" ] || {
+      [ ! -f "$RR_STAGE/$fw/$BL_OUTPUT_DIR/$tool_id.txt" ] || {
         mkdir -p "$IMPL_DIR/$BL_OUTPUT_DIR" \
-          && mv "$stage/$fw/$BL_OUTPUT_DIR/$tool_id.txt" "$IMPL_DIR/$BL_OUTPUT_DIR/$tool_id.txt"
+          && mv "$RR_STAGE/$fw/$BL_OUTPUT_DIR/$tool_id.txt" "$IMPL_DIR/$BL_OUTPUT_DIR/$tool_id.txt"
       } || die 3 "recipe-refresh: could not move the $tool_id output into $IMPL_DIR/$BL_OUTPUT_DIR"
     done <<RR_MOVES
 $moves
 RR_MOVES
-    rm -rf "${stage:?}"
+    rr_stage_remove
     [ -z "$adopted" ] || write_atomic "$BASELINE_FILE" "$baseline_doc"
   fi
 

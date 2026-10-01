@@ -222,8 +222,8 @@ Code 73 has no review action behind it, so put its three routes to the person. T
 `checks` again with `--check-recipe` naming the recipe body the baseline read, whose sha256 the
 refusal prints. Nothing here restores a body the catalog replaced. The second: adopt the new body
 with the implement skill's `recipe-refresh --check-recipe`, as its `references/preconditions.md`
-says. It adopts only when every tool row of the new body reads met on the tree, and otherwise
-refuses and names the row. The third: abandon the baseline, by moving
+says. It adopts only when each tool row of the new body reads met or undeclared on the tree.
+Otherwise it refuses and names the row. The third: abandon the baseline, by moving
 `implementation/baseline.json` and `implementation/baseline-output/` aside and running the
 implement skill's `preconditions` again. Say what that costs. The new baseline reads the tree as it
 stands, which already holds this task's code. Checks 5 to 7 then subtract this task's own findings

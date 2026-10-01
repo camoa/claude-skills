@@ -119,8 +119,8 @@ each recipe's path, and every later step reads that path. A republished recipe c
 until `recipe-refresh` replaces the path for the frameworks named. It records what changed and
 re-runs nothing: the verdict stands, because a recipe's conditions change more rarely than its
 markers. The review recipe is pinned by the baseline, and the build refuses a different body.
-`recipe-refresh` adopts a new review body only when every tool row of it reads met on the tree as
-it stands, because that baseline then subtracts nothing. Otherwise it refuses and names the row.
+`recipe-refresh` adopts a new review body only when each tool row reads met or undeclared now.
+That baseline then subtracts nothing. Otherwise it refuses and names the row.
 The freeze then reads the record's path, or refuses a path that disagrees with it, and its record
 names the recipe it read.
 
