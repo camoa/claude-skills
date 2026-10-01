@@ -681,6 +681,7 @@ do_read() {
   echo "action: read"
   echo "task: $TASK_PATH"
   echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
+  echo "surfaces-deferred: $(jq -r '(.surfacesDeferred // []) | if length == 0 then "none" else join(" ") end' "$TASK_PATH/task.json" 2>/dev/null)"
   echo "contract: $contract_state"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"

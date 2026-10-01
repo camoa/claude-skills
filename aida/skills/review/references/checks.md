@@ -22,6 +22,9 @@ framework. **These are review's only two lookups.** Name the role, and pass the 
 its own word: SKILL.md holds both rules. The role identifies a path and never opens the body. Never
 fetch a catalog address yourself, and never read a cached copy behind the navigator's back. The
 role reads a folder source this project configured itself first, so it wins over the catalog.
+When a folder answers for `test-execution`, the role also returns the catalog's copy, or the
+lookup's word. Pass it as `--catalog-recipe`. A project copy behind the catalog's copy becomes a
+catalog note, because the copy can fall behind after preconditions compared them.
 
 Then invoke the tool skill with `require --advisory <path>` for each `review` recipe path, from
 the worktree. Read its `TOOLING:` lines to the person, and go on whatever they say. A missing tool
@@ -35,6 +38,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --recipe <framework>=<path to the test-execution recipe> \
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
+  --catalog-recipe <framework>=<the catalog's copy or the lookup's word, when a folder answered> \
   --value <name>=<value>...
 ```
 `--recipe` names the `test-execution` recipe, for its `## Test commands` block, which carries the

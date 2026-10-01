@@ -75,7 +75,8 @@ then had only the research text. Research names guides and never opens them. The
 follows the same rule unless the playbook record holds a loaded source.
 
 A lens check fails on any medium or high finding. When every finding of one of those six lens
-checks is low, you decide the check at close. Confirm the findings and the check reads met, with
+checks is low, you decide the check at close. The same holds for "everything serves a criterion" and
+"a test per criterion, and mutation", whose other half is a script, once that half passed. Confirm the findings and the check reads met, with
 the findings left as follow up. Reject them and it reads unmet. With nobody present, the check
 reads met, and the pull request body names the check and its low findings.
 
@@ -242,8 +243,9 @@ answer met or unmet for the criterion.
 
 The close then writes the criterion answers and the verdict into the review record,
 `review/review.json` in the task folder, and commits the task folder. The steps before it commit
-nothing. An existing record is archived beside the new one with its date and commit, never
-overwritten, so a defect one pass found is never lost to the next pass's record.
+nothing. An existing record, its findings file and its brief are archived beside the new ones
+with their date and commit, never overwritten. So a defect one pass found is never lost to the
+next pass, and the next reviewer never starts from the last one's findings.
 
 The close writes one thing back into the contract: each criterion's verdict. That write changes
 the contract's hash, so the next thing that reads the contract reports it as changed. The report
@@ -266,7 +268,8 @@ Find the check in the audit list, where it carries the word could-not-look. Then
 | the walk of the surfaces was not done, on an autonomous run | review again with a person present |
 
 A second review starts only when you ask for one, and it starts from the first step, against
-the code as it stands now. The old record is archived first, so nothing found before is lost.
+the code as it stands now. The old record, findings file and brief are archived first, so
+nothing found before is lost.
 
 ## Autonomous runs
 

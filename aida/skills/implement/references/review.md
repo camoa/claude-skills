@@ -111,8 +111,9 @@ again. Keep the departure and the review goes on." Then say what that line or it
 change the design, amend the order in design and close design, then offer the
 restart in `references/finish.md`. To keep the departure, run `review-record` again with
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
-reason, and the order goes on as below. Unattended, the flag refuses (exit 68), and the halt
-stands.
+reason, and the order goes on as below. Unattended, the flag refuses (exit 68). There nothing
+halts: `review-record` writes the record with the departure as `deviationPending`, prints a
+`departurePending:` line, and the order goes on as below.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
@@ -318,9 +319,7 @@ the evidence that no round can reach it. When the round was verified first, the 
 same call with the rulings and no verdicts file, and the round's verdicts stand. With no round:
 a finding whose fix scope is empty may be ruled at `reviewed`, with the rulings and no verdicts
 file. It asks for no code change, so no round can reach it. No round is recorded. Unattended,
-`fix-brief` halts the order and the halt names this call. A person runs `task set-run-mode
-interactive` on the task, then `clear-halt`, then rules. No `start` is needed: every step reads
-the run mode from the task itself.
+`fix-brief` marks each such finding pending and exits 0, and its `next:` line names the close.
 Any other finding before the cap refuses (exit 3), and the message names the findings that may be
 ruled now. Unattended refuses every ruling (exit 55).
 
@@ -332,7 +331,8 @@ and the work is accepted. Load-bearing: the work cannot be accepted with it, so 
 work stops until you act. Test-wrong: the problem is real and the fix needs a frozen test
 changed, so the tests are retaken. A model may not make these calls with nobody watching." Then
 say each finding in plain words, with what it cites. At the cap, unattended, `verify-record`
-already halted the order instead.
+marks each open finding with an empty fix scope pending, as `fix-brief` does. It halts the order
+only for an open finding that has a fix scope.
 
 Run the same call again, with one `--ruling` flag added per finding ruled:
 ```

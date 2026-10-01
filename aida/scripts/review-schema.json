@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA review record",
-  "description": "What one pass of the review stage found, at <task folder>/review/review.json (ideal/review.md, 'The review record'). One file per task, in its own folder beside research/, design/ and implementation/, because implementation's own `restart` archives that folder whole and a review inside it would go with a build restart it has nothing to do with. Four actions write it in turn: `checks` creates it with the change set and checks 3 to 8, `findings` adds checks 2, 9 to 12 and 16 and every finding, `surfaces` adds checks 13 to 15 and the surface rows, and `close` adds check 1, the criterion verdicts and the verdict. A re-run archives the previous record to review/review-<date>-<commit>.json before it writes, and refuses when that move fails (exit 63). Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What one pass of the review stage found, at <task folder>/review/review.json (ideal/review.md, 'The review record'). One file per task, in its own folder beside research/, design/ and implementation/, because implementation's own `restart` archives that folder whole and a review inside it would go with a build restart it has nothing to do with. Four actions write it in turn: `checks` creates it with the change set and checks 3 to 8, `findings` adds checks 2, 9 to 12 and 16 and every finding, `surfaces` adds checks 13 to 15 and the surface rows, and `close` adds check 1, the criterion verdicts and the verdict. A re-run archives a closed record, with that pass's review/findings.json and review/brief.json, to <name>-<date>-<commit>.json before it writes, adding -2, -3 and on when a name is taken, and refuses when a move fails (exit 63). Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -93,8 +93,8 @@
     },
     "surfaceSetup": {
       "type": "string",
-      "enum": ["not-applicable", "available", "not-offered-autonomous", "registered", "declined"],
-      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a kind that is off, not declined, and carried by the recipe's surface rows, whichever kinds are already on, which is when the skill offers that kind once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. `declined` is a project where every such kind was declined by a person, which the surfaces skill writes per kind."
+      "enum": ["not-applicable", "available", "not-offered-autonomous", "registered", "declined", "not-this-task", "file-on-another-branch"],
+      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a kind that is off, not declined, and carried by the recipe's surface rows, whichever kinds are already on, which is when the skill offers that kind once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. `declined` is a project where every such kind was declined by a person, which the surfaces skill writes per kind. `not-this-task` is a kind this task answered \"not this task\" for, at scope, design or review, which `task defer-surface` writes in task.json's surfacesDeferred, so the offer is made once per task. `file-on-another-branch` is a surface file that this tree lacks and another branch holds: no kind is offered, because any setup would collide with that file (gap row 278)."
     },
     "mutation": {
       "type": "object",
@@ -135,7 +135,7 @@
     "verdict": {
       "type": "string",
       "enum": ["passed", "failed"],
-      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: a check reading unmet fails, a check reading unknown fails, met and undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the checks said. The rows say which check or criterion caused a fail. An absent verdict is a review that has not closed, never a review that passed."
+      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: a check reading unmet fails, a check reading unknown fails, met and undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the checks said. The rows say which check or criterion caused a fail. An absent verdict is a review that has not closed, never a review that passed. `close` also leaves it absent while a `decision-` check reads unknown, so a later close answers that check with no fresh pass (gap row 279)."
     },
     "catalogNotes": {
       "type": "array",
@@ -244,7 +244,22 @@
         "answeredBy": {
           "type": "string",
           "enum": ["person", "nobody"],
-          "description": "Present only on a lens check whose findings are all low, which a person decides rather than the script. `nobody` before the person answers, when the check reads unknown, or on a run with nobody present, when it reads met. `person` once `close --row` took the answer."
+          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision an unattended build left in finished.json `pendingDecisions` (gap row 279). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
+        },
+        "answer": {
+          "type": "string",
+          "enum": ["wrong", "deferred", "load-bearing", "test-wrong", "keep", "rebuild"],
+          "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, or keep or rebuild for a departure. wrong, deferred and keep read met; load-bearing, test-wrong and rebuild read unmet. Completion offers a follow up task for each deferred one."
+        },
+        "scriptHalf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "detail"],
+          "properties": {
+            "verdict": {"type": "string", "enum": ["met", "unmet", "unknown", "undeclared", "not-needed"]},
+            "detail": {"type": "string", "minLength": 1}
+          },
+          "description": "Present only on checks 3 and 4: the verdict and detail `checks` wrote, before any lens half. `findings` reads the check again from it each time it runs, so a second run never reads an earlier lens reading as the script half."
         },
         "absent": {
           "type": "boolean",

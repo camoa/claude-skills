@@ -103,6 +103,11 @@ can still be retaken. After the build, the route is `retake-tests` under Rulings
 ends there with the report, and decides none of the three. A model ruling that a test is wrong,
 with nobody watching, is the test describing the code again.
 
+Two decisions do not halt an unattended run: a finding with an empty fix scope, and a departure
+from the design. Each is recorded as pending on the order's review record, and the order goes on
+to its close. Later orders start, and `finish` runs. The review stage puts each one to the person
+before its verdict, and it cannot pass while one is unanswered. A model still decides neither.
+
 Each halt takes the route of its row in the table above, and the `next:` line from `read` names
 it. Offer any of them only when a person is present to decide it.
 

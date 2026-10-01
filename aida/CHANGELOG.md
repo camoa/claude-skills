@@ -4,6 +4,72 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.12] - 2026-10-01
+
+Seven changes from the event archive task's second review and the
+supporting taxonomies site's content freshness run, on 6.0.11. One of
+them is the owner's request: an unattended run no longer stops for a
+decision only a person makes.
+
+### Changed
+
+- Unattended, a finding that needs a person's ruling and a reviewer's
+  `departed` verdict no longer halt the build. Each waits as a decision,
+  the run goes on, and `finish` carries it to the task review. There the
+  person answers each one once with `close --row`. Review writes no
+  verdict while a decision waits. A ruling of `deferred` becomes a
+  follow-up task. A departure answered `rebuild`, or a ruling of
+  `load-bearing` or `test-wrong`, fails the review; a fix commit and
+  `finish` again follow, and a decision already answered is not asked
+  again. At the fix-round cap, a finding with no fix scope waits the same
+  way. Attended runs are unchanged.
+- The rule for a lens check whose findings are all low now also covers the
+  lens half of checks 3 and 4. Running `findings` again on the same record
+  gives the same verdicts, because `checks` keeps the script half apart.
+- A surface file that only another branch holds reads as off, in both run
+  modes. Nothing offers its setup, `install` refuses, and nothing says to
+  merge that branch. The pull request body names the branch. The detail
+  says it ends when the branch lands or is deleted.
+- "Not this task" for a surface kind is recorded with `task
+  defer-surface`, at scope, design or review, and no later stage asks
+  again in that task.
+
+### Fixed
+
+- A second review archives the first pass's findings file and brief with
+  its record, under a free name, so the new reviewer starts clean.
+- A departure in how files were produced can be recorded. Its evidence may
+  name the changed files, matched as whole paths, as well as a
+  `file:line`.
+- `dispatch-open implementer` refuses wherever `build-brief` would, with
+  the same message and code: a dependency with no completion record, a
+  missing ledger entry, spent attempts. Both refuse an order that is past
+  its build (exit 116).
+- `build-record` refuses an order a halt has stopped (exit 49), except the
+  departure halt that `--accept-deviation` answers.
+- Review names a preconditions record that holds no tool result, and says
+  the tool check did not run for that task.
+- Preconditions and review compare the project's copy of the
+  test-execution recipe with the catalog's, and report an older copy as a
+  catalog note. A copy that could not be compared reads "not checked".
+- Correction to the 6.0.0 notes: preconditions checked `requires_tooling`
+  only in the skill text until 6.0.11, so a run could skip it unrecorded.
+
+### Known limits
+
+- A review record written before 6.0.12 holds no script half for checks 3
+  and 4. `findings` refuses it (exit 62) until `checks` runs again.
+- A departure answered `rebuild` does not send the order back through the
+  build steps. The fix is a commit on the task branch, then `finish`.
+- At the fix-round cap, an open finding that has a fix scope still halts.
+- The catalog copy of a recipe reaches the compare through the catalog
+  identifier's answer, which only a live run shows.
+- That scope and design skip a deferred or branch-held surface kind is
+  skill text. Only a live run shows it.
+- The dev-guides test-execution recipe runs mutation over Kernel-only
+  code, which does not finish. An ask was sent to scope it or make it
+  opt-in.
+
 ## [6.0.11] - 2026-10-01
 
 Eight changes from the event archive task's live run and review on 6.0.10.

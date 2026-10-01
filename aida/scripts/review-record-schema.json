@@ -63,7 +63,7 @@
           "evidence": { "type": "string", "minLength": 1 }
         }
       },
-      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and halts the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
+      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, or only the files of the diff for a departure in how files were produced (gap row 280), and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and halts the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
     },
     "deviationAccepted": {
       "type": "object",
@@ -75,6 +75,16 @@
         "because": { "type": "string", "minLength": 1 }
       },
       "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and halts the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason. A person who kept the same line at `build-record --accept-deviation` is not asked again: the build record's own object is carried here (gap row 266). Present only when a person accepted one."
+    },
+    "deviationPending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["departure", "file"],
+      "properties": {
+        "departure": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 }
+      },
+      "description": "A departure found while nobody was present (gap row 279). Unattended, `review-record` halts nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. Present only on an unattended review that found one and that no person accepted."
     }
   },
   "$defs": {
@@ -127,8 +137,8 @@
         },
         "status": {
           "type": "string",
-          "enum": ["open", "addressed", "ruled"],
-          "description": "Where this finding stands. Open until a verification calls it addressed or a person rules on it at the cap. A finding recorded with actionable false opens like any other and stays open, because nothing can close it: no fixer ever sees it. Every count that gates a step counts the open actionable findings only, so such a finding blocks nothing while staying visibly unanswered."
+          "enum": ["open", "addressed", "ruled", "pending"],
+          "description": "Where this finding stands. Open until a verification calls it addressed or a person rules on it at the cap. Pending when its fix scope is empty and nobody was present to rule: `fix-brief` marks it, `finish` carries it to finished.json, and the person rules it at the task review (gap row 279). A finding recorded with actionable false opens like any other and stays open, because nothing can close it: no fixer ever sees it. Every count that gates a step counts the open actionable findings only, so such a finding blocks nothing while staying visibly unanswered."
         },
         "origin": {
           "type": "string",

@@ -218,6 +218,8 @@ CP_IDS
 # Every finding in the review record carrying `disposition: follow-up`, each with the task that
 # exists for it under tasks/ or null. The task id is `<source task>-<finding id>`, and the folder
 # is how completion knows the task exists. No task field is added, and no goal text is parsed.
+# A decision the person deferred at review's close is one too, its id `<order>-<finding>`, with
+# its evidence from finished.json `pendingDecisions` (gap row 279).
 # Sets CP_FOLLOW_UPS to [{finding, severity, lens, file, lines, evidence, task}].
 cp_load_follow_ups() {
   local rows_out one fid task_id task_here
@@ -232,7 +234,11 @@ cp_load_follow_ups() {
       '{finding: .id, severity: .severity, lens: .lens, file: (.file // ""), lines: (.lines // ""),
         evidence: .evidence, task: (if $task == "" then null else $task end)}' >>"$rows_out"
   done <<CP_FINDINGS
-$(printf '%s' "$CP_REVIEW_DOC" | jq -c '(.findings // [])[] | select(.disposition == "follow-up")')
+$(printf '%s' "$CP_REVIEW_DOC" | jq -c --argjson fin "$CP_FINISHED_DOC" '
+  ((.findings // [])[] | select(.disposition == "follow-up")),
+  ((.checks // [])[] | select(.answer == "deferred") | (.id | ltrimstr("decision-")) as $k
+   | ([ ($fin.pendingDecisions // [])[] | select(.unit + "-" + (.finding // "") == $k) ][0]) as $p
+   | {id: $k, severity: ($p.severity // "low"), lens: "decision", evidence: ($p.text // .detail)})')
 CP_FINDINGS
   CP_FOLLOW_UPS="$(jq -s '.' "$rows_out")" || { rm -f "$rows_out"; die 3 "$1: could not assemble the follow up rows"; }
   rm -f "$rows_out"
@@ -720,12 +726,19 @@ do_close() {
   # because a script inventing a reason would be a bypass.
   if [ "$CP_REVIEW_VERDICT" != "passed" ] && [ -z "$reason" ]; then
     # The lens checks review read met on low findings alone with nobody present are reported here,
-    # since the body that would carry them is not written on this halt (gap row 274).
-    local unconfirmed
+    # since the body that would carry them is not written on this halt (gap row 274). The catalog
+    # notes are too, for the same reason, such as a project recipe copy behind the catalog (row 284).
+    # The decisions an unattended build left wait for the person the same way (gap row 279).
+    local unconfirmed notes undecided
     unconfirmed="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "met" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
+    notes="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.catalogNotes // [])[] | .seen + " (" + .where + ")" ] | join(" ")' 2>/dev/null)"
+    undecided="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
+    local decide_route=""
+    [ -z "$undecided" ] \
+      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. A --reason here closes the task with every one of those decisions unmade."
     case "$CP_RUN_MODE" in
-      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}" ;;
-      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it." ;;
+      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
+      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;
     esac
   fi
 

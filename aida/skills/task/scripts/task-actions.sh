@@ -49,6 +49,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    -- <text...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] decline-recipe --project <path> \
 #                    <task-id> <framework>
+#   task-actions.sh [--run-mode <interactive|autonomous>] defer-surface --project <path> \
+#                    <task-id> <e2e|visual-regression>
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
 #                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
 #                    [--setup-recipe <kind>=<path>]...
@@ -124,6 +126,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh set-budget --project <path> <task-id> [--dispatches <n>] [--minutes <n>]
        task-actions.sh save     --project <path> <task-id> -- <text...>
        task-actions.sh decline-recipe --project <path> <task-id> <framework>
+       task-actions.sh defer-surface --project <path> <task-id> <e2e|visual-regression>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
                                  [--setup-recipe <kind>=<path>]...
        task-actions.sh environment --project <path> <task-id> not-applicable -- <reason...>
@@ -1051,56 +1054,79 @@ do_set_budget() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# decline-recipe: written only when a person answers "not for this framework" to the missing
-# process recipe ask (task-schema.json, recipesDeclined). Nothing here asks. The framework must
-# be one project.json declares, so a typo never silences the ask for a real framework. A repeat
-# is refused: the field is a set, and a second write would say the person was asked twice.
+# A person's per-task answer, appended to one list field of task.json, committed and summarised.
+# Nothing here asks. A repeat is refused: the field is a set, and a second write would say the
+# person was asked twice. $1 the action, $2 the project, $3 the task id, $4 the field, $5 the
+# value, $6 the commit subject, $7 the commit reason, $8 the label printed before the value, $9
+# the refusal of a repeat, before the quoted value.
 # ------------------------------------------------------------------------------------------------
 
-do_decline_recipe() {
-  local project_path="" id="" framework=""
+append_task_answer() {
+  local action="$1" project_path="$2" id="$3" field="$4" value="$5" task_json
+  task_json="$(task_dir_for "$project_path" "$id")/task.json"
+  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  if jq -e --arg f "$field" --arg v "$value" '(.[$f] // []) | index($v) != null' "$task_json" >/dev/null 2>&1; then
+    die3 "$action: $task_json $9 '$value'"
+  fi
+
+  write_atomic "$task_json" "$(jq --arg f "$field" --arg v "$value" '.[$f] = ((.[$f] // []) + [$v])' "$task_json")"
+
+  commit_task_change "$project_path" "$6" "$7" "" "" "$id" "$action" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+
+  echo "$8: ${value}"
+  echo "$field: $(jq -r --arg f "$field" '.[$f] | join(" ")' "$task_json")"
+  task_summary "$task_json"
+}
+
+# Parses --project <path> <task-id> <value> for the two actions below. Sets AT_PROJECT, AT_ID and
+# AT_VALUE, the project canonical. $1 the action, $2 what the value is, then the arguments.
+parse_task_answer() {
+  local action="$1" what="$2" _resolved_project
+  shift 2
+  AT_PROJECT=""; AT_ID=""; AT_VALUE=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) AT_PROJECT="${2:?--project needs a value}"; shift 2 ;;
       *)
-        if [ -z "$id" ]; then id="$1"; shift
-        elif [ -z "$framework" ]; then framework="$1"; shift
-        else die3 "decline-recipe: unrecognized argument: $1"
+        if [ -z "$AT_ID" ]; then AT_ID="$1"; shift
+        elif [ -z "$AT_VALUE" ]; then AT_VALUE="$1"; shift
+        else die3 "$action: unrecognized argument: $1"
         fi
         ;;
     esac
   done
+  [ -n "$AT_PROJECT" ] || die3 "$action: --project is required"
+  _resolved_project="$(canon_existing_dir "$AT_PROJECT")" || die3 "$action: not a folder: $AT_PROJECT"
+  AT_PROJECT="$_resolved_project"
+  [ -n "$AT_ID" ] || die3 "$action: a task id is required"
+  [ -n "$AT_VALUE" ] || die3 "$action: $what is required"
+}
 
-  [ -n "$project_path" ] || die3 "decline-recipe: --project is required"
-  local _resolved_project
-  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "decline-recipe: not a folder: $project_path"
-  project_path="$_resolved_project"
-  [ -n "$id" ] || die3 "decline-recipe: a task id is required"
-  [ -n "$framework" ] || die3 "decline-recipe: a framework is required, one project.json declares"
-  jq -e --arg f "$framework" '(.frameworks // []) | index($f) != null' "$project_path/project.json" >/dev/null 2>&1 \
-    || die3 "decline-recipe: $project_path/project.json does not declare the framework '$framework'"
+# decline-recipe: written only when a person answers "not for this framework" to the missing
+# process recipe ask (task-schema.json, recipesDeclined). The framework must be one project.json
+# declares, so a typo never silences the ask for a real framework.
+do_decline_recipe() {
+  parse_task_answer decline-recipe "a framework" "$@"
+  jq -e --arg f "$AT_VALUE" '(.frameworks // []) | index($f) != null' "$AT_PROJECT/project.json" >/dev/null 2>&1 \
+    || die3 "decline-recipe: $AT_PROJECT/project.json does not declare the framework '$AT_VALUE'"
+  append_task_answer decline-recipe "$AT_PROJECT" "$AT_ID" recipesDeclined "$AT_VALUE" \
+    "Decline a process recipe for ${AT_VALUE} on ${AT_ID}" "a person answered not for this framework" "RECIPE DECLINED" \
+    "already declines a recipe for"
+}
 
-  local task_dir task_json
-  task_dir="$(task_dir_for "$project_path" "$id")"
-  task_json="$task_dir/task.json"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
-  if jq -e --arg f "$framework" '(.recipesDeclined // []) | index($f) != null' "$task_json" >/dev/null 2>&1; then
-    die3 "decline-recipe: $task_json already declines a recipe for '$framework'"
-  fi
-
-  write_atomic "$task_json" "$(jq --arg f "$framework" '.recipesDeclined = ((.recipesDeclined // []) + [$f])' "$task_json")"
-
-  commit_task_change "$project_path" \
-    "Decline a process recipe for ${framework} on ${id}" \
-    "a person answered not for this framework" \
-    "" \
-    "" \
-    "$id" "decline-recipe" \
-    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
-
-  echo "RECIPE DECLINED: ${framework}"
-  echo "recipesDeclined: $(jq -r '.recipesDeclined | join(" ")' "$task_json")"
-  task_summary "$task_json"
+# defer-surface: written only when a person answers "not this task" to a surface setup offer at
+# scope, design or review (task-schema.json, surfacesDeferred). Each of the three reads the field
+# and does not offer that kind again in this task (gap row 278).
+do_defer_surface() {
+  parse_task_answer defer-surface "a kind" "$@"
+  case "$AT_VALUE" in
+    e2e|visual-regression) ;;
+    *) die3 "defer-surface: the kind is e2e or visual-regression, not '$AT_VALUE'" ;;
+  esac
+  append_task_answer defer-surface "$AT_PROJECT" "$AT_ID" surfacesDeferred "$AT_VALUE" \
+    "Defer ${AT_VALUE} surfaces on ${AT_ID}" "a person answered not this task" "SURFACE DEFERRED" \
+    "already defers"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1795,6 +1821,7 @@ case "$action" in
   set-budget) do_set_budget "$@" ;;
   save) do_save "$@" ;;
   decline-recipe) do_decline_recipe "$@" ;;
+  defer-surface) do_defer_surface "$@" ;;
   environment) do_environment "$@" ;;
   prune) do_prune "$@" ;;
   *) usage; exit 3 ;;

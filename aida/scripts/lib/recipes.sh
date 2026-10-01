@@ -61,6 +61,7 @@
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
 #   rv_read_findings_array <file> <key> <action>  sets RV_FINDINGS_ARRAY, or exits 52
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
+#   cr_catalog_pair <action> <value>          parses --catalog-recipe's path or reason into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
 #   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
@@ -83,9 +84,12 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_precondition_names <recipe>        each name its ## Preconditions prose puts in backticks
-#   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
+#   recipe_name_of <recipe> [<key>]           the name: field of its frontmatter, or the <key>:
+#                                             field; empty when it has none
 #   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
 #                                             the list under <key>; 2 on a value it cannot read
+#   recipe_stale_line <fw> <copy> <catalog>   one sentence when the copy is behind the catalog's
+#                                             copy or could not be compared; nothing otherwise
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
 #                                             sets RF_EARLIER
@@ -614,6 +618,15 @@ cr_lookup_failure_pair() {
   esac
   # shellcheck disable=SC2034 # read by the sourcing script
   CR_PAIR="$(printf '%s\t%s' "$fw" "$reason")"
+}
+
+# Parses one `--catalog-recipe <framework>=<path or reason>` value, the catalog's copy of a recipe a
+# project folder answered for, and sets CR_PAIR the way the two functions above do. $1 the action.
+cr_catalog_pair() {
+  case "${2#*=}" in
+    no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "$1" "--catalog-recipe" "$2" ;;
+    *) cr_recipe_pair "$1" "--catalog-recipe" "$2" ;;
+  esac
 }
 
 # Resolves the recipes into the commands the checks run. The caller sets these globals first,
@@ -1695,10 +1708,12 @@ recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/
 # environment up` records the ones that are files the branch changed.
 recipe_precondition_names() { recipe_prose_under "$1" Preconditions | grep -o '`[^` ]*`' | tr -d '`'; }
 
-# The name: field of the frontmatter of the recipe $1, or empty when it has none.
+# The name: field of the frontmatter of the recipe $1, or empty when it has none. $2 names
+# another field instead, such as version.
 recipe_name_of() {
-  awk 'NR == 1 && !/^---[ \t\r]*$/ { exit } NR > 1 && /^---[ \t\r]*$/ { exit }
-       NR > 1 && /^name:/ { sub(/^name:[ \t]*/, ""); sub(/[ \t\r]+$/, ""); print; exit }' "$1"
+  awk -v key="${2:-name}:" 'NR == 1 && !/^---[ \t\r]*$/ { exit } NR > 1 && /^---[ \t\r]*$/ { exit }
+       NR > 1 && index($0, key) == 1 { v = substr($0, length(key) + 1); sub(/^[ \t]+/, "", v)
+                                       sub(/[ \t\r]+$/, "", v); print v; exit }' "$1"
 }
 
 # The names under the requires_tooling: list of the frontmatter of the recipe $1, one per line.
@@ -1722,6 +1737,36 @@ recipe_requires_tooling_of() {
                                        if (v != "[]") bad = 1
                                        exit }
        END { exit (bad ? 2 : 0) }' "$1"
+}
+
+# One sentence when the project's copy $2 of a framework's test-execution recipe is behind the
+# catalog's copy $3, or could not be compared with it; nothing otherwise (gap row 284). $1 the
+# framework. $3 is a path, or the catalog lookup's own word: no-recipe has nothing to compare, and
+# listing-unreachable or fetch-failed means nobody read the catalog's copy. Two files with other
+# names are two recipes, so their versions are not compared. Preconditions and review both call
+# this. The task reads the recipe at its recorded path, so an update in place needs no other step.
+# version_at_least is task-helpers.sh's, which every caller sources.
+recipe_stale_line() {
+  local fw="$1" have="$2" catalog="$3" mine theirs
+  case "$catalog" in
+    ''|no-recipe) return 0 ;;
+    listing-unreachable|fetch-failed)
+      mine="$(recipe_name_of "$have" version)"
+      printf "%s: the project's copy of the test-execution recipe is version %s, and its catalog version was not checked, because the catalog's copy could not be read (%s)." \
+        "$fw" "${mine:-unstated}" "$catalog"
+      return 0 ;;
+  esac
+  [ ! "$have" -ef "$catalog" ] || return 0
+  mine="$(recipe_name_of "$have")"; theirs="$(recipe_name_of "$catalog")"
+  if [ -z "$mine" ] || [ "$mine" != "$theirs" ]; then
+    printf "%s: the project's copy of the test-execution recipe is named %s and the catalog's copy %s, so their versions were not compared." \
+      "$fw" "${mine:-nothing}" "${theirs:-nothing}"
+    return 0
+  fi
+  mine="$(recipe_name_of "$have" version)"; theirs="$(recipe_name_of "$catalog" version)"
+  version_at_least "$mine" "$theirs" && return 0
+  printf "%s: the project's copy of the test-execution recipe is version %s, and the catalog's is %s. Nothing was changed. Update the project's copy in place, and the task reads the new version at the same path." \
+    "$fw" "${mine:-unstated}" "$theirs"
 }
 
 # True when the file $3 holds the block for the path $2 of an earlier version of the recipe $1.

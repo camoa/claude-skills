@@ -74,7 +74,9 @@ code is written against, not the declaration alone. Three files once said the re
 forward and none of them did; `build-brief` is what actually forwards it now.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
-no completion record, and when the attempts are already spent. Read a refusal and act on it.
+no completion record, and when the attempts are already spent. It also refuses an order past its
+build: a build starts only from `tests-frozen` or `code-written` (exit 116). Read a refusal and
+act on it.
 
 That list is the withheld list.
 
@@ -104,8 +106,8 @@ Open it first:
 The script derives the rest itself from the frozen snapshot: this role is denied every other
 order's owned files, and allowed its own. Never type those paths here. It prints both lists, and
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
-write. An order whose tests were never frozen refuses too (exit 114), the same way `build-brief`
-does. Nothing is written. Freeze the order's tests first.
+write. It also refuses for each reason `build-brief` refuses above, with the same words. Tests
+never frozen exit 114 here. Nothing is written. Act on the refusal first.
 
 **Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
 mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.
@@ -145,14 +147,16 @@ say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
 halt a started order. Unattended, run `build-record` as after any return. It halts the order
-itself, so do not halt it again. The next `start` sets aside what was left.
+itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
+(exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
 `build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
 and `haltsCleared` in the ledger hold the reason, and the flag clears the deviation's halt. Review
 carries the answer and does not ask again about that line. A stop line other than `Stop: none`
-has no such route. Unattended, the flag refuses (exit 68), and the halt names the route.
+has no such route. Unattended, the flag refuses (exit 68). There a deviation is no stop:
+`build-record` records the attempt, and `review-record` keeps the line for the task review.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.

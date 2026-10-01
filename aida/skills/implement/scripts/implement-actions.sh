@@ -30,6 +30,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--implement-lookup <framework>=<path|reason>]...
 #                                                    [--tooling <tool>=<path>]...
+#                                                    [--catalog-recipe <framework>=<path|reason>]...
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -349,13 +350,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      than minting a second one for the same meaning.
 #  39  `build-brief` found no <task_folder>/implementation/tests-<unit_id>.json for this unit. Step
 #      three (`tests-brief` and `tests-freeze`) has not run for it yet.
-#  40  `build-brief` found an order in the given unit's dependsOn with no completion record in the
-#      ledger (its lastStep is not "closed"), so that order's interface record does not exist yet.
+#  40  `build-brief` or `dispatch-open implementer` found an order in the given unit's dependsOn
+#      with no completion record in the ledger (its lastStep is not "closed"), so that order's
+#      interface record does not exist yet.
 #      The same fact exit 23 names for `tests-brief`, kept apart because the two actions read the
 #      dependency for two different reasons: `tests-brief` needs the interface to write tests
 #      against it, `build-brief` needs it to hand to the model writing the code.
-#  41  `build-brief` found the given unit's attempt counter already at its allowed limit. Nothing is
-#      handed over; the order is exhausted.
+#  41  `build-brief` or `dispatch-open implementer` found the given unit's attempt counter
+#      already at its allowed limit. Nothing is handed over; the order is exhausted.
 #  42  `build-brief` ran before `start`, so <task_folder>/implementation/snapshot.json does not
 #      exist. A different number from exit 25, which `tests-brief` and `tests-freeze` share for the
 #      same fact: `build-brief` gets its own so a caller can tell which step never started without
@@ -400,7 +402,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      no --verdicts also follows `reviewed` (gap row 265); `close` follows `reviewed` or `fixed`.
 #      The message names the step found and the steps allowed.
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
-#      message carries the halt's own recorded reason.
+#      message carries the halt's own recorded reason. `build-record` refuses on it too, so a
+#      halted order records no attempt; --accept-deviation lets the deviation's own halt through.
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
 #      second brief and `review-record` refuses to write a second record.
@@ -416,7 +419,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  53  `fix-brief` or `fix-record` found no open actionable finding for this order, so there is
 #      nothing for a fixer to do. `verify-brief` shares it: nothing open means nothing to verify.
 #      `fix-brief` also refuses when every open finding has an empty fix scope, and names the
-#      ruling route; unattended, it halts the order first (gap row 265).
+#      ruling route (gap row 265). Unattended, it marks each such finding pending instead, and
+#      exits 0: the person rules it at the task review (gap row 279).
 #  54  `fix-brief` or `fix-record` found this order's fix rounds already spent (roundsUsed at
 #      FIX_ROUNDS_ALLOWED). Every open finding needs a ruling now, not another round. The mirror of
 #      exit 41 for the build attempts.
@@ -702,7 +706,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      than `Deviation: none`, or a heading that starts with "Deviation", in the report or the
 #      interface record, is a stop too (gap row 221). A person keeps a deviation with
 #      --accept-deviation, interactive only (exit 68), and the message and the halt name that
-#      route. A stop line other than `Stop: none` has no such route (gap row 266).
+#      route. A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a
+#      deviation is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
@@ -715,7 +720,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      review holds. The halt names the file and the line. No review record is written. A person
 #      accepts the departure with --accept-deviation instead, interactive only (exit 68). A recipe
 #      the reviewer answers departed takes the same route, under a halt of its own wording (gap
-#      row 225).
+#      row 225). Unattended, nothing halts: the record holds the departure as deviationPending,
+#      and the person decides it at the task review (gap row 279).
 #
 # The code the reviewer's recipe answers added (gap row 225).
 # 108  `review-record` found the findings file's `recipes` list does not answer the review
@@ -758,11 +764,17 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 114  `dispatch-open` was given the implementer role for an order with no
 #      <task_folder>/implementation/tests-<unit_id>.json. The same fact exit 39 names for
 #      `build-brief`, with the same message. Nothing is written, so no record opens for a build
-#      that has no brief. Run tests-freeze on the order first.
+#      that has no brief. Run tests-freeze on the order first. The implementer role also takes
+#      `build-brief`'s ledger refusals and its exits 40, 41 and 116, with the same codes and words
+#      (gap row 281).
 # 115  `dispatch-open` was given the reviewer role for an order with no reviewer brief:
 #      brief-<unit_id>-review.json, or brief-<unit_id>-verify-<round>.json after a fix round. The
 #      message names the step that writes it. Nothing is written. Kept apart from 114 because the
 #      repair differs: a missing brief needs review-brief or verify-brief, not tests-freeze.
+# The code the build-step check added (gap row 281).
+# 116  `build-brief` or `dispatch-open implementer` found the order at a ledger step no build starts
+#      from. A build starts from tests-frozen, or from code-written to rebuild a failed attempt. The
+#      message names the step and what to run instead. Nothing is written.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -909,6 +921,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--tooling <tool>=<path>]...
+                            [--catalog-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -1559,7 +1572,7 @@ do_read() {
   # order with open findings is waiting for a fixer. One row per order in the ledger, in the
   # ledger's own order, so a reader never has to open six files to learn where a task stands. A
   # ledger that could not be read leaves the list empty rather than guessing at it.
-  local reviews_json order_ids order_count oi one_id one_file one_exists one_open one_note
+  local reviews_json order_ids order_count oi one_id one_file one_exists one_open one_note one_pending
   reviews_json='[]'
   if [ "$ledger_readable" = "true" ]; then
     order_ids="$(jq -c '[ (.orders // [])[] | .id ]' "$LEDGER_FILE" 2>/dev/null)"
@@ -1569,20 +1582,23 @@ do_read() {
     while [ "$oi" -lt "$order_count" ]; do
       one_id="$(printf '%s' "$order_ids" | jq -r --argjson i "$oi" '.[$i]')"
       one_file="$IMPL_DIR/review-$one_id.json"
-      one_exists=false; one_open=0; one_note="no review record"
+      one_exists=false; one_open=0; one_pending=0; one_note="no review record"
       if [ -f "$one_file" ]; then
         one_exists=true
         if jq empty "$one_file" 2>/dev/null; then
           one_open="$(jq '[ (.findings // [])[] | select(.actionable == true and .status == "open") ] | length' "$one_file" 2>/dev/null)"
           case "$one_open" in ''|*[!0-9]*) one_open=0 ;; esac
+          # What waits for the person at the task review (gap row 279).
+          one_pending="$(jq '([ (.findings // [])[] | select(.status == "pending") ] | length) + (if has("deviationPending") then 1 else 0 end)' "$one_file" 2>/dev/null)"
+          case "$one_pending" in ''|*[!0-9]*) one_pending=0 ;; esac
           one_note="ok"
         else
           one_note="present but could not be read as JSON"
         fi
       fi
       reviews_json="$(printf '%s' "$reviews_json" | jq -c --arg unit "$one_id" \
-        --argjson exists "$one_exists" --argjson open "$one_open" --arg note "$one_note" \
-        '. + [{unit: $unit, reviewRecordExists: $exists, openActionableFindings: $open, note: $note}]')"
+        --argjson exists "$one_exists" --argjson open "$one_open" --argjson pending "$one_pending" --arg note "$one_note" \
+        '. + [{unit: $unit, reviewRecordExists: $exists, openActionableFindings: $open, pendingForReview: $pending, note: $note}]')"
       oi=$((oi + 1))
     done
   fi
@@ -1626,7 +1642,7 @@ do_read() {
              halt: ("halt: " + (.haltedBecause // "none")),
              attempts: ("attempts=" + ((.attemptsUsed // 0) | tostring)),
              rounds: ("rounds=" + ((.roundsUsed // 0) | tostring)),
-             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings)" else "review: none" end),
+             review: (if ($rv[$o.id].reviewRecordExists // false) then "review: open=\($rv[$o.id].openActionableFindings) pending=\($rv[$o.id].pendingForReview)" else "review: none" end),
              needs: ($needs[$o.id] // "unknown: no readable snapshot names this order")} ]' \
       "$LEDGER_FILE")"
     criteria_line="$(printf '%s' "$ledger_summary" | jq -r \
@@ -3145,7 +3161,7 @@ do_preconditions() {
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_said tooling_entries
-  local tooling="" tooling_json end_absent_json pc_no_recipe
+  local tooling="" tooling_json end_absent_json pc_no_recipe catalog_recipes="" pc_stale="" pc_line pc_catalog
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3180,6 +3196,12 @@ do_preconditions() {
       --tooling)
         [ "$#" -ge 2 ] || die 3 "preconditions: --tooling needs <tool>=<path>"
         tooling="$tooling$2
+"
+        shift 2 ;;
+      --catalog-recipe)
+        [ "$#" -ge 2 ] || die 3 "preconditions: --catalog-recipe needs <framework>=<path>"
+        cr_catalog_pair "preconditions" "$2"
+        catalog_recipes="$catalog_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -3539,6 +3561,18 @@ EOF
   record_file="$task_folder/implementation/preconditions.json"
   write_atomic "$record_file" "$record_json"
 
+  # A project's own copy of the test-execution recipe behind the catalog's copy (gap row 284). The
+  # folder source wins the lookup, so nothing else would say the copy fell behind. Reported only.
+  while IFS="$(printf '\t')" read -r fw pc_catalog; do
+    [ -n "$fw" ] || continue
+    recipe_path="$(cr_lookup "$recipes" "$fw")"
+    [ -n "$recipe_path" ] || continue
+    pc_line="$(recipe_stale_line "$fw" "$recipe_path" "$pc_catalog")"
+    [ -z "$pc_line" ] || pc_stale="$pc_stale${pc_stale:+ }$pc_line"
+  done <<PC_CATALOG
+$catalog_recipes
+PC_CATALOG
+
   # The freeze wall, announced here rather than at the first order's freeze. `tests-freeze` takes
   # its test globs from the implement recipe's `## Oracle files` block, so with no such recipe a
   # test-proved order dies at exit 27, after the design closed, the build started and the test
@@ -3721,7 +3755,7 @@ EOF
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
-        --arg failedOutput "$pc_failed" '
+        --arg failedOutput "$pc_failed" --arg staleRecipe "$pc_stale" '
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -3758,6 +3792,7 @@ EOF
      endOfTaskAbsent: ([ $report.frameworks[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ]
                        | if length == 0 then "none"
                          else join(", ") + ": absent, and only end-of-task rows run it, so the build goes on and review reads those rows as known. Install it with the tool skill to run them." end),
+     staleRecipe: (if $staleRecipe == "" then "none" else $staleRecipe end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"
@@ -5873,6 +5908,70 @@ im_require_tests_record() {
     || die 3 "$1: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 }
 
+# Every refusal build-brief takes from the order's records rather than from its own arguments:
+# the tests record (exit $3, as above), the ledger, each dependency's completion record (exit
+# 40), the order's step (exit 116) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
+# it writes, so no builder opens for an order build-brief would refuse (gap row 281). The order's
+# frozen work order is $4. Sets IM_TESTS_DOC, IM_ATTEMPTS_USED and IM_ATTEMPTS_ALLOWED.
+IM_ATTEMPTS_USED=0; IM_ATTEMPTS_ALLOWED=0
+im_require_build_ready() {
+  local who="$1" unit_id="$2" unit_json="$4" ledger_doc
+  im_require_tests_record "$who" "$unit_id" "$3"
+
+  # --- the ledger: needed for the dependency check and the attempt count ---------------------------
+  local ledger_file="$IMPL_DIR/ledger.json"
+  [ -f "$ledger_file" ] \
+    || die 3 "$who: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
+  [ -n "$ledger_doc" ] \
+    || die 3 "$who: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  # --- exit 40: every dependency needs a completion record before its interface is handed over ------
+  local dep_id dep_entry dep_step
+  while IFS= read -r dep_id; do
+    [ -n "$dep_id" ] || continue
+    dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
+      '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+    [ "$dep_entry" != "null" ] \
+      || die 3 "$who: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
+    dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
+    [ "$dep_step" = "closed" ] \
+      || die 40 "$who: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+  done <<IM_DEPS
+$(printf '%s' "$unit_json" | jq -r '(.dependsOn // [])[]')
+IM_DEPS
+
+  # --- exit 41: the attempt counter for this unit must still have room -----------------------------
+  local order_entry
+  order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die 3 "$who: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+
+  # --- exit 116: a build starts or resumes only where `read` routes one --------------------------
+  # tests-frozen is the first build, and the step a retake-tests returns to. code-written is a
+  # failed attempt, rebuilt while attempts remain. A builder stopped at its turn limit records
+  # nothing, so its resume finds one of these two. A fix round dispatches the fixer, not this role.
+  local step after
+  step="$(printf '%s' "$order_entry" | jq -r '.lastStep // "not started"')"
+  case "$step" in
+    tests-frozen|code-written) ;;
+    *)
+      case "$step" in
+        checks-passed) after="Its checks passed, so run review-brief on $unit_id next." ;;
+        reviewed|fixed) after="It is in review, so run fix-brief, verify-brief or close on $unit_id, as read routes it." ;;
+        closed) after="It is closed, so nothing more is built for it." ;;
+        *) after="Run tests-freeze on $unit_id first." ;;
+      esac
+      die 116 "$who: $unit_id is at step $step in $ledger_file, and a build starts only from tests-frozen or code-written. $after" ;;
+  esac
+  IM_ATTEMPTS_USED="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
+  case "$IM_ATTEMPTS_USED" in ''|*[!0-9]*) IM_ATTEMPTS_USED=0 ;; esac
+  IM_ATTEMPTS_ALLOWED="$(attempts_allowed_for "$order_entry")"
+  [ "$IM_ATTEMPTS_USED" -lt "$IM_ATTEMPTS_ALLOWED" ] \
+    || die 41 "$who: $unit_id has already used $IM_ATTEMPTS_USED of $IM_ATTEMPTS_ALLOWED allowed attempts. Nothing more is handed over."
+}
+
 do_build_brief() {
   [ "$#" -ge 2 ] || die 3 "build-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "build-brief: unrecognized extra argument: $3"
@@ -5895,68 +5994,37 @@ do_build_brief() {
   # --- exit 38: the unit itself must be in the frozen copy -----------------------------------------
   bb_load_unit "$snapshot_doc" "$unit_id"
 
-  # --- exit 39: step three (tests-brief, tests-freeze) must already have run for this unit ---------
-  im_require_tests_record "build-brief" "$unit_id" 39
+  # --- exits 39, 40 and 41, and the ledger: the order's records must allow a build ----------------
+  im_require_build_ready "build-brief" "$unit_id" 39 "$BB_UNIT_JSON"
+  local attempts_used="$IM_ATTEMPTS_USED" attempts_allowed="$IM_ATTEMPTS_ALLOWED"
 
-  # --- the ledger: needed for the dependency check and the attempt count ---------------------------
-  local ledger_file="$IMPL_DIR/ledger.json"
-  [ -f "$ledger_file" ] \
-    || die 3 "build-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
-  local ledger_doc
-  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
-  [ -n "$ledger_doc" ] \
-    || die 3 "build-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
-
-  # --- exit 40: every dependency needs a completion record before its interface is handed over ------
-  # dep_interface is declared here, never inside the loop, for the reason tests-brief states above
-  # and this file's own header records as trap 5.
-  local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
+  # Every dependency is closed by now. dep_interface is declared here, never inside the loop, for
+  # the reason tests-brief states above and this file's own header records as trap 5.
+  local depends_json dep_count i dep_id dep_interface dependency_interfaces_json='[]'
   local dep_record_file dep_record_text dependency_information_json='[]'
   depends_json="$(printf '%s' "$BB_UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
   while [ "$i" -lt "$dep_count" ]; do
     dep_id="$(printf '%s' "$depends_json" | jq -r --argjson i "$i" '.[$i]')"
-    dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
-      '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
-    [ "$dep_entry" != "null" ] \
-      || die 3 "build-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
-    dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
-    if [ "$dep_step" = "closed" ]; then
-      dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
-        '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
-      # Both texts, each labelled. The declaration is what design promised; the record is what the
-      # builder says it exposed, and the two can differ. The next order writes its tests and its
-      # code against the record where one exists, which is what build.md and the two agent files
-      # already say and what neither brief carried.
-      dep_record_file="$IMPL_DIR/build-$dep_id.json"
-      dep_record_text=""
-      if [ -f "$dep_record_file" ]; then
-        dep_record_text="$(jq -r '.interfaceRecord // ""' "$dep_record_file" 2>/dev/null)"
-      fi
-      dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
-        --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
-        . + [ {id: $id, declaredInterface: $iface, interface: $iface}
-              + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
-      dependency_information_json="$(im_dependency_information "$dependency_information_json" "$dep_id")"
-    else
-      die 40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+    dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
+      '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
+    # Both texts, each labelled. The declaration is what design promised; the record is what the
+    # builder says it exposed, and the two can differ. The next order writes its tests and its
+    # code against the record where one exists, which is what build.md and the two agent files
+    # already say and what neither brief carried.
+    dep_record_file="$IMPL_DIR/build-$dep_id.json"
+    dep_record_text=""
+    if [ -f "$dep_record_file" ]; then
+      dep_record_text="$(jq -r '.interfaceRecord // ""' "$dep_record_file" 2>/dev/null)"
     fi
+    dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
+      --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
+      . + [ {id: $id, declaredInterface: $iface, interface: $iface}
+            + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
+    dependency_information_json="$(im_dependency_information "$dependency_information_json" "$dep_id")"
     i=$((i + 1))
   done
-
-  # --- exit 41: the attempt counter for this unit must still have room -----------------------------
-  local order_entry attempts_used
-  order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
-    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
-  [ "$order_entry" != "null" ] \
-    || die 3 "build-brief: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
-  attempts_used="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
-  case "$attempts_used" in ''|*[!0-9]*) attempts_used=0 ;; esac
-  local attempts_allowed
-  attempts_allowed="$(attempts_allowed_for "$order_entry")"
-  [ "$attempts_used" -lt "$attempts_allowed" ] \
-    || die 41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
   # A later attempt starts from the earlier one's committed code. The build record keeps the last
   # attempt only, so its stoppers are what that attempt failed on, read here and not recomputed
@@ -7674,6 +7742,13 @@ do_build_record() {
   attempt_number=$((attempts_used_before + 1))
   local attempts_allowed
   attempts_allowed="$(attempts_allowed_for "$order_entry")"
+  # Exit 49. A halted order records no attempt, or a build after a Stop: line halt records over it.
+  # --accept-deviation answers the deviation's own halt, so only that segment lets the step through.
+  local br_halted
+  br_halted="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  [ -z "$accept" ] || br_halted="$(halt_segments_matching "$br_halted" "$(jq -cn --arg p "$BR_DEVIATION_PREFIX" '[$p]')" drop)"
+  [ -z "$br_halted" ] \
+    || die 49 "build-record: $unit_id is halted, so this step refuses. The ledger records the reason: $br_halted"
 
   # --- the task's own project, through the one reader every step-five action already uses ---------
   # The range lives in the code worktree, or in the project folder for an order whose proof is
@@ -7738,6 +7813,11 @@ do_build_record() {
   if $is_deviation && [ -n "$accept" ]; then
     accepted_json="$(jq -cn --arg d "$(printf '%s\n' "$stop_lines" | head -n 1)" --arg f "$stop_file" --arg b "$accept" \
       '{departure: $d, file: $f, because: $b}')"
+    stop_lines=""
+  fi
+  # Gap row 279. Unattended, a deviation stops nothing: the attempt is recorded, and review-record
+  # finds the same line and keeps it for the person at the task review.
+  if $is_deviation && [ "$ledger_run_mode" = "autonomous" ]; then
     stop_lines=""
   fi
   if [ -n "$stop_lines" ]; then
@@ -8475,7 +8555,8 @@ rv_recipe_refs() {
 # Sets RV_RECIPE_ANSWERS to the reviewer's `recipes` list in the findings file $1, or to [] when
 # the file has none. $2 the action's own name. An answer is {ref, verdict, evidence}: the verdict
 # is followed, departed or not-applicable, and the evidence gives the reason on one line. A
-# departure's evidence names file:line of a file in the order's diff, $3. Dies 52 on a malformed
+# departure's evidence names a file in the order's diff, $3, with or without a line. A departure in
+# how files were produced has no one line (gap row 280). Dies 52 on a malformed
 # answer, and 108 when an item of rv_recipe_refs has no answer, or an answer names a ref twice or a
 # ref not on that list. Called as a plain statement, never with `$(...)`, for the reason
 # rv_read_findings_array states.
@@ -8513,12 +8594,14 @@ rv_read_recipe_answers() {
       in_diff=no
       while IFS= read -r p; do
         [ -n "$p" ] || continue
-        case "$evidence" in *"$p:"[0-9]*) in_diff=yes ;; esac
+        case " $evidence " in
+          *[!A-Za-z0-9_./-]"$p"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$p".[!A-Za-z0-9_./-]*) in_diff=yes ;;
+        esac
       done <<RR_DIFF
 $diff_paths
 RR_DIFF
       [ "$in_diff" = "yes" ] \
-        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file:line of a file in $diff. Name where the build departs, not the recipe's own line."
+        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files that a departure in how files were produced made or changed. The recipe's own line is not enough."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
@@ -8854,6 +8937,10 @@ do_review_record() {
   if [ -z "$departure" ]; then
     [ -z "$accept" ] \
       || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
+  elif [ -z "$accept" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    # Gap row 279. Unattended, the departure waits for the person at the task review, and the
+    # record below holds it as deviationPending. Nothing halts.
+    :
   elif [ -z "$accept" ]; then
     local departure_ledger
     departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
@@ -8919,7 +9006,8 @@ do_review_record() {
     + (if ($information | length) == 0 then {} else {information: $information} end)
     + (if ($recipes | length) == 0 then {} else {recipes: $recipes} end)
     + (if $accept != "" then {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}}
-       elif $carried != null then {deviationAccepted: $carried} else {} end)')"
+       elif $carried != null then {deviationAccepted: $carried} else {} end)
+    + (if $accept == "" and $departure != "" then {deviationPending: {departure: $departure, file: $departureFile}} else {} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal halts the order with the non-goal
@@ -8966,6 +9054,7 @@ do_review_record() {
      state: "reviewed",
      halt: $halt}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
+    + (if has("deviationPending") then {departurePending: (.deviationPending.departure + ": the person decides at the task review")} else {} end)
     + {record: $record, next: $next}')"
   # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
   # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
@@ -9051,8 +9140,10 @@ do_fix_brief() {
 
   # Gap row 265. A finding with an empty fix scope asks for no code change, so a fixer can change
   # nothing and fix-record refuses the empty range. When every open finding is one, no brief is
-  # written, and a person rules each one at verify-record with no round. Unattended halts first.
-  local empty_ids empty_why empty_who empty_call empty_ledger
+  # written, and a person rules each one at verify-record with no round. Unattended, each one is
+  # marked pending instead, so it is no longer open and the order goes on to its close. The person
+  # rules it at the task review, from finished.json (gap row 279).
+  local empty_ids empty_why empty_who empty_call empty_doc
   empty_ids="$(printf '%s' "$open_json" | jq -r 'if all(.[]; (.fixScope // []) | length == 0) then [ .[].id ] | join(", ") else "" end')"
   if [ -n "$empty_ids" ]; then
     case "$empty_ids" in
@@ -9061,11 +9152,16 @@ do_fix_brief() {
     esac
     empty_call="verify-record $TASK_PATH $unit_id --ruling ${empty_ids%%,*}=<wrong|deferred|load-bearing|test-wrong>::<reason>"
     if [ "$RV_RUN_MODE" = "autonomous" ]; then
-      empty_why="$empty_why. A person runs task set-run-mode interactive on this task, then clear-halt, then rules $empty_who: $empty_call"
-      empty_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$empty_why")"
-      [ -n "$empty_ledger" ] || die 3 "fix-brief: the halt on $unit_id could not be written."
-      write_atomic "$RV_LEDGER_FILE" "$empty_ledger"
-      die 53 "fix-brief: $unit_id is halted, and nobody is present to rule: $empty_why."
+      empty_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --arg ids "$empty_ids" '
+        ($ids | split(", ")) as $p
+        | .findings = [ .findings[] | if (.id as $i | $p | index($i)) != null then .status = "pending" else . end ]')"
+      [ -n "$empty_doc" ] || die 3 "fix-brief: the pending findings of $unit_id could not be written."
+      write_atomic "$RV_REVIEW_FILE" "$empty_doc"
+      im_print_summary "fix-brief" "$(jq -cn --arg order "$unit_id" --arg why "$empty_why" --arg record "$RV_REVIEW_FILE" \
+        --arg next "$(im_next_step "$RV_LEDGER_DOC" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" \
+        '{order: $order, pending: ($why + ". Nobody is present to rule, so the person rules at the task review"),
+          record: $record, next: $next}')"
+      exit 0
     fi
     die 53 "fix-brief: $empty_why. A person rules $empty_who: $empty_call."
   fi
@@ -9828,6 +9924,12 @@ do_verify_record() {
   # loop, the two gates and the per-ruling loop live there.
   rv_apply_rulings "$unit_id" "$updated_findings" "$rounds_used" "$rulings_raw"
   updated_findings="$RV_RULED_FINDINGS"
+  # Gap row 279. Unattended at the cap, a finding with an empty fix scope waits for the task
+  # review as fix-brief marks it, so only a finding with a fix scope still halts the order.
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    updated_findings="$(printf '%s' "$updated_findings" | jq -c '
+      map(if .actionable == true and .status == "open" and ((.fixScope // []) | length == 0) then .status = "pending" else . end)')"
+  fi
   local open_now unruled
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
@@ -10201,7 +10303,7 @@ CLOSE_FAKES
   # The model-judged count is over the whole ledger, not this order alone: it is what a person
   # returning to a finished run reads to list every row no person ever looked at.
   im_print_summary "close" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" --argjson served "$served_json" \
-    --arg ledger "$RV_LEDGER_FILE" --arg earlier "${earlier_own% }" \
+    --arg ledger "$RV_LEDGER_FILE" --arg earlier "${earlier_own% }" --argjson review "$RV_REVIEW_DOC" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
     | {order: $id,
@@ -10216,6 +10318,8 @@ CLOSE_FAKES
                        judgedBy: ("judgedBy=" + (([ (.judgements // [])[] | .judgedBy ] | unique) | if length == 0 then "nobody" else join(",") end))} ],
        rowsJudgedByModel: (([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
                            + ([ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length)),
+       pendingForReview: ([ ($review.findings // [])[] | select(.status == "pending") | .id ]
+                          + (if $review | has("deviationPending") then ["departure"] else [] end)),
        ledger: $ledger,
        next: $next}')"
   exit 0
@@ -10437,6 +10541,7 @@ FN_RECIPES
   # frozen records are per order. A criterion two orders serve carries one entry per order, the same shape
   # the frozen records themselves keep.
   local order_ids order_count oi one_id one_tests checklists_json='[]' deferred_json='[]' one_review
+  local pending_json='[]'
   order_ids="$(printf '%s' "$FN_LEDGER_DOC" | jq -c '[ (.orders // [])[] | .id ]')"
   order_count="$(printf '%s' "$order_ids" | jq 'length')"
   oi=0
@@ -10458,9 +10563,23 @@ FN_RECIPES
           $have + [ ($doc.findings // [])[] | select(.ruling == "deferred")
                     | {unit: $unit, finding: .id, severity: .severity, linkedTo: (.linkedTo // ""),
                        evidence: (.evidence // ""), reason: (.rulingReason // "")} ]')"
+      # What an unattended run left for the person, which review puts to them (gap row 279).
+      pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
+          $have + [ ($doc.findings // [])[] | select(.status == "pending")
+                    | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.evidence // "")} ]
+                + [ $doc.deviationPending // empty
+                    | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file)} ]')"
     fi
     oi=$((oi + 1))
   done
+  # A finish after a failed review carries no decision the person already answered there: a
+  # `decision-` check with an `answer` in review.json or an archived pass (gap row 279).
+  local answered_json
+  answered_json="$(find "$TASK_PATH/review" -maxdepth 1 -type f -name 'review*.json' -exec cat {} + 2>/dev/null \
+    | jq -cs '[ .[] | (.checks // [])[] | select((.id | startswith("decision-")) and has("answer")) | .id ] | unique' 2>/dev/null)"
+  [ -n "$answered_json" ] || answered_json='[]'
+  pending_json="$(printf '%s' "$pending_json" | jq -c --argjson answered "$answered_json" '
+    [ .[] | select(("decision-" + .unit + "-" + (.finding // "departure")) as $id | $answered | index($id) | not) ]')"
   # An order proved by confirm froze no row, so its done-when rows are the checklist. One row per
   # sentence, under each criterion confirmCriteria names for the order, and the person answers
   # that criterion at review's close (gap row 196).
@@ -10479,7 +10598,7 @@ FN_RECIPES
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
     --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
-    --argjson suite "$suite_json" --arg pluginVersion "$(plugin_version)" '
+    --argjson pending "$pending_json" --argjson suite "$suite_json" --arg pluginVersion "$(plugin_version)" '
     ([ ($snap.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]) as $kinds
     | {
       schemaVersion: 1,
@@ -10496,6 +10615,7 @@ FN_RECIPES
                      judgedBy: ([ ($c.judgements // [])[] | .judgedBy ] | unique)} ],
       checklists: $checklists,
       deferred: $deferred,
+      pendingDecisions: $pending,
       rowsJudgedByModel: (([ ($ledger.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
                           + ([ ($ledger.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length))
     }')"
@@ -10516,6 +10636,7 @@ FN_RECIPES
      criteria: ((.criteria | group_by(.rowState) | map("\(.[0].rowState)=\(length)") | join(" ")) | if . == "" then "none" else . end),
      checklists: (.checklists | length),
      deferred: ([ .deferred[] | .unit + "/" + .finding ]),
+     pendingDecisions: ([ .pendingDecisions[] | .unit + "/" + (.finding // .kind) ]),
      rowsJudgedByModel: .rowsJudgedByModel,
      record: $record,
      next: "none: implementation is finished, and the review stage reads the record"}')"
@@ -11564,10 +11685,11 @@ do_dispatch_open() {
        && { [ "$BR_ORDER_SLOT" = "order-tests" ] || [ "$BR_ORDER_SLOT" = "done-when" ]; }; then
       die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
     fi
-    # The implementer builds from the brief, and build-brief refuses an order with no frozen tests
-    # record. Refused here too, so no record opens for a build that has no brief (gap row 267). The
-    # fixer needs a fix brief, which a review writes after a build record.
-    [ "$role_bare" != "implementer" ] || im_require_tests_record "dispatch-open" "$unit_id" 114
+    # The implementer builds from the brief, so it is refused wherever build-brief would refuse on
+    # the order's records. No record opens for a build that has no brief (gap rows 267 and 281).
+    # The fixer needs a fix brief, which a review writes after a build record.
+    [ "$role_bare" != "implementer" ] || im_require_build_ready "dispatch-open" "$unit_id" 114 \
+      "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '[ .workOrders[] | select(.id == $u) ][0]')"
   fi
 
   # The reviewer reads the brief review-brief writes, or verify-brief after a fix round. Without it

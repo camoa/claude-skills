@@ -3,7 +3,7 @@ name: review
 description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
 ---
 
 # Review
@@ -66,8 +66,10 @@ step being run is in this conversation.
 
 A recorded verdict is the end of the pass, and `read` says so in that word. Start a second review
 only when a person asks for one, and start it at `checks`, because the range and the tools answer
-against the code as it stands now. The old record is archived before anything is written, and exit 63
-refuses the write when that move fails.
+against the code as it stands now. Before anything is written, `checks` or `close` archives the
+closed record, `review/findings.json` and `review/brief.json`, each to `<name>-<date>-<commit>.json`.
+A taken name gets `-2`, `-3` and on. `brief` archives a findings file left at its path the same way.
+A fresh reviewer then finds no earlier findings there. Exit 63 refuses the write when a move fails.
 
 Open a step file through the script, never through the Read tool:
 ```

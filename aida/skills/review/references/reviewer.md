@@ -17,7 +17,8 @@ frozen contract, and every work order. It holds the path to `review/diff.patch`.
 research records. Each finding carries the paths its source names, each marked on disk or not,
 and its URLs apart. It holds `guideBodies`, the guide bodies design opened, each marked on disk
 or not. It holds the results of checks 4 to 8, with every tool row and every mutation
-survivor. It holds the findings implementation ruled deferred. It holds
+survivor. It holds the findings implementation ruled deferred. It holds `pendingDecisions`: the
+findings and departures an unattended build left for the person. It holds
 `playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
 `absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 
@@ -54,8 +55,10 @@ fixed, and a check reads its verdict off the lens that raised the finding:
 | `mutation` | a survivor inside code a criterion covers |
 | `purpose` | check 3, a hunk that serves nothing, or fails one of the four purposefulness questions |
 
-Check 3 reads met only when the script half found no unowned file and the `purpose` lens returned
-nothing. A `purpose` finding turns the script half's row unmet and keeps the file and lines.
+Checks 3 and 4 each have a script half and a lens half: `purpose` for check 3, `mutation` for
+check 4. An unmet script half decides the check. On a met script half, the lens half decides it
+by the rule for lens checks below. A medium or high lens finding reads unmet in every case. A
+`purpose` finding keeps the file and lines.
 
 No dispatch record is opened, and none can be: `dispatch-open` requires a work order id, and a task
 level review has no order. SKILL.md says what follows from that. The role holds Read, Glob, Grep and

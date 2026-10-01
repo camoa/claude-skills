@@ -11,8 +11,27 @@ row sits under each criterion that order owns, or serves when it owns none. Show
 summary asks a different question than the row a person signed up to answer. Show every row in one
 pass, and ask for each one only once.
 
-Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. Its detail
-names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
+Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
+check names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
+
+A check whose id begins `decision-` is a decision an unattended build left. Ask it in the
+words of `references/review.md` under the implement skill, under Rulings for a finding and under
+the departure halt for a departure. The answer decides what happens next:
+
+- `wrong`: the reviewer was mistaken, and the work stands as built.
+- `deferred`: the finding is real and waits. Completion offers it as a follow up task, the way
+  it offers a follow-up finding (`skills/completion/scripts/completion-actions.sh`, `cp_load_follow_ups`).
+- `keep`: the departure stands as built.
+- `load-bearing`, `test-wrong` or `rebuild`: the check reads unmet, so the review fails. The
+  order is closed, so the routes inside implement no longer reach it. The route is a fix
+  commit on the task branch, then finish again, per "Finish runs again after a failed review"
+  in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A wrong
+  test is corrected by the person, not a model. A departure is rebuilt to the design. That
+  finish carries no decision the person already answered, so the next review asks it no more.
+
+`close` writes no verdict while a `decision-` check is unanswered. The record keeps every row,
+and a later `close` with the person present answers each one with no fresh pass. Autonomous,
+nobody answers, so the review has no verdict and completion's halt names each decision.
 
 The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
 below. Autonomous, there is
@@ -36,11 +55,11 @@ Run, with one `--row` per criterion a person verified, and one per criterion tha
 done-when rows of an order proved by `confirm`, and one per check the person answered:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
-  --row <criterion>=met|unmet --row <check id>=met|unmet
+  --row <criterion>=met|unmet --row <check id>=met|unmet \
+  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild
 ```
-It archives any previous record to `review/review-<date>-<commit>.json` before it writes, and it
-refuses at exit 63 when that move fails. Version 5 ran four review passes on one task, each
-overwriting the last, and pass three found a defect pass four's record does not mention.
+On a record that already holds a verdict, it archives that pass's files as `checks` does, per
+SKILL.md, and stops at exit 63.
 
 It writes check 1, one verdict per criterion, and the review's own verdict into
 `review/review.json`. The record is committed when the stage closes: `close` commits the task
