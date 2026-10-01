@@ -46,7 +46,7 @@
     "inTree": {
       "type": "boolean",
       "enum": [true],
-      "description": "Written by `task create --after <task-id> --in-tree` and present only then. task_worktree, the one reader, makes this task's branch in the tree of the `after` task, from that task's tip, instead of cutting a new tree. A tree with uncommitted changes is refused. When no tree holds that task's branch, it cuts a new tree as `after` alone does. Both records then name one tree, and the branch checked out there says which task builds in it now: resolve_task_folder refuses the other, and prune keeps a tree another task records (gap row 302)."
+      "description": "Written by `task create --after <task-id> --in-tree` and present only then. task_worktree, the one reader, makes this task's branch in the tree of the `after` task, from that task's tip, instead of cutting a new tree. It does so only once that task's review has closed, because that review runs in the tree, so `create` defers the tree to `start` while it is open. A tree with uncommitted changes is refused. When the review is still open, or no tree holds that task's branch, it cuts a new tree as `after` alone does. Both records then name one tree, and the branch checked out there says which task builds in it now: resolve_task_folder refuses the other, and prune keeps a tree another task records (gap row 302)."
     },
     "runMode": {
       "type": "string",

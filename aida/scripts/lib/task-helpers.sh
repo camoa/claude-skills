@@ -170,7 +170,7 @@ GIT_WORKTREES
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
 # one). Prints the canonical path on success.
 resolve_task_folder() {
-  local arg="$1" who="$2" p wt project code here top found held branch
+  local arg="$1" who="$2" p wt project code here top found
   [ -n "$arg" ] || die3 "$who: a task folder is required"
   p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
   [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
@@ -207,12 +207,7 @@ resolve_task_folder() {
   found="$(task_tree_from_git "$p" "$code" "$who")"
   [ -z "$found" ] || wt="$found"
   if [ "$top" = "$wt" ]; then
-    # A chain made with --in-tree shares one tree, and the branch checked out there says which task
-    # builds in it now (gap row 302). A detached HEAD names no task, so it is not refused.
-    held="$(git -C "$wt" symbolic-ref -q --short HEAD 2>/dev/null)"
-    branch="$(jq -r '.worktree.branch // empty' "$p/task.json" 2>/dev/null)"
-    [ -z "$held" ] || [ -z "$branch" ] || [ "$held" = "$branch" ] \
-      || die3 "$who: the worktree $wt holds the branch $held, and this task builds on $branch. Another task of its chain builds in this tree now. Nothing was written. Commit the work there, then run: git -C $wt switch $branch"
+    task_tree_turn "$p" "$wt" "$who"
     printf '%s' "$p"; return 0
   fi
   # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
@@ -777,6 +772,36 @@ task_stage() {
   fi
 }
 
+# A chain made with --in-tree shares one tree, and the branch checked out there says which task
+# builds in it now (gap row 302). Refuses through die3 when the tree $2 holds a branch other than
+# the one the task folder $1 records. A detached HEAD names no task, so it is not refused. $3 the
+# action's own name.
+task_tree_turn() {
+  local held branch
+  held="$(git -C "$2" symbolic-ref -q --short HEAD 2>/dev/null)"
+  branch="$(jq -r '.worktree.branch // empty' "$1/task.json" 2>/dev/null)"
+  [ -z "$held" ] || [ -z "$branch" ] || [ "$held" = "$branch" ] \
+    || die3 "$3: the worktree $2 holds the branch $held, and this task builds on $branch. Another task of its chain builds in this tree now. Nothing was written. Commit the work there, then run: git -C $2 switch $branch"
+}
+
+# The ids of the other tasks of the project $1 whose record names the tree $2, one per line. $3 is
+# the caller's own id, left out. A tree is named twice when two old ids slug to one folder, or when
+# a later task took it over with --in-tree (gap row 302). Calls no die function.
+task_tree_others() {
+  find "$1/tasks" -name task.json -exec jq -r --arg p "$2" --arg id "$3" \
+    'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null
+}
+
+# True when the task this task builds on has a closed review, a verdict of passed or failed, or
+# reads complete. Its review and completion run in its tree, so --in-tree takes that tree over only
+# then (gap row 302). $1 the task folder.
+task_after_reviewed() {
+  local pred
+  pred="$(dirname -- "$1")/$(jq -r '.after // empty' "$1/task.json" 2>/dev/null)"
+  case "$(jq -r '.verdict // empty' "$pred/review/review.json" 2>/dev/null)" in passed|failed) return 0 ;; esac
+  [ "$(jq -r '.state // empty' "$pred/task.json" 2>/dev/null)" = "complete" ]
+}
+
 # The task this task builds on, from task.json's `after`, and whether that task's build is
 # finished (gap row 291). Prints nothing when the field is absent. Otherwise prints `<id> finished`
 # when the other task holds a readable implementation/finished.json or reads complete, a person
@@ -870,11 +895,17 @@ task_worktree() {
     fi
   fi
   # A task made with --in-tree takes over that task's tree, on a new branch from its tip, so a chain
-  # pays one checkout and one dependency sync (gap row 302). The tree goes only when it is clean and
-  # still holds that task's branch, so no work and no other task's turn is carried over. The earlier
-  # task keeps its record, and the tree check refuses it while this branch is checked out.
+  # pays one checkout and one dependency sync (gap row 302). The tree goes only once that task's
+  # review has closed, and only when it is clean and still holds that task's branch. So no work and
+  # no other task's turn is carried over. The earlier task keeps its record, and the tree check
+  # refuses it while this branch is checked out.
   if [ -n "$after_branch" ] && [ "$(jq -r '.inTree // false' "$task_json" 2>/dev/null)" = true ]; then
-    found="$(task_tree_from_git "$(dirname -- "$pred")" "$code" "$who")"
+    found=""
+    if task_after_reviewed "$task_folder"; then
+      found="$(task_tree_from_git "$(dirname -- "$pred")" "$code" "$who")"
+    else
+      printf '%s: the tree of task %s is not shared, because its review has not closed and runs in that tree. A new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
+    fi
     if [ -n "$found" ]; then
       [ -z "$(git -C "$found" status --porcelain 2>/dev/null)" ] \
         || die3 "$who: task $id takes over the worktree $found of task ${after% *}, and that tree has uncommitted changes. Nothing was made. Commit them on $after_branch, then run this again."
@@ -886,7 +917,8 @@ task_worktree() {
       printf '%s' "$found"
       return 0
     fi
-    printf '%s: no tree on disk holds the branch of task %s, so a new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
+    ! task_after_reviewed "$task_folder" \
+      || printf '%s: no tree on disk holds the branch of task %s, so a new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
   fi
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
@@ -916,8 +948,7 @@ task_worktree() {
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   # Two old ids such as a_b and a-b slug to one folder. The tree there is the other task's.
   if [ -e "$wt" ]; then
-    found="$(find "$project/tasks" -name task.json -exec jq -r --arg p "$wt" --arg id "$id" \
-      'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null | head -1)"
+    found="$(task_tree_others "$project" "$wt" "$id" | head -1)"
     [ -z "$found" ] \
       || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
   fi

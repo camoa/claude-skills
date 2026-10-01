@@ -74,7 +74,10 @@ unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `
 steps 4 and 5 then. `start` makes the tree once that build is finished.
 Add `--in-tree` with `--after` when the person runs the chain one task after another. The task
 then takes over that task's tree, on the new branch `feature/<name>` from its tip. So the chain
-pays one checkout and one dependency sync. That tree must hold no uncommitted change. Both tasks
+pays one checkout and one dependency sync. That task's review runs in its tree, so the take-over
+waits until that review has closed. While it is open, `create` makes no tree and prints `in-tree:`.
+Skip steps 4 and 5 then. `start` takes the tree over, or cuts a new tree if the review is still
+open, and says which. That tree must hold no uncommitted change. Both tasks
 then record one tree, and the branch checked out there says which task builds in it now. A stage
 action of the other task exits 3, and its message names the `git switch` that gives it the tree.
 When no tree holds that task's branch, a new tree is cut as with `--after` alone.

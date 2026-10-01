@@ -252,7 +252,11 @@ do_create() {
   # A task built on another whose build is unfinished gets its tree at start instead.
   local after_state
   after_state="$(task_after_state "$task_dir")"
-  if [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
+  # An --in-tree task whose predecessor's review is open gets its tree at start, which comes later
+  # and so more often finds that review closed and the tree free (gap row 302).
+  if [ "$in_tree" = true ] && ! task_after_reviewed "$task_dir"; then
+    echo "in-tree: waits for the review of ${after}. start takes its tree over then, or cuts a new tree."
+  elif [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
     ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
   fi
 
@@ -1533,6 +1537,20 @@ do_environment() {
     # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
     # caller stood. The refusal it already printed is above this one.
     [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
+    # A later task made with --in-tree that records a site in this tree uses that site now, so only
+    # this record lets go of it (gap row 302). With no such task the site is this task's alone, so
+    # it goes down whichever branch is checked out.
+    local other
+    while IFS= read -r other; do
+      [ -n "$other" ] && [ -n "$(jq -r '.environment.recipe // empty' "$(task_dir_for "$project_path" "$other")/task.json" 2>/dev/null)" ] || continue
+      write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+      commit_task_change "$project_path" "Let go of the site of ${id}" "task ${other} uses it" "" "" "$id" "environment" \
+        || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+      printf 'environment: down for %s, the site stays up for task %s in %s\n' "$id" "$other" "$wt"
+      return 0
+    done <<TA_OTHERS
+$(task_tree_others "$project_path" "$wt" "$id")
+TA_OTHERS
     # A tear-down after the restore, committed or not, resolves the site by the name the restore
     # put back, which can be the main checkout's (gap row 262).
     restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)" \
@@ -1626,6 +1644,8 @@ TA_TOKEN_LIST
   # inside its own subshell. Without this test `cd ""` changes nothing and the bring-up lines run
   # in the caller's directory, which is any tree at all.
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
+  # up commits the recipe's files on the branch checked out there, so only that branch's task runs it.
+  task_tree_turn "$task_dir" "$wt" "environment"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
   # After the restore, committed or not, a site brought up here takes the name the restore put
@@ -1823,8 +1843,7 @@ TA_IDS
     task_dir="$(task_dir_for "$project_path" "$id")"; task_json="$task_dir/task.json"
     wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
     # A later task made with --in-tree builds in this tree now, so the tree stays (gap row 302).
-    held="$(find "$project_path/tasks" -name task.json -exec jq -r --arg p "$wt" --arg id "$id" \
-      'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null | head -1)"
+    held="$(task_tree_others "$project_path" "$wt" "$id" | head -1)"
     # Git's refusal is checked first, so a dirty tree loses nothing: not its site, not its record.
     [ -n "$held" ] || [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
       || die3 "prune: $wt has uncommitted changes. Commit or stash there first; prune never forces"

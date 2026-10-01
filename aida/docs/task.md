@@ -64,7 +64,9 @@ refuses to start. `/aida:next` shows the task each one waits on.
 
 For a chain you run one task after another, add `--in-tree` to `--after`. The later task then
 takes over the earlier task's tree on a new branch, so the chain pays one checkout and one
-dependency sync. Only one task builds in that tree at a time: the one whose branch is checked
+dependency sync. The take-over waits until the earlier task's review has closed, because that
+review runs in the tree. If it is still open when the later task starts, the later task gets a new
+tree instead, and AIDA says so. Only one task builds in that tree at a time: the one whose branch is checked
 out there. To go back to the earlier task, for its review, commit and run `git switch` to its
 branch in that tree. Prune keeps a tree that a later task still builds in.
 
