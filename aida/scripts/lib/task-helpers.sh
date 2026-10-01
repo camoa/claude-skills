@@ -800,7 +800,7 @@ task_worktree_group() {
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule group base_branch
+  local found rule group base_branch after after_branch after_base pred
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -818,6 +818,24 @@ task_worktree() {
   # the machine that wrote it. One copy serves both branches below.
   group="$(task_worktree_group "$code" "$who")" || exit 3
   rule="$group/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
+  # A task made with `after` is cut from that task's branch, and only once its build is finished:
+  # cut earlier, the branch holds none of that build (gap row 291). A complete task whose branch is
+  # gone was merged and pruned, so its work is on trunk and the rule below serves. Checked before
+  # anything is printed or made.
+  after_branch=""
+  after="$(task_after_state "$task_folder")"
+  if [ -n "$after" ] && ! git -C "$code" rev-parse -q --verify "refs/heads/${branch:-feature/$id}" >/dev/null 2>&1; then
+    [ "${after##* }" = "finished" ] \
+      || die3 "$who: task $id builds on task ${after% *}, whose build is ${after##* }. Its tree is cut from that task's branch once that build is finished."
+    pred="$(dirname -- "$task_folder")/${after% *}/task.json"
+    after_branch="$(jq -r '.worktree.branch // empty' "$pred" 2>/dev/null)"
+    if [ -z "$after_branch" ] \
+        || ! after_base="$(git -C "$code" rev-parse -q --verify "refs/heads/$after_branch^{commit}" 2>/dev/null)"; then
+      [ "$(jq -r '.state // empty' "$pred" 2>/dev/null)" = "complete" ] \
+        || die3 "$who: task $id builds on task ${after% *}. That task records no branch, or its branch is not in $code. Nothing was made."
+      after_branch=""
+    fi
+  fi
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
@@ -861,15 +879,8 @@ task_worktree() {
     said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   else
-    # A task made with `after` is cut from that task's branch, and only once its build is
-    # finished: cut earlier, the branch holds none of that build (gap row 291).
-    found="$(task_after_state "$task_folder")"
-    if [ -n "$found" ]; then
-      [ "${found##* }" = "finished" ] \
-        || { rmdir "$group" 2>/dev/null; die3 "$who: task $id builds on task ${found% *}, whose build is ${found##* }. Its tree is cut from that task's branch once that build is finished."; }
-      base_branch="$(jq -r '.worktree.branch // empty' "$(dirname -- "$task_folder")/${found% *}/task.json" 2>/dev/null)"
-      base="$(git -C "$code" rev-parse -q --verify "refs/heads/${base_branch:-none}^{commit}" 2>/dev/null)" \
-        || { rmdir "$group" 2>/dev/null; die3 "$who: task $id builds on task ${found% *}, and its branch ${base_branch:-none recorded} is not in $code. Nothing was made."; }
+    if [ -n "$after_branch" ]; then
+      base="$after_base"; base_branch="$after_branch"
     else
       base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
     fi

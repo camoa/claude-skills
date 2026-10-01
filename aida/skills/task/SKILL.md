@@ -72,9 +72,9 @@ that task's branch, and `task.json` records `after`. Use it for a chain of tasks
 because a tree cut now from trunk holds none of the earlier builds. While that task's build is
 unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
 steps 4 and 5 then. `start` makes the tree once that build is finished.
-Show the whole output. Exit code 3 means one of four things: the name collided with an existing task, it failed the name rule
-the script also enforces, `--after` named a task this project does not hold, or the worktree could not be made. In the last case the folder is
-removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
+Show the whole output. Exit code 3 has four causes. The name collided with an existing task,
+or it failed the name rule. `--after` named a task this project does not hold, or the worktree
+could not be made. In the last case the folder is removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
@@ -299,6 +299,9 @@ A task made with `--after` starts only when the task it builds on has finished i
 task then holds `implementation/finished.json`, or reads complete. Otherwise `start` prints
 `REFUSED` and exits 1, and the stage that called it writes nothing. Say which task to build first.
 When it starts, `start` cuts the tree from that task's branch, and `worktree:` names the tree.
+That task may be complete with its branch merged and pruned. The tree is then cut by the base
+rule above, because that work is on trunk. A tree that cannot be cut exits 3, and no state is
+written.
 Enter it as `create` step 4 says.
 
 When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
@@ -339,7 +342,8 @@ split advisor recommends the children and their criteria after research closes. 
 `split-read` action checks that every criterion is claimed once, before this action runs. This only performs
 the mechanical split.
 
-The two-level limit stays: a task that already has a parent cannot be split again, and a child
+Each child takes the parent's `after`, so it waits for the same build, and gets its tree as
+`create` gives one. The two-level limit stays: a task that already has a parent cannot be split again, and a child
 always lives in the same project as its parent, never another one. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \

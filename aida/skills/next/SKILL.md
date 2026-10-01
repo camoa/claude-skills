@@ -61,7 +61,7 @@ Each `OPEN:` line is one of two shapes:
   record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
   `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
   `worktree`: the path of the task's own git worktree, or `none` for a task made before every
-  task had one. With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
+  task had one, or one waiting on another task's build (`afterBuild`, below). With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
   is on this machine. The key is absent with `none`.
   And `stage`: where the task stands, the first stage whose close record is absent,
   one of `scope`, `research`, `design`, `implementation`, `review`, `completion`.
@@ -77,7 +77,8 @@ Each `OPEN:` line is one of two shapes:
   appears under `LEGACY_COMPLETE:`), and `path`.
 
 **Exactly one line under `OPEN:`.** That is the answer. Say which task it is and its `stage`.
-Name `/aida:<stage>` as the skill to run next. Treat it as active. This step writes nothing, except the move of a legacy task; there is no session file. It asks one
+Name `/aida:<stage>` as the skill to run next. When `afterBuild` is not `finished`, name the task
+it waits on and no stage, because every stage refuses. Treat it as active. This step writes nothing, except the move of a legacy task; there is no session file. It asks one
 question only when the line carries `legacyStages`: the offer in "Carrying version 5 work
 forward," below. Go there. Otherwise
 enter the tree, below. A
@@ -106,7 +107,8 @@ so read the message and take the route it names.
 `worktree: none` has no tree yet. A task reading `worktreeOnDisk: no` records a path this machine
 does not have: the tree was removed, or another machine recorded it. On either reading, do not
 call the entry tool and do not name a route. Say the first stage action that needs the code makes
-the tree and names the path it made. Say a recorded path is computed again here, never reused.
+the tree and names the path it made. When `afterBuild` is not `finished`, say instead that
+`start` makes the tree once that build is finished. Say a recorded path is computed again here, never reused.
 Stop there. Only a task whose `worktreeOnDisk` reads `yes` goes on to the two routes.
 
 **The prefix.** Start the Bash call with `cd <worktree> &&`. It works from any folder on the
@@ -182,7 +184,8 @@ Read the first line.
   than all), `worktree:`, `worktree-on-disk:` when a path is recorded, `review:` and `stage:`, with `legacyStages:` when
   it applies. A task made with `--after` adds `after:` and `after-build:`, which mean what
   `after` and `afterBuild` mean in the report. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
-  `/aida:<stage>` as the skill to run next. Treat it as active. Read
+  `/aida:<stage>` as the skill to run next. When `after-build:` is not `finished`, name the task
+  it waits on and no stage. Treat it as active. Read
   the file at `task-file:` only when another field is needed. With `legacyStages:`, go to
   "Carrying version 5 work forward," above; its offer is the one question asked here. Otherwise
   enter the tree, above.

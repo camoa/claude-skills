@@ -71,7 +71,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
 # the folder it made first. A miss that is a real, expected outcome (start or complete or split
 # naming a task that does not exist) exits 1 and prints nothing useful to stdout, never confused
-# with 3.
+# with 3. So does a start refused because the task it builds on (`after`) has not finished its
+# build. A start whose tree cannot be cut from that task's branch exits 3 and writes no state.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk
 # regular-expression interval (foundations.md, Honesty: the exact construct that made every
@@ -839,14 +840,15 @@ do_split() {
   # The positional list, empty by now, collects each child's folder for the commit: the commit
   # stages the parent's folder and every child's, never tasks/ whole.
   i=0
-  local cgoal ccrit
+  local cgoal ccrit after_state
   while [ "$i" -lt "$child_count" ]; do
     cid="${child_ids[$i]}"; cgoal="${child_goals[$i]}"; ccrit="${child_criteria_json[$i]}"
     cdir="$(task_dir_for "$project_path" "$cid")"
     mkdir -p "$cdir" || die3 "split: cannot create $cdir"
     set -- "$@" "tasks/$cid"
 
-    jq -n --arg id "$cid" --arg parent "$parent_id" '{
+    # A child builds on what its parent builds on, so it waits for the same build (gap row 291).
+    jq -n --arg id "$cid" --arg parent "$parent_id" --arg after "$(jq -r '.after // empty' "$parent_json_file")" '{
         schemaVersion: 1,
         id: $id,
         state: "new",
@@ -854,7 +856,8 @@ do_split() {
         children: [],
         mechanismHints: [],
         externalIds: {}
-      }' > "$cdir/task.json" || die3 "split: could not write $cdir/task.json"
+      } + (if $after == "" then {} else {after: $after} end)' > "$cdir/task.json" \
+      || die3 "split: could not write $cdir/task.json"
 
     {
       printf '# %s\n\n' "$cid"
@@ -865,8 +868,12 @@ do_split() {
         printf '%s' "$ccrit" | jq -r '.[] | "- " + .'
       fi
     } > "$cdir/task.md" || die3 "split: could not write $cdir/task.md"
-    # Each child gets its tree now, so no child waits for a first stage action to make one.
-    task_worktree "$cdir" "split" >/dev/null
+    # Each child gets its tree now, so no child waits for a first stage action to make one. A
+    # child whose parent waits on an unfinished build gets its tree at start, as create does.
+    after_state="$(task_after_state "$cdir")"
+    if [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
+      task_worktree "$cdir" "split" >/dev/null
+    fi
 
     i=$((i + 1))
   done
