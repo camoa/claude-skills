@@ -99,22 +99,22 @@ usage() {
 usage: project-actions.sh create --name <name> --path <codePath> [--projects-home <dir>]
                                   [--framework <fw>]...
        project-actions.sh report
-       project-actions.sh switch <name-or-codePath>
+       project-actions.sh switch <name-or-path>
        project-actions.sh list [active|complete|archived]...
-       project-actions.sh state <name-or-codePath> <active|complete|archived> -- <why...>
-       project-actions.sh set-code-path <name-or-codePath> <newCodePath>
-       project-actions.sh set-frameworks <name-or-codePath> <framework>...
-       project-actions.sh git-init <name-or-codePath>
-       project-actions.sh add-source <name-or-codePath> <kind> <folder|catalog>
+       project-actions.sh state <name-or-path> <active|complete|archived> -- <why...>
+       project-actions.sh set-code-path <name-or-path> <newCodePath>
+       project-actions.sh set-frameworks <name-or-path> <framework>...
+       project-actions.sh git-init <name-or-path>
+       project-actions.sh add-source <name-or-path> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
        project-actions.sh agentic-source <projectFolder> <framework>
-       project-actions.sh subscribe-playbook <name-or-codePath> <framework> <set-id>
-       project-actions.sh unsubscribe-playbook <name-or-codePath> <framework> <set-id>
-       project-actions.sh drop-retired <name-or-codePath>
-       project-actions.sh [--run-mode <interactive|autonomous>] unregister <name-or-codePath>
-       project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-codePath> [--decline] -- <why...>
-       project-actions.sh [--run-mode <interactive|autonomous>] task-rule-remove <name-or-codePath>
-       project-actions.sh [--run-mode <interactive|autonomous>] uninstall <name-or-codePath>
+       project-actions.sh subscribe-playbook <name-or-path> <framework> <set-id>
+       project-actions.sh unsubscribe-playbook <name-or-path> <framework> <set-id>
+       project-actions.sh drop-retired <name-or-path>
+       project-actions.sh [--run-mode <interactive|autonomous>] unregister <name-or-path>
+       project-actions.sh [--run-mode <interactive|autonomous>] task-rule <name-or-path> [--decline] -- <why...>
+       project-actions.sh [--run-mode <interactive|autonomous>] task-rule-remove <name-or-path>
+       project-actions.sh [--run-mode <interactive|autonomous>] uninstall <name-or-path>
        project-actions.sh [--run-mode <interactive|autonomous>] record-declined <directory>
        project-actions.sh rebuild-registry [projectsHome]
        project-actions.sh read-projects-base
@@ -201,34 +201,23 @@ settings_set_projects_base_if_unset() {
   printf '%s' "$cur" | jq --arg b "$base" '.projectsBase = $b' | settings__write
 }
 
-# Looks a target up by its exact name or its exact codePath (never by ancestry, that is
-# registry_resolve_by_directory's job, a different question). Prints the matching registry row as
-# one JSON object and exits 0, or prints nothing and exits 1. Reads the store file directly: an
-# exact-match lookup by either address is not one of registry.sh's own public functions, and
-# composing it from the raw store is what that library's own header asks a caller to do.
+# Looks a target up by its exact name, its exact codePath or its exact project folder path (never
+# by ancestry, that is registry_resolve_by_directory's job, a different question). Every action
+# that takes a project resolves it here, so each takes all three addresses. A code path and a
+# project folder are never the same folder, so the two paths cannot both answer. Prints the
+# matching registry row as one JSON object and exits 0, or prints nothing and exits 1. Reads the
+# store file directly: an exact-match lookup by these addresses is not one of registry.sh's own
+# public functions, and composing it from the raw store is what that library's own header asks a
+# caller to do.
 resolve_target() {
   local target="$1" canon
   [ -r "$REGISTRY_FILE" ] || return 1
   canon="$(canon_path "$target")"
   jq -c --arg n "$target" --arg c "$canon" '
-    [.projects[]? | select(.name == $n or (.codePath // "" | sub("/+$"; "")) == $c)] | first // empty
+    [.projects[]? | select(.name == $n or ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))] | first // empty
   ' "$REGISTRY_FILE" 2>/dev/null | grep -q . && \
   jq -c --arg n "$target" --arg c "$canon" '
-    [.projects[]? | select(.name == $n or (.codePath // "" | sub("/+$"; "")) == $c)] | first
-  ' "$REGISTRY_FILE" 2>/dev/null
-}
-
-# Looks a target up by its exact project folder path, the one address resolve_target never reads.
-# Prints the matching registry row as one JSON object, or prints nothing. A project folder path
-# and a code path are never the same folder, so the two lookups cannot both answer. Named for the
-# row it returns: scripts/lib/recipes.sh, which this file sources, already has a
-# resolve_project_folder, and that one takes a task folder and returns the folder two levels up.
-resolve_row_by_project_path() {
-  local canon
-  [ -r "$REGISTRY_FILE" ] || return 1
-  canon="$(canon_path "$1")"
-  jq -c --arg p "$canon" '
-    [.projects[]? | select((.path // "" | sub("/+$"; "")) == $p)] | first // empty
+    [.projects[]? | select(.name == $n or ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))] | first
   ' "$REGISTRY_FILE" 2>/dev/null
 }
 
@@ -595,15 +584,12 @@ register_v6_folder() {
 }
 
 do_switch() {
-  local target="${1:?switch: a name or a code path is required}" match project_path cwd
+  local target="${1:?switch: a name or a path is required}" match project_path cwd
   local registered=0 rc
+  # resolve_target answers a registered project named by its own folder path. Without that, the
+  # version 6 pickup below refused on this project's own name, and its advice to edit the name in
+  # the project file made check-project.sh exit 4 for good.
   match="$(resolve_target "$target")"
-  # A project that is still registered, named by its own folder path. resolve_target reads a name
-  # and a code path, so it misses that address. The version 6 pickup below would then refuse on
-  # this project's own name. Its refusal tells the person to edit the name in their project file,
-  # and that edit is what makes check-project.sh exit 4 for good. The folder is already the row's,
-  # so the answer is to switch to it.
-  [ -n "$match" ] || match="$(resolve_row_by_project_path "$target")"
   # Order matters. A version 5 folder holds no project.json, so register_v5_folder returns 1 for
   # every folder the second branch takes. A folder holding both files is a version 5 pickup that
   # already ran: its project file is the truth, and the version 5 branch would overwrite it.
@@ -676,7 +662,7 @@ do_list() {
 # ------------------------------------------------------------------------------------------------
 
 do_state() {
-  local target="${1:?state: a name or a code path is required}"
+  local target="${1:?state: a name or a path is required}"
   local new_state="${2:?state: active, complete or archived is required}"
   shift 2
   [ "${1:-}" = "--" ] && shift
@@ -737,7 +723,7 @@ do_state() {
 # ------------------------------------------------------------------------------------------------
 
 do_set_code_path() {
-  local target="${1:?set-code-path: a name or a code path is required}"
+  local target="${1:?set-code-path: a name or a path is required}"
   local new_path="${2:?set-code-path: a new code path is required}"
   local match project_path old_path
   match="$(resolve_target "$target")"
@@ -815,7 +801,7 @@ do_set_code_path() {
 # ------------------------------------------------------------------------------------------------
 
 do_set_frameworks() {
-  local target="${1:?set-frameworks: a name or a code path is required}"
+  local target="${1:?set-frameworks: a name or a path is required}"
   shift
   [ "$#" -ge 1 ] || die3 "set-frameworks: at least one framework is required"
   local match project_path
@@ -840,7 +826,7 @@ do_set_frameworks() {
 # Only a version 5 folder reaches this: create makes its folder a repository. The files already
 # there are committed at once, so the check does not next report them as uncommitted work.
 do_git_init() {
-  local target="${1:?git-init: a name or a code path is required}" match project_path
+  local target="${1:?git-init: a name or a path is required}" match project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
@@ -869,7 +855,7 @@ do_git_init() {
 # declaration is not load-bearing yet, and it becomes so the moment the comparison descends.
 # Nothing here fetches anything; declaring is cheap and fetching stays lazy.
 do_add_source() {
-  local target="${1:?add-source: a name or a code path is required}"
+  local target="${1:?add-source: a name or a path is required}"
   local kind="${2:?add-source: a kind is required}"
   local folder="${3:?add-source: a folder, or the word catalog, is required}"
   case "$kind" in
@@ -1020,7 +1006,7 @@ AS_NAMES
 # unreachable. A framework left with no set loses its key, since the schema wants one item.
 # $1 add or remove, then the target, the framework and the set id.
 do_subscription() {
-  local op="$1" target="${2:?$1-playbook: a name or a code path is required}"
+  local op="$1" target="${2:?$1-playbook: a name or a path is required}"
   local fw="${3:?$1-playbook: a framework is required}" set_id="${4:?$1-playbook: a set id is required}"
   local match project_path
   printf '%s' "$set_id" | grep -Eq '^[a-z0-9-]+/best-practices/[a-z0-9-]+$' \
@@ -1054,7 +1040,7 @@ do_subscription() {
 # retired may be a person's own, so it stays and the check keeps naming it. Only AIDA's own
 # project file changes, so this runs in both modes.
 do_drop_retired() {
-  local target="${1:?drop-retired: a name or a code path is required}" match project_path retired present subject
+  local target="${1:?drop-retired: a name or a path is required}" match project_path retired present subject
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
@@ -1081,7 +1067,7 @@ do_drop_retired() {
 # ------------------------------------------------------------------------------------------------
 
 do_unregister() {
-  local target="${1:?unregister: a name or a code path is required}" match project_path code_path base
+  local target="${1:?unregister: a name or a path is required}" match project_path code_path base
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
@@ -1160,7 +1146,7 @@ do_task_rule() {
   # Both paths are a person's answer to the same offer. The write puts an instruction the harness
   # enforces into a repository the person owns; the decline suppresses the offer for good.
   cr_require_person task-rule "a person answered the task-rule offer"
-  local target="${1:?task-rule: a name or a code path is required}"
+  local target="${1:?task-rule: a name or a path is required}"
   shift
   local declining="false"
   [ "${1:-}" = "--decline" ] && { declining="true"; shift; }
@@ -1277,7 +1263,7 @@ do_task_rule() {
 
 do_task_rule_remove() {
   cr_require_person task-rule-remove "a person asked for the block to leave their own repository"
-  local target="${1:?task-rule-remove: a name or a code path is required}" match code_path project_path
+  local target="${1:?task-rule-remove: a name or a path is required}" match code_path project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
@@ -1323,7 +1309,7 @@ do_task_rule_remove() {
 
 do_uninstall() {
   cr_require_person uninstall "a person asked for AIDA to leave their own repository"
-  local target="${1:?uninstall: a name or a code path is required}" match project_path
+  local target="${1:?uninstall: a name or a path is required}" match project_path
   match="$(resolve_target "$target")"
   [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
