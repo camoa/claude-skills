@@ -437,7 +437,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and an unattended run has none to offer (decision 12).
 #  56  `verify-record` reached the round cap on an unattended run with findings still open. The
 #      order is halted with them named, and the verification itself is recorded first, so a refusal
-#      never throws away the verdicts it already read.
+#      never throws away the verdicts it already read. On a light task the findings go pending
+#      instead, and the person rules them at the task review (gap row 296).
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
 #      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
 #      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
@@ -923,6 +924,18 @@ attempts_allowed_for() {
 # rather than learning something new. A constant here beside the attempt cap, so the two caps are
 # read and changed in one place.
 FIX_ROUNDS_ALLOWED=2
+
+# The fix rounds one order is allowed. A light task gets one. So does an order whose rounds were
+# recorded on a light task: a person who sets the task interactive to rule is then not offered a
+# second round light never allows (gap row 296). Each repair a dependent order opened adds its one
+# round, so roundsUsed never goes down (gap row 286). $1 the order's ledger entry.
+order_fix_rounds_allowed() {
+  local allowed="$FIX_ROUNDS_ALLOWED"
+  if task_is_light "$TASK_PATH" || [ "$(printf '%s' "$1" | jq '.lightRounds // false')" = "true" ]; then
+    allowed=1
+  fi
+  printf '%s' "$((allowed + $(printf '%s' "$1" | jq '(.repairs // []) | length')))"
+}
 
 # The last line a fixer and a test author write in the report their brief pins, as their last act
 # (gap row 250). dispatch-close reads its absence as a stop before the role finished.
@@ -8083,9 +8096,7 @@ BR_EARLIER
     fi
     commit_text="$commit_text Revert them, or have the person keep them, before the next build."
   fi
-  rounds_allowed="$FIX_ROUNDS_ALLOWED"
-  ! task_is_light "$TASK_PATH" || rounds_allowed=1
-  rounds_allowed=$((rounds_allowed + $(printf '%s' "$new_ledger" | jq --arg id "$owner" '[ .orders[] | select(.id == $id) ][0].repairs | length')))
+  rounds_allowed="$(order_fix_rounds_allowed "$(printf '%s' "$new_ledger" | jq -c --arg id "$owner" '[ .orders[] | select(.id == $id) ][0]')")"
   write_atomic "$review_file" "$review_doc"
   write_atomic "$ledger_file" "$new_ledger"
   im_print_summary "build-record" "$(jq -cn --arg order "$unit_id" --arg owner "$owner" --arg f "$new_id" \
@@ -8738,11 +8749,7 @@ rv_load_state() {
   # start. With two sources, a person who set the task interactive cleared a halt and was then
   # refused a ruling as unattended (gap row 265).
   RV_RUN_MODE="$(task_run_mode "$TASK_PATH" implement)"
-  # A light task gets one fix round, and the halt after it logs the rounds it skipped.
-  ! task_is_light "$TASK_PATH" || FIX_ROUNDS_ALLOWED=1
-  # Each repair a dependent order opened adds its one round, so roundsUsed never goes down (gap
-  # row 286).
-  FIX_ROUNDS_ALLOWED=$((FIX_ROUNDS_ALLOWED + $(printf '%s' "$RV_ORDER_ENTRY" | jq '(.repairs // []) | length')))
+  FIX_ROUNDS_ALLOWED="$(order_fix_rounds_allowed "$RV_ORDER_ENTRY")"
 
   # Exit 49: a halted order refuses every step after the halt. The reason is the halt's own words,
   # so a reader never has to open the ledger to learn why the step stopped. $3, when given, is a
@@ -10002,6 +10009,10 @@ RV_SCOPE
   # before it, and refuses on either.
   local record_file="$IMPL_DIR/fix-$unit_id-$round_number.json"
   local prev_file existing_doc existing_commit
+  # The ledger step a recorded round writes, in the crash repair and after the checks. On a light
+  # task it also marks the order, so its cap stays one round in any later mode (gap row 296).
+  local step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed"'
+  ! task_is_light "$TASK_PATH" || step_expr="$step_expr | .lightRounds = true"
   if [ -f "$record_file" ]; then
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
     [ -n "$existing_doc" ] \
@@ -10015,7 +10026,7 @@ RV_SCOPE
       fr_step="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')"
       if [ "$fr_step" != "fixed" ]; then
         fr_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
-          '.orders = (.orders | map(if .id == $id then (.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed") else . end))')"
+          ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
         [ -n "$fr_ledger" ] || die 3 "fix-record: the ledger update for $unit_id failed."
         write_atomic "$RV_LEDGER_FILE" "$fr_ledger"
         im_print_summary "fix-record" "$(printf '%s' "$existing_doc" | jq -c --arg record "$record_file" \
@@ -10156,7 +10167,7 @@ RV_SCOPE
   # fact becomes true rather than when the next brief refuses.
   # order-tests carries the same floor it carries at build-record: it must have run and answered
   # met. A fix round nothing executed proves nothing about the fix.
-  local all_met first_stopper step_expr halt_why=""
+  local all_met first_stopper halt_why=""
   all_met="$(br_checks_pass "$checks_json" "")"
   first_stopper="$(br_first_stopper "$checks_json" "")"
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$scope_list" ]; then
@@ -10169,7 +10180,6 @@ RV_SCOPE
       halt_why="fix rounds spent: $round_number of $FIX_ROUNDS_ALLOWED, and the last was stopped by $first_stopper"
     fi
   fi
-  step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed"'
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
@@ -10210,8 +10220,9 @@ RV_SCOPE
   exit 0
 }
 
-# The compromises log row for the fix rounds a light task skips. The two halts at the one-round
-# cap, in fix-record and verify-record, both call it. $1 the order, $2 what was still open.
+# The compromises log row for the fix rounds a light task skips. The halt at the one-round cap in
+# fix-record calls it, and close calls it for the findings verify-record left pending. $1 the
+# order, $2 what was still open.
 light_log_fix_rounds() {
   log_compromise "$TASK_PATH" implement "fix rounds after the first on $1, with $2 still open" \
     "run a second fix round, then take a person's ruling on each finding still open"
@@ -10516,10 +10527,15 @@ do_verify_record() {
   rv_apply_rulings "$unit_id" "$updated_findings" "$rounds_used" "$rulings_raw"
   updated_findings="$RV_RULED_FINDINGS"
   # Gap row 279. Unattended at the cap, a finding with an empty fix scope waits for the task
-  # review as fix-brief marks it, so only a finding with a fix scope still halts the order.
+  # review as fix-brief marks it, so only a finding with a fix scope still halts the order. On a
+  # light task every open finding waits there. Light spends one round and leaves the rest to the
+  # person at review, so a halt here calls a person mid-build. close logs the skipped rounds (gap
+  # row 296).
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    updated_findings="$(printf '%s' "$updated_findings" | jq -c '
-      map(if .actionable == true and .status == "open" and ((.fixScope // []) | length == 0) then .status = "pending" else . end)')"
+    local light=false
+    ! task_is_light "$TASK_PATH" || light=true
+    updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson light "$light" '
+      map(if .actionable == true and .status == "open" and ($light or ((.fixScope // []) | length == 0)) then .status = "pending" else . end)')"
   fi
   local open_now unruled
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
@@ -10529,8 +10545,6 @@ do_verify_record() {
     rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
       "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
     echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
-    ! task_is_light "$TASK_PATH" \
-      || light_log_fix_rounds "$unit_id" "$open_list" >&2
     die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
   fi
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
@@ -10889,6 +10903,13 @@ do_close() {
     done <<CLOSE_FAKES
 $(git -C "$RV_RANGE_REPO" diff -U0 --no-renames "$started_at" "$head_now" 2>/dev/null)
 CLOSE_FAKES
+    # The rounds skipped after the one round, for the same reason. A pending finding with a fix
+    # scope, which the verifier did not place outside its file, is one verify-record left at the
+    # light cap (gap row 296).
+    local skipped
+    skipped="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ .findings[]
+      | select(.status == "pending" and ((.fixScope // []) | length > 0) and .defectInFile != "no") | .id ] | join(", ")')"
+    [ -z "$skipped" ] || light_log_fix_rounds "$unit_id" "$skipped"
   fi
 
   # The model-judged count is over the whole ledger, not this order alone: it is what a person

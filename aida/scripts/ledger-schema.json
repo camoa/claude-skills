@@ -167,6 +167,11 @@
           "default": 0,
           "description": "How many fix rounds this order has had. One round is one fixer and one verification. Same reason as attemptsUsed."
         },
+        "lightRounds": {
+          "type": "boolean",
+          "const": true,
+          "description": "Present, and true, once `fix-record` has recorded a fix round of this order on a light task. The order's cap then stays one round when a person later sets the task interactive to rule, because the round was spent under that cap (gap row 296)."
+        },
         "commitRange": {
           "type": "string",
           "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$",
