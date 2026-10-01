@@ -61,7 +61,7 @@
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
 #   rv_is_finding_id <id>                     true for `f` and then digits, no leading zero
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
-#   rv_read_findings_array <file> <key> <action>  sets RV_FINDINGS_ARRAY, or exits 52
+#   rv_read_findings_array <file> <key> <action> [minted]  sets RV_FINDINGS_ARRAY, or exits 52
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
 #   cr_catalog_pair <action> <value>          parses --catalog-recipe's path or reason into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
