@@ -1971,6 +1971,15 @@ RW_RESEARCH_FILES
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
   done
+  # What an unattended build left for a person, one check each, which reads unknown until the
+  # person answers it with close --row (gap row 279). Nobody present leaves it unknown.
+  printf '%s' "$RW_FINISHED_DOC" | jq -c '(.pendingDecisions // [])[]
+    | ("decision-" + .unit + "-" + (.finding // "departure")) as $id
+    | {id: $id, verdict: "unknown", answeredBy: "nobody",
+       detail: ((if .kind == "ruling"
+                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because its fix scope is empty and nobody was present: " + .text + ". The person keeps the work as built with --row " + $id + "=met"
+                 else .unit + " departs from the design, found while nobody was present: " + .text + ". The person keeps the departure with --row " + $id + "=met" end)
+                + ", or fails the review with --row " + $id + "=unmet.")}' >>"$rows_file"
   # --- the done-when clauses the tests step routed here, one verdict each ------------------------
   # Such a clause asserts the change added nothing of a named kind, and no test of it can be watched
   # failing, so the reviewer judges it against the diff (live-run row 184). The verdicts ride in the
@@ -2748,7 +2757,7 @@ $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, and no check of that id holds only low findings. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, and no check of that id waits for the person. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
   # not judge severity, so it names them and sends the person back to the producer.
@@ -2779,7 +2788,8 @@ RW_ROWS
     $record[0]
     | .criteria = $criteria
     | .checks = ([$one] + (.checks | map(select(.id != "every-criterion"))))')"
-  # A check holding only low findings takes the person's --row (gap row 274).
+  # A check holding only low findings takes the person's --row (gap row 274), and so does a
+  # decision an unattended build left (gap row 279).
   local check_rows
   check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
@@ -2791,8 +2801,10 @@ RW_ROWS
     .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
       | if $g == null then $c
         else $c | .verdict = $g.verdict | .answeredBy = "person"
-          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet)\\.$"; ""))
-                       + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
+          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet|kept it|did not keep it, so the check reads unmet)\\.$"; ""))
+                       + (if ($c.id | startswith("decision-")) then
+                            (if $g.verdict == "met" then " The person kept it." else " The person did not keep it, so the check reads unmet." end)
+                          elif $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
                                   else " The person rejected them, so the check reads unmet." end)) end ]')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
   # The absence check is read again off the rows the record holds, so a row stored before
@@ -2886,6 +2898,8 @@ do_audit() {
         # completion prints these lines into the pull request body (live-run row 154).
         # A lens check holding only low findings waits for the person at close (gap row 274).
         elif $v == "unknown" and .answeredBy == "nobody" then "awaiting-person"
+        # A decision an unattended build left reads as answered once a person gives it (gap row 279).
+        elif ($id | startswith("decision-")) then "read"
         elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" or $v == "undeclared" then "could-not-look" else "ran" end)
         elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
         elif $id == "test-and-mutation" then

@@ -722,11 +722,13 @@ do_close() {
     # The lens checks review read met on low findings alone with nobody present are reported here,
     # since the body that would carry them is not written on this halt (gap row 274). The catalog
     # notes are too, for the same reason, such as a project recipe copy behind the catalog (row 284).
-    local unconfirmed notes
+    # The decisions an unattended build left wait for the person the same way (gap row 279).
+    local unconfirmed notes undecided
     unconfirmed="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "met" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
     notes="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.catalogNotes // [])[] | .seen + " (" + .where + ")" ] | join(" ")' 2>/dev/null)"
+    undecided="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
     case "$CP_RUN_MODE" in
-      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}" ;;
+      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}${undecided:+ These checks wait for a decision only a person makes: $undecided}" ;;
       *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it." ;;
     esac
   fi

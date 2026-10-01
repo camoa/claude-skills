@@ -418,7 +418,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  53  `fix-brief` or `fix-record` found no open actionable finding for this order, so there is
 #      nothing for a fixer to do. `verify-brief` shares it: nothing open means nothing to verify.
 #      `fix-brief` also refuses when every open finding has an empty fix scope, and names the
-#      ruling route; unattended, it halts the order first (gap row 265).
+#      ruling route (gap row 265). Unattended, it marks each such finding pending instead, and
+#      exits 0: the person rules it at the task review (gap row 279).
 #  54  `fix-brief` or `fix-record` found this order's fix rounds already spent (roundsUsed at
 #      FIX_ROUNDS_ALLOWED). Every open finding needs a ruling now, not another round. The mirror of
 #      exit 41 for the build attempts.
@@ -704,7 +705,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      than `Deviation: none`, or a heading that starts with "Deviation", in the report or the
 #      interface record, is a stop too (gap row 221). A person keeps a deviation with
 #      --accept-deviation, interactive only (exit 68), and the message and the halt name that
-#      route. A stop line other than `Stop: none` has no such route (gap row 266).
+#      route. A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a
+#      deviation is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
@@ -717,7 +719,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      review holds. The halt names the file and the line. No review record is written. A person
 #      accepts the departure with --accept-deviation instead, interactive only (exit 68). A recipe
 #      the reviewer answers departed takes the same route, under a halt of its own wording (gap
-#      row 225).
+#      row 225). Unattended, nothing halts: the record holds the departure as deviationPending,
+#      and the person decides it at the task review (gap row 279).
 #
 # The code the reviewer's recipe answers added (gap row 225).
 # 108  `review-record` found the findings file's `recipes` list does not answer the review
@@ -7801,6 +7804,11 @@ do_build_record() {
       '{departure: $d, file: $f, because: $b}')"
     stop_lines=""
   fi
+  # Gap row 279. Unattended, a deviation stops nothing: the attempt is recorded, and review-record
+  # finds the same line and keeps it for the person at the task review.
+  if $is_deviation && [ "$ledger_run_mode" = "autonomous" ]; then
+    stop_lines=""
+  fi
   if [ -n "$stop_lines" ]; then
     local stop_commits stop_commit_count stop_commit_text=""
     stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
@@ -8918,6 +8926,10 @@ do_review_record() {
   if [ -z "$departure" ]; then
     [ -z "$accept" ] \
       || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
+  elif [ -z "$accept" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    # Gap row 279. Unattended, the departure waits for the person at the task review, and the
+    # record below holds it as deviationPending. Nothing halts.
+    :
   elif [ -z "$accept" ]; then
     local departure_ledger
     departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
@@ -8983,7 +8995,8 @@ do_review_record() {
     + (if ($information | length) == 0 then {} else {information: $information} end)
     + (if ($recipes | length) == 0 then {} else {recipes: $recipes} end)
     + (if $accept != "" then {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}}
-       elif $carried != null then {deviationAccepted: $carried} else {} end)')"
+       elif $carried != null then {deviationAccepted: $carried} else {} end)
+    + (if $accept == "" and $departure != "" then {deviationPending: {departure: $departure, file: $departureFile}} else {} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal halts the order with the non-goal
@@ -9030,6 +9043,7 @@ do_review_record() {
      state: "reviewed",
      halt: $halt}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
+    + (if has("deviationPending") then {departurePending: (.deviationPending.departure + ": the person decides at the task review")} else {} end)
     + {record: $record, next: $next}')"
   # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
   # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
@@ -9115,8 +9129,10 @@ do_fix_brief() {
 
   # Gap row 265. A finding with an empty fix scope asks for no code change, so a fixer can change
   # nothing and fix-record refuses the empty range. When every open finding is one, no brief is
-  # written, and a person rules each one at verify-record with no round. Unattended halts first.
-  local empty_ids empty_why empty_who empty_call empty_ledger
+  # written, and a person rules each one at verify-record with no round. Unattended, each one is
+  # marked pending instead, so it is no longer open and the order goes on to its close. The person
+  # rules it at the task review, from finished.json (gap row 279).
+  local empty_ids empty_why empty_who empty_call empty_doc
   empty_ids="$(printf '%s' "$open_json" | jq -r 'if all(.[]; (.fixScope // []) | length == 0) then [ .[].id ] | join(", ") else "" end')"
   if [ -n "$empty_ids" ]; then
     case "$empty_ids" in
@@ -9125,11 +9141,16 @@ do_fix_brief() {
     esac
     empty_call="verify-record $TASK_PATH $unit_id --ruling ${empty_ids%%,*}=<wrong|deferred|load-bearing|test-wrong>::<reason>"
     if [ "$RV_RUN_MODE" = "autonomous" ]; then
-      empty_why="$empty_why. A person runs task set-run-mode interactive on this task, then clear-halt, then rules $empty_who: $empty_call"
-      empty_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$empty_why")"
-      [ -n "$empty_ledger" ] || die 3 "fix-brief: the halt on $unit_id could not be written."
-      write_atomic "$RV_LEDGER_FILE" "$empty_ledger"
-      die 53 "fix-brief: $unit_id is halted, and nobody is present to rule: $empty_why."
+      empty_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --arg ids "$empty_ids" '
+        ($ids | split(", ")) as $p
+        | .findings = [ .findings[] | if (.id as $i | $p | index($i)) != null then .status = "pending" else . end ]')"
+      [ -n "$empty_doc" ] || die 3 "fix-brief: the pending findings of $unit_id could not be written."
+      write_atomic "$RV_REVIEW_FILE" "$empty_doc"
+      im_print_summary "fix-brief" "$(jq -cn --arg order "$unit_id" --arg why "$empty_why" --arg record "$RV_REVIEW_FILE" \
+        --arg next "$(im_next_step "$RV_LEDGER_DOC" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" \
+        '{order: $order, pending: ($why + ". Nobody is present to rule, so the person rules at the task review"),
+          record: $record, next: $next}')"
+      exit 0
     fi
     die 53 "fix-brief: $empty_why. A person rules $empty_who: $empty_call."
   fi
@@ -10501,6 +10522,7 @@ FN_RECIPES
   # frozen records are per order. A criterion two orders serve carries one entry per order, the same shape
   # the frozen records themselves keep.
   local order_ids order_count oi one_id one_tests checklists_json='[]' deferred_json='[]' one_review
+  local pending_json='[]'
   order_ids="$(printf '%s' "$FN_LEDGER_DOC" | jq -c '[ (.orders // [])[] | .id ]')"
   order_count="$(printf '%s' "$order_ids" | jq 'length')"
   oi=0
@@ -10522,6 +10544,12 @@ FN_RECIPES
           $have + [ ($doc.findings // [])[] | select(.ruling == "deferred")
                     | {unit: $unit, finding: .id, severity: .severity, linkedTo: (.linkedTo // ""),
                        evidence: (.evidence // ""), reason: (.rulingReason // "")} ]')"
+      # What an unattended run left for the person, which review puts to them (gap row 279).
+      pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
+          $have + [ ($doc.findings // [])[] | select(.status == "pending")
+                    | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.evidence // "")} ]
+                + [ $doc.deviationPending // empty
+                    | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file)} ]')"
     fi
     oi=$((oi + 1))
   done
@@ -10543,7 +10571,7 @@ FN_RECIPES
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
     --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
-    --argjson suite "$suite_json" --arg pluginVersion "$(plugin_version)" '
+    --argjson pending "$pending_json" --argjson suite "$suite_json" --arg pluginVersion "$(plugin_version)" '
     ([ ($snap.alignment.criteria // [])[] | {id: .id, verifiedBy: .verifiedBy} ]) as $kinds
     | {
       schemaVersion: 1,
@@ -10560,6 +10588,7 @@ FN_RECIPES
                      judgedBy: ([ ($c.judgements // [])[] | .judgedBy ] | unique)} ],
       checklists: $checklists,
       deferred: $deferred,
+      pendingDecisions: $pending,
       rowsJudgedByModel: (([ ($ledger.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
                           + ([ ($ledger.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length))
     }')"
@@ -10580,6 +10609,7 @@ FN_RECIPES
      criteria: ((.criteria | group_by(.rowState) | map("\(.[0].rowState)=\(length)") | join(" ")) | if . == "" then "none" else . end),
      checklists: (.checklists | length),
      deferred: ([ .deferred[] | .unit + "/" + .finding ]),
+     pendingDecisions: ([ .pendingDecisions[] | .unit + "/" + (.finding // .kind) ]),
      rowsJudgedByModel: .rowsJudgedByModel,
      record: $record,
      next: "none: implementation is finished, and the review stage reads the record"}')"

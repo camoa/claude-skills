@@ -79,6 +79,14 @@
       },
       "description": "Every finding a person ruled deferred at the fix round cap, with the reason they gave. Real, not fixed, and recorded here so deferring a finding is not the same as the finding disappearing. Findings ruled wrong are not carried: a ruling of wrong says there was nothing to carry."
     },
+    "pendingDecisions": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/pendingRow"
+      },
+      "description": "What an unattended build left for a person, copied from each order's review record (gap row 279): a finding marked pending, and a departure held as deviationPending. The review stage writes one check per entry, and each reads unknown until the person answers it at close."
+    },
     "rowsJudgedByModel": {
       "type": "integer",
       "minimum": 0,
@@ -259,6 +267,18 @@
           "type": "string",
           "description": "What a person must look at, written by that order's test author from the verify clause and copied here verbatim rather than summarised. On an order proved by confirm, one of its done-when rows, verbatim."
         }
+      }
+    },
+    "pendingRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "kind", "text"],
+      "properties": {
+        "unit": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The order whose review record holds this decision." },
+        "kind": { "type": "string", "enum": ["ruling", "departure"], "description": "`ruling` for a finding with an empty fix scope, `departure` for a departure from the design." },
+        "finding": { "type": "string", "pattern": "^f[1-9][0-9]*$", "description": "The finding's own id, present on a ruling only." },
+        "severity": { "type": "string", "enum": ["high", "medium", "low"], "description": "What the reviewer called the finding, present on a ruling only." },
+        "text": { "type": "string", "description": "The finding's evidence, or the departure and the file it was found in, copied verbatim." }
       }
     },
     "deferredRow": {

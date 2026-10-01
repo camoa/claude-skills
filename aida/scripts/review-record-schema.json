@@ -75,6 +75,16 @@
         "because": { "type": "string", "minLength": 1 }
       },
       "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and halts the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason. A person who kept the same line at `build-record --accept-deviation` is not asked again: the build record's own object is carried here (gap row 266). Present only when a person accepted one."
+    },
+    "deviationPending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["departure", "file"],
+      "properties": {
+        "departure": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 }
+      },
+      "description": "A departure found while nobody was present (gap row 279). Unattended, `review-record` halts nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. Present only on an unattended review that found one and that no person accepted."
     }
   },
   "$defs": {
@@ -127,8 +137,8 @@
         },
         "status": {
           "type": "string",
-          "enum": ["open", "addressed", "ruled"],
-          "description": "Where this finding stands. Open until a verification calls it addressed or a person rules on it at the cap. A finding recorded with actionable false opens like any other and stays open, because nothing can close it: no fixer ever sees it. Every count that gates a step counts the open actionable findings only, so such a finding blocks nothing while staying visibly unanswered."
+          "enum": ["open", "addressed", "ruled", "pending"],
+          "description": "Where this finding stands. Open until a verification calls it addressed or a person rules on it at the cap. Pending when its fix scope is empty and nobody was present to rule: `fix-brief` marks it, `finish` carries it to finished.json, and the person rules it at the task review (gap row 279). A finding recorded with actionable false opens like any other and stays open, because nothing can close it: no fixer ever sees it. Every count that gates a step counts the open actionable findings only, so such a finding blocks nothing while staying visibly unanswered."
         },
         "origin": {
           "type": "string",

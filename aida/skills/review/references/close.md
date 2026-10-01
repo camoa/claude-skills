@@ -12,7 +12,9 @@ summary asks a different question than the row a person signed up to answer. Sho
 pass, and ask for each one only once.
 
 Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. Its detail
-names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
+names the low findings of one lens, or one decision an unattended build left: a finding nobody
+ruled, or a departure from the design. The person answers met, or unmet, which fails the review.
+Autonomous, such a check stays unknown, so the review fails, and completion's halt names it.
 
 The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
 below. Autonomous, there is

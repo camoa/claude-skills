@@ -154,7 +154,8 @@ kind that a script can read, so a person sees each one. The person may keep a de
 `build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
 and `haltsCleared` in the ledger hold the reason, and the flag clears the deviation's halt. Review
 carries the answer and does not ask again about that line. A stop line other than `Stop: none`
-has no such route. Unattended, the flag refuses (exit 68), and the halt names the route.
+has no such route. Unattended, the flag refuses (exit 68). There a deviation is no stop:
+`build-record` records the attempt, and `review-record` keeps the line for the task review.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.
