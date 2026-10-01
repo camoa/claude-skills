@@ -1541,6 +1541,7 @@ RW_FIT
     --arg range "$range" --arg commit "$head_now" --arg runMode "$RW_RUN_MODE" \
     --argjson hasUpstream "$([ -n "$upstream" ] && echo true || echo false)" \
     --argjson recipes "$recipes_json" --slurpfile checks "$parts_file" \
+    --arg serves "$CHECK_SERVES" --arg testMutation "$CHECK_TEST_MUTATION" \
     --argjson resolved "$CR_DOC" \
     --slurpfile mutation "$mutation_file" --argjson notes "$RW_CATALOG_NOTES" \
     --argjson frozenFindings "$frozen_findings" '
@@ -1553,7 +1554,10 @@ RW_FIT
                 | ([ ($resolved.frameworks // [])[] | select(.framework == $row.framework) ][0]) as $fw
                 | $row + {checkRecipeSha256: ($fw.checkRecipeSha256 // ""),
                           testRecipeSha256: ($fw.testRecipeSha256 // "")} ],
-     checks: $checks,
+     # Checks 3 and 4 keep their script half apart, so findings applies its lens half to the
+     # script half every time it runs, and never to an earlier lens reading (gap row 277).
+     checks: [ $checks[] | if .id == $serves or .id == $testMutation
+                           then .scriptHalf = {verdict, detail} else . end ],
      criteria: [], findings: $frozenFindings, surfaces: [],
      mutation: $mutation, catalogNotes: $notes}')"
   rm -f "$parts_file" "$mutation_file"
@@ -2026,19 +2030,27 @@ RW_RESEARCH_FILES
   # the same reading as the six lens checks (gap row 277). Otherwise the script half decides, and a
   # medium or high finding still turns a script half that could not look into unmet. The detail
   # names the half that decided, and an unmet check never carries the met half's sentence.
-  local lens_hits
+  # A record checks wrote before gap row 277 holds no script half, and its row may already carry
+  # an earlier lens reading. Findings cannot tell the two apart, so it sends the caller back.
+  local no_half lens_hits
+  no_half="$(printf '%s' "$updated" | jq -r --arg a "$CHECK_SERVES" --arg b "$CHECK_TEST_MUTATION" \
+    '[ .checks[] | select((.id == $a or .id == $b) and (has("scriptHalf") | not)) | .id ] | join(", ")')"
+  [ -z "$no_half" ] \
+    || die 62 "findings: $RECORD_FILE holds no script half for $no_half, because checks wrote it before the script half was kept apart. Run checks again, then brief and findings."
   for lens_word in mutation purpose; do
     check_id="$(rw_check_for_lens "$lens_word")"
     lens_row="$(rw_lens_row "$lens_word" "$check_id" "$findings_json")"
-    [ -n "$lens_row" ] || continue
+    [ -n "$lens_row" ] || lens_row="null"
     lens_hits="$(rw_lens_hits "$lens_word" "$findings_json")"
-    updated="$(printf '%s' "$updated" | jq -c --argjson r "$lens_row" --arg l "$lens_word" --arg hits "$lens_hits" '
-      .checks = [ .checks[] | if .id != $r.id then .
-        elif .verdict == "met" then . + $r
-          | .detail = "the script half read met, so the \($l) lens decides this check: \($r.detail)"
-        elif .verdict == "unmet" then .detail += " The script half decides this check. The \($l) lens also raised \($hits)."
-        elif $r.verdict == "unmet" then .verdict = "unmet" | .detail += " The \($l) lens decides this check: \($r.detail)."
-        else .detail += " The \($l) lens raised only low findings, which stay follow-up: \($hits)." end ]')"
+    updated="$(printf '%s' "$updated" | jq -c --argjson r "$lens_row" --arg id "$check_id" --arg l "$lens_word" --arg hits "$lens_hits" '
+      .checks = [ .checks[] | if .id != $id then .
+        else .scriptHalf as $s | del(.answeredBy) | .verdict = $s.verdict | .detail = $s.detail
+        | if $r == null then .
+          elif .verdict == "met" then . + $r
+            | .detail = "the script half read met, so the \($l) lens decides this check: \($r.detail)"
+          elif .verdict == "unmet" then .detail += " The script half decides this check. The \($l) lens also raised \($hits)."
+          elif $r.verdict == "unmet" then .verdict = "unmet" | .detail += " The \($l) lens decides this check: \($r.detail)."
+          else .detail += " The \($l) lens raised only low findings, which stay follow-up: \($hits)." end end ]')"
   done
 
   rw_write_record "findings" "$updated"

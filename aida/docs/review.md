@@ -75,8 +75,8 @@ then had only the research text. Research names guides and never opens them. The
 follows the same rule unless the playbook record holds a loaded source.
 
 A lens check fails on any medium or high finding. When every finding of one of those six lens
-checks is low, you decide the check at close. The same holds for the two contract checks that are half
-reviewer, once their script half passed. Confirm the findings and the check reads met, with
+checks is low, you decide the check at close. The same holds for "everything serves a criterion" and
+"a test per criterion, and mutation", whose other half is a script, once that half passed. Confirm the findings and the check reads met, with
 the findings left as follow up. Reject them and it reads unmet. With nobody present, the check
 reads met, and the pull request body names the check and its low findings.
 

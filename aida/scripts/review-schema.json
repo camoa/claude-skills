@@ -246,6 +246,16 @@
           "enum": ["person", "nobody"],
           "description": "Present only on a lens check whose findings are all low, which a person decides rather than the script. `nobody` before the person answers, when the check reads unknown, or on a run with nobody present, when it reads met. `person` once `close --row` took the answer."
         },
+        "scriptHalf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "detail"],
+          "properties": {
+            "verdict": {"type": "string", "enum": ["met", "unmet", "unknown", "undeclared", "not-needed"]},
+            "detail": {"type": "string", "minLength": 1}
+          },
+          "description": "Present only on checks 3 and 4: the verdict and detail `checks` wrote, before any lens half. `findings` reads the check again from it each time it runs, so a second run never reads an earlier lens reading as the script half."
+        },
         "absent": {
           "type": "boolean",
           "description": "True when the recipe row for this check was declared absent, and `detail` carries the recipe's own reason. It exists because undeclared covers two facts that must not read alike: a framework saying it has no such tool answered the question, and a caller that passed no recipe answered nothing."
