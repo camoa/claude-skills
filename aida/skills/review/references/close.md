@@ -26,7 +26,8 @@ the departure halt for a departure. The answer decides what happens next:
   order is closed, so the routes inside implement no longer reach it. The route is a fix
   commit on the task branch, then finish again, per "Finish runs again after a failed review"
   in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A wrong
-  test is corrected by the person, not a model. A departure is rebuilt to the design.
+  test is corrected by the person, not a model. A departure is rebuilt to the design. That
+  finish carries no decision the person already answered, so the next review asks it no more.
 
 `close` writes no verdict while a `decision-` check is unanswered. The record keeps every row,
 and a later `close` with the person present answers each one with no fresh pass. Autonomous,

@@ -10572,6 +10572,14 @@ FN_RECIPES
     fi
     oi=$((oi + 1))
   done
+  # A finish after a failed review carries no decision the person already answered there: a
+  # `decision-` check with an `answer` in review.json or an archived pass (gap row 279).
+  local answered_json
+  answered_json="$(find "$TASK_PATH/review" -maxdepth 1 -type f -name 'review*.json' -exec cat {} + 2>/dev/null \
+    | jq -cs '[ .[] | (.checks // [])[] | select((.id | startswith("decision-")) and has("answer")) | .id ] | unique' 2>/dev/null)"
+  [ -n "$answered_json" ] || answered_json='[]'
+  pending_json="$(printf '%s' "$pending_json" | jq -c --argjson answered "$answered_json" '
+    [ .[] | select(("decision-" + .unit + "-" + (.finding // "departure")) as $id | $answered | index($id) | not) ]')"
   # An order proved by confirm froze no row, so its done-when rows are the checklist. One row per
   # sentence, under each criterion confirmCriteria names for the order, and the person answers
   # that criterion at review's close (gap row 196).
