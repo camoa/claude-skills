@@ -264,7 +264,8 @@ interface-record: a fix round does not rewrite that record. A check answering un
 spends the round and leaves every finding open. At the round cap, the script halts the order
 itself, naming the check that stopped it. `review-brief` is never run again for this order.
 `verify-record` then opens one finding for that check, on the order's first criterion and its
-owned files. The next round fixes it, or at the cap it takes a ruling like any other finding.
+owned files. It reads low when coding-standards alone stopped the round, and medium otherwise.
+The next round fixes it, or at the cap it takes a ruling like any other finding.
 
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses

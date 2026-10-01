@@ -10584,14 +10584,18 @@ do_verify_record() {
   # Gap row 305. A check that stopped this round opens one finding, on the order's first criterion
   # and its owned files. Every other finding may read addressed, and then nothing open would route
   # the failed check: no further round, no ruling, no pending decision. The cap rules apply to it.
-  local fix_checks check_stop
+  # Its severity is low when coding-standards alone stopped the round, a style line, and medium
+  # for any other check, so a light task's cap leaves only a style failure for the review.
+  local fix_checks check_stop check_severity
   fix_checks="$(jq -c '.checks // []' "$fix_file" 2>/dev/null)"
   if [ "$(br_checks_pass "${fix_checks:-[]}" "")" != "true" ]; then
     check_stop="$(br_first_stopper "${fix_checks:-[]}" "")"
+    check_severity="$(printf '%s' "${fix_checks:-[]}" | jq -r "$BR_STOPPERS_JQ"'
+      if (stoppers | length > 0) and (stoppers - ["coding-standards"] | length == 0) then "low" else "medium" end')"
     new_id="f$(printf '%s' "$updated_findings" | jq '[ .[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
-    braw="$(printf '%s' "$RV_UNIT_JSON" | jq -c --arg id "$new_id" \
+    braw="$(printf '%s' "$RV_UNIT_JSON" | jq -c --arg id "$new_id" --arg severity "$check_severity" \
       --arg evidence "fix round $rounds_used of $unit_id was stopped by its check $check_stop" '
-      {id: $id, severity: "medium", file: "", lines: "",
+      {id: $id, severity: $severity, file: "", lines: "",
        linkedTo: (((.criteriaOwned // []) + (.criteriaServed // []))[0] // ""),
        evidence: $evidence, fixScope: (.ownedFiles // [])}')"
     bbuilt="$(rv_finding_record "$braw" "$alignment" "round$rounds_used")"
