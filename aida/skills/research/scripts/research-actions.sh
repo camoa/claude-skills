@@ -78,7 +78,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      contract's criteria to know what it is answering for (ideal/research.md, 'The criteria are
 #      what stops research'), so it refuses to start without one rather than starting blind.
 #      Or `distill` found no records/research-distill.json, so the distiller has not been
-#      dispatched yet.
+#      dispatched yet. A light task's `distill` reads no sidecar (distill_deferred).
 #      Or `split-read` found no records/research-split.json, so the split-advisor has not
 #      been dispatched yet.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
@@ -709,7 +709,7 @@ do_check() {
 # Reads the sidecar the distiller wrote after `check` exited 0; the read is distill_read in task-helpers.sh.
 do_distill() {
   [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
-  distill_read "$TASK_PATH" research
+  if task_is_light "$TASK_PATH"; then distill_deferred research; else distill_read "$TASK_PATH" research; fi
   exit 0
 }
 

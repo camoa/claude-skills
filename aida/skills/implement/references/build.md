@@ -8,8 +8,10 @@ reference now. Nothing below may change one.
 Dispatch `catalog-identifier` with the lines `point: implement`, each framework, and the project
 folder. Skip it when an earlier step of this build has resolved it, the tests step included. Name
 the role, and pass the lookup's answer in its own word: SKILL.md holds both rules. Once resolved,
-reuse the path per framework for every order in this build. No record holds these paths. They
-live in the conversation, so a fresh window resolves them again.
+reuse the path per framework for every order in this build. They live in the conversation, so a
+fresh window resolves them again. **Light:** dispatch nothing here. Read each path from
+`implementation/preconditions.json`, at `frameworks[].implementRecipePath`. A framework without
+that field had no implement recipe at preconditions, so pass no path for it.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.

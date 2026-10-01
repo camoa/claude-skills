@@ -219,6 +219,11 @@ registers the demo path as one critical surface. The surface is a page, or a com
 when the path works. Review then runs it every time, and so can you, after each change. Review
 fails a light task that has no such surface. `set-run-mode` says whether end to end is on.
 
+Light also dispatches fewer helpers before the first line of code. Scope and research run no
+distiller, and one distiller reads all three stages when design closes. Recipe lookups made at
+the same step go in one dispatch. The build reads the implement recipe that preconditions
+recorded. One interface lookup names every reuse candidate.
+
 **The compromises log.** Each skip is written by the code that decides it, never from a model's
 memory. It goes to `COMPROMISES.md` at the top of the task's worktree, one row per skip, and is
 committed there, so it ships with the code. A row names the task, the stage, what was skipped and

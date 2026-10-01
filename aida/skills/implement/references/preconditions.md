@@ -29,6 +29,10 @@ Dispatch it a third time, with `point: implement` and each framework. Do not rea
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.
 
+**Light:** ask for the three points in one dispatch, with the lines `point: test-execution`,
+`point: review` and `point: implement`, each framework, and the project folder. The record keeps
+the `implement` path, so the tests step and the build step of a light task read it there.
+
 ## Check the tools the test recipe names
 
 The script runs the tool skill's `require` itself, from the worktree, for each `test-execution`

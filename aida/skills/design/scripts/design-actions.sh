@@ -156,7 +156,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or `read-guide` or `verify` was given a path naming no file on disk; or `account` was given
 #      a --finding naming no finding under research/, or a --remove naming no entry on the order;
 #      or `distill` found no
-#      records/design-distill.json, so the distiller has not been dispatched yet.
+#      records/design-distill.json, so the distiller has not been dispatched yet. On a light task
+#      it reads the scope and research sidecars too, and any of the three can be absent.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
@@ -2442,9 +2443,19 @@ do_account() {
 }
 
 # Reads the sidecar the distiller wrote after `close`; the read is distill_read in task-helpers.sh.
+# A light task's one distiller wrote a sidecar for each of the three stages, so each is read under
+# its own `stage:` line (distill_deferred).
 do_distill() {
   [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
-  distill_read "$TASK_PATH" design
+  if task_is_light "$TASK_PATH"; then
+    local stage
+    for stage in scope research design; do
+      echo "stage: $stage"
+      distill_read "$TASK_PATH" "$stage"
+    done
+  else
+    distill_read "$TASK_PATH" design
+  fi
   exit 0
 }
 

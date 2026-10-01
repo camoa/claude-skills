@@ -1,6 +1,6 @@
 ---
 name: internal-searcher
-description: Searches this project's own code and configuration for prior art, or reads one reuse candidate's interface. Dispatched by the research and design skills only. Reads the project, never the web.
+description: Searches this project's own code and configuration for prior art, or reads the interface of one or more reuse candidates. Dispatched by the research and design skills only. Reads the project, never the web.
 tools: Read, Glob, Grep
 disallowedTools: Agent
 model: sonnet
@@ -27,6 +27,11 @@ candidate's source and the order. Find each thing the order's build or tests wil
 return the class or service id, the methods and their arguments. Also return the keys of what
 they return. Give each with its repository-relative path. Return only that text, because design
 records it word for word. Skip the task-record search.
+
+A light task's design names every candidate in one dispatch, because each dispatch costs a
+context. The candidate line and the order line then repeat, one pair per candidate, before the
+code path. Return one block per pair, headed by the candidate exactly as given. Design records
+each block word for word.
 
 **You cannot reach the web, and that is the point.** Prior art inside a project is a claim about
 this project. A web result answers a different question without announcing that it has. You have no

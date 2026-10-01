@@ -296,6 +296,8 @@ Before that dispose, dispatch `internal-searcher` once per candidate the order's
 will call, with the message this file names. Its lines are the role, the run mode and the word
 `interface`. Then come the candidate as research named it, the order file's path, the code path,
 and the project folder. The code path is the task's worktree, from the `worktree:` line.
+**Light:** dispatch once for all orders. Repeat the candidate line and the order line, one pair
+per candidate, before the code path. Pass each returned block as that candidate's `--interface`.
 
 A decline takes no `--cost` and no `--path`: nothing is compared, and nothing is reused. Its
 `--why` names what was weighed. It stands in both modes, because a decline with a reason is a
@@ -884,7 +886,10 @@ already closed.
 Once `design-closed.json` is written, dispatch `distiller` once, with the message this file
 names. Its lines are the role, the run mode, the task folder, the stage `design`, and the paths
 of `design/*.json` and `design-closed.json`. Never a summary of this conversation. It writes
-`records/design-distill.json`. Then run:
+`records/design-distill.json`. **Light:** scope and research dispatched no distiller, so this one
+dispatch names all three stages. Write `scope` and the path of `alignment.json`, then `research`
+and its paths, then `design` and its paths. `distill` then prints a `stage:` line before each
+stage's lines, and a `stale` on any stage means this same dispatch again. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh distill "<task_folder>"
 ```

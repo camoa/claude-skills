@@ -440,6 +440,8 @@ writes `records/research-distill.json`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh distill "<task_folder>"
 ```
+**Light:** dispatch no distiller, and run this call alone. It prints `distill: deferred to the
+design close`, because design's close distills all three stages.
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is another `record` call. `standsAlone: stale` means the findings
 changed after the distiller read them: dispatch it again, then run the same call again. Exit 2

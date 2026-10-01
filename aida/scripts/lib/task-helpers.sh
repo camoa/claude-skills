@@ -52,6 +52,7 @@
 #                                         the stage-boundary commit of one task folder; says so
 #                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
+#   distill_deferred <stage>              prints the line a light task's scope or research distill shows
 #   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
@@ -719,6 +720,14 @@ distill_read() {
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }
 
+# A light task dispatches no distiller at the scope close or the research close. The design close
+# dispatches one over all three stages, so the run pays for one dispatch, and a contract edit
+# before design closes costs no repeat (gap row 292). Scope's and research's distill print this
+# line in place of distill_read. $1 the stage.
+distill_deferred() {
+  echo "distill: deferred to the design close, light run. Dispatch no distiller for $1"
+}
+
 # The playbook record research loads, `<task_folder>/records/playbooks.json`. One spelling for
 # every reader: the four implementation briefs, the architecture review brief and check 16's floor.
 # The JSON form is null rather than a path when the file is absent, so a role never opens a file
@@ -736,13 +745,16 @@ playbooks_path_json() {
 # Derived from the records in the task folder every time, never stored: each stage writes one
 # record when it closes, and the stage is the first whose record is absent. Scope's is the
 # distill sidecar, records/scope-distill.json, which approve and distill both need before they
-# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start.
+# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start. A
+# light task has no scope sidecar until design closes, so its scope closes on the pluginVersion
+# that only the scope close writes into alignment.json.
 # This is the one copy of that rule; the session-start hook and the next skill's report both
 # print what it says. $1 the task folder, $2 the review word next-actions.sh derives from
 # review/review.json (passed, failed, unfinished or none). Calls no die function.
 task_stage() {
   local task_folder="$1" review="$2"
-  if [ ! -f "$task_folder/records/scope-distill.json" ]; then
+  if [ ! -f "$task_folder/records/scope-distill.json" ] && { ! task_is_light "$task_folder" \
+      || [ -z "$(jq -r '.pluginVersion // empty' "$task_folder/alignment.json" 2>/dev/null)" ]; }; then
     echo "scope"
   elif [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
     echo "research"

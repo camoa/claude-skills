@@ -94,12 +94,13 @@ Print the path and say so. Go on to step 5 either way.
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
 site, so a review or a baseline taken there would capture the served checkout instead. Dispatch
-`catalog-identifier` once per point, as the surfaces skill does. The role reads one `point:` line
-per message, and it reads any other word as a framework. The first dispatch has the line
+`catalog-identifier` once per point, as the surfaces skill does. The role reads any word that is
+not on a `point:` line as a framework. The first dispatch has the line
 `point: worktree-environment`, then every framework the project records and the project folder.
 When the project record has `surfaces.e2e.enabled`, dispatch the role again with
 `point: e2e-setup` and the same other lines. When it has `surfaces.visualRegression.enabled`,
-dispatch it again with `point: visual-regression`. `up` then installs that harness in the tree.
+dispatch it again with `point: visual-regression`. **Light:** send all these points in one
+dispatch, one `point:` line each. `up` then installs that harness in the tree.
 Pass the worktree-environment answer as `--recipe <framework>=<path>` or
 `--lookup-failed <framework>=<word>`, one flag per framework. Pass each setup recipe as
 `--setup-recipe <kind>=<path>`, where the kind is `e2e` or `visual-regression`. A setup lookup

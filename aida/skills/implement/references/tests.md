@@ -25,6 +25,9 @@ which levels exist and when each is right, what a test may not do in this framew
 criterion id attaches to a test. The test author and the row-checker read it, so an order
 whose roles hold neither skips it.
 
+**Light:** do not ask for `point: implement`. Preconditions resolved it, so read each path from
+`implementation/preconditions.json`, at `frameworks[].implementRecipePath`.
+
 **`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
 naming test files, so this is not a guess at what the block is for. Pass those globs and the path
