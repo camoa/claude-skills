@@ -59,8 +59,10 @@ row rejected in this dispatch, or rejected earlier, covers no part of the done-w
 **An absence row names a done-when clause and no test.** Its key is `<order id>:absence:<n>`. The
 test author returned the clause as an absence, which says the change added nothing of a named
 kind. Answer one question: could a test prove this clause? A clause that also states a behaviour,
-such as where a value comes from, can be proved. Confirm only a clause that nothing can run. A
-rejection's note names what a test would observe, or the behaviour to split out of the clause.
+such as where a value comes from, can be proved. A forbidden call is provable when a test can
+observe its effect, such as a bare time() against a fixed clock. Confirm only a clause that nothing
+can run. A rejection's note names what a test would observe, or the behaviour to split out of the
+clause. A dispatch that holds only absence rows names no recipe. Answer those from the clause.
 
 For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does

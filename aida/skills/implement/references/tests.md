@@ -44,9 +44,10 @@ halfway through it.
 
 ## An order with no `test-author` in its roles
 
-Such an order skips `tests-brief` and the test author. Its `roles=` says whether a row-checker
-judges it. The freeze flags still follow the proof kind, so read the order's `proof` from the
-frozen snapshot for them.
+Such an order skips `tests-brief` and the test author. The freeze flags still follow the proof
+kind, so read the order's `proof` from the frozen snapshot for them. On every kind, each absence
+clause the order routes goes to the `row-checker` as a row of its own, the way the checkpoint below
+says. "Put no row to anyone" below means no row but those.
 
 `gate` means its deliverable is exported configuration, and a test that reads the YAML back cannot
 fail for the right reason. Put no row to anyone. Go straight to the freeze below with no `--test`,
@@ -300,11 +301,13 @@ only where nothing the order owns covers it. So the checker needs the owned crit
 done-when row (gap row 210). The rows carry names and not test code. The question is whether the
 tests named exercise the sentence beside them.
 
-Build one row per absence clause the author returned: the key `<order id>:absence:<n>`, with n
-its done-when row counted from 1, and the clause verbatim. It names no test. The checker answers
-one question: could a test prove this clause? A yes is a rejected row. The freeze refuses (exit 64)
-an `--absence` clause with no row, so the clause reaches a checker before the build (gap row 273).
-An order with no other row dispatches no checker, so its clauses go to review alone.
+Build one row per absence clause the author returned. Its key is `<order id>:absence:<n>`, with n
+its done-when row counted from 1. It holds the clause verbatim and names no test. The checker
+answers one question: could a test prove this clause? A yes is a rejected row. The freeze refuses
+(exit 64) an `--absence` clause with no row, so the clause reaches a checker before the build (gap
+row 273). An order with no test row dispatches the checker with these rows alone, and with no
+`--test-glob` and no recipe. A rejected one on such an order is frozen again without its
+`--absence`, so the order's own proof covers the clause, or design splits it.
 
 **Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
 recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a
@@ -431,7 +434,7 @@ This refuses outright (exit 74) when the order serves and owns no criterion at a
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
 step. A `gate`, `record` or `observe` order freezes with no test row, and each refuses a `--test`. A
 `record` order owes its done-when row, `--row <order id>=...`, and refuses without it (exit 64).
-An `observe` order owes no row: the freeze accepts it with nothing.
+An `observe` order owes no row but its absence rows: the freeze accepts it with nothing else.
 It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward

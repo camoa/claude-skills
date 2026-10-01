@@ -5044,11 +5044,11 @@ TF_EOF
     ')"
   # Each routed clause is a row of its own, keyed <unit>:absence:<n>, n its doneWhen row counted
   # from 1. The checker asks whether a test could prove it, before the freeze rather than at the
-  # task review (gap row 273). An order the checker is not dispatched for has no expected row, and
-  # its clauses go to review as before.
+  # task review (gap row 273). This holds on every proof kind, so br_order_needs gives every kind
+  # the row-checker.
   rows_expected_json="$(printf '%s' "$rows_expected_json" | jq -c --argjson routed "$absence_json" \
       --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" --arg unit "$unit_id" '
-      if length == 0 then . else . + [ $routed[] as $t | $unit + ":absence:" + (($dw | index($t)) + 1 | tostring) ] end')"
+      . + [ $routed[] as $t | $unit + ":absence:" + (($dw | index($t)) + 1 | tostring) ]')"
   [ -n "$rows_expected_json" ] || die 3 "tests-freeze: could not list the rows of $unit_id's routed clauses."
   # One entry per test and row key, {name, path, key, red}: what red_again reads, and the files
   # each row's tests sit in.
@@ -5155,10 +5155,17 @@ TF_RECORDED
           + (if [ $rej[] | select(. as $k | ($owned | index($k)) != null) ] == [] then [] else [$unit] end)
         | map(select(. as $k | ($keys | index($k)) != null)) | unique')"
     [ -n "$tf_check_again" ] || die 3 "tests-freeze: could not list the rows of $unit_id the checker judges again."
-    # A rejected absence row has no test to repair, so the refusal names its two routes.
+    # A rejected absence row has no test to repair, so the refusal names its two routes. An order
+    # with no test author drops the --absence instead: its own check, the gate lines, the
+    # observation, the record's done-when row or the person's checklist at review, then covers it.
     local tf_absence_route=""
-    printf '%s' "$rows_meta_json" | jq -e 'any(.[]; .verdict == "rejected" and (.criterion | test(":absence:[0-9]+$")))' >/dev/null \
-      && tf_absence_route=" A rejected absence row says a test could prove that clause. The test author writes a test for it and returns no absence for it, or design splits the clause."
+    if printf '%s' "$rows_meta_json" | jq -e 'any(.[]; .verdict == "rejected" and (.criterion | test(":absence:[0-9]+$")))' >/dev/null; then
+      if [ "$BR_ORDER_SLOT" = "order-tests" ]; then
+        tf_absence_route=" A rejected absence row says a test could prove that clause. The test author writes a test for it and returns no absence for it, or design splits the clause."
+      else
+        tf_absence_route=" A rejected absence row says that clause can be proved. This order has no test author: freeze again without that --absence, so the order's own proof covers the clause, or design splits the clause."
+      fi
+    fi
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
           | .criterion + ": " + .note ] | join("; ")')"
@@ -11505,14 +11512,6 @@ do_dispatch_open() {
       ;;
     *) die 3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
   esac
-  # The row-checker's whole job is reading the named tests, and design lists an order's tests under
-  # ownedFiles. Without the globs the derivation below cannot tell an owned test from owned source,
-  # so it denied the checker the very files it was dispatched to read (live-run row 106). The
-  # checkpoint runs before the freeze, so no frozen record holds the globs yet; the call carries
-  # them, the same values tests-freeze takes.
-  if [ "$role_bare" = "row-checker" ] && [ -z "$test_glob_raw" ]; then
-    die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
-  fi
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "dispatch-open")"
@@ -11547,6 +11546,16 @@ do_dispatch_open() {
     [ "$unit_present" = "0" ] \
       && die 22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
     im_refuse_unneeded_role "$role_bare" "$unit_id"
+    # The row-checker's whole job is reading the named tests, and design lists an order's tests under
+    # ownedFiles. Without the globs the derivation below cannot tell an owned test from owned source,
+    # so it denied the checker the very files it was dispatched to read (live-run row 106). The
+    # checkpoint runs before the freeze, so no frozen record holds the globs yet; the call carries
+    # them, the same values tests-freeze takes. An order with no test row puts only its routed
+    # absence clauses to the checker (gap row 273), and those name no test file.
+    if [ "$role_bare" = "row-checker" ] && [ -z "$test_glob_raw" ] \
+       && { [ "$BR_ORDER_SLOT" = "order-tests" ] || [ "$BR_ORDER_SLOT" = "done-when" ]; }; then
+      die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
+    fi
     # The implementer builds from the brief, and build-brief refuses an order with no frozen tests
     # record. Refused here too, so no record opens for a build that has no brief (gap row 267). The
     # fixer needs a fix brief, which a review writes after a build record.
