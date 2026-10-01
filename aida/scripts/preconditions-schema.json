@@ -110,6 +110,19 @@
             }
           }
         },
+        "buildToolsNotChecked": {
+          "type": "array",
+          "description": "Each check row build-record runs that applies to an owned file, and whose argv holds no tool the review recipe names under requires_tooling. Nothing checked its program before the build, and no tool name is guessed from the argv (gap row 285). Present only when one exists.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["row", "argv"],
+            "properties": {
+              "row": {"type": "string", "minLength": 1, "description": "The check row's id."},
+              "argv": {"type": "array", "items": {"type": "string"}, "description": "The row's command, as the recipe declares it."}
+            }
+          }
+        },
         "implementRecipePath": {
           "type": "string",
           "minLength": 1,

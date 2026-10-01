@@ -2972,10 +2972,13 @@ bl_run_suite() {
 # answer over the same files; at the baseline's commit a file the order later deletes still
 # exists, so the second filter only matters there for a file already absent.
 BR_INSIDE_JSON="[]"; BR_OUTSIDE_COUNT=0; BR_DELETED_COUNT=0
+# The first filter alone: prints the entries of $1 that lie in the code repository at $2.
+br_inside_repository() {
+  jq -cn --argjson paths "$1" --arg cp "$2/" '[ $paths[] | select((startswith("/") | not) or startswith($cp)) ]'
+}
 br_scope_to_repository() {
   local inside_json inside_count pi entry full
-  inside_json="$(jq -cn --argjson paths "$1" --arg cp "$2/" \
-    '[ $paths[] | select((startswith("/") | not) or startswith($cp)) ]')"
+  inside_json="$(br_inside_repository "$1" "$2")"
   BR_OUTSIDE_COUNT="$(jq -n --argjson paths "$1" --arg cp "$2/" \
     '[ $paths[] | select(startswith("/") and (startswith($cp) | not)) ] | length')"
   BR_INSIDE_JSON="[]"; BR_DELETED_COUNT=0
@@ -3148,10 +3151,11 @@ bl_tool_result() {
 # found. One that only end-of-task rows of $2, the test-command rows, run by name in their argv is
 # recorded under `end` instead, and the build goes on: review reads those rows as known. No recipe
 # field says which rows a tool serves yet. $3 says what runs the tool, for `what`. $4 is a newline
-# list of tool names, and require checks only those; empty checks every name. Reads codepath,
-# tooling and task_folder from do_preconditions.
+# list of tool names, and require checks only those; empty checks every name. $5 `tooling` names
+# the tool's tooling recipe as the place its setup lives, in place of $1. Reads codepath, tooling
+# and task_folder from do_preconditions.
 pc_tooling_check() {
-  local recipe="$1" rows="$2" runs="$3" only="$4" said
+  local recipe="$1" rows="$2" runs="$3" only="$4" setup="${5:-}" said given
   if said="$(cd "$codepath" || exit 3
       set --
       while IFS= read -r pair; do [ -z "$pair" ] || set -- "$@" --tooling "$pair"; done <<PC_TOOLING
@@ -3162,7 +3166,9 @@ PC_TOOLING
 $only
 PC_ONLY
       "$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" "$@" "$recipe" 2>&1 </dev/null)"; then
-    printf '%s\n' "$said" | jq -Rsc --arg recipe "$recipe" --arg runs "$runs" --argjson rows "$rows" '
+    given="$(printf '%s' "$tooling" | jq -Rsc 'split("\n") | map(select(contains("=")) | {key: sub("=.*"; ""), value: sub("^[^=]*="; "")}) | from_entries')"
+    printf '%s\n' "$said" | jq -Rsc --arg recipe "$recipe" --arg runs "$runs" --argjson rows "$rows" \
+      --arg setup "$setup" --argjson given "$given" '
       [ split("\n")[] | capture("^TOOLING: (?<tool>[^ ]+) (?<state>present|absent|unknown)(: (?<said>.*))?$") ]
       | map(. as $t
         | [ $rows[] | select((.argv // []) | any(contains($t.tool))) ] as $used
@@ -3173,7 +3179,10 @@ PC_ONLY
               what: ("the tool " + $t.tool + ", which " + $runs),
               verdict: (if $t.state == "present" then "met" else "unknown" end)}
             + (if $t.state == "absent" then {reason: "check-command-not-found",
-                 owner: ("the tool skill: install " + $t.tool + ". The recipe documents its setup: " + $recipe)} else {} end)
+                 owner: ("the tool skill: install " + $t.tool + ". "
+                   + if $setup != "tooling" then "The recipe documents its setup: " + $recipe
+                     elif $given[$t.tool] then "Its tooling recipe says how: " + $given[$t.tool]
+                     else "Its tooling recipe says how, and the tool skill'"'"'s show " + $t.tool + " names it" end)} else {} end)
             + (if $t.state == "present" then {} else $first end))} end)
       | {entries: [ .[].entry // empty ], end: [ .[].end // empty ]}'
   else
@@ -3183,23 +3192,40 @@ PC_ONLY
   fi
 }
 
-# Prints, one per line, the tools the review recipe $2 names under requires_tooling that a check
-# build-record runs needs for framework $1 (gap row 285). The rows are cr_resolve's own, the ones
-# build-record runs, and a tool belongs to a row whose argv holds its name. A row reading files
-# counts only when an order owns a file inside the code repository with one of its extensions,
-# whether or not that file exists yet. Returns 2 on a list the reader cannot see, and prints nothing.
+# Prints {tools, unchecked} for framework $1 and its review recipe $2 (gap row 285). The rows are
+# cr_resolve's own, the ones build-record runs. A row reading files applies only when an order owns
+# a file of a type it reads inside the code repository, whether or not that file exists yet.
+# `tools` holds each name the recipe lists under requires_tooling that an applying row's argv
+# holds. `unchecked` holds each applying row whose argv holds none of them, with that argv: no
+# tool name is guessed from a command. Returns 2 on a list the reader cannot see.
 pc_build_tools() {
-  local names
-  names="$(recipe_requires_tooling_of "$2")" || return 2
-  [ -n "$names" ] || return 0
-  jq -rn --arg fw "$1" --arg cp "$codepath/" --arg names "$names" \
-        --argjson doc "$CR_DOC" --argjson snap "$SNAPSHOT_DOC" '
-    [ ($snap.workOrders // [])[] | (.ownedFiles // [])[] | select((startswith("/") | not) or startswith($cp)) ] as $scope
-    | [ ($doc.tools // [])[] | select(.framework == $fw and (.argv | type) == "array")
-        | select((any(.argv[]; . == "{paths}" or . == "{file}" or . == "{dirs}") | not)
-                 or any($scope[] as $f | (.extensions // [""])[] as $e | $f | endswith($e); .)) ] as $rows
-    | $names | split("\n")[] | ltrimstr("\"") | rtrimstr("\"") | ltrimstr("'"'"'") | rtrimstr("'"'"'")
-    | select(length > 0) | . as $n | select(any($rows[]; any(.argv[]; contains($n))))'
+  local names="" listed name scope rows row row_argv exts scoped applying='[]'
+  listed="$(recipe_requires_tooling_of "$2")" || return 2
+  while IFS= read -r name; do
+    [ -z "$name" ] || names="$names$(pc_unquote "$name")
+"
+  done <<PC_NAMES
+$listed
+PC_NAMES
+  scope="$(br_inside_repository "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique')" "$codepath")"
+  rows="$(printf '%s' "$CR_DOC" | jq -c --arg fw "$1" '(.tools // [])[] | select(.framework == $fw and (.argv | type) == "array")')"
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    row_argv="$(printf '%s' "$row" | jq -c '.argv')"
+    if br_argv_takes_paths "$row_argv"; then
+      exts="$(printf '%s' "$row" | jq -c '.extensions // empty')"
+      scoped="$scope"; [ -z "$exts" ] || scoped="$(br_filter_extensions "$scope" "$exts")"
+      [ "$scoped" != "[]" ] || continue
+    fi
+    applying="$(jq -nc --argjson have "$applying" --argjson row "$row" '$have + [$row]')"
+  done <<PC_ROWS
+$rows
+PC_ROWS
+  jq -nc --argjson rows "$applying" --arg names "$names" '
+    ($names | split("\n") | map(select(length > 0))) as $n
+    | def holds($t): any(.argv[]; contains($t));
+    {tools: [ $n[] as $t | select(any($rows[]; holds($t))) | $t ],
+     unchecked: [ $rows[] | select(any($n[] as $t | holds($t); .) | not) | {row: .id, argv} ]}'
 }
 
 # The step. Every framework the project declares must be answered for, because the build runs in
@@ -3221,7 +3247,7 @@ do_preconditions() {
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
-  local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
+  local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3459,14 +3485,18 @@ PC_RECIPES
     # still runs those checks on every order, so not-needed checks them too (gap row 285).
     check_path="$(printf '%s' "$CR_DOC" | jq -r --arg f "$fw" '[ (.frameworks // [])[] | select(.framework == $f) ][0].checkRecipe // ""')"
     # A list pc_build_tools cannot read goes to require whole, which refuses it by name.
-    build_tools=""; build_rc=0
-    [ -z "$check_path" ] || { build_tools="$(pc_build_tools "$fw" "$check_path")" || build_rc=$?; }
+    build_json=""; build_rc=0
+    [ -z "$check_path" ] || { build_json="$(pc_build_tools "$fw" "$check_path")" || build_rc=$?; }
+    [ -n "$build_json" ] || build_json='{}'
+    build_tools="$(printf '%s' "$build_json" | jq -r '(.tools // [])[]')"
+    unchecked_json="$(printf '%s' "$build_json" | jq -c '.unchecked // []')"
     if [ -n "$build_tools" ] || [ "$build_rc" -ne 0 ]; then
       tooling_json="$(pc_tooling_check "$check_path" '[]' \
-        "the review recipe names under requires_tooling, for a check build-record runs on each order" "$build_tools")"
-      if [ "$(printf '%s' "$tooling_json" | jq '.entries | length')" -gt 0 ]; then
-        tooling_entries="$tooling_entries$(printf '%s' "$tooling_json" | jq -c '.entries')"
-        entries_json="$(jq -nc --argjson have "$entries_json" --argjson add "$(printf '%s' "$tooling_json" | jq -c '.entries')" '$have + $add')"
+        "the review recipe names under requires_tooling, for a check build-record runs on each order" "$build_tools" tooling)"
+      build_entries="$(printf '%s' "$tooling_json" | jq -c '.entries')"
+      if [ "$build_entries" != "[]" ]; then
+        entries_json="$(jq -nc --argjson have "$entries_json" --argjson add "$build_entries" '$have + $add')"
+        tooling_entries="$build_entries"
       fi
     fi
     if [ "$section_state" = "ok" ] || [ -n "$tooling_entries" ]; then
@@ -3576,7 +3606,7 @@ EOF
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
           --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
           --arg reason "$harness_reason" --argjson endAbsent "$end_absent_json" \
-          --arg imLookup "$im_lookup" --arg imPath "$im_path" '
+          --arg imLookup "$im_lookup" --arg imPath "$im_path" --argjson unchecked "$unchecked_json" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke,
        implementLookup: $imLookup}
@@ -3584,6 +3614,7 @@ EOF
       + (if $imPath == "" then {} else {implementRecipePath: $imPath} end)
       + (if $verdict == "not-needed" then {reason: $reason} else {} end)
       + (if $endAbsent == [] then {} else {endOfTaskToolsAbsent: $endAbsent} end)
+      + (if $unchecked == [] then {} else {buildToolsNotChecked: $unchecked} end)
     ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
@@ -3840,6 +3871,9 @@ PC_CATALOG
      endOfTaskAbsent: ([ $report.frameworks[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ]
                        | if length == 0 then "none"
                          else join(", ") + ": absent, and only end-of-task rows run it, so the build goes on and review reads those rows as known. Install it with the tool skill to run them." end),
+     buildToolsNotChecked: ([ $report.frameworks[] | (.buildToolsNotChecked // [])[] | .row + " (" + (.argv | join(" ")) + ")" ]
+                       | if length == 0 then "none"
+                         else join(", ") + ": the review recipe names no tool under requires_tooling that this row runs, so nothing checked its program before the build. A missing program reads unknown at build-record." end),
      staleRecipe: (if $staleRecipe == "" then "none" else $staleRecipe end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
