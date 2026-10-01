@@ -51,10 +51,11 @@ accomplish and why, not a ticket. Write it back in one or two sentences and conf
 yes or no before writing anything. Autonomous with no goal given or implied by the conversation:
 **halt.** A task with no stated goal is not a record of anything.
 
-**3. Write it.** Run, with the run mode set as decided above:
+**3. Write it.** Run, with the run mode set as decided above. Add `--after <task-id>` when the
+person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  create --project "<projectPath>" --name "<name>" -- <goal...>
+  create --project "<projectPath>" --name "<name>" [--after <task-id>] -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
@@ -64,8 +65,15 @@ slug of the code folder plus the task name, so a site name is predictable and un
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
 records on disk stays where it is.
-Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
-the script also enforces, or the worktree could not be made. In the last case the folder is
+The tree is cut from HEAD of the folder this call runs in, when that folder is in the code
+repository. So a task made from inside another task's tree starts from that task's work. From
+anywhere else the tree is cut from HEAD of the code path. With `--after`, the tree is cut from
+that task's branch, and `task.json` records `after`. Use it for a chain of tasks made up front,
+because a tree cut now from trunk holds none of the earlier builds. While that task's build is
+unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
+steps 4 and 5 then. `start` makes the tree once that build is finished.
+Show the whole output. Exit code 3 means one of four things: the name collided with an existing task, it failed the name rule
+the script also enforces, `--after` named a task this project does not hold, or the worktree could not be made. In the last case the folder is
 removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
 
@@ -286,6 +294,12 @@ Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `com
 since a completed task is not reopened here. Otherwise it writes the new state, commits, and runs
 the task check. Show the whole output. The check reports and never repairs, so a finding here is
 the one thing to repair now, before the stage writes anything.
+
+A task made with `--after` starts only when the task it builds on has finished its build. That
+task then holds `implementation/finished.json`, or reads complete. Otherwise `start` prints
+`REFUSED` and exits 1, and the stage that called it writes nothing. Say which task to build first.
+When it starts, `start` cuts the tree from that task's branch, and `worktree:` names the tree.
+Enter it as `create` step 4 says.
 
 When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
 person by hand, or a stage's script through scope's `init`. A stage's script passes that line

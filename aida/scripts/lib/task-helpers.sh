@@ -745,6 +745,27 @@ task_stage() {
   fi
 }
 
+# The task this task builds on, from task.json's `after`, and whether that task's build is
+# finished (gap row 291). Prints nothing when the field is absent. Otherwise prints `<id> finished`
+# when the other task holds a readable implementation/finished.json or reads complete, a person
+# having closed it, `<id> missing` when the project holds no such task, and `<id> unfinished`
+# else. start, task_worktree and the next report all ask here. $1 the task folder. Calls no die
+# function.
+task_after_state() {
+  local after pred
+  after="$(jq -r '.after // empty' "$1/task.json" 2>/dev/null)"
+  [ -n "$after" ] || return 0
+  pred="$(dirname -- "$1")/$after"
+  if [ ! -f "$pred/task.json" ]; then
+    printf '%s missing' "$after"
+  elif jq empty "$pred/implementation/finished.json" >/dev/null 2>&1 \
+      || [ "$(jq -r '.state // empty' "$pred/task.json" 2>/dev/null)" = "complete" ]; then
+    printf '%s finished' "$after"
+  else
+    printf '%s unfinished' "$after"
+  fi
+}
+
 # The folder that holds every task tree of one repository: <parent of code>/<slug of the code
 # folder>.worktrees. It sits beside the code path, so the trees do not lie loose among the other
 # folders there (gap row 260). task_worktree makes a tree in it, and prune removes it when empty.
@@ -774,7 +795,7 @@ task_worktree_group() {
 # folder named before the id was slugged. A recorded tree on disk is kept. The base is HEAD of the
 # directory this action was started from when that directory is inside the code repository, so a
 # follow-up made from its parent's tree stacks on the parent's work; otherwise it is the code path's
-# HEAD. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
+# HEAD. A task whose record names `after` is cut from that task's branch instead. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
 # said once, on stderr, and nothing asks.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
@@ -840,7 +861,18 @@ task_worktree() {
     said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   else
-    base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
+    # A task made with `after` is cut from that task's branch, and only once its build is
+    # finished: cut earlier, the branch holds none of that build (gap row 291).
+    found="$(task_after_state "$task_folder")"
+    if [ -n "$found" ]; then
+      [ "${found##* }" = "finished" ] \
+        || { rmdir "$group" 2>/dev/null; die3 "$who: task $id builds on task ${found% *}, whose build is ${found##* }. Its tree is cut from that task's branch once that build is finished."; }
+      base_branch="$(jq -r '.worktree.branch // empty' "$(dirname -- "$task_folder")/${found% *}/task.json" 2>/dev/null)"
+      base="$(git -C "$code" rev-parse -q --verify "refs/heads/${base_branch:-none}^{commit}" 2>/dev/null)" \
+        || { rmdir "$group" 2>/dev/null; die3 "$who: task $id builds on task ${found% *}, and its branch ${base_branch:-none recorded} is not in $code. Nothing was made."; }
+    else
+      base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
+    fi
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   fi

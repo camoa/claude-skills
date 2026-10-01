@@ -69,6 +69,9 @@ Each `OPEN:` line is one of two shapes:
   file the move kept under a `.v5` name and whose version 6 record is absent. The order is the
   stage order, from `scope`, `research`, `design`. Otherwise the key is absent. See "Carrying
   version 5 work forward," below.
+  `after` appears only on a task made with `--after`. It names the task this one builds on.
+  `afterBuild` says whether that build is `finished`, `unfinished` or `missing`. A task that
+  does not read `finished` cannot start yet. Say which task it waits on.
 - `"kind":"legacy"`: a task from before the tasks folder existed. Carries `id`, `epic` (the
   folder it is nested inside, or `null`), `legacyState` (`in_progress` here; `complete` only
   appears under `LEGACY_COMPLETE:`), and `path`.
@@ -82,7 +85,7 @@ enter the tree, below. A
 the report again. Read the task as `kind: new`. Never delete it: the move keeps it.
 
 **More than one line.** List them in the order printed, each numbered, showing the id, its
-state and its review word (or, for a legacy entry, its `epic` and that it predates the tasks folder). Ask which one.
+state and its review word (or, for a legacy entry, its `epic` and that it predates the tasks folder). Add `after` and `afterBuild` when a line has them. Ask which one.
 Wait for a plain answer, a number or the task's own id. A chosen legacy entry goes to the move,
 below, and then to "A task named directly", below. Any other choice goes to "A task named
 directly" as it is.
@@ -177,7 +180,8 @@ Read the first line.
 - **`FOUND: new`.** Summary lines follow: `PATH:`, `task-file:`, `id:`, `state:`, `parent:`,
   `children:`, `runMode:` (with the stages the mode covers in brackets when it covers fewer
   than all), `worktree:`, `worktree-on-disk:` when a path is recorded, `review:` and `stage:`, with `legacyStages:` when
-  it applies. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
+  it applies. A task made with `--after` adds `after:` and `after-build:`, which mean what
+  `after` and `afterBuild` mean in the report. Say which task it is, from its `id`, `state`, `review` and `stage`. Name
   `/aida:<stage>` as the skill to run next. Treat it as active. Read
   the file at `task-file:` only when another field is needed. With `legacyStages:`, go to
   "Carrying version 5 work forward," above; its offer is the one question asked here. Otherwise

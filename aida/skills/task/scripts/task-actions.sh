@@ -32,7 +32,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
-#                    -- <goal...>
+#                    [--after <task-id>] -- <goal...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] repair --project <path> <old-task-folder>
 #   task-actions.sh [--run-mode <interactive|autonomous>] start --project <path> <task-id> \
 #                    -- <why...>
@@ -114,7 +114,7 @@ done
 
 usage() {
   cat <<'EOF' >&2
-usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
+usage: task-actions.sh create   --project <path> --name <id> [--after <task-id>] -- <goal...>
        task-actions.sh repair   --project <path> <old-task-folder>
        task-actions.sh start    --project <path> <task-id> -- <why...>
        task-actions.sh complete --project <path> <task-id> -- <summary...>
@@ -187,7 +187,8 @@ task_summary() {
     "children: " + ((.children // []) | join(" ")),
     "runMode: " + (.runMode // "interactive")
       + (if ((.runModeStages // []) | length) > 0 then " (" + (.runModeStages | join(", ")) + ")" else "" end),
-    "worktree: " + (.worktree.path // "none")' "$1"
+    "worktree: " + (.worktree.path // "none"),
+    (if .after then "after: " + .after else empty end)' "$1"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -195,11 +196,12 @@ task_summary() {
 # ------------------------------------------------------------------------------------------------
 
 do_create() {
-  local project_path="" id=""
+  local project_path="" id="" after=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
       --name) id="${2:?--name needs a value}"; shift 2 ;;
+      --after) after="${2:?--after needs a value}"; shift 2 ;;
       --) shift; break ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
@@ -217,10 +219,15 @@ do_create() {
   local task_dir
   task_dir="$(task_dir_for "$project_path" "$id")"
   [ ! -e "$task_dir" ] || die3 "create: $task_dir already exists. Pick a different name"
+  if [ -n "$after" ]; then
+    case "$after" in */*|.|..) die3 "create: '$after' is not a task id" ;; esac
+    [ -f "$(task_dir_for "$project_path" "$after")/task.json" ] \
+      || die3 "create: --after names $after, and this project has no such task"
+  fi
 
   mkdir -p "$task_dir" || die3 "create: cannot create $task_dir"
 
-  jq -n --arg id "$id" '{
+  jq -n --arg id "$id" --arg after "$after" '{
       schemaVersion: 1,
       id: $id,
       state: "new",
@@ -228,7 +235,8 @@ do_create() {
       children: [],
       mechanismHints: [],
       externalIds: {}
-    }' > "$task_dir/task.json" || die3 "create: could not write $task_dir/task.json"
+    } + (if $after == "" then {} else {after: $after} end)' > "$task_dir/task.json" \
+    || die3 "create: could not write $task_dir/task.json"
 
   {
     printf '# %s\n\n' "$id"
@@ -238,7 +246,12 @@ do_create() {
 
   # The task's own worktree, made right after the record is written whole, so a second window
   # can open the tree before any stage runs. A tree that cannot be made leaves no half-made task.
-  ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
+  # A task built on another whose build is unfinished gets its tree at start instead.
+  local after_state
+  after_state="$(task_after_state "$task_dir")"
+  if [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
+    ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
+  fi
 
   commit_task_change "$project_path" \
     "Create task ${id}" \
@@ -250,6 +263,7 @@ do_create() {
 
   echo "CREATED: ${task_dir}"
   task_summary "$task_dir/task.json"
+  [ -z "$after_state" ] || echo "after-build: ${after_state##* }"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -615,6 +629,18 @@ do_start() {
       return 0
       ;;
   esac
+
+  # A task built on another starts once that task's build is finished, read from its records, and
+  # its tree is cut then, from that task's branch (gap row 291).
+  local after_state
+  after_state="$(task_after_state "$task_dir")"
+  if [ -n "$after_state" ]; then
+    if [ "${after_state##* }" != "finished" ]; then
+      echo "REFUSED: ${id} builds on ${after_state% *}, whose build is ${after_state##* }. Start ${id} once implementation of ${after_state% *} has finished." >&2
+      return 1
+    fi
+    ( task_worktree "$task_dir" "start" >/dev/null ) || exit 3
+  fi
 
   local tmp
   tmp="$(mktemp)" || die3 "start: cannot create a temp file"

@@ -38,6 +38,11 @@
       "items": { "type": "string", "minLength": 1 },
       "description": "The ids of this task's own children, in no particular order. Empty for a task with none. This is what replaces version 5's four-valued `kind` field (`flat`, `epic`, `sub_epic`, `subtask`): a task has children or it does not, and whether an epic sits one level down or two is a question about `parent`, not about this field. A task's own folder never moves when a child is added or removed; only this list changes."
     },
+    "after": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The id of the task in this project that this task builds on, written by `task create --after <task-id>` and present only then. task_worktree cuts this task's tree from that task's `worktree.branch` instead of from HEAD, and `start` refuses while that task's build is unfinished. The build is finished when that task holds a readable implementation/finished.json or reads complete. Until then `create` makes no tree, and `start` makes it. task_after_state in scripts/lib/task-helpers.sh is the one reader, and the next skill's report prints it (gap row 291)."
+    },
     "runMode": {
       "type": "string",
       "enum": ["autonomous", "light"],
