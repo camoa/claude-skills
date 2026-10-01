@@ -7910,14 +7910,13 @@ BR_EARLIER
   write_atomic "$review_file" "$review_doc"
   write_atomic "$ledger_file" "$new_ledger"
   im_print_summary "build-record" "$(jq -cn --arg order "$unit_id" --arg owner "$owner" --arg f "$new_id" \
-    --arg linked "$linked" --arg file "$rel" --arg commits "${commit_text:-none}" --arg record "$review_file" \
+    --arg linked "$linked" --arg file "$rel" --arg commits "$commit_text" --arg record "$review_file" \
     --arg rounds "$(printf '%s' "$owner_entry" | jq -r '.roundsUsed // 0') used of $rounds_allowed" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {order: $order,
      state: "stopped on a defect in a closed order'"'"'s file. A stop is not an attempt, so no attempt is spent",
      repair: "\($owner) reopened on \($f), citing \($linked) as its first criterion, in \($file). Its fix rounds allowed rose by one: \($rounds)",
-     waiting: "\($order) builds again once \($owner) closes",
-     commitsAfterStart: $commits,
+     waiting: ("\($order) builds again once \($owner) closes." + (if $commits == "" then "" else " " + $commits end)),
      record: $record,
      next: $next}')"
   exit 0
