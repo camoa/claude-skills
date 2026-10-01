@@ -352,7 +352,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      three (`tests-brief` and `tests-freeze`) has not run for it yet.
 #  40  `build-brief` or `dispatch-open implementer` found an order in the given unit's dependsOn
 #      with no completion record in the ledger (its lastStep is not "closed"), so that order's
-#      interface record does not exist yet.
+#      interface record does not exist yet. Or a repair the given unit opened on another order
+#      has not closed again (gap row 286).
 #      The same fact exit 23 names for `tests-brief`, kept apart because the two actions read the
 #      dependency for two different reasons: `tests-brief` needs the interface to write tests
 #      against it, `build-brief` needs it to hand to the model writing the code.
@@ -708,6 +709,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      --accept-deviation, interactive only (exit 68), and the message and the halt name that
 #      route. A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a
 #      deviation is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
+#      A `Stop: closed-order-defect: <file>: <what fails>` line naming a file a closed order owns
+#      exits 0 instead: br_open_repair reopens that order for one fix round (gap row 286).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
@@ -1394,7 +1397,9 @@ im_next_step() {
     | ([ $orders[] | select((.haltedBecause // "") == "") ]) as $live
     | (($snap.workOrders // []) | map({(.id): (.dependsOn // [])}) | add // {}) as $deps
     | ([ $live[] | select(.lastStep == "checks-passed" or .lastStep == "reviewed" or .lastStep == "fixed") ] | .[0]) as $rv
-    | ([ $live[] | select(.lastStep == "tests-frozen"
+    # An order that stopped on a closed order'"'"'s defect waits until that repair closes (gap row 286).
+    | ([ $orders[] | select(.lastStep != "closed") | (.repairs // [])[] | .by ]) as $waiting
+    | ([ $live[] | select(.id as $i | $waiting | index($i) | not) | select(.lastStep == "tests-frozen"
                           or (.lastStep == "code-written" and ((.attemptsUsed // 0) < (.attemptsAllowed // $allowed)))) ] | .[0]) as $bd
     | ([ $live[] | select(.lastStep == null) | select((($deps[.id] // []) - $closed) | length == 0) ] | .[0]) as $ts
     | ([ $orders[] | select((.haltedBecause // "") | contains("design drift")) ] | .[0]) as $drift
@@ -6016,6 +6021,13 @@ im_require_build_ready() {
   [ -n "$ledger_doc" ] \
     || die 3 "$who: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
+  # --- exit 40, first: a repair this unit opened on a closed order has not closed again (gap row 286) --
+  local repairing
+  repairing="$(printf '%s' "$ledger_doc" | jq -r --arg u "$unit_id" \
+    '[ (.orders // [])[] | select(.lastStep != "closed") | select(any((.repairs // [])[]; .by == $u)) | .id ] | join(", ")')"
+  [ -z "$repairing" ] \
+    || die 40 "$who: $unit_id stopped on a defect in a file $repairing owns, and that repair has not closed, so nothing of $unit_id is built until it does."
+
   # --- exit 40: every dependency needs a completion record before its interface is handed over ------
   local dep_id dep_entry dep_step
   while IFS= read -r dep_id; do
@@ -7789,6 +7801,96 @@ br_deviations() {
   } | grep -v -i '^deviations*:[[:space:]]*none[[:space:]]*$'
 }
 
+# Gap row 286. A builder that meets a defect in a file a closed order owns stops with
+# `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
+# may not own one file, and the live fix was a hand commit no reviewer read. So the stop reopens
+# the owner for one fix round: one finding on its review record, one round added to its allowance,
+# and its own fixer and verifier. The owner is found from the snapshot, never from the builder's
+# word. No person decides anything here, so the route runs unattended too. The stopped order spends
+# no attempt and waits, through im_require_build_ready and the next line, until the owner closes.
+# One repair per attempt of the stopped order, so a builder that stops on every run halts as today.
+# Exits 0 once the route opens. Returns 1 when it does not apply, and BR_REPAIR_NOTE then says why
+# when the line named the kind. $1 the stopped order, $2 the stop line's value, $3 the report,
+# $4 the attempt it did not spend, $5 the ledger file, $6 its document, $7 the commits after start.
+BR_REPAIR_KIND="closed-order-defect"
+BR_REPAIR_NOTE=""
+br_open_repair() {
+  local unit_id="$1" value="$2" report="$3" attempt="$4" ledger_file="$5" ledger_doc="$6" commits="$7"
+  local rest file defect abs rel owner="" owner_glob="" one g owner_entry linked review_file review_doc raw built new_id new_ledger
+  case "$value" in "$BR_REPAIR_KIND:"*) ;; *) return 1 ;; esac
+  rest="${value#*:}"
+  file="$(printf '%s' "${rest%%:*}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  defect="$(printf '%s' "${rest#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  case "$rest" in *:*) ;; *) defect="" ;; esac
+  if [ -z "$file" ] || [ -z "$defect" ]; then
+    BR_REPAIR_NOTE=" No repair opened: the line must read '$BR_REPAIR_KIND: <file>: <what fails>'."
+    return 1
+  fi
+  abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
+  rel="${abs#"$RV_CODEPATH"/}"
+  while IFS='	' read -r one g; do
+    [ -n "$g" ] && [ -z "$owner" ] || continue
+    case "$g" in
+      /*) tf_path_matches_catalog_glob "$abs" "$g" || continue ;;
+      *) tf_path_matches_catalog_glob "$rel" "$g" || continue ;;
+    esac
+    owner="$one"; owner_glob="$g"
+  done <<BR_OWNED
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '.workOrders[] | select(.id != $u) | .id as $i | (.ownedFiles // [])[] | $i + "\t" + .')
+BR_OWNED
+  owner_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$owner" '[ (.orders // [])[] | select(.id == $id) ][0] // null')"
+  if [ -z "$owner" ] || [ "$(printf '%s' "$owner_entry" | jq -r '.lastStep // ""')" != "closed" ]; then
+    BR_REPAIR_NOTE=" No repair opened: no closed order owns $file."
+    return 1
+  fi
+  if [ "$(printf '%s' "$owner_entry" | jq --arg u "$unit_id" --argjson a "$attempt" '[ (.repairs // [])[] | select(.by == $u and .attempt == $a) ] | length')" != "0" ]; then
+    BR_REPAIR_NOTE=" No repair opened: $unit_id already opened one on $owner at attempt $attempt."
+    return 1
+  fi
+  linked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$owner" \
+    '[ .workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // ""')"
+  review_file="$IMPL_DIR/review-$owner.json"
+  review_doc="$(jq -c '.' "$review_file" 2>/dev/null)"
+  [ -n "$review_doc" ] \
+    || die 3 "build-record: $review_file is missing or not JSON, though the ledger records $owner as closed."
+  new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
+  case "$owner_glob" in /*) rel="$abs" ;; esac
+  raw="$(jq -cn --arg id "$new_id" --arg file "$rel" --arg linked "$linked" \
+    --arg evidence "$unit_id stopped at attempt $attempt on a defect in this file: $defect. Its report: $report." \
+    '{id: $id, severity: "high", file: $file, lines: "", linkedTo: $linked, evidence: $evidence, fixScope: [$file]}')"
+  built="$(rv_finding_record "$raw" "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')" repair)"
+  if [ "$(printf '%s' "$built" | jq -r '.actionable')" != "true" ]; then
+    BR_REPAIR_NOTE=" No repair opened: $owner serves no criterion, so no fixer could act on the finding."
+    return 1
+  fi
+  review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
+  [ -n "$review_doc" ] || die 3 "build-record: the repair finding on $owner could not be written."
+  # Back to the step its fix rounds follow. The range close wrote stays on the repair entry, and
+  # close writes the order's range again.
+  new_ledger="$(printf '%s' "$ledger_doc" | jq -c --arg id "$owner" --arg u "$unit_id" --argjson a "$attempt" \
+    --arg f "$new_id" --arg report "$report" --arg at "$(date -u +%Y-%m-%d)" '
+    .orders = (.orders | map(if .id == $id then
+      (.repairs = ((.repairs // []) + [{by: $u, attempt: $a, finding: $f, report: $report, at: $at}
+                                       + (if .commitRange then {closedRange: .commitRange} else {} end)])
+       | .lastStep = (if (.roundsUsed // 0) > 0 then "fixed" else "reviewed" end)
+       | del(.commitRange))
+      else . end))')"
+  [ -n "$new_ledger" ] || die 3 "build-record: the repair on $owner could not be written to the ledger."
+  write_atomic "$review_file" "$review_doc"
+  write_atomic "$ledger_file" "$new_ledger"
+  im_print_summary "build-record" "$(jq -cn --arg order "$unit_id" --arg owner "$owner" --arg f "$new_id" \
+    --arg linked "$linked" --arg file "$rel" --arg commits "${commits:-none}" --arg record "$review_file" \
+    --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    {order: $order,
+     state: "stopped on a defect in a closed order'"'"'s file. A stop is not an attempt, so no attempt is spent",
+     repair: "\($owner) reopened for one fix round on \($f), citing \($linked), in \($file)",
+     waiting: "\($order) builds again once \($owner) closes",
+     commitsAfterStart: $commits,
+     record: $record,
+     next: $next}')"
+  exit 0
+}
+
 do_build_record() {
   local task_arg="" unit_id="" interface_path="" report_path="" started_at="" observed_path=""
   local nothing_ran="" have_nothing_ran=false accept=""
@@ -7980,6 +8082,8 @@ do_build_record() {
     local stop_commits stop_commit_count stop_commit_text=""
     stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
     stop_commits="${stop_commits% }"
+    $is_deviation \
+      || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits"
     stop_commit_count="$(printf '%s' "$stop_commits" | wc -w | tr -d ' ')"
     if [ "$stop_commit_count" -gt 0 ]; then
       stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
@@ -7997,7 +8101,7 @@ do_build_record() {
     fi
     [ -z "$stop_commit_text" ] \
       || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route"
+    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE"
   fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
@@ -8425,6 +8529,9 @@ rv_load_state() {
   RV_RUN_MODE="$(task_run_mode "$TASK_PATH" implement)"
   # A light task gets one fix round, and the halt after it logs the rounds it skipped.
   ! task_is_light "$TASK_PATH" || FIX_ROUNDS_ALLOWED=1
+  # Each repair a dependent order opened adds its one round, so roundsUsed never goes down (gap
+  # row 286).
+  FIX_ROUNDS_ALLOWED=$((FIX_ROUNDS_ALLOWED + $(printf '%s' "$RV_ORDER_ENTRY" | jq '(.repairs // []) | length')))
 
   # Exit 49: a halted order refuses every step after the halt. The reason is the halt's own words,
   # so a reader never has to open the ledger to learn why the step stopped. $3, when given, is a

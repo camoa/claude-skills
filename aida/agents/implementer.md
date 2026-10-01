@@ -95,8 +95,14 @@ Stop: none
 Stop: test-wrong: <the test, and why it seems wrong>
 Stop: interface-misfit: <what the unit needs that the interface does not give>
 Stop: file-not-owned: <the file, and why the unit needs it>
+Stop: closed-order-defect: <the file>: <what fails, and the output that shows it>
 Stop: attempts-out: <what is still not done>
 ```
+
+Use `closed-order-defect` when your code is right and what fails lies in a file another unit
+owns. Name that one file, as the error names it, then the failure. A script finds the unit that
+owns the file. When that unit is closed, it reopens it for a repair, and you build again after.
+Otherwise the stop goes to a person.
 
 Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report or your
 interface record is a stop, so its line is `interface-misfit`. A departure from the design's

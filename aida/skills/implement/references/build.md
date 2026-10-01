@@ -150,6 +150,23 @@ halt a started order. Unattended, run `build-record` as after any return. It hal
 itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
 (exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
 
+**A defect in a closed order's file has its own route.** The stop line reads
+`Stop: closed-order-defect: <file>: <what fails>`. `build-record` finds the order that owns the
+file in the snapshot. When that order is closed, the script reopens it for a repair, in both run
+modes. It adds one high finding with origin `repair` to that order's review record. It sends the
+order back to its review step and adds one fix round to its allowance, so no counter goes down.
+The ledger entry keeps the repair under `repairs`, with the range the order closed with. The
+script exits 0 and prints a `repair:` line. The stopped order spends no attempt. No person decides
+anything here: the owner's fixer works in the owner's files, and the reviewer verifies the round.
+So the route runs unattended too. A ruling it reaches waits the way it waits for any order. Follow
+the `next:` line to the reopened order. Run `start` first when the builder left files uncommitted.
+Then fix, verify and close that order under `references/review.md`. Until it closes,
+`build-brief` refuses the stopped order (exit 40). Then build the stopped order again. A file no
+closed order owns, or a second such stop at one attempt, halts as any other stop does.
+Interactive, open with: "A finished unit of work had a defect, and the next unit found it. Its
+own fixer repairs it, and a reviewer checks the repair. Nothing needs your decision now." Then
+name the file and the reopened order.
+
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
 `build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
