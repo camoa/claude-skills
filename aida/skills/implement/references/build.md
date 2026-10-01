@@ -134,7 +134,8 @@ A stop looks like this in the conversation: the role returns early. Its report's
 the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
 cause, and `build-record` refuses a report without one (exit 106). Under `Stop: none`, the report
 also holds exactly one deviation line, `Deviation: none` or `Deviation: <what>: <why>`, and the
-same refusal applies. A deviation other than none, or a heading that starts with "Deviation", in
+same refusal applies. The builder writes each line alone, and puts any note on its own line.
+A deviation other than none, or a heading that starts with "Deviation", in
 the report or the interface record, is a stop. A cause is a stop even
 when code was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
 attempt. It names each commit made after the attempt began, and the person reverts or keeps them

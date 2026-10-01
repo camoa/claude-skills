@@ -714,7 +714,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
-#      names `dispatch-open --resume` (gap row 228).
+#      names `dispatch-open --resume` (gap row 228). A stop or deviation line in the report or the
+#      interface record that reads none followed by more text refuses the same way (gap row 298).
 #
 # The code a departure at review added (gap row 224).
 # 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
@@ -7781,13 +7782,20 @@ BR_SHOTS
 # Prints each line of a builder's file that starts with one key, such as `stop`, in any case.
 # Markdown emphasis and a list marker are dropped first, so `- **Stop:** none` counts. A heading
 # never counts, so a `# stop:` comment in a code block is not the stop line. $1 the file, $2 the key.
-# A value of none followed by a mark and more text prints as none alone: the live builder wrote
-# "Deviation: none. The three changes are named by design paragraph (17)" (gap row 298). A comma
-# keeps the text, because "none, except" names a deviation.
+# A value of none with a trailing full stop prints as none alone.
 br_marked_lines() {
   sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^-[[:space:]]*//' "$1" 2>/dev/null \
     | grep -i "^$2:" \
-    | sed -e 's/^\([^:]*:\)[[:space:]]*\([Nn][Oo][Nn][Ee]\)[[:space:]]*[^[:alnum:][:space:],].*$/\1 \2/'
+    | sed -e 's/^\([^:]*:\)[[:space:]]*\([Nn][Oo][Nn][Ee]\)[[:space:]]*[.]\{0,1\}[[:space:]]*$/\1 \2/'
+}
+
+# Prints each stop or deviation line whose value is none followed by more text. The live builder
+# wrote "Deviation: none. The three changes are named by design paragraph (17)" (gap row 298).
+# Such a line is neither none nor a deviation, and no script can tell which the text means, so
+# build-record refuses it. "nonexistent" does not start the value with the word none. $1 the file.
+br_none_with_text() {
+  { br_marked_lines "$1" stop; br_marked_lines "$1" deviation; } \
+    | grep -i '^[^:]*:[[:space:]]*none[^[:alnum:]]'
 }
 
 # The fronts of the halts a builder's stop line and a builder's deviation write unattended.
@@ -8080,6 +8088,13 @@ do_build_record() {
   local is_deviation=false accepted_json=""
   # The task's own mode, not the ledger's copy from start (gap row 265).
   ledger_run_mode="$(task_run_mode "$TASK_PATH" implement)"
+  local none_file none_line
+  for none_file in "$report_path" "$interface_path"; do
+    [ -f "$none_file" ] || continue
+    none_line="$(br_none_with_text "$none_file" | head -n 1)"
+    [ -z "$none_line" ] \
+      || die 106 "build-record: $none_file holds the line '$none_line'. A stop or deviation line reads none alone, or names its cause, so this line is neither. Nothing is recorded and no attempt is spent. Have the builder write the line alone, put any note on its own line, then run build-record again."
+  done
   stop_lines="$(br_marked_lines "$report_path" stop)"
   stop_count="$(printf '%s' "$stop_lines" | grep -c '.')"
   [ "$stop_count" = "1" ] \

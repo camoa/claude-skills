@@ -108,7 +108,8 @@ Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in 
 interface record is a stop, so its line is `interface-misfit`. A departure from the design's
 interface or from a recipe rule is never built. It is a stop, and its line is `interface-misfit`.
 Under `Stop: none`, your report also holds exactly one deviation line: `Deviation: none`, or
-`Deviation: <what>: <why>`. Write `Deviation: none` only when the code follows the interface and
+`Deviation: <what>: <why>`. Write each line alone, and put any note on its own line. Write
+`Deviation: none` only when the code follows the interface and
 every recipe rule. After a stop line other than `none`, return, and end the turn with nothing
 further written. `build-record` refuses a report with no stop line, and a `Stop: none` report with
 no deviation line. It reads any deviation other than `none` as a stop, in the report or the
