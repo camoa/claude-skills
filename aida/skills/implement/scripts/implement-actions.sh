@@ -29,6 +29,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--implement-lookup <framework>=<path|reason>]...
+#                                                    [--tooling <tool>=<path>]...
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -906,6 +907,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--check-recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
+                            [--tooling <tool>=<path>]...
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -3141,7 +3143,8 @@ do_preconditions() {
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
-  local harness_needed harness_reason env_asked=no env_owner=""
+  local harness_needed harness_reason env_asked=no env_owner="" tooling_said tooling_entries
+  local tooling_args=()
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3172,6 +3175,10 @@ do_preconditions() {
         [ -n "${2#*=}" ] || die 3 "preconditions: --implement-lookup was given neither a path nor a reason: $2"
         implement_lookups="$implement_lookups$(printf '%s' "$2" | sed 's/=/\t/')
 "
+        shift 2 ;;
+      --tooling)
+        [ "$#" -ge 2 ] || die 3 "preconditions: --tooling needs <tool>=<path>"
+        tooling_args+=(--tooling "$2")
         shift 2 ;;
       --value)
         [ "$#" -ge 2 ] || die 3 "preconditions: --value needs <name>=<value>"
@@ -3353,11 +3360,34 @@ PC_RECIPES
       [ -z "$env_owner" ] || entries_json="$(printf '%s' "$entries_json" | jq --arg o "$env_owner" '
         map(if .verdict == "unmet" then . + {owner: $o} + (if .owner then {recipeOwner: .owner} else {} end) else . end)')"
     fi
+    # The tools the recipe names under requires_tooling, checked by the tool skill's own require,
+    # from the worktree. Without it a missing tool is first met at review, when its row runs (gap
+    # row 271). An absent tool reads as a condition whose check command was not found.
+    tooling_entries=""
+    if [ "$lookup" = "resolved" ] && [ "$fw_verdict" != "not-needed" ]; then
+      if tooling_said="$(cd "$codepath" && "$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" \
+          ${tooling_args[@]+"${tooling_args[@]}"} require --advisory --task "$task_folder" "$recipe_path" 2>&1 </dev/null)"; then
+        tooling_entries="$(printf '%s\n' "$tooling_said" | jq -Rc --arg recipe "$recipe_path" '
+          capture("^TOOLING: (?<tool>[^ ]+) (?<state>present|absent|unknown)(: (?<said>.*))?$")
+          | {id: ("requires_tooling: " + .tool),
+             what: ("the tool " + .tool + ", which the test-execution recipe names under requires_tooling"),
+             verdict: (if .state == "present" then "met" else "unknown" end)}
+            + (if .state == "absent" then {reason: "check-command-not-found",
+                 owner: ("the tool skill: install " + .tool + ". The recipe documents its setup: " + $recipe)} else {} end)
+            + (if .state != "present" and (.said // "") != "" then {firstLine: .said} else {} end)')"
+      else
+        tooling_entries="$(jq -nc --arg said "$(printf '%s\n' "$tooling_said" | grep -m1 '[^[:space:]]')" '
+          {id: "requires_tooling", what: "the tools the test-execution recipe names under requires_tooling",
+           verdict: "unknown"} + (if $said == "" then {} else {firstLine: $said} end)')"
+      fi
+      [ -z "$tooling_entries" ] \
+        || entries_json="$(printf '%s\n' "$tooling_entries" | jq -sc --argjson have "$entries_json" '$have + .')"
+    fi
     tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
-    if [ "$section_state" = "ok" ]; then
-      fw_verdict="$(jq -r '
+    if [ "$section_state" = "ok" ] || [ -n "$tooling_entries" ]; then
+      fw_verdict="$(jq -r --arg fw "$fw_verdict" '
         def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
-        (map(.verdict) + ["met"]) | max_by(rank)
+        (map(.verdict) + [$fw]) | max_by(rank)
       ' <<EOF
 $entries_json
 EOF
@@ -3648,7 +3678,7 @@ EOF
         [ .frameworks[] | . as $f
           | ( (.entries[] | select(.verdict | bad)
                | if .check then {next: ("The \($f.framework) condition \(.id)" + how + ". " + ran(.check)), output: said}
-                 else {next: ("The \($f.framework) condition \(.id)" + how), output: "none"} end),
+                 else {next: ("The \($f.framework) condition \(.id)" + how), output: (.firstLine // "none")} end),
               (.smoke | select(.verdict | bad)
                | if .exitCode == null then {next: "The \($f.framework) smoke row read \(.verdict): \(.reason // "")", output: "none"}
                  else {next: ("The \($f.framework) smoke row" + ({verdict, exitCode} | how) + ". "

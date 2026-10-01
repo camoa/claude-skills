@@ -23,14 +23,23 @@ Dispatch it a third time, with `point: implement` and each framework. Do not rea
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.
 
-## Install the tools the test recipe names
+## Check the tools the test recipe names
 
-Invoke the tool skill with `require <path>` for the `test-execution` recipe of each framework. Do
-this from the worktree, before the checks below run any recipe line. The tool skill's section
-"Tools a recipe names" says what each answer means. Go on only when it exits 0. Skip this when
-every order has `proof: record` or `proof: confirm`, because no test runs then. Skip it too when
-the task has no automated tests and every other order has `proof: gate`. The `review` recipe's
-tools are review's to check, not this step's.
+The script runs the tool skill's `require` itself, from the worktree, for each `test-execution`
+recipe. Each tool the recipe names under `requires_tooling` becomes one condition, with the id
+`requires_tooling: <tool>`. A present tool reads met. An absent tool reads unknown with
+`check-command-not-found`, as a condition whose checker is missing does. Its owner names the tool
+skill's install and the recipe path, which documents the setup. So the run stops, and
+`nextAdvice:` says to install.
+
+An absent tool stops the run even when only an end-of-task row uses it, such as `mutation`. The
+recipe names no row per tool, so nothing can tell which tools the orders need. An install now costs
+less than a review check that reads unknown at the end.
+
+A tool that reads unknown with "no recipe" goes to the catalog first, as the tool skill's "No
+recipe" section says. Pass each path it returns as `--tooling <tool>=<path>` and run this step
+again. Nothing is checked when no order needs the harness, as the next section says. The `review`
+recipe's tools are review's to check, not this step's.
 
 ## Run the checks
 
@@ -41,6 +50,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --implement-lookup <framework>=<path to the implement recipe, or the lookup's own word> \
+  --tooling <tool>=<path to a tooling recipe the catalog returned> \
   --value <name>=<value>...
 ```
 `--recipe` names the `test-execution` recipe this step already resolved, for the `## Preconditions`

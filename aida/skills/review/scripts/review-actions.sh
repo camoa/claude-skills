@@ -757,10 +757,9 @@ rw_run_done() {
 # The verdict and the detail for a run that decided nothing, worded once for every caller: a
 # placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
 # an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
-# exit status is the caller's own to read. $1 the row's own label, $2 where a catalog note points, or
-# empty for a caller that raises none.
+# exit status is the caller's own to read. $1 the row's own label.
 rw_run_fault() {
-  local label="$1" where="$2"
+  local label="$1" said
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
   case "$RW_RUN_KIND" in
     UNRESOLVED)
@@ -775,8 +774,10 @@ rw_run_fault() {
   case "$RW_RUN_RC" in
     127)
       RW_RUN_VERDICT="unknown"
-      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided."
-      [ -z "$where" ] || rw_catalog_note "the $label command the recipe declares could not be found" "$where" ;;
+      # A command not found is this project's install, not the recipe, so no catalog note is raised
+      # (gap row 271). The shell's own line names the program it could not find.
+      said="$(printf '%s\n' "$RW_RUN_OUTPUT" | grep -m1 '[^[:space:]]')"
+      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says." ;;
     126)
       RW_RUN_VERDICT="unknown"
       RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;
@@ -963,7 +964,7 @@ rw_run_mutation() {
       continue
     fi
     rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_CHANGED_JSON" "$RW_VALUES" ""
-    rw_run_fault "mutation" "the test-execution recipe for $fw"
+    rw_run_fault "mutation"
     if [ -n "$RW_RUN_VERDICT" ]; then
       combined="$(rw_worse "$combined" "$RW_RUN_VERDICT")"
       detail="$detail $fw: $RW_RUN_DETAIL"
@@ -1100,7 +1101,7 @@ rw_tool_row_check() {
   fi
 
   rw_run_row "$argv" "$scoped" "$RW_VALUES" "$signal"
-  rw_run_fault "$row_id" "the review recipe for ${framework:-this project}"
+  rw_run_fault "$row_id"
   verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$verdict" ]; then
     rc="$RW_RUN_RC"
@@ -1205,7 +1206,7 @@ rw_check_suite() {
       detail="$detail $fw: $(printf '%s' "$cmd" | jq -r '.absent // .missing')"
     else
       rw_run_row "$(printf '%s' "$cmd" | jq -c '.argv')" '[]' "$RW_VALUES" ""
-      rw_run_fault "suite" "the test-execution recipe for $fw"
+      rw_run_fault "suite"
       outfile="$RW_RUN_OUTFILE"
       if [ -n "$RW_RUN_VERDICT" ]; then
         verdict="$RW_RUN_VERDICT"
@@ -2097,7 +2098,7 @@ rw_surface_kind() {
   # {paths} expands to nothing here on purpose: the surfaces that run are named through {surfaces}
   # above, never through the changed files, so a row ending in {paths} runs the whole set.
   rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "$values" ""
-  rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$row" | jq -r '.framework // "this project"')"
+  rw_run_fault "$row_id"
   ran=false; rc=""; row_verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$row_verdict" ]; then
     ran=true
@@ -2158,7 +2159,7 @@ rw_surface_row_check() {
   local one="$1" id="$2" did="$3" fw
   fw="$(printf '%s' "$one" | jq -r '.framework // ""')"
   rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "${4:-$RW_VALUES}" ""
-  rw_run_fault "$id" "the review recipe for ${fw:-this project}"
+  rw_run_fault "$id"
   if [ -n "$RW_RUN_VERDICT" ]; then
     rw_check_row "$id" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" "" "" "$fw"
   elif [ "$RW_RUN_RC" = "0" ]; then
