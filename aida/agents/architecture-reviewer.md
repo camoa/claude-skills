@@ -73,8 +73,9 @@ it. Read what a service and the UI layer are off the units the work orders wrote
 neutral, and the layer names are not.
 
 For `guides` and `practices`, open the paths the research records cite. Each research finding carries
-its text, its source path and the criteria it served, and the text says whether the source is a guide
-or an agentic recipe. A body that is not on disk is named as unread, and you answer from the text.
+its text, its source sentence, its `paths` and its `urls`, and the criteria it served. Each path is
+marked `onDisk`. The text says whether the source is a guide or an agentic recipe. A body that is not
+on disk is named as unread, and you answer from the text. A URL is never on disk.
 Ask no catalog for anything; you have no way to reach one and no need.
 
 For `practices` the brief also carries `playbooksPath`: the playbook record that research loaded,

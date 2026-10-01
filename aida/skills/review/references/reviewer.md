@@ -14,8 +14,9 @@ results.
 
 It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
 frozen contract, and every work order. It holds the path to `review/diff.patch`. It holds the
-research records and the paths they cite. It holds the results of checks 4 to 8, with every tool
-row and every mutation survivor. It holds the findings implementation ruled deferred. It holds
+research records. Each finding carries the paths its source names, each marked on disk or not,
+and its URLs apart. It holds the results of checks 4 to 8, with every tool row and every mutation
+survivor. It holds the findings implementation ruled deferred. It holds
 `playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
 `absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 
@@ -103,7 +104,9 @@ described in `references/checks.md`: a playbook record that was never loaded rea
 Checks 12 and 16 have one more floor, and it is the research records. Both read them and nothing
 else. A task whose research records cite no source leaves both undeclared, because neither lens
 had a guide or an accepted practice to judge against. A task with no research record at all leaves
-both unknown, because nobody looked. Met means a judgement happened.
+both unknown, because nobody looked. Met means a judgement happened. So where the brief puts no
+cited path on disk, both read unknown when their lens raised nothing. A URL is not a path on disk.
+Check 16 escapes that floor when the playbook record has a loaded source.
 
 ## Classify every finding
 

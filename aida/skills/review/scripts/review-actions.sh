@@ -1581,21 +1581,34 @@ do_brief() {
   done <<RW_RESEARCH
 $list
 RW_RESEARCH
-  # Whether each cited source is on disk, so the reviewer names a body it could not open as unread
+  # A finding's source is a sentence, such as "src/a.php:12 (read 2026-09-26, internal-searcher)"
+  # or two URLs joined by " ; " (live-run row 272). So the brief takes the URLs and the path-like
+  # words out of it: a word with a slash, its line number cut off. A URL is no disk path and is kept
+  # apart. Records keep the one source field, so a record written before this reads the same way.
+  research_json="$(printf '%s' "$research_json" | jq -c '
+    [ .[] | .findings = [ .findings[]
+      | ([ (.source // "") | splits("[\\s;()]+") | rtrimstr(",") | select(. != "") ]) as $words
+      | .urls = [ $words[] | select(test("^https?://")) ]
+      | .paths = ([ $words[] | select(test("://") | not) | select(startswith("...") | not)
+                    | ltrimstr("./") | sub(":.*$"; "") | select(test("/")) ] | unique) ] ]')"
+  # Whether each cited path is on disk, so the reviewer names a body it could not open as unread
   # rather than answering as though it had read it. The paths are tested once, in one pass, and one
-  # jq marks every finding from that list: a test per finding reran jq twice for each one.
-  local src on_disk
+  # jq marks every finding from that list: a test per finding reran jq twice for each one. A
+  # relative path is the code path's, never the folder this script was started from.
+  local src on_disk where
   on_disk='[]'
   while IFS= read -r src; do
     [ -n "$src" ] || continue
-    if [ -e "$src" ] || [ -e "$RV_CODEPATH/$src" ]; then
+    case "$src" in /*) where="$src" ;; *) where="$RV_CODEPATH/$src" ;; esac
+    if [ -e "$where" ]; then
       on_disk="$(jq -nc --argjson have "$on_disk" --arg s "$src" '$have + [$s]')"
     fi
   done <<RW_SOURCES
-$(printf '%s' "$research_json" | jq -r '[ .[].findings[].source ] | unique | .[]')
+$(printf '%s' "$research_json" | jq -r '[ .[].findings[].paths[] ] | unique | .[]')
 RW_SOURCES
   research_json="$(printf '%s' "$research_json" | jq -c --argjson found "$on_disk" '
-    [ .[] | .findings = [ .findings[] | . as $f | .onDisk = (($found | index($f.source)) != null) ] ]')"
+    [ .[] | .findings = [ .findings[]
+      | .paths = [ .paths[] | . as $p | {path: $p, onDisk: (($found | index($p)) != null)} ] ] ]')"
 
   brief_json="$(jq -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
@@ -1645,8 +1658,9 @@ RW_SOURCES
       line("lenses"; (.lenses | join(" "))),
       line("playbooksPath"; (.playbooksPath // "none: records/playbooks.json is absent")),
       line("researchFiles"; (.research | length)),
-      line("researchPaths(onDisk)"; ([ .research[].findings[] | select(.onDisk) ] | length)),
-      line("researchPaths(notOnDisk)"; ([ .research[].findings[] | select(.onDisk | not) ] | length)),
+      line("researchPaths(onDisk)"; ([ .research[].findings[].paths[] | select(.onDisk) | .path ] | unique | length)),
+      line("researchPaths(notOnDisk)"; ([ .research[].findings[].paths[] | select(.onDisk | not) | .path ] | unique | length)),
+      line("researchUrls"; ([ .research[].findings[].urls[] ] | unique | length)),
       line("deferredFindings"; (.deferredFindings | length)) ] | .[]'
   local skip_reason
   skip_reason="$(rw_reviewer_skip_reason)"
@@ -1809,6 +1823,20 @@ RW_RESEARCH_FILES
   [ "$RW_COMMITS_IN_CODE" = "yes" ] \
     || diff_floor="no order in this task commits in the code repository, so the diff this lens reads holds nothing the task produced. Each deliverable is a document in the project folder, which this stage does not hand the reviewer."
 
+  # The research records cite sources, and none of them is a body on disk: the brief marked every
+  # path it took out of them off disk, or found only URLs. Then the guides lens judged the finding
+  # text alone, and met would say it judged a guide (live-run row 272). The brief decides this, not
+  # the reviewer's report. The practices lens also reads the playbook record, so a loaded source
+  # there is a body it opened.
+  local body_floor practices_body bodies_on_disk
+  body_floor=""; practices_body=""
+  bodies_on_disk="$(jq -r '[ (.research // [])[] | (.findings // [])[] | (.paths // [])[] | select(.onDisk == true) ] | length' "$BRIEF_FILE" 2>/dev/null)"
+  [ "${bodies_on_disk:-0}" != "0" ] \
+    || body_floor="no source the research cites is a body on disk: $BRIEF_FILE names no cited path on disk, and URLs and prose are not bodies, so this lens judged the finding text alone. Record the path of each body research read, with /aida:research on this task, then run brief and findings again."
+  [ ! -f "$playbooks_record" ] \
+    || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
+    || practices_body="loaded"
+
   local rows_file lens_word check_id hits updated
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
@@ -1826,6 +1854,8 @@ RW_RESEARCH_FILES
       rw_check_row "$check_id" "$source_floor" "$source_note" >>"$rows_file"
     elif [ -n "$diff_floor" ]; then
       rw_check_row "$check_id" "undeclared" "$diff_floor" >>"$rows_file"
+    elif [ -n "$body_floor" ] && { [ "$lens_word" = "guides" ] || { [ "$lens_word" = "practices" ] && [ -z "$practices_body" ]; }; }; then
+      rw_check_row "$check_id" "unknown" "$body_floor" >>"$rows_file"
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
