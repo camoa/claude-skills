@@ -447,15 +447,19 @@ task_env_recipe_change() {
 # row 269). Running `up` again writes the field and commits nothing for files already committed.
 # $1 the task folder, $2 the unmatched files joined by ", ".
 task_env_rerun_step() {
-  local recipe dir names one rest="$2, "
+  local recipe dir names="" one rest="$2, "
   recipe="$(jq -r 'if .worktree.recipeChanges == null then .environment.recipe // empty else empty end' "$1/task.json" 2>/dev/null)"
-  [ -n "$recipe" ] && [ -f "$recipe" ] || return 0
-  dir="$(mktemp -d)" || return 0
-  names="$(recipe_files_into "$recipe" Files "$dir" | cut -f2; recipe_precondition_names "$recipe")"
-  rm -rf "$dir"
+  [ -n "$recipe" ] || return 0
+  # A recipe that is gone names no file, so any unmatched file may be one `up` would record.
+  if [ -f "$recipe" ]; then
+    dir="$(mktemp -d)" || return 0
+    names="$(recipe_files_into "$recipe" Files "$dir" | cut -f2; recipe_precondition_names "$recipe")"
+    rm -rf "$dir"
+  fi
   while [ -n "${rest#, }" ]; do
     one="${rest%%, *}"; rest="${rest#*, }"
-    [ -n "$one" ] && printf '%s\n' "$names" | grep -qxF -- "$one" || continue
+    [ -n "$one" ] || continue
+    [ ! -f "$recipe" ] || printf '%s\n' "$names" | grep -qxF -- "$one" || continue
     jq -r '" The site of this task came up before `task environment up` recorded the files its recipe changed, so none of them was set aside. Run `task environment \(.id) up` again to record them, then run this step again."' "$1/task.json" 2>/dev/null
     return 0
   done

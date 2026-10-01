@@ -93,9 +93,9 @@ the judgement such an order left on the ledger, the way it reads an observed rec
 order. A criterion judged at build time is covered.
 
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A support file
-that an order's tests froze is set aside, because the freeze guards it. A hunk inside an owned
-file that serves nothing is the reviewer's to raise, and its finding cites an id or is not acted
-on.
+that an order's tests froze is set aside while it holds the content the freeze hashed. A hunk
+inside an owned file that serves nothing is the reviewer's to raise, and its finding cites an id
+or is not acted on.
 
 **A check answers unknown only when nothing it reads could be read.** A check with two inputs that
 got one answers from that one, and names what it did not get. Otherwise one network failure stops
