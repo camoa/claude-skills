@@ -153,7 +153,7 @@
       "items": {
         "$ref": "#/$defs/disposition"
       },
-      "description": "The disposition that stands for each candidate, one entry per candidate, written by design-actions.sh's `dispose` alone. A second dispose of the same candidate replaces its entry in place. Entry n is confirmed by records/disposition-<id>-<n>.json, which the disposition-confirmer writes. An unattended `close` refuses while an entry disposed unattended has no such file, or one whose value differs (gap row 293). Optional: an order that disposed nothing has none."
+      "description": "The disposition that stands for each candidate, one entry per candidate, written by design-actions.sh's `dispose` alone. A second dispose of the same candidate replaces its entry in place. records/disposition-<id>.json, which the disposition-confirmer writes, maps each candidate to the confirmer's value. An unattended `close` refuses with exit 8 while an entry disposed unattended has no value there, or another value (gap row 293). A `Candidate` paragraph the list does not name counts the same way, so an order disposed before this field is counted too. Optional: an order that disposed nothing has none."
     },
     "findings": {
       "type": "array",

@@ -10,7 +10,7 @@
 # made again is either consumed like that, or it is output a person already saw on stdout.
 #
 # It is not that the same file comes back. Five of these are written by an agent and not by a
-# script: design-critique-<>.md, <>-distill.json, disposition-<>-<>.json, research-split.json and
+# script: design-critique-<>.md, <>-distill.json, disposition-<>.json, research-split.json and
 # playbooks-catalog.json.
 # A second dispatch reads the same inputs and returns a different document. The catalog also needs
 # the guide service reachable. An entry naming an agent in column two is one of these five.
@@ -58,7 +58,7 @@ design-critique-<>.md | the design-critic agent, one file per lens | the design 
 <>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again
 <>-distill.stamp | scripts/lib/task-helpers.sh, distill_read | the stage's distill or approve action writes it again at its next read of a current sidecar
 design-distill.json | the distiller agent | design close dispatches the distiller again
-disposition-<>-<>.json | the disposition-confirmer agent, one file per disposition made unattended | the design skill dispatches the confirmer again; `dispose` removes the file when it replaces that disposition
+disposition-<>.json | the disposition-confirmer agent, one file per work order | the design skill dispatches the confirmer again for the candidates the file lacks; `dispose` removes one candidate's value when its new outcome differs
 environment-down.txt | skills/task/scripts/task-actions.sh, action `environment down` | the action runs the tear-down lines again
 environment-up.txt | skills/task/scripts/task-actions.sh, action `environment up` | the action runs the bring-up lines again
 playbooks-catalog.json | the playbook-loader agent | the research skill dispatches the loader again

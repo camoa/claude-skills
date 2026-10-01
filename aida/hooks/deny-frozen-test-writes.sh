@@ -41,6 +41,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # cp's -t names, and tar's extract folder and created archive. The person, and any other agent
 # type, is not its concern.
 #
+# Rule four, added for gap row 293, holds three roles to their own records. It is stated where it
+# runs, before the others.
+#
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
 # frozen test needs the design reopened, never a direct edit. The one exception is narrow and
@@ -107,6 +110,47 @@ is_test_author() {
   case "$1" in test-author|*:test-author) return 0 ;; esac
   return 1
 }
+
+# Rule four, added for gap row 293, runs before every other rule and needs no project. Three roles
+# each write one kind of record, and that role alone writes it, through the file tools. The Bash
+# door is not this rule's: none of the three has Bash, and a script's own write runs there.
+#   disposition-confirmer  records/disposition-<order>.json
+#   design-critic          records/design-critique-<lens>.md
+#   distiller              records/<stage>-distill.json
+# A confirmer keeps every value the verdict file already holds, so a disagreement it recorded is
+# never cleared by asking again. Only design-actions.sh's `dispose` removes a value.
+own_record_owner() {
+  case "$1" in
+    */records/disposition-*.json) echo disposition-confirmer ;;
+    */records/design-critique-*.md) echo design-critic ;;
+    */records/*-distill.json) echo distiller ;;
+  esac
+}
+deny_own_record() {
+  jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  exit 0
+}
+if [ "$TOOL" != "Bash" ]; then
+  OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
+  OWN_OWNER="$(own_record_owner "$OWN_TARGET")"
+  case "${AGENT##*:}" in
+    disposition-confirmer|design-critic|distiller)
+      [ "$OWN_OWNER" = "${AGENT##*:}" ] \
+        || deny_own_record "$OWN_TARGET: the ${AGENT##*:} writes only its own record under records/, and nothing else." ;;
+    *)
+      [ -z "$OWN_OWNER" ] \
+        || deny_own_record "$OWN_TARGET: only the $OWN_OWNER writes this record. Dispatch it; do not write the record yourself." ;;
+  esac
+  if [ "$OWN_OWNER" = disposition-confirmer ]; then
+    [ "$TOOL" = Write ] || deny_own_record "$OWN_TARGET: write the whole verdict file with Write, and keep every value it already holds."
+    if [ -f "$OWN_TARGET" ] && jq -e 'type == "object"' "$OWN_TARGET" >/dev/null 2>&1; then
+      jq -e --argjson old "$(cat "$OWN_TARGET")" '
+          (.tool_input.content | fromjson) as $new
+          | ($new | type) == "object" and all($old | to_entries[]; $new[.key] == .value)' <<<"$INPUT" >/dev/null 2>&1 \
+        || deny_own_record "$OWN_TARGET: a value once written in this file stays. Keep every key and value it holds, and add only the candidates it lacks."
+    fi
+  fi
+fi
 
 # ---- resolve the project the same way hooks/session-start.sh's own resolution does -------------
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"

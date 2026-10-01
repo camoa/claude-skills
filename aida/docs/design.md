@@ -351,13 +351,13 @@ Unattended, the record says `none`.
 ## Running it unattended
 
 Set the task's run mode to autonomous before starting and design asks nothing. One thing runs
-unattended that does not run attended. After each reuse disposition, a confirmer reads the
+unattended that does not run attended. After an order's reuse dispositions, a confirmer reads the
 written reasoning and the files it cites, and nothing else. It is refused this conversation's own
 account, because a decision checked against its author's narrative is not checked. It answers
 agree, disagree or downgrade, with what it compared, and design appends that answer to the
-order's reasoning. One confirmer checks one disposition. The unattended close refuses while any
-disposition made unattended lacks a confirmer's agreement. Interactively, you read the reasoning
-yourself.
+order's reasoning. One confirmer checks every disposition of one order. The unattended close
+refuses while any disposition made unattended lacks a confirmer's agreement, and asking again
+does not clear a disagreement. Interactively, you read the reasoning yourself.
 
 ## Closing, and what implementation builds from
 

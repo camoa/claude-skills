@@ -315,20 +315,22 @@ dimension is refused the same way; ask what it compared, then call again.
 
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
-**Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it, with
-the message this file names. Dispatch one confirmer per disposition, never one for several. Its
-lines are the role, the run mode, the order file's path from the `DISPOSED:` line, the
-`--candidate` text, and the path on the `confirmFile:` line. A dispatch that names no role runs as
-the general agent with write tools and this session's model. This one must write nothing but its
-verdict file to mean anything.
+**Autonomous:** once every disposition of an order is recorded, dispatch `disposition-confirmer`
+once for that order, with the message this file names. One confirmer judges every candidate of
+the order. Its lines are the role and the run mode. Then the order file's path, from the
+`DISPOSED:` line. Then the verdict file's path, from the `confirmFile:` line. A dispatch that names
+no role runs as the general agent with write tools and this session's model. This one must write
+nothing but its verdict file to mean anything.
 
 Never this conversation's own account: being denied that is the entire reason the role exists,
 and handing it over turns the check into the decision reading itself. Record what it found with
 `update --append-reasoning`, which adds a paragraph after the text `dispose` wrote.
 
-An unattended `close` refuses with exit 5 while a disposition made unattended has no verdict file,
-or one whose value differs from the value that stands. It prints one line per such disposition.
-On a disagreement, dispose that candidate again, then dispatch a fresh confirmer.
+An unattended `close` refuses with exit 8 while a disposition made unattended lacks an agreeing
+value in its order's verdict file. It prints one line per such disposition. A missing value
+needs one confirmer for that order. A different value is a disagreement, and asking again does
+not clear it. Dispose that candidate again with `--verdict` set to the confirmer's value. When the
+confirmer answered `supersede`, an unattended dispose cannot record it, and a person decides.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
@@ -844,6 +846,8 @@ those words to the call below. Autonomous, nobody says so: run it once the check
 ```
 Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
 `close` refuses with neither, and a later close restates the verdict rather than carrying it over.
+Unattended, `close` exits 8 on a disposition no confirmer agreed with. "The reuse decision" says
+what to do.
 
 Interactive, when critique files exist: ask the person for one line. It names how many findings
 changed an order and how many were left with a reason. Pass it as `--critique-outcome`. The

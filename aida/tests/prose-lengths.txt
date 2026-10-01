@@ -2,7 +2,7 @@
 agents/architecture-reviewer.md 186
 agents/catalog-identifier.md 124
 agents/design-critic.md 127
-agents/disposition-confirmer.md 51
+agents/disposition-confirmer.md 61
 agents/distiller.md 93
 agents/split-advisor.md 66
 agents/fixer.md 74
@@ -15,7 +15,7 @@ agents/row-checker.md 102
 agents/test-author.md 151
 skills/completion/SKILL.md 106
 skills/completion/references/close.md 131
-skills/design/SKILL.md 914
+skills/design/SKILL.md 918
 skills/implement/SKILL.md 260
 skills/implement/references/build.md 538
 skills/implement/references/finish.md 231

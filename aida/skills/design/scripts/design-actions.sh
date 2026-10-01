@@ -201,14 +201,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      outside the project folder or under a path the project ignores. Or a dependency cycle, an
 #      order that reaches no owner, overlapping owned files, or an id naming nothing real
 #      (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
-#      files, before writing anything. An unattended `close` also refuses a disposition made
-#      unattended whose verdict file is missing or holds another value (gap row 293).
+#      files, before writing anything.
 #   6  `start` was asked to begin design on a task research has not closed: no
 #      records/research-check.json, or one whose exitCode is not 0. Research is required (the
 #      owner's rule: no skip), and the way through is the research skill.
 #   7  `check` or `close` found a research finding no work order accounts for (gap row 223). Each
 #      one prints as `<search>#<n>: <the first line of its text>`. `account` is the way through.
 #      `check` reports it only when the design check itself is clean.
+#   8  an unattended `close` found a disposition made unattended, or one only a paragraph records,
+#      that records/disposition-<order>.json does not confirm: no value for the candidate, or
+#      another value (gap row 293). One line per such disposition says which, and what to do.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -259,6 +261,7 @@ die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
 die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
 die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
+die8() { printf 'design-actions: %s\n' "$1" >&2; exit 8; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -631,6 +634,23 @@ unaccounted_findings() {
 # (live-run rows 79 and 131).
 reasoning_appended() {
   printf '%s' "$1" | jq --arg v "$2" '.reasoning = (if (.reasoning // "") == "" then $v else .reasoning + "\n\n" + $v end)'
+}
+
+# The dispositions that stand on the work order file $1, one `<disposition> TAB <runMode> TAB
+# <candidate>` line each. The order's `dispositions` list comes first. Then each candidate a live
+# `Candidate <c> (` paragraph names and the list does not, with its last paragraph's outcome and the
+# run mode `unrecorded`. An order disposed before the list existed holds only paragraphs, and
+# those are counted too (gap row 293).
+standing_dispositions() {
+  jq -r '
+    ((.dispositions // []) | map(.candidate)) as $listed
+    | ((.dispositions // [])
+       + ([ (.reasoning // "") | split("\n\n")[]
+            | capture("^Candidate (?<candidate>.*) \\((same-name|same-directory|same-layer)\\)\\. Proposed [a-z]+, citing [^\n]*?\\. Disposition: (?<disposition>[a-z]+) \\(")
+            | select(.candidate as $c | $listed | index($c) | not) ]
+          | reduce .[] as $p ({}; .[$p.candidate] = $p.disposition)
+          | to_entries | map({candidate: .key, disposition: .value, runMode: "unrecorded"})))[]
+    | [.disposition, .runMode, .candidate] | @tsv' "$1"
 }
 
 # The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
@@ -1531,9 +1551,10 @@ do_verify() {
 # merge: folds one order into another (SKILL.md, "Size a work order"). Every list field is the
 # ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
 # appended under a line naming the folded order. A disposition `dispose` wrote on it is not
-# lost, and a reader can tell which order stated what. Its `dispositions` entries land after the
-# survivor's, where no verdict file names them, so an unattended close asks for a confirmer again. That line is a paragraph of its own, so
-# a folded paragraph marked struck still starts with REASONING_JQ's prefix. The summary says which scalars were carried
+# lost, and a reader can tell which order stated what. That line is a paragraph of its own, so
+# a folded paragraph marked struck still starts with REASONING_JQ's prefix. Its `dispositions`
+# entries land after the survivor's, one per candidate with the survivor's kept. The survivor's
+# verdict file does not name them, so an unattended close asks for a confirmer again. The summary says which scalars were carried
 # and which were dropped. A live run that saw only list counts read the append as a drop and
 # rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
 # and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
@@ -1589,6 +1610,7 @@ do_merge() {
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
     | union("ownedFiles") | union("sharedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
     | union("dispositions")
+    | if has("dispositions") then .dispositions |= reduce .[] as $d ([]; if any(.[]; .candidate == $d.candidate) then . else . + [$d] end) else . end
     | .dependsOn = [ (.dependsOn // [])[] | select(. != $from and . != $i.id) ]
     | append("interface") | append("reasoning")
   ' "$into_file")"
@@ -2083,27 +2105,28 @@ do_close() {
   # Unattended, each disposition nobody watched needs the confirmer's verdict file, and the value
   # in it must be the one that stands (gap row 293). A value that differs is a disagreement.
   if [ "$RUN_MODE" = "autonomous" ]; then
-    local unconfirmed="" wo_json wo_id k disp mode cand verdict_file got
+    local unconfirmed="" wo_json wo_id disp mode cand verdict_file got
     while IFS= read -r wo_json; do
       [ -n "$wo_json" ] || continue
       wo_id="$(jq -r '.id' "$wo_json")"
-      k=0
+      verdict_file="$TASK_PATH/records/disposition-$wo_id.json"
       while IFS="$(printf '\t')" read -r disp mode cand; do
-        k=$((k + 1))
-        [ "$mode" = "autonomous" ] || continue
-        verdict_file="$TASK_PATH/records/disposition-$wo_id-$k.json"
-        got="$(jq -r '.value // empty' "$verdict_file" 2>/dev/null)"
+        [ "$mode" != "interactive" ] || continue
+        got="$(jq -r --arg c "$cand" '.[$c] // empty' "$verdict_file" 2>/dev/null)"
         if [ -z "$got" ]; then
           unconfirmed="$unconfirmed
 $wo_id, $cand, $disp: no verdict in $verdict_file"
+        elif [ "$got" = "supersede" ] && [ "$disp" != "supersede" ]; then
+          unconfirmed="$unconfirmed
+$wo_id, $cand, $disp: the confirmer answered supersede, which an unattended dispose cannot record. A person decides it"
         elif [ "$got" != "$disp" ]; then
           unconfirmed="$unconfirmed
-$wo_id, $cand, $disp: the confirmer answered $got in $verdict_file"
+$wo_id, $cand, $disp: the confirmer answered $got. Dispose it again with --verdict $got"
         fi
-      done < <(jq -r '(.dispositions // [])[] | [.disposition, .runMode, .candidate] | @tsv' "$wo_json")
+      done < <(standing_dispositions "$wo_json")
     done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
     [ -z "$unconfirmed" ] \
-      || die5 "close: a disposition recorded unattended has no confirmer verdict that agrees. Dispatch disposition-confirmer once per line, with that candidate and file. On a disagreement, dispose the candidate again first:$unconfirmed"
+      || die8 "close: a disposition made unattended has no confirmer verdict that agrees. For a missing verdict, dispatch one disposition-confirmer for that order:$unconfirmed"
   fi
 
   local unaccounted
@@ -2241,10 +2264,10 @@ $unaccounted"
 # paragraph per call, so every candidate's verdict survives. Neither flag, and the order's
 # `reuses` is left as it was.
 #
-# Each call also writes the outcome to the order's `dispositions`, one entry per candidate, and
-# removes that entry's old verdict file. Unattended, it prints `confirmFile:`, the path the
-# confirmer writes its verdict to. An unattended `close` counts the entries against those files,
-# because one confirmer once judged the last of six paragraphs and the other five stood (gap row 293).
+# Each call also writes the outcome to the order's `dispositions`, one entry per candidate.
+# Unattended, it prints `confirmFile:`, the order's verdict file, which maps each candidate to the
+# confirmer's value. An unattended `close` counts the dispositions against that file, because one
+# confirmer once judged the last of six paragraphs and the other five stood (gap row 293).
 #
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
 # because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
@@ -2338,21 +2361,27 @@ do_dispose() {
     doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
       '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"
   fi
+  # What stood for this candidate before this call, read before the write below.
+  local before verdict_file held
+  before="$(standing_dispositions "$file" | awk -F'\t' -v c="$candidate" '$3 == c { print $1 }')"
   doc="$(printf '%s' "$doc" | jq --arg c "$candidate" --arg o "$outcome" --arg m "$RUN_MODE" '
     {candidate: $c, disposition: $o, runMode: $m} as $e
     | .dispositions = (.dispositions // [])
     | if any(.dispositions[]; .candidate == $c) then .dispositions |= map(if .candidate == $c then $e else . end)
       else .dispositions += [$e] end')"
-  local n confirm_file
-  n="$(printf '%s' "$doc" | jq --arg c "$candidate" '[.dispositions[].candidate] | index($c) + 1')"
-  confirm_file="$TASK_PATH/records/disposition-$id-$n.json"
   write_atomic "$file" "$doc"
-  # A verdict on the entry this call replaced no longer confirms anything.
-  rm -f -- "$confirm_file"
+  # The confirmer's value for this candidate stays when it agrees with the new outcome, and when
+  # the outcome did not change, so a disagreement is never cleared by asking again. A new outcome
+  # it did not judge drops the value, and only this candidate's.
+  verdict_file="$TASK_PATH/records/disposition-$id.json"
+  held="$(jq -r --arg c "$candidate" '.[$c] // empty' "$verdict_file" 2>/dev/null)"
+  if [ -n "$held" ] && [ "$held" != "$outcome" ] && [ "$before" != "$outcome" ]; then
+    write_atomic "$verdict_file" "$(jq --arg c "$candidate" 'del(.[$c])' "$verdict_file")"
+  fi
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
-  [ "$RUN_MODE" != "autonomous" ] || echo "confirmFile: $confirm_file"
+  [ "$RUN_MODE" != "autonomous" ] || echo "confirmFile: $verdict_file"
   echo "reuses: $(printf '%s' "$doc" | jq -r '(.reuses // []) | length')"
   wo_summary "$doc"
   render_wo "$id"
