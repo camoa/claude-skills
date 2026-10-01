@@ -1751,8 +1751,9 @@ recipe_stale_line() {
   case "$catalog" in
     ''|no-recipe) return 0 ;;
     listing-unreachable|fetch-failed)
+      mine="$(recipe_name_of "$have" version)"
       printf "%s: the project's copy of the test-execution recipe is version %s, and its catalog version was not checked, because the catalog's copy could not be read (%s)." \
-        "$fw" "$(recipe_name_of "$have" version)" "$catalog"
+        "$fw" "${mine:-unstated}" "$catalog"
       return 0 ;;
   esac
   [ ! "$have" -ef "$catalog" ] || return 0
