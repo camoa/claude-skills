@@ -99,7 +99,9 @@ raised a finding. It records one row per routed done-when clause, and one more c
 It prints one summary line per check with the counts.
 Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
-never a clean one**, and version 5 paid for that four times. Check 16 has a floor before its lens,
+never a clean one**, and version 5 paid for that four times. When every finding of a lens is low,
+the script does not decide its check. Interactive, the check reads unknown until the person answers
+at close. Autonomous, it reads met, and the audit lines name the check and its findings. Check 16 has a floor before its lens,
 described in `references/checks.md`: a playbook record that was never loaded reads unknown.
 
 Checks 12 and 16 have one more floor, and it is the research records. Both read them and nothing

@@ -27,7 +27,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   review-actions.sh surfaces <task_folder> [--walked <surface id>]...
 #                                            [--accept-baseline <surface id>]...
 #                                            [--value <name>=<value>]...
-#   review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+#   review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
 #   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
 #   review-actions.sh step     <name>
 #
@@ -193,7 +193,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
-       review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+       review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
        review-actions.sh audit    <task_folder>
        review-actions.sh step     <name>
 EOF
@@ -487,7 +487,7 @@ rw_print_summary() {
       line("commit"; .reviewedAt),
       line("runMode"; .runMode) ]
     + [ (.recipes // [])[] | line("recipe(\(.framework))"; "lookup=\(.lookup) test=\(.testRecipe) check=\(.checkRecipe)") ]
-    + [ (.checks // [])[] | line("check(\(.id))"; "\(.verdict) | \(.detail | short)") ]
+    + [ (.checks // [])[] | line("check(\(.id))"; "\(.verdict)\(if has("answeredBy") then " answeredBy=" + .answeredBy else "" end) | \(.detail | short)") ]
     + [ (.criteria // [])[] | line("criterion(\(.id))"; "\(.verdict) answeredBy=\(.answeredBy)") ]
     + [ (.surfaces // [])[] | line("surface(\(.id))"; "\(.verdict) walked=\(.walked) ran=\(.ran)") ]
     + (if has("surfaceSetup") then [ line("surfaceSetup"; .surfaceSetup) ] else [] end)
@@ -1861,7 +1861,7 @@ RW_RESEARCH_FILES
     || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
     || practices_body="loaded"
 
-  local rows_file lens_word check_id hits updated
+  local rows_file lens_word check_id hits low_only updated
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
     check_id="$(rw_check_for_lens "$lens_word")"
@@ -1870,8 +1870,18 @@ RW_RESEARCH_FILES
     # finding beats both floors below it: a lens that raised one judged something.
     hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
       '[ .[] | select(.lens == $l) | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
+    low_only="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
+      '[ .[] | select(.lens == $l) | .severity ] | length > 0 and all(. == "low")')"
     if [ "$lens_word" = "practices" ] && [ -n "$playbooks_floor" ]; then
       rw_check_row "$check_id" "unknown" "$playbooks_floor" >>"$rows_file"
+    # Only low findings: a person decides the check at close, and nobody present reads met. The
+    # answeredBy key marks the check as the person's question, and `close --row` answers it.
+    elif [ "$low_only" = "true" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
+      rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised is low: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
+        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
+    elif [ "$low_only" = "true" ]; then
+      rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low: $hits. Nobody was present to confirm them, so the check reads met and the findings stay follow-up." \
+        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
     elif [ -n "$hits" ]; then
       rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits" >>"$rows_file"
     elif [ -n "$source_floor" ] && { [ "$lens_word" = "guides" ] || [ "$lens_word" = "practices" ]; }; then
@@ -2545,7 +2555,7 @@ do_close() {
   [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it"
 
   local alignment criteria count i one kind state verdict answered suite_verdict
-  local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
+  local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
   local observe_owner observed_file confirm_owned failed_by cited_by="" stale_low
   alignment="$(rw_alignment)"
   # The criteria an order proved by confirm puts to the person, confirmCriteria in
@@ -2634,16 +2644,17 @@ do_close() {
 
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
-  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --rawfile given /dev/stdin '
+  person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
+  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(($co | index($id)) == null)
+      | . as $id | select(($co | index($id)) == null) | select(($pc | index($id)) == null)
       | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
     | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm puts it to a person. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, and no check of that id holds only low findings. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
   # not judge severity, so it names them and sends the person back to the producer.
@@ -2674,6 +2685,20 @@ RW_ROWS
     $record[0]
     | .criteria = $criteria
     | .checks = ([$one] + (.checks | map(select(.id != "every-criterion"))))')"
+  # A check holding only low findings takes the person's --row (gap row 274).
+  local check_rows
+  check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
+      | {id: .[0], verdict: .[1]} ]' <<RW_ROWS
+$rows
+RW_ROWS
+)"
+  updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" '
+    .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
+      | if $g == null then $c
+        else $c | .verdict = $g.verdict | .answeredBy = "person"
+          | .detail = (.detail + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
+                                  else " The person rejected them, so the check reads unmet." end)) end ]')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
   # The absence check is read again off the rows the record holds, so a row stored before
   # `testable` existed reads unknown here rather than passing on the check `findings` wrote.
@@ -2784,8 +2809,11 @@ do_audit() {
       def named($lead): [ $r.checks[] | .detail | scan($lead + "[^.]*") | sub($lead; "") | split(", ") ] | add // [];
       (named("Disabled and not run: ")) as $disabled
     | (named("touched none of their declared paths: ")) as $unaffected
-    | ([ .checks[] | {id, verdict, how: how} ]) as $rows
-    | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)" ]
+    # A check a person answered, or one nobody was present to answer, carries its detail here,
+    # because completion prints these lines into the pull request body (gap row 274).
+    | ([ .checks[] | {id, verdict, how: how,
+          note: (if has("answeredBy") then " answeredBy=" + .answeredBy + ": " + .detail else "" end)} ]) as $rows
+    | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)\(.note)" ]
       + [ .surfaces[] | .id as $sid | "surface(\($sid)): " + (if .ran then "run"
             elif ($disabled | index($sid)) != null then "not run: disabled"
             elif ($unaffected | index($sid)) != null then "not run: unaffected"

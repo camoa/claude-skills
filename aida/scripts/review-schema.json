@@ -241,6 +241,11 @@
           "minLength": 1,
           "description": "Why this verdict, in plain words naming what was compared: an exit code, a file that matched no order, a marker that was found, or the lens that returned nothing."
         },
+        "answeredBy": {
+          "type": "string",
+          "enum": ["person", "nobody"],
+          "description": "Present only on a lens check whose findings are all low, which a person decides rather than the script. `nobody` before the person answers, when the check reads unknown, or on a run with nobody present, when it reads met. `person` once `close --row` took the answer."
+        },
         "absent": {
           "type": "boolean",
           "description": "True when the recipe row for this check was declared absent, and `detail` carries the recipe's own reason. It exists because undeclared covers two facts that must not read alike: a framework saying it has no such tool answered the question, and a caller that passed no recipe answered nothing."

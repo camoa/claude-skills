@@ -11,6 +11,9 @@ row sits under each criterion that order owns, or serves when it owns none. Show
 summary asks a different question than the row a person signed up to answer. Show every row in one
 pass, and ask for each one only once.
 
+Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. Its detail
+names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
+
 The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
 below. Autonomous, there is
 nobody to ask: each such criterion reads unanswered, no row flag is accepted, and the task gets no
@@ -30,10 +33,10 @@ the row.
 ## Close
 
 Run, with one `--row` per criterion a person verified, and one per criterion that carries the
-done-when rows of an order proved by `confirm`:
+done-when rows of an order proved by `confirm`, and one per check the person answered:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
-  --row <criterion>=met|unmet
+  --row <criterion>=met|unmet --row <check id>=met|unmet
 ```
 It archives any previous record to `review/review-<date>-<commit>.json` before it writes, and it
 refuses at exit 63 when that move fails. Version 5 ran four review passes on one task, each

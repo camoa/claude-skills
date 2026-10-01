@@ -74,6 +74,11 @@ check reads unknown, not met, when no guide body design opened is on disk, becau
 then had only the research text. Research names guides and never opens them. The practices check
 follows the same rule unless the playbook record holds a loaded source.
 
+A lens check fails on any medium or high finding. When every finding of one of those six lens
+checks is low, you decide the check at close. Confirm the findings and the check reads met, with
+the findings left as follow up. Reject them and it reads unmet. With nobody present, the check
+reads met, and the pull request body names the check and its low findings.
+
 The same reviewer answers one more check, which exists only when the build sent it something. A
 done-when clause that asserts an absence says the change added nothing of a named kind. No second
 engine for one job. No new dependency. No static call to the container. No test of it can be watched
@@ -216,8 +221,7 @@ low. Then it cites one criterion or one non-goal, or neither, and that decides w
 - **It cites a non-goal.** The task did what it said it would not do.
 - **It cites neither, or it is low and cites a criterion.** It is work nobody has a task for.
   Interactively, review offers one follow up task per finding, and a yes creates it from the
-  evidence. Autonomously, it is recorded and
-  named, and no task is created. Folding such work in silently is what scope exists to prevent.
+  evidence. Autonomously, it is recorded and named, and no task is created. Folding such work in silently is what scope exists to prevent.
 
 Severity overrides the third case only: a high severity security fault is raised to you at once,
 because leaving it queued ships it. A finding implementation deferred at its fix round cap is not
@@ -271,6 +275,7 @@ answer is accepted only when a person is present.
 |---|---|---|
 | a criterion a person verifies | you answer met or unmet | unanswered, and no sign off |
 | the walk of the surfaces | you walk every one | recorded as not done, and the surface checks read unknown |
+| a lens check whose findings are all low | you confirm the findings, met, or reject them, unmet | met, and named in the pull request body |
 | a finding citing neither a criterion nor a non-goal, or a low one citing a criterion | a follow up task is offered | recorded, and no task is created |
 | a new baseline for a surface | planned, shown, confirmed, then written | refused, and recorded as refused |
 | setting up a surface | offered once | not offered, and recorded as not offered |
