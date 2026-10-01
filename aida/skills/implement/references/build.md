@@ -315,8 +315,8 @@ compared against the baseline it ran against, and a changed recipe makes that co
 no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
-`references/preconditions.md` does. A placeholder is a whole token, never part of one. It has
-these forms:
+`references/preconditions.md` does. A placeholder is a whole token, or part of one, such as
+`gate-{project}`. It has these forms:
 - `{a.b}` is the Input contract field at that dotted path. Pass `--value a.b=<value>`. For a
   list of scalars, pass one `--value a.b=<item>` per item, and the line runs once per item.
   Only the first such name in a line makes it run more than once.
@@ -326,7 +326,11 @@ these forms:
 - `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them. On
   an order that owns no file, such a line does not apply, and it never passes the order alone.
 
-A `{a.b}` placeholder with no value reads unknown.
+A name with no `--value` is read from the tokens preconditions recorded. It is then read from
+the keys of the task's environment record, such as `project`. A `{a.b}` placeholder with no value
+reads unknown. A `## Configuration gate` line of a `gate` order is the exception. A token there
+with no value refuses at 3 before any check runs, and no attempt is spent. The message names the
+token. Supply the value, then run the same step again.
 
 Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
 the worktree. A line can run a script the recipe ships. After the lines, it removes those

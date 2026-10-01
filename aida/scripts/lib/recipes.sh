@@ -43,6 +43,8 @@
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command
+#   br_token_value <values> <name>            a run line's value for that name, from every source
+#   br_fill_arg <values> <arg>                the argument with each {name} filled, or the unfilled name
 #   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
 #   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
@@ -77,6 +79,7 @@
 #                                               shell; writes the command, then its output, to <out>
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
 #   fill_tokens_from <list> <line>            the line with every `{name}` the list holds filled
+#   task_environment_tokens <task.json>       the keys task.json keeps under environment, as a list
 #   run_recipe_capture <who> <recipe> <line> <dir> <out> <capture> [<hint>]  runs one line; its
 #                                             stdout to <capture>, both streams to <out>
 #   recipe_tokens_run <who> <recipe> <out> <dir> <seed> <hint>  runs the ## Tokens blocks into RT_TOKENS;
@@ -940,10 +943,9 @@ tf_path_matches_catalog_glob() {
 
 # Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
 # array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry, and
-# that `{dirs}` expands to one token per directory holding one. $5 is
-# the tab-separated `--value` list every other single-placeholder token is read from. A name the
-# list lacks is read from the tokens preconditions recorded (br_recorded_token). A name that
-# ends in `:json` and has no value reads JSON null. $6, when
+# that `{dirs}` expands to one token per directory holding one. Every other `{name}`, a whole
+# token or inside one such as `gate-{project}`, is filled by br_fill_arg from $5, the
+# tab-separated `--value` list (gap row 288). $6, when
 # given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
 # $7, when given, receives `+ ` and the command as it runs, every token filled (gap row 264). A
 # token that is empty or holds a character outside [A-Za-z0-9_./:=@%+,-] is in single quotes, so a
@@ -956,7 +958,7 @@ tf_path_matches_catalog_glob() {
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
 br_run_resolved() {
   local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}" logfile="${7:-}"
-  local count i tok name list_json pcount pi rc
+  local count i tok list_json pcount pi rc
   set --
   count="$(printf '%s' "$argv_json" | jq 'length' 2>/dev/null)"
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
@@ -985,14 +987,9 @@ br_run_resolved() {
           pi=$((pi + 1))
         done
         ;;
-      '{'*'}')
-        name="${tok#\{}"; name="${name%\}}"
-        tok="$(cr_lookup "$values" "$name")"
-        [ -n "$tok" ] || tok="$(br_recorded_token "$name")"
-        # `{a.b:json}` is a field's whole value as one JSON token, so an absent field is JSON null.
-        case "$name" in *:json) tok="${tok:-null}" ;; esac
-        if [ -z "$tok" ]; then
-          printf 'UNRESOLVED\t%s' "$name"
+      *'{'*'}'*)
+        if ! tok="$(br_fill_arg "$values" "$tok")"; then
+          printf 'UNRESOLVED\t%s' "$tok"
           return 0
         fi
         set -- "$@" "$tok"
@@ -1025,6 +1022,35 @@ br_run_resolved() {
     rc=$?
   fi
   printf 'RAN\t%s' "$rc"
+}
+
+# The value of the name $2 in a run line. The `--value` list $1 is read first, then the tokens
+# preconditions recorded, then the keys task.json keeps under `environment`, the keys the status
+# line reads. A name that ends in `:json` is a field's whole value as one JSON token, so an absent
+# field is JSON null. Prints nothing when no source has the name.
+br_token_value() {
+  local tok
+  tok="$(cr_lookup "$1" "$2")"
+  [ -n "$tok" ] || tok="$(br_recorded_token "$2")"
+  [ -n "$tok" ] || [ -z "${TASK_PATH:-}" ] || tok="$(cr_lookup "$(task_environment_tokens "$TASK_PATH/task.json")" "$2")"
+  case "$2" in *:json) tok="${tok:-null}" ;; esac
+  printf '%s' "$tok"
+}
+
+# The argument $2 with each `{name}` in it filled by br_token_value from the list $1. The text
+# between a `{` and the next `}` is the name, so no argument runs with a brace pair left in. On a
+# name with no value it prints that name and returns 1.
+br_fill_arg() {
+  local rest="$2" out="" name value
+  while :; do
+    case "$rest" in *'{'*'}'*) ;; *) break ;; esac
+    out="$out${rest%%\{*}"; rest="${rest#*\{}"
+    name="${rest%%\}*}"; rest="${rest#*\}}"
+    value="$(br_token_value "$1" "$name")"
+    [ -n "$value" ] || { printf '%s' "$name"; return 1; }
+    out="$out$value"
+  done
+  printf '%s' "$out$rest"
 }
 
 # The value the test recipe's `## Tokens` block gave the name $1 at preconditions, from the task's
@@ -1913,6 +1939,12 @@ RF_TAKE_DIRS
   printf '%s\n%s\n%s\n' "$back" "$gone" "$left"
 }
 
+# The keys the task record $1 keeps under `environment`, one `<name><TAB><value>` line each, the
+# shape cr_lookup reads. Only string values are listed.
+task_environment_tokens() {
+  jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$1" 2>/dev/null
+}
+
 # Runs the `## Status` line of the environment recipe $2 in the worktree $3. Returns 0 when the
 # site is up, 1 when it is down, and 2 when the recipe has no such block (gap row 212). The recipe
 # decides what up means, so no framework's probe lives here. `{name}` is filled from the keys the
@@ -1929,7 +1961,7 @@ recipe_status_run() {
   RS_FIRST=""
   line="$(sh_blocks_under "$recipe" Status | sed -n '/[^ ]/{p;q;}')"
   [ -n "$line" ] || return 2
-  line="$(fill_tokens_from "$(jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$4" 2>/dev/null)" "$line")"
+  line="$(fill_tokens_from "$(task_environment_tokens "$4")" "$line")"
   refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
   case "$line" in *'{'*'}'*) rest="${line#*\{}"; die 3 "$who: the ## Status line of $recipe holds a token nothing fills: {${rest%%\}*}}. A status line may hold only the keys the task record keeps under environment." ;; esac
   recipe_files_place "$who" "$recipe" "$tree" "$dir" >/dev/null

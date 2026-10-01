@@ -3373,6 +3373,14 @@ PC_RECIPES
     rm -f "$tokens_out"
     PC_VALUES="$values"
   fi
+  # A gate order's `## Configuration gate` lines may hold a token, such as `{project}`. Each one
+  # is resolved here and never run, because a gate line reaches the site (gap row 288). A token
+  # that nothing fills refuses now, before a build spends an attempt on it.
+  local pc_gate_missing=""
+  printf '%s' "$SNAPSHOT_DOC" | jq -e "$BR_ORDER_FACTS_JQ"' any((.workOrders // [])[]; orderFacts.slot == "configuration-gate")' >/dev/null \
+    && pc_gate_missing="$(br_gate_unfilled "$implement_lookups" "$PC_VALUES")"
+  [ -z "$pc_gate_missing" ] \
+    || die 3 "preconditions: a gate order runs the ## Configuration gate of ${pc_gate_missing#*	}, and its token {${pc_gate_missing%%	*}} has no value. Nothing was recorded. Pass --value ${pc_gate_missing%%	*}=<value>, or bring the environment up with task environment <task-id> up, which records it."
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
     [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
     | join(", ")')"
@@ -6883,7 +6891,7 @@ br_run_lines() {
       values="$(printf '%s\n' "$BRC_VALUES" | awk -F "$tab" -v n="$tok" '$1 == n { sub(/^[^\t]*\t/, ""); print }')"
       if [ "$(printf '%s\n' "$values" | grep -c .)" -gt 1 ]; then multi_name="$tok"; multi_values="$values"; break; fi
     done <<BR_RUN_TOKENS
-$(printf '%s' "$argv_json" | jq -r '.[] | select(test("^[{][^{}]+[}]$")) | .[1:-1]')
+$(printf '%s' "$argv_json" | jq -r '.[] | scan("[{]([^{}]+)[}]") | .[0]')
 BR_RUN_TOKENS
     while IFS= read -r value; do
       if [ -n "$multi_name" ]; then
@@ -7177,6 +7185,41 @@ br_site_status() {
   br_verify_files_remove
   trap - EXIT INT TERM
   return "$rc"
+}
+
+# The first token no source fills in the `## Configuration gate` lines of the recipes $1, a
+# `<framework><TAB><path>` list, with $2 as the `--value` list. Prints `<name><TAB><path>`, or
+# nothing when every token fills. It resolves each argument the way br_run_resolved does and runs
+# nothing, because a gate line reaches the site (gap row 288).
+br_gate_unfilled() {
+  local fw rp arg name
+  while IFS="$(printf '\t')" read -r fw rp; do
+    [ -n "$fw" ] && [ -f "$rp" ] || continue
+    while IFS= read -r arg; do
+      case "$arg" in '{paths}'|'{file}'|'{dirs}') continue ;; *'{'*'}'*) ;; *) continue ;; esac
+      if ! name="$(br_fill_arg "$2" "$arg")"; then
+        printf '%s\t%s' "$name" "$rp"
+        return 0
+      fi
+    done <<BR_GATE_ARGS
+$(sh_blocks_under "$rp" "Configuration gate" | jq -Rr 'split(" ") | .[] | select(. != "")')
+BR_GATE_ARGS
+  done <<BR_GATE_RECIPES
+$1
+BR_GATE_RECIPES
+}
+
+# Refuses at 3, before any check runs, when a `## Configuration gate` line of a gate order holds
+# a token nothing fills. Such a line would fail for a reason that is not the order's, so no
+# attempt is spent, and the same step runs again once the value exists. Reads BRC_WHO,
+# BRC_UNIT_JSON, BRC_GATE_RECIPES and BRC_VALUES.
+br_require_gate_tokens() {
+  local found
+  br_order_facts "$BRC_UNIT_JSON"
+  [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
+  found="$(br_gate_unfilled "$BRC_GATE_RECIPES" "$BRC_VALUES")"
+  [ -z "$found" ] \
+    || die 3 "$BRC_WHO: the token {${found%%	*}} in the ## Configuration gate of ${found#*	} has no value, so no check ran and no attempt was spent. A value comes from --value ${found%%	*}=<value>, from the tokens preconditions recorded, or from the task's environment record, which task environment <task-id> up writes."
 }
 
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
@@ -7547,6 +7590,7 @@ br_eight_checks() {
   [ -n "$interface_check_json" ] \
     || die 3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
 
+  br_require_gate_tokens
   br_require_site_up
   seven_file="$(mktemp)" || die 3 "$BRC_WHO: could not create a temporary file"
   br_seven_checks >"$seven_file"
@@ -9594,6 +9638,7 @@ RV_SCOPE
 
   # The checks travel by file to the record, the same as build-record (nyc defects 9 and 12).
   local seven_file checks_json
+  br_require_gate_tokens
   br_require_site_up
   seven_file="$(mktemp)" || die 3 "fix-record: could not create a temporary file"
   br_seven_checks >"$seven_file"

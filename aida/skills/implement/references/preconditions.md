@@ -178,6 +178,12 @@ there. A rerun takes new values and never reads the old ones, and `recipe-refres
 when it changes a recipe path. A block that fails or prints nothing stops the blocks after it. Its name stays unfilled,
 and a row that needs it reads unknown and names it. A recipe with no `## Tokens` section fills nothing.
 
+A `gate` order runs the implement recipe's `## Configuration gate` lines at its build. A line may
+hold a token such as `{project}`, which the task's environment record supplies. When any order's
+proof is `gate`, the script resolves each token in those lines and runs none of them, because a
+gate line reaches the site. A token that nothing fills refuses at 3, names the token, and writes
+nothing. Bring the environment up, or pass `--value <name>=<value>`, then run the step again.
+
 ## Read the verdicts to the person
 
 - **met.** Every declared condition answered yes. The build can go on.
