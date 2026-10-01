@@ -203,22 +203,53 @@ settings_set_projects_base_if_unset() {
 
 # Looks a target up by its exact name, its exact codePath or its exact project folder path (never
 # by ancestry, that is registry_resolve_by_directory's job, a different question). Every action
-# that takes a project resolves it here, so each takes all three addresses. A code path and a
-# project folder are never the same folder, so the two paths cannot both answer. Prints the
-# matching registry row as one JSON object and exits 0, or prints nothing and exits 1. Reads the
-# store file directly: an exact-match lookup by these addresses is not one of registry.sh's own
-# public functions, and composing it from the raw store is what that library's own header asks a
-# caller to do.
+# that takes a project resolves it here, so each takes all three addresses. Prints the matching
+# registry row as one JSON object and exits 0, or prints nothing and exits 1. create,
+# set-code-path and both pickups refuse a path that another row already holds in either field. A
+# registry written before that refusal can still hold such a pair, so a target that matches two
+# rows is refused with exit 3, naming both, and never answered by registry order. Reads the store
+# file directly: an exact-match lookup by these addresses is not one of registry.sh's own public
+# functions, and composing it from the raw store is what that library's own header asks a caller
+# to do.
 resolve_target() {
-  local target="$1" canon
+  local target="$1" canon rows
   [ -r "$REGISTRY_FILE" ] || return 1
   canon="$(canon_path "$target")"
-  jq -c --arg n "$target" --arg c "$canon" '
-    [.projects[]? | select(.name == $n or ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))] | first // empty
-  ' "$REGISTRY_FILE" 2>/dev/null | grep -q . && \
-  jq -c --arg n "$target" --arg c "$canon" '
-    [.projects[]? | select(.name == $n or ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))] | first
-  ' "$REGISTRY_FILE" 2>/dev/null
+  rows="$(jq -c --arg n "$target" --arg c "$canon" '
+    [.projects[]? | select(.name == $n or ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))] | unique
+  ' "$REGISTRY_FILE" 2>/dev/null)" || return 1
+  case "$(printf '%s' "$rows" | jq 'length')" in
+    0) return 1 ;;
+    1) printf '%s' "$rows" | jq -c '.[0]' ;;
+    *) printf 'project-actions: %s names more than one project: %s. Name the project by its name.\n' \
+         "$target" "$(printf '%s' "$rows" | jq -r '[.[].name] | join(", ")')" >&2
+       return 3 ;;
+  esac
+}
+
+# The caller's half of a failed resolve_target: exit 3 when the target named two projects, else
+# print NOT FOUND and return, so the caller returns 1.
+unresolved() {
+  [ "$1" -ne 3 ] || exit 3
+  echo "NOT FOUND: $2" >&2
+}
+
+# Succeeds when a registry row, other than the one whose project folder is <except>, holds <path>
+# as its code path or as its project folder.
+path_taken() {
+  printf '%s' "$1" | jq -e --arg c "$2" --arg x "${3:-}" '
+    any(.projects[]?; (.path // "" | sub("/+$"; "")) != $x
+      and ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))' >/dev/null 2>&1
+}
+
+# The pickups' guard: refuses a code path or a project folder, read from a file this action did
+# not write, that another row already holds in either field.
+refuse_taken_paths() {
+  local snapshot p
+  snapshot="$(registry__current)" || die3 "switch: the registry could not be read; nothing was registered. See the error above."
+  for p in "$1" "$2"; do
+    ! path_taken "$snapshot" "$p" || die3 "switch: this path is already registered: $p. Nothing was registered."
+  done
 }
 
 # The project folder's ignore file, written by create and by git-init on a version 5 pickup. A
@@ -347,8 +378,7 @@ do_create() {
   local registry_snapshot
   registry_snapshot="$(registry__current)" || die3 "the registry could not be read; nothing was written. See the error above."
 
-  if printf '%s' "$registry_snapshot" | jq -e --arg c "$code_path" \
-      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c)' >/dev/null 2>&1; then
+  if path_taken "$registry_snapshot" "$code_path"; then
     die3 "a project is already registered for $code_path. Nothing was written."
   fi
   refuse_taken_name "$name" "the name '$name' is already registered. Choose a different name."
@@ -359,6 +389,8 @@ do_create() {
   local project_path
   project_path="$(canon_path "$projects_home/$name")"
   [ ! -e "$project_path" ] || die3 "the project folder $project_path already exists. Pick a different name or remove that folder first."
+  ! path_taken "$registry_snapshot" "$project_path" \
+    || die3 "a project is already registered for $project_path. Pick a different name."
 
   # The project folder and the code path are never the same folder (ideal/project.md, "What a
   # project is"). Both sides are canonicalised before they are compared. Comparing a concatenated
@@ -508,6 +540,7 @@ register_v5_folder() {
   # not an error anybody sees: check-project.sh then exits 4 for both projects, forever. The row
   # is always another folder's here. do_switch matched this folder's own path first, and a folder
   # this function accepts holds no project file to have been registered from.
+  refuse_taken_paths "$code_path" "$folder"
   refuse_taken_name "$name" "switch: another project already holds the name '$name'. This folder has no row of its own, so rename $folder, then pick it up again."
   registry_add_project "$code_path" "$folder" "$name" || die3 "the registry row for $folder was not written; see the message above."
   # The folder's parent is the projects base when none is recorded yet. A first version 6 run on
@@ -576,6 +609,7 @@ register_v6_folder() {
   # do_switch matched this folder's own path against the rows before reaching here, so the row
   # holding the name is always another folder's. A rename is the repair for that. For a folder
   # colliding with itself it would be the defect: the file would stop agreeing with its own row.
+  refuse_taken_paths "$code_path" "$folder"
   refuse_taken_name "$name" "switch: another project already holds the name '$name'. This folder has no row of its own, so change its name in $folder/project.json, then pick it up again."
   registry_add_project "$code_path" "$folder" "$name" \
     || die3 "the registry row for $folder was not written; see the message above."
@@ -589,7 +623,7 @@ do_switch() {
   # resolve_target answers a registered project named by its own folder path. Without that, the
   # version 6 pickup below refused on this project's own name, and its advice to edit the name in
   # the project file made check-project.sh exit 4 for good.
-  match="$(resolve_target "$target")"
+  match="$(resolve_target "$target")" || [ $? -ne 3 ] || exit 3
   # Order matters. A version 5 folder holds no project.json, so register_v5_folder returns 1 for
   # every folder the second branch takes. A folder holding both files is a version 5 pickup that
   # already ran: its project file is the truth, and the version 5 branch would overwrite it.
@@ -675,8 +709,7 @@ do_state() {
   esac
 
   local match project_path old_state
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   old_state="$(jq -r '.state' "$project_path/project.json" 2>/dev/null)"
 
@@ -726,8 +759,7 @@ do_set_code_path() {
   local target="${1:?set-code-path: a name or a path is required}"
   local new_path="${2:?set-code-path: a new code path is required}"
   local match project_path old_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   old_path="$(printf '%s' "$match" | jq -r '.codePath')"
 
@@ -741,9 +773,7 @@ do_set_code_path() {
 
   local registry_snapshot
   registry_snapshot="$(registry__current)" || die3 "the registry could not be read; nothing was changed. See the error above."
-  if printf '%s' "$registry_snapshot" | jq -e --arg c "$new_path" --arg p "$(strip_slash "$project_path")" \
-      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c and (.path // "" | sub("/+$"; "")) != $p)' \
-      >/dev/null 2>&1; then
+  if path_taken "$registry_snapshot" "$new_path" "$(strip_slash "$project_path")"; then
     die3 "a project is already registered for $new_path. Nothing was changed."
   fi
 
@@ -805,8 +835,7 @@ do_set_frameworks() {
   shift
   [ "$#" -ge 1 ] || die3 "set-frameworks: at least one framework is required"
   local match project_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   write_project_field "$project_path" "could not update frameworks in $project_path/project.json" \
@@ -827,8 +856,7 @@ do_set_frameworks() {
 # there are committed at once, so the check does not next report them as uncommitted work.
 do_git_init() {
   local target="${1:?git-init: a name or a path is required}" match project_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   if git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1; then
     echo "GIT: already a repository $project_path"
@@ -874,8 +902,7 @@ do_add_source() {
   fi
 
   local match project_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   # A new source for a kind takes the next precedence number. The order sources are declared in
@@ -1011,8 +1038,7 @@ do_subscription() {
   local match project_path
   printf '%s' "$set_id" | grep -Eq '^[a-z0-9-]+/best-practices/[a-z0-9-]+$' \
     || die3 "$op-playbook: a set id is <framework>/best-practices/<author>, got: $set_id"
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   if [ "$(jq --arg k "$fw" '(.frameworks // []) | index($k) != null' "$project_path/project.json")" != "true" ]; then
     printf 'project-actions: %s-playbook: key "%s" names a framework this project never declared\n' "$op" "$fw" >&2
@@ -1041,8 +1067,7 @@ do_subscription() {
 # project file changes, so this runs in both modes.
 do_drop_retired() {
   local target="${1:?drop-retired: a name or a path is required}" match project_path retired present subject
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   retired="$(pf_retired_fields "${PLUGIN_ROOT}/scripts/project-schema.json" "$project_path/project.json")" \
     || die3 "drop-retired: $project_path/project.json could not be read"
@@ -1068,8 +1093,7 @@ do_drop_retired() {
 
 do_unregister() {
   local target="${1:?unregister: a name or a path is required}" match project_path code_path base
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
 
@@ -1155,8 +1179,7 @@ do_task_rule() {
   [ -n "$why" ] || why="requested"
 
   local match code_path project_path project_name claude_md present tmp
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   project_name="$(printf '%s' "$match" | jq -r '.name')"
   # The project file is authoritative and the registry is an index (ideal/project.md, "What a
@@ -1264,8 +1287,7 @@ do_task_rule() {
 do_task_rule_remove() {
   cr_require_person task-rule-remove "a person asked for the block to leave their own repository"
   local target="${1:?task-rule-remove: a name or a path is required}" match code_path project_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
@@ -1310,8 +1332,7 @@ do_task_rule_remove() {
 do_uninstall() {
   cr_require_person uninstall "a person asked for AIDA to leave their own repository"
   local target="${1:?uninstall: a name or a path is required}" match project_path
-  match="$(resolve_target "$target")"
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   local task_rule_state code_path
