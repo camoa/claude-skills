@@ -9080,13 +9080,14 @@ rv_recipe_refs() {
 # ref not on that list. Called as a plain statement, never with `$(...)`, for the reason
 # rv_read_findings_array states. $4 the order's test globs, one per line, given only when the task
 # has no automated tests and the order froze no test file. Then the recipe's rules on frozen tests
-# do not apply, so a departure that names only test files is recorded not-applicable (gap row 300).
-# A glob with no "/" matches a file name anywhere in the tree, as pytest's patterns do.
+# do not apply, so a departure that names only test files is recorded not-applicable, and the
+# answer keeps the reviewer's words as departedAnswer (gap row 300). A glob with no "/" matches a
+# file name anywhere in the tree, as pytest's patterns do.
 RV_RECIPE_ANSWERS="[]"
 RR_REDISPATCH="Run review-brief again for this order, then dispatch the reviewer again."
 rv_read_recipe_answers() {
   local file="$1" who="$2" diff="$3" test_globs="${4:-}" refs arr count i one ref verdict evidence seen="" diff_paths p in_diff
-  local named_tests only_tests is_test g
+  local named_tests only_tests is_test g sfx
   refs="$(rv_recipe_refs)"
   diff_paths=""
   [ ! -f "$diff" ] || diff_paths="$(sed -n 's#^+++ b/##p; s#^--- a/##p' "$diff" | LC_ALL=C sort -u)"
@@ -9116,31 +9117,43 @@ rv_read_recipe_answers() {
     if [ "$verdict" = "departed" ]; then
       in_diff=no
       only_tests=yes
+      [ -n "$test_globs" ] || only_tests=no
       named_tests=""
       while IFS= read -r p; do
         [ -n "$p" ] || continue
+        is_test="$(printf '%s\n' "$test_globs" | while IFS= read -r g; do
+            case "$g" in
+              "") continue ;;
+              */*) tf_path_matches_catalog_glob "$p" "$g" ;;
+              *) tf_path_matches_glob "${p##*/}" "$g" ;;
+            esac && { printf 'yes'; break; }
+          done)"
         case " $evidence " in
           *[!A-Za-z0-9_./-]"$p"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$p".[!A-Za-z0-9_./-]*)
             in_diff=yes
-            is_test="$(printf '%s\n' "$test_globs" | while IFS= read -r g; do
-                case "$g" in
-                  "") continue ;;
-                  */*) tf_path_matches_catalog_glob "$p" "$g" ;;
-                  *) tf_path_matches_glob "${p##*/}" "$g" ;;
-                esac && { printf 'yes'; break; }
-              done)"
-            if [ "$is_test" = "yes" ]; then named_tests="$named_tests, $p"; else only_tests=no; fi ;;
+            [ "$is_test" != "yes" ] || named_tests="$named_tests, $p" ;;
         esac
+        # Any other file the evidence names, by its path, a path suffix or its bare name, keeps the
+        # departure, because only the rules on frozen tests stop applying.
+        if [ "$is_test" != "yes" ]; then
+          sfx="$p"
+          while :; do
+            case " $evidence " in
+              *[!A-Za-z0-9_./-]"$sfx"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$sfx".[!A-Za-z0-9_./-]*) only_tests=no; break ;;
+            esac
+            case "$sfx" in */*) sfx="${sfx#*/}" ;; *) break ;; esac
+          done
+        fi
       done <<RR_DIFF
 $diff_paths
 RR_DIFF
       [ "$in_diff" = "yes" ] \
         || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files that a departure in how files were produced made or changed. The recipe's own line is not enough."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
-      if [ "$only_tests" = "yes" ]; then
+      if [ "$only_tests" = "yes" ] && [ -n "$named_tests" ]; then
         arr="$(printf '%s' "$arr" | jq -c --argjson i "$i" \
-          --arg why "$who: the task has no automated tests and this order froze no test file, so the recipe's rules on frozen tests do not apply to ${named_tests#, }. The reviewer answered departed: $evidence" \
-          '.[$i].verdict = "not-applicable" | .[$i].evidence = $why')"
+          --arg why "the task has no automated tests and this order froze no test file, so the recipe's rules on frozen tests do not apply to ${named_tests#, }" \
+          '.[$i].departedAnswer = .[$i].evidence | .[$i].verdict = "not-applicable" | .[$i].evidence = $why')"
       fi
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
@@ -9157,7 +9170,8 @@ $ref"
   done <<RR_REFS
 $refs
 RR_REFS
-  RV_RECIPE_ANSWERS="$(printf '%s' "$arr" | jq -c '[ .[] | {ref: (.ref | tostring), verdict, evidence: (.evidence | tostring)} ]')"
+  RV_RECIPE_ANSWERS="$(printf '%s' "$arr" | jq -c '[ .[] | {ref: (.ref | tostring), verdict, evidence: (.evidence | tostring)}
+    + (if has("departedAnswer") then {departedAnswer} else {} end) ]')"
 }
 
 # Every non-goal the given finding list cites, as a printable list. Empty when none does.
@@ -9643,6 +9657,9 @@ do_review_record() {
     else (.[] | "information: \(.id) \(.summary | gsub("\n"; " ") | .[0:240])"),
          "information: \(length) for the person, in the record and in the next order\u0027s briefs" end')"
   [ -z "$information_lines" ] || printf '%s\n' "$information_lines"
+  # Gap row 300. A departure this action recorded not-applicable is shown, so a person sees it.
+  printf '%s' "$RV_RECIPE_ANSWERS" | jq -r '.[] | select(has("departedAnswer"))
+    | "recipe: \(.ref) recorded not-applicable: \(.evidence); the reviewer answered departed: \(.departedAnswer)"'
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
     echo "REVIEW-RECORD: $unit_id is halted. A finding hits a non-goal and this run is unattended: $nongoal_hits" >&2
   fi

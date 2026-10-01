@@ -1478,6 +1478,20 @@ $(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | so
 $TASK_PATH/design-closed.json
 RW_FIT
 
+  # Gap row 300. A departure an order's review-record recorded not-applicable, because the task has
+  # no automated tests, is a catalog note: nothing else shows a person an edited or deleted assertion.
+  local rv_file rv_ref rv_words
+  while IFS= read -r rv_file; do
+    case "$rv_file" in ""|*-findings.json) continue ;; esac
+    while IFS="$(printf '\t')" read -r rv_ref rv_words; do
+      [ -z "$rv_ref" ] || rw_catalog_note "review-record recorded the recipe not-applicable for $(basename "$rv_file" .json | sed 's/^review-//'), because the task has no automated tests; the reviewer answered departed: $rv_words" "$rv_ref"
+    done <<RW_NA
+$(jq -r '(.recipes // [])[] | select(has("departedAnswer")) | [.ref, .departedAnswer] | @tsv' "$rv_file" 2>/dev/null)
+RW_NA
+  done <<RW_REVIEWS
+$(find "$TASK_PATH/implementation" -maxdepth 1 -type f -name 'review-*.json' 2>/dev/null | sort)
+RW_REVIEWS
+
   # --- the change set, read and never derived -----------------------------------------------------
   range="$(printf '%s' "$RW_FINISHED_DOC" | jq -r '.commitRange // ""')"
   case "$range" in
