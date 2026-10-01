@@ -262,8 +262,9 @@ the diff and nothing else. "No new Composer dependency" is one. "The form shows 
 not. Neither is "the saved date matches the one entered". Each of those is a claim about what the
 code does, and a test can watch it fail. A clause that merely holds the word `no` is not an absence
 either. "The form shows no legacy field" is a behaviour, so it takes a test. Judge the clause and
-not its wording, and route only what nothing can run. Review asks the same question. The reviewer
-says whether a test could have watched each routed clause fail, and a yes fails the review.
+not its wording, and route only what nothing can run. The row checker asks the same question
+before the freeze, below, and review asks it again. The reviewer says whether a test could have
+watched each routed clause fail, and a yes fails the review.
 
 The freeze refuses the flag (exit 81) on two facts. The clause is not, verbatim, one of the order's
 frozen done-when entries. Or the clause carries no negation word at all. A contraction such as
@@ -298,6 +299,12 @@ person answered it. Add it only when an earlier round gave one. The author tests
 only where nothing the order owns covers it. So the checker needs the owned criteria to judge the
 done-when row (gap row 210). The rows carry names and not test code. The question is whether the
 tests named exercise the sentence beside them.
+
+Build one row per absence clause the author returned: the key `<order id>:absence:<n>`, with n
+its done-when row counted from 1, and the clause verbatim. It names no test. The checker answers
+one question: could a test prove this clause? A yes is a rejected row. The freeze refuses (exit 64)
+an `--absence` clause with no row, so the clause reaches a checker before the build (gap row 273).
+An order with no other row dispatches no checker, so its clauses go to review alone.
 
 **Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
 recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a

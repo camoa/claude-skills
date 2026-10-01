@@ -460,8 +460,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The exit codes the checkpoint, the finish, the grant and the restart add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
 #      machine-verified criterion a --test names with no row, a doneWhen test with no doneWhen row,
-#      a row naming a criterion no --test claims or the doneWhen with no doneWhen test, a row
-#      naming a criterion a person verifies, or two rows naming one thing. The message names
+#      an --absence clause with no row on an order that has other rows (gap row 273), a row
+#      naming a criterion no --test claims or the doneWhen with no doneWhen test, a row naming a
+#      criterion a person verifies, or two rows naming one thing. The message names
 #      which. A row set this script half understands would put a judgement on the wrong criterion,
 #      which nothing later could tell from a real one. On missing rows the confirmed rows given
 #      are recorded as `rowsConfirmed` first, the same way exit 65 records them (gap row 259).
@@ -5041,6 +5042,14 @@ TF_EOF
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
         + (if $dw or $slot == "done-when" then [$unit] else [] end)
     ')"
+  # Each routed clause is a row of its own, keyed <unit>:absence:<n>, n its doneWhen row counted
+  # from 1. The checker asks whether a test could prove it, before the freeze rather than at the
+  # task review (gap row 273). An order the checker is not dispatched for has no expected row, and
+  # its clauses go to review as before.
+  rows_expected_json="$(printf '%s' "$rows_expected_json" | jq -c --argjson routed "$absence_json" \
+      --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" --arg unit "$unit_id" '
+      if length == 0 then . else . + [ $routed[] as $t | $unit + ":absence:" + (($dw | index($t)) + 1 | tostring) ] end')"
+  [ -n "$rows_expected_json" ] || die 3 "tests-freeze: could not list the rows of $unit_id's routed clauses."
   # One entry per test and row key, {name, path, key, red}: what red_again reads, and the files
   # each row's tests sit in.
   local tf_red_entries
@@ -5100,7 +5109,7 @@ TF_RECORDED
         "$(printf '%s' "$rows_meta_json" | jq -c --argjson expected "$rows_expected_json" \
           'map(select(.criterion as $k | ($expected | index($k)) != null))')"
     fi
-    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. Put the missing rows to the checker, then run tests-freeze again with a --row for each.$TF_CARRY_NEXT$tf_changed"
+    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. So is each --absence clause, as <order id>:absence:<its doneWhen row>. Put the missing rows to the checker, then run tests-freeze again with a --row for each.$TF_CARRY_NEXT$tf_changed"
   fi
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
@@ -5146,6 +5155,10 @@ TF_RECORDED
           + (if [ $rej[] | select(. as $k | ($owned | index($k)) != null) ] == [] then [] else [$unit] end)
         | map(select(. as $k | ($keys | index($k)) != null)) | unique')"
     [ -n "$tf_check_again" ] || die 3 "tests-freeze: could not list the rows of $unit_id the checker judges again."
+    # A rejected absence row has no test to repair, so the refusal names its two routes.
+    local tf_absence_route=""
+    printf '%s' "$rows_meta_json" | jq -e 'any(.[]; .verdict == "rejected" and (.criterion | test(":absence:[0-9]+$")))' >/dev/null \
+      && tf_absence_route=" A rejected absence row says a test could prove that clause. The test author writes a test for it and returns no absence for it, or design splits the clause."
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
           | .criterion + ": " + .note ] | join("; ")')"
@@ -5194,11 +5207,11 @@ TF_RECORDED
         '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
-      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker.$TF_CARRY_NEXT
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker.$tf_absence_route$TF_CARRY_NEXT
 checkAgain: $tf_check_again"
     fi
     # No ledger record carries this rejection, so the refusal names the tests to run again.
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks.$TF_CARRY_NEXT
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks.$tf_absence_route$TF_CARRY_NEXT
 checkAgain: $tf_check_again
 redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
