@@ -66,9 +66,9 @@ sources are asked before the catalog, so run this first, once per phase and fram
 It prints one line, or nothing. `RECIPE: <path> source=<folder>`: a recipe is on disk; answer
 `available` with that path, name the folder as where it came from, and do not ask the navigator.
 One exception: for `point: test-execution`, ask the navigator as below as well. Return its path
-apart, as the catalog's copy, never as the answer. Preconditions compares the two versions. A
-navigator that fails here leaves the answer as it is. Return its word for the catalog's copy, as
-below, and keep the folder's answer.
+apart, as the catalog's copy, never as the answer. Preconditions and review compare the two
+versions. A navigator that fails here leaves the answer as it is. Return its word for the
+catalog's copy, as below, and keep the folder's answer.
 `RECIPE: catalog`, with or without `searched=<folders>`: no folder before the catalog holds
 this phase; ask the navigator as below. A folder that holds nothing is not an answer, so a
 folder miss never ends the lookup. When `searched=` is present, name those folders beside the

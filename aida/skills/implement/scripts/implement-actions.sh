@@ -3147,7 +3147,7 @@ do_preconditions() {
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_said tooling_entries
-  local tooling="" tooling_json end_absent_json pc_no_recipe catalog_recipes="" pc_stale="" pc_have pc_catalog
+  local tooling="" tooling_json end_absent_json pc_no_recipe catalog_recipes="" pc_stale="" pc_line pc_catalog
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3186,10 +3186,7 @@ do_preconditions() {
         shift 2 ;;
       --catalog-recipe)
         [ "$#" -ge 2 ] || die 3 "preconditions: --catalog-recipe needs <framework>=<path>"
-        case "${2#*=}" in
-          no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "preconditions" "--catalog-recipe" "$2" ;;
-          *) cr_recipe_pair "preconditions" "--catalog-recipe" "$2" ;;
-        esac
+        cr_catalog_pair "preconditions" "$2"
         catalog_recipes="$catalog_recipes$CR_PAIR
 "
         shift 2 ;;
@@ -3550,29 +3547,17 @@ EOF
   record_file="$task_folder/implementation/preconditions.json"
   write_atomic "$record_file" "$record_json"
 
-  # A project's own copy of the test-execution recipe at a lower version than the catalog's copy of
-  # the same recipe (gap row 284). The folder source wins the lookup, so nothing else would say the
-  # copy fell behind. Reported only: the copy is the project's, and the task keeps the path it used.
+  # A project's own copy of the test-execution recipe behind the catalog's copy (gap row 284). The
+  # folder source wins the lookup, so nothing else would say the copy fell behind. Reported only.
   while IFS="$(printf '\t')" read -r fw pc_catalog; do
     [ -n "$fw" ] || continue
     recipe_path="$(cr_lookup "$recipes" "$fw")"
     [ -n "$recipe_path" ] || continue
-    # The catalog holds no copy to compare against, or nobody could read the one it holds.
-    case "$pc_catalog" in
-      no-recipe) continue ;;
-      listing-unreachable|fetch-failed)
-        pc_stale="$pc_stale${pc_stale:+ }$fw: not checked, because the catalog's copy could not be read ($pc_catalog). The project's copy is version $(recipe_name_of "$recipe_path" version)."
-        continue ;;
-    esac
-    [ ! "$recipe_path" -ef "$pc_catalog" ] || continue
-    pc_have="$(recipe_name_of "$recipe_path" version)"
-    version_at_least "$pc_have" "$(recipe_name_of "$pc_catalog" version)" && continue
-    pc_stale="$pc_stale${pc_stale:+ }$fw: the project's copy is version ${pc_have:-unstated}, and the catalog's is $(recipe_name_of "$pc_catalog" version)."
+    pc_line="$(recipe_stale_line "$fw" "$recipe_path" "$pc_catalog")"
+    [ -z "$pc_line" ] || pc_stale="$pc_stale${pc_stale:+ }$pc_line"
   done <<PC_CATALOG
 $catalog_recipes
 PC_CATALOG
-  [ -z "$pc_stale" ] \
-    || pc_stale="$pc_stale Nothing was changed. Update the project's copy when it is behind, then run recipe-refresh to point this task at it."
 
   # The freeze wall, announced here rather than at the first order's freeze. `tests-freeze` takes
   # its test globs from the implement recipe's `## Oracle files` block, so with no such recipe a

@@ -17,8 +17,9 @@ The role reads a folder source this project configured itself first, so it wins 
 When a folder answers for `test-execution`, the role also returns the catalog's copy of the same
 recipe. Pass that path as `--catalog-recipe <framework>=<path>`, or the lookup's own word when it
 failed. A project copy at a lower version than the catalog's prints on the `staleRecipe:` line,
-with both versions. A failed lookup prints there as not checked. Read that line to the person.
-The step changes nothing, because the copy belongs to the project.
+with both versions. A failed lookup, or a catalog copy with another name, prints there as not
+checked. Read that line to the person. The step changes nothing, because the copy belongs to the
+project. Review compares the two copies again.
 
 Dispatch `catalog-identifier` once more, with `point: review` and each framework. This is a
 second recipe, never the same file as the `test-execution` one above. Pass its path straight

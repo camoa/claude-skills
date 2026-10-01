@@ -21,6 +21,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   review-actions.sh checks   <task_folder> [--recipe <framework>=<path>]...
 #                                            [--check-recipe <framework>=<path>]...
 #                                            [--lookup-failed <framework>=<reason>]...
+#                                            [--catalog-recipe <framework>=<path|reason>]...
 #                                            [--value <name>=<value>]...
 #   review-actions.sh brief    <task_folder>          writes <task>/review/brief.json
 #   review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
@@ -188,6 +189,7 @@ usage: review-actions.sh read     <task_folder>
                                   [--recipe <framework>=<path to the test-execution recipe>]...
                                   [--check-recipe <framework>=<path to the review recipe>]...
                                   [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
+                                  [--catalog-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                                   [--value <name>=<value>]...
        review-actions.sh brief    <task_folder>
        review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
@@ -785,7 +787,7 @@ rw_run_done() {
 # exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
 # test-execution row, whose preconditions record may hold its tool as absent at the end of the task.
 rw_run_fault() {
-  local label="$1" fw="${2:-}" said known install
+  local label="$1" fw="${2:-}" said known install named rp
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
   case "$RW_RUN_KIND" in
     UNRESOLVED)
@@ -807,12 +809,17 @@ rw_run_fault() {
       # A record with no requires_tooling result for the framework, neither a condition nor an
       # end-of-task tool, is one the tool check never ran on, as before 6.0.11 (gap row 284). It is
       # named, not repaired: running require here would run each tool, and a tool may reach a site.
-      known=""
-      [ -z "$fw" ] || known="$(jq -r --arg fw "$fw" --arg row "$label" --arg install "$install" '. as $d
+      # The recipe the record names must list a tool, or there was nothing to check.
+      known=""; named=""
+      rp="$(jq -r --arg fw "$fw" '[ (.frameworks // [])[] | select(.framework == $fw) ][0].recipePath // empty' \
+        "$TASK_PATH/implementation/preconditions.json" 2>/dev/null)"
+      [ -z "$rp" ] || [ ! -f "$rp" ] \
+        || named="$(recipe_requires_tooling_of "$rp" 2>/dev/null; recipe_requires_tooling_of "$rp" requires_tooling_with_tests 2>/dev/null)"
+      [ -z "$fw" ] || known="$(jq -r --arg fw "$fw" --arg row "$label" --arg install "$install" --arg named "$named" '. as $d
         | [ (.frameworks // [])[] | select(.framework == $fw) ][0] as $f
         | [ ($f.endOfTaskToolsAbsent // [])[] | select((.rows // []) | index($row)) | .tool ]
         | if length > 0 then "Preconditions recorded \(join(", ")) absent on \($d.takenAt // "an earlier day"), before the build started, so this is known and not a fault this task introduced. Install it with the tool skill to run this row."
-          elif $f != null and ($f.endOfTaskToolsAbsent // []) == []
+          elif $f != null and $named != "" and $f.verdict != "not-needed" and ($f.endOfTaskToolsAbsent // []) == []
                and ([ ($f.entries // [])[] | select((.id // "") | startswith("requires_tooling")) ] | length) == 0
           then $install + " The preconditions record of \($d.takenAt // "an earlier day") holds no result for the tools the test-execution recipe names under requires_tooling. So nothing checked those tools for this task, as with any record written before aida 6.0.11. To check them, run the tool skill'"'"'s require on \($f.recipePath // "the test-execution recipe")."
           else "" end' \
@@ -1337,8 +1344,8 @@ rw_check_suite() {
 }
 
 do_checks() {
-  local task_arg="" recipes="" check_recipes="" failures="" values=""
-  local frameworks fw lookup recipes_json rows_file parts_file
+  local task_arg="" recipes="" check_recipes="" failures="" values="" catalog_recipes=""
+  local frameworks fw lookup recipes_json rows_file parts_file catalog stale
   local range base head_end head_now coverage cov_verdict cov_detail
   local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
   local upstream empty_range
@@ -1361,6 +1368,12 @@ do_checks() {
         [ "$#" -ge 2 ] || die 3 "checks: --lookup-failed needs <framework>=<reason>"
         cr_lookup_failure_pair "checks" "--lookup-failed" "$2"
         failures="$failures$CR_PAIR
+"
+        shift 2 ;;
+      --catalog-recipe)
+        [ "$#" -ge 2 ] || die 3 "checks: --catalog-recipe needs <framework>=<path>"
+        cr_catalog_pair "checks" "$2"
+        catalog_recipes="$catalog_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -1442,6 +1455,15 @@ RW_FRAMEWORKS
     rw_catalog_note "the test commands block's heading is there and its key never opens under it" "$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | select(.testCommandsState == "unparseable") | .testRecipe ] | join(", ")')"
   fi
   RW_BLOCK_NOTE="$(pc_trim "$RW_BLOCK_NOTE")"
+  # A project copy can fall behind the catalog after preconditions compared them, so review compares
+  # again (gap row 284). A catalog note reaches the pull request body and the unattended halt.
+  while IFS="$(printf '\t')" read -r fw catalog; do
+    [ -n "$fw" ] && [ -n "$(cr_lookup "$recipes" "$fw")" ] || continue
+    stale="$(recipe_stale_line "$fw" "$(cr_lookup "$recipes" "$fw")" "$catalog")"
+    [ -z "$stale" ] || rw_catalog_note "$stale" "$(cr_lookup "$recipes" "$fw")"
+  done <<RW_CATALOG
+$catalog_recipes
+RW_CATALOG
 
   # A recipe research or design judged not to fit is a catalog note, never a check (ideal/tooling.md).
   local fit_file fit_stage fit_json

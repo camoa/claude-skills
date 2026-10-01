@@ -720,11 +720,13 @@ do_close() {
   # because a script inventing a reason would be a bypass.
   if [ "$CP_REVIEW_VERDICT" != "passed" ] && [ -z "$reason" ]; then
     # The lens checks review read met on low findings alone with nobody present are reported here,
-    # since the body that would carry them is not written on this halt (gap row 274).
-    local unconfirmed
+    # since the body that would carry them is not written on this halt (gap row 274). The catalog
+    # notes are too, for the same reason, such as a project recipe copy behind the catalog (row 284).
+    local unconfirmed notes
     unconfirmed="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "met" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
+    notes="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.catalogNotes // [])[] | .seen + " (" + .where + ")" ] | join(" ")' 2>/dev/null)"
     case "$CP_RUN_MODE" in
-      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}" ;;
+      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}" ;;
       *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it." ;;
     esac
   fi
