@@ -131,7 +131,7 @@
       "type": "string",
       "default": "",
       "minLength": 1,
-      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against."
+      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against. One word of it is read: when it starts with `large`, the implementer's dispatch record carries `resumesAllowed` 2, so a builder stopped at its turn limit is resumed twice (gap row 301)."
     },
     "proof": {
       "type": "string",

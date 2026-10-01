@@ -134,7 +134,8 @@ production code either. That bound is recorded on the dispatch, not applied by a
 dispatch record is the task's own. So a task has at most one open dispatch, and two tasks of one
 project build side by side. It carries the time it opened, so a record a role never closed is
 named with its age. A role that returns with no report, such as one stopped at its turn limit, is
-asked once to finish. A second return with no report halts the order.
+asked once to finish. An implementer is asked twice when its order's diff budget starts with
+`large`. One more return with no report halts the order.
 
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of

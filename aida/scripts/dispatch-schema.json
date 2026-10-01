@@ -30,7 +30,18 @@
     "resumedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A second `--no-report` on a record carrying it halts the order and removes the record (exit 110)."
+      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A `--no-report` once `resumes` reaches `resumesAllowed` halts the order and removes the record (exit 110)."
+    },
+    "resumes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How many times `dispatch-close --no-report` kept this record open for a resume (gap row 301). A record carrying `resumedAt` and not this key counts one, as `dispatch-open --resume` writes it."
+    },
+    "resumesAllowed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2,
+      "description": "Present on an implementer's record (gap row 301): 2 when the order's diffBudget in the frozen snapshot starts with the word `large`, else 1. `dispatch-open` derives it and never takes it by hand. Absent means 1. The runtime reads `maxTurns` from the agent definition alone. The Agent tool takes no turn cap per call. So a larger turn budget is one more resume at the same cap."
     },
     "reportPath": {
       "type": "string",

@@ -81,7 +81,9 @@ widen the diff and nothing asked for it.
 **Commit every change before you return.** Use a one-line message naming this unit, on the branch
 already checked out, in the repository the brief's `commitIn` names. That is the code worktree,
 or the project folder for an order whose proof is `record`; there, stage your owned files and
-nothing else. `build-record` refuses when the tree is not clean.
+nothing else. `build-record` refuses when the tree is not clean. When the order's reasoning numbers
+its parts, commit each part when it works, before you start the next. A stop at your turn limit
+then loses one part and not the order.
 
 Return under fifteen lines: the five answers first, then what you changed, one line on the tests,
 that the interface record is written, and any concern.

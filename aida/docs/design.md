@@ -74,6 +74,8 @@ observe. It leaves the level, unit or kernel or functional in your framework's w
 stage that writes the test. The tests are named here because they must exist before the code
 does. A test written from finished code ratifies it; one that failed before the code existed
 constrains it. The diff budget is a signal to the reviewer, never a limit that anything enforces.
+Its first word is `small`, `medium` or `large`. A `large` order's builder may stop at its turn
+limit and be resumed twice instead of once.
 
 ## What design reads first
 

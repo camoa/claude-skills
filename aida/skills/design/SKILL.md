@@ -500,6 +500,11 @@ the class, the interface, the method, the route, the hook and the config key. Th
 interface check counts only the backtick-quoted names. An order that exposes nothing takes no
 `--interface`.
 
+Start `--diff-budget` with `small`, `medium` or `large`. The build reads the first word. An order
+whose budget starts with `large` gives its builder a second resume at the turn limit. Number the
+parts of such an order in its reasoning, as `(1)`, `(2)` and so on. The builder commits after each
+part, so a stop loses one part and not the order.
+
 Name a `--surface` when the order changes a page or a screen a person sees, by its id in the
 surface registry. Most orders name none.
 
