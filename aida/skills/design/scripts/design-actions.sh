@@ -1616,7 +1616,7 @@ do_merge() {
   ' "$into_file")"
 
   local k before after
-  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses verify findings dispositions; do
+  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles sharedFiles surfaces tests doneWhen reuses verify findings dispositions; do
     before="$(jq -r --arg k "$k" '(.[$k] // []) | length' "$into_file")"
     after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
     echo "$k: $before -> $after"
