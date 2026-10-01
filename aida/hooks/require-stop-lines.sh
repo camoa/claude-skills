@@ -13,7 +13,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # platform gives the builder the reason as its next instruction. The file stays the one source.
 #
 # The second return is allowed whatever the file holds: `stop_hook_active` is true, and
-# build-record still refuses at 106. Allow, silent, on everything this hook cannot resolve: no jq,
+# build-record still refuses at 106. An unfinished builder is told to return with neither line,
+# because a stop line on unfinished work spends an attempt and skips the resume 106 names.
+# Allow, silent, on everything this hook cannot resolve: no jq,
 # no agent type, no project for the directory, no open implementer record, no brief, no report path.
 INPUT="$(cat 2>/dev/null)"
 command -v jq >/dev/null 2>&1 || exit 0
@@ -44,5 +46,5 @@ ANSWERS="$(jq -r '.reportPath // empty' "$BRIEF" 2>/dev/null)"
 [ -n "$UNIT" ] && [ -n "$ANSWERS" ] || exit 0
 FAULT="$(br_lines_fault "$ANSWERS" "$(jq -r '.interfacePath // empty' "$BRIEF" 2>/dev/null)")"
 [ -n "$FAULT" ] || exit 0
-jq -nc --arg r "$FAULT Write the stop line, and under Stop: none the deviation line, in $ANSWERS, each alone on its own line. build-record reads that file and never your returned text. Then return again." \
+jq -nc --arg r "$FAULT Write the stop line, and under Stop: none the deviation line, in $ANSWERS, each alone on its own line. build-record reads that file and never your returned text. Then return again. If your work is not finished, return now and write neither line." \
   '{decision: "block", reason: $r}'
