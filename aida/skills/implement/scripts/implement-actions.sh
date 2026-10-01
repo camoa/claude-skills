@@ -7804,19 +7804,24 @@ br_deviations() {
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
 # `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
 # may not own one file, and the live fix was a hand commit no reviewer read. So the stop reopens
-# the owner for one fix round: one finding on its review record, one round added to its allowance,
-# and its own fixer and verifier. The owner is found from the snapshot, never from the builder's
-# word. No person decides anything here, so the route runs unattended too. The stopped order spends
-# no attempt and waits, through im_require_build_ready and the next line, until the owner closes.
-# One repair per attempt of the stopped order, so a builder that stops on every run halts as today.
+# the owner for a repair: one finding on its review record, one round added to its allowance, and
+# its own fixer and verifier. The owner is found from the snapshot, never from the builder's word.
+# Whether the failure really lies in that file is the verifier's to answer, and a no waits for the
+# person. The stopped order spends no attempt and waits, through im_require_build_ready and the
+# next line, until the owner closes. Fixing one fatal error often shows the next, so another repair
+# at the same attempt opens once every earlier one reads addressed. The stopped order's attempt
+# allowance caps them, so a builder that stops on every run halts as today. Commits the builder
+# made after it began are handled as at any stop: named, and unattended the stopped order halts.
 # Exits 0 once the route opens. Returns 1 when it does not apply, and BR_REPAIR_NOTE then says why
 # when the line named the kind. $1 the stopped order, $2 the stop line's value, $3 the report,
-# $4 the attempt it did not spend, $5 the ledger file, $6 its document, $7 the commits after start.
+# $4 the attempt it did not spend, $5 the ledger file, $6 its document, $7 the commits after start,
+# $8 the run mode.
 BR_REPAIR_KIND="closed-order-defect"
 BR_REPAIR_NOTE=""
 br_open_repair() {
-  local unit_id="$1" value="$2" report="$3" attempt="$4" ledger_file="$5" ledger_doc="$6" commits="$7"
+  local unit_id="$1" value="$2" report="$3" attempt="$4" ledger_file="$5" ledger_doc="$6" commits="$7" run_mode="$8"
   local rest file defect abs rel owner="" owner_glob="" one g owner_entry linked review_file review_doc raw built new_id new_ledger
+  local earlier allowed repair_state commit_count commit_text="" rounds_allowed
   case "$value" in "$BR_REPAIR_KIND:"*) ;; *) return 1 ;; esac
   rest="${value#*:}"
   file="$(printf '%s' "${rest%%:*}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
@@ -7843,10 +7848,23 @@ BR_OWNED
     BR_REPAIR_NOTE=" No repair opened: no closed order owns $file."
     return 1
   fi
-  if [ "$(printf '%s' "$owner_entry" | jq --arg u "$unit_id" --argjson a "$attempt" '[ (.repairs // [])[] | select(.by == $u and .attempt == $a) ] | length')" != "0" ]; then
-    BR_REPAIR_NOTE=" No repair opened: $unit_id already opened one on $owner at attempt $attempt."
+  earlier="$(printf '%s' "$ledger_doc" | jq -r --arg u "$unit_id" --argjson a "$attempt" \
+    '(.orders // [])[] | .id as $o | (.repairs // [])[] | select(.by == $u and .attempt == $a) | $o + " " + .finding')"
+  allowed="$(attempts_allowed_for "$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
+  if [ "$(printf '%s' "$earlier" | grep -c .)" -ge "$allowed" ]; then
+    BR_REPAIR_NOTE=" No repair opened: $unit_id has opened $allowed at attempt $attempt, as many as its attempts allowed."
     return 1
   fi
+  while IFS=' ' read -r one g; do
+    [ -n "$g" ] || continue
+    repair_state="$(jq -r --arg f "$g" '[ (.findings // [])[] | select(.id == $f) ][0].status // ""' "$IMPL_DIR/review-$one.json" 2>/dev/null)"
+    if [ "$repair_state" != "addressed" ]; then
+      BR_REPAIR_NOTE=" No repair opened: the repair $unit_id opened on $one at attempt $attempt, $g, reads $repair_state, not addressed."
+      return 1
+    fi
+  done <<BR_EARLIER
+$earlier
+BR_EARLIER
   linked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$owner" \
     '[ .workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // ""')"
   review_file="$IMPL_DIR/review-$owner.json"
@@ -7863,6 +7881,7 @@ BR_OWNED
     BR_REPAIR_NOTE=" No repair opened: $owner serves no criterion, so no fixer could act on the finding."
     return 1
   fi
+  built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
   review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$review_doc" ] || die 3 "build-record: the repair finding on $owner could not be written."
   # Back to the step its fix rounds follow. The range close wrote stays on the repair entry, and
@@ -7876,14 +7895,27 @@ BR_OWNED
        | del(.commitRange))
       else . end))')"
   [ -n "$new_ledger" ] || die 3 "build-record: the repair on $owner could not be written to the ledger."
+  if [ -n "$commits" ]; then
+    commit_count="$(printf '%s' "$commits" | wc -w | tr -d ' ')"
+    commit_text="It committed $commit_count after it began: $commits."
+    if [ "$run_mode" = "autonomous" ]; then
+      new_ledger="$(halt_order_in "$new_ledger" "$unit_id" "$BR_STOP_PREFIX a Stop: line says so, at $report. $commit_text")"
+      [ -n "$new_ledger" ] || die 3 "build-record: the halt on $unit_id could not be written."
+    fi
+    commit_text="$commit_text Revert them, or have the person keep them, before the next build."
+  fi
+  rounds_allowed="$FIX_ROUNDS_ALLOWED"
+  ! task_is_light "$TASK_PATH" || rounds_allowed=1
+  rounds_allowed=$((rounds_allowed + $(printf '%s' "$new_ledger" | jq --arg id "$owner" '[ .orders[] | select(.id == $id) ][0].repairs | length')))
   write_atomic "$review_file" "$review_doc"
   write_atomic "$ledger_file" "$new_ledger"
   im_print_summary "build-record" "$(jq -cn --arg order "$unit_id" --arg owner "$owner" --arg f "$new_id" \
-    --arg linked "$linked" --arg file "$rel" --arg commits "${commits:-none}" --arg record "$review_file" \
+    --arg linked "$linked" --arg file "$rel" --arg commits "${commit_text:-none}" --arg record "$review_file" \
+    --arg rounds "$(printf '%s' "$owner_entry" | jq -r '.roundsUsed // 0') used of $rounds_allowed" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {order: $order,
      state: "stopped on a defect in a closed order'"'"'s file. A stop is not an attempt, so no attempt is spent",
-     repair: "\($owner) reopened for one fix round on \($f), citing \($linked), in \($file)",
+     repair: "\($owner) reopened on \($f), citing \($linked) as its first criterion, in \($file). Its fix rounds allowed rose by one: \($rounds)",
      waiting: "\($order) builds again once \($owner) closes",
      commitsAfterStart: $commits,
      record: $record,
@@ -8083,7 +8115,7 @@ do_build_record() {
     stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
     stop_commits="${stop_commits% }"
     $is_deviation \
-      || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits"
+      || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits" "$ledger_run_mode"
     stop_commit_count="$(printf '%s' "$stop_commits" | wc -w | tr -d ' ')"
     if [ "$stop_commit_count" -gt 0 ]; then
       stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
@@ -9954,7 +9986,8 @@ do_verify_brief() {
     [ (.findings // [])[] | select(.actionable == true and .status == "open") ]
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin}
-          + (if has("scopeInsufficientInRound") then {scopeInsufficientInRound, scopeInsufficientBecause} else {} end))')"
+          + (if has("scopeInsufficientInRound") then {scopeInsufficientInRound, scopeInsufficientBecause} else {} end)
+          + (if .origin == "repair" then {question: ("Does the cited failure arise in " + .file + "? Answer defectInFile yes or no.")} else {} end))')"
   [ "$(printf '%s' "$open_json" | jq 'length')" -gt 0 ] 2>/dev/null \
     || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
@@ -10115,7 +10148,7 @@ do_verify_record() {
   # Exit 58: the verdict list and the open findings have to correspond, both ways. Every open
   # actionable finding needs one verdict, and a verdict about anything else is a verifier reading
   # a list this order does not hold.
-  local open_ids verdict_ids missing extra vcount vi vrow vid vverdict
+  local open_ids verdict_ids missing extra vcount vi vrow vid vverdict vorigin
   open_ids="$(printf '%s' "$RV_REVIEW_DOC" | jq -c \
     '[ (.findings // [])[] | select(.actionable == true and .status == "open") | .id ]')"
   vcount="$(printf '%s' "$verdict_rows" | jq 'length')"
@@ -10131,6 +10164,15 @@ do_verify_record() {
       addressed|not-addressed) ;;
       *) die 52 "verify-record: the verdict for $vid is '$vverdict'. The two words are addressed and not-addressed." ;;
     esac
+    # A repair finding rests on the stopped builder's word that the failure lies in that file.
+    # The verifier answers that too, and a no waits for the person (gap row 286).
+    vorigin="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$vid" '[ (.findings // [])[] | select(.id == $id) ][0].origin // ""')"
+    if [ "$vorigin" = "repair" ]; then
+      case "$(printf '%s' "$vrow" | jq -r '.defectInFile // ""')" in
+        yes|no) ;;
+        *) die 52 "verify-record: $vid is a repair finding, and its verdict has no defectInFile. Answer yes or no: does the cited failure arise in $(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$vid" '[ .findings[] | select(.id == $id) ][0].file')?" ;;
+      esac
+    fi
     vi=$((vi + 1))
   done
   verdict_ids="$(printf '%s' "$verdict_rows" | jq -c '[ .[].id ]')"
@@ -10152,8 +10194,12 @@ do_verify_record() {
       . as $f
       | ([ $v[] | select(.id == $f.id) ] | .[0]) as $row
       | if $row == null then $f
+        elif $row.defectInFile == "no" then
+          $f + { status: "pending", defectInFile: "no",
+                 pendingBecause: ("the verifier answered that the failure does not arise in " + $f.file + ": " + ($row.evidence // "")) }
         elif $row.verdict == "addressed" then
-          $f + { status: "addressed", addressedInRound: $r,
+          $f + (if $row.defectInFile then {defectInFile: $row.defectInFile} else {} end)
+          + { status: "addressed", addressedInRound: $r,
                  addressedEvidence: ($row.evidence // ""),
                  addressedFile: ($row.file // ""), addressedLines: ($row.lines // "") }
         else $f end
@@ -10830,7 +10876,7 @@ FN_RECIPES
       # What an unattended run left for the person, which review puts to them (gap row 279).
       pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
           $have + [ ($doc.findings // [])[] | select(.status == "pending")
-                    | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.evidence // "")} ]
+                    | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.pendingBecause // .evidence // "")} ]
                 + [ $doc.deviationPending // empty
                     | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file)} ]')"
     fi
@@ -10871,7 +10917,8 @@ FN_RECIPES
       task: $task,
       commitRange: $range,
       suite: $suite,
-      orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)} ],
+      orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)}
+                + (if ((.repairs // []) | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
       criteria: [ ($ledger.criteria // [])[] | . as $c
                   | {id: $c.id,
                      verifiedBy: (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) // ""),

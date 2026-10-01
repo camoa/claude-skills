@@ -134,6 +134,11 @@ this shape:
 ], "newBreakage": [ ... ], "outOfScope": [ "..." ] }
 ```
 
+A finding with origin `repair` carries a `question`. Another unit's builder named the file, and
+nobody has checked that claim. Answer it in that verdict as `"defectInFile": "yes"` or `"no"`,
+with the reason in `evidence`. Answer `no` when the failure arises elsewhere, such as in the
+builder's own unit. A `no` waits for the person, whatever the verdict says.
+
 **You may not read code the fix diff did not touch, and you may not raise a finding against it.**
 You may not extend the loop by adding a round of your own. You are not given the original full
 diff, the contract beyond what the findings already cite, or an earlier round's verdicts.

@@ -153,19 +153,25 @@ itself, so do not halt it again. A halted order records no attempt: `build-recor
 **A defect in a closed order's file has its own route.** The stop line reads
 `Stop: closed-order-defect: <file>: <what fails>`. `build-record` finds the order that owns the
 file in the snapshot. When that order is closed, the script reopens it for a repair, in both run
-modes. It adds one high finding with origin `repair` to that order's review record. It sends the
-order back to its review step and adds one fix round to its allowance, so no counter goes down.
-The ledger entry keeps the repair under `repairs`, with the range the order closed with. The
-script exits 0 and prints a `repair:` line. The stopped order spends no attempt. No person decides
-anything here: the owner's fixer works in the owner's files, and the reviewer verifies the round.
-So the route runs unattended too. A ruling it reaches waits the way it waits for any order. Follow
-the `next:` line to the reopened order. Run `start` first when the builder left files uncommitted.
-Then fix, verify and close that order under `references/review.md`. Until it closes,
-`build-brief` refuses the stopped order (exit 40). Then build the stopped order again. A file no
-closed order owns, or a second such stop at one attempt, halts as any other stop does.
-Interactive, open with: "A finished unit of work had a defect, and the next unit found it. Its
-own fixer repairs it, and a reviewer checks the repair. Nothing needs your decision now." Then
-name the file and the reopened order.
+modes. It adds one high finding with origin `repair` to that order's review record. The finding
+cites the owner's first criterion by position, and says so. The script sends the order back to its
+review step and adds one fix round to its allowance, so no counter goes down. The ledger entry
+keeps the repair under `repairs`, with the range the order closed with. `finished.json` carries
+that range beside the new one. The script exits 0 and prints a `repair:` line. The stopped order
+spends no attempt. Commits it made after it began are named, as at any stop. Unattended, they
+halt the stopped order for a person. The owner's fixer works in the owner's files, and the
+reviewer verifies the round. The verifier also answers whether the failure arises in that file.
+A `no` makes the finding pending, and the person rules on it at the task review. So the route
+runs unattended too. Follow the `next:` line to the reopened order. Run `start` first when the
+builder left files uncommitted. Then fix, verify and close that order under
+`references/review.md`. Until it closes, `build-brief` refuses the stopped order (exit 40). Then
+build the stopped order again. Its next stop of this kind at the same attempt opens another repair
+once every earlier one reads addressed. The stopped order's attempt allowance caps how many. A
+file no closed order owns, or a stop past that cap, halts as any other stop does. Interactive,
+open with: "A finished unit of work had a defect, and the next unit found it. Its own fixer
+repairs it, and a reviewer checks the repair and where the defect lies. Nothing needs your
+decision unless the reviewer finds the defect elsewhere." Then name the file and the reopened
+order.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run

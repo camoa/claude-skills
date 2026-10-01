@@ -199,6 +199,11 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many fix rounds this order took. Copied from the ledger. It is the cheapest reading of which orders were hard, which is what a person deciding where to look next wants first."
+        },
+        "closedRanges": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$"},
+          "description": "The commitRange this order held each time a dependent order's repair reopened it, oldest first. Present only when one did. commitRange then covers the last close alone, the repair's own commits, so the order's whole work is these ranges and that one (gap row 286)."
         }
       }
     },

@@ -387,7 +387,7 @@
       "required": ["by", "attempt", "finding", "report", "at"],
       "properties": {
         "by": {"type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The order whose builder stopped on the defect. It builds again only once this order closes."},
-        "attempt": {"type": "integer", "minimum": 1, "description": "The attempt of that order the stop did not spend. One repair per attempt, so a builder that stops on every run halts as any other stop does."},
+        "attempt": {"type": "integer", "minimum": 1, "description": "The attempt of that order the stop did not spend. Another repair at the same attempt opens only once every earlier one's finding reads addressed, and no more than that order's attempts allowed, so a builder that stops on every run halts as any other stop does."},
         "finding": {"type": "string", "pattern": "^f[1-9][0-9]*$", "description": "The finding the repair added to this order's review record, with origin `repair`."},
         "report": {"type": "string", "minLength": 1, "description": "The stopped builder's report, which holds the evidence."},
         "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the repair opened. Set by the script, never typed."},

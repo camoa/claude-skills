@@ -173,6 +173,16 @@
           "minimum": 1,
           "description": "Which round's fixer reported that the scope it was given was too small for this finding. Present only when a fixer reported it. A fixer does not widen its own scope and does not fix what is not in its findings: it reports, and `fix-record` records the report here (ideal/implementation.md, 'One fixer per round, verification per finding')."
         },
+        "defectInFile": {
+          "type": "string",
+          "enum": ["yes", "no"],
+          "description": "On a finding with origin `repair` only: the verifier's answer to whether the cited failure arises in the finding's file. The stopped builder named the file, and no other role had checked it. A no makes the finding pending for the person (gap row 286)."
+        },
+        "pendingBecause": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why a finding waits for the person, when a verification set it pending: a repair finding whose failure the verifier says does not arise in its file. `finish` carries it to finished.json as the decision's text (gap row 286)."
+        },
         "scopeInsufficientBecause": {
           "type": "string",
           "minLength": 1,
