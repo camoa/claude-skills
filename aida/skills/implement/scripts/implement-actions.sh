@@ -192,6 +192,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                        it owns a file in the code path. Every
 #                                                        step below asks one of those three, and
 #                                                        never reads the proof kind itself.
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/builder-lines.sh  sourced. The builder's stop and deviation
+#                                                        lines, which build-record and
+#                                                        hooks/require-stop-lines.sh both read.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/baseline-schema.json   the shape `preconditions` writes to
 #                                                        baseline.json, which `start` compares a
 #                                                        resumed run's copy against (exit 83)
@@ -842,6 +845,7 @@ SCHEMA_CHECK_LIB="${PLUGIN_ROOT}/scripts/lib/schema-check.sh"
 PROOF_LIB="${PLUGIN_ROOT}/scripts/lib/proof.sh"
 SURFACES_LIB="${PLUGIN_ROOT}/scripts/lib/surfaces.sh"
 PATHS_LIB="${PLUGIN_ROOT}/scripts/lib/paths.sh"
+BUILDER_LINES_LIB="${PLUGIN_ROOT}/scripts/lib/builder-lines.sh"
 BASELINE_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/baseline-schema.json"
 OBSERVED_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/observed-schema.json"
 
@@ -891,6 +895,11 @@ source "$SURFACES_LIB" || die 3 "the surfaces library failed to load: $SURFACES_
 [ -f "$PATHS_LIB" ] || die 3 "cannot find the paths library at $PATHS_LIB"
 # shellcheck source=/dev/null
 source "$PATHS_LIB" || die 3 "the paths library failed to load: $PATHS_LIB"
+# The builder's stop and deviation lines, read the same way by build-record and by the hook that
+# sends the implementer back to its answers file before it returns (gap row 304).
+[ -f "$BUILDER_LINES_LIB" ] || die 3 "cannot find the builder-lines library at $BUILDER_LINES_LIB"
+# shellcheck source=/dev/null
+source "$BUILDER_LINES_LIB" || die 3 "the builder-lines library failed to load: $BUILDER_LINES_LIB"
 
 # How many times `build-brief` will hand one order to a builder before refusing (exit 41). Two, not
 # version 5's three: nothing in version 5 justifies three beyond a clamp guarding a corrupted
@@ -7960,39 +7969,10 @@ BR_SHOTS
     || die 94 "$who: these $field images the observed record names lie outside $folder/: ${stray_shots%, }. A file where a browser tool put it vanishes with that folder, and the evidence with it. Move each under that folder and name the new path in the row's $field."
 }
 
-# Prints each line of a builder's file that starts with one key, such as `stop`, in any case.
-# Markdown emphasis and a list marker are dropped first, so `- **Stop:** none` counts. A heading
-# never counts, so a `# stop:` comment in a code block is not the stop line. $1 the file, $2 the key.
-# A value of none with a trailing full stop prints as none alone.
-br_marked_lines() {
-  sed -e 's/\*//g' -e 's/^[[:space:]]*//' -e 's/^-[[:space:]]*//' "$1" 2>/dev/null \
-    | grep -i "^$2:" \
-    | sed -e 's/^\([^:]*:\)[[:space:]]*\([Nn][Oo][Nn][Ee]\)[[:space:]]*[.]\{0,1\}[[:space:]]*$/\1 \2/'
-}
-
-# Prints each stop or deviation line whose value is none followed by more text. The live builder
-# wrote "Deviation: none. The three changes are named by design paragraph (17)" (gap row 298).
-# Such a line is neither none nor a deviation, and no script can tell which the text means, so
-# build-record refuses it. "nonexistent" does not start the value with the word none. $1 the file.
-br_none_with_text() {
-  { br_marked_lines "$1" stop; br_marked_lines "$1" deviation; } \
-    | grep -i '^[^:]*:[[:space:]]*none[^[:alnum:]]'
-}
-
 # The fronts of the halts a builder's stop line and a builder's deviation write unattended.
 # `build-record --accept-deviation` clears the deviation segments only, so a stop line still halts.
 BR_STOP_PREFIX="the builder stopped:"
 BR_DEVIATION_PREFIX="the builder declared a deviation:"
-
-# Prints each deviation a builder's file names, other than none: its deviation lines, and every
-# heading whose text starts with "Deviation". The live builder wrote a section headed "Deviation
-# from the module's DI convention" (gap row 221). $1 the file.
-br_deviations() {
-  { br_marked_lines "$1" deviation
-    grep -i '^[[:space:]]*#[#]*[[:space:]]*[*]*deviation' "$1" 2>/dev/null \
-      | sed -e 's/\*//g' -e 's/^[[:space:]]*#[#]*[[:space:]]*//'
-  } | grep -v -i '^deviations*:[[:space:]]*none[[:space:]]*$'
-}
 
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
 # `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
@@ -8271,21 +8251,18 @@ do_build_record() {
   # the first deviation line and the reason, the way review-record keeps a departure (gap row 266).
   # A deviation from a play stops too. The line has no kind a script can read, and a kind the
   # builder writes itself would let it mark any deviation as a play. So a person sees each one.
-  local ledger_run_mode stop_lines stop_count stop_value deviation_count stop_file="$report_path"
+  local ledger_run_mode stop_lines stop_value stop_file="$report_path"
   local is_deviation=false accepted_json=""
   # The task's own mode, not the ledger's copy from start (gap row 265).
   ledger_run_mode="$(task_run_mode "$TASK_PATH" implement)"
-  local none_file none_line
-  for none_file in "$report_path" "$interface_path"; do
-    [ -f "$none_file" ] || continue
-    none_line="$(br_none_with_text "$none_file" | head -n 1)"
-    [ -z "$none_line" ] \
-      || die 106 "build-record: $none_file holds the line '$none_line'. A stop or deviation line reads none alone, or names its cause, so this line is neither. Nothing is recorded and no attempt is spent. Have the builder write the line alone, put any note on its own line, then run build-record again."
-  done
+  local lines_fault lines_rc turn_note=""
+  lines_fault="$(br_lines_fault "$report_path" "$interface_path")"
+  lines_rc=$?
+  [ "$lines_rc" != "2" ] \
+    || turn_note=" A builder stopped at its turn limit writes none: run dispatch-open with implementer, $unit_id and --resume, then resume the same agent by message."
+  [ -z "$lines_fault" ] \
+    || die 106 "build-record: $lines_fault Nothing is recorded and no attempt is spent. Have the builder write the line alone, put any note on its own line, then run build-record again.$turn_note"
   stop_lines="$(br_marked_lines "$report_path" stop)"
-  stop_count="$(printf '%s' "$stop_lines" | grep -c '.')"
-  [ "$stop_count" = "1" ] \
-    || die 106 "build-record: the builder's report at $report_path holds $stop_count stop lines, and it must hold exactly one: 'Stop: none', or 'Stop: <cause>: <reason>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again. A builder stopped at its turn limit writes none: run dispatch-open with implementer, $unit_id and --resume, then resume the same agent by message."
   stop_value="$(printf '%s' "${stop_lines#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   case "$stop_value" in
     [Nn][Oo][Nn][Ee])
@@ -8295,9 +8272,6 @@ do_build_record() {
         stop_lines="$(br_deviations "$interface_path")"
       fi
       if [ -z "$stop_lines" ]; then
-        deviation_count="$(br_marked_lines "$report_path" deviation | grep -c '.')"
-        [ "$deviation_count" = "1" ] \
-          || die 106 "build-record: the builder's report at $report_path holds $deviation_count deviation lines, and it must hold exactly one: 'Deviation: none', or 'Deviation: <what>: <why>'. Nothing is recorded and no attempt is spent. Have the builder write the one line, then run build-record again."
         [ -z "$accept" ] \
           || die 3 "build-record: --accept-deviation was given, and neither the report nor the interface record of $unit_id names a deviation. Nothing is written."
       else

@@ -6,7 +6,7 @@ agents/disposition-confirmer.md 61
 agents/distiller.md 98
 agents/split-advisor.md 66
 agents/fixer.md 74
-agents/implementer.md 125
+agents/implementer.md 126
 agents/internal-searcher.md 56
 agents/outward-searcher.md 41
 agents/playbook-loader.md 85

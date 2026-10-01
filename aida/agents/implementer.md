@@ -86,7 +86,8 @@ its parts, commit each part when it works, before you start the next. A stop at 
 then loses one part and not the order.
 
 Return under fifteen lines: the five answers first, then what you changed, one line on the tests,
-that the interface record is written, and any concern.
+that the interface record is written, and any concern. The stop and deviation lines below go in
+the report file. No script reads your returned text, and a hook sends you back to the file.
 
 Stop and say so, rather than working around it, when a test seems wrong, when the interface you were
 given does not fit what the unit has to do, or when your attempts run out. A test you route around
