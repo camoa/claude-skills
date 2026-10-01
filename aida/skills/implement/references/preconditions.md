@@ -264,9 +264,18 @@ heading changes more rarely than its markers, and the person who refreshes knows
 a framework with no resolved recipe on record, and a path that does not exist (exit 90). The
 freeze refuses a `--test-recipe` that is not the record's path (exit 91), so run this first.
 
-The review recipe is pinned by the baseline for the task's life, and `recipe-refresh` does not
-touch it. Adopting a republished body would need a new baseline, and a baseline reads the tree
-before the task. It cannot be taken again once the task has changed the tree. Each tool runs where
-the tree stands, so a second reading records this task's own findings as pre-existing. The build
-refuses a body the baseline did not read (exit 73). Finish the task with the pinned body. The other
-route is to abandon the baseline by hand, and checks 5 to 7 then subtract this task's own findings.
+The review recipe is pinned by the baseline, with its sha256. The build refuses a body the
+baseline did not read (exit 73). A baseline reads the tree before the task. Each tool runs where
+the tree stands, so a second reading records this task's own findings as pre-existing. For that
+reason a new review body is adopted only when no finding can hide. Resolve it the same way, with
+`point: review`, then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
+  --check-recipe <framework>=<path to the review recipe>
+```
+It runs every tool row of the new body over the baseline's scope, on the tree as it stands. When
+each row reads met or undeclared, nothing is subtracted. It then pins the new body, writes those
+readings into the baseline, and records both hashes under `recipeRefreshes`. When a row reads
+unmet or unknown, it refuses (exit 73), names each such row, and writes nothing. Then finish the
+task with the pinned body, or repair what the row found and run it again. The last route is to
+abandon the baseline by hand, and checks 5 to 7 then subtract this task's own findings.

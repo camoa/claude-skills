@@ -118,10 +118,11 @@ from; a run at a different commit refuses rather than overwrites.
 each recipe's path, and every later step reads that path. A republished recipe changes nothing
 until `recipe-refresh` replaces the path for the frameworks named. It records what changed and
 re-runs nothing: the verdict stands, because a recipe's conditions change more rarely than its
-markers. Only the test-execution recipe is refreshed. The review recipe is pinned by the baseline
-for the task's life. A republished one has a new body, so the build refuses it, and no action
-takes a new baseline mid-task. The freeze then reads the record's path, or refuses a path that
-disagrees with it, and its record names the recipe it read.
+markers. The review recipe is pinned by the baseline, and the build refuses a different body.
+`recipe-refresh` adopts a new review body only when every tool row of it reads met on the tree as
+it stands, because that baseline then subtracts nothing. Otherwise it refuses and names the row.
+The freeze then reads the record's path, or refuses a path that disagrees with it, and its record
+names the recipe it read.
 
 ## Writing the tests for one order
 

@@ -160,9 +160,11 @@ recipe it resolved is not the baseline's. That is rare: the catalog's review rec
 the task was open. Nothing retakes a baseline mid-task, because a baseline reads the tree before
 the task and the tree now holds this task's code.
 
-You have two ways past, and the second costs something. Review again against the recipe body the
+You have three ways past, and the last costs something. Review again against the recipe body the
 baseline read. The refusal prints its path and its sha256, and nothing in AIDA restores a body the
-catalog replaced. Or abandon the baseline: move `implementation/baseline.json` and
+catalog replaced. Or adopt the new body with the implement action `recipe-refresh --check-recipe`.
+It adopts only when every tool row of the new body reads met on the tree as it stands, so nothing
+is subtracted, and it refuses and names the row otherwise. Or abandon the baseline: move `implementation/baseline.json` and
 `implementation/baseline-output/` out of the task folder and run `/aida:implement <task-id>`, whose
 preconditions step takes a new one. That new baseline reads the tree as it stands, so the tool
 checks subtract this task's own findings and pass on findings this task added. Do it only

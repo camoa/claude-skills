@@ -1093,19 +1093,6 @@ rw_run_mutation() {
   rm -f "$mut_file"
 }
 
-# The baseline field that holds one tool row's own earlier verdict, or the empty string for a row
-# the baseline has no field for. baseline-schema.json carries three tool fields and no more, so a
-# duplication or design-metrics row the recipe declares has no baseline to subtract, and this says
-# so rather than reading its absence as a clean one.
-rw_baseline_field_for() {
-  case "$1" in
-    coding-standards) printf 'codingStandards' ;;
-    static-analysis)  printf 'staticAnalysis' ;;
-    security)         printf 'security' ;;
-    *) printf '' ;;
-  esac
-}
-
 # One tool row from the check commands block, run over the changed files. Every row the recipe
 # declares is run, whatever its id. Prints the check row.
 #

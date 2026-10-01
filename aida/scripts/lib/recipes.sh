@@ -1234,6 +1234,18 @@ br_subtract_baseline() {
   [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
+# The baseline field that holds one tool row's own earlier verdict, or the empty string for a row
+# the baseline has no field for. baseline-schema.json carries three tool fields and no more, so a
+# duplication or design-metrics row the recipe declares has no baseline to subtract, and this says
+# so rather than reading its absence as a clean one.
+rw_baseline_field_for() {
+  case "$1" in
+    coding-standards) printf 'codingStandards' ;;
+    static-analysis)  printf 'staticAnalysis' ;;
+    security)         printf 'security' ;;
+    *) printf '' ;;
+  esac
+}
 
 # Exit 73. Every tool check compares its own result against the baseline that step two took, and
 # that comparison is only honest while both ran the same command. The baseline records the check
@@ -1254,7 +1266,7 @@ cr_require_baseline_recipes() {
     was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
     was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
     if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
-      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. If that body is gone, the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
+      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. Or adopt the new body: implement-actions.sh recipe-refresh --check-recipe $fw=<path> adopts it only when every tool row of it reads met on the current tree. Otherwise the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
     fi
     idx=$((idx + 1))
   done

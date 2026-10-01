@@ -32,7 +32,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--tooling <tool>=<path>]...
 #                                                    [--catalog-recipe <framework>=<path|reason>]...
 #                                                    [--value <name>=<value>]...
-#   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
+#   implement-actions.sh recipe-refresh <task_folder> [--recipe <framework>=<path>]...
+#                                                     [--check-recipe <framework>=<path>]...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
 #   implement-actions.sh tests-freeze <task_folder> <unit_id> \
 #                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
@@ -519,7 +520,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      sha256 differs. Every tool check compares its own result against that baseline, so a changed
 #      recipe compares one tool's output against another tool's baseline. The baseline is not
 #      retaken mid-task: it reads the tree before the task, and the tree now holds this task's own
-#      code. Run again with the recipe body the baseline read.
+#      code. Run again with the recipe body the baseline read. `recipe-refresh --check-recipe`
+#      refuses with this code too, when a tool row of the new body does not read met on the
+#      current tree (gap row 295). The message names each such row. Nothing is written.
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
@@ -621,7 +624,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # The codes a recipe refreshed mid-task added (live-run row 99).
 #  90  `recipe-refresh` was given a framework preconditions.json holds no resolved recipe for, or a
-#      path that does not exist. Both are a lookup that answered for nothing on record: every
+#      path that does not exist. With --check-recipe, it is a framework baseline.json pins no review
+#      recipe for, or a task with no readable baseline. Both are a lookup that answered for nothing on record: every
 #      reader of a recipe path filters on `lookup == "resolved"`, so a path written beside a failed
 #      lookup would reach nothing, and the first path is preconditions' to record. Nothing is
 #      written.
@@ -931,7 +935,8 @@ usage: implement-actions.sh read  <task_folder>
                             [--tooling <tool>=<path>]...
                             [--catalog-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
-       implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
+       implement-actions.sh recipe-refresh <task_folder> [--recipe <framework>=<path>]...
+                            [--check-recipe <framework>=<path>]...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
        implement-actions.sh tests-freeze <task_folder> <unit_id>
                             [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
@@ -3908,15 +3913,19 @@ PC_CATALOG
 # new path over. This replaces the path the record holds for the named frameworks only, and
 # appends what changed under `recipeRefreshes`. It re-runs nothing: the verdict stands, because a
 # recipe's preconditions heading changes more rarely than its markers do, and the person who
-# refreshes knows why. Only the test-execution recipe is refreshed. The review recipe is pinned by
-# baseline.json with its sha256, and swapping that path would need a new baseline. A baseline is a
-# reading of the tree before the task. It cannot be taken again once the task has changed the tree.
-# bl_tool_result runs each tool where the tree stands, so a second reading would record this task's
-# own findings as pre-existing. references/preconditions.md records the gap. Every refusal
-# runs before the one write, so a refused call leaves the record as it was.
+# refreshes knows why. The review recipe is pinned by baseline.json with its sha256, and a baseline
+# reads the tree before the task. bl_tool_result runs each tool where the tree stands, so a second
+# reading would record this task's own findings as pre-existing. So --check-recipe adopts a new
+# review body only when every tool row of it reads met or undeclared on the current tree (gap row
+# 295). Such a baseline subtracts nothing, so no finding of this task is hidden. Any other reading
+# refuses at exit 73 and names the row. The adoption replaces the pin and the baseline fields of
+# the rows it ran, and records both hashes under `recipeRefreshes`. Every refusal runs before the
+# first write, so a refused call leaves the records as they were.
 do_recipe_refresh() {
   local task_folder="" recipes="" fw rp line from kind resolve_rc
   local record_file record_doc today refreshed=""
+  local check_recipes="" baseline_doc="" scope_json stage was_path was_sha now_sha cc_state
+  local tool_id result verdict failed adopted="" unchanged="" reads="" moves="" field
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --recipe)
@@ -3929,13 +3938,22 @@ do_recipe_refresh() {
         recipes="$recipes$CR_PAIR
 "
         shift 2 ;;
+      --check-recipe)
+        [ "$#" -ge 2 ] || die 3 "recipe-refresh: --check-recipe needs <framework>=<path>"
+        case "$2" in *=*) ;; *) die 3 "recipe-refresh: --check-recipe takes <framework>=<path>, got: $2" ;; esac
+        [ -f "${2#*=}" ] || die 90 "recipe-refresh: the path handed over for ${2%%=*} does not exist: ${2#*=}. Nothing was written."
+        cr_recipe_pair "recipe-refresh" "--check-recipe" "$2"
+        check_recipes="$check_recipes$CR_PAIR
+"
+        shift 2 ;;
       -*) die 3 "recipe-refresh: unrecognized argument: $1" ;;
       *)
         [ -z "$task_folder" ] || die 3 "recipe-refresh: more than one task folder given"
         task_folder="$1"; shift ;;
     esac
   done
-  [ -n "$recipes" ] || die 3 "recipe-refresh: nothing to refresh; pass --recipe <framework>=<path>"
+  [ -n "$recipes$check_recipes" ] \
+    || die 3 "recipe-refresh: nothing to refresh; pass --recipe or --check-recipe <framework>=<path>"
 
   task_folder="$(resolve_task_folder "$task_folder" "recipe-refresh")"
   resolve_rc=$?
@@ -3975,6 +3993,84 @@ do_recipe_refresh() {
 $recipes
 RR_EOF
 
+  if [ -n "$check_recipes" ]; then
+    BASELINE_FILE="$IMPL_DIR/baseline.json"
+    [ "$(bl_state)" = "ok" ] \
+      || die 90 "recipe-refresh: $BASELINE_FILE is missing or unreadable, so no review recipe is pinned to replace. preconditions takes the baseline and pins the first one. Nothing was written."
+    baseline_doc="$(jq -c '.' "$BASELINE_FILE")"
+    rv_load_codepath "recipe-refresh"
+    scope_json="$(printf '%s' "$baseline_doc" | jq -c '.scope // []')"
+    stage="$(mktemp -d "$IMPL_DIR/.recipe-refresh.XXXXXX")" || die 3 "recipe-refresh: could not create a temporary folder"
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      fw="${line%%	*}"; rp="${line#*	}"
+      was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
+      was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
+      [ -n "$was_sha" ] || { rm -rf "${stage:?}"; die 90 "recipe-refresh: $BASELINE_FILE pins no review recipe for framework $fw, so there is none to replace. A first one is preconditions' to pin, with --check-recipe $fw=<path>. Nothing was written."; }
+      CR_WHO="recipe-refresh"; CR_TEST_RECIPES=""; CR_CHECK_RECIPES="$line"; PC_VALUES=""
+      # shellcheck disable=SC2034 # read by the sourced library
+      CR_TOOL_IDS_ALL=true
+      cr_resolve
+      now_sha="$(printf '%s' "$CR_DOC" | jq -r '.frameworks[0].checkRecipeSha256')"
+      if [ "$now_sha" = "$was_sha" ]; then
+        unchanged="$unchanged$fw	$rp	$was_sha
+"
+        continue
+      fi
+      cc_state="$(printf '%s' "$CR_DOC" | jq -r '.frameworks[0].checkCommandsState')"
+      [ "$cc_state" = "ok" ] \
+        || { rm -rf "${stage:?}"; die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted: its Check commands block could not be read (state: $cc_state). Nothing was written."; }
+      failed=""
+      while IFS= read -r tool_id; do
+        [ -n "$tool_id" ] || continue
+        result="$(bl_tool_result "$tool_id" "$tool_id" "$RV_CODEPATH" "$scope_json" "$stage/$fw")"
+        [ -n "$result" ] || { rm -rf "${stage:?}"; die 3 "recipe-refresh: the $tool_id run produced no result. Nothing was written."; }
+        verdict="$(printf '%s' "$result" | jq -r '.verdict')"
+        reads="$reads$fw	$tool_id	$verdict
+"
+        case "$verdict" in
+          met|undeclared) ;;
+          *) failed="$failed $tool_id reads $verdict ($(printf '%s' "$result" | jq -r 'if .reason then .reason else "exit \(.exitCode)" end'))." ;;
+        esac
+        field="$(rw_baseline_field_for "$tool_id")"
+        [ -n "$field" ] || continue
+        baseline_doc="$(printf '%s' "$baseline_doc" | jq -c --arg k "$field" --argjson r "$result" '.[$k] = $r')"
+        moves="$moves$fw	$tool_id
+"
+      done <<RR_TOOLS
+$(printf '%s' "$CR_DOC" | jq -r '(.tools // [])[].id')
+RR_TOOLS
+      [ -z "$failed" ] \
+        || { rm -rf "${stage:?}"; die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted, because not every tool row of it reads met on the current tree:$failed A new baseline would subtract that finding from every later check. Finish the task with the pinned body, sha256 $was_sha, or repair the finding and run this again. Nothing was written."; }
+      baseline_doc="$(printf '%s' "$baseline_doc" | jq -c --arg f "$fw" --arg p "$rp" --arg sha "$now_sha" \
+        '.checkRecipes |= map(if .framework == $f then .path = $p | .sha256 = $sha else . end)')"
+      record_doc="$(printf '%s' "$record_doc" | jq -c --arg f "$fw" --arg from "$was_path" --arg to "$rp" \
+        --arg fromSha "$was_sha" --arg toSha "$now_sha" --arg at "$today" '
+        .recipeRefreshes = ((.recipeRefreshes // []) + [{framework: $f, kind: "review", from: $from, to: $to,
+          fromSha256: $fromSha, toSha256: $toSha, at: $at}])')"
+      [ -n "$baseline_doc" ] && [ -n "$record_doc" ] \
+        || { rm -rf "${stage:?}"; die 3 "recipe-refresh: the record update for $fw failed. Nothing was written."; }
+      adopted="$adopted$fw	$was_path	$was_sha	$rp	$now_sha
+"
+    done <<RR_CHECK
+$check_recipes
+RR_CHECK
+    # Each output the new baseline names replaces the old file of that row. A row that ran no
+    # command names no file, so its old file goes too.
+    while IFS='	' read -r fw tool_id; do
+      [ -n "$fw" ] || continue
+      rm -f "${IMPL_DIR:?}/${BL_OUTPUT_DIR:?}/${tool_id:?}.txt"
+      [ ! -f "$stage/$fw/$BL_OUTPUT_DIR/$tool_id.txt" ] || {
+        mkdir -p "$IMPL_DIR/$BL_OUTPUT_DIR" \
+          && mv "$stage/$fw/$BL_OUTPUT_DIR/$tool_id.txt" "$IMPL_DIR/$BL_OUTPUT_DIR/$tool_id.txt"
+      } || die 3 "recipe-refresh: could not move the $tool_id output into $IMPL_DIR/$BL_OUTPUT_DIR"
+    done <<RR_MOVES
+$moves
+RR_MOVES
+    rm -rf "${stage:?}"
+    [ -z "$adopted" ] || write_atomic "$BASELINE_FILE" "$baseline_doc"
+  fi
+
   write_atomic "$record_file" "$record_doc"
   echo "action: recipe-refresh"
   # One line per entry, the fields the record holds. No field is ever empty, so a tab-split read
@@ -3985,6 +4081,25 @@ RR_EOF
   done <<RR_EOF
 $refreshed
 RR_EOF
+  while IFS='	' read -r fw tool_id verdict; do
+    [ -n "$fw" ] || continue
+    printf 'read: %s %s %s\n' "$fw" "$tool_id" "$verdict"
+  done <<RR_EOF
+$reads
+RR_EOF
+  while IFS='	' read -r fw from was_sha rp now_sha; do
+    [ -n "$fw" ] || continue
+    printf 'adopted: %s review %s (sha256 %s) -> %s (sha256 %s)\n' "$fw" "$from" "$was_sha" "$rp" "$now_sha"
+  done <<RR_EOF
+$adopted
+RR_EOF
+  while IFS='	' read -r fw rp was_sha; do
+    [ -n "$fw" ] || continue
+    printf 'unchanged: %s review %s has the sha256 the baseline pinned, %s, so nothing was adopted\n' "$fw" "$rp" "$was_sha"
+  done <<RR_EOF
+$unchanged
+RR_EOF
+  [ -z "$adopted" ] || printf 'baseline: %s\n' "$BASELINE_FILE"
   printf 'record: %s\n' "$record_file"
   printf 'verdict: %s (unchanged; the refresh re-runs nothing)\n' "$(printf '%s' "$record_doc" | jq -r '.verdict')"
 }
