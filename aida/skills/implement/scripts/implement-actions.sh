@@ -30,6 +30,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--implement-lookup <framework>=<path|reason>]...
 #                                                    [--tooling <tool>=<path>]...
+#                                                    [--catalog-recipe <framework>=<path>]...
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -909,6 +910,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--tooling <tool>=<path>]...
+                            [--catalog-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -3145,7 +3147,7 @@ do_preconditions() {
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_said tooling_entries
-  local tooling="" tooling_json end_absent_json pc_no_recipe
+  local tooling="" tooling_json end_absent_json pc_no_recipe catalog_recipes="" pc_stale="" pc_have pc_catalog
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3180,6 +3182,12 @@ do_preconditions() {
       --tooling)
         [ "$#" -ge 2 ] || die 3 "preconditions: --tooling needs <tool>=<path>"
         tooling="$tooling$2
+"
+        shift 2 ;;
+      --catalog-recipe)
+        [ "$#" -ge 2 ] || die 3 "preconditions: --catalog-recipe needs <framework>=<path>"
+        cr_recipe_pair "preconditions" "--catalog-recipe" "$2"
+        catalog_recipes="$catalog_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -3539,6 +3547,22 @@ EOF
   record_file="$task_folder/implementation/preconditions.json"
   write_atomic "$record_file" "$record_json"
 
+  # A project's own copy of the test-execution recipe at a lower version than the catalog's copy of
+  # the same recipe (gap row 284). The folder source wins the lookup, so nothing else would say the
+  # copy fell behind. Reported only: the copy is the project's, and the task keeps the path it used.
+  while IFS="$(printf '\t')" read -r fw pc_catalog; do
+    [ -n "$fw" ] || continue
+    recipe_path="$(cr_lookup "$recipes" "$fw")"
+    [ -n "$recipe_path" ] && [ ! "$recipe_path" -ef "$pc_catalog" ] || continue
+    pc_have="$(recipe_name_of "$recipe_path" version)"
+    version_at_least "$pc_have" "$(recipe_name_of "$pc_catalog" version)" && continue
+    pc_stale="$pc_stale${pc_stale:+ }$fw: the project's copy is version ${pc_have:-unstated}, and the catalog's is $(recipe_name_of "$pc_catalog" version)."
+  done <<PC_CATALOG
+$catalog_recipes
+PC_CATALOG
+  [ -z "$pc_stale" ] \
+    || pc_stale="$pc_stale Nothing was changed. Update the project's copy, then run recipe-refresh to point this task at it."
+
   # The freeze wall, announced here rather than at the first order's freeze. `tests-freeze` takes
   # its test globs from the implement recipe's `## Oracle files` block, so with no such recipe a
   # test-proved order dies at exit 27, after the design closed, the build started and the test
@@ -3721,7 +3745,7 @@ EOF
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
-        --arg failedOutput "$pc_failed" '
+        --arg failedOutput "$pc_failed" --arg staleRecipe "$pc_stale" '
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -3758,6 +3782,7 @@ EOF
      endOfTaskAbsent: ([ $report.frameworks[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ]
                        | if length == 0 then "none"
                          else join(", ") + ": absent, and only end-of-task rows run it, so the build goes on and review reads those rows as known. Install it with the tool skill to run them." end),
+     staleRecipe: (if $staleRecipe == "" then "none" else $staleRecipe end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"

@@ -785,7 +785,7 @@ rw_run_done() {
 # exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
 # test-execution row, whose preconditions record may hold its tool as absent at the end of the task.
 rw_run_fault() {
-  local label="$1" fw="${2:-}" said known
+  local label="$1" fw="${2:-}" said known install
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
   case "$RW_RUN_KIND" in
     UNRESOLVED)
@@ -803,15 +803,21 @@ rw_run_fault() {
       # A command not found is this project's install, not the recipe, so no catalog note is raised
       # (gap row 271). The shell's own line names the program it could not find.
       said="$(printf '%s\n' "$RW_RUN_OUTPUT" | grep -m1 '[^[:space:]]')"
-      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says."
+      install="The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says."
+      # A record with no requires_tooling result for the framework, neither a condition nor an
+      # end-of-task tool, is one the tool check never ran on, as before 6.0.11 (gap row 284). It is
+      # named, not repaired: running require here would run each tool, and a tool may reach a site.
       known=""
-      [ -z "$fw" ] || known="$(jq -r --arg fw "$fw" --arg row "$label" '. as $d
-        | [ (.frameworks // [])[] | select(.framework == $fw) | (.endOfTaskToolsAbsent // [])[]
-          | select((.rows // []) | index($row)) | .tool ]
-        | if length == 0 then "" else "Preconditions recorded \(join(", ")) absent on \($d.takenAt // "an earlier day"), before the build started, so this is known and not a fault this task introduced. Install it with the tool skill to run this row." end' \
+      [ -z "$fw" ] || known="$(jq -r --arg fw "$fw" --arg row "$label" --arg install "$install" '. as $d
+        | [ (.frameworks // [])[] | select(.framework == $fw) ][0] as $f
+        | [ ($f.endOfTaskToolsAbsent // [])[] | select((.rows // []) | index($row)) | .tool ]
+        | if length > 0 then "Preconditions recorded \(join(", ")) absent on \($d.takenAt // "an earlier day"), before the build started, so this is known and not a fault this task introduced. Install it with the tool skill to run this row."
+          elif $f != null and ($f.endOfTaskToolsAbsent // []) == []
+               and ([ ($f.entries // [])[] | select((.id // "") | startswith("requires_tooling")) ] | length) == 0
+          then $install + " The preconditions record of \($d.takenAt // "an earlier day") holds no result for the tools the test-execution recipe names under requires_tooling. So nothing checked those tools for this task, as with any record written before aida 6.0.11. To check them, run the tool skill'"'"'s require on \($f.recipePath // "the test-execution recipe")."
+          else "" end' \
         "$TASK_PATH/implementation/preconditions.json" 2>/dev/null)"
-      [ -z "$known" ] \
-        || RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. $known" ;;
+      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. ${known:-$install}" ;;
     126)
       RW_RUN_VERDICT="unknown"
       RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;

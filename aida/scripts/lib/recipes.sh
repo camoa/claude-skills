@@ -83,7 +83,8 @@
 #   run_recipe_lines <who> <recipe> <lines> <out> <label> [<fill>]  runs every line; exit 4 on a failure
 #   recipe_prose_under <recipe> <heading>     the prose under that H2, indented
 #   recipe_precondition_names <recipe>        each name its ## Preconditions prose puts in backticks
-#   recipe_name_of <recipe>                   the name: field of its frontmatter, or empty
+#   recipe_name_of <recipe> [<key>]           the name: field of its frontmatter, or the <key>:
+#                                             field; empty when it has none
 #   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
 #                                             the list under <key>; 2 on a value it cannot read
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
@@ -1695,10 +1696,12 @@ recipe_prose_under() { sed -n "/^## $2\$/,/^## /p" "$1" | sed '1d; /^## /d; /^$/
 # environment up` records the ones that are files the branch changed.
 recipe_precondition_names() { recipe_prose_under "$1" Preconditions | grep -o '`[^` ]*`' | tr -d '`'; }
 
-# The name: field of the frontmatter of the recipe $1, or empty when it has none.
+# The name: field of the frontmatter of the recipe $1, or empty when it has none. $2 names
+# another field instead, such as version.
 recipe_name_of() {
-  awk 'NR == 1 && !/^---[ \t\r]*$/ { exit } NR > 1 && /^---[ \t\r]*$/ { exit }
-       NR > 1 && /^name:/ { sub(/^name:[ \t]*/, ""); sub(/[ \t\r]+$/, ""); print; exit }' "$1"
+  awk -v key="${2:-name}:" 'NR == 1 && !/^---[ \t\r]*$/ { exit } NR > 1 && /^---[ \t\r]*$/ { exit }
+       NR > 1 && index($0, key) == 1 { v = substr($0, length(key) + 1); sub(/^[ \t]+/, "", v)
+                                       sub(/[ \t\r]+$/, "", v); print v; exit }' "$1"
 }
 
 # The names under the requires_tooling: list of the frontmatter of the recipe $1, one per line.

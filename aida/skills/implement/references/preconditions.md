@@ -14,6 +14,10 @@ answer in its own word: SKILL.md holds both rules. The role identifies and retur
 never opens the body.
 Never fetch a catalog address yourself and never read a cached copy behind the navigator's back.
 The role reads a folder source this project configured itself first, so it wins over the catalog.
+When a folder answers for `test-execution`, the role also returns the catalog's copy of the same
+recipe. Pass that path as `--catalog-recipe <framework>=<path>`. A project copy at a lower version
+than the catalog's prints on the `staleRecipe:` line, with both versions. Read that line to the
+person. The step changes nothing, because the copy belongs to the project.
 
 Dispatch `catalog-identifier` once more, with `point: review` and each framework. This is a
 second recipe, never the same file as the `test-execution` one above. Pass its path straight
@@ -54,6 +58,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --implement-lookup <framework>=<path to the implement recipe, or the lookup's own word> \
   --tooling <tool>=<path to a tooling recipe the catalog returned> \
+  --catalog-recipe <framework>=<path to the catalog's copy, when a folder answered> \
   --value <name>=<value>...
 ```
 `--recipe` names the `test-execution` recipe this step already resolved, for the `## Preconditions`
