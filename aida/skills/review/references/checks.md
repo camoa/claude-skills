@@ -64,6 +64,11 @@ reviewer reads those rows before it judges, so do not re-derive a measurement he
 this stage judges against, and no role after the freeze may change them. A row's detail names each
 test it left out. A row whose files are all frozen tests reads undeclared.
 
+**The static-analysis row runs once more, over the frozen tests alone.** The project's own analyser
+reads the tests after the merge. A run that reads unmet or unknown becomes one finding on the
+`frozen-tests` lens, with disposition `follow-up`. No check reads that lens, so it blocks nothing.
+Completion offers it as a follow-up task for the test author.
+
 **Checks 5 to 7 subtract the baseline** in `implementation/baseline.json`. A finding that predates
 the build is not this task's, and blocking on it blocks every task forever. The baseline is scoped to
 the orders' owned files, so a finding in a file no order owns reads as this task's. That is right:

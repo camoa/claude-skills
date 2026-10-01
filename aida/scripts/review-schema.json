@@ -318,8 +318,8 @@
         },
         "lens": {
           "type": "string",
-          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation", "purpose"],
-          "description": "Which of the eight lenses raised it. One dispatch carries all eight, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4. The `purpose` lens is the hunk read, and it lands on check 3."
+          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation", "purpose", "frozen-tests"],
+          "description": "Which of the eight lenses raised it. One dispatch carries all eight, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4. The `purpose` lens is the hunk read, and it lands on check 3. `frozen-tests` is no reviewer lens: the checks step raises it when the static-analysis row, run over the frozen tests alone, reads unmet or unknown. No check reads it, so it blocks nothing, and its disposition is always follow-up (gap row 270)."
         },
         "severity": {
           "type": "string",

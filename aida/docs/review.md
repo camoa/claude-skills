@@ -60,7 +60,9 @@ Every check is a question with one answer. They fall into four groups.
 at the final commit. They are coding standards, static analysis, security, and the full test
 suite. A recipe may declare more rows, such as a duplication tool or a design-metrics tool. Each
 adds one check, so the list can run past sixteen on such a framework. The tool rows leave the frozen
-tests out, as the build does, because no role after the freeze may change them.
+tests out, as the build does, because no role after the freeze may change them. Static analysis
+then runs once more over the frozen tests alone. A finding there blocks nothing: it becomes a
+follow-up that completion offers.
 
 **The reviewer's lenses.** One reviewer reading the diff answers five checks. They are SOLID,
 DRY, architecture fit, the guides research cited, and the framework practices this project

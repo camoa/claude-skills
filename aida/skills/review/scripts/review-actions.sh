@@ -1066,8 +1066,11 @@ rw_baseline_field_for() {
 # took, because a finding that predates this build is not this task's, and blocking on it blocks
 # every task forever. A baseline that was unmet has its kept output subtracted line by line
 # (br_subtract_baseline, the build's own), so only a finding absent then reads as this task's.
+#
+# $2 `frozen` runs the row over the frozen tests alone and prints nothing when the change touched
+# none. The caller turns that row into a follow-up finding, never a check, so it blocks nothing.
 rw_tool_row_check() {
-  local row="$1" row_id framework argv signal exts scoped scoped_count has_paths
+  local row="$1" only_frozen="${2:-}" row_id framework argv signal exts scoped scoped_count has_paths
   local frozen left_out left_note rc failed how
   local verdict detail field baseline_doc baseline_verdict baseline_output new_json new_count
   row_id="$(printf '%s' "$row" | jq -r '.id')"
@@ -1102,6 +1105,13 @@ rw_tool_row_check() {
   left_note=""
   [ "$has_paths" = "false" ] || [ "$left_out" = "[]" ] \
     || left_note=" The frozen tests were left out: $(printf '%s' "$left_out" | jq -r 'join(", ")')."
+  if [ "$only_frozen" = "frozen" ]; then
+    scoped="$left_out"
+    [ -z "$exts" ] || scoped="$(br_filter_extensions "$scoped" "$exts")"
+    scoped_count="$(printf '%s' "$scoped" | jq 'length')"
+    [ "$has_paths" = "true" ] && [ "$scoped_count" -gt 0 ] || return 0
+    left_note=" This run read the frozen tests alone: $(printf '%s' "$scoped" | jq -r 'join(", ")')."
+  fi
 
   if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
     # No order owns a file in the code repository, so no file this tool reads was ever going to be
@@ -1299,7 +1309,7 @@ do_checks() {
   local task_arg="" recipes="" check_recipes="" failures="" values=""
   local frameworks fw lookup recipes_json rows_file parts_file
   local range base head_end head_now coverage cov_verdict cov_detail
-  local mut_verdict tool_count ti one mutation_file record_json today floor_id
+  local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
   local upstream empty_range
 
   while [ "$#" -gt 0 ]; do
@@ -1461,10 +1471,24 @@ RW_FIT
 
   tool_count="$(printf '%s' "$CR_DOC" | jq '(.tools // []) | length')"
   case "$tool_count" in ''|*[!0-9]*) tool_count=0 ;; esac
-  ti=0; one=""
+  ti=0; one=""; frozen_row=""; frozen_findings="[]"
   while [ "$ti" -lt "$tool_count" ]; do
     one="$(printf '%s' "$CR_DOC" | jq -c --argjson i "$ti" '.tools[$i]')"
     rw_tool_row_check "$one" >>"$parts_file"
+    # The project's own analyser runs its test rules over the tests after the merge. So the frozen
+    # tests get one more static-analysis run here, and a finding goes to completion as a follow-up
+    # for the test author (gap row 270).
+    if [ "$(printf '%s' "$one" | jq -r '.id')" = "static-analysis" ]; then
+      frozen_row="$(rw_tool_row_check "$one" frozen)"
+      [ -z "$frozen_row" ] || frozen_findings="$(jq -nc --argjson have "$frozen_findings" --argjson r "$frozen_row" '
+        if ($r.verdict == "unmet" or $r.verdict == "unknown")
+        then $have + [{id: "f1", lens: "frozen-tests", severity: "low", file: "", lines: "",
+                       linkedTo: "", disposition: "follow-up",
+                       evidence: ($r.detail + (if (($r.newLines // []) | length) > 0
+                                  then "\n" + ($r.newLines | join("\n"))
+                                  else "\n" + (($r.output // "") | .[-2000:]) end))}]
+        else $have end')"
+    fi
     ti=$((ti + 1))
   done
   # The three ids below are a floor the recipe may add to and never a list it may shorten, so each one
@@ -1493,7 +1517,8 @@ RW_FIT
     --argjson hasUpstream "$([ -n "$upstream" ] && echo true || echo false)" \
     --argjson recipes "$recipes_json" --slurpfile checks "$parts_file" \
     --argjson resolved "$CR_DOC" \
-    --slurpfile mutation "$mutation_file" --argjson notes "$RW_CATALOG_NOTES" '
+    --slurpfile mutation "$mutation_file" --argjson notes "$RW_CATALOG_NOTES" \
+    --argjson frozenFindings "$frozen_findings" '
     $mutation[0] as $mutation
     | {schemaVersion: 1, takenAt: $takenAt, task: $task,
      reviewedRange: $range, reviewedAt: $commit, hasUpstream: $hasUpstream, runMode: $runMode,
@@ -1504,7 +1529,7 @@ RW_FIT
                 | $row + {checkRecipeSha256: ($fw.checkRecipeSha256 // ""),
                           testRecipeSha256: ($fw.testRecipeSha256 // "")} ],
      checks: $checks,
-     criteria: [], findings: [], surfaces: [],
+     criteria: [], findings: $frozenFindings, surfaces: [],
      mutation: $mutation, catalogNotes: $notes}')"
   rm -f "$parts_file" "$mutation_file"
   [ -n "$record_json" ] || die 3 "checks: could not assemble the review record for $RW_TASK_ID."
@@ -1869,6 +1894,12 @@ RW_RESEARCH_FILES
            | {seen: .seen, where: .where} ]
     else [] end' "$findings_path" 2>/dev/null)"
   [ -n "$reviewer_notes" ] || reviewer_notes='[]'
+  # The checks step's frozen-test findings stay, numbered after the reviewer's own. No lens check reads
+  # the frozen-tests lens, so they block nothing.
+  findings_json="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson mine "$findings_json" '
+    ([ $mine[] | .id[1:] | tonumber ] | max // 0) as $top
+    | $mine + ([ (.findings // [])[] | select(.lens == "frozen-tests") ]
+               | to_entries | map(.value + {id: ("f" + (($top + .key + 1) | tostring))}))')"
   updated="$(jq -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
     --argjson notes "$reviewer_notes" --argjson absences "$absence_rows" --arg skip "$skip_reason" '
     . as $rows

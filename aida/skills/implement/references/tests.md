@@ -292,7 +292,8 @@ tests out of their tool rows, because no role after the freeze may write them.
 
 Do not run the static-analysis row here. The tests name code that does not exist yet, so an
 analyser reports each missing name. Once the code exists, an analyser can read a test's guard as
-always true. No role may then change the test, so review does not judge it (gap row 270).
+always true. No role may then change the test. So review runs the row over the frozen tests once
+more, and each finding becomes a follow-up for the test author (gap row 270).
 
 ## Put the rows to the checker, before anything is frozen
 
