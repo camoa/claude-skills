@@ -1464,7 +1464,7 @@ do_environment() {
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
     # The address keys the record kept, so `{worktreeProject}` reaches the tear-down. The marker's
     # own fields name no token, so they are left out with the three the up shape owns.
-    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt" and .key != "state" and .key != "startedAt") | "\(.key)\t\(.value)"' "$task_json")
+    TOKENS="$TOKENS$(task_environment_tokens "$task_json" | grep -v -E "^(address|recipe|upAt|state|startedAt)$(printf '\t')")
 "
     # A marker with no address holds none of those keys either, and a tear-down line may need one.
     # `up` marked the address command in records/environment-up.txt, with the line above, so the

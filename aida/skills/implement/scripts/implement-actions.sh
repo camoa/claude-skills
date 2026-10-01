@@ -6963,10 +6963,15 @@ BR_RUN_VALUES
 # does not is named, with its exit and its output. Both lists run through br_run_lines from the
 # worktree. The first block line restores the snapshot the environment's bring-up took, so a task
 # with no environment recorded reads unknown before any line runs. Two recipes each carrying the
-# block are two answers to one question, exit 72. Prints the check object.
+# block are two answers to one question, exit 72. The gate is the section's first `sh` block. Its
+# second is the put-back line, which puts the site back after a gate that reached its fourth line,
+# whatever the gate's verdict (gap row 288). It runs into the same output and never changes the
+# verdict or the exit code. A put-back that fails leads the detail, because the summary cuts a
+# long detail and the person must put the site back by hand. Prints the check object.
 br_gate_check() {
   local verdict="" detail="" outfile lines gate_fw="" gate_recipe="" gate_lines="" fw rp count=0
   local own_json cites own_verdict="" own_detail="" gate_verdict="" gate_detail="" rc="" lines_json
+  local back_lines="" back_note="" gate_n gate_why gate_rc gate_skipped
   br_verify_runs; own_json="$BRV_RUNS"; cites="$BRV_CITES"
   if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
     detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
@@ -6997,12 +7002,13 @@ br_gate_check() {
   else
     while IFS="$(printf '\t')" read -r fw rp; do
       [ -n "$fw" ] || continue
-      lines="$(sh_blocks_under "$rp" "Configuration gate" | grep '[^[:space:]]')"
+      lines="$(sh_blocks_under "$rp" "Configuration gate" 1 | grep '[^[:space:]]')"
       [ -n "$lines" ] || continue
       count=$((count + 1))
       [ "$count" -le 1 ] \
         || die 72 "$BRC_WHO: $gate_fw and $fw each carry a ## Configuration gate, and nothing here may choose between two answers to one question."
       gate_fw="$fw"; gate_recipe="$rp"; gate_lines="$lines"
+      back_lines="$(sh_blocks_under "$rp" "Configuration gate" 2 | grep '[^[:space:]]')"
     done <<BR_GATE
 $BRC_GATE_RECIPES
 BR_GATE
@@ -7016,18 +7022,31 @@ BR_GATE
     else
       lines_json="$(printf '%s\n' "$gate_lines" | jq -Rc '[ ., inputs ] | map(select(. != "") | {run: ., pass: "exit 0"})')"
       br_run_lines "$lines_json" "$gate_recipe" "$BRC_CODEPATH" "$outfile" "the ## Configuration gate line above is refused."
-      gate_verdict="${BRL_VERDICT:-met}"
+      gate_verdict="${BRL_VERDICT:-met}"; gate_n="$BRL_N"; gate_why="$BRL_WHY"; gate_rc="$BRL_RC"; gate_skipped="$BRL_SKIPPED"
       # The exit code the check carries is the first failing list's, else the last that ran.
-      [ -z "$BRL_RC" ] || [ "$own_verdict" = "unmet" ] || rc="$BRL_RC"
+      [ -z "$gate_rc" ] || [ "$own_verdict" = "unmet" ] || rc="$gate_rc"
+      if [ -n "$back_lines" ] && [ "$gate_n" -ge 4 ]; then
+        br_run_lines "$(printf '%s\n' "$back_lines" | jq -Rc '[ ., inputs ] | map(select(. != "") | {run: ., pass: "exit 0"})')" \
+          "$gate_recipe" "$BRC_CODEPATH" "$outfile" "the put-back line above is refused."
+        if [ "${BRL_RC:-}" = "0" ]; then
+          back_note=" The put-back line exited 0."
+        else
+          back_note="The put-back line ($BRL_LINE) exited ${BRL_RC:-without running}, so the site does not hold what the build left. Run that line again by hand. "
+        fi
+      fi
       case "$gate_verdict" in
-        met)   gate_detail="every ## Configuration gate line ($BRL_N of them$([ "$BRL_SKIPPED" -eq 0 ] || printf ', %s did not apply' "$BRL_SKIPPED")) exited 0 on $gate_fw, from $gate_recipe. A line 2 that printed 'There are no changes to import' is a finding the reviewer reads in the output." ;;
-        unmet) gate_detail="$BRL_WHY on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0." ;;
-        *)     gate_detail="$BRL_WHY" ;;
+        met)   gate_detail="every ## Configuration gate line ($gate_n of them$([ "$gate_skipped" -eq 0 ] || printf ', %s did not apply' "$gate_skipped")) exited 0 on $gate_fw, from $gate_recipe. A gate line that printed 'There are no changes to import' is a finding the reviewer reads in the output." ;;
+        unmet) gate_detail="$gate_why on $gate_fw; the recipe's prose under ## Configuration gate says what a failure of that line means. Every line before it exited 0." ;;
+        *)     gate_detail="$gate_why" ;;
       esac
     fi
   fi
   verdict="$(br_worst_verdict "$(jq -nc --arg a "$own_verdict" --arg b "$gate_verdict" '[ $a, $b ] | map(select(. != ""))')")"
   detail="$own_detail${own_detail:+${gate_detail:+ }}$gate_detail"
+  case "$back_note" in
+    ' '*) detail="$detail$back_note" ;;
+    ?*)   detail="$back_note$detail" ;;
+  esac
   if [ -n "$rc" ]; then
     jq -n --arg verdict "$verdict" --arg detail "$detail" --argjson rc "$rc" --rawfile out "$outfile" \
       '{id: "configuration-gate", verdict: $verdict, detail: $detail, exitCode: $rc, output: $out}'
@@ -7187,39 +7206,50 @@ br_site_status() {
   return "$rc"
 }
 
+# The first token no source fills in the run lines $1, one per line, with $2 as the `--value`
+# list. Prints its name, or nothing when every token fills. It resolves each argument the way
+# br_run_resolved does and runs nothing, because a gate line reaches the site (gap row 288).
+br_first_unfilled() {
+  local arg name
+  while IFS= read -r arg; do
+    case "$arg" in '{paths}'|'{file}'|'{dirs}') continue ;; *'{'*'}'*) ;; *) continue ;; esac
+    if ! name="$(br_fill_arg "$2" "$arg")"; then
+      printf '%s' "$name"
+      return 0
+    fi
+  done <<BR_UNFILLED_ARGS
+$(printf '%s\n' "$1" | jq -Rr 'split(" ") | .[] | select(. != "")')
+BR_UNFILLED_ARGS
+}
+
 # The first token no source fills in the `## Configuration gate` lines of the recipes $1, a
 # `<framework><TAB><path>` list, with $2 as the `--value` list. Prints `<name><TAB><path>`, or
-# nothing when every token fills. It resolves each argument the way br_run_resolved does and runs
-# nothing, because a gate line reaches the site (gap row 288).
+# nothing when every token fills. Both of the section's blocks are read, the put-back line too.
 br_gate_unfilled() {
-  local fw rp arg name
+  local fw rp name
   while IFS="$(printf '\t')" read -r fw rp; do
     [ -n "$fw" ] && [ -f "$rp" ] || continue
-    while IFS= read -r arg; do
-      case "$arg" in '{paths}'|'{file}'|'{dirs}') continue ;; *'{'*'}'*) ;; *) continue ;; esac
-      if ! name="$(br_fill_arg "$2" "$arg")"; then
-        printf '%s\t%s' "$name" "$rp"
-        return 0
-      fi
-    done <<BR_GATE_ARGS
-$(sh_blocks_under "$rp" "Configuration gate" | jq -Rr 'split(" ") | .[] | select(. != "")')
-BR_GATE_ARGS
+    name="$(br_first_unfilled "$(sh_blocks_under "$rp" "Configuration gate")" "$2")"
+    [ -z "$name" ] || { printf '%s\t%s' "$name" "$rp"; return 0; }
   done <<BR_GATE_RECIPES
 $1
 BR_GATE_RECIPES
 }
 
-# Refuses at 3, before any check runs, when a `## Configuration gate` line of a gate order holds
-# a token nothing fills. Such a line would fail for a reason that is not the order's, so no
-# attempt is spent, and the same step runs again once the value exists. Reads BRC_WHO,
-# BRC_UNIT_JSON, BRC_GATE_RECIPES and BRC_VALUES.
+# Refuses at 3, before any check runs, when a line a gate order runs holds a token nothing fills:
+# a line of its own `verify` list or of the `## Configuration gate`. Such a line would fail for a
+# reason that is not the order's, so no attempt is spent, and the same step runs again once the
+# value exists. Reads BRC_WHO, BRC_UNIT_JSON, BRC_GATE_RECIPES and BRC_VALUES.
 br_require_gate_tokens() {
-  local found
+  local found="" name
   br_order_facts "$BRC_UNIT_JSON"
   [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
-  found="$(br_gate_unfilled "$BRC_GATE_RECIPES" "$BRC_VALUES")"
+  br_verify_runs
+  name="$(br_first_unfilled "$(printf '%s' "$BRV_RUNS" | jq -r '.[].run')" "$BRC_VALUES")"
+  [ -z "$name" ] || found="$name	$BRV_CITES, a verify line of this order"
+  [ -n "$found" ] || found="$(br_gate_unfilled "$BRC_GATE_RECIPES" "$BRC_VALUES")"
   [ -z "$found" ] \
-    || die 3 "$BRC_WHO: the token {${found%%	*}} in the ## Configuration gate of ${found#*	} has no value, so no check ran and no attempt was spent. A value comes from --value ${found%%	*}=<value>, from the tokens preconditions recorded, or from the task's environment record, which task environment <task-id> up writes."
+    || die 3 "$BRC_WHO: the token {${found%%	*}} in the lines from ${found#*	} has no value, so no check ran and no attempt was spent. A value comes from --value ${found%%	*}=<value>, from the tokens preconditions recorded, or from the task's environment record, which task environment <task-id> up writes."
 }
 
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site

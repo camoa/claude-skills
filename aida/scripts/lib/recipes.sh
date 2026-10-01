@@ -71,8 +71,8 @@
 #   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
 #   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
 #   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
-#   fenced_blocks_under <recipe> <heading> <tag>  the lines of every block with that tag, in order
-#   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
+#   fenced_blocks_under <recipe> <heading> <tag> [<n>]  the lines of every block with that tag, or of block n
+#   sh_blocks_under <recipe> <heading> [<n>]  the same, for blocks tagged sh: one command per line
 #   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
 #   recipe_files_into <recipe> <heading> <dir>  one file per fenced block; prints <n><TAB><path>
 #   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a
@@ -1552,17 +1552,18 @@ CR_FRAMEWORKS
 
 # The lines inside every block tagged $3 under the H2 $2 of the recipe $1, in order. The tag is
 # read with the surrounding space removed, because a trailing space is invisible in an editor.
+# $4, when given, is a block number: only the lines of that block with the tag, counting from 1.
 fenced_blocks_under() {
-  awk -v want="$2" -v tag="$3" '
+  awk -v want="$2" -v tag="$3" -v only="${4:-0}" '
     function fence_tag(line,   t) { t = line; sub(/^`+/, "", t); gsub(/^[ \t]+|[ \t\r]+$/, "", t); return t }
-    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; next }
+    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; n = 0; next }
     !inSection { next }
-    /^```/ { if (inFence) { inFence = 0; taken = 0; next }; inFence = 1; taken = (fence_tag($0) == tag); next }
-    inFence && taken { print }
+    /^```/ { if (inFence) { inFence = 0; taken = 0; next }; inFence = 1; taken = (fence_tag($0) == tag); n += taken; next }
+    inFence && taken && (only == 0 || n == only) { print }
   ' "$1"
 }
 
-sh_blocks_under() { fenced_blocks_under "$1" "$2" "sh"; }
+sh_blocks_under() { fenced_blocks_under "$1" "$2" "sh" "${3:-}"; }
 
 # A recipe is data written elsewhere. Refuse a line that would mean more than it says. $1 the
 # script's own name, $2 the recipe, $3 the line. Returns 1 and names both on a refusal.

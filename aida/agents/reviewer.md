@@ -29,7 +29,7 @@ Read the brief first; everything below is in it or named by it.
 In review mode, the brief holds the criteria this order serves and owns, the non-goals it names,
 and the order record. It names the diff as a file, the frozen tests, and the builder's report. It
 holds the results of the eight checks that already ran, and both interface texts. On an order
-whose proof is `gate`, read the `configuration-gate` output. A line 2 that printed `There are
+whose proof is `gate`, read the `configuration-gate` output. A gate line that printed `There are
 no changes to import` means the export changed nothing against the seed. Refuse the order with a
 high finding, as the recipe says. On an order whose proof is `record`, the brief's
 `deliverables` name the document by path, and the diff is the project folder's. Read the document

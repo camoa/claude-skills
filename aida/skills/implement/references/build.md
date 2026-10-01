@@ -415,8 +415,10 @@ This step runs all eight deciding checks. The record holds every one.
   unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
   An order with verify lines runs them alone then, and the detail says the block did not run.
   A verify line that is not binding runs only when the person approved it at the design close.
-  A line 2 that printed `There are no changes to import` is a finding for the reviewer, not
-  for this check.
+  A gate line that printed `There are no changes to import` is a finding for the reviewer, not
+  for this check. The section's second `sh` block is the put-back line. It runs after a gate
+  that reached its fourth line, whatever the verdict, and never changes the verdict. When it
+  fails, the detail starts with its exit. Tell the person to run that line again by hand.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
