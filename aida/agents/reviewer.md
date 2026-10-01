@@ -47,7 +47,7 @@ findings to the path the brief gives, in this shape:
     "departsFromDesign": false }
 ], "recipes": [
   { "ref": "the path from the brief", "verdict": "followed|departed|not-applicable",
-    "evidence": "..." }
+    "evidence": "...", "finding": "f1" }
 ] }
 ```
 
@@ -92,9 +92,16 @@ above, with `evidence` on one line. `departed` names the file and the line of th
 `evidence`, whether or not the builder declared it. The recipe's own line is not enough. A
 departure in how files were produced has no one line, such as YAML written by hand in place of a
 generator. Name each file it made or changed by its path in the diff.
+Evidence such as "diff lines 859" names no file, and the script refuses it.
 `not-applicable` gives its reason in `evidence`. A script refuses a list that skips an item or
-adds one, and a departure sends the order back to design. Leave `recipes` out when the brief's
-list is empty.
+adds one. Leave `recipes` out when the brief's list is empty.
+
+**A departure that a fix can cure is also a finding.** A deprecated call and a hand-written file
+that the recipe's generator can write again are examples. Write a finding with a `fixScope`,
+linked to the criterion the order owns. Its `file` is a file the departed evidence names. Put its
+id under `finding` in the departed answer. The fix round then cures the departure, and verify
+confirms it. Leave `finding` out when no change inside the order's files can cure the departure.
+Then the departure sends the order back to design.
 
 The brief's `automatedTests` says whether the task has automated tests. When it is false and
 `frozenTests` is empty, the recipe's rules on frozen tests do not apply. Design may then direct
@@ -144,6 +151,10 @@ A finding with origin `repair` carries a `question`. Another unit's builder name
 nobody has checked that claim. Answer it in that verdict as `"defectInFile": "yes"` or `"no"`,
 with the reason in `evidence`. Answer `no` when the failure arises elsewhere, such as in the
 builder's own unit. A `no` waits for the person, whatever the verdict says.
+
+A finding with `departureFrom` carries a `question` too. Its fix was to cure a departure from that
+recipe. Answer it as `"departureCured": "yes"` or `"no"`, with the reason in `evidence`. A `no`
+waits for the person.
 
 **You may not read code the fix diff did not touch, and you may not raise a finding against it.**
 You may not extend the loop by adding a round of your own. You are not given the original full

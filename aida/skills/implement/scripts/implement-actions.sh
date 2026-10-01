@@ -737,7 +737,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      accepts the departure with --accept-deviation instead, interactive only (exit 68). A recipe
 #      the reviewer answers departed takes the same route, under a halt of its own wording (gap
 #      row 225). Unattended, nothing halts: the record holds the departure as deviationPending,
-#      and the person decides it at the task review (gap row 279).
+#      and the person decides it at the task review (gap row 279). A departed recipe answer whose
+#      `finding` names an actionable finding with a fix scope halts nothing in either mode: the
+#      fix round cures it and verify confirms the cure (gap row 303).
 #
 # The code the reviewer's recipe answers added (gap row 225).
 # 108  `review-record` found the findings file's `recipes` list does not answer the review
@@ -9076,7 +9078,9 @@ rv_recipe_refs() {
 # the file has none. $2 the action's own name. An answer is {ref, verdict, evidence}: the verdict
 # is followed, departed or not-applicable, and the evidence gives the reason on one line. A
 # departure's evidence names a file in the order's diff, $3, with or without a line. A departure in
-# how files were produced has no one line (gap row 280). Dies 52 on a malformed
+# how files were produced has no one line (gap row 280). A departed answer may name, under
+# `finding`, the finding whose fix cures it; review-record checks it (gap row 303). Sets
+# RV_RECIPE_NAMED to {ref: [the diff files its departed evidence names]}, for that check. Dies 52 on a malformed
 # answer, and 108 when an item of rv_recipe_refs has no answer, or an answer names a ref twice or a
 # ref not on that list. Called as a plain statement, never with `$(...)`, for the reason
 # rv_read_findings_array states. $4 the order's test globs, one per line, given only when the task
@@ -9085,10 +9089,12 @@ rv_recipe_refs() {
 # answer keeps the reviewer's words as departedAnswer (gap row 300). A glob with no "/" matches a
 # file name anywhere in the tree, as pytest's patterns do.
 RV_RECIPE_ANSWERS="[]"
+RV_RECIPE_NAMED="{}"
 RR_REDISPATCH="Run review-brief again for this order, then dispatch the reviewer again."
 rv_read_recipe_answers() {
   local file="$1" who="$2" diff="$3" test_globs="${4:-}" refs arr count i one ref verdict evidence seen="" diff_paths p in_diff
-  local named_tests only_tests is_test g sfx
+  local named_tests only_tests is_test g sfx named_files
+  RV_RECIPE_NAMED="{}"
   refs="$(rv_recipe_refs)"
   diff_paths=""
   [ ! -f "$diff" ] || diff_paths="$(sed -n 's#^+++ b/##p; s#^--- a/##p' "$diff" | LC_ALL=C sort -u)"
@@ -9120,6 +9126,7 @@ rv_read_recipe_answers() {
       only_tests=yes
       [ -n "$test_globs" ] || only_tests=no
       named_tests=""
+      named_files=""
       while IFS= read -r p; do
         [ -n "$p" ] || continue
         is_test="$(printf '%s\n' "$test_globs" | while IFS= read -r g; do
@@ -9132,6 +9139,8 @@ rv_read_recipe_answers() {
         case " $evidence " in
           *[!A-Za-z0-9_./-]"$p"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$p".[!A-Za-z0-9_./-]*)
             in_diff=yes
+            named_files="$named_files$p
+"
             [ "$is_test" != "yes" ] || named_tests="$named_tests, $p" ;;
         esac
         # Any other file the evidence names, by its path, a path suffix or its bare name, keeps the
@@ -9149,12 +9158,13 @@ rv_read_recipe_answers() {
 $diff_paths
 RR_DIFF
       [ "$in_diff" = "yes" ] \
-        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files that a departure in how files were produced made or changed. The recipe's own line is not enough."
+        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files that a departure in how files were produced made or changed. The recipe's own line is not enough, and neither is a line of the diff itself. The accepted form is <path>:<line>, with the path as the diff names it, for example $(printf '%s\n' "$diff_paths" | grep -v -x -e '' -e /dev/null | head -n 1):<line>."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
+      RV_RECIPE_NAMED="$(printf '%s' "$RV_RECIPE_NAMED" | jq -c --arg r "$ref" --arg f "$named_files" '.[$r] = ($f | split("\n") | map(select(. != "")))')"
       if [ "$only_tests" = "yes" ] && [ -n "$named_tests" ]; then
         arr="$(printf '%s' "$arr" | jq -c --argjson i "$i" \
           --arg why "the task has no automated tests and this order froze no test file, so the recipe's rules on frozen tests do not apply to ${named_tests#, }" \
-          '.[$i].departedAnswer = .[$i].evidence | .[$i].verdict = "not-applicable" | .[$i].evidence = $why')"
+          '.[$i].departedAnswer = .[$i].evidence | .[$i].verdict = "not-applicable" | .[$i].evidence = $why | del(.[$i].finding)')"
       fi
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
@@ -9172,7 +9182,8 @@ $ref"
 $refs
 RR_REFS
   RV_RECIPE_ANSWERS="$(printf '%s' "$arr" | jq -c '[ .[] | {ref: (.ref | tostring), verdict, evidence: (.evidence | tostring)}
-    + (if has("departedAnswer") then {departedAnswer} else {} end) ]')"
+    + (if has("departedAnswer") then {departedAnswer} else {} end)
+    + (if has("finding") then {finding: (.finding | tostring)} else {} end) ]')"
 }
 
 # Every non-goal the given finding list cites, as a printable list. Empty when none does.
@@ -9338,7 +9349,9 @@ RB_COMMITS
       findingsPath: $findingsPath,
       playbooksPath: $playbooksPath,
       recipes: ($recipes | split("\n") | map(select(. != "")))
-    }')"
+    }
+    + (if $recipes == "" then {} else
+       {recipeAnswer: "One answer per recipe: ref, verdict, evidence. A departed answer that a fix inside the order cures adds finding: the id of a finding with a fixScope, on a file the evidence names."} end)')"
   [ -n "$brief_json" ] || die 3 "review-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
   # The check verdicts are printed one per line because review.md routes on interface-record's;
@@ -9476,58 +9489,6 @@ do_review_record() {
     || rr_test_globs="$(jq -r '(.testGlobs // [])[]' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
   rv_read_recipe_answers "$findings_path" "review-record" "$IMPL_DIR/diff-$unit_id.patch" "$rr_test_globs"
 
-  # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
-  # review holds: the design, or a recipe it relies on, is what is wrong, so no fixer can repair
-  # it. The scan is build-record's own, over the latest attempt's report and the interface record
-  # its build record holds. A build record written before that scan existed reaches review with
-  # one in it. The reviewer's information item with departsFromDesign true is the same fact, and so
-  # is a recipe it answers departed (gap row 225); those halts carry the reviewer's own front. The
-  # halt names the file and the line, never the builder's text, which may hold the halt separator.
-  # The recipe reader already refused that separator, and a line break, in the reviewer's evidence.
-  local departure departure_file departure_line="" iface_file halt_why=""
-  departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
-  departure="$(br_deviations "$departure_file" | head -n 1)"
-  [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$departure_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
-  if [ -z "$departure" ]; then
-    iface_file="$(mktemp)" || die 3 "review-record: could not create a temporary file"
-    printf '%s\n' "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" >"$iface_file"
-    departure="$(br_deviations "$iface_file" | head -n 1)"
-    [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$iface_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
-    rm -f "$iface_file"
-    departure_file="the interfaceRecord of $IMPL_DIR/build-$unit_id.json"
-  fi
-  # Gap row 266. A person kept this line at build-record, so the review carries that answer and
-  # does not ask again. A departure the reviewer finds is a new fact, and it still halts.
-  local build_accepted
-  build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
-  [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] || departure=""
-  [ -z "$departure" ] || halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"
-  if [ -z "$departure" ]; then
-    departure="$(printf '%s' "$information_json" | jq -r \
-      '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
-    departure_file="$findings_path"
-    [ -z "$departure" ] \
-      || halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
-  fi
-  if [ -z "$departure" ]; then
-    departure="$(printf '%s' "$RV_RECIPE_ANSWERS" | jq -r \
-      '[ .[] | select(.verdict == "departed") ] | .[0] // empty | "\(.ref): \(.evidence)"')"
-    [ -z "$departure" ] || halt_why="$RR_REVIEWER_PREFIX $departure"
-  fi
-  if [ -z "$departure" ]; then
-    [ -z "$accept" ] \
-      || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
-  elif [ -z "$accept" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    # Gap row 279. Unattended, the departure waits for the person at the task review, and the
-    # record below holds it as deviationPending. Nothing halts.
-    :
-  elif [ -z "$accept" ]; then
-    local departure_ledger
-    departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
-    [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
-    write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
-    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
-  fi
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   # Gap row 265. An empty fix scope routes a finding to a ruling with no fix round, so the script
   # checks the reviewer's claim. A finding that cites a file the order owns, or a file its diff
@@ -9564,6 +9525,91 @@ do_review_record() {
     findings_json="$(printf '%s' "$findings_json" | jq -c --argjson f "$built" '. + [$f]')"
     i=$((i + 1))
   done
+
+  # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
+  # review holds: the design, or a recipe it relies on, is what is wrong, so no fixer can repair
+  # it. The scan is build-record's own, over the latest attempt's report and the interface record
+  # its build record holds. A build record written before that scan existed reaches review with
+  # one in it. The reviewer's information item with departsFromDesign true is the same fact, and so
+  # is a recipe it answers departed (gap row 225); those halts carry the reviewer's own front. The
+  # halt names the file and the line, never the builder's text, which may hold the halt separator.
+  # The recipe reader already refused that separator, and a line break, in the reviewer's evidence.
+  local departure departure_file departure_line="" iface_file halt_why=""
+  departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
+  departure="$(br_deviations "$departure_file" | head -n 1)"
+  [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$departure_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
+  if [ -z "$departure" ]; then
+    iface_file="$(mktemp)" || die 3 "review-record: could not create a temporary file"
+    printf '%s\n' "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.interfaceRecord // ""')" >"$iface_file"
+    departure="$(br_deviations "$iface_file" | head -n 1)"
+    [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$iface_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
+    rm -f "$iface_file"
+    departure_file="the interfaceRecord of $IMPL_DIR/build-$unit_id.json"
+  fi
+  # Gap row 266. A person kept this line at build-record, so the review carries that answer and
+  # does not ask again. A departure the reviewer finds is a new fact, and it still halts.
+  local build_accepted
+  build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
+  [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] || departure=""
+  [ -z "$departure" ] || halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"
+  if [ -z "$departure" ]; then
+    departure="$(printf '%s' "$information_json" | jq -r \
+      '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
+    departure_file="$findings_path"
+    [ -z "$departure" ] \
+      || halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
+  fi
+  # Gap row 303. A recipe the reviewer answers departed, paired by `finding` with an actionable
+  # finding that has a fix scope, is one a fix round cures, so it opens that round and halts
+  # nothing. The paired finding sits on a file the departed evidence names, so an unrelated finding
+  # cannot carry a design departure. With no `finding`, the one curable finding on such a file is
+  # paired here; two or more go back to the reviewer. The paired finding carries departureFrom, and
+  # verify answers departureCured for it. A departed answer with no such finding takes the route above.
+  local pair_json pair_err paired_lines
+  pair_json="$(printf '%s' "$RV_RECIPE_ANSWERS" | jq -c --argjson f "$findings_json" --argjson named "$RV_RECIPE_NAMED" '
+    [ .[] | . as $a | ($named[$a.ref] // []) as $files
+      | if ($a | has("finding")) then
+          ([ $f[] | select(.id == $a.finding) ][0]) as $p
+          | if $a.verdict != "departed" or $p == null then
+              {a: $a, err: "the recipes answer for \($a.ref) (\($a.verdict), finding \($a.finding)) names a finding it cannot carry. Only a departed answer names a finding, and the finding is one of this file'"'"'s findings, by its id."}
+            elif ($files | index($p.file)) == null then
+              {a: $a, err: "the recipes answer for \($a.ref) names finding \($p.id), on \($p.file), a file its departed evidence does not name. The finding that cures a departure sits on a file the evidence names: \($files | join(", "))."}
+            else {a: $a} end
+        elif $a.verdict == "departed" then
+          [ $f[] | select(.actionable and (.fixScope | length) > 0 and (.file as $pf | $files | index($pf)) != null) | .id ] as $c
+          | if ($c | length) == 1 then {a: ($a + {finding: $c[0]}), paired: $c[0]}
+            elif ($c | length) > 1 then {a: $a, err: "the recipes answer for \($a.ref) is departed, and \($c | join(", ")) each sit on a file its evidence names. Name the one whose fix cures the departure under finding."}
+            else {a: $a} end
+        else {a: $a} end ]')"
+  [ -n "$pair_json" ] || die 3 "review-record: the recipe answers could not be paired with the findings."
+  pair_err="$(printf '%s' "$pair_json" | jq -r '[ .[] | .err // empty ] | .[0] // empty')"
+  [ -z "$pair_err" ] || die 52 "review-record: $pair_err in $findings_path. Nothing is written. $RR_REDISPATCH"
+  paired_lines="$(printf '%s' "$pair_json" | jq -r '.[] | select(has("paired")) | "paired: \(.a.ref) with \(.paired), the one actionable finding on a file its departed evidence names"')"
+  RV_RECIPE_ANSWERS="$(printf '%s' "$pair_json" | jq -c '[ .[].a ]')"
+  findings_json="$(printf '%s' "$findings_json" | jq -c --argjson r "$RV_RECIPE_ANSWERS" '
+    map(. as $x | ([ $r[] | select(.verdict == "departed" and .finding == $x.id) ][0].ref) as $ref
+        | if $ref != null and $x.actionable and ($x.fixScope | length) > 0 then $x + {departureFrom: $ref} else $x end)')"
+  if [ -z "$departure" ]; then
+    departure="$(printf '%s' "$RV_RECIPE_ANSWERS" | jq -r --argjson f "$findings_json" '
+      [ $f[] | select(.actionable and (.fixScope | length) > 0) | .id ] as $cures
+      | [ .[] | select(.verdict == "departed" and ((.finding // "") as $id | $cures | index($id)) == null) ]
+      | .[0] // empty | "\(.ref): \(.evidence)"')"
+    [ -z "$departure" ] || halt_why="$RR_REVIEWER_PREFIX $departure"
+  fi
+  if [ -z "$departure" ]; then
+    [ -z "$accept" ] \
+      || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
+  elif [ -z "$accept" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    # Gap row 279. Unattended, the departure waits for the person at the task review, and the
+    # record below holds it as deviationPending. Nothing halts.
+    :
+  elif [ -z "$accept" ]; then
+    local departure_ledger
+    departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
+    [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
+    write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
+    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
+  fi
 
   local today record_json
   today="$(date -u +%Y-%m-%d)"
@@ -9619,6 +9665,7 @@ do_review_record() {
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
   [ -z "$outside_lines" ] || printf '%s' "$outside_lines"
+  [ -z "$paired_lines" ] || printf '%s\n' "$paired_lines"
   # One line per finding: its severity, whether it is actionable and what it cites. Its evidence
   # stays in the record, named by path.
   im_print_summary "review-record" "$(printf '%s' "$record_json" | jq -c --arg record "$review_file" \
@@ -10279,7 +10326,8 @@ do_verify_brief() {
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin}
           + (if has("scopeInsufficientInRound") then {scopeInsufficientInRound, scopeInsufficientBecause} else {} end)
-          + (if .origin == "repair" then {question: ("Does the cited failure arise in " + .file + "? Answer defectInFile yes or no.")} else {} end))')"
+          + (if .origin == "repair" then {question: ("Does the cited failure arise in " + .file + "? Answer defectInFile yes or no.")} else {} end)
+          + (if has("departureFrom") then {departureFrom, question: ("Is the departure from " + .departureFrom + " gone? Answer departureCured yes or no.")} else {} end))')"
   [ "$(printf '%s' "$open_json" | jq 'length')" -gt 0 ] 2>/dev/null \
     || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
@@ -10440,7 +10488,7 @@ do_verify_record() {
   # Exit 58: the verdict list and the open findings have to correspond, both ways. Every open
   # actionable finding needs one verdict, and a verdict about anything else is a verifier reading
   # a list this order does not hold.
-  local open_ids verdict_ids missing extra vcount vi vrow vid vverdict vorigin
+  local open_ids verdict_ids missing extra vcount vi vrow vid vverdict vorigin vfrom
   open_ids="$(printf '%s' "$RV_REVIEW_DOC" | jq -c \
     '[ (.findings // [])[] | select(.actionable == true and .status == "open") | .id ]')"
   vcount="$(printf '%s' "$verdict_rows" | jq 'length')"
@@ -10463,6 +10511,15 @@ do_verify_record() {
       case "$(printf '%s' "$vrow" | jq -r '.defectInFile // ""')" in
         yes|no) ;;
         *) die 52 "verify-record: $vid is a repair finding, and its verdict has no defectInFile. Answer yes or no: does the cited failure arise in $(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$vid" '[ .findings[] | select(.id == $id) ][0].file')?" ;;
+      esac
+    fi
+    # A finding paired with a recipe departure is addressed only when the departure is gone, and a
+    # no waits for the person (gap row 303).
+    vfrom="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$vid" '[ (.findings // [])[] | select(.id == $id) ][0].departureFrom // ""')"
+    if [ -n "$vfrom" ]; then
+      case "$(printf '%s' "$vrow" | jq -r '.departureCured // ""')" in
+        yes|no) ;;
+        *) die 52 "verify-record: $vid cures a departure from $vfrom, and its verdict has no departureCured. Answer yes or no: is the departure from $vfrom gone?" ;;
       esac
     fi
     vi=$((vi + 1))
@@ -10489,8 +10546,12 @@ do_verify_record() {
         elif $row.defectInFile == "no" then
           $f + { status: "pending", defectInFile: "no",
                  pendingBecause: ("the verifier answered that the failure does not arise in " + $f.file + ": " + ($row.evidence // "")) }
+        elif $row.departureCured == "no" then
+          $f + { status: "pending", departureCured: "no",
+                 pendingBecause: ("the verifier answered that the departure from " + $f.departureFrom + " is not gone: " + ($row.evidence // "")) }
         elif $row.verdict == "addressed" then
           $f + (if $row.defectInFile then {defectInFile: $row.defectInFile} else {} end)
+          + (if $row.departureCured then {departureCured: $row.departureCured} else {} end)
           + { status: "addressed", addressedInRound: $r,
                  addressedEvidence: ($row.evidence // ""),
                  addressedFile: ($row.file // ""), addressedLines: ($row.lines // "") }
@@ -10913,7 +10974,7 @@ CLOSE_FAKES
     local skipped
     skipped="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ .findings[]
       | select((.status == "pending" or .status == "ruled") and ((.fixScope // []) | length > 0)
-               and .defectInFile != "no" and (has("scopeInsufficientInRound") | not)) | .id ] | join(", ")')"
+               and .defectInFile != "no" and .departureCured != "no" and (has("scopeInsufficientInRound") | not)) | .id ] | join(", ")')"
     [ -z "$skipped" ] || light_log_fix_rounds "$unit_id" "$skipped"
   fi
 

@@ -101,7 +101,12 @@ act on one outside this task.
 A departure the builder declared never closes clean, whatever the review holds. The script scans
 the latest attempt's report and the interface record in its build record, the way `build-record`
 does. An information item the reviewer marks `departsFromDesign` true is a hit too. So is a
-recipe the reviewer answers `departed`. The findings file answers each item of the brief's
+recipe the reviewer answers `departed`, unless its `finding` names an actionable finding with a
+fix scope. That departure opens a fix round like any finding, in both run modes. The verifier
+answers `departureCured`, and a `no` waits for the person. With no `finding`, the script pairs the
+one such finding on a file the evidence names, and prints a `paired:` line. Exit 52 refuses a
+`finding` on another verdict, or one that names no finding in the file. It also refuses a finding
+on a file the evidence does not name, and two candidates for one answer. The findings file answers each item of the brief's
 `recipes` once. Otherwise the script refuses (exit 108): run `review-brief` again for this order,
 then dispatch the reviewer again. On a hit it refuses (exit 107), writes no review record, and
 halts the order for design drift. The halt names the file and the line number, the item, or the

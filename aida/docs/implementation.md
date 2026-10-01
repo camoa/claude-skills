@@ -449,11 +449,13 @@ already stops on one. The review runs the same scan over the latest attempt, bec
 record from an earlier version can carry one. A reviewer that sees a departure marks its
 information item `departsFromDesign`, and that is a hit too. The reviewer also answers each
 implement recipe: followed, departed, or not applicable with a reason. A departed answer is a
-hit, and a missing or extra answer is refused. A hit halts the order for design drift, whatever
+hit, and a missing or extra answer is refused. A departure that a fix can cure is not a hit when
+it is paired with a finding that has a fix scope, on a file the evidence names. The fix round
+cures it, and the verify step confirms the cure. A hit halts the order for design drift, whatever
 else the reviewer wrote. What is wrong is the design, or a recipe it relies on, so no fixer can
 repair it. You change the design and restart the order, or you keep the departure with a reason.
-The review record and the ledger keep that reason. Unattended, nobody can keep it, so the halt
-stands.
+The review record and the ledger keep that reason. Unattended, nothing halts: the departure waits
+for you at the task review.
 
 ## Fixing what the review found
 
