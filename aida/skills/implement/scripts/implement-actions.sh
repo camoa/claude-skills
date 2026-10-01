@@ -759,7 +759,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 114  `dispatch-open` was given the implementer role for an order with no
 #      <task_folder>/implementation/tests-<unit_id>.json. The same fact exit 39 names for
 #      `build-brief`, with the same message. Nothing is written, so no record opens for a build
-#      that has no brief. Run tests-freeze on the order first.
+#      that has no brief. Run tests-freeze on the order first. The implementer role also takes
+#      `build-brief`'s ledger refusals, its exit 40 and its exit 41, with the same codes and words
+#      (gap row 281).
 # 115  `dispatch-open` was given the reviewer role for an order with no reviewer brief:
 #      brief-<unit_id>-review.json, or brief-<unit_id>-verify-<round>.json after a fix round. The
 #      message names the step that writes it. Nothing is written. Kept apart from 114 because the
@@ -5894,6 +5896,52 @@ im_require_tests_record() {
     || die 3 "$1: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 }
 
+# Every refusal build-brief takes from the order's records rather than from its own arguments:
+# the tests record (exit $3, as above), the ledger, each dependency's completion record (exit
+# 40) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
+# it writes, so no builder opens for an order build-brief would refuse (gap row 281). The order's
+# frozen work order is $4. Sets IM_TESTS_DOC, IM_ATTEMPTS_USED and IM_ATTEMPTS_ALLOWED.
+IM_ATTEMPTS_USED=0; IM_ATTEMPTS_ALLOWED=0
+im_require_build_ready() {
+  local who="$1" unit_id="$2" unit_json="$4" ledger_doc
+  im_require_tests_record "$who" "$unit_id" "$3"
+
+  # --- the ledger: needed for the dependency check and the attempt count ---------------------------
+  local ledger_file="$IMPL_DIR/ledger.json"
+  [ -f "$ledger_file" ] \
+    || die 3 "$who: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
+  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
+  [ -n "$ledger_doc" ] \
+    || die 3 "$who: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  # --- exit 40: every dependency needs a completion record before its interface is handed over ------
+  local dep_id dep_entry dep_step
+  while IFS= read -r dep_id; do
+    [ -n "$dep_id" ] || continue
+    dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
+      '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+    [ "$dep_entry" != "null" ] \
+      || die 3 "$who: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
+    dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
+    [ "$dep_step" = "closed" ] \
+      || die 40 "$who: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+  done <<IM_DEPS
+$(printf '%s' "$unit_json" | jq -r '(.dependsOn // [])[]')
+IM_DEPS
+
+  # --- exit 41: the attempt counter for this unit must still have room -----------------------------
+  local order_entry
+  order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
+  [ "$order_entry" != "null" ] \
+    || die 3 "$who: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+  IM_ATTEMPTS_USED="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
+  case "$IM_ATTEMPTS_USED" in ''|*[!0-9]*) IM_ATTEMPTS_USED=0 ;; esac
+  IM_ATTEMPTS_ALLOWED="$(attempts_allowed_for "$order_entry")"
+  [ "$IM_ATTEMPTS_USED" -lt "$IM_ATTEMPTS_ALLOWED" ] \
+    || die 41 "$who: $unit_id has already used $IM_ATTEMPTS_USED of $IM_ATTEMPTS_ALLOWED allowed attempts. Nothing more is handed over."
+}
+
 do_build_brief() {
   [ "$#" -ge 2 ] || die 3 "build-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "build-brief: unrecognized extra argument: $3"
@@ -5916,68 +5964,37 @@ do_build_brief() {
   # --- exit 38: the unit itself must be in the frozen copy -----------------------------------------
   bb_load_unit "$snapshot_doc" "$unit_id"
 
-  # --- exit 39: step three (tests-brief, tests-freeze) must already have run for this unit ---------
-  im_require_tests_record "build-brief" "$unit_id" 39
+  # --- exits 39, 40 and 41, and the ledger: the order's records must allow a build ----------------
+  im_require_build_ready "build-brief" "$unit_id" 39 "$BB_UNIT_JSON"
+  local attempts_used="$IM_ATTEMPTS_USED" attempts_allowed="$IM_ATTEMPTS_ALLOWED"
 
-  # --- the ledger: needed for the dependency check and the attempt count ---------------------------
-  local ledger_file="$IMPL_DIR/ledger.json"
-  [ -f "$ledger_file" ] \
-    || die 3 "build-brief: $ledger_file not found, though $IMPL_DIR/snapshot.json exists. A snapshot with no ledger beside it is not a supported state; run start again."
-  local ledger_doc
-  ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
-  [ -n "$ledger_doc" ] \
-    || die 3 "build-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
-
-  # --- exit 40: every dependency needs a completion record before its interface is handed over ------
-  # dep_interface is declared here, never inside the loop, for the reason tests-brief states above
-  # and this file's own header records as trap 5.
-  local depends_json dep_count i dep_id dep_entry dep_step dep_interface dependency_interfaces_json='[]'
+  # Every dependency is closed by now. dep_interface is declared here, never inside the loop, for
+  # the reason tests-brief states above and this file's own header records as trap 5.
+  local depends_json dep_count i dep_id dep_interface dependency_interfaces_json='[]'
   local dep_record_file dep_record_text dependency_information_json='[]'
   depends_json="$(printf '%s' "$BB_UNIT_JSON" | jq -c '.dependsOn // []')"
   dep_count="$(printf '%s' "$depends_json" | jq 'length')"
   i=0
   while [ "$i" -lt "$dep_count" ]; do
     dep_id="$(printf '%s' "$depends_json" | jq -r --argjson i "$i" '.[$i]')"
-    dep_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$dep_id" \
-      '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
-    [ "$dep_entry" != "null" ] \
-      || die 3 "build-brief: $unit_id depends on $dep_id, which has no entry in $ledger_file, though start opens one entry per snapshot work order."
-    dep_step="$(printf '%s' "$dep_entry" | jq -r '.lastStep // "not started"')"
-    if [ "$dep_step" = "closed" ]; then
-      dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
-        '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
-      # Both texts, each labelled. The declaration is what design promised; the record is what the
-      # builder says it exposed, and the two can differ. The next order writes its tests and its
-      # code against the record where one exists, which is what build.md and the two agent files
-      # already say and what neither brief carried.
-      dep_record_file="$IMPL_DIR/build-$dep_id.json"
-      dep_record_text=""
-      if [ -f "$dep_record_file" ]; then
-        dep_record_text="$(jq -r '.interfaceRecord // ""' "$dep_record_file" 2>/dev/null)"
-      fi
-      dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
-        --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
-        . + [ {id: $id, declaredInterface: $iface, interface: $iface}
-              + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
-      dependency_information_json="$(im_dependency_information "$dependency_information_json" "$dep_id")"
-    else
-      die 40 "build-brief: $unit_id depends on $dep_id, which has no completion record ($ledger_file records its last step as $dep_step), so its interface record does not exist yet."
+    dep_interface="$(printf '%s' "$snapshot_doc" | jq -r --arg id "$dep_id" \
+      '(.workOrders // []) | map(select(.id == $id)) | .[0].interface // ""')"
+    # Both texts, each labelled. The declaration is what design promised; the record is what the
+    # builder says it exposed, and the two can differ. The next order writes its tests and its
+    # code against the record where one exists, which is what build.md and the two agent files
+    # already say and what neither brief carried.
+    dep_record_file="$IMPL_DIR/build-$dep_id.json"
+    dep_record_text=""
+    if [ -f "$dep_record_file" ]; then
+      dep_record_text="$(jq -r '.interfaceRecord // ""' "$dep_record_file" 2>/dev/null)"
     fi
+    dependency_interfaces_json="$(printf '%s' "$dependency_interfaces_json" | jq -c \
+      --arg id "$dep_id" --arg iface "$dep_interface" --arg rec "$dep_record_text" '
+      . + [ {id: $id, declaredInterface: $iface, interface: $iface}
+            + (if $rec == "" then {} else {interfaceRecord: $rec} end) ]')"
+    dependency_information_json="$(im_dependency_information "$dependency_information_json" "$dep_id")"
     i=$((i + 1))
   done
-
-  # --- exit 41: the attempt counter for this unit must still have room -----------------------------
-  local order_entry attempts_used
-  order_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
-    '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
-  [ "$order_entry" != "null" ] \
-    || die 3 "build-brief: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
-  attempts_used="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
-  case "$attempts_used" in ''|*[!0-9]*) attempts_used=0 ;; esac
-  local attempts_allowed
-  attempts_allowed="$(attempts_allowed_for "$order_entry")"
-  [ "$attempts_used" -lt "$attempts_allowed" ] \
-    || die 41 "build-brief: $unit_id has already used $attempts_used of $attempts_allowed allowed attempts. Nothing more is handed over."
 
   # A later attempt starts from the earlier one's committed code. The build record keeps the last
   # attempt only, so its stoppers are what that attempt failed on, read here and not recomputed
@@ -11588,10 +11605,11 @@ do_dispatch_open() {
        && { [ "$BR_ORDER_SLOT" = "order-tests" ] || [ "$BR_ORDER_SLOT" = "done-when" ]; }; then
       die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
     fi
-    # The implementer builds from the brief, and build-brief refuses an order with no frozen tests
-    # record. Refused here too, so no record opens for a build that has no brief (gap row 267). The
-    # fixer needs a fix brief, which a review writes after a build record.
-    [ "$role_bare" != "implementer" ] || im_require_tests_record "dispatch-open" "$unit_id" 114
+    # The implementer builds from the brief, so it is refused wherever build-brief would refuse on
+    # the order's records. No record opens for a build that has no brief (gap rows 267 and 281).
+    # The fixer needs a fix brief, which a review writes after a build record.
+    [ "$role_bare" != "implementer" ] || im_require_build_ready "dispatch-open" "$unit_id" 114 \
+      "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '[ .workOrders[] | select(.id == $u) ][0]')"
   fi
 
   # The reviewer reads the brief review-brief writes, or verify-brief after a fix round. Without it
