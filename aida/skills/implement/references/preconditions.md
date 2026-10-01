@@ -79,6 +79,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --implement-lookup <framework>=<path to the implement recipe, or the lookup's own word> \
+  --check-lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --tooling <tool>=<path to a tooling recipe the catalog returned> \
   --catalog-recipe <framework>=<the catalog's copy or the lookup's word, when a folder answered> \
   --value <name>=<value>...
@@ -96,7 +97,11 @@ declared nothing. `no-recipe` records the framework `undeclared`: the catalog lo
 nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` record it
 `unknown`, and stop: nobody looked. Every framework prints its own line on every run.
 `--check-recipe` is optional per framework: absent, its three tool checks record
-undeclared, with a reason saying no check recipe was resolved.
+undeclared, with a reason saying no check recipe was resolved. A failed `review` lookup passes
+`--check-lookup-failed <framework>=<word>`. The record keeps each framework's answer as
+`reviewLookup`. The `reviewNotResolved:` line names each framework with no review recipe, and
+`none` when every framework has one. Read that line to the person. A light run asks every point
+in one dispatch, and this line is what shows an answer that dispatch dropped.
 
 **A task whose orders are all proved by their records runs no test, so it needs no harness.**
 The same holds for an order a person confirms, whose task has no automated tests. On such a task

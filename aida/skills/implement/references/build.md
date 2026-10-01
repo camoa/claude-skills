@@ -10,8 +10,9 @@ folder. Skip it when an earlier step of this build has resolved it, the tests st
 the role, and pass the lookup's answer in its own word: SKILL.md holds both rules. Once resolved,
 reuse the path per framework for every order in this build. They live in the conversation, so a
 fresh window resolves them again. **Light:** dispatch nothing here. Read each path from
-`implementation/preconditions.json`, at `frameworks[].implementRecipePath`. A framework without
-that field had no implement recipe at preconditions, so pass no path for it.
+`implementation/preconditions.json`, at `frameworks[].implementRecipePath`. Read its
+`implementLookup` too. `not-given` means nobody asked, so dispatch the lookup for that framework,
+as other modes do. A failure word means no implement recipe, so pass no path for it.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.

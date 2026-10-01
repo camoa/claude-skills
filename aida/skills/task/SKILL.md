@@ -409,8 +409,9 @@ it down for the next window. Only a person invokes it; nothing dispatches it.
 
 The current stage is the `stage` the next skill's report prints for this task, the first whose
 close record is absent.
-That is scope without `records/scope-distill.json`, research without
-`records/research-check.json` at `exitCode` 0, design without `design-closed.json`. A task in state `new`, or whose stage has no
+That is scope without `records/scope-distill.json`. A light task is at scope only when
+`alignment.json` also lacks `pluginVersion`, which scope's close stamps. Research is the stage without
+`records/research-check.json` at `exitCode` 0, and design without `design-closed.json`. A task in state `new`, or whose stage has no
 record on disk yet, skips the distiller: nothing exists to distill. The stage's first record is
 `alignment.json` for scope, `research/*.json` for research, `design/*.json` for design. Say which
 stage it would have been and that none exists, then go on to the list. Otherwise, when the

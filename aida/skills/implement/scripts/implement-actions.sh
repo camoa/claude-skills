@@ -29,6 +29,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--implement-lookup <framework>=<path|reason>]...
+#                                                    [--check-lookup-failed <framework>=<reason>]...
 #                                                    [--tooling <tool>=<path>]...
 #                                                    [--catalog-recipe <framework>=<path|reason>]...
 #                                                    [--value <name>=<value>]...
@@ -932,6 +933,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--check-recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
+                            [--check-lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--tooling <tool>=<path>]...
                             [--catalog-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
@@ -3243,7 +3245,7 @@ do_preconditions() {
   local task_folder="" project_folder codepath resolve_rc
   local recipes="" failures="" values="" check_recipes="" fw
   local implement_lookups="" im_answer im_lookup im_path im_resolved im_blocked im_freeze
-  local im_notgiven im_by_tests im_unlooked im_advice
+  local im_notgiven im_by_tests im_unlooked im_advice check_failures="" rv_lookup rv_unresolved
   local cs_json sa_json sec_json
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
@@ -3278,6 +3280,12 @@ do_preconditions() {
         [ "$#" -ge 2 ] || die 3 "preconditions: --lookup-failed needs <framework>=<reason>"
         cr_lookup_failure_pair "preconditions" "--lookup-failed" "$2"
         failures="$failures$CR_PAIR
+"
+        shift 2 ;;
+      --check-lookup-failed)
+        [ "$#" -ge 2 ] || die 3 "preconditions: --check-lookup-failed needs <framework>=<reason>"
+        cr_lookup_failure_pair "preconditions" "--check-lookup-failed" "$2"
+        check_failures="$check_failures$CR_PAIR
 "
         shift 2 ;;
       --implement-lookup)
@@ -3434,6 +3442,12 @@ PC_RECIPES
         im_lookup="resolved"; im_path="$im_answer"
         [ -f "$im_path" ] || die 3 "preconditions: the implement recipe handed over for $fw is not a file: $im_path" ;;
     esac
+
+    # The review recipe's answer, recorded the way implementLookup is (gap row 292). Without a
+    # path, build-record runs no check command, and a light run that asks every point in one
+    # dispatch can drop this answer unseen. `not-given` says nobody passed one.
+    if [ -n "$(cr_lookup "$check_recipes" "$fw")" ]; then rv_lookup="resolved"
+    else rv_lookup="$(cr_lookup "$check_failures" "$fw")"; rv_lookup="${rv_lookup:-not-given}"; fi
 
     : >"$entries_file"
     : >"$tc_rows_file"
@@ -3623,10 +3637,11 @@ EOF
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
           --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
           --arg reason "$harness_reason" --argjson endAbsent "$end_absent_json" \
-          --arg imLookup "$im_lookup" --arg imPath "$im_path" --argjson unchecked "$unchecked_json" '
+          --arg imLookup "$im_lookup" --arg imPath "$im_path" --argjson unchecked "$unchecked_json" \
+          --arg rvLookup "$rv_lookup" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke,
-       implementLookup: $imLookup}
+       implementLookup: $imLookup, reviewLookup: $rvLookup}
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
       + (if $imPath == "" then {} else {implementRecipePath: $imPath} end)
       + (if $verdict == "not-needed" then {reason: $reason} else {} end)
@@ -3683,6 +3698,10 @@ PC_CATALOG
   # because the freeze line is already near the 240 characters a summary value prints.
   im_unlooked="none"
   im_advice="none"
+  rv_unresolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.reviewLookup != "resolved") | .framework + "=" + .reviewLookup ] | join(", ")')"
+  [ -n "$rv_unresolved" ] \
+    && rv_unresolved="no review recipe for $rv_unresolved, so build-record runs no check command there. Ask for point: review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
+    || rv_unresolved="none"
   [ -z "$im_notgiven" ] || [ -z "$im_blocked" ] \
     || im_unlooked="nobody looked up $im_notgiven, so nothing here says whether these test-proved orders can freeze: $im_blocked"
   # A summary value prints 240 characters (`im_print_summary`), and two of these messages carry a
@@ -3847,7 +3866,7 @@ PC_CATALOG
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
         --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
-        --arg freezeAdvice "$im_advice" \
+        --arg freezeAdvice "$im_advice" --arg reviewNotResolved "$rv_unresolved" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
@@ -3871,6 +3890,7 @@ PC_CATALOG
      freeze: $freeze,
      notLookedUp: $notLookedUp,
      freezeAdvice: $freezeAdvice,
+     reviewNotResolved: $reviewNotResolved,
      baseline: ($baselineStatus + " | " + $baselineNote),
      baselineFile: (if $baselineStatus == "not-attempted" then "none" else $baselineFile end),
      baselineCommit: (if $baselineCommit == "" then "none" else $baselineCommit end),

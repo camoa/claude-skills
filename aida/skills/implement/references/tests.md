@@ -26,7 +26,8 @@ criterion id attaches to a test. The test author and the row-checker read it, so
 whose roles hold neither skips it.
 
 **Light:** do not ask for `point: implement`. Preconditions resolved it, so read each path from
-`implementation/preconditions.json`, at `frameworks[].implementRecipePath`.
+`implementation/preconditions.json`, at `frameworks[].implementRecipePath`. A framework whose
+`implementLookup` reads `not-given` was never asked, so ask for it here.
 
 **`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for

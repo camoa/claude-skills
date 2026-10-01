@@ -95,6 +95,11 @@
           "minLength": 1,
           "description": "The framework name as project.json records it. Joined on, never re-derived from the repository."
         },
+        "reviewLookup": {
+          "type": "string",
+          "enum": ["resolved", "no-recipe", "listing-unreachable", "fetch-failed", "not-given"],
+          "description": "What the review recipe lookup returned, recorded the way implementLookup is (gap row 292). `resolved` when a --check-recipe was passed for this framework, a failure word from --check-lookup-failed, else `not-given`: nobody passed an answer. Without a path, build-record runs no check command for this framework. Absent from a record written before this field existed."
+        },
         "implementLookup": {
           "type": "string",
           "enum": [
