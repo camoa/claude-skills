@@ -111,12 +111,13 @@ is not a guide body. Check 16 escapes that floor when the playbook record has a 
 
 ## Classify every finding
 
-- **A finding citing a criterion** is this task's work. That criterion reads unmet, and the task is
-  not done.
+- **A finding citing a criterion at medium or high severity** is this task's work. `close` records
+  that criterion unmet, and the task is not done.
 - **A finding citing a non-goal** is this task's work the other way. The task did what it said it
   would not do.
-- **A finding citing neither** is recorded with `disposition: follow-up`, and named in the report,
-  whatever the run mode. Interactive, offer one task per finding, and for each yes run:
+- **A finding citing neither, or a low one citing a criterion,** is recorded with
+  `disposition: follow-up`, and named in the report, whatever the run mode. Interactive, offer one
+  task per finding, and for each yes run:
   ```
   "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh follow-ups "<task_folder>" \
     --create <finding id>

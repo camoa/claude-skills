@@ -156,7 +156,9 @@ review.
 **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and only one the
 contract gave you. A finding that cites neither carries `"disposition": "follow-up"` instead, which
 says only that it fits no id. Whether that finding is folded in or queued is not your call. Never
-invent an id to make a finding count, and never drop a finding because no id fits.
+invent an id to make a finding count, and never drop a finding because no id fits. Cite a criterion
+only when the finding shows that criterion failing, never only to give the finding a route. A
+finding citing a criterion at medium or high severity fails that criterion. A low finding fails none.
 
 **Every finding cites its evidence in one line.** For `guides` and `practices` that line is the
 recipe path and its section, or the research finding's own source and text. For the other lenses it is

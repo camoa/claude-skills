@@ -211,11 +211,12 @@ orders cannot be seen inside one. It runs at the top model, as every critic in A
 Every finding names its lens, its file and lines, its evidence, and a severity of high, medium or
 low. Then it cites one criterion or one non-goal, or neither, and that decides what it is.
 
-- **It cites a criterion.** The work is this task's. That criterion reads unmet, and the task is
-  not done.
+- **It cites a criterion at medium or high severity.** The work is this task's. That criterion
+  reads unmet, and the task is not done.
 - **It cites a non-goal.** The task did what it said it would not do.
-- **It cites neither.** It is work nobody has a task for. Interactively, review offers one follow
-  up task per finding, and a yes creates it from the evidence. Autonomously, it is recorded and
+- **It cites neither, or it is low and cites a criterion.** It is work nobody has a task for.
+  Interactively, review offers one follow up task per finding, and a yes creates it from the
+  evidence. Autonomously, it is recorded and
   named, and no task is created. Folding such work in silently is what scope exists to prevent.
 
 Severity overrides the third case only: a high severity security fault is raised to you at once,

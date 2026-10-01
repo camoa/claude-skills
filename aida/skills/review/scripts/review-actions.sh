@@ -1743,7 +1743,7 @@ do_findings() {
   [ -n "$findings_path" ] || [ -n "$skip_reason" ] \
     || die 3 "findings: --findings is required. An absent findings file is never a clean review."
 
-  local raw count i one lens cid linked disposition built findings_json alignment
+  local raw count i one lens cid linked severity disposition built findings_json alignment
   raw='[]'
   if [ -n "$findings_path" ]; then
     rv_read_findings_array "$findings_path" "findings" "findings"
@@ -1752,7 +1752,7 @@ do_findings() {
   alignment="$(rw_alignment)"
   findings_json='[]'
   count="$(printf '%s' "$raw" | jq 'length')"
-  i=0; lens=""; linked=""; disposition=""; built=""; cid=""
+  i=0; lens=""; linked=""; severity=""; disposition=""; built=""; cid=""
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$raw" | jq -c --argjson i "$i" '.[$i]')"
     cid="$(printf '%s' "$one" | jq -r '.id')"
@@ -1762,9 +1762,14 @@ do_findings() {
       *) die 52 "findings: finding $cid in $findings_path names the lens '$lens'. The eight lens words are $LENS_WORDS, and each of six checks reads its verdict off its own lens, so a word outside that list would leave a check reading met on a findings file that is not empty." ;;
     esac
     linked="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
-    disposition="$(jq -nr --argjson a "$alignment" --arg l "$linked" '
+    severity="$(printf '%s' "$one" | jq -r '.severity // ""')"
+    # A low finding is follow-up whatever it cites. The reviewer chooses both the severity and the
+    # link, and nothing checks the link, so a nit routed through a criterion would fail it (gap
+    # row 274). `close` reads this disposition and nothing else.
+    disposition="$(jq -nr --argjson a "$alignment" --arg l "$linked" --arg s "$severity" '
       if $l == "" then "follow-up"
-      elif (($a.criteria // []) | map(.id) | index($l)) != null then "criterion"
+      elif (($a.criteria // []) | map(.id) | index($l)) != null then
+        (if $s == "low" then "follow-up" else "criterion" end)
       elif (($a.nonGoals // []) | map(.id) | index($l)) != null then "non-goal"
       else "follow-up" end')"
     built="$(printf '%s' "$one" | jq -c --arg disposition "$disposition" '
@@ -1998,7 +2003,7 @@ RW_RESEARCH_FILES
   follow_up="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up") | .id ] | join(", ")')"
   high_security="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up" and .severity == "high") | .id ] | join(", ")')"
   [ -z "$follow_up" ] \
-    || echo "FINDINGS: these findings cite neither a criterion nor a non-goal and are recorded as follow-up work nobody has a task for: $follow_up" >&2
+    || echo "FINDINGS: these findings cite no non-goal, and no criterion at medium or high severity, so they are recorded as follow-up work nobody has a task for: $follow_up" >&2
   [ -z "$high_security" ] \
     || echo "FINDINGS: these follow-up findings are high severity and go to the person now, because leaving one queued ships it: $high_security" >&2
   exit 0
@@ -2541,7 +2546,7 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
-  local observe_owner observed_file confirm_owned
+  local observe_owner observed_file confirm_owned failed_by cited_by=""
   alignment="$(rw_alignment)"
   # The criteria an order proved by confirm puts to the person, confirmCriteria in
   # scripts/lib/proof.sh. The person answers each one with --row, the way a person-verified
@@ -2609,6 +2614,13 @@ do_close() {
         *) verdict="unanswered" ;;
       esac
     fi
+    # A finding `findings` recorded with disposition criterion fails the criterion it cites, however
+    # the row above answered (gap row 274).
+    failed_by="$(printf '%s' "$RW_RECORD_DOC" | jq -r --arg id "$cid" \
+      '[ (.findings // [])[] | select(.disposition == "criterion" and .linkedTo == $id) | .id ] | join(", ")')"
+    if [ -n "$failed_by" ]; then
+      verdict="unmet"; answered="script"; cited_by="$cited_by $cid on $failed_by;"
+    fi
     case "$verdict" in
       unanswered) unanswered=$((unanswered + 1)) ;;
       unmet)      unmet_count=$((unmet_count + 1)) ;;
@@ -2636,7 +2648,7 @@ RW_ROWS
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then
     check_one_verdict="unmet"
-    check_one_detail="$unmet_count criterion row(s) read unmet, so the task is not done."
+    check_one_detail="$unmet_count criterion row(s) read unmet, so the task is not done.${cited_by:+ A finding fails each of these:${cited_by%;}.}"
   elif [ "$unanswered" -gt 0 ]; then
     check_one_verdict="unknown"
     check_one_detail="$unanswered criterion row(s) read unanswered, and a criterion nobody could reach is never a pass."

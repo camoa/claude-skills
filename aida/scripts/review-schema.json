@@ -336,7 +336,7 @@
         },
         "linkedTo": {
           "type": "string",
-          "description": "The one criterion id or non-goal id this finding cites, or empty when it cites neither. Empty is the third case of the classifier and is what `disposition` then records."
+          "description": "The one criterion id or non-goal id this finding cites, or empty when it cites neither. Empty is the third case of the classifier and is what `disposition` then records. It is kept as written when the finding is low, though `disposition` then reads follow-up."
         },
         "evidence": {
           "type": "string",
@@ -346,7 +346,7 @@
         "disposition": {
           "type": "string",
           "enum": ["criterion", "non-goal", "follow-up"],
-          "description": "What this finding is. `criterion` means this task's work, and that criterion reads unmet. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
+          "description": "What this finding is. `criterion` means this task's work: it cites a criterion at medium or high severity, and `close` records that criterion unmet. A low finding citing a criterion is `follow-up`, because the reviewer chooses both the severity and the link and nothing checks the link. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, or a low one citing a criterion, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
         }
       }
     },
