@@ -710,6 +710,12 @@ leaves out a path it did not touch, and the build stops. It is best effort, and 
 the close. Answer each one: write the path as plain text with `update --interface`, or add the
 reuse with `dispose --path --interface`.
 
+`check` also prints `interfaceShaped:`, at every exit code. It names each name in backticks in an
+order's interface that holds `<` or `{`. Such a name is often a shape, such as `type.<id>`. The
+build's interface check matches a shape only when the builder's record repeats its text. A generic
+type holds `<` too, so the line never blocks the close. Name each real element instead, or write
+the shape as plain text with `update --interface`.
+
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's
 own interface, its reuses and its `dependsOn` orders. The test author may not open source, so a

@@ -291,6 +291,10 @@ Which of the other three proofs fits is a judgment, so no exit code holds it.
 It also prints `interfaceUnquoted:` with every order whose interface names nothing in backticks.
 A script cannot tell whether prose names a code element, so this does not hold the close either.
 
+It also prints `interfaceShaped:` with every name in backticks in an interface that holds `<` or
+`{`. Such a name is often a shape, not a name, and a generic type holds `<` too. So this does not
+hold the close either.
+
 It also prints `callsUndeclared:` with each `name()` call a done-when row or a test makes that no
 interface the order declares holds. The test author cannot read source to learn the signature. A
 call a clause denies is named too, so this does not hold the close either.

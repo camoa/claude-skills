@@ -64,7 +64,9 @@ have only the first.
 
 Write the interface record when you are done: what this unit actually exposes, in prose, for the
 units that depend on it. Write it from what you built, not from what you intended. Write it to the
-path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there.
+path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there. Repeat each
+name in the brief's `unit.interfaceNames` verbatim, in backticks. The check counts those exact
+names. A name you did not build stays out, and your answers say why.
 
 Record the evidence: the command you ran, what it printed before, and what it printed after. Run the
 unit's own tests while you work, and the whole suite once before you stop. Run every tool that each

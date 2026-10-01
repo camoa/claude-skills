@@ -1903,6 +1903,22 @@ do_check() {
   else
     echo "interfaceUnowned: none"
   fi
+  # The backticked interface names that hold `<` or `{` (gap row 299). Such a name is often a
+  # shape, such as `type.<id>`, and the builder's record matches it only by repeating the shape.
+  # A generic type such as `List<Item>` holds `<` too, so the line never blocks the close.
+  local shaped
+  shaped="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '
+        select((.interface | type) == "string") | . as $wo
+        | [ .interface | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`") | select(test("[<{]")) ]
+        | unique | select(length > 0)
+        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done \
+    | paste -s -d ';' - | sed 's/;/; /g')"
+  if [ -n "$shaped" ]; then
+    echo "interfaceShaped: $shaped | best effort: each name in backticks holds < or {, so it may be a shape. The build's interface check matches a shape only by its repeated text. Name each real element, or write the shape as plain text with update --interface"
+  else
+    echo "interfaceShaped: none"
+  fi
   # The calls an order's done-when rows and tests make that nothing it declares names (gap row
   # 231). The test author may not read source, so a signature the brief lacks sent it to a runtime.
   # A `name()` token is looked for as `name(` in the order's interface, its reuses and the

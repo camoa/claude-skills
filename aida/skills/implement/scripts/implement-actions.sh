@@ -6141,8 +6141,10 @@ do_build_brief() {
 
   # --- assemble the brief: exactly these keys, and nothing else ------------------------------------
   local unit_out tests_out
-  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c "$REASONING_JQ"'
-    {id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""),
+  unit_out="$(printf '%s' "$BB_UNIT_JSON" | jq -c \
+    --argjson interfaceNames "$(br_interface_names "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.interface // ""')")" \
+    "$REASONING_JQ"'
+    {id, title, ownedFiles: (.ownedFiles // []), interface: (.interface // ""), interfaceNames: $interfaceNames,
       doneWhen: (.doneWhen // []), diffBudget: (.diffBudget // ""), reasoning: liveReasoning,
       proof: (.proof // "tests"), verify: (.verify // []),
       findings: [ (.findings // [])[] | select(has("setAside") | not) | {ref, text} ]}')"
@@ -7540,21 +7542,34 @@ br_interface_text() {
   return 0
 }
 
+# The names a text holds in backticks, once each, in the order they first appear. $1 the text.
+# Prints a JSON array. The build brief lists an order's declared names from this, and check eight
+# counts the same names, so the builder is told exactly what the check looks for (gap row 299).
+br_interface_names() {
+  jq -n --arg s "$1" '
+    [ $s | scan("`[^`]*`") | ltrimstr("`") | rtrimstr("`") | select(length > 0) ]
+    | reduce .[] as $x ([]; if index($x) then . else . + [$x] end)
+  ' 2>/dev/null
+}
+
 # Check eight, the interface record, and the countable half of it only. $1 the interface this order
 # declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
 #
-# Every backtick-quoted token in the declaration must appear verbatim in the record. Any missing
-# token is unmet, naming them. All present is met. A declaration naming no element in backticks has
+# Every backtick-quoted token in the declaration must appear in the record. It appears when the
+# record holds it verbatim, or holds a shortened form of it in backticks. A shortened form is a name
+# the token ends with after a `.` or `::`, and no other declared token ends with it. So `load_rules`
+# names `periplus.engine.packload.load_rules`, and a `run_all` that two declared names end with
+# names neither (gap row 299). A token holding a slash or a space is a path or a phrase. A token
+# whose last segment holds only lowercase letters and digits may be a file name, such as `a.php`.
+# None of these is ever shortened. The detail lists each shortened form for the reviewer. Any
+# token still missing is unmet, naming them. All present is met. A declaration naming no element in backticks has
 # nothing countable in it, so this answers unknown and the reviewer reads both texts instead. That
 # unknown is the one unknown in this stage that does not spend an attempt (ideal/implementation.md).
 # `build-record` runs this check; `fix-record` never does.
 br_interface_check() {
   local declared="$1" record="$2"
-  local tokens_json token_count missing_json missing_count verdict detail
-  tokens_json="$(jq -n --arg s "$declared" '
-    [ $s | scan("`[^`]*`") | ltrimstr("`") | rtrimstr("`") | select(length > 0) ]
-    | reduce .[] as $x ([]; if index($x) then . else . + [$x] end)
-  ' 2>/dev/null)"
+  local tokens_json token_count missing_json missing_count verdict detail short_json short_text
+  tokens_json="$(br_interface_names "$declared")"
   [ -n "$tokens_json" ] || tokens_json='[]'
   token_count="$(printf '%s' "$tokens_json" | jq 'length')"
   if [ "$token_count" -eq 0 ]; then
@@ -7565,13 +7580,29 @@ br_interface_check() {
     # so an unbound form asks whether the record holds itself and every token reads as present.
     missing_json="$(jq -n --argjson toks "$tokens_json" --arg rec "$record" \
       '[ $toks[] as $t | select(($rec | contains($t)) | not) | $t ]')"
+    short_json="$(jq -n --argjson toks "$tokens_json" --argjson miss "$missing_json" \
+      --argjson recs "$(br_interface_names "$record")" '
+      def ends($r): endswith("." + $r) or endswith("::" + $r);
+      [ $miss[] as $d | select($d | test("[/\\s]|[.:][a-z0-9]+$") | not)
+        | [ $recs[] | select(test("^[A-Za-z_]\\S*$")) | . as $r
+            | select($d | ends($r))
+            | select([ $toks[] | select(ends($r)) ] | length == 1) ]
+        | select(length > 0) | {declared: $d, record: .[0]} ]' 2>/dev/null)"
+    [ -n "$short_json" ] || short_json='[]'
+    missing_json="$(jq -n --argjson miss "$missing_json" --argjson short "$short_json" \
+      '$miss - [ $short[].declared ]')"
+    short_text="$(printf '%s' "$short_json" | jq -r '
+      if length == 0 then "" else "; shortened in the record: " + (map(.record + " for " + .declared) | join(", ")) end')"
     missing_count="$(printf '%s' "$missing_json" | jq 'length')"
-    if [ "$missing_count" -eq 0 ]; then
+    if [ "$missing_count" -eq 0 ] && [ -z "$short_text" ]; then
       verdict="met"
       detail="every element the declaration names in backticks ($token_count of them) appears verbatim in the interface record."
+    elif [ "$missing_count" -eq 0 ]; then
+      verdict="met"
+      detail="every element the declaration names in backticks ($token_count of them) appears in the interface record$short_text."
     else
       verdict="unmet"
-      detail="these elements the declaration names in backticks do not appear in the interface record: $(printf '%s' "$missing_json" | jq -r 'join(", ")')"
+      detail="these elements the declaration names in backticks do not appear in the interface record: $(printf '%s' "$missing_json" | jq -r 'join(", ")')$short_text"
     fi
   fi
   jq -n --arg verdict "$verdict" --arg detail "$detail" \

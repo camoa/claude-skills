@@ -40,7 +40,8 @@ It reads the frozen copy and the frozen tests. It writes eleven things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns and, under `findings`, the research findings
-  design used for it;
+  design used for it. Under `interfaceNames` it lists each name the declared interface holds in
+  backticks, the names the interface-record check counts;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
@@ -474,7 +475,9 @@ This step runs all eight deciding checks. The record holds every one.
   that froze none reads undeclared, because the row hashed nothing, and the executed count does
   not count it.
 - **interface-record.** Does the interface record name every element the order's own declared
-  interface names in backticks.
+  interface names in backticks. A shortened name in backticks counts when it ends the declared
+  name after a `.` or `::`, and ends no other declared name. A path or a file name such as
+  `a.php` is never shortened. The detail lists each shortened name.
 
 A suite or a tool the baseline recorded red does not fail these checks by itself. The check
 subtracts the baseline's own output from the run now, line by line. Numbers and dots are set

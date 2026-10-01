@@ -372,7 +372,9 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 5. **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An
    order that froze none reads undeclared here, because there was nothing to hash.
 6. **interface-record.** Does the builder's record name every element the order's declared
-   interface names in backticks.
+   interface names in backticks. The brief lists those names, and the builder repeats them.
+   A shortened name counts when it ends one declared name after a `.` or `::`, and no other.
+   A path or a file name such as `a.php` is never shortened.
 
 The three tool checks run over the order's owned files minus its frozen tests. The implementer
 may not write the tests, so the tools judge only what it may write. An owned file outside the
