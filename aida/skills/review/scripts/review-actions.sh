@@ -1739,6 +1739,34 @@ rw_check_for_lens() {
   esac
 }
 
+# The findings one lens raised, as one line. A purpose finding keeps its file and lines, because
+# check 3's script half cites files alone. $1 the lens, $2 the findings array.
+rw_lens_hits() {
+  printf '%s' "$2" | jq -r --arg l "$1" '[ .[] | select(.lens == $l)
+    | (.id + " (" + .severity + ")" + (if $l == "purpose" then " at " + .file + ":" + .lines else "" end)
+       + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")'
+}
+
+# One lens's reading of its check, as one check row, or nothing when the lens raised no finding.
+# A medium or high finding reads unmet. Only low findings: a person decides the check at close, and
+# nobody present reads met (gap row 274). The answeredBy key marks the check as the person's
+# question, and `close --row` answers it. $1 the lens, $2 the check id, $3 the findings array.
+rw_lens_row() {
+  local lens_word="$1" check_id="$2" hits low_only
+  hits="$(rw_lens_hits "$lens_word" "$3")"
+  [ -n "$hits" ] || return 0
+  low_only="$(printf '%s' "$3" | jq -r --arg l "$lens_word" '[ .[] | select(.lens == $l) | .severity ] | all(. == "low")')"
+  if [ "$low_only" = "true" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
+    rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised is low: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
+      | jq -c '. + {answeredBy: "nobody"}'
+  elif [ "$low_only" = "true" ]; then
+    rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low: $hits. Nobody was present to confirm them, so the check reads met and the findings stay follow-up." \
+      | jq -c '. + {answeredBy: "nobody"}'
+  else
+    rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits"
+  fi
+}
+
 do_findings() {
   local task_arg="" findings_path=""
   while [ "$#" -gt 0 ]; do
@@ -1889,29 +1917,18 @@ RW_RESEARCH_FILES
     || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
     || practices_body="loaded"
 
-  local rows_file lens_word check_id hits low_only updated
+  local rows_file lens_word check_id lens_row updated
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
     check_id="$(rw_check_for_lens "$lens_word")"
-    # Met when this lens returned nothing, unmet when it returned a finding. An absent verdict is
+    # Met when this lens returned nothing, and the finding's reading otherwise. An absent verdict is
     # never a clean one, which is why every one of the six is written whatever the file held. A
     # finding beats both floors below it: a lens that raised one judged something.
-    hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
-      '[ .[] | select(.lens == $l) | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
-    low_only="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
-      '[ .[] | select(.lens == $l) | .severity ] | length > 0 and all(. == "low")')"
+    lens_row="$(rw_lens_row "$lens_word" "$check_id" "$findings_json")"
     if [ "$lens_word" = "practices" ] && [ -n "$playbooks_floor" ]; then
       rw_check_row "$check_id" "unknown" "$playbooks_floor" >>"$rows_file"
-    # Only low findings: a person decides the check at close, and nobody present reads met. The
-    # answeredBy key marks the check as the person's question, and `close --row` answers it.
-    elif [ "$low_only" = "true" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
-      rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised is low: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
-        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
-    elif [ "$low_only" = "true" ]; then
-      rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low: $hits. Nobody was present to confirm them, so the check reads met and the findings stay follow-up." \
-        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
-    elif [ -n "$hits" ]; then
-      rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits" >>"$rows_file"
+    elif [ -n "$lens_row" ]; then
+      printf '%s\n' "$lens_row" >>"$rows_file"
     elif [ -n "$source_floor" ] && { [ "$lens_word" = "guides" ] || [ "$lens_word" = "practices" ]; }; then
       rw_check_row "$check_id" "$source_floor" "$source_note" >>"$rows_file"
     elif [ -n "$diff_floor" ]; then
@@ -2004,35 +2021,25 @@ RW_RESEARCH_FILES
   rm -f "$rows_file"
   [ -n "$updated" ] || die 3 "findings: could not update the record with what the reviewer found."
 
-  # A survivor the reviewer read as a finding is a test nothing can fail, so check 4 reads unmet
-  # however its own script half answered. The lens is one more reading of the same check, never a
-  # check of its own.
-  local mutation_hits
-  mutation_hits="$(printf '%s' "$findings_json" | jq -c '[ .[] | select(.lens == "mutation") ]')"
-  if [ "$(printf '%s' "$mutation_hits" | jq 'length')" -gt 0 ]; then
-    updated="$(printf '%s' "$updated" | jq -c --argjson hits "$mutation_hits" '
-      .checks = (.checks | map(if .id == "test-and-mutation"
-        then (.verdict = "unmet"
-              | .detail = (.detail + " The mutation lens raised "
-                           + ($hits | length | tostring) + " finding(s) on surviving mutants: "
-                           + ([ $hits[] | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
-        else . end))')"
-  fi
-
-  # A hunk the purpose lens faulted is check 3's other half, so check 3 reads unmet however its own
-  # script half answered. The detail keeps the file and lines, because
-  # the hunk half cites those and the script half cites files alone.
-  local purpose_hits
-  purpose_hits="$(printf '%s' "$findings_json" | jq -c '[ .[] | select(.lens == "purpose") ]')"
-  if [ "$(printf '%s' "$purpose_hits" | jq 'length')" -gt 0 ]; then
-    updated="$(printf '%s' "$updated" | jq -c --argjson hits "$purpose_hits" --arg id "$CHECK_SERVES" '
-      .checks = (.checks | map(if .id == $id
-        then (.verdict = "unmet"
-              | .detail = (.detail + " The purpose lens raised "
-                           + ($hits | length | tostring) + " finding(s) on hunks the purpose lens faulted: "
-                           + ([ $hits[] | (.id + " (" + .severity + ") at " + .file + ":" + .lines + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
-        else . end))')"
-  fi
+  # The mutation lens is check 4's other half and the purpose lens is check 3's, each one more
+  # reading of the same check, never a check of its own. On a met script half the lens decides, by
+  # the same reading as the six lens checks (gap row 277). Otherwise the script half decides, and a
+  # medium or high finding still turns a script half that could not look into unmet. The detail
+  # names the half that decided, and an unmet check never carries the met half's sentence.
+  local lens_hits
+  for lens_word in mutation purpose; do
+    check_id="$(rw_check_for_lens "$lens_word")"
+    lens_row="$(rw_lens_row "$lens_word" "$check_id" "$findings_json")"
+    [ -n "$lens_row" ] || continue
+    lens_hits="$(rw_lens_hits "$lens_word" "$findings_json")"
+    updated="$(printf '%s' "$updated" | jq -c --argjson r "$lens_row" --arg l "$lens_word" --arg hits "$lens_hits" '
+      .checks = [ .checks[] | if .id != $r.id then .
+        elif .verdict == "met" then . + $r
+          | .detail = "the script half read met, so the \($l) lens decides this check: \($r.detail)"
+        elif .verdict == "unmet" then .detail += " The script half decides this check. The \($l) lens also raised \($hits)."
+        elif $r.verdict == "unmet" then .verdict = "unmet" | .detail += " The \($l) lens decides this check: \($r.detail)."
+        else .detail += " The \($l) lens raised only low findings, which stay follow-up: \($hits)." end ]')"
+  done
 
   rw_write_record "findings" "$updated"
   rw_print_summary "$updated" "findings"

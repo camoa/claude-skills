@@ -30,7 +30,7 @@ skills/research/SKILL.md 572
 skills/review/SKILL.md 229
 skills/review/references/checks.md 130
 skills/review/references/close.md 79
-skills/review/references/reviewer.md 143
+skills/review/references/reviewer.md 145
 skills/review/references/surfaces.md 87
 skills/scope/SKILL.md 462
 skills/surfaces/SKILL.md 130

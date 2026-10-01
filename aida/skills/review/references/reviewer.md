@@ -54,8 +54,10 @@ fixed, and a check reads its verdict off the lens that raised the finding:
 | `mutation` | a survivor inside code a criterion covers |
 | `purpose` | check 3, a hunk that serves nothing, or fails one of the four purposefulness questions |
 
-Check 3 reads met only when the script half found no unowned file and the `purpose` lens returned
-nothing. A `purpose` finding turns the script half's row unmet and keeps the file and lines.
+Checks 3 and 4 each have a script half and a lens half: `purpose` for check 3, `mutation` for
+check 4. An unmet script half decides the check. On a met script half, the lens half decides it
+by the rule for lens checks below. A medium or high lens finding reads unmet in every case. A
+`purpose` finding keeps the file and lines.
 
 No dispatch record is opened, and none can be: `dispatch-open` requires a work order id, and a task
 level review has no order. SKILL.md says what follows from that. The role holds Read, Glob, Grep and
@@ -100,7 +102,7 @@ It prints one summary line per check with the counts.
 Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
 never a clean one**, and version 5 paid for that four times. When every finding of a lens is low,
-the script does not decide its check. Interactive, the check reads unknown until the person answers
+the script does not decide its check. This also covers the lens half of checks 3 and 4. Interactive, the check reads unknown until the person answers
 at close. Autonomous, it reads met, and the audit lines name the check and its findings. Check 16 has a floor before its lens,
 described in `references/checks.md`: a playbook record that was never loaded reads unknown.
 
