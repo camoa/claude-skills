@@ -4,6 +4,57 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.11] - 2026-10-01
+
+Eight changes from the event archive task's live run and review on 6.0.10.
+
+### Changed
+
+- A review lens check whose findings are all low severity is a person's
+  decision. In an attended run, the person confirms or rejects it at
+  `close` with `--row <check>=met|unmet`. In an unattended run it reads
+  met, and the pull request body and completion's halt message name it.
+- A low review finding becomes a follow-up, whatever criterion it cites.
+  A medium or high finding that cites a criterion makes that criterion
+  read unmet at `close`, as the review text says.
+- Review runs static analysis over the frozen test files apart from the
+  other files. A finding there becomes a follow-up for the test author and
+  does not fail the review.
+- The row checker judges each "adds nothing" clause routed to review,
+  before the freeze, on every proof kind. A clause that a test could prove
+  blocks the freeze with the route named.
+
+### Fixed
+
+- When a suite cannot be decided and its recipe row has no
+  `warning_line:`, `finish` names the recipe file, the missing key and how
+  to add it. For a catalog recipe, it says to copy the recipe into the
+  project first. A green baseline gets the same hint.
+- Review sets aside the test support files a freeze recorded, while they
+  hold the frozen content. The hint to rerun `task environment up` appears
+  only for files that `up` records.
+- Preconditions checks the tools the test-execution recipe requires. A
+  missing tool that only end-of-task rows use is recorded and read as known
+  at review. Review no longer blames the recipe when a command is not
+  found.
+- The review brief reads file paths and URLs out of research source
+  sentences. The guides check reads met only when a guide body that design
+  opened is on disk. Otherwise it reads unknown.
+- A surface kind marked on with no surface file is caught. When another
+  branch holds the file, review and the project check name the branch. An
+  attended review offers setup otherwise, and an unattended review keeps
+  the check unknown.
+
+### Known limits
+
+- Whether a lens judged the guide body is still the reviewer's word. The
+  script decides only that a body was on disk.
+- A finding's severity is the reviewer's choice, and nothing checks it.
+- End-of-task tools are matched by name against the recipe's rows. The
+  catalog has no field for them yet.
+- The dev-guides recipes need two changes, sent as asks: an absent-method
+  guard that static analysis accepts, and a list of end-of-task tools.
+
 ## [6.0.10] - 2026-09-30
 
 Seven changes from two live runs on 6.0.9, the event archive task and the
