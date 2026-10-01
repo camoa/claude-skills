@@ -30,7 +30,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--implement-lookup <framework>=<path|reason>]...
 #                                                    [--tooling <tool>=<path>]...
-#                                                    [--catalog-recipe <framework>=<path>]...
+#                                                    [--catalog-recipe <framework>=<path|reason>]...
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -910,7 +910,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--tooling <tool>=<path>]...
-                            [--catalog-recipe <framework>=<path>]...
+                            [--catalog-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -3186,7 +3186,10 @@ do_preconditions() {
         shift 2 ;;
       --catalog-recipe)
         [ "$#" -ge 2 ] || die 3 "preconditions: --catalog-recipe needs <framework>=<path>"
-        cr_recipe_pair "preconditions" "--catalog-recipe" "$2"
+        case "${2#*=}" in
+          no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "preconditions" "--catalog-recipe" "$2" ;;
+          *) cr_recipe_pair "preconditions" "--catalog-recipe" "$2" ;;
+        esac
         catalog_recipes="$catalog_recipes$CR_PAIR
 "
         shift 2 ;;
@@ -3553,7 +3556,15 @@ EOF
   while IFS="$(printf '\t')" read -r fw pc_catalog; do
     [ -n "$fw" ] || continue
     recipe_path="$(cr_lookup "$recipes" "$fw")"
-    [ -n "$recipe_path" ] && [ ! "$recipe_path" -ef "$pc_catalog" ] || continue
+    [ -n "$recipe_path" ] || continue
+    # The catalog holds no copy to compare against, or nobody could read the one it holds.
+    case "$pc_catalog" in
+      no-recipe) continue ;;
+      listing-unreachable|fetch-failed)
+        pc_stale="$pc_stale${pc_stale:+ }$fw: not checked, because the catalog's copy could not be read ($pc_catalog). The project's copy is version $(recipe_name_of "$recipe_path" version)."
+        continue ;;
+    esac
+    [ ! "$recipe_path" -ef "$pc_catalog" ] || continue
     pc_have="$(recipe_name_of "$recipe_path" version)"
     version_at_least "$pc_have" "$(recipe_name_of "$pc_catalog" version)" && continue
     pc_stale="$pc_stale${pc_stale:+ }$fw: the project's copy is version ${pc_have:-unstated}, and the catalog's is $(recipe_name_of "$pc_catalog" version)."
@@ -3561,7 +3572,7 @@ EOF
 $catalog_recipes
 PC_CATALOG
   [ -z "$pc_stale" ] \
-    || pc_stale="$pc_stale Nothing was changed. Update the project's copy, then run recipe-refresh to point this task at it."
+    || pc_stale="$pc_stale Nothing was changed. Update the project's copy when it is behind, then run recipe-refresh to point this task at it."
 
   # The freeze wall, announced here rather than at the first order's freeze. `tests-freeze` takes
   # its test globs from the implement recipe's `## Oracle files` block, so with no such recipe a
