@@ -757,9 +757,10 @@ rw_run_done() {
 # The verdict and the detail for a run that decided nothing, worded once for every caller: a
 # placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
 # an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
-# exit status is the caller's own to read. $1 the row's own label.
+# exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
+# test-execution row, whose preconditions record may hold its tool as absent at the end of the task.
 rw_run_fault() {
-  local label="$1" said
+  local label="$1" fw="${2:-}" said known
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
   case "$RW_RUN_KIND" in
     UNRESOLVED)
@@ -777,7 +778,15 @@ rw_run_fault() {
       # A command not found is this project's install, not the recipe, so no catalog note is raised
       # (gap row 271). The shell's own line names the program it could not find.
       said="$(printf '%s\n' "$RW_RUN_OUTPUT" | grep -m1 '[^[:space:]]')"
-      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says." ;;
+      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says."
+      known=""
+      [ -z "$fw" ] || known="$(jq -r --arg fw "$fw" --arg row "$label" '. as $d
+        | [ (.frameworks // [])[] | select(.framework == $fw) | (.endOfTaskToolsAbsent // [])[]
+          | select((.rows // []) | index($row)) | .tool ]
+        | if length == 0 then "" else "Preconditions recorded \(join(", ")) absent on \($d.takenAt // "an earlier day"), before the build started, so this is known and not a fault this task introduced. Install it with the tool skill to run this row." end' \
+        "$TASK_PATH/implementation/preconditions.json" 2>/dev/null)"
+      [ -z "$known" ] \
+        || RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. $known" ;;
     126)
       RW_RUN_VERDICT="unknown"
       RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;
@@ -964,7 +973,7 @@ rw_run_mutation() {
       continue
     fi
     rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_CHANGED_JSON" "$RW_VALUES" ""
-    rw_run_fault "mutation"
+    rw_run_fault "mutation" "$fw"
     if [ -n "$RW_RUN_VERDICT" ]; then
       combined="$(rw_worse "$combined" "$RW_RUN_VERDICT")"
       detail="$detail $fw: $RW_RUN_DETAIL"
@@ -1206,7 +1215,7 @@ rw_check_suite() {
       detail="$detail $fw: $(printf '%s' "$cmd" | jq -r '.absent // .missing')"
     else
       rw_run_row "$(printf '%s' "$cmd" | jq -c '.argv')" '[]' "$RW_VALUES" ""
-      rw_run_fault "suite"
+      rw_run_fault "suite" "$fw"
       outfile="$RW_RUN_OUTFILE"
       if [ -n "$RW_RUN_VERDICT" ]; then
         verdict="$RW_RUN_VERDICT"

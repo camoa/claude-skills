@@ -3144,7 +3144,7 @@ do_preconditions() {
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_said tooling_entries
-  local tooling_args=()
+  local tooling="" tooling_json end_absent_json pc_no_recipe
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3178,7 +3178,8 @@ do_preconditions() {
         shift 2 ;;
       --tooling)
         [ "$#" -ge 2 ] || die 3 "preconditions: --tooling needs <tool>=<path>"
-        tooling_args+=(--tooling "$2")
+        tooling="$tooling$2
+"
         shift 2 ;;
       --value)
         [ "$#" -ge 2 ] || die 3 "preconditions: --value needs <name>=<value>"
@@ -3360,30 +3361,46 @@ PC_RECIPES
       [ -z "$env_owner" ] || entries_json="$(printf '%s' "$entries_json" | jq --arg o "$env_owner" '
         map(if .verdict == "unmet" then . + {owner: $o} + (if .owner then {recipeOwner: .owner} else {} end) else . end)')"
     fi
+    tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
     # The tools the recipe names under requires_tooling, checked by the tool skill's own require,
     # from the worktree. Without it a missing tool is first met at review, when its row runs (gap
-    # row 271). An absent tool reads as a condition whose check command was not found.
-    tooling_entries=""
+    # row 271). An absent tool reads as a condition whose check command was not found. One that
+    # only end-of-task rows run, by name in their argv, is recorded instead and the build goes on:
+    # review reads those rows as known. No recipe field says which rows a tool serves yet.
+    tooling_entries=""; end_absent_json='[]'
     if [ "$lookup" = "resolved" ] && [ "$fw_verdict" != "not-needed" ]; then
-      if tooling_said="$(cd "$codepath" && "$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" \
-          ${tooling_args[@]+"${tooling_args[@]}"} require --advisory --task "$task_folder" "$recipe_path" 2>&1 </dev/null)"; then
-        tooling_entries="$(printf '%s\n' "$tooling_said" | jq -Rc --arg recipe "$recipe_path" '
-          capture("^TOOLING: (?<tool>[^ ]+) (?<state>present|absent|unknown)(: (?<said>.*))?$")
-          | {id: ("requires_tooling: " + .tool),
-             what: ("the tool " + .tool + ", which the test-execution recipe names under requires_tooling"),
-             verdict: (if .state == "present" then "met" else "unknown" end)}
-            + (if .state == "absent" then {reason: "check-command-not-found",
-                 owner: ("the tool skill: install " + .tool + ". The recipe documents its setup: " + $recipe)} else {} end)
-            + (if .state != "present" and (.said // "") != "" then {firstLine: .said} else {} end)')"
+      if tooling_said="$(cd "$codepath" || exit 3
+          set --
+          while IFS= read -r pair; do [ -z "$pair" ] || set -- "$@" --tooling "$pair"; done <<PC_TOOLING
+$tooling
+PC_TOOLING
+          "$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" "$@" \
+            require --advisory --task "$task_folder" "$recipe_path" 2>&1 </dev/null)"; then
+        tooling_json="$(printf '%s\n' "$tooling_said" | jq -Rsc --arg recipe "$recipe_path" --argjson rows "$tc_rows_json" '
+          [ split("\n")[] | capture("^TOOLING: (?<tool>[^ ]+) (?<state>present|absent|unknown)(: (?<said>.*))?$") ]
+          | map(. as $t
+            | [ $rows[] | select((.argv // []) | any(contains($t.tool))) ] as $used
+            | (if ($t.said // "") == "" then {} else {firstLine: $t.said} end) as $first
+            | if $t.state == "absent" and ($used | length) > 0 and all($used[]; .cost == "end-of-task")
+              then {end: ({tool: $t.tool, rows: [ $used[].id ]} + $first)}
+              else {entry: ({id: ("requires_tooling: " + $t.tool),
+                  what: ("the tool " + $t.tool + ", which the test-execution recipe names under requires_tooling"),
+                  verdict: (if $t.state == "present" then "met" else "unknown" end)}
+                + (if $t.state == "absent" then {reason: "check-command-not-found",
+                     owner: ("the tool skill: install " + $t.tool + ". The recipe documents its setup: " + $recipe)} else {} end)
+                + (if $t.state == "present" then {} else $first end))} end)
+          | {entries: [ .[].entry // empty ], end: [ .[].end // empty ]}')"
       else
-        tooling_entries="$(jq -nc --arg said "$(printf '%s\n' "$tooling_said" | grep -m1 '[^[:space:]]')" '
-          {id: "requires_tooling", what: "the tools the test-execution recipe names under requires_tooling",
-           verdict: "unknown"} + (if $said == "" then {} else {firstLine: $said} end)')"
+        tooling_json="$(jq -nc --arg said "$(printf '%s\n' "$tooling_said" | grep -m1 '[^[:space:]]')" '
+          {entries: [ {id: "requires_tooling", what: "the tools the test-execution recipe names under requires_tooling",
+                       verdict: "unknown"} + (if $said == "" then {} else {firstLine: $said} end) ], end: []}')"
       fi
-      [ -z "$tooling_entries" ] \
-        || entries_json="$(printf '%s\n' "$tooling_entries" | jq -sc --argjson have "$entries_json" '$have + .')"
+      end_absent_json="$(printf '%s' "$tooling_json" | jq -c '.end')"
+      if [ "$(printf '%s' "$tooling_json" | jq '.entries | length')" -gt 0 ]; then
+        tooling_entries="$(printf '%s' "$tooling_json" | jq -c '.entries')"
+        entries_json="$(jq -nc --argjson have "$entries_json" --argjson add "$tooling_entries" '$have + $add')"
+      fi
     fi
-    tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
     if [ "$section_state" = "ok" ] || [ -n "$tooling_entries" ]; then
       fw_verdict="$(jq -r --arg fw "$fw_verdict" '
         def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
@@ -3487,7 +3504,7 @@ EOF
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
           --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
-          --arg reason "$harness_reason" \
+          --arg reason "$harness_reason" --argjson endAbsent "$end_absent_json" \
           --arg imLookup "$im_lookup" --arg imPath "$im_path" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke,
@@ -3495,6 +3512,7 @@ EOF
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
       + (if $imPath == "" then {} else {implementRecipePath: $imPath} end)
       + (if $verdict == "not-needed" then {reason: $reason} else {} end)
+      + (if $endAbsent == [] then {} else {endOfTaskToolsAbsent: $endAbsent} end)
     ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
@@ -3689,6 +3707,11 @@ EOF
       pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
       printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
         && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
+      # The catalog comes first, as the tool skill's exit 2 wins over its exit 4.
+      pc_no_recipe="$(printf '%s' "$record_json" | jq -r '[ .frameworks[].entries[]
+        | select(.verdict == "unknown" and ((.firstLine // "") | startswith("no recipe"))) | .id | ltrimstr("requires_tooling: ") ] | join(", ")')"
+      [ -z "$pc_no_recipe" ] \
+        || pc_advice="No folder holds a tooling recipe for $pc_no_recipe. Dispatch catalog-identifier with tooling: <tool> per tool, then run preconditions again with --tooling <tool>=<path>"
       ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
@@ -3731,6 +3754,9 @@ EOF
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
                           + " security=" + $baselineSummary.security.verdict end),
+     endOfTaskAbsent: ([ $report.frameworks[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ]
+                       | if length == 0 then "none"
+                         else join(", ") + ": absent, and only end-of-task rows run it, so the build goes on and review reads those rows as known. Install it with the tool skill to run them." end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"

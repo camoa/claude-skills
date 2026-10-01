@@ -32,13 +32,16 @@ recipe. Each tool the recipe names under `requires_tooling` becomes one conditio
 skill's install and the recipe path, which documents the setup. So the run stops, and
 `nextAdvice:` says to install.
 
-An absent tool stops the run even when only an end-of-task row uses it, such as `mutation`. The
-recipe names no row per tool, so nothing can tell which tools the orders need. An install now costs
-less than a review check that reads unknown at the end.
+An absent tool that only end-of-task rows run, such as `mutation`, does not stop the run. The
+script matches the tool name against each test-command row's argv and cost. Such a tool goes in
+`endOfTaskToolsAbsent` in the record, and the `endOfTaskAbsent:` line names it. Read that line to
+the person. Review then reads those rows as known since preconditions, not as a fault of the task.
+An install would change files no order owns, so the build does not ask for one. A tool that a
+row of another cost also runs still stops the run.
 
 A tool that reads unknown with "no recipe" goes to the catalog first, as the tool skill's "No
-recipe" section says. Pass each path it returns as `--tooling <tool>=<path>` and run this step
-again. Nothing is checked when no order needs the harness, as the next section says. The `review`
+recipe" section says. The `nextAdvice:` line names this step. Pass each path the catalog returns
+as `--tooling <tool>=<path>` and run this step again. Nothing is checked when no order needs the harness, as the next section says. The `review`
 recipe's tools are review's to check, not this step's.
 
 ## Run the checks

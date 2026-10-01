@@ -96,6 +96,20 @@
           ],
           "description": "What the `point: implement` lookup returned for this framework. `tests-freeze` takes its test globs from that recipe's `## Oracle files` block, so a framework with no implement recipe cannot freeze a test-proved order, and this step is where a person is told. `not-given` is a fifth value because a lookup nobody ran is not a lookup that found nothing: the caller passed no --implement-lookup for this framework."
         },
+        "endOfTaskToolsAbsent": {
+          "type": "array",
+          "description": "Each tool the recipe names under requires_tooling that read absent and that only end-of-task rows run, matched by name in their argv. Recorded instead of a condition, so the build goes on, and review reads those rows as known since preconditions (gap row 271). Present only when one exists.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tool", "rows"],
+            "properties": {
+              "tool": {"type": "string", "minLength": 1},
+              "rows": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "The ids of the test-command rows whose argv names the tool."},
+              "firstLine": {"type": "string", "minLength": 1, "description": "The first line the tool's check printed."}
+            }
+          }
+        },
         "implementRecipePath": {
           "type": "string",
           "minLength": 1,
