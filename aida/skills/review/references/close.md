@@ -38,9 +38,8 @@ done-when rows of an order proved by `confirm`, and one per check the person ans
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet --row <check id>=met|unmet
 ```
-It archives any previous record to `review/review-<date>-<commit>.json` before it writes, and it
-refuses at exit 63 when that move fails. Version 5 ran four review passes on one task, each
-overwriting the last, and pass three found a defect pass four's record does not mention.
+On a record that already holds a verdict, it archives that pass's files as `checks` does, per
+SKILL.md, and stops at exit 63.
 
 It writes check 1, one verdict per criterion, and the review's own verdict into
 `review/review.json`. The record is committed when the stage closes: `close` commits the task

@@ -66,9 +66,10 @@ step being run is in this conversation.
 
 A recorded verdict is the end of the pass, and `read` says so in that word. Start a second review
 only when a person asks for one, and start it at `checks`, because the range and the tools answer
-against the code as it stands now. Before anything is written, `checks` archives the old record,
-`review/findings.json` and `review/brief.json`, each to `<name>-<date>-<commit>.json`. A fresh
-reviewer then finds no earlier findings at its path. Exit 63 refuses the write when a move fails.
+against the code as it stands now. Before anything is written, `checks` or `close` archives the
+closed record, `review/findings.json` and `review/brief.json`, each to `<name>-<date>-<commit>.json`.
+A taken name gets `-2`, `-3` and on. `brief` archives a findings file left at its path the same way.
+A fresh reviewer then finds no earlier findings there. Exit 63 refuses the write when a move fails.
 
 Open a step file through the script, never through the Read tool:
 ```

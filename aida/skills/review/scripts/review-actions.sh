@@ -313,32 +313,49 @@ rw_step_now() {
   printf 'checks'
 }
 
-# Exit 63. A re-run archives the record a previous pass closed, and refuses when the move fails.
-# Version 5 ran four review passes on one task, each overwriting the last, and pass three found a
-# defect pass four's record does not mention. A record with no verdict is a pass still in flight and
-# is updated in place: nothing in it has been concluded yet. The name reuses the shape `restart`
-# writes. The pass's findings file and brief go with it under the same suffix: the next brief names
-# the same findings path, and a fresh reviewer that finds a file there starts from the previous
-# reviewer's conclusions (gap row 276). The record moves last. $1 the action.
-rw_archive_closed_record() {
-  local who="$1" short today file target
-  [ -n "$RW_RECORD_DOC" ] || return 0
-  printf '%s' "$RW_RECORD_DOC" | jq -e 'has("verdict")' >/dev/null 2>&1 || return 0
-  short="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt // ""' | cut -c1-7)"
-  [ -n "$short" ] || short="unknown"
+# Exit 63. Moves each file named after $3 that exists to <name>-<date>-<commit>.json, with $2 the
+# commit. One suffix serves every file: the first of <date>-<commit>, then -2, -3 and on, that no
+# file takes, so two passes on one commit in one day both keep their files. $1 the action.
+rw_archive_files() {
+  local who="$1" short="$2" today suffix n file target taken
+  shift 2
   today="$(date -u +%Y-%m-%d)"
-  for file in "$FINDINGS_TARGET" "$BRIEF_FILE" "$RECORD_FILE"; do
-    target="${file%.json}-$today-$short.json"
-    [ ! -e "$file" ] || [ ! -e "$target" ] \
-      || die 63 "$who: $target already exists, so archiving $file would write over a file of an earlier pass. Move or remove that file by hand first; nothing has been written."
+  suffix="$today-$short"; n=1
+  while :; do
+    taken=""
+    for file in "$@"; do
+      [ -e "$file" ] && [ -e "${file%.json}-$suffix.json" ] && taken="yes"
+    done
+    [ -n "$taken" ] || break
+    n=$((n + 1)); suffix="$today-$short-$n"
   done
-  for file in "$FINDINGS_TARGET" "$BRIEF_FILE" "$RECORD_FILE"; do
+  for file in "$@"; do
     [ -e "$file" ] || continue
-    target="${file%.json}-$today-$short.json"
+    target="${file%.json}-$suffix.json"
     mv "$file" "$target" \
       || die 63 "$who: could not move $file to $target, so the write was refused. The record of the previous pass is still at $RECORD_FILE."
-    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): the previous pass's $(basename "$file") moved to $target" >&2
+    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): the previous $(basename "$file") moved to $target" >&2
   done
+}
+
+# The commit of the record loaded, cut to seven characters, for an archive name.
+rw_record_short() {
+  local short
+  short="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt // ""' 2>/dev/null | cut -c1-7)"
+  printf '%s' "${short:-unknown}"
+}
+
+# A re-run archives the record a previous pass closed. Version 5 ran four review passes on one task,
+# each overwriting the last, and pass three found a defect pass four's record does not mention. A
+# record with no verdict is a pass still in flight and is updated in place: nothing in it has been
+# concluded yet. The name reuses the shape `restart` writes. The pass's findings file and brief go
+# with it: the next brief names the same findings path, and a fresh reviewer that finds a file there
+# starts from the previous reviewer's conclusions (gap row 276). The record moves last. $1 the action.
+rw_archive_closed_record() {
+  local who="$1"
+  [ -n "$RW_RECORD_DOC" ] || return 0
+  printf '%s' "$RW_RECORD_DOC" | jq -e 'has("verdict")' >/dev/null 2>&1 || return 0
+  rw_archive_files "$who" "$(rw_record_short)" "$FINDINGS_TARGET" "$BRIEF_FILE" "$RECORD_FILE"
   RW_RECORD_DOC=""
 }
 
@@ -1666,6 +1683,9 @@ RW_GUIDES
   # The brief is a file the dispatch names, never text printed through this conversation: it carries
   # the contract, every order and every research finding, and printing it would spend the reviewer's
   # own context twice over.
+  # A findings file already at the path is an earlier reviewer's, from a pass re-run before its
+  # verdict, and the reviewer this brief serves must not start from it (gap row 276).
+  rw_archive_files "brief" "$(rw_record_short)" "$FINDINGS_TARGET"
   write_atomic "$BRIEF_FILE" "$brief_json"
   printf '%s' "$brief_json" | jq -r --arg brief "$BRIEF_FILE" --arg findings "$FINDINGS_TARGET" \
     --arg diff "$DIFF_FILE" --arg code "$RV_CODEPATH" '

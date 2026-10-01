@@ -22,7 +22,7 @@ survivor. It holds the findings implementation ruled deferred. It holds
 `absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 
 The call prints the brief's own path, the path the findings go to at `review/findings.json`, and
-the counts. On a second pass, no file is at the findings path, per SKILL.md. Read neither file into this conversation, per SKILL.md. Its `reviewer:` line says
+the counts. Read neither file into this conversation, per SKILL.md. Its `reviewer:` line says
 whether to dispatch the reviewer.
 
 ## Dispatch the architecture reviewer
