@@ -575,6 +575,9 @@ A line that says no end marker follows the block is not an offer either. The tex
 marker may be the person's own, so the rewrite and the removal both refuse at exit 3. Name the
 line the report gives, and say the person fixes it by hand. Then the offer comes back.
 
+A `Surfaces:` line moves no exit code and names a kind marked on with no surface file, so name its
+repair once.
+
 Exit 3 and exit 5 still come through a pickup. Three says the check could not run, so there are
 no findings to read. Five says the code path names a refused location. Both rows above apply as
 written.

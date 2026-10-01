@@ -29,6 +29,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--check-recipe <framework>=<path>]...
 #                                                    [--lookup-failed <framework>=<reason>]...
 #                                                    [--implement-lookup <framework>=<path|reason>]...
+#                                                    [--tooling <tool>=<path>]...
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
 #   implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -459,8 +460,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The exit codes the checkpoint, the finish, the grant and the restart add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
 #      machine-verified criterion a --test names with no row, a doneWhen test with no doneWhen row,
-#      a row naming a criterion no --test claims or the doneWhen with no doneWhen test, a row
-#      naming a criterion a person verifies, or two rows naming one thing. The message names
+#      an --absence clause with no row on an order that has other rows (gap row 273), a row
+#      naming a criterion no --test claims or the doneWhen with no doneWhen test, a row naming a
+#      criterion a person verifies, or two rows naming one thing. The message names
 #      which. A row set this script half understands would put a judgement on the wrong criterion,
 #      which nothing later could tell from a real one. On missing rows the confirmed rows given
 #      are recorded as `rowsConfirmed` first, the same way exit 65 records them (gap row 259).
@@ -906,6 +908,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--check-recipe <framework>=<path>]...
                             [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                             [--implement-lookup <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
+                            [--tooling <tool>=<path>]...
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> --recipe <framework>=<path>...
        implement-actions.sh tests-brief  <task_folder> <unit_id>
@@ -3141,7 +3144,8 @@ do_preconditions() {
   local baseline_status baseline_note baseline_commit_report baseline_summary_json
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
-  local harness_needed harness_reason env_asked=no env_owner=""
+  local harness_needed harness_reason env_asked=no env_owner="" tooling_said tooling_entries
+  local tooling="" tooling_json end_absent_json pc_no_recipe
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3171,6 +3175,11 @@ do_preconditions() {
         [ -n "${2%%=*}" ] || die 3 "preconditions: --implement-lookup was given no framework name: $2"
         [ -n "${2#*=}" ] || die 3 "preconditions: --implement-lookup was given neither a path nor a reason: $2"
         implement_lookups="$implement_lookups$(printf '%s' "$2" | sed 's/=/\t/')
+"
+        shift 2 ;;
+      --tooling)
+        [ "$#" -ge 2 ] || die 3 "preconditions: --tooling needs <tool>=<path>"
+        tooling="$tooling$2
 "
         shift 2 ;;
       --value)
@@ -3354,10 +3363,49 @@ PC_RECIPES
         map(if .verdict == "unmet" then . + {owner: $o} + (if .owner then {recipeOwner: .owner} else {} end) else . end)')"
     fi
     tc_rows_json="$(jq -s '.' "$tc_rows_file" 2>/dev/null)" || tc_rows_json="[]"
-    if [ "$section_state" = "ok" ]; then
-      fw_verdict="$(jq -r '
+    # The tools the recipe names under requires_tooling, checked by the tool skill's own require,
+    # from the worktree. Without it a missing tool is first met at review, when its row runs (gap
+    # row 271). An absent tool reads as a condition whose check command was not found. One that
+    # only end-of-task rows run, by name in their argv, is recorded instead and the build goes on:
+    # review reads those rows as known. No recipe field says which rows a tool serves yet.
+    tooling_entries=""; end_absent_json='[]'
+    if [ "$lookup" = "resolved" ] && [ "$fw_verdict" != "not-needed" ]; then
+      if tooling_said="$(cd "$codepath" || exit 3
+          set --
+          while IFS= read -r pair; do [ -z "$pair" ] || set -- "$@" --tooling "$pair"; done <<PC_TOOLING
+$tooling
+PC_TOOLING
+          "$PLUGIN_ROOT/skills/tool/scripts/tool-actions.sh" "$@" \
+            require --advisory --task "$task_folder" "$recipe_path" 2>&1 </dev/null)"; then
+        tooling_json="$(printf '%s\n' "$tooling_said" | jq -Rsc --arg recipe "$recipe_path" --argjson rows "$tc_rows_json" '
+          [ split("\n")[] | capture("^TOOLING: (?<tool>[^ ]+) (?<state>present|absent|unknown)(: (?<said>.*))?$") ]
+          | map(. as $t
+            | [ $rows[] | select((.argv // []) | any(contains($t.tool))) ] as $used
+            | (if ($t.said // "") == "" then {} else {firstLine: $t.said} end) as $first
+            | if $t.state == "absent" and ($used | length) > 0 and all($used[]; .cost == "end-of-task")
+              then {end: ({tool: $t.tool, rows: [ $used[].id ]} + $first)}
+              else {entry: ({id: ("requires_tooling: " + $t.tool),
+                  what: ("the tool " + $t.tool + ", which the test-execution recipe names under requires_tooling"),
+                  verdict: (if $t.state == "present" then "met" else "unknown" end)}
+                + (if $t.state == "absent" then {reason: "check-command-not-found",
+                     owner: ("the tool skill: install " + $t.tool + ". The recipe documents its setup: " + $recipe)} else {} end)
+                + (if $t.state == "present" then {} else $first end))} end)
+          | {entries: [ .[].entry // empty ], end: [ .[].end // empty ]}')"
+      else
+        tooling_json="$(jq -nc --arg said "$(printf '%s\n' "$tooling_said" | grep -m1 '[^[:space:]]')" '
+          {entries: [ {id: "requires_tooling", what: "the tools the test-execution recipe names under requires_tooling",
+                       verdict: "unknown"} + (if $said == "" then {} else {firstLine: $said} end) ], end: []}')"
+      fi
+      end_absent_json="$(printf '%s' "$tooling_json" | jq -c '.end')"
+      if [ "$(printf '%s' "$tooling_json" | jq '.entries | length')" -gt 0 ]; then
+        tooling_entries="$(printf '%s' "$tooling_json" | jq -c '.entries')"
+        entries_json="$(jq -nc --argjson have "$entries_json" --argjson add "$tooling_entries" '$have + $add')"
+      fi
+    fi
+    if [ "$section_state" = "ok" ] || [ -n "$tooling_entries" ]; then
+      fw_verdict="$(jq -r --arg fw "$fw_verdict" '
         def rank: if . == "met" then 0 elif . == "undeclared" then 1 elif . == "unknown" then 2 else 3 end;
-        (map(.verdict) + ["met"]) | max_by(rank)
+        (map(.verdict) + [$fw]) | max_by(rank)
       ' <<EOF
 $entries_json
 EOF
@@ -3457,7 +3505,7 @@ EOF
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
           --arg verdict "$fw_verdict" --argjson entries "$entries_json" \
           --arg tcState "$tc_state" --argjson tcRows "$tc_rows_json" --argjson smoke "$smoke_json" \
-          --arg reason "$harness_reason" \
+          --arg reason "$harness_reason" --argjson endAbsent "$end_absent_json" \
           --arg imLookup "$im_lookup" --arg imPath "$im_path" '
       {framework: $framework, lookup: $lookup, verdict: $verdict, entries: $entries,
        testCommands: {state: $tcState, rows: $tcRows}, smoke: $smoke,
@@ -3465,6 +3513,7 @@ EOF
       + (if $recipePath == "" then {} else {recipePath: $recipePath} end)
       + (if $imPath == "" then {} else {implementRecipePath: $imPath} end)
       + (if $verdict == "not-needed" then {reason: $reason} else {} end)
+      + (if $endAbsent == [] then {} else {endOfTaskToolsAbsent: $endAbsent} end)
     ' >>"$fw_json_file" || die 3 "preconditions: could not record the result for framework $fw"
   done || exit $?
 
@@ -3648,7 +3697,7 @@ EOF
         [ .frameworks[] | . as $f
           | ( (.entries[] | select(.verdict | bad)
                | if .check then {next: ("The \($f.framework) condition \(.id)" + how + ". " + ran(.check)), output: said}
-                 else {next: ("The \($f.framework) condition \(.id)" + how), output: "none"} end),
+                 else {next: ("The \($f.framework) condition \(.id)" + how), output: (.firstLine // "none")} end),
               (.smoke | select(.verdict | bad)
                | if .exitCode == null then {next: "The \($f.framework) smoke row read \(.verdict): \(.reason // "")", output: "none"}
                  else {next: ("The \($f.framework) smoke row" + ({verdict, exitCode} | how) + ". "
@@ -3659,6 +3708,11 @@ EOF
       pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
       printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
         && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
+      # The catalog comes first, as the tool skill's exit 2 wins over its exit 4.
+      pc_no_recipe="$(printf '%s' "$record_json" | jq -r '[ .frameworks[].entries[]
+        | select(.verdict == "unknown" and ((.firstLine // "") | startswith("no recipe"))) | .id | ltrimstr("requires_tooling: ") ] | join(", ")')"
+      [ -z "$pc_no_recipe" ] \
+        || pc_advice="No folder holds a tooling recipe for $pc_no_recipe. Dispatch catalog-identifier with tooling: <tool> per tool, then run preconditions again with --tooling <tool>=<path>"
       ;;
   esac
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
@@ -3701,6 +3755,9 @@ EOF
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
                           + " security=" + $baselineSummary.security.verdict end),
+     endOfTaskAbsent: ([ $report.frameworks[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ]
+                       | if length == 0 then "none"
+                         else join(", ") + ": absent, and only end-of-task rows run it, so the build goes on and review reads those rows as known. Install it with the tool skill to run them." end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"
@@ -4985,6 +5042,14 @@ TF_EOF
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
         + (if $dw or $slot == "done-when" then [$unit] else [] end)
     ')"
+  # Each routed clause is a row of its own, keyed <unit>:absence:<n>, n its doneWhen row counted
+  # from 1. The checker asks whether a test could prove it, before the freeze rather than at the
+  # task review (gap row 273). This holds on every proof kind, so br_order_needs gives every kind
+  # the row-checker.
+  rows_expected_json="$(printf '%s' "$rows_expected_json" | jq -c --argjson routed "$absence_json" \
+      --argjson dw "$(printf '%s' "$UNIT_JSON" | jq -c '.doneWhen // []')" --arg unit "$unit_id" '
+      . + [ $routed[] as $t | $unit + ":absence:" + (($dw | index($t)) + 1 | tostring) ]')"
+  [ -n "$rows_expected_json" ] || die 3 "tests-freeze: could not list the rows of $unit_id's routed clauses."
   # One entry per test and row key, {name, path, key, red}: what red_again reads, and the files
   # each row's tests sit in.
   local tf_red_entries
@@ -5044,7 +5109,7 @@ TF_RECORDED
         "$(printf '%s' "$rows_meta_json" | jq -c --argjson expected "$rows_expected_json" \
           'map(select(.criterion as $k | ($expected | index($k)) != null))')"
     fi
-    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. Put the missing rows to the checker, then run tests-freeze again with a --row for each.$TF_CARRY_NEXT$tf_changed"
+    die 64 "tests-freeze: these rows are missing: $rows_missing. Every criterion a --test names, and the doneWhen when a --test proves it or the order is proved by its record, is judged before the tests are frozen. So is each --absence clause, as <order id>:absence:<its doneWhen row>. Put the missing rows to the checker, then run tests-freeze again with a --row for each.$TF_CARRY_NEXT$tf_changed"
   fi
   rows_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson rows "$rows_meta_json" '
       ($criteria | map(select(.verifiedBy == "person") | .id)) as $people
@@ -5090,6 +5155,27 @@ TF_RECORDED
           + (if [ $rej[] | select(. as $k | ($owned | index($k)) != null) ] == [] then [] else [$unit] end)
         | map(select(. as $k | ($keys | index($k)) != null)) | unique')"
     [ -n "$tf_check_again" ] || die 3 "tests-freeze: could not list the rows of $unit_id the checker judges again."
+    # A rejected absence row has no test to repair, so the refusal names its two routes. An order
+    # with no test author drops the --absence instead: its own check, the gate lines, the
+    # observation, the record's done-when row or the person's checklist at review, then covers it.
+    # The test author is named only on a kind whose roles hold one.
+    local tf_absence_route="" tf_has_author=false tf_person_next tf_model_next
+    br_order_needs "$UNIT_JSON"
+    case " $BR_ORDER_ROLES " in *" test-author "*) tf_has_author=true ;; esac
+    if printf '%s' "$rows_meta_json" | jq -e 'any(.[]; .verdict == "rejected" and (.criterion | test(":absence:[0-9]+$")))' >/dev/null; then
+      if [ "$tf_has_author" = true ]; then
+        tf_absence_route=" A rejected absence row says a test could prove that clause. The test author writes a test for it and returns no absence for it, or design splits the clause."
+      else
+        tf_absence_route=" A rejected absence row says that clause can be proved. Freeze again without that --absence, so the order's own proof covers the clause, or design splits the clause."
+      fi
+    fi
+    if [ "$tf_has_author" = true ]; then
+      tf_person_next=" A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker."
+      tf_model_next=" Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks."
+    else
+      tf_person_next=" Put the rows checkAgain names to the checker."
+      tf_model_next="$tf_person_next"
+    fi
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
           | .criterion + ": " + .note ] | join("; ")')"
@@ -5138,11 +5224,11 @@ TF_RECORDED
         '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
-      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker.$TF_CARRY_NEXT
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows.$tf_person_next$tf_absence_route$TF_CARRY_NEXT
 checkAgain: $tf_check_again"
     fi
     # No ledger record carries this rejection, so the refusal names the tests to run again.
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks.$TF_CARRY_NEXT
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows.$tf_model_next$tf_absence_route$TF_CARRY_NEXT
 checkAgain: $tf_check_again
 redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
@@ -6266,6 +6352,36 @@ br_tool_check() {
   [ -z "$outfile" ] || rm -f "$outfile"
 }
 
+# The clause a finish suite detail ends with when no line matched the selector and the row has no
+# warning_line (gap row 268). $1 the row's warning_line, $2 the framework entry. Prints nothing
+# outside finish or with a key. A recipe outside the project's own recipe folders is a catalog
+# copy a refresh replaces, so the person copies it into a folder and points the task at the copy.
+br_warning_hint() {
+  local warning="$1" fw_obj="$2" recipe fw line loc="" own="" name tab
+  [ "$BRC_END_OF_TASK" = "true" ] && [ -z "$warning" ] && [ -n "${RV_PROJECT_FOLDER:-}" ] || return 0
+  recipe="$(printf '%s' "$fw_obj" | jq -r '.testRecipe')"
+  fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
+  tab="$(printf '\t')"
+  while IFS= read -r line; do
+    [ "${line%%"$tab"*}" = "folder" ] || continue
+    [ -n "$loc" ] || loc="${line#*"$tab"}"
+    case "$recipe" in "${line#*"$tab"}"/*) own="yes" ;; esac
+  done <<BWH_LINES
+$(sw_source_lines "$RV_PROJECT_FOLDER/project.json" processRecipes)
+BWH_LINES
+  printf ' The suite row in %s declares no warning_line, so finish cannot read this red as runner warnings. warning_line is a regular expression for the lines a runner prints that fail no test.' "$recipe"
+  if [ -n "$own" ]; then
+    printf ' If the output holds no failed test, only runner warnings, a person adds warning_line to that row, under failure_line, and runs finish again.'
+  else
+    name="$(jq -r '.name // empty' "$RV_PROJECT_FOLDER/project.json" 2>/dev/null)"
+    printf ' That file is not in a recipe folder this project declares, and a catalog refresh replaces it.'
+    printf ' If the output holds no failed test, only runner warnings, a person copies it to %s/process-recipes/%s/test-execution.md and adds warning_line to its suite row, under failure_line.' "${loc:-<folder>}" "$fw"
+    [ -n "$loc" ] || printf ' Declare that folder first, with project-actions.sh add-source %s processRecipes <folder>.' "$name"
+    printf ' Then point this task at the copy, with implement-actions.sh recipe-refresh %s --recipe %s=<the copy>, and run finish again.' "$TASK_PATH" "$fw"
+  fi
+  printf ' finish then names the routes.'
+}
+
 # One commanded test check: order-tests or suite-regression. $1 the check id, $2 the field of each
 # framework entry holding the command (`orderTests` or `suite`), $3 a word for the message. The
 # command comes from the recipe, and it runs once per framework the task resolved one for, because
@@ -6417,13 +6533,19 @@ br_test_check() {
                 ;;
             esac
             # A baseline with no red to subtract, and a run red only on runner warnings: warned,
-            # the same test the subtraction makes, never a failure this order introduced.
+            # the same test the subtraction makes, never a failure this order introduced. A run
+            # the selector names no line of, on a row with no warning_line, gets the hint.
             case "$baseline_verdict" in
-              unmet|unknown) ;;
+              unmet)
+                [ "$BR_SUB_UNSELECTED" != "true" ] || detail="$detail$(br_warning_hint "$warning" "$fw_obj")"
+                ;;
+              unknown) ;;
               *)
                 if br_warnings_only "$selector" "$warning" "$outfile"; then
                   verdict="warned"; warn_json="$BR_WARN_LINES"
                   detail="the suite exited $rc on $fw, where the baseline recorded no failure, and $BR_WARN_DETAIL"
+                elif br_selector_misses "$selector" "$outfile"; then
+                  detail="$detail$(br_warning_hint "$warning" "$fw_obj")"
                 fi
                 ;;
             esac
@@ -7024,7 +7146,7 @@ BR_DIFF
     ofc_verdict="unmet"
     ofc_detail="these changed files match none of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')'s own ownedFiles: ${unmatched%, }"
     [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
-    rerun_step="$(task_env_rerun_step "$TASK_PATH")"
+    rerun_step="$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$rerun_step" ] || ofc_detail="${ofc_detail%.}.$rerun_step"
   elif [ -n "$env_aside" ]; then
     ofc_verdict="met"
@@ -7265,8 +7387,7 @@ br_eight_checks() {
   local declared="$1" record_text="$2"
   local unit_id seven_file interface_check_json
   unit_id="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
-  BRC_SELECTED_JSON="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  BRC_SELECTED_JSON="$(br_frozen_test_paths "$(printf '%s' "$BRC_TESTS_DOC" | jq -c '.rows // []')")"
   CR_WHO="$BRC_WHO"
   cr_resolve
   cr_require_baseline_recipes "$BRC_WHO" "$BRC_BASELINE_FILE"
@@ -9274,8 +9395,7 @@ RV_SCOPE
   BRC_ALLOWED_JSON="$(jq -c '.allowedFiles // []' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
   [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
   local selected_tests_json
-  selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  selected_tests_json="$(br_frozen_test_paths "$(printf '%s' "$tests_doc" | jq -c '.rows // []')")"
   # shellcheck disable=SC2034 # read by the sourced library
   CR_WHO="fix-record"
   # shellcheck disable=SC2034 # read by the sourced library
@@ -11400,14 +11520,6 @@ do_dispatch_open() {
       ;;
     *) die 3 "dispatch-open: a unit id looks like wo1, wo2, ...; got: $unit_id" ;;
   esac
-  # The row-checker's whole job is reading the named tests, and design lists an order's tests under
-  # ownedFiles. Without the globs the derivation below cannot tell an owned test from owned source,
-  # so it denied the checker the very files it was dispatched to read (live-run row 106). The
-  # checkpoint runs before the freeze, so no frozen record holds the globs yet; the call carries
-  # them, the same values tests-freeze takes.
-  if [ "$role_bare" = "row-checker" ] && [ -z "$test_glob_raw" ]; then
-    die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
-  fi
 
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_arg" "dispatch-open")"
@@ -11442,6 +11554,16 @@ do_dispatch_open() {
     [ "$unit_present" = "0" ] \
       && die 22 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
     im_refuse_unneeded_role "$role_bare" "$unit_id"
+    # The row-checker's whole job is reading the named tests, and design lists an order's tests under
+    # ownedFiles. Without the globs the derivation below cannot tell an owned test from owned source,
+    # so it denied the checker the very files it was dispatched to read (live-run row 106). The
+    # checkpoint runs before the freeze, so no frozen record holds the globs yet; the call carries
+    # them, the same values tests-freeze takes. An order with no test row puts only its routed
+    # absence clauses to the checker (gap row 273), and those name no test file.
+    if [ "$role_bare" = "row-checker" ] && [ -z "$test_glob_raw" ] \
+       && { [ "$BR_ORDER_SLOT" = "order-tests" ] || [ "$BR_ORDER_SLOT" = "done-when" ]; }; then
+      die 3 "dispatch-open: row-checker needs --test-glob <glob>, one per pattern the implement recipe declares. The checker reads the named tests, and the globs decide which owned files stay readable; without them every owned test file is denied."
+    fi
     # The implementer builds from the brief, and build-brief refuses an order with no frozen tests
     # record. Refused here too, so no record opens for a build that has no brief (gap row 267). The
     # fixer needs a fix brief, which a review writes after a build record.

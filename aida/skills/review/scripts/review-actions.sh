@@ -27,7 +27,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   review-actions.sh surfaces <task_folder> [--walked <surface id>]...
 #                                            [--accept-baseline <surface id>]...
 #                                            [--value <name>=<value>]...
-#   review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+#   review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
 #   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
 #   review-actions.sh step     <name>
 #
@@ -193,7 +193,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
-       review-actions.sh close    <task_folder> [--row <criterion>=met|unmet]...
+       review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
        review-actions.sh audit    <task_folder>
        review-actions.sh step     <name>
 EOF
@@ -411,13 +411,14 @@ rw_owned_files() {
   printf '%s' "$RW_SNAPSHOT_DOC" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique'
 }
 
-# Every frozen test row, across every order's own tests-<unit>.json, as one JSON array. Walked with
-# `find` and a while loop rather than a glob, so a task with no frozen record at all reads as an
-# empty list instead of a literal pattern. $1 the action.
-RW_TEST_ROWS="[]"
+# Every frozen test row, across every order's own tests-<unit>.json, as one JSON array, and every
+# support file those records froze, with its sha256, as another. Walked with `find` and a while loop rather than a
+# glob, so a task with no frozen record at all reads as an empty list instead of a literal pattern.
+# $1 the action.
+RW_TEST_ROWS="[]"; RW_TEST_SUPPORT="[]"
 rw_load_test_rows() {
   local who="$1" list one doc
-  RW_TEST_ROWS='[]'
+  RW_TEST_ROWS='[]'; RW_TEST_SUPPORT='[]'
   list="$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)"
   while IFS= read -r one; do
     [ -n "$one" ] || continue
@@ -426,6 +427,7 @@ rw_load_test_rows() {
       || die 3 "$who: $one exists but could not be read as JSON. Repair or remove it by hand before running this again."
     RW_TEST_ROWS="$(jq -nc --argjson have "$RW_TEST_ROWS" --argjson doc "$doc" \
       '$have + [ ($doc.rows // [])[] | . + {unit: ($doc.unit // "")} ]')"
+    RW_TEST_SUPPORT="$(jq -nc --argjson have "$RW_TEST_SUPPORT" --argjson doc "$doc" '$have + [ ($doc.support // [])[] | {path, sha256} ]')"
   done <<RW_TEST_FILES
 $list
 RW_TEST_FILES
@@ -485,7 +487,7 @@ rw_print_summary() {
       line("commit"; .reviewedAt),
       line("runMode"; .runMode) ]
     + [ (.recipes // [])[] | line("recipe(\(.framework))"; "lookup=\(.lookup) test=\(.testRecipe) check=\(.checkRecipe)") ]
-    + [ (.checks // [])[] | line("check(\(.id))"; "\(.verdict) | \(.detail | short)") ]
+    + [ (.checks // [])[] | line("check(\(.id))"; "\(.verdict)\(if has("answeredBy") then " answeredBy=" + .answeredBy else "" end) | \(.detail | short)") ]
     + [ (.criteria // [])[] | line("criterion(\(.id))"; "\(.verdict) answeredBy=\(.answeredBy)") ]
     + [ (.surfaces // [])[] | line("surface(\(.id))"; "\(.verdict) walked=\(.walked) ran=\(.ran)") ]
     + (if has("surfaceSetup") then [ line("surfaceSetup"; .surfaceSetup) ] else [] end)
@@ -755,10 +757,10 @@ rw_run_done() {
 # The verdict and the detail for a run that decided nothing, worded once for every caller: a
 # placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
 # an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
-# exit status is the caller's own to read. $1 the row's own label, $2 where a catalog note points, or
-# empty for a caller that raises none.
+# exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
+# test-execution row, whose preconditions record may hold its tool as absent at the end of the task.
 rw_run_fault() {
-  local label="$1" where="$2"
+  local label="$1" fw="${2:-}" said known
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
   case "$RW_RUN_KIND" in
     UNRESOLVED)
@@ -773,8 +775,18 @@ rw_run_fault() {
   case "$RW_RUN_RC" in
     127)
       RW_RUN_VERDICT="unknown"
-      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided."
-      [ -z "$where" ] || rw_catalog_note "the $label command the recipe declares could not be found" "$where" ;;
+      # A command not found is this project's install, not the recipe, so no catalog note is raised
+      # (gap row 271). The shell's own line names the program it could not find.
+      said="$(printf '%s\n' "$RW_RUN_OUTPUT" | grep -m1 '[^[:space:]]')"
+      RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says."
+      known=""
+      [ -z "$fw" ] || known="$(jq -r --arg fw "$fw" --arg row "$label" '. as $d
+        | [ (.frameworks // [])[] | select(.framework == $fw) | (.endOfTaskToolsAbsent // [])[]
+          | select((.rows // []) | index($row)) | .tool ]
+        | if length == 0 then "" else "Preconditions recorded \(join(", ")) absent on \($d.takenAt // "an earlier day"), before the build started, so this is known and not a fault this task introduced. Install it with the tool skill to run this row." end' \
+        "$TASK_PATH/implementation/preconditions.json" 2>/dev/null)"
+      [ -z "$known" ] \
+        || RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. $known" ;;
     126)
       RW_RUN_VERDICT="unknown"
       RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;
@@ -784,7 +796,7 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched="" env_aside="" aside_line="" extra="" light=false
+  local owned owned_count one matched gi glob unmatched="" env_aside="" support_aside="" support_changed="" frozen sha aside_line="" extra="" light=false
   owned="$(rw_owned_files)"
   task_is_light "$TASK_PATH" && light=true
   owned_count="$(printf '%s' "$owned" | jq 'length')"
@@ -817,16 +829,30 @@ rw_check_serves() {
       [ "$matched" = "true" ] && break
       gi=$((gi + 1))
     done
-    [ "$matched" = "true" ] || unmatched="$unmatched$one, "
+    [ "$matched" = "true" ] && continue
+    # A support file an order's tests froze, still as the freeze hashed it (gap row 269).
+    frozen="$(printf '%s' "$RW_TEST_SUPPORT" | jq -r --arg p "$one" '.[] | select(.path == $p) | .sha256')"
+    if [ -n "$frozen" ]; then
+      records_hash__resolve_sha256_cmd \
+        || die 3 "checks: neither sha256sum nor 'shasum -a 256' was found on PATH"
+      sha="$(git -C "$RV_CODEPATH" show "${RW_RANGE##*..}:$one" 2>/dev/null | "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1)"
+      if printf '%s\n' "$frozen" | grep -qxF -- "$sha"; then
+        support_aside="$support_aside$one, "; continue
+      fi
+      support_changed="$support_changed$one, "
+    fi
+    unmatched="$unmatched$one, "
   done <<RW_CHANGED
 $(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
 RW_CHANGED
   [ -z "$env_aside" ] || aside_line=" Set aside as files \`task environment up\` recorded: ${env_aside%, }."
+  [ -z "$support_aside" ] || aside_line="$aside_line Set aside as support files an order's tests froze: ${support_aside%, }."
   if [ -n "$unmatched" ]; then
-    extra="$aside_line$(task_env_rerun_step "$TASK_PATH")"
+    [ -z "$support_changed" ] || extra=" These are frozen support files that changed after the freeze: ${support_changed%, }."
+    extra="$extra$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$extra" ] || extra=".$extra"
     rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }$extra"
-  elif [ -n "$env_aside" ]; then
+  elif [ -n "$aside_line" ]; then
     rw_check_row "$CHECK_SERVES" "met" "every other changed file in $RW_RANGE matches some order's own ownedFiles.$aside_line"
   else
     rw_check_row "$CHECK_SERVES" "met" "every one of the $RW_CHANGED_COUNT changed files in $RW_RANGE matches some order's own ownedFiles."
@@ -947,7 +973,7 @@ rw_run_mutation() {
       continue
     fi
     rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_CHANGED_JSON" "$RW_VALUES" ""
-    rw_run_fault "mutation" "the test-execution recipe for $fw"
+    rw_run_fault "mutation" "$fw"
     if [ -n "$RW_RUN_VERDICT" ]; then
       combined="$(rw_worse "$combined" "$RW_RUN_VERDICT")"
       detail="$detail $fw: $RW_RUN_DETAIL"
@@ -1040,9 +1066,12 @@ rw_baseline_field_for() {
 # took, because a finding that predates this build is not this task's, and blocking on it blocks
 # every task forever. A baseline that was unmet has its kept output subtracted line by line
 # (br_subtract_baseline, the build's own), so only a finding absent then reads as this task's.
+#
+# $2 `frozen` runs the row over the frozen tests alone and prints nothing when the change touched
+# none. The caller turns that row into a follow-up finding, never a check, so it blocks nothing.
 rw_tool_row_check() {
-  local row="$1" row_id framework argv signal exts scoped scoped_count has_paths
-  local rc failed how
+  local row="$1" only_frozen="${2:-}" row_id framework argv signal exts scoped scoped_count has_paths
+  local frozen left_out left_note rc failed how
   local verdict detail field baseline_doc baseline_verdict baseline_output new_json new_count
   row_id="$(printf '%s' "$row" | jq -r '.id')"
   framework="$(printf '%s' "$row" | jq -r '.framework // ""')"
@@ -1062,9 +1091,27 @@ rw_tool_row_check() {
   exts="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
   has_paths=false
   br_argv_takes_paths "$argv" && has_paths=true
-  scoped="$RW_CHANGED_JSON"
-  [ -z "$exts" ] || scoped="$(br_filter_extensions "$RW_CHANGED_JSON" "$exts")"
+  # The frozen tests are the reference this stage judges against, and no role after the freeze may
+  # write them. So they come out first, as they do from the build's tool rows (br_tool_check). A
+  # static analyser reads a test's guard as always true once the guarded code exists, and nobody
+  # could repair that (gap row 270). The tests step ran the coding-standards row over them.
+  frozen="$(br_frozen_test_paths "$RW_TEST_ROWS")"
+  left_out="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+    '[ $changed[] | select(. as $p | $frozen | index($p) != null) ]')"
+  scoped="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+    '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
+  [ -z "$exts" ] || scoped="$(br_filter_extensions "$scoped" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
+  left_note=""
+  [ "$has_paths" = "false" ] || [ "$left_out" = "[]" ] \
+    || left_note=" The frozen tests were left out: $(printf '%s' "$left_out" | jq -r 'join(", ")')."
+  if [ "$only_frozen" = "frozen" ]; then
+    scoped="$left_out"
+    [ -z "$exts" ] || scoped="$(br_filter_extensions "$scoped" "$exts")"
+    scoped_count="$(printf '%s' "$scoped" | jq 'length')"
+    [ "$has_paths" = "true" ] && [ "$scoped_count" -gt 0 ] || return 0
+    left_note=" This run read the frozen tests alone: $(printf '%s' "$scoped" | jq -r 'join(", ")')."
+  fi
 
   if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
     # No order owns a file in the code repository, so no file this tool reads was ever going to be
@@ -1079,12 +1126,16 @@ rw_tool_row_check() {
     return 0
   fi
   if [ "$has_paths" = "true" ] && [ -n "$exts" ] && [ "$scoped_count" -eq 0 ]; then
-    rw_check_row "$row_id" "undeclared" "the $row_id command reads only $(printf '%s' "$exts" | jq -r 'join(", ")'), and this change touches no file with one of those extensions, so the row does not apply to it." "" "" "$framework"
+    rw_check_row "$row_id" "undeclared" "the $row_id command reads only $(printf '%s' "$exts" | jq -r 'join(", ")'), and this change touches no file with one of those extensions outside its frozen tests, so the row does not apply to it.$left_note" "" "" "$framework"
+    return 0
+  fi
+  if [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
+    rw_check_row "$row_id" "undeclared" "every file this change touches is a frozen test, so the row does not apply to it.$left_note" "" "" "$framework"
     return 0
   fi
 
   rw_run_row "$argv" "$scoped" "$RW_VALUES" "$signal"
-  rw_run_fault "$row_id" "the review recipe for ${framework:-this project}"
+  rw_run_fault "$row_id"
   verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$verdict" ]; then
     rc="$RW_RUN_RC"
@@ -1130,7 +1181,7 @@ rw_tool_row_check() {
   fi
   verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
   verdict="$(rw_worse "$verdict" "$RW_CHECK_FLOOR")"
-  detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
+  detail="$detail$left_note $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
   rw_check_row "$row_id" "$verdict" "$(pc_trim "$detail")" "$rc" "$RW_RUN_OUTFILE" "$framework" "" "$new_json" "$new_count"
   rw_run_done
 }
@@ -1189,7 +1240,7 @@ rw_check_suite() {
       detail="$detail $fw: $(printf '%s' "$cmd" | jq -r '.absent // .missing')"
     else
       rw_run_row "$(printf '%s' "$cmd" | jq -c '.argv')" '[]' "$RW_VALUES" ""
-      rw_run_fault "suite" "the test-execution recipe for $fw"
+      rw_run_fault "suite" "$fw"
       outfile="$RW_RUN_OUTFILE"
       if [ -n "$RW_RUN_VERDICT" ]; then
         verdict="$RW_RUN_VERDICT"
@@ -1258,7 +1309,7 @@ do_checks() {
   local task_arg="" recipes="" check_recipes="" failures="" values=""
   local frameworks fw lookup recipes_json rows_file parts_file
   local range base head_end head_now coverage cov_verdict cov_detail
-  local mut_verdict tool_count ti one mutation_file record_json today floor_id
+  local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
   local upstream empty_range
 
   while [ "$#" -gt 0 ]; do
@@ -1420,10 +1471,24 @@ RW_FIT
 
   tool_count="$(printf '%s' "$CR_DOC" | jq '(.tools // []) | length')"
   case "$tool_count" in ''|*[!0-9]*) tool_count=0 ;; esac
-  ti=0; one=""
+  ti=0; one=""; frozen_row=""; frozen_findings="[]"
   while [ "$ti" -lt "$tool_count" ]; do
     one="$(printf '%s' "$CR_DOC" | jq -c --argjson i "$ti" '.tools[$i]')"
     rw_tool_row_check "$one" >>"$parts_file"
+    # The project's own analyser runs its test rules over the tests after the merge. So the frozen
+    # tests get one more static-analysis run here, and a finding goes to completion as a follow-up
+    # for the test author (gap row 270).
+    if [ "$(printf '%s' "$one" | jq -r '.id')" = "static-analysis" ]; then
+      frozen_row="$(rw_tool_row_check "$one" frozen)"
+      [ -z "$frozen_row" ] || frozen_findings="$(jq -nc --argjson have "$frozen_findings" --argjson r "$frozen_row" '
+        if ($r.verdict == "unmet" or $r.verdict == "unknown")
+        then $have + [{id: "f1", lens: "frozen-tests", severity: "low", file: "", lines: "",
+                       linkedTo: "", disposition: "follow-up",
+                       evidence: ($r.detail + (if (($r.newLines // []) | length) > 0
+                                  then "\n" + ($r.newLines | join("\n"))
+                                  else "\n" + (($r.output // "") | .[-2000:]) end))}]
+        else $have end')"
+    fi
     ti=$((ti + 1))
   done
   # The three ids below are a floor the recipe may add to and never a list it may shorten, so each one
@@ -1452,7 +1517,8 @@ RW_FIT
     --argjson hasUpstream "$([ -n "$upstream" ] && echo true || echo false)" \
     --argjson recipes "$recipes_json" --slurpfile checks "$parts_file" \
     --argjson resolved "$CR_DOC" \
-    --slurpfile mutation "$mutation_file" --argjson notes "$RW_CATALOG_NOTES" '
+    --slurpfile mutation "$mutation_file" --argjson notes "$RW_CATALOG_NOTES" \
+    --argjson frozenFindings "$frozen_findings" '
     $mutation[0] as $mutation
     | {schemaVersion: 1, takenAt: $takenAt, task: $task,
      reviewedRange: $range, reviewedAt: $commit, hasUpstream: $hasUpstream, runMode: $runMode,
@@ -1463,7 +1529,7 @@ RW_FIT
                 | $row + {checkRecipeSha256: ($fw.checkRecipeSha256 // ""),
                           testRecipeSha256: ($fw.testRecipeSha256 // "")} ],
      checks: $checks,
-     criteria: [], findings: [], surfaces: [],
+     criteria: [], findings: $frozenFindings, surfaces: [],
      mutation: $mutation, catalogNotes: $notes}')"
   rm -f "$parts_file" "$mutation_file"
   [ -n "$record_json" ] || die 3 "checks: could not assemble the review record for $RW_TASK_ID."
@@ -1515,26 +1581,54 @@ do_brief() {
   done <<RW_RESEARCH
 $list
 RW_RESEARCH
-  # Whether each cited source is on disk, so the reviewer names a body it could not open as unread
+  # A finding's source is a sentence, such as "src/a.php:12 (read 2026-09-26, internal-searcher)"
+  # or two URLs joined by " ; " (live-run row 272). So the brief takes the URLs and the path-like
+  # words out of it: a word with a slash, its line number cut off. A URL is no disk path and is kept
+  # apart. Records keep the one source field, so a record written before this reads the same way.
+  research_json="$(printf '%s' "$research_json" | jq -c '
+    [ .[] | .findings = [ .findings[]
+      | ([ (.source // "") | splits("[\\s;()]+") | rtrimstr(",") | select(. != "") ]) as $words
+      | .urls = [ $words[] | select(test("^https?://")) ]
+      | .paths = ([ $words[] | select(test("://") | not) | select(startswith("...") | not)
+                    | ltrimstr("./") | sub(":.*$"; "") | select(test("/")) ] | unique) ] ]')"
+  # Whether each cited path is on disk, so the reviewer names a body it could not open as unread
   # rather than answering as though it had read it. The paths are tested once, in one pass, and one
-  # jq marks every finding from that list: a test per finding reran jq twice for each one.
-  local src on_disk
+  # jq marks every finding from that list: a test per finding reran jq twice for each one. A
+  # relative path is the code path's, never the folder this script was started from.
+  local src on_disk where
   on_disk='[]'
   while IFS= read -r src; do
     [ -n "$src" ] || continue
-    if [ -e "$src" ] || [ -e "$RV_CODEPATH/$src" ]; then
+    case "$src" in /*) where="$src" ;; *) where="$RV_CODEPATH/$src" ;; esac
+    if [ -e "$where" ] || { [ "${src#/}" = "$src" ] && [ -e "$TASK_PATH/$src" ]; }; then
       on_disk="$(jq -nc --argjson have "$on_disk" --arg s "$src" '$have + [$s]')"
     fi
   done <<RW_SOURCES
-$(printf '%s' "$research_json" | jq -r '[ .[].findings[].source ] | unique | .[]')
+$(printf '%s' "$research_json" | jq -r '[ .[].findings[].paths[] ] | unique | .[]')
 RW_SOURCES
   research_json="$(printf '%s' "$research_json" | jq -c --argjson found "$on_disk" '
-    [ .[] | .findings = [ .findings[] | . as $f | .onDisk = (($found | index($f.source)) != null) ] ]')"
+    [ .[] | .findings = [ .findings[]
+      | .paths = [ .paths[] | . as $p | {path: $p, onDisk: (($found | index($p)) != null)} ] ] ]')"
+  # The guide bodies design opened. Research names a guide and never opens it, so design's read
+  # is the only record of a guide body, and the guides lens opens these (live-run row 272).
+  local guide_bodies='[]' guide_path
+  if [ -f "$TASK_PATH/design-guides-read.json" ]; then
+    while IFS= read -r guide_path; do
+      [ -n "$guide_path" ] || continue
+      guide_bodies="$(jq -nc --argjson have "$guide_bodies" --arg p "$guide_path" \
+        --arg name "$(jq -r --arg p "$guide_path" '[ (.guides // [])[] | select(.path == $p) | (.name // "") ][0]' "$TASK_PATH/design-guides-read.json")" \
+        --argjson on "$([ -f "$guide_path" ] && echo true || echo false)" \
+        '$have + [{path: $p, name: $name, onDisk: $on}]')"
+    done <<RW_GUIDES
+$(jq -r '(.guides // [])[] | (.path // empty)' "$TASK_PATH/design-guides-read.json" 2>/dev/null)
+RW_GUIDES
+  fi
 
   brief_json="$(jq -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
+    --argjson guideBodies "$guide_bodies" \
     --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
     --argjson absenceClauses "$RW_ABSENCE_CLAUSES" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" "$REASONING_JQ"'
@@ -1553,6 +1647,7 @@ RW_SOURCES
      workOrders: [ ($snap.workOrders // [])[] | .reasoning = liveReasoning ],
      absenceClauses: $absenceClauses,
      research: $research,
+     guideBodies: $guideBodies,
      deferredFindings: ($finished.deferred // []),
      checks: [ ($record.checks // [])[]
                | select(.id != "serves-a-criterion")
@@ -1579,8 +1674,11 @@ RW_SOURCES
       line("lenses"; (.lenses | join(" "))),
       line("playbooksPath"; (.playbooksPath // "none: records/playbooks.json is absent")),
       line("researchFiles"; (.research | length)),
-      line("researchPaths(onDisk)"; ([ .research[].findings[] | select(.onDisk) ] | length)),
-      line("researchPaths(notOnDisk)"; ([ .research[].findings[] | select(.onDisk | not) ] | length)),
+      line("researchPaths(onDisk)"; ([ .research[].findings[].paths[] | select(.onDisk) | .path ] | unique | length)),
+      line("researchPaths(notOnDisk)"; ([ .research[].findings[].paths[] | select(.onDisk | not) | .path ] | unique | length)),
+      line("researchUrls"; ([ .research[].findings[].urls[] ] | unique | length)),
+      line("guideBodies(onDisk)"; ([ .guideBodies[] | select(.onDisk) ] | length)),
+      line("guideBodies(notOnDisk)"; ([ .guideBodies[] | select(.onDisk | not) ] | length)),
       line("deferredFindings"; (.deferredFindings | length)) ] | .[]'
   local skip_reason
   skip_reason="$(rw_reviewer_skip_reason)"
@@ -1645,7 +1743,7 @@ do_findings() {
   [ -n "$findings_path" ] || [ -n "$skip_reason" ] \
     || die 3 "findings: --findings is required. An absent findings file is never a clean review."
 
-  local raw count i one lens cid linked disposition built findings_json alignment
+  local raw count i one lens cid linked severity disposition built findings_json alignment
   raw='[]'
   if [ -n "$findings_path" ]; then
     rv_read_findings_array "$findings_path" "findings" "findings"
@@ -1654,7 +1752,7 @@ do_findings() {
   alignment="$(rw_alignment)"
   findings_json='[]'
   count="$(printf '%s' "$raw" | jq 'length')"
-  i=0; lens=""; linked=""; disposition=""; built=""; cid=""
+  i=0; lens=""; linked=""; severity=""; disposition=""; built=""; cid=""
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$raw" | jq -c --argjson i "$i" '.[$i]')"
     cid="$(printf '%s' "$one" | jq -r '.id')"
@@ -1664,9 +1762,14 @@ do_findings() {
       *) die 52 "findings: finding $cid in $findings_path names the lens '$lens'. The eight lens words are $LENS_WORDS, and each of six checks reads its verdict off its own lens, so a word outside that list would leave a check reading met on a findings file that is not empty." ;;
     esac
     linked="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
-    disposition="$(jq -nr --argjson a "$alignment" --arg l "$linked" '
+    severity="$(printf '%s' "$one" | jq -r '.severity // ""')"
+    # A low finding is follow-up whatever it cites. The reviewer chooses both the severity and the
+    # link, and nothing checks the link, so a nit routed through a criterion would fail it (gap
+    # row 274). `close` reads this disposition and nothing else.
+    disposition="$(jq -nr --argjson a "$alignment" --arg l "$linked" --arg s "$severity" '
       if $l == "" then "follow-up"
-      elif (($a.criteria // []) | map(.id) | index($l)) != null then "criterion"
+      elif (($a.criteria // []) | map(.id) | index($l)) != null then
+        (if $s == "low" then "follow-up" else "criterion" end)
       elif (($a.nonGoals // []) | map(.id) | index($l)) != null then "non-goal"
       else "follow-up" end')"
     built="$(printf '%s' "$one" | jq -c --arg disposition "$disposition" '
@@ -1743,7 +1846,22 @@ RW_RESEARCH_FILES
   [ "$RW_COMMITS_IN_CODE" = "yes" ] \
     || diff_floor="no order in this task commits in the code repository, so the diff this lens reads holds nothing the task produced. Each deliverable is a document in the project folder, which this stage does not hand the reviewer."
 
-  local rows_file lens_word check_id hits updated
+  # A guide body is one design opened, listed in design-guides-read.json, which the brief marks on
+  # disk or not. Research never opens a guide, and a code file research cites is no guide. With no
+  # guide body on disk the guides lens judged the finding text alone, and met would say it judged
+  # a guide (live-run row 272). The brief decides this, not the reviewer's report. The practices
+  # lens reads the same bodies, since design opens the agentic recipes too, and also the playbook
+  # record, so a loaded source there is a body it opened.
+  local body_floor practices_body bodies_on_disk
+  body_floor=""; practices_body=""
+  bodies_on_disk="$(jq -r '[ (.guideBodies // [])[] | select(.onDisk == true) ] | length' "$BRIEF_FILE" 2>/dev/null)"
+  [ "${bodies_on_disk:-0}" != "0" ] \
+    || body_floor="no guide body is on disk: $BRIEF_FILE lists none from $TASK_PATH/design-guides-read.json, so this lens judged the research finding text alone. Design records each guide body it opens with design-actions.sh read-guide; once one is recorded and on disk, run brief and findings again."
+  [ ! -f "$playbooks_record" ] \
+    || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
+    || practices_body="loaded"
+
+  local rows_file lens_word check_id hits low_only updated
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
     check_id="$(rw_check_for_lens "$lens_word")"
@@ -1751,15 +1869,27 @@ RW_RESEARCH_FILES
     # never a clean one, which is why every one of the six is written whatever the file held. A
     # finding beats both floors below it: a lens that raised one judged something.
     hits="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
-      '[ .[] | select(.lens == $l) | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
+      '[ .[] | select(.lens == $l) | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")')"
+    low_only="$(printf '%s' "$findings_json" | jq -r --arg l "$lens_word" \
+      '[ .[] | select(.lens == $l) | .severity ] | length > 0 and all(. == "low")')"
     if [ "$lens_word" = "practices" ] && [ -n "$playbooks_floor" ]; then
       rw_check_row "$check_id" "unknown" "$playbooks_floor" >>"$rows_file"
+    # Only low findings: a person decides the check at close, and nobody present reads met. The
+    # answeredBy key marks the check as the person's question, and `close --row` answers it.
+    elif [ "$low_only" = "true" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
+      rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised is low: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
+        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
+    elif [ "$low_only" = "true" ]; then
+      rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low: $hits. Nobody was present to confirm them, so the check reads met and the findings stay follow-up." \
+        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
     elif [ -n "$hits" ]; then
       rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits" >>"$rows_file"
     elif [ -n "$source_floor" ] && { [ "$lens_word" = "guides" ] || [ "$lens_word" = "practices" ]; }; then
       rw_check_row "$check_id" "$source_floor" "$source_note" >>"$rows_file"
     elif [ -n "$diff_floor" ]; then
       rw_check_row "$check_id" "undeclared" "$diff_floor" >>"$rows_file"
+    elif [ -n "$body_floor" ] && { [ "$lens_word" = "guides" ] || { [ "$lens_word" = "practices" ] && [ -z "$practices_body" ]; }; }; then
+      rw_check_row "$check_id" "unknown" "$body_floor" >>"$rows_file"
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
@@ -1828,6 +1958,12 @@ RW_RESEARCH_FILES
            | {seen: .seen, where: .where} ]
     else [] end' "$findings_path" 2>/dev/null)"
   [ -n "$reviewer_notes" ] || reviewer_notes='[]'
+  # The checks step's frozen-test findings stay, numbered after the reviewer's own. No lens check reads
+  # the frozen-tests lens, so they block nothing.
+  findings_json="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson mine "$findings_json" '
+    ([ $mine[] | .id[1:] | tonumber ] | max // 0) as $top
+    | $mine + ([ (.findings // [])[] | select(.lens == "frozen-tests") ]
+               | to_entries | map(.value + {id: ("f" + (($top + .key + 1) | tostring))}))')"
   updated="$(jq -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
     --argjson notes "$reviewer_notes" --argjson absences "$absence_rows" --arg skip "$skip_reason" '
     . as $rows
@@ -1851,7 +1987,7 @@ RW_RESEARCH_FILES
         then (.verdict = "unmet"
               | .detail = (.detail + " The mutation lens raised "
                            + ($hits | length | tostring) + " finding(s) on surviving mutants: "
-                           + ([ $hits[] | (.id + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
+                           + ([ $hits[] | (.id + " (" + .severity + ") cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
         else . end))')"
   fi
 
@@ -1866,7 +2002,7 @@ RW_RESEARCH_FILES
         then (.verdict = "unmet"
               | .detail = (.detail + " The purpose lens raised "
                            + ($hits | length | tostring) + " finding(s) on hunks the purpose lens faulted: "
-                           + ([ $hits[] | (.id + " at " + .file + ":" + .lines + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
+                           + ([ $hits[] | (.id + " (" + .severity + ") at " + .file + ":" + .lines + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")) + "."))
         else . end))')"
   fi
 
@@ -1877,7 +2013,7 @@ RW_RESEARCH_FILES
   follow_up="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up") | .id ] | join(", ")')"
   high_security="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up" and .severity == "high") | .id ] | join(", ")')"
   [ -z "$follow_up" ] \
-    || echo "FINDINGS: these findings cite neither a criterion nor a non-goal and are recorded as follow-up work nobody has a task for: $follow_up" >&2
+    || echo "FINDINGS: these findings cite no non-goal, and no criterion at medium or high severity, so they are recorded as follow-up work nobody has a task for: $follow_up" >&2
   [ -z "$high_security" ] \
     || echo "FINDINGS: these follow-up findings are high severity and go to the person now, because leaving one queued ships it: $high_security" >&2
   exit 0
@@ -1978,6 +2114,10 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "visual parity has no recipe row, no project field and no harness in version 6, so nothing ran and nothing is claimed. It is recorded as unavailable." >>"$checks_out"
     return 0
   fi
+  if [ "$enabled" = "on with no surface file" ]; then
+    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree and on every branch, so it reads as off. Review ran nothing for it and offers its setup." >>"$checks_out"
+    return 0
+  fi
   if [ "$enabled" != "on" ]; then
     rw_check_row "$check_id" "undeclared" "the project record says $gate is $enabled, so review ran nothing for it. Review runs nothing that is off." >>"$checks_out"
     return 0
@@ -1997,7 +2137,13 @@ rw_surface_kind() {
     return 0
   fi
   if [ "$SF_STATE" != "ok" ]; then
-    rw_check_row "$check_id" "unknown" "the recipe commands a $row_id run and the surface file is $SF_STATE, so nobody could say which surfaces to answer about." >>"$checks_out"
+    detail="the recipe commands a $row_id run and the surface file is $SF_STATE, so nobody could say which surfaces to answer about."
+    if [ -n "$RW_SURFACE_BRANCH" ]; then
+      detail="$detail Branch $RW_SURFACE_BRANCH holds the surface file. Merge it into this task's branch, then run review again. A new setup here would collide with it at merge."
+    elif [ "$SF_STATE" != "unreadable" ]; then
+      detail="$detail Nobody was present to take the setup offer. /aida:surfaces $gate writes the file."
+    fi
+    rw_check_row "$check_id" "unknown" "$detail" >>"$checks_out"
     return 0
   fi
   if [ "$count" -eq 0 ]; then
@@ -2081,7 +2227,7 @@ rw_surface_kind() {
   # {paths} expands to nothing here on purpose: the surfaces that run are named through {surfaces}
   # above, never through the changed files, so a row ending in {paths} runs the whole set.
   rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" '[]' "$values" ""
-  rw_run_fault "$row_id" "the review recipe for $(printf '%s' "$row" | jq -r '.framework // "this project"')"
+  rw_run_fault "$row_id"
   ran=false; rc=""; row_verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$row_verdict" ]; then
     ran=true
@@ -2142,7 +2288,7 @@ rw_surface_row_check() {
   local one="$1" id="$2" did="$3" fw
   fw="$(printf '%s' "$one" | jq -r '.framework // ""')"
   rw_run_row "$(printf '%s' "$one" | jq -c '.argv // []')" '[]' "${4:-$RW_VALUES}" ""
-  rw_run_fault "$id" "the review recipe for ${fw:-this project}"
+  rw_run_fault "$id"
   if [ -n "$RW_RUN_VERDICT" ]; then
     rw_check_row "$id" "$RW_RUN_VERDICT" "$RW_RUN_DETAIL" "" "" "$fw"
   elif [ "$RW_RUN_RC" = "0" ]; then
@@ -2236,6 +2382,21 @@ do_surfaces() {
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
+  # A kind marked on with no surface file was set up by half (gap row 275). When a branch holds the
+  # file, the repair is a merge, so the check stays unknown, names the branch, and nothing offers a
+  # setup that would collide with it. Otherwise, with a person present, the kind reads as off and gets
+  # the off kind's offer. Unattended, nobody takes that offer, so the check stays unknown and names
+  # the route. The project record keeps its word: the surfaces skill writes that field.
+  RW_SURFACE_BRANCH=""
+  case "$SF_STATE" in
+    missing|absent)
+      RW_SURFACE_BRANCH="$(sf_branch_with "$RV_CODEPATH" "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')")"
+      if [ -z "$RW_SURFACE_BRANCH" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
+        [ "$e2e_on" != "on" ] || e2e_on="on with no surface file"
+        [ "$vr_on" != "on" ] || vr_on="on with no surface file"
+      fi
+      ;;
+  esac
 
   # Per kind: off, not declined, and the recipe carries its surface row. Rows that are not absent
   # are how review knows the framework has that kind at all. The two are separate capabilities, so
@@ -2285,7 +2446,7 @@ do_surfaces() {
   fi
   # A light task runs no visual regression. Implementation's start logged the skip, because a
   # commit here would move the code under this review (gap row 197).
-  if [ "$vr_on" = "on" ] && task_is_light "$TASK_PATH"; then
+  if [ "${vr_on%% *}" = "on" ] && task_is_light "$TASK_PATH"; then
     rw_check_row "$CHECK_VR" "undeclared" "a light run skips visual regression, so review ran nothing for it. COMPROMISES.md in the code repository records the skip." >>"$checks_file"
   else
     rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
@@ -2347,6 +2508,8 @@ RW_SURFACE_VERDICTS
   rw_print_summary "$updated" "surfaces"
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
   echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
+  [ -z "$RW_SURFACE_BRANCH" ] \
+    || echo "SURFACES: branch $RW_SURFACE_BRANCH holds the surface file. Say to merge it into this task's branch and run review again. Offer no setup for a kind marked on." >&2
   case "$setup" in
     available)              echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
     declined)               echo "SURFACES: every kind that is off has been declined, and none of them is offered again." >&2 ;;
@@ -2392,8 +2555,8 @@ do_close() {
   [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it"
 
   local alignment criteria count i one kind state verdict answered suite_verdict
-  local hit rows_out criteria_json bad_rows unanswered=0 unmet_count=0
-  local observe_owner observed_file confirm_owned
+  local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
+  local observe_owner observed_file confirm_owned failed_by cited_by="" stale_low
   alignment="$(rw_alignment)"
   # The criteria an order proved by confirm puts to the person, confirmCriteria in
   # scripts/lib/proof.sh. The person answers each one with --row, the way a person-verified
@@ -2461,6 +2624,13 @@ do_close() {
         *) verdict="unanswered" ;;
       esac
     fi
+    # A finding `findings` recorded with disposition criterion fails the criterion it cites, however
+    # the row above answered (gap row 274).
+    failed_by="$(printf '%s' "$RW_RECORD_DOC" | jq -r --arg id "$cid" \
+      '[ (.findings // [])[] | select(.disposition == "criterion" and .linkedTo == $id) | .id ] | join(", ")')"
+    if [ -n "$failed_by" ]; then
+      verdict="unmet"; answered="script"; cited_by="$cited_by $cid on $failed_by;"
+    fi
     case "$verdict" in
       unanswered) unanswered=$((unanswered + 1)) ;;
       unmet)      unmet_count=$((unmet_count + 1)) ;;
@@ -2474,21 +2644,26 @@ do_close() {
 
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
-  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --rawfile given /dev/stdin '
+  person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
+  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(($co | index($id)) == null)
+      | . as $id | select(($co | index($id)) == null) | select(($pc | index($id)) == null)
       | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
     | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, and no order proved by confirm puts it to a person. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, and no check of that id holds only low findings. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
+  # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
+  # not judge severity, so it names them and sends the person back to the producer.
+  stale_low="$(printf '%s' "$RW_RECORD_DOC" | jq -r \
+    '[ (.findings // [])[] | select(.disposition == "criterion" and .severity == "low") | .id ] | join(", ")')"
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then
     check_one_verdict="unmet"
-    check_one_detail="$unmet_count criterion row(s) read unmet, so the task is not done."
+    check_one_detail="$unmet_count criterion row(s) read unmet, so the task is not done.${cited_by:+ A finding fails each of these:${cited_by%;}.}${stale_low:+ These low findings carry disposition criterion from an older findings step, so run findings again: $stale_low.}"
   elif [ "$unanswered" -gt 0 ]; then
     check_one_verdict="unknown"
     check_one_detail="$unanswered criterion row(s) read unanswered, and a criterion nobody could reach is never a pass."
@@ -2510,6 +2685,21 @@ RW_ROWS
     $record[0]
     | .criteria = $criteria
     | .checks = ([$one] + (.checks | map(select(.id != "every-criterion"))))')"
+  # A check holding only low findings takes the person's --row (gap row 274).
+  local check_rows
+  check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
+      | {id: .[0], verdict: .[1]} ]' <<RW_ROWS
+$rows
+RW_ROWS
+)"
+  updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" '
+    .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
+      | if $g == null then $c
+        else $c | .verdict = $g.verdict | .answeredBy = "person"
+          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet)\\.$"; ""))
+                       + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
+                                  else " The person rejected them, so the check reads unmet." end)) end ]')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
   # The absence check is read again off the rows the record holds, so a row stored before
   # `testable` existed reads unknown here rather than passing on the check `findings` wrote.
@@ -2556,11 +2746,12 @@ RW_ROWS
     "the review $verdict_word${failing:+: $failing}"
   rw_print_summary "$updated" "close"
   printf 'contract: %s\n' "$ALIGNMENT_FILE"
-  local undeclared_list unknown_list note_count
+  local undeclared_list unknown_list awaiting_list note_count
   undeclared_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "undeclared") | .id ] | join(", ")')"
-  unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown") | .id ] | join(", ")')"
+  unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy != "nobody") | .id ] | join(", ")')"
+  awaiting_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | .id ] | join(", ")')"
   note_count="$(printf '%s' "$updated" | jq '(.catalogNotes // []) | length')"
-  echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
+  echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Checks awaiting the person: ${awaiting_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
   case "$live_state" in
     ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, so the next start reports the contract as changed; the drift is review's own and it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
     *)  echo "CLOSE: $ALIGNMENT_FILE is $live_state, so no criterion verdict was written into the contract. The record holds them." >&2 ;;
@@ -2599,6 +2790,8 @@ do_audit() {
         # A lens reading undeclared had no source and no diff to judge, so it looked at nothing.
         # Calling that `ran` contradicted the floors this stage applies before a lens verdict, and
         # completion prints these lines into the pull request body (live-run row 154).
+        # A lens check holding only low findings waits for the person at close (gap row 274).
+        elif $v == "unknown" and .answeredBy == "nobody" then "awaiting-person"
         elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" or $v == "undeclared" then "could-not-look" else "ran" end)
         elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
         elif $id == "test-and-mutation" then
@@ -2620,13 +2813,16 @@ do_audit() {
       def named($lead): [ $r.checks[] | .detail | scan($lead + "[^.]*") | sub($lead; "") | split(", ") ] | add // [];
       (named("Disabled and not run: ")) as $disabled
     | (named("touched none of their declared paths: ")) as $unaffected
-    | ([ .checks[] | {id, verdict, how: how} ]) as $rows
-    | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)" ]
+    # A check a person answered, or one nobody was present to answer, carries its detail here,
+    # because completion prints these lines into the pull request body (gap row 274).
+    | ([ .checks[] | {id, verdict, how: how,
+          note: (if has("answeredBy") then " answeredBy=" + .answeredBy + ": " + .detail else "" end)} ]) as $rows
+    | [ $rows[] | "check(\(.id)): \(.verdict) \(.how)\(.note)" ]
       + [ .surfaces[] | .id as $sid | "surface(\($sid)): " + (if .ran then "run"
             elif ($disabled | index($sid)) != null then "not run: disabled"
             elif ($unaffected | index($sid)) != null then "not run: unaffected"
             else "not run: no harness" end) ]
-      + [ "audit: " + ([ "ran", "read", "could-not-look", "off" ] | map(. as $w | $w + "=" + ([ $rows[] | select(.how == $w) ] | length | tostring)) | join(" ")) ]
+      + [ "audit: " + ([ "ran", "read", "could-not-look", "awaiting-person", "off" ] | map(. as $w | $w + "=" + ([ $rows[] | select(.how == $w) ] | length | tostring)) | join(" ")) ]
     | .[]' || die 3 "audit: $RECORD_FILE could not be read as a review record."
   exit 0
 }

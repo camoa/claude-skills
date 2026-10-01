@@ -59,14 +59,25 @@ Every check is a question with one answer. They fall into four groups.
 **The tools.** Four checks run the commands the framework's recipe declares, over the whole task
 at the final commit. They are coding standards, static analysis, security, and the full test
 suite. A recipe may declare more rows, such as a duplication tool or a design-metrics tool. Each
-adds one check, so the list can run past sixteen on such a framework.
+adds one check, so the list can run past sixteen on such a framework. The tool rows leave the frozen
+tests out, as the build does, because no role after the freeze may change them. Static analysis
+then runs once more over the frozen tests alone. A finding there blocks nothing: it becomes a
+follow-up that completion offers.
 
 **The reviewer's lenses.** One reviewer reading the diff answers five checks. They are SOLID,
 DRY, architecture fit, the guides research cited, and the framework practices this project
 accepted, including the plays in your [playbook](playbooks.md). The same reviewer answers the
 non-goal check whole. Mutation testing makes small changes to the code and runs the tests; a
 change no test catches is a survivor. The reviewer also judges every hunk for purpose and reads
-those survivors, so two of the contract checks are half script and half reviewer.
+those survivors, so two of the contract checks are half script and half reviewer. The guides
+check reads unknown, not met, when no guide body design opened is on disk, because the reviewer
+then had only the research text. Research names guides and never opens them. The practices check
+follows the same rule unless the playbook record holds a loaded source.
+
+A lens check fails on any medium or high finding. When every finding of one of those six lens
+checks is low, you decide the check at close. Confirm the findings and the check reads met, with
+the findings left as follow up. Reject them and it reads unmet. With nobody present, the check
+reads met, and the pull request body names the check and its low findings.
 
 The same reviewer answers one more check, which exists only when the build sent it something. A
 done-when clause that asserts an absence says the change added nothing of a named kind. No second
@@ -172,6 +183,7 @@ After the close, review prints one line per check: its name, its answer, and how
 | read | a record decided it, and nothing ran |
 | off | the project turned it off, the recipe declares the row absent, or no order asked for the check |
 | could-not-look | a recipe, a row, a file or a tool was missing, so the answer is unknown or undeclared |
+| awaiting-person | a lens check holds only low findings, and you answer it at close |
 
 Then one line per surface, and a line of counts. You see this before the verdict word, so what
 did not run is in front of you first. Completion puts the same list in the pull request body.
@@ -205,11 +217,12 @@ orders cannot be seen inside one. It runs at the top model, as every critic in A
 Every finding names its lens, its file and lines, its evidence, and a severity of high, medium or
 low. Then it cites one criterion or one non-goal, or neither, and that decides what it is.
 
-- **It cites a criterion.** The work is this task's. That criterion reads unmet, and the task is
-  not done.
+- **It cites a criterion at medium or high severity.** The work is this task's. That criterion
+  reads unmet, and the task is not done.
 - **It cites a non-goal.** The task did what it said it would not do.
-- **It cites neither.** It is work nobody has a task for. Interactively, review offers one follow
-  up task per finding, and a yes creates it from the evidence. Autonomously, it is recorded and
+- **It cites neither, or it is low and cites a criterion.** It is work nobody has a task for.
+  Interactively, review offers one follow up task per finding, and a yes creates it from the
+  evidence. Autonomously, it is recorded and
   named, and no task is created. Folding such work in silently is what scope exists to prevent.
 
 Severity overrides the third case only: a high severity security fault is raised to you at once,
@@ -264,7 +277,8 @@ answer is accepted only when a person is present.
 |---|---|---|
 | a criterion a person verifies | you answer met or unmet | unanswered, and no sign off |
 | the walk of the surfaces | you walk every one | recorded as not done, and the surface checks read unknown |
-| a finding citing neither a criterion nor a non-goal | a follow up task is offered | recorded, and no task is created |
+| a lens check whose findings are all low | you confirm the findings, met, or reject them, unmet | met, and named in the pull request body |
+| a finding citing neither a criterion nor a non-goal, or a low one citing a criterion | a follow up task is offered | recorded, and no task is created |
 | a new baseline for a surface | planned, shown, confirmed, then written | refused, and recorded as refused |
 | setting up a surface | offered once | not offered, and recorded as not offered |
 

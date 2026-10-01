@@ -46,7 +46,11 @@ file with a corrected test. The freeze refuses a red run older than its test fil
 When the brief holds `rowsRejected`, a person rejected those rows at the checkpoint. Each row holds
 the person's words and the checker's note. Repair the tests of those rows only. Then run again
 each test that `rowsRejected.redAgain` names, and write its new red run. Each one shares a file
-with a repaired test. The freeze refuses a red run older than its test file.
+with a repaired test. The freeze refuses a red run older than its test file. A row keyed
+`<order id>:absence:<n>` names done-when row n, which you returned as an absence. The checker found
+that a test could prove it. Write that test, and do not return the clause as an absence again.
+When the clause joins an absence to a behaviour, test the behaviour. Name the clause in your
+report, so design can split it.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The

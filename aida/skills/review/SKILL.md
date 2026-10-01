@@ -125,7 +125,8 @@ branch is recorded rather than assumed.
 |---|---|---|
 | A person verified criterion | the person answers met or unmet | `unanswered`, and no sign off |
 | The walk of the surfaces | the person walks every one | recorded as not done, and checks 13 to 15 read unknown |
-| A finding citing neither a criterion nor a non-goal | a follow up task is offered | recorded, and no task is created |
+| A lens check whose findings are all low | the person confirms them, met, or rejects them, unmet | met, and named in the audit lines |
+| A finding citing neither a criterion nor a non-goal, or a low one citing a criterion | a follow up task is offered | recorded, and no task is created |
 | A new baseline for a surface | plan, show, confirm, then write | refused, and recorded as refused |
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 
@@ -165,6 +166,7 @@ order: the id, the verdict, and one word for how the verdict came about.
 | `read` | a record field decided it, and nothing ran |
 | `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent |
 | `could-not-look` | a recipe, a row, a file or a tool was absent, so the verdict is unknown or undeclared |
+| `awaiting-person` | a lens check holds only low findings, and the person answers it at close |
 
 Then one line per surface: run, or not run with the reason, `disabled`, `unaffected` or `no harness`.
 Then one line with the counts per word. Exit 3 with no record, naming the file. Run it at any step

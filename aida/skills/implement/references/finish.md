@@ -48,6 +48,17 @@ passed. It refuses on an autonomous implement stage (exit 68). The record keeps 
 `warned`, with the warning lines, the reason, and `judgedBy: person`. Review reports the suite row
 met and says it is that person's answer.
 
+A recipe can lack `warning_line`. Then the same red reads `unknown` over a red baseline, and
+`unmet` over a green or absent one. When no line matches `failure_line`, the detail names the
+recipe file, the missing key, and what the key reads. No action writes a recipe. For a file in
+a recipe folder the project declares, a person adds the key to the suite row, under
+`failure_line`, and runs `finish` again. `finish` reads that file on each run. Any other file is
+a catalog copy, and a refresh replaces it. The person copies it to
+`<folder>/process-recipes/<framework>/test-execution.md` and adds the key there. A folder the
+project does not declare yet is declared first, with the project skill's `add-source`. Then
+`recipe-refresh` points the task at the copy, and `finish` runs again. Without the key,
+`--accept-warnings` does not pass. An `unknown` suite can hide a failure that prints no test line.
+
 On success it writes `implementation/finished.json`: the commit range this stage produced, and
 each order's own range and rounds used. The suite's verdict is under `suite`, with its output in
 the sidecar. The record is committed when the stage closes: `finish` commits

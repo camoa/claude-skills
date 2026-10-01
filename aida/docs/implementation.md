@@ -187,7 +187,9 @@ clause asserts, and making the test fail means adding the thing the clause forbi
 routes the clause rather than freezing a test for it. It records the clause on the order's ledger
 entry. Review carries it to the architecture reviewer, which judges it against the task's whole
 diff. So the clause is visible as owed rather than untested in silence, and the author no longer
-chooses between an unprovable test and none.
+chooses between an unprovable test and none. Before the freeze, the row checker gets each routed
+clause as a row of its own and asks whether a test could prove it. A yes sends the clause back to
+the test author, so a clause a test could prove is not found first at review.
 
 The route is narrow on purpose. The freeze refuses a clause the order's done-when does not hold word
 for word. It refuses a clause with no negation word in it at all. A contraction such as doesn't
@@ -198,7 +200,9 @@ have watched each routed clause fail, and a yes fails the review.
 
 When the author returns, the coding-standards tool runs over the new test files, and a finding
 goes back to the author before the freeze. This is the one place the tests' own standards are
-judged, because the build step leaves the frozen tests out of its tool checks.
+judged, because the build and review leave the frozen tests out of their tool checks. Static
+analysis does not run on the tests here: before the code exists it reports each missing name.
+Review runs it over the frozen tests, and a finding there becomes a follow-up.
 
 ## Who confirms the tests prove the criteria
 

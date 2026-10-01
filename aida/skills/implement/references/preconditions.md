@@ -23,14 +23,26 @@ Dispatch it a third time, with `point: implement` and each framework. Do not rea
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.
 
-## Install the tools the test recipe names
+## Check the tools the test recipe names
 
-Invoke the tool skill with `require <path>` for the `test-execution` recipe of each framework. Do
-this from the worktree, before the checks below run any recipe line. The tool skill's section
-"Tools a recipe names" says what each answer means. Go on only when it exits 0. Skip this when
-every order has `proof: record` or `proof: confirm`, because no test runs then. Skip it too when
-the task has no automated tests and every other order has `proof: gate`. The `review` recipe's
-tools are review's to check, not this step's.
+The script runs the tool skill's `require` itself, from the worktree, for each `test-execution`
+recipe. Each tool the recipe names under `requires_tooling` becomes one condition, with the id
+`requires_tooling: <tool>`. A present tool reads met. An absent tool reads unknown with
+`check-command-not-found`, as a condition whose checker is missing does. Its owner names the tool
+skill's install and the recipe path, which documents the setup. So the run stops, and
+`nextAdvice:` says to install.
+
+An absent tool that only end-of-task rows run, such as `mutation`, does not stop the run. The
+script matches the tool name against each test-command row's argv and cost. Such a tool goes in
+`endOfTaskToolsAbsent` in the record, and the `endOfTaskAbsent:` line names it. Read that line to
+the person. Review then reads those rows as known since preconditions, not as a fault of the task.
+An install would change files no order owns, so the build does not ask for one. A tool that a
+row of another cost also runs still stops the run.
+
+A tool that reads unknown with "no recipe" goes to the catalog first, as the tool skill's "No
+recipe" section says. The `nextAdvice:` line names this step. Pass each path the catalog returns
+as `--tooling <tool>=<path>` and run this step again. Nothing is checked when no order needs the harness, as the next section says. The `review`
+recipe's tools are review's to check, not this step's.
 
 ## Run the checks
 
@@ -41,6 +53,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --implement-lookup <framework>=<path to the implement recipe, or the lookup's own word> \
+  --tooling <tool>=<path to a tooling recipe the catalog returned> \
   --value <name>=<value>...
 ```
 `--recipe` names the `test-execution` recipe this step already resolved, for the `## Preconditions`
@@ -193,7 +206,8 @@ runner warnings and no failed test, give the routes `finish` offers, in its word
 warnings: run finish again with --accept-warnings <the person's reason>, interactive only. Change
 the suite row's command in the project's copy of the test-execution recipe, so these warnings do
 not fail the run. Or repair the project configuration that raises them, in a change outside this
-task." A failed test is repaired outside this task. In an unattended run the build goes on, and a
+task." A suite row with no `warning_line` needs the key first, or `--accept-warnings` does not
+pass (`references/finish.md`). A failed test is repaired outside this task. In an unattended run the build goes on, and a
 person meets the red at `finish`.
 
 What each run printed is kept whole, one file per run under `implementation/baseline-output/`,

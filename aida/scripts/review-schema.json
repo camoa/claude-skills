@@ -241,6 +241,11 @@
           "minLength": 1,
           "description": "Why this verdict, in plain words naming what was compared: an exit code, a file that matched no order, a marker that was found, or the lens that returned nothing."
         },
+        "answeredBy": {
+          "type": "string",
+          "enum": ["person", "nobody"],
+          "description": "Present only on a lens check whose findings are all low, which a person decides rather than the script. `nobody` before the person answers, when the check reads unknown, or on a run with nobody present, when it reads met. `person` once `close --row` took the answer."
+        },
         "absent": {
           "type": "boolean",
           "description": "True when the recipe row for this check was declared absent, and `detail` carries the recipe's own reason. It exists because undeclared covers two facts that must not read alike: a framework saying it has no such tool answered the question, and a caller that passed no recipe answered nothing."
@@ -318,8 +323,8 @@
         },
         "lens": {
           "type": "string",
-          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation", "purpose"],
-          "description": "Which of the eight lenses raised it. One dispatch carries all eight, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4. The `purpose` lens is the hunk read, and it lands on check 3."
+          "enum": ["non-goals", "solid", "dry", "architecture", "guides", "practices", "mutation", "purpose", "frozen-tests"],
+          "description": "Which of the eight lenses raised it. One dispatch carries all eight, and each of checks 2, 9, 10, 11, 12 and 16 reads its verdict off its own lens: met when that lens returned nothing, unmet when it returned a finding. The `mutation` lens is the survivors read, and it lands on check 4. The `purpose` lens is the hunk read, and it lands on check 3. `frozen-tests` is no reviewer lens: the checks step raises it when the static-analysis row, run over the frozen tests alone, reads unmet or unknown. No check reads it, so it blocks nothing, and its disposition is always follow-up (gap row 270)."
         },
         "severity": {
           "type": "string",
@@ -336,7 +341,7 @@
         },
         "linkedTo": {
           "type": "string",
-          "description": "The one criterion id or non-goal id this finding cites, or empty when it cites neither. Empty is the third case of the classifier and is what `disposition` then records."
+          "description": "The one criterion id or non-goal id this finding cites, or empty when it cites neither. Empty is the third case of the classifier and is what `disposition` then records. It is kept as written when the finding is low, though `disposition` then reads follow-up."
         },
         "evidence": {
           "type": "string",
@@ -346,7 +351,7 @@
         "disposition": {
           "type": "string",
           "enum": ["criterion", "non-goal", "follow-up"],
-          "description": "What this finding is. `criterion` means this task's work, and that criterion reads unmet. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
+          "description": "What this finding is. `criterion` means this task's work: it cites a criterion at medium or high severity, and `close` records that criterion unmet. A low finding citing a criterion is `follow-up`, because the reviewer chooses both the severity and the link and nothing checks the link. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, or a low one citing a criterion, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
         }
       }
     },

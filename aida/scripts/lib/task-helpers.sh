@@ -32,8 +32,8 @@
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
-#   task_env_rerun_step <folder>          the next step when `environment up` ran before it
-#                                         recorded the recipe's files
+#   task_env_rerun_step <folder> <files>  the next step when `environment up` ran before it
+#                                         recorded the recipe's files and one of them is unmatched
 #   task_fork_point <folder> <tree>       prints the commit the task's branch forked from its
 #                                         base, or nothing when the record holds no base
 #   task_env_restore_commit <folder> <tree> [worktree]
@@ -441,12 +441,28 @@ task_env_recipe_change() {
 }
 
 # The next step an owned-files check adds when it reads unmet on a task whose site came up before
-# `up` wrote worktree.recipeChanges, so nothing was set aside. Prints nothing otherwise. Running
-# `up` again writes the field and commits nothing for files already committed. $1 the task folder.
+# `up` wrote worktree.recipeChanges, so nothing was set aside. Prints nothing otherwise, and
+# nothing when no unmatched file is one `up` would record: a file of the recipe's `## Files`, or a
+# name its `## Preconditions` prose puts in backticks. Rerunning cannot clear any other file (gap
+# row 269). Running `up` again writes the field and commits nothing for files already committed.
+# $1 the task folder, $2 the unmatched files joined by ", ".
 task_env_rerun_step() {
-  jq -r 'if (.environment.recipe // "") != "" and .worktree.recipeChanges == null
-    then " The site of this task came up before `task environment up` recorded the files its recipe changed, so none of them was set aside. Run `task environment \(.id) up` again to record them, then run this step again."
-    else empty end' "$1/task.json" 2>/dev/null
+  local recipe dir names="" one rest="$2, "
+  recipe="$(jq -r 'if .worktree.recipeChanges == null then .environment.recipe // empty else empty end' "$1/task.json" 2>/dev/null)"
+  [ -n "$recipe" ] || return 0
+  # A recipe that is gone names no file, so any unmatched file may be one `up` would record.
+  if [ -f "$recipe" ]; then
+    dir="$(mktemp -d)" || return 0
+    names="$(recipe_files_into "$recipe" Files "$dir" | cut -f2; recipe_precondition_names "$recipe")"
+    rm -rf "$dir"
+  fi
+  while [ -n "${rest#, }" ]; do
+    one="${rest%%, *}"; rest="${rest#*, }"
+    [ -n "$one" ] || continue
+    [ ! -f "$recipe" ] || printf '%s\n' "$names" | grep -qxF -- "$one" || continue
+    jq -r '" The site of this task came up before `task environment up` recorded the files its recipe changed, so none of them was set aside. Run `task environment \(.id) up` again to record them, then run this step again."' "$1/task.json" 2>/dev/null
+    return 0
+  done
 }
 
 # The commit the branch in the tree $2 forked from worktree.base of the task folder $1. Prints

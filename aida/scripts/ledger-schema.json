@@ -203,7 +203,7 @@
             "additionalProperties": false,
             "required": ["criterion", "personWords", "checkerNote"],
             "properties": {
-              "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, or the order id for the done-when row."},
+              "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, the order id for the done-when row, or `<order id>:absence:<n>` for a routed absence clause, n its done-when row counted from 1 (gap row 273)."},
               "personWords": {"type": "string", "minLength": 1, "description": "The person's words, verbatim, from the row's `--row <key>=rejected::person::<words>` flag."},
               "checkerNote": {"type": ["string", "null"], "description": "The checker's note on this row, read from `implementation/row-check-<order id>.json`. Null when that file or its row is absent."},
               "redAgain": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "The name of every `--test` with a `--red` in a file that holds one of this row's tests. A `--locks-in` test has no red run, so it is not here. The repair edits that file, so each of those red runs is then older than it, and `tests-freeze` refuses it (exit 109). `tests-brief` joins these lists under `rowsRejected.redAgain` (gap row 258)."}
@@ -219,7 +219,7 @@
             "additionalProperties": false,
             "required": ["criterion", "judgedBy", "note", "recordedAt"],
             "properties": {
-              "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, or the order id for the done-when row."},
+              "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, the order id for the done-when row, or `<order id>:absence:<n>` for a routed absence clause, n its done-when row counted from 1 (gap row 273)."},
               "judgedBy": { "$ref": "#/$defs/judgement/properties/judgedBy" },
               "note": { "$ref": "#/$defs/judgement/properties/note", "description": "For a model's row, the checker's own note from `implementation/row-check-<order id>.json` when that file confirms the row. Otherwise the note on the row's `--row` flag." },
               "recordedAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "The UTC time the checker's verdict file was last written, when it exists and is older than the refusal. Otherwise the time of the refusal. Set by the script, never typed. The next freeze carries the row only when none of its test files changed after this time."}

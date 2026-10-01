@@ -60,6 +60,15 @@ person wants more, and say they can open it in an editor.
 declares, including a duplication tool or a design-metrics tool, and records one check row each. The
 reviewer reads those rows before it judges, so do not re-derive a measurement here.
 
+**The tool rows leave the frozen tests out, as the build's do.** The frozen tests are the reference
+this stage judges against, and no role after the freeze may change them. A row's detail names each
+test it left out. A row whose files are all frozen tests reads undeclared.
+
+**The static-analysis row runs once more, over the frozen tests alone.** The project's own analyser
+reads the tests after the merge. A run that reads unmet or unknown becomes one finding on the
+`frozen-tests` lens, with disposition `follow-up`. No check reads that lens, so it blocks nothing.
+Completion offers it as a follow-up task for the test author.
+
 **Checks 5 to 7 subtract the baseline** in `implementation/baseline.json`. A finding that predates
 the build is not this task's, and blocking on it blocks every task forever. The baseline is scoped to
 the orders' owned files, so a finding in a file no order owns reads as this task's. That is right:
@@ -92,9 +101,10 @@ the diff holds nothing, and this stage does not hand the reviewer the deliverabl
 the judgement such an order left on the ledger, the way it reads an observed record for a page
 order. A criterion judged at build time is covered.
 
-**Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A hunk inside an
-owned file that serves nothing is the reviewer's to raise, and its finding cites an id or is not
-acted on.
+**Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A support file
+that an order's tests froze is set aside while it holds the content the freeze hashed. A hunk
+inside an owned file that serves nothing is the reviewer's to raise, and its finding cites an id
+or is not acted on.
 
 **A check answers unknown only when nothing it reads could be read.** A check with two inputs that
 got one answers from that one, and names what it did not get. Otherwise one network failure stops

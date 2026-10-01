@@ -96,6 +96,20 @@
           ],
           "description": "What the `point: implement` lookup returned for this framework. `tests-freeze` takes its test globs from that recipe's `## Oracle files` block, so a framework with no implement recipe cannot freeze a test-proved order, and this step is where a person is told. `not-given` is a fifth value because a lookup nobody ran is not a lookup that found nothing: the caller passed no --implement-lookup for this framework."
         },
+        "endOfTaskToolsAbsent": {
+          "type": "array",
+          "description": "Each tool the recipe names under requires_tooling that read absent and that only end-of-task rows run, matched by name in their argv. Recorded instead of a condition, so the build goes on, and review reads those rows as known since preconditions (gap row 271). Present only when one exists.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tool", "rows"],
+            "properties": {
+              "tool": {"type": "string", "minLength": 1},
+              "rows": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "The ids of the test-command rows whose argv names the tool."},
+              "firstLine": {"type": "string", "minLength": 1, "description": "The first line the tool's check printed."}
+            }
+          }
+        },
         "implementRecipePath": {
           "type": "string",
           "minLength": 1,
@@ -145,12 +159,12 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "The entry's own id, as the recipe wrote it. Not minted here and not renamed, so a person reading a refusal can find the line in the recipe."
+          "description": "The entry's own id, as the recipe wrote it. Not minted here and not renamed, so a person reading a refusal can find the line in the recipe. A tool the recipe names under requires_tooling is the one exception: its id is `requires_tooling: <tool>`, and `requires_tooling` alone when the tool check could not run (gap row 271)."
         },
         "what": {
           "type": "string",
           "minLength": 1,
-          "description": "The condition in the recipe's own words. This is what a person reads when a run refuses, so it is copied verbatim rather than summarised."
+          "description": "The condition in the recipe's own words. This is what a person reads when a run refuses, so it is copied verbatim rather than summarised. A requires_tooling entry names the tool instead, because the recipe gives that tool no words of its own."
         },
         "check": {
           "type": "array",

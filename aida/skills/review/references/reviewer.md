@@ -14,8 +14,10 @@ results.
 
 It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
 frozen contract, and every work order. It holds the path to `review/diff.patch`. It holds the
-research records and the paths they cite. It holds the results of checks 4 to 8, with every tool
-row and every mutation survivor. It holds the findings implementation ruled deferred. It holds
+research records. Each finding carries the paths its source names, each marked on disk or not,
+and its URLs apart. It holds `guideBodies`, the guide bodies design opened, each marked on disk
+or not. It holds the results of checks 4 to 8, with every tool row and every mutation
+survivor. It holds the findings implementation ruled deferred. It holds
 `playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
 `absenceClauses`: every done-when clause the tests step routed here, read from the ledger.
 
@@ -97,22 +99,27 @@ raised a finding. It records one row per routed done-when clause, and one more c
 It prints one summary line per check with the counts.
 Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
-never a clean one**, and version 5 paid for that four times. Check 16 has a floor before its lens,
+never a clean one**, and version 5 paid for that four times. When every finding of a lens is low,
+the script does not decide its check. Interactive, the check reads unknown until the person answers
+at close. Autonomous, it reads met, and the audit lines name the check and its findings. Check 16 has a floor before its lens,
 described in `references/checks.md`: a playbook record that was never loaded reads unknown.
 
 Checks 12 and 16 have one more floor, and it is the research records. Both read them and nothing
 else. A task whose research records cite no source leaves both undeclared, because neither lens
 had a guide or an accepted practice to judge against. A task with no research record at all leaves
-both unknown, because nobody looked. Met means a judgement happened.
+both unknown, because nobody looked. Met means a judgement happened. So where the brief puts no
+guide body on disk, both read unknown when their lens raised nothing. A code file research cites
+is not a guide body. Check 16 escapes that floor when the playbook record has a loaded source.
 
 ## Classify every finding
 
-- **A finding citing a criterion** is this task's work. That criterion reads unmet, and the task is
-  not done.
+- **A finding citing a criterion at medium or high severity** is this task's work. `close` records
+  that criterion unmet, and the task is not done.
 - **A finding citing a non-goal** is this task's work the other way. The task did what it said it
   would not do.
-- **A finding citing neither** is recorded with `disposition: follow-up`, and named in the report,
-  whatever the run mode. Interactive, offer one task per finding, and for each yes run:
+- **A finding citing neither, or a low one citing a criterion,** is recorded with
+  `disposition: follow-up`, and named in the report, whatever the run mode. Interactive, offer one
+  task per finding, and for each yes run:
   ```
   "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh follow-ups "<task_folder>" \
     --create <finding id>

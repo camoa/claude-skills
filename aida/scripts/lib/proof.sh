@@ -114,6 +114,8 @@ BR_HARNESS_JQ="$BR_ORDER_FACTS_JQ"'
 #   only the reviewer reads the diff against the contract.
 # - The row-checker stays on a `record` order. Its done-when row is that order's only check, so
 #   without the checker nothing judges the deliverable before the build.
+# - The row-checker is on every other kind too. It judges each absence clause the order routes
+#   (gap row 273). Such a dispatch carries no test-authoring recipe, so those kinds do not ask for it.
 # - No top-tier critic leaves because an order is small. A small diff can still break a criterion,
 #   and a missed defect costs the same whatever the size.
 # shellcheck disable=SC2034 # read by the sourcing script
@@ -125,7 +127,7 @@ br_order_needs() {
   case "$BR_ORDER_SLOT" in
     order-tests) BR_ORDER_ROLES="test-author row-checker implementer reviewer"; BR_ORDER_LOOKUPS="test-authoring implement" ;;
     done-when)   BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="test-authoring implement" ;;
-    *)           BR_ORDER_ROLES="implementer reviewer";                         BR_ORDER_LOOKUPS="implement" ;;
+    *)           BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="implement" ;;
   esac
 }
 
