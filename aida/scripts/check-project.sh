@@ -856,8 +856,9 @@ if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
 fi
 
 # A surface kind marked on whose surface file is missing was set up by half. Named here so it is
-# seen before review (gap row 275). A branch that holds the file needs a merge, and a new setup
-# would collide with it. No exit code moves: a stage that uses no surfaces is not blocked by it.
+# seen before review (gap row 275). A branch that holds the file is often another task's unfinished
+# work, so the file reaches the trunk when it lands, and a new setup would collide with it (gap row
+# 278). No exit code moves: a stage that uses no surfaces is not blocked by it.
 SURFACE_KINDS_ON=""
 SURFACES_WITHOUT_FILE_JSON='[]'
 [ "$CODEPATH_EXISTS_JSON" = "true" ] && SURFACE_KINDS_ON="$(jq -r '
@@ -874,7 +875,7 @@ if [ -n "$SURFACE_KINDS_ON" ]; then
       while IFS= read -r kind; do
         echo "Surfaces: $kind is on, and the surface file is $SF_STATE${SURFACE_FILE:+ at $SURFACE_FILE}."
         if [ -n "$SURFACE_BRANCH" ]; then
-          echo "  Branch $SURFACE_BRANCH holds it. Repair: merge that branch. A new setup would collide with it at merge."
+          echo "  Branch $SURFACE_BRANCH holds it. The file reaches the trunk when that branch lands. Until then review reads $kind as off, with no setup offer."
         else
           echo "  Review offers its setup as for a kind that is off. Repair: /aida:surfaces $kind writes the file."
         fi

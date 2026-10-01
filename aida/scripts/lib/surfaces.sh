@@ -15,9 +15,9 @@
 #                                    is when a record written before row 32 of
 #                                    audit/14-live-run-gaps.md holds an absolute one
 #   sf_branch_with <tree> <registryPath>    prints the first local or remote branch that holds the
-#                                    newest commit touching the surface file, or nothing. A file
-#                                    on an unmerged branch needs a merge, and a fresh setup here
-#                                    would collide with it at merge (gap row 275)
+#                                    newest commit touching the surface file, or nothing. That
+#                                    file reaches this tree through the trunk, and a fresh setup
+#                                    here would collide with it (gap rows 275 and 278)
 #
 # Missing and unreadable stay two words, because they send a reader to two different repairs. A
 # file whose rows lack a string id, a kinds array or a boolean enabled reads unreadable, and the

@@ -93,8 +93,8 @@
     },
     "surfaceSetup": {
       "type": "string",
-      "enum": ["not-applicable", "available", "not-offered-autonomous", "registered", "declined"],
-      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a kind that is off, not declined, and carried by the recipe's surface rows, whichever kinds are already on, which is when the skill offers that kind once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. `declined` is a project where every such kind was declined by a person, which the surfaces skill writes per kind."
+      "enum": ["not-applicable", "available", "not-offered-autonomous", "registered", "declined", "not-this-task", "file-on-another-branch"],
+      "description": "What `surfaces` found about setting the surfaces up. `registered` is a project that already has a registry. `available` is a kind that is off, not declined, and carried by the recipe's surface rows, whichever kinds are already on, which is when the skill offers that kind once. `not-offered-autonomous` is the same state with nobody present to ask. `not-applicable` is a framework that declares every surface row absent. `declined` is a project where every such kind was declined by a person, which the surfaces skill writes per kind. `not-this-task` is a kind this task answered \"not this task\" for, which `task defer-surface` writes in task.json's surfacesDeferred, so the offer is made once per task. `file-on-another-branch` is a surface file that this tree lacks and another branch holds: no kind is offered, because any setup would collide with that file (gap row 278)."
     },
     "mutation": {
       "type": "object",

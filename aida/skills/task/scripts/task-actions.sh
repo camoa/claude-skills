@@ -49,6 +49,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                    -- <text...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] decline-recipe --project <path> \
 #                    <task-id> <framework>
+#   task-actions.sh [--run-mode <interactive|autonomous>] defer-surface --project <path> \
+#                    <task-id> <e2e|visual-regression>
 #   task-actions.sh [--run-mode <interactive|autonomous>] environment --project <path> <task-id> \
 #                    <show|up|down> [--recipe <framework>=<path>]... [--lookup-failed <framework>=<word>]...
 #                    [--setup-recipe <kind>=<path>]...
@@ -124,6 +126,7 @@ usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
        task-actions.sh set-budget --project <path> <task-id> [--dispatches <n>] [--minutes <n>]
        task-actions.sh save     --project <path> <task-id> -- <text...>
        task-actions.sh decline-recipe --project <path> <task-id> <framework>
+       task-actions.sh defer-surface --project <path> <task-id> <e2e|visual-regression>
        task-actions.sh environment --project <path> <task-id> <show|up|down> <recipe flags>
                                  [--setup-recipe <kind>=<path>]...
        task-actions.sh environment --project <path> <task-id> not-applicable -- <reason...>
@@ -1104,6 +1107,59 @@ do_decline_recipe() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# defer-surface: written only when a person answers "not this task" to review's surface setup offer
+# (task-schema.json, surfacesDeferred). Nothing here asks. Review reads the field, so a second pass
+# of the same task does not repeat the offer (gap row 278). A repeat is refused, as decline-recipe
+# refuses one.
+# ------------------------------------------------------------------------------------------------
+
+do_defer_surface() {
+  local project_path="" id="" kind=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      *)
+        if [ -z "$id" ]; then id="$1"; shift
+        elif [ -z "$kind" ]; then kind="$1"; shift
+        else die3 "defer-surface: unrecognized argument: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [ -n "$project_path" ] || die3 "defer-surface: --project is required"
+  local _resolved_project
+  _resolved_project="$(canon_existing_dir "$project_path")" || die3 "defer-surface: not a folder: $project_path"
+  project_path="$_resolved_project"
+  [ -n "$id" ] || die3 "defer-surface: a task id is required"
+  case "$kind" in
+    e2e|visual-regression) ;;
+    *) die3 "defer-surface: the kind is e2e or visual-regression, not '$kind'" ;;
+  esac
+
+  local task_json
+  task_json="$(task_dir_for "$project_path" "$id")/task.json"
+  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  if jq -e --arg k "$kind" '(.surfacesDeferred // []) | index($k) != null' "$task_json" >/dev/null 2>&1; then
+    die3 "defer-surface: $task_json already defers $kind"
+  fi
+
+  write_atomic "$task_json" "$(jq --arg k "$kind" '.surfacesDeferred = ((.surfacesDeferred // []) + [$k])' "$task_json")"
+
+  commit_task_change "$project_path" \
+    "Defer ${kind} surfaces on ${id}" \
+    "a person answered not this task" \
+    "" \
+    "" \
+    "$id" "defer-surface" \
+    || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+
+  echo "SURFACE DEFERRED: ${kind}"
+  echo "surfacesDeferred: $(jq -r '.surfacesDeferred | join(" ")' "$task_json")"
+  task_summary "$task_json"
+}
+
+# ------------------------------------------------------------------------------------------------
 # save: appends a decision no record holds yet to <task>/notes/<date>.md under a `## <UTC time>`
 # heading (ideal/task.md, "A save before the window closes"). A note is never a stage record: each
 # record has one producer, and the note is what the next window reads until that producer runs.
@@ -1795,6 +1851,7 @@ case "$action" in
   set-budget) do_set_budget "$@" ;;
   save) do_save "$@" ;;
   decline-recipe) do_decline_recipe "$@" ;;
+  defer-surface) do_defer_surface "$@" ;;
   environment) do_environment "$@" ;;
   prune) do_prune "$@" ;;
   *) usage; exit 3 ;;

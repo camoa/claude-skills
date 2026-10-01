@@ -119,6 +119,13 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 },
       "description": "The frameworks a person answered `not for this framework` to the missing process recipe ask, written by `task decline-recipe`, one name per answer, each one project.json declares. Present only after the first such answer. Research and design skip their ask for a framework named here; implementation never asks, so it reads nothing. The answer is per task, because a secondary framework that needs no recipe on this task may need one on the next (live-run row 123)."
+    },
+    "surfacesDeferred": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["e2e", "visual-regression"] },
+      "description": "The surface kinds a person answered `not this task` to at review's setup offer, written by `task defer-surface`, one kind per answer. Present only after the first such answer. Review reads it and does not offer that kind again in this task, so a second review pass does not repeat the offer. The answer is per task, and the next task may ask again (gap row 278)."
     }
   },
   "$defs": {

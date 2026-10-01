@@ -2161,8 +2161,12 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "visual parity has no recipe row, no project field and no harness in version 6, so nothing ran and nothing is claimed. It is recorded as unavailable." >>"$checks_out"
     return 0
   fi
+  if [ "$enabled" = "on with its surface file on a branch" ]; then
+    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree. Branch $RW_SURFACE_BRANCH holds it, and the file reaches this task once that branch lands on the trunk. Until then it reads as off here, and review ran nothing for it." >>"$checks_out"
+    return 0
+  fi
   if [ "$enabled" = "on with no surface file" ]; then
-    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree and on every branch, so it reads as off. Review ran nothing for it and offers its setup." >>"$checks_out"
+    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree and on every branch, so it reads as off. Review ran nothing for it." >>"$checks_out"
     return 0
   fi
   if [ "$enabled" != "on" ]; then
@@ -2185,9 +2189,7 @@ rw_surface_kind() {
   fi
   if [ "$SF_STATE" != "ok" ]; then
     detail="the recipe commands a $row_id run and the surface file is $SF_STATE, so nobody could say which surfaces to answer about."
-    if [ -n "$RW_SURFACE_BRANCH" ]; then
-      detail="$detail Branch $RW_SURFACE_BRANCH holds the surface file. Merge it into this task's branch, then run review again. A new setup here would collide with it at merge."
-    elif [ "$SF_STATE" != "unreadable" ]; then
+    if [ "$SF_STATE" != "unreadable" ]; then
       detail="$detail Nobody was present to take the setup offer. /aida:surfaces $gate writes the file."
     fi
     rw_check_row "$check_id" "unknown" "$detail" >>"$checks_out"
@@ -2424,40 +2426,51 @@ do_surfaces() {
 
   local e2e_on vr_on parity_on registry_path setup checks_file surfaces_file surfaces_json updated
   local one_accept all_rows si one_surface merged one_verdict
-  local e2e_declined vr_declined open_kinds relevant_off
+  local e2e_declined vr_declined open_kinds relevant_off task_deferred deferred_kinds on_word=""
   e2e_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
-  # A kind marked on with no surface file was set up by half (gap row 275). When a branch holds the
-  # file, the repair is a merge, so the check stays unknown, names the branch, and nothing offers a
-  # setup that would collide with it. Otherwise, with a person present, the kind reads as off and gets
-  # the off kind's offer. Unattended, nobody takes that offer, so the check stays unknown and names
-  # the route. The project record keeps its word: the surfaces skill writes that field.
+  # A kind marked on with no surface file was set up by half (gap row 275). When another branch holds
+  # the file, it is often another task's unfinished work, and a merge would put that work into this
+  # task (gap row 278). The file reaches this task through the trunk, so in both run modes the kind
+  # reads as off, and nothing offers a setup that would collide with it. Unknown would fail every
+  # review until that branch lands, with no answer in this task that repairs it. With no branch and a
+  # person present, the kind reads as off and gets the off kind's offer. Unattended, nobody takes
+  # that offer, so the check stays unknown and names the route. The surfaces skill writes the
+  # project record's field.
   RW_SURFACE_BRANCH=""
   case "$SF_STATE" in
     missing|absent)
       RW_SURFACE_BRANCH="$(sf_branch_with "$RV_CODEPATH" "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')")"
-      if [ -z "$RW_SURFACE_BRANCH" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
-        [ "$e2e_on" != "on" ] || e2e_on="on with no surface file"
-        [ "$vr_on" != "on" ] || vr_on="on with no surface file"
+      if [ -n "$RW_SURFACE_BRANCH" ]; then on_word="on with its surface file on a branch"
+      elif [ "$RW_RUN_MODE" = "interactive" ]; then on_word="on with no surface file"; fi
+      if [ -n "$on_word" ]; then
+        [ "$e2e_on" != "on" ] || e2e_on="$on_word"
+        [ "$vr_on" != "on" ] || vr_on="$on_word"
       fi
       ;;
   esac
 
-  # Per kind: off, not declined, and the recipe carries its surface row. Rows that are not absent
-  # are how review knows the framework has that kind at all. The two are separate capabilities, so
-  # declining one never silences the other's offer.
+  # Per kind: off, not declined, not answered "not this task" on this task, and the recipe carries
+  # its surface row. Rows that are not absent are how review knows the framework has that kind at
+  # all. The two are separate capabilities, so declining one never silences the other's offer. A
+  # surface file on another branch silences both: one file serves every kind, so any setup collides.
   e2e_declined="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.e2e.declined // false')"
   vr_declined="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.visualRegression.declined // false')"
-  open_kinds=""; relevant_off=""
+  task_deferred=" $(jq -r '(.surfacesDeferred // []) | join(" ")' "$TASK_PATH/task.json" 2>/dev/null) "
+  open_kinds=""; relevant_off=""; deferred_kinds=""
   if [ "$e2e_on" != "on" ] && [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select(.id == "e2e" and (.absent // false) == false) ] | length')" -gt 0 ]; then
     relevant_off="yes"
-    [ "$e2e_declined" = "true" ] || open_kinds="end to end"
+    if [ "$e2e_declined" = "true" ] || [ -n "$RW_SURFACE_BRANCH" ]; then :
+    elif [ "${task_deferred#* e2e }" != "$task_deferred" ]; then deferred_kinds="end to end"
+    else open_kinds="end to end"; fi
   fi
   if [ "$vr_on" != "on" ] && [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq '[ .[] | select(.id == "visual-regression" and (.absent // false) == false) ] | length')" -gt 0 ]; then
     relevant_off="yes"
-    [ "$vr_declined" = "true" ] || open_kinds="${open_kinds:+$open_kinds and }visual regression"
+    if [ "$vr_declined" = "true" ] || [ -n "$RW_SURFACE_BRANCH" ]; then :
+    elif [ "${task_deferred#* visual-regression }" != "$task_deferred" ]; then deferred_kinds="${deferred_kinds:+$deferred_kinds and }visual regression"
+    else open_kinds="${open_kinds:+$open_kinds and }visual regression"; fi
   fi
 
   # The offer, which the skill makes and this action only records what it can decide.
@@ -2465,6 +2478,10 @@ do_surfaces() {
     if [ "$RW_RUN_MODE" = "autonomous" ]; then setup="not-offered-autonomous"; else setup="available"; fi
   elif [ "$SF_STATE" = "ok" ]; then
     setup="registered"
+  elif [ -n "$RW_SURFACE_BRANCH" ]; then
+    setup="file-on-another-branch"
+  elif [ -n "$deferred_kinds" ]; then
+    setup="not-this-task"
   elif [ -n "$relevant_off" ]; then
     setup="declined"
   else
@@ -2556,7 +2573,9 @@ RW_SURFACE_VERDICTS
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
   echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   [ -z "$RW_SURFACE_BRANCH" ] \
-    || echo "SURFACES: branch $RW_SURFACE_BRANCH holds the surface file. Say to merge it into this task's branch and run review again. Offer no setup for a kind marked on." >&2
+    || echo "SURFACES: branch $RW_SURFACE_BRANCH holds the surface file. It reaches this task once that branch lands on the trunk. Until then a kind marked on reads as off here. Offer no setup, and do not tell the person to bring that branch into this task." >&2
+  [ -z "$deferred_kinds" ] \
+    || echo "SURFACES: this task answered not this task for $deferred_kinds, so the offer is not made again." >&2
   case "$setup" in
     available)              echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
     declined)               echo "SURFACES: every kind that is off has been declined, and none of them is offered again." >&2 ;;
