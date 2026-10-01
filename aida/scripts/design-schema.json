@@ -80,7 +80,16 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared. At least one entry is required: an order that names no file it may write hands the builder no boundary at all."
+      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, except for an entry both orders name in sharedFiles, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared. At least one entry is required: an order that names no file it may write hands the builder no boundary at all."
+    },
+    "sharedFiles": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The entries of ownedFiles this order shares with other orders, written by `add-owned-file --shared` and removed with the entry. Optional: an order with none omits it. A shared file is one several orders only add to, such as a list of enabled modules or a dependency manifest (gap row 287). Two orders may both own a path only when both name it here; an overlap either order leaves undeclared still fails the design check and `start`. Implementation reads the field in three places. The implementer of one order may read a file it shares. A commit that changes only shared files is attributed to an order by that order's own build or fix record, and never by its paths. The review diff of a shared file holds the changes of that order's own commits only. Whether a change only adds is not checked: no framework-neutral reading of a diff tells an addition from a rewrite, since a manifest entry also edits the line before it."
     },
     "surfaces": {
       "type": "array",

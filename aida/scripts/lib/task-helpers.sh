@@ -397,6 +397,18 @@ task_is_light() {
   [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
 }
 
+# The one overlap rule for owned files, read by check-design.sh and by implementation's `start`.
+# Input: the work orders as a JSON array. Output: one {ids, path} per entry two orders both
+# declare, compared as declared strings. An entry both orders list in sharedFiles is not an
+# overlap, because each order only adds to that file (gap row 287).
+OWNED_OVERLAP_JQ='
+  [ range(0; length) as $i | range($i + 1; length) as $j
+    | .[$i] as $a | .[$j] as $b
+    | ($a.ownedFiles // [])[] as $p
+    | select(($b.ownedFiles // []) | index($p) != null)
+    | select(((($a.sharedFiles // []) | index($p) != null) and (($b.sharedFiles // []) | index($p) != null)) | not)
+    | {ids: [$a.id, $b.id], path: $p} ]'
+
 # One row of the compromises log, COMPROMISES.md at the top of the task's tree (gap row 197). The
 # code that decides a skip calls this, so the log never rests on a model's memory. The file ships
 # with the code, because a later normal task takes it as its scope. A row already in the file is

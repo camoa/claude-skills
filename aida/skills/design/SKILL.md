@@ -523,6 +523,13 @@ same rule holds for code. An order that changes a class owns every file the reci
 that class. A constructor change, for one, rewrites the service definition. A file added here
 to an order the build already started is taken in place at the next `start`, once design has
 closed again on the live files. Nothing halts when nothing else on the order changed.
+
+A file that several orders only add to may have more than one owner. A list of enabled modules
+and a dependency manifest are examples. Each order that adds to it passes `--shared` with that
+path. An order can then enable the module it builds, and does not wait for another order. Two
+orders that own one path, and do not both mark it shared, still fail the check. A file that one
+order rewrites belongs to that order alone. Nothing checks that a shared change only adds, so the
+reviewer of each order reads that order's own changes to the file.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
@@ -660,7 +667,7 @@ zero it adds one `open:` line naming what is open. The report holds:
   automated tests;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
-- two work orders sharing a declared owned file;
+- two work orders sharing a declared owned file that one of them does not mark `--shared`;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
 
 `check` also prints `verifyNotBinding:`, the orders holding an entry that is not binding.
@@ -746,7 +753,8 @@ problem. Read the report file when the line is not enough, and fix the specific 
     entry point that is not a screen belongs in the order that builds the feature, as above, not
     in an order of its own; an order for it alone needs a criterion that names it;
   - a cycle needs one of the `dependsOn` edges in it removed;
-  - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat;
+  - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat,
+    or `--shared` on both orders when each only adds to the file;
   - a wildcard in an owned file needs the directory named instead, or each file added, because
     implementation derives what the test author may not read from this list and reads it as paths;
   - an unknown id needs correcting to one that actually exists.

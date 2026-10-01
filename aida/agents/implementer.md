@@ -19,8 +19,8 @@ refuses a write under the code path outside it. A file this unit needs and does 
 stop, even for a two-line change. Your report names the file and why the unit needs it.
 
 **You may not read another order's source.** The dispatch record's `denyRead` list names the
-files: every other order's owned files, closed orders included. A closed order's source is still
-another unit's source. What another unit exposes is its interface record, and the brief holds the
+files: every other order's owned files, closed orders included. A file your order shares stays
+readable. A closed order's source is still another unit's source. What another unit exposes is its interface record, and the brief holds the
 ones you depend on. A hook refuses Read, Grep and the plain shell reads such as `cat`, `head`,
 `sed` and `grep`. A path a shell assembles at run time is not caught, and it is still denied.
 

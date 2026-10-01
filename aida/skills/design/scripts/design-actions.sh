@@ -41,7 +41,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
-#                        --id <woId> --path <path>
+#                        --id <woId> --path <path> [--shared]
 #   design-actions.sh add-done-when  <task_folder> \
 #                        --id <woId> --text <text>
 #   design-actions.sh add-test       <task_folder> \
@@ -282,7 +282,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--interface <text>] [--reasoning <text>] \
                                          [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
-       design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
+       design-actions.sh add-owned-file <task_folder> --id <woId> --path <path> [--shared]
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
                                          --description <text>
@@ -1070,7 +1070,7 @@ require_wo_id_arg() {
 }
 
 do_add_owned_file() {
-  local id="" path_val=""
+  local id="" path_val="" shared=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
@@ -1079,6 +1079,7 @@ do_add_owned_file() {
       --path)
         need_value "add-owned-file" "--path" "$#" "${2:-}"
         path_val="$2"; shift 2 ;;
+      --shared) shared=true; shift ;;
       *) die3 "add-owned-file: unrecognized argument: $1" ;;
     esac
   done
@@ -1104,6 +1105,11 @@ do_add_owned_file() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-owned-file: $file exists but is not valid JSON"
   doc="$(jq --arg p "$path_val" '.ownedFiles = (((.ownedFiles // []) + [$p]) | unique)' "$file")"
+  # --shared marks a file several orders only add to, so another order may own it too when it
+  # also marks it (design-schema.json, sharedFiles). Given again on a path the order owns, it marks
+  # that path.
+  [ "$shared" = "false" ] \
+    || doc="$(printf '%s' "$doc" | jq --arg p "$path_val" '.sharedFiles = (((.sharedFiles // []) + [$p]) | unique)')"
   # An order whose every owned file lies under the project folder delivers a document, not code.
   # So its proof is `record` (nyc defect 17): no test, no commit in the code repository, its
   # done-when rows judged instead. The task folder's deliverables/ is the usual place; a report
@@ -1338,7 +1344,8 @@ do_remove_owned_file() {
     || die2 "remove-owned-file: $id does not own $path_val"
   [ "$(jq -r '(.ownedFiles // []) | length' "$file")" -gt 1 ] \
     || die3 "remove-owned-file: $path_val is the only file $id owns, and an order that names no file hands the builder no boundary (design-schema.json, ownedFiles). Add the replacement first, or fold the order into another with merge"
-  doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]' "$file")"
+  doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]
+    | if has("sharedFiles") then .sharedFiles -= [$p] else . end' "$file")"
   local unset_proof
   unset_proof="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" \
     'if (.proof // "") == "record" and ((.ownedFiles // []) | any(startswith($t)) | not) then "yes" else "" end')"
@@ -1578,7 +1585,7 @@ do_merge() {
       def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n\n" + $f[k] end;
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
-    | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
+    | union("ownedFiles") | union("sharedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
     | .dependsOn = [ (.dependsOn // [])[] | select(. != $from and . != $i.id) ]
     | append("interface") | append("reasoning")
   ' "$into_file")"

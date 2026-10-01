@@ -1995,7 +1995,7 @@ do_start() {
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
       # A started order whose live copy differs from the frozen one only by added owned files is
-      # not halted either (live-run row 91), and neither is one that only took research findings
+      # not halted either (live-run row 91), nor by files it newly shares (gap row 287), and neither is one that only took research findings
       # from `account` (gap row 226), and neither is one whose reasoning only grew by
       # `update --append-reasoning`: the live value starts with the frozen one (gap row 227).
       # Neither is one whose absence rows design marked reviewed (gap row 237). Its
@@ -2014,11 +2014,13 @@ do_start() {
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .findings, .reasoning, .absenceReviewed)))
+              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
+              | select(((($s.sharedFiles // []) - ($l.sharedFiles // [])) | length) == 0)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
               | [ (if ((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 then "gained owned files" else empty end),
+                  (if ((($l.sharedFiles // []) - ($s.sharedFiles // [])) | length) > 0 then "gained shared files" else empty end),
                   (if $l.findings != $s.findings then "findings changed" else empty end),
                   (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
                   (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end) ] as $why
@@ -2121,16 +2123,7 @@ do_start() {
       | (reduce $trimmed[] as $o ({}; .[$o.id] = $o.dependsOn)) as $adj
       | [ $ids[] | . as $x | select((reach($adj; $x) | index($x)) != null) ]
     ')"
-  overlap_json="$(jq -c -n --argjson orders "$build_orders_json" '
-      [ range(0; ($orders | length)) as $i
-        | range($i + 1; ($orders | length)) as $j
-        | ($orders[$i]) as $a | ($orders[$j]) as $b
-        | (($a.ownedFiles // []) as $af | ($b.ownedFiles // []) as $bf
-            | [ $af[] as $p | select($bf | index($p) != null) | $p ]) as $shared
-        | $shared[] as $path
-        | {ids: [$a.id, $b.id], path: $path}
-      ]
-    ')"
+  overlap_json="$(printf '%s' "$build_orders_json" | jq -c "$OWNED_OVERLAP_JQ")"
   local cycle_count overlap_count
   cycle_count="$(printf '%s' "$cycles_json" | jq 'length')"
   overlap_count="$(printf '%s' "$overlap_json" | jq 'length')"
@@ -8639,16 +8632,33 @@ rv_load_order_start() {
     || die 3 "$who: the start of $unit_id's range could not be read from its freeze record or its build record, though both steps write it."
 }
 
+# How order $2 owns path $1: "own" when the path matches an entry of its ownedFiles it does not
+# share, "shared" when it matches only entries of its sharedFiles, nothing when it matches none.
+# Another order owns a shared file too, so a path alone never attributes a change to this order.
+im_path_claim() {
+  local g claim=""
+  while IFS= read -r g; do
+    [ -n "$g" ] && tf_path_matches_catalog_glob "$1" "$g" || continue
+    if printf '%s' "$2" | jq -e --arg g "$g" '(.sharedFiles // []) | index($g) != null' >/dev/null 2>&1; then
+      claim=shared
+    else
+      echo own; return 0
+    fi
+  done <<IPC_OWNED
+$(printf '%s' "$2" | jq -r '(.ownedFiles // [])[]')
+IPC_OWNED
+  [ -z "$claim" ] || echo "$claim"
+}
+
 # The commits after $2 up to $3 in the repository $1, oldest first, one line each: "own <sha>" when
 # the commit is order $4's, "other <sha>" when it is not. A commit is the order's when a range one
 # of its records names holds it: the build record's, or a fix round's. Or when every file it
-# changes matches the order's ownedFiles, which is how an earlier attempt is found. Another
-# order's freeze or build changes a file this order does not own, so it reads as other.
+# changes is the order's and one of them is not shared, which is how an earlier attempt is found.
+# Another order's freeze or build changes a file this order does not own, so it reads as other.
 # $4 the frozen work order, $5 the folder holding the order's build and fix records.
 im_order_commits() {
-  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" f r c p g owned paths mine
+  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" f r c p paths mine alone
   id="$(printf '%s' "$unit_json" | jq -r '.id // ""')"
-  owned="$(printf '%s' "$unit_json" | jq -r '(.ownedFiles // [])[]')"
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
@@ -8661,21 +8671,19 @@ IOC_RECORDS
   for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
     if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
     paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
-    mine=false
+    mine=false; alone=false
     [ -z "$paths" ] || mine=true
     while IFS= read -r p; do
       [ -n "$p" ] && [ "$mine" = "true" ] || continue
-      mine=false
-      while IFS= read -r g; do
-        [ -n "$g" ] || continue
-        if tf_path_matches_catalog_glob "$p" "$g"; then mine=true; break; fi
-      done <<IOC_OWNED
-$owned
-IOC_OWNED
+      case "$(im_path_claim "$p" "$unit_json")" in
+        own) alone=true ;;
+        shared) ;;
+        *) mine=false ;;
+      esac
     done <<IOC_PATHS
 $paths
 IOC_PATHS
-    if [ "$mine" = "true" ]; then echo "own $c"; else echo "other $c"; fi
+    if [ "$mine" = "true" ] && [ "$alone" = "true" ]; then echo "own $c"; else echo "other $c"; fi
   done
 }
 
@@ -8989,7 +8997,9 @@ do_review_brief() {
   # the deliverables by path, since a document is read whole and not as a patch (nyc defect 17).
   # In the code repository the diff runs over every attempt, and holds only the files this order's
   # own commits changed, so another order built between two attempts stays out (gap row 222).
-  local started_at commit diff_path deliverables_json own_paths
+  # A file this order shares is diffed per own commit instead, so another order's lines in it stay
+  # out too (gap row 287).
+  local started_at commit diff_path deliverables_json own_commits own_paths shared_paths="" c
   rv_load_order_start "review-brief" "$unit_id"
   started_at="$RV_ORDER_START"
   commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
@@ -9001,18 +9011,36 @@ do_review_brief() {
     git_diff_of "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_RANGE_SCOPE" > "$diff_path" \
       || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
   else
-    own_paths="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_UNIT_JSON" "$IMPL_DIR" \
-      | sed -n 's/^own //p' | while IFS= read -r c; do
-          git -C "$RV_RANGE_REPO" diff-tree --no-commit-id --name-only -r --no-renames "$c"
+    own_commits="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_UNIT_JSON" "$IMPL_DIR" \
+      | sed -n 's/^own //p')"
+    own_paths="$(printf '%s\n' "$own_commits" | while IFS= read -r c; do
+          [ -z "$c" ] || git -C "$RV_RANGE_REPO" diff-tree --no-commit-id --name-only -r --no-renames "$c"
         done | LC_ALL=C sort -u)"
     set --
-    while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<RB_PATHS
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if [ "$(im_path_claim "$p" "$RV_UNIT_JSON")" = "shared" ]; then shared_paths="$shared_paths$p
+"; else set -- "$@" "$p"; fi
+    done <<RB_PATHS
 $own_paths
 RB_PATHS
     : > "$diff_path" || die 3 "review-brief: could not write $diff_path."
     if [ "$#" -gt 0 ]; then
       git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" -- "$@" > "$diff_path" 2>/dev/null \
         || die 3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
+    fi
+    if [ -n "$shared_paths" ]; then
+      set --
+      while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<RB_SHARED
+$shared_paths
+RB_SHARED
+      while IFS= read -r c; do
+        [ -n "$c" ] || continue
+        git -C "$RV_RANGE_REPO" diff "$c^" "$c" -- "$@" >> "$diff_path" 2>/dev/null \
+          || die 3 "review-brief: could not write the diff of $c into $diff_path."
+      done <<RB_COMMITS
+$own_commits
+RB_COMMITS
     fi
   fi
   [ -z "$RV_RANGE_PATHS" ] || deliverables_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
@@ -11655,13 +11683,14 @@ do_restart() {
   # the order's first freeze that changes its owned files is the order's, recorded or not. Without
   # a freeze, the span opens at the ledger's startedFrom. The freeze commits stay: they hold the
   # tests, which the next test author rewrites. A commit a record names that changes no owned file
-  # is the order's as well. A commit that is the order's and changes a file it does not own would
+  # is the order's as well. A file the order shares is another order's too, so a change to shared
+  # files alone is the order's only when a record names it (gap row 287). A commit that is the order's and changes a file it does not own would
   # take other work with it, so the restart stops before it changes anything and names the files.
   # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
   # history, and AIDA's own command hook refuses the hard reset that would drop it.
-  local revert_json='[]' mixed="" stale="" one_id owned rec freezes from gone c paths p g own_n outside merge s l
+  local revert_json='[]' mixed="" stale="" one_id unit rec freezes from gone c paths p own_n sh_n outside merge s l
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
-    owned="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0].ownedFiles // [] | .[]')"
+    unit="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {}')"
     rec="$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .kind + " " + .commit')"
     freezes="$(printf '%s' "$rec" | sed -n 's/^freeze //p')"
     # A test file a superseded freeze created, that no later freeze touched, is a test a person
@@ -11703,21 +11732,19 @@ RS_ADDED
       else
         paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
       fi
-      own_n=0; outside=""
+      own_n=0; sh_n=0; outside=""
       while IFS= read -r p; do
         [ -n "$p" ] || continue
-        while IFS= read -r g; do
-          [ -n "$g" ] || continue
-          if tf_path_matches_catalog_glob "$p" "$g"; then own_n=$((own_n + 1)); continue 2; fi
-        done <<RS_OWNED
-$owned
-RS_OWNED
-        outside="$outside $p"
+        case "$(im_path_claim "$p" "$unit")" in
+          own) own_n=$((own_n + 1)) ;;
+          shared) sh_n=$((sh_n + 1)) ;;
+          *) outside="$outside $p" ;;
+        esac
       done <<RS_PATHS
 $paths
 RS_PATHS
       [ "$own_n" -gt 0 ] || printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c" || continue
-      if [ "$own_n" -gt 0 ] && [ -z "$outside" ] && [ -z "$merge" ]; then
+      if [ $((own_n + sh_n)) -gt 0 ] && [ -z "$outside" ] && [ -z "$merge" ]; then
         revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
           'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
       else
@@ -12186,8 +12213,9 @@ TG_ROOTS
     [ -n "$mine_count" ] || mine_count=0
     [ "$mine_count" -gt 0 ] 2>/dev/null \
       || die 47 "dispatch-open: $unit_id declares no owned file in $IMPL_DIR/snapshot.json, so a $role_bare would be dispatched with nowhere it is meant to write. Design has to name what this order owns before its code is written."
-    others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
-      '[ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] | unique')"
+    # A file this order shares is another order's too, and this order still reads it (gap row 287).
+    others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" --argjson m "$mine_json" \
+      '[ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] - $m | unique')"
     deny_raw="$deny_raw$(printf '%s' "$others_json" | jq -r '.[]')
 "
     allow_raw="$allow_raw$(printf '%s' "$mine_json" | jq -r '.[]')
