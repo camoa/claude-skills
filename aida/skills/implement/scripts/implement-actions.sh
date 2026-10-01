@@ -8475,7 +8475,8 @@ rv_recipe_refs() {
 # Sets RV_RECIPE_ANSWERS to the reviewer's `recipes` list in the findings file $1, or to [] when
 # the file has none. $2 the action's own name. An answer is {ref, verdict, evidence}: the verdict
 # is followed, departed or not-applicable, and the evidence gives the reason on one line. A
-# departure's evidence names file:line of a file in the order's diff, $3. Dies 52 on a malformed
+# departure's evidence names a file in the order's diff, $3, with or without a line. A departure in
+# how files were produced has no one line (gap row 280). Dies 52 on a malformed
 # answer, and 108 when an item of rv_recipe_refs has no answer, or an answer names a ref twice or a
 # ref not on that list. Called as a plain statement, never with `$(...)`, for the reason
 # rv_read_findings_array states.
@@ -8513,12 +8514,12 @@ rv_read_recipe_answers() {
       in_diff=no
       while IFS= read -r p; do
         [ -n "$p" ] || continue
-        case "$evidence" in *"$p:"[0-9]*) in_diff=yes ;; esac
+        case "$evidence" in *"$p"*) in_diff=yes ;; esac
       done <<RR_DIFF
 $diff_paths
 RR_DIFF
       [ "$in_diff" = "yes" ] \
-        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file:line of a file in $diff. Name where the build departs, not the recipe's own line."
+        || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files a departure in how files were produced made. The recipe's own line is not enough."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
