@@ -317,20 +317,28 @@ rw_step_now() {
 # Version 5 ran four review passes on one task, each overwriting the last, and pass three found a
 # defect pass four's record does not mention. A record with no verdict is a pass still in flight and
 # is updated in place: nothing in it has been concluded yet. The name reuses the shape `restart`
-# writes. $1 the action.
+# writes. The pass's findings file and brief go with it under the same suffix: the next brief names
+# the same findings path, and a fresh reviewer that finds a file there starts from the previous
+# reviewer's conclusions (gap row 276). The record moves last. $1 the action.
 rw_archive_closed_record() {
-  local who="$1" short today target
+  local who="$1" short today file target
   [ -n "$RW_RECORD_DOC" ] || return 0
   printf '%s' "$RW_RECORD_DOC" | jq -e 'has("verdict")' >/dev/null 2>&1 || return 0
   short="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt // ""' | cut -c1-7)"
   [ -n "$short" ] || short="unknown"
   today="$(date -u +%Y-%m-%d)"
-  target="$REVIEW_DIR/review-$today-$short.json"
-  [ ! -e "$target" ] \
-    || die 63 "$who: $target already exists, so archiving $RECORD_FILE would write over the record of an earlier pass. Move or remove that file by hand first; nothing has been written."
-  mv "$RECORD_FILE" "$target" \
-    || die 63 "$who: could not move $RECORD_FILE to $target, so the write was refused. The record of the previous pass is still there."
-  echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): the previous review record moved to $target" >&2
+  for file in "$FINDINGS_TARGET" "$BRIEF_FILE" "$RECORD_FILE"; do
+    target="${file%.json}-$today-$short.json"
+    [ ! -e "$file" ] || [ ! -e "$target" ] \
+      || die 63 "$who: $target already exists, so archiving $file would write over a file of an earlier pass. Move or remove that file by hand first; nothing has been written."
+  done
+  for file in "$FINDINGS_TARGET" "$BRIEF_FILE" "$RECORD_FILE"; do
+    [ -e "$file" ] || continue
+    target="${file%.json}-$today-$short.json"
+    mv "$file" "$target" \
+      || die 63 "$who: could not move $file to $target, so the write was refused. The record of the previous pass is still at $RECORD_FILE."
+    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): the previous pass's $(basename "$file") moved to $target" >&2
+  done
   RW_RECORD_DOC=""
 }
 
