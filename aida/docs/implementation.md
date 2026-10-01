@@ -200,7 +200,8 @@ have watched each routed clause fail, and a yes fails the review.
 
 When the author returns, the coding-standards tool runs over the new test files, and a finding
 goes back to the author before the freeze. This is the one place the tests' own standards are
-judged, because the build step leaves the frozen tests out of its tool checks.
+judged, because the build and review leave the frozen tests out of their tool checks. Static
+analysis does not run on the tests: before the code exists it reports each missing name.
 
 ## Who confirms the tests prove the criteria
 

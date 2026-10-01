@@ -7387,8 +7387,7 @@ br_eight_checks() {
   local declared="$1" record_text="$2"
   local unit_id seven_file interface_check_json
   unit_id="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
-  BRC_SELECTED_JSON="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  BRC_SELECTED_JSON="$(br_frozen_test_paths "$(printf '%s' "$BRC_TESTS_DOC" | jq -c '.rows // []')")"
   CR_WHO="$BRC_WHO"
   cr_resolve
   cr_require_baseline_recipes "$BRC_WHO" "$BRC_BASELINE_FILE"
@@ -9396,8 +9395,7 @@ RV_SCOPE
   BRC_ALLOWED_JSON="$(jq -c '.allowedFiles // []' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
   [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
   local selected_tests_json
-  selected_tests_json="$(printf '%s' "$tests_doc" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
+  selected_tests_json="$(br_frozen_test_paths "$(printf '%s' "$tests_doc" | jq -c '.rows // []')")"
   # shellcheck disable=SC2034 # read by the sourced library
   CR_WHO="fix-record"
   # shellcheck disable=SC2034 # read by the sourced library

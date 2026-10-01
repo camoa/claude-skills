@@ -59,7 +59,8 @@ Every check is a question with one answer. They fall into four groups.
 **The tools.** Four checks run the commands the framework's recipe declares, over the whole task
 at the final commit. They are coding standards, static analysis, security, and the full test
 suite. A recipe may declare more rows, such as a duplication tool or a design-metrics tool. Each
-adds one check, so the list can run past sixteen on such a framework.
+adds one check, so the list can run past sixteen on such a framework. The tool rows leave the frozen
+tests out, as the build does, because no role after the freeze may change them.
 
 **The reviewer's lenses.** One reviewer reading the diff answers five checks. They are SOLID,
 DRY, architecture fit, the guides research cited, and the framework practices this project

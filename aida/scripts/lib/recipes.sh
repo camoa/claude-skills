@@ -1035,6 +1035,13 @@ br_filter_extensions() {
   '
 }
 
+# Prints the frozen test files named by $1, a JSON array of rows as a tests-<unit>.json holds them.
+# The build and review leave these out of their tool rows, because no role after the freeze may
+# write them (gap row 270).
+br_frozen_test_paths() {
+  printf '%s' "$1" | jq -c '[ .[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
+}
+
 # True when the argv array $1 holds `{paths}`, `{file}` or `{dirs}`. br_run_resolved expands each
 # of them from the file list. Such a row reads the caller's files. An empty list is then a row
 # that does not apply, never a run over the tool's own default scope. The build once left `{dirs}`

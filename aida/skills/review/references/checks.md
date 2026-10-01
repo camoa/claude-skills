@@ -60,6 +60,10 @@ person wants more, and say they can open it in an editor.
 declares, including a duplication tool or a design-metrics tool, and records one check row each. The
 reviewer reads those rows before it judges, so do not re-derive a measurement here.
 
+**The tool rows leave the frozen tests out, as the build's do.** The frozen tests are the reference
+this stage judges against, and no role after the freeze may change them. A row's detail names each
+test it left out. A row whose files are all frozen tests reads undeclared.
+
 **Checks 5 to 7 subtract the baseline** in `implementation/baseline.json`. A finding that predates
 the build is not this task's, and blocking on it blocks every task forever. The baseline is scoped to
 the orders' owned files, so a finding in a file no order owns reads as this task's. That is right:

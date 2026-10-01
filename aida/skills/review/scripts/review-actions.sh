@@ -1068,7 +1068,7 @@ rw_baseline_field_for() {
 # (br_subtract_baseline, the build's own), so only a finding absent then reads as this task's.
 rw_tool_row_check() {
   local row="$1" row_id framework argv signal exts scoped scoped_count has_paths
-  local rc failed how
+  local frozen left_out left_note rc failed how
   local verdict detail field baseline_doc baseline_verdict baseline_output new_json new_count
   row_id="$(printf '%s' "$row" | jq -r '.id')"
   framework="$(printf '%s' "$row" | jq -r '.framework // ""')"
@@ -1088,9 +1088,20 @@ rw_tool_row_check() {
   exts="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
   has_paths=false
   br_argv_takes_paths "$argv" && has_paths=true
-  scoped="$RW_CHANGED_JSON"
-  [ -z "$exts" ] || scoped="$(br_filter_extensions "$RW_CHANGED_JSON" "$exts")"
+  # The frozen tests are the reference this stage judges against, and no role after the freeze may
+  # write them. So they come out first, as they do from the build's tool rows (br_tool_check). A
+  # static analyser reads a test's guard as always true once the guarded code exists, and nobody
+  # could repair that (gap row 270). The tests step ran the coding-standards row over them.
+  frozen="$(br_frozen_test_paths "$RW_TEST_ROWS")"
+  left_out="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+    '[ $changed[] | select(. as $p | $frozen | index($p) != null) ]')"
+  scoped="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+    '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
+  [ -z "$exts" ] || scoped="$(br_filter_extensions "$scoped" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
+  left_note=""
+  [ "$has_paths" = "false" ] || [ "$left_out" = "[]" ] \
+    || left_note=" The frozen tests were left out: $(printf '%s' "$left_out" | jq -r 'join(", ")')."
 
   if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
     # No order owns a file in the code repository, so no file this tool reads was ever going to be
@@ -1105,7 +1116,11 @@ rw_tool_row_check() {
     return 0
   fi
   if [ "$has_paths" = "true" ] && [ -n "$exts" ] && [ "$scoped_count" -eq 0 ]; then
-    rw_check_row "$row_id" "undeclared" "the $row_id command reads only $(printf '%s' "$exts" | jq -r 'join(", ")'), and this change touches no file with one of those extensions, so the row does not apply to it." "" "" "$framework"
+    rw_check_row "$row_id" "undeclared" "the $row_id command reads only $(printf '%s' "$exts" | jq -r 'join(", ")'), and this change touches no file with one of those extensions outside its frozen tests, so the row does not apply to it.$left_note" "" "" "$framework"
+    return 0
+  fi
+  if [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
+    rw_check_row "$row_id" "undeclared" "every file this change touches is a frozen test, so the row does not apply to it.$left_note" "" "" "$framework"
     return 0
   fi
 
@@ -1156,7 +1171,7 @@ rw_tool_row_check() {
   fi
   verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
   verdict="$(rw_worse "$verdict" "$RW_CHECK_FLOOR")"
-  detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
+  detail="$detail$left_note $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
   rw_check_row "$row_id" "$verdict" "$(pc_trim "$detail")" "$rc" "$RW_RUN_OUTFILE" "$framework" "" "$new_json" "$new_count"
   rw_run_done
 }

@@ -287,8 +287,12 @@ command from the check recipe `references/preconditions.md` resolved, with `{pat
 paths the author returned, and run it here. When the row lists `extensions`, pass only the test
 files that end in one of them. When none is left, the row does not apply: say so, and run
 nothing. Send any finding back to the author before the freeze. No script action runs one recipe row on its own, so this conversation runs the command.
-This is the one place the tests' own standards are judged. The build step leaves the frozen tests
-out of its tool rows, because the implementer may not write them.
+This is the one place the tests' own standards are judged. The build and review leave the frozen
+tests out of their tool rows, because no role after the freeze may write them.
+
+Do not run the static-analysis row here. The tests name code that does not exist yet, so an
+analyser reports each missing name. Once the code exists, an analyser can read a test's guard as
+always true. No role may then change the test, so review does not judge it (gap row 270).
 
 ## Put the rows to the checker, before anything is frozen
 
