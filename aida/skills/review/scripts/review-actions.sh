@@ -890,7 +890,8 @@ RW_CHANGED
   # only the person can say whether it belongs. The task's architecture reviewer reads it in the
   # whole diff.
   local hand
-  hand="$(bash "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh" unattributed "$TASK_PATH" 2>/dev/null \
+  # Run from the code repository review reads, since implementation refuses a call from outside it.
+  hand="$(cd "$RV_CODEPATH" && bash "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh" unattributed "$TASK_PATH" 2>/dev/null \
     | sed -n 's/^unattributed: //p' | grep -vx none | paste -sd ';' - | sed 's/;/; /g')"
   [ -z "$hand" ] || aside_line="$aside_line These commits lie outside every order's records, so no order's review read them, and a person says whether each belongs: $hand."
   if [ -n "$unmatched" ]; then

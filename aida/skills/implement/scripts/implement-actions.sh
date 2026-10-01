@@ -7840,6 +7840,12 @@ br_open_repair() {
   fi
   abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
   rel="${abs#"$RV_CODEPATH"/}"
+  # A file the stopped order owns, shared with a closed order, is its own to change, so no other
+  # sharer reopens (gap row 287).
+  if [ -n "$(im_path_claim "$rel" "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '[ .workOrders[] | select(.id == $u) ][0] // {}')")" ]; then
+    BR_REPAIR_NOTE=" No repair opened: $unit_id owns $file itself, so the fix is its own."
+    return 1
+  fi
   while IFS='	' read -r one g; do
     [ -n "$g" ] && [ -z "$owner" ] || continue
     case "$g" in
