@@ -469,7 +469,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the same gap at `close`, by which point both rounds are already spent.
 #  63  `close` found the code repository at a commit other than the one the last record for this
 #      order was written at: the build record when no fix round ran, the last fix record otherwise.
-#      The range this would write would name work nothing in this stage judged.
+#      The range this would write would name work nothing in this stage judged. A light task's
+#      compromises log commits after that record do not count (gap row 305).
 #
 # The exit codes the checkpoint, the finish, the grant and the restart add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
@@ -8866,7 +8867,8 @@ ICC_PATHS
 # the commit is order $4's, "other <sha>" when it is not. A commit is the order's when a range one
 # of its records names holds it: the build record's, or a fix round's. Or when im_commit_claim
 # reads it as the order's, which is how an earlier attempt is found. Another order's freeze or
-# build changes a file this order does not own, so it reads as other.
+# build changes a file this order does not own, so it reads as other. A compromises log commit is
+# neither, and prints nothing (gap row 305).
 # $4 the frozen work order, $5 the folder holding the order's build and fix records.
 im_order_commits() {
   local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" taken f r c paths
@@ -8883,6 +8885,7 @@ $(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$id-*.json" 2>/dev/null | sort)
 IOC_RECORDS
   for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
     if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
+    ! compromise_log_commit "$TASK_PATH" "$repo" "$c" || continue
     paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
     if [ "$(im_commit_claim "$paths" "$unit_json" "$c" "$taken")" = "own" ]; then echo "own $c"; else echo "other $c"; fi
   done
@@ -10578,6 +10581,24 @@ do_verify_record() {
     bi=$((bi + 1))
   done
 
+  # Gap row 305. A check that stopped this round opens one finding, on the order's first criterion
+  # and its owned files. Every other finding may read addressed, and then nothing open would route
+  # the failed check: no further round, no ruling, no pending decision. The cap rules apply to it.
+  local fix_checks check_stop
+  fix_checks="$(jq -c '.checks // []' "$fix_file" 2>/dev/null)"
+  if [ "$(br_checks_pass "${fix_checks:-[]}" "")" != "true" ]; then
+    check_stop="$(br_first_stopper "${fix_checks:-[]}" "")"
+    new_id="f$(printf '%s' "$updated_findings" | jq '[ .[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
+    braw="$(printf '%s' "$RV_UNIT_JSON" | jq -c --arg id "$new_id" \
+      --arg evidence "fix round $rounds_used of $unit_id was stopped by its check $check_stop" '
+      {id: $id, severity: "medium", file: "", lines: "",
+       linkedTo: (((.criteriaOwned // []) + (.criteriaServed // []))[0] // ""),
+       evidence: $evidence, fixScope: (.ownedFiles // [])}')"
+    bbuilt="$(rv_finding_record "$braw" "$alignment" "round$rounds_used")"
+    updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson f "$bbuilt" '. + [$f]')"
+    echo "VERIFY-RECORD: $new_id opens for the check that stopped round $rounds_used: $check_stop" >&2
+  fi
+
   # Decision 11 again, and for the same reason: a new finding that hits a non-goal is the same
   # fact as one the review raised, and an unattended run has nobody to rule on either.
   local nongoal_hits
@@ -10844,9 +10865,11 @@ do_close() {
   # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
   # last record for this order was written at: the build record when no round ran, the last fix
   # record otherwise. Without both, the range names commits that do not hold the work, which is the
-  # same gap the record steps close with exit 61.
+  # same gap the record steps close with exit 61. A compromises log commit after the record is
+  # AIDA's own, so HEAD may sit past the record on those alone, and the range ends at the record
+  # (gap row 305).
   br_require_clean_tree "close" "$RV_RANGE_REPO" "" "" "" "" "$RV_RANGE_PATHS"
-  local last_record last_commit
+  local last_record last_commit c moved=""
   if [ "$rounds_used" -gt 0 ] 2>/dev/null; then
     last_record="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
   else
@@ -10858,7 +10881,13 @@ do_close() {
   [ -n "$last_commit" ] \
     || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
   [ "$last_commit" = "$head_now" ] \
+    || git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$last_commit" "$head_now" 2>/dev/null || moved=yes
+  for c in $(git -C "$RV_RANGE_REPO" rev-list "$last_commit..$head_now" 2>/dev/null); do
+    compromise_log_commit "$TASK_PATH" "$RV_RANGE_REPO" "$c" || moved=yes
+  done
+  [ -z "$moved" ] \
     || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
+  head_now="$last_commit"
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \

@@ -263,6 +263,8 @@ round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
 spends the round and leaves every finding open. At the round cap, the script halts the order
 itself, naming the check that stopped it. `review-brief` is never run again for this order.
+`verify-record` then opens one finding for that check, on the order's first criterion and its
+owned files. The next round fixes it, or at the cap it takes a ruling like any other finding.
 
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
@@ -403,7 +405,8 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. On success it writes `lastStep = "closed"` and the commit range the order
+the last record left it. On a light task, commits that change only `COMPROMISES.md` may follow
+that record: they are AIDA's own log, and the range ends at the record. On success it writes `lastStep = "closed"` and the commit range the order
 produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The
