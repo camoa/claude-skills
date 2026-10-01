@@ -88,6 +88,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--accept-warnings <the person's reason>]
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text>
+#   implement-actions.sh unattributed <task_folder>
 #   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
 #   implement-actions.sh retake-tests <task_folder> <unit_id>
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
@@ -980,6 +981,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--accept-warnings <the person's reason>]
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text>
+       implement-actions.sh unattributed <task_folder>
        implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
        implement-actions.sh retake-tests <task_folder> <unit_id>
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
@@ -8650,15 +8652,51 @@ IPC_OWNED
   [ -z "$claim" ] || echo "$claim"
 }
 
+# The commits a build or fix record of an order other than $2 names, in the repository $1, one per
+# line. Every folder under the task folder such a record can sit in is read: the implementation
+# folder, its retake folders, and the folders a restart wrote.
+im_taken_commits() {
+  local f r
+  find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'build-wo*.json' -o -name 'fix-wo*-*.json' \) 2>/dev/null \
+    | while IFS= read -r f; do
+        case "$(basename "$f")" in "build-$2.json"|"fix-$2-"*) continue ;; esac
+        r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
+        [ -z "$r" ] || git -C "$1" rev-list "$r" 2>/dev/null
+      done
+}
+
+# Whose commit $3 is, from the paths it changes ($1, one per line) and the frozen work order $2.
+# Prints "own" when every path is the order's, "none" when no path is, and "mixed" followed by the
+# paths the order does not own otherwise. A path the order shares counts as the order's unless a
+# build or fix record of another order holds the commit: $4, as im_taken_commits prints it. So a
+# builder's attempt on a shared file is found even when no record names it (gap row 287).
+im_commit_claim() {
+  local p own_n=0 outside=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$(im_path_claim "$p" "$2")" in
+      own) own_n=$((own_n + 1)) ;;
+      shared) printf '%s\n' "$4" | grep -Fqx -- "$3" || own_n=$((own_n + 1)) ;;
+      *) outside="$outside $p" ;;
+    esac
+  done <<ICC_PATHS
+$1
+ICC_PATHS
+  if [ "$own_n" -eq 0 ]; then echo none
+  elif [ -n "$outside" ]; then echo "mixed$outside"
+  else echo own; fi
+}
+
 # The commits after $2 up to $3 in the repository $1, oldest first, one line each: "own <sha>" when
 # the commit is order $4's, "other <sha>" when it is not. A commit is the order's when a range one
-# of its records names holds it: the build record's, or a fix round's. Or when every file it
-# changes is the order's and one of them is not shared, which is how an earlier attempt is found.
-# Another order's freeze or build changes a file this order does not own, so it reads as other.
+# of its records names holds it: the build record's, or a fix round's. Or when im_commit_claim
+# reads it as the order's, which is how an earlier attempt is found. Another order's freeze or
+# build changes a file this order does not own, so it reads as other.
 # $4 the frozen work order, $5 the folder holding the order's build and fix records.
 im_order_commits() {
-  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" f r c p paths mine alone
+  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" taken f r c paths
   id="$(printf '%s' "$unit_json" | jq -r '.id // ""')"
+  taken="$(im_taken_commits "$repo" "$id")"
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
@@ -8671,19 +8709,7 @@ IOC_RECORDS
   for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
     if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
     paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
-    mine=false; alone=false
-    [ -z "$paths" ] || mine=true
-    while IFS= read -r p; do
-      [ -n "$p" ] && [ "$mine" = "true" ] || continue
-      case "$(im_path_claim "$p" "$unit_json")" in
-        own) alone=true ;;
-        shared) ;;
-        *) mine=false ;;
-      esac
-    done <<IOC_PATHS
-$paths
-IOC_PATHS
-    if [ "$mine" = "true" ] && [ "$alone" = "true" ]; then echo "own $c"; else echo "other $c"; fi
+    if [ "$(im_commit_claim "$paths" "$unit_json" "$c" "$taken")" = "own" ]; then echo "own $c"; else echo "other $c"; fi
   done
 }
 
@@ -11683,14 +11709,15 @@ do_restart() {
   # the order's first freeze that changes its owned files is the order's, recorded or not. Without
   # a freeze, the span opens at the ledger's startedFrom. The freeze commits stay: they hold the
   # tests, which the next test author rewrites. A commit a record names that changes no owned file
-  # is the order's as well. A file the order shares is another order's too, so a change to shared
-  # files alone is the order's only when a record names it (gap row 287). A commit that is the order's and changes a file it does not own would
-  # take other work with it, so the restart stops before it changes anything and names the files.
+  # is the order's as well. im_commit_claim decides, the rule review-brief and close read too, so
+  # a change to a shared file is the order's unless another order's record holds it (gap row 287).
+  # A commit that is the order's and changes a file it does not own would take other work with it, so the restart stops before it changes anything and names the files.
   # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
   # history, and AIDA's own command hook refuses the hard reset that would drop it.
-  local revert_json='[]' mixed="" stale="" one_id unit rec freezes from gone c paths p own_n sh_n outside merge s l
+  local revert_json='[]' mixed="" stale="" one_id unit taken rec freezes from gone c paths p claim outside merge s l
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     unit="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {}')"
+    taken="$(im_taken_commits "$RV_CODEPATH" "$one_id")"
     rec="$(rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one_id" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .kind + " " + .commit')"
     freezes="$(printf '%s' "$rec" | sed -n 's/^freeze //p')"
     # A test file a superseded freeze created, that no later freeze touched, is a test a person
@@ -11732,19 +11759,19 @@ RS_ADDED
       else
         paths="$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
       fi
-      own_n=0; sh_n=0; outside=""
-      while IFS= read -r p; do
-        [ -n "$p" ] || continue
-        case "$(im_path_claim "$p" "$unit")" in
-          own) own_n=$((own_n + 1)) ;;
-          shared) sh_n=$((sh_n + 1)) ;;
-          *) outside="$outside $p" ;;
-        esac
-      done <<RS_PATHS
-$paths
-RS_PATHS
-      [ "$own_n" -gt 0 ] || printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c" || continue
-      if [ $((own_n + sh_n)) -gt 0 ] && [ -z "$outside" ] && [ -z "$merge" ]; then
+      # A commit this order's own record names is its own, so no other order's record is asked.
+      if printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c"; then
+        claim="$(im_commit_claim "$paths" "$unit" "$c" "")"
+      else
+        claim="$(im_commit_claim "$paths" "$unit" "$c" "$taken")"
+        [ "$claim" != "none" ] || continue
+      fi
+      case "$claim" in
+        own) outside="" ;;
+        none) outside=" $(printf '%s' "$paths" | tr '\n' ' ' | sed 's/ $//')" ;;
+        *) outside="${claim#mixed}" ;;
+      esac
+      if [ -z "$outside" ] && [ -z "$merge" ]; then
         revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
           'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
       else
@@ -11835,6 +11862,50 @@ RS_PATHS
   printf '%s' "$stale"
   echo "RESTART: run start on this task to continue."
   printf '%s\n' "$target"
+  exit 0
+}
+
+# unattributed: the commits since the build started that no order's records account for, one
+# line each, "unattributed: <commit> <subject>", or "unattributed: none". Read only. Review's
+# serves check prints them, because their files can match an order's ownedFiles while no order's
+# review read them (gap row 287). An order accounts for a commit its records name (rs_order_commits),
+# one inside its closed commitRange, and one a restart reverted, with its revert. A commit that
+# changes only files AIDA itself writes, the compromises log and the files `task environment up`
+# recorded, is AIDA's own.
+do_unattributed() {
+  [ "$#" -eq 1 ] || die 3 "unattributed: one task folder is required"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "unattributed")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+  fn_load_task_state "unattributed"
+  rv_load_codepath "unattributed"
+  local started known one c p ours found=""
+  started="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // ""')"
+  [ -n "$started" ] || die 3 "unattributed: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
+  known="$(
+    for one in $(printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[].id'); do
+      rs_order_commits "$TASK_PATH" "$RV_CODEPATH" "$one" "$FN_LEDGER_DOC" | jq -r '.[] | select(has("missing") | not) | .commit'
+    done
+    printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[] | select(.lastStep == "closed") | .commitRange // empty' \
+      | while IFS= read -r one; do [ -z "$one" ] || git -C "$RV_CODEPATH" rev-list "$one" 2>/dev/null; done
+    find "$TASK_PATH" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
+      -exec jq -r '(.reverted // [])[] | .commit, .revert' {} ';' 2>/dev/null)"
+  for c in $(git -C "$RV_CODEPATH" rev-list --reverse "$started..HEAD" 2>/dev/null); do
+    printf '%s\n' "$known" | grep -Fqx -- "$c" && continue
+    ours=true
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      [ "$p" = "$COMPROMISES_FILE" ] || task_env_recipe_change "$TASK_PATH" "$p" "$RV_CODEPATH" "$c" || ours=false
+    done <<UA_PATHS
+$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
+UA_PATHS
+    [ "$ours" = "false" ] || continue
+    found=yes
+    echo "unattributed: $(git -C "$RV_CODEPATH" log -1 --format='%h %s' "$c")"
+  done
+  [ -n "$found" ] || echo "unattributed: none"
   exit 0
 }
 
@@ -12535,6 +12606,7 @@ case "$ACTION" in
   finish)         do_finish         "$@" ;;
   grant-attempt)  do_grant_attempt  "$@" ;;
   restart)        do_restart        "$@" ;;
+  unattributed)   do_unattributed   "$@" ;;
   clear-halt)     do_clear_halt     "$@" ;;
   retake-tests)   do_retake_tests   "$@" ;;
   dispatch-open)  do_dispatch_open  "$@" ;;

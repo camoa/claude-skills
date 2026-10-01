@@ -528,8 +528,9 @@ A file that several orders only add to may have more than one owner. A list of e
 and a dependency manifest are examples. Each order that adds to it passes `--shared` with that
 path. An order can then enable the module it builds, and does not wait for another order. Two
 orders that own one path, and do not both mark it shared, still fail the check. A file that one
-order rewrites belongs to that order alone. Nothing checks that a shared change only adds, so the
-reviewer of each order reads that order's own changes to the file.
+order rewrites belongs to that order alone. A lock file that a tool generates is such a file.
+Nothing checks that a shared change only adds, so the reviewer of each order reads that order's
+own changes to the file.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"

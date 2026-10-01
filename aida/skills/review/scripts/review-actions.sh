@@ -885,6 +885,14 @@ $(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
 RW_CHANGED
   [ -z "$env_aside" ] || aside_line=" Set aside as files \`task environment up\` recorded: ${env_aside%, }."
   [ -z "$support_aside" ] || aside_line="$aside_line Set aside as support files an order's tests froze: ${support_aside%, }."
+  # A commit no order's records account for passes on its files alone, though no order's review
+  # read it (gap row 287). It is named and does not fail the row: it may be a person's own fix, and
+  # only the person can say whether it belongs. The task's architecture reviewer reads it in the
+  # whole diff.
+  local hand
+  hand="$(bash "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh" unattributed "$TASK_PATH" 2>/dev/null \
+    | sed -n 's/^unattributed: //p' | grep -vx none | paste -sd ';' - | sed 's/;/; /g')"
+  [ -z "$hand" ] || aside_line="$aside_line These commits lie outside every order's records, so no order's review read them, and a person says whether each belongs: $hand."
   if [ -n "$unmatched" ]; then
     [ -z "$support_changed" ] || extra=" These are frozen support files that changed after the freeze: ${support_changed%, }."
     extra="$extra$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"

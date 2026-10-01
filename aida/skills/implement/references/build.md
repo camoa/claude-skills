@@ -118,9 +118,10 @@ them belong to this stage, which commits them when it finishes. The owned-files 
 aside and counts them in its detail, so a sweep is visible there, not a failure.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
-there. A file the order shares with another order is its own too, and the rendered order tells the
-implementer to add lines there only. The review diff of that file holds this order's own commits. The dispatch record carries the list, and a hook refuses the implementer a write under the
-code path outside it while the record is open. The reason tells it to stop and report.
+there. A file the order shares with another order is its own too, and the rendered order tells
+the implementer to add entries there only. The review diff of that file holds this order's own
+commits. The dispatch record carries the list, and a hook refuses the implementer a write under
+the code path outside it while the record is open. The reason tells it to stop and report.
 
 **It may not change a test.** A test that seems wrong is a reason to stop, not to edit. A hook
 refuses the write and names which order froze the file.
