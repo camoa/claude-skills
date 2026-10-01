@@ -5,8 +5,8 @@ Autonomous means nobody is present. AIDA then takes the recommended answer where
 records that it did, and stops at any step it cannot take without you. The mode can cover the
 whole task or only the stages you name. This page covers what each mode is and how you set it.
 It covers the one rule that governs an autonomous run and what differs in each stage. It then
-covers light, an autonomous run that skips named steps and logs each one. It ends with what to
-read when you come back to a run that happened without you.
+covers light, an autonomous run that skips named steps, logs each one, and stops at review for
+you. It ends with what to read when you come back to a run that happened without you.
 
 ## The two modes
 
@@ -201,7 +201,12 @@ Set it with `/aida:task set-run-mode <task-id> light`. It takes no `--stage`. In
 autonomous tasks are unchanged by it.
 
 A light task has no automated tests. Scope writes that answer itself, so each code order takes
-the proof a person confirms at review. What light skips:
+the proof a person confirms at review. So the run ends at review, and a person closes the task.
+With nobody present, review records each of those criteria as unanswered, and completion halts.
+The task then waits for you. Answer the rows when you run review again, or close the task with
+a reason. `set-run-mode` says this in its `sign-off:` line. The path script does not stand in for
+your answer. Its lines are written by the build it judges, and no record says which criteria
+it proves. What light skips:
 
 - **Research** searches this project and the catalog, and runs no outward search on the web.
 - **Design** runs no critique. The first work order, `wo1`, is the walking skeleton: a tiny
@@ -228,8 +233,9 @@ recorded. One interface lookup names every reuse candidate.
 memory. It goes to `COMPROMISES.md` at the top of the task's worktree, one row per skip, and is
 committed there, so it ships with the code. A row names the task, the stage, what was skipped and
 what a normal run would do. Each marked fake gets its own row when its order closes. The same
-step run twice logs once. A light run is done when the path script passes, the log is current,
-and nothing on the non-goals was built. A later normal task takes the log as its scope.
+step run twice logs once. A light run is ready for you when the path script passes, the log is
+current, and nothing on the non-goals was built. It is done when a person has answered the
+criteria and closed the task. A later normal task takes the log as its scope.
 
 AIDA keeps no budget clock. A budget set with `set-budget` still halts the build at its ceiling,
 because you set it.

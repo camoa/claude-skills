@@ -1008,6 +1008,10 @@ do_set_run_mode() {
     else
       echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
     fi
+    # With no automated tests each code order's proof is a person's answer, so the run cannot close
+    # the task (gap row 290). A contract that already answered yes keeps its tests.
+    [ "$(automated_tests "$task_dir")" = "yes" ] \
+      || echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task."
   fi
   task_summary "$task_json"
 }

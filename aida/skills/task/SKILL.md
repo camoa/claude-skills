@@ -379,7 +379,7 @@ absence already means that. Show the whole output.
 Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
 whether end to end is on. Light keeps one script that walks the demo path, and review
 fails the task without it. When end to end is off, say that a person sets it up with
-`/aida:surfaces e2e` before the run.
+`/aida:surfaces e2e` before the run. The `sign-off:` line says that a person closes the task.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 
