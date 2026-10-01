@@ -96,6 +96,11 @@ generator. Name each file it made or changed by its path in the diff.
 adds one, and a departure sends the order back to design. Leave `recipes` out when the brief's
 list is empty.
 
+The brief's `automatedTests` says whether the task has automated tests. When it is false and
+`frozenTests` is empty, the recipe's rules on frozen tests do not apply. Design may then direct
+an edit to an existing test, such as an expected list or a file count. That edit is not a
+departure. `review-record` records a departure that names only test files as not-applicable.
+
 **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
 only one the contract gave you. A finding naming neither, or naming an id the contract does not
 carry, never reaches a fixer. Report what you saw regardless; do not invent an id to make it count.

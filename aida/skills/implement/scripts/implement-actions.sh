@@ -9078,11 +9078,15 @@ rv_recipe_refs() {
 # how files were produced has no one line (gap row 280). Dies 52 on a malformed
 # answer, and 108 when an item of rv_recipe_refs has no answer, or an answer names a ref twice or a
 # ref not on that list. Called as a plain statement, never with `$(...)`, for the reason
-# rv_read_findings_array states.
+# rv_read_findings_array states. $4 the order's test globs, one per line, given only when the task
+# has no automated tests and the order froze no test file. Then the recipe's rules on frozen tests
+# do not apply, so a departure that names only test files is recorded not-applicable (gap row 300).
+# A glob with no "/" matches a file name anywhere in the tree, as pytest's patterns do.
 RV_RECIPE_ANSWERS="[]"
 RR_REDISPATCH="Run review-brief again for this order, then dispatch the reviewer again."
 rv_read_recipe_answers() {
-  local file="$1" who="$2" diff="$3" refs arr count i one ref verdict evidence seen="" diff_paths p in_diff
+  local file="$1" who="$2" diff="$3" test_globs="${4:-}" refs arr count i one ref verdict evidence seen="" diff_paths p in_diff
+  local named_tests only_tests is_test g
   refs="$(rv_recipe_refs)"
   diff_paths=""
   [ ! -f "$diff" ] || diff_paths="$(sed -n 's#^+++ b/##p; s#^--- a/##p' "$diff" | LC_ALL=C sort -u)"
@@ -9111,10 +9115,21 @@ rv_read_recipe_answers() {
     esac
     if [ "$verdict" = "departed" ]; then
       in_diff=no
+      only_tests=yes
+      named_tests=""
       while IFS= read -r p; do
         [ -n "$p" ] || continue
         case " $evidence " in
-          *[!A-Za-z0-9_./-]"$p"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$p".[!A-Za-z0-9_./-]*) in_diff=yes ;;
+          *[!A-Za-z0-9_./-]"$p"[!A-Za-z0-9_./-]*|*[!A-Za-z0-9_./-]"$p".[!A-Za-z0-9_./-]*)
+            in_diff=yes
+            is_test="$(printf '%s\n' "$test_globs" | while IFS= read -r g; do
+                case "$g" in
+                  "") continue ;;
+                  */*) tf_path_matches_catalog_glob "$p" "$g" ;;
+                  *) tf_path_matches_glob "${p##*/}" "$g" ;;
+                esac && { printf 'yes'; break; }
+              done)"
+            if [ "$is_test" = "yes" ]; then named_tests="$named_tests, $p"; else only_tests=no; fi ;;
         esac
       done <<RR_DIFF
 $diff_paths
@@ -9122,6 +9137,11 @@ RR_DIFF
       [ "$in_diff" = "yes" ] \
         || die 52 "$who: the recipes answer for $ref in $file is departed, and its evidence names no file in $diff. Name the file and the line where the build departs, or the files that a departure in how files were produced made or changed. The recipe's own line is not enough."
       halt_refuse_separator "$who" "the recipes answer for $ref" "$evidence"
+      if [ "$only_tests" = "yes" ]; then
+        arr="$(printf '%s' "$arr" | jq -c --argjson i "$i" \
+          --arg why "$who: the task has no automated tests and this order froze no test file, so the recipe's rules on frozen tests do not apply to ${named_tests#, }. The reviewer answered departed: $evidence" \
+          '.[$i].verdict = "not-applicable" | .[$i].evidence = $why')"
+      fi
     fi
     printf '%s\n' "$refs" | grep -Fxq -- "$ref" \
       || die 108 "$who: $file answers for $ref, which is not a recipe this order carries. The review brief's recipes list is the whole list. $RR_REDISPATCH"
@@ -9272,6 +9292,7 @@ RB_COMMITS
     --arg diffPath "$diff_path" \
     --argjson deliverables "$deliverables_json" \
     --argjson frozenTests "$tests_json" \
+    --argjson automatedTests "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment.automatedTests')" \
     --arg reportPath "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')" \
     --slurpfile build "$IMPL_DIR/build-$unit_id.json" \
     --arg interfaceDeclared "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')" \
@@ -9291,6 +9312,7 @@ RB_COMMITS
       deliverables: $deliverables,
       startedAt: $startedAt,
       commit: $commit,
+      automatedTests: $automatedTests,
       frozenTests: $frozenTests,
       locksIn: $locksIn,
       reportPath: $reportPath,
@@ -9433,7 +9455,11 @@ do_review_record() {
   raw_findings="$RV_FINDINGS_ARRAY"
   rv_read_information_array "$findings_path" "review-record"
   information_json="$RV_INFORMATION_ARRAY"
-  rv_read_recipe_answers "$findings_path" "review-record" "$IMPL_DIR/diff-$unit_id.patch"
+  local rr_test_globs=""
+  [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.alignment.automatedTests == false')" != "true" ] \
+    || [ "$(rv_frozen_test_paths_json "$unit_id")" != "[]" ] \
+    || rr_test_globs="$(jq -r '(.testGlobs // [])[]' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
+  rv_read_recipe_answers "$findings_path" "review-record" "$IMPL_DIR/diff-$unit_id.patch" "$rr_test_globs"
 
   # Exit 107, gap row 224. A departure the builder declared goes back to design, whatever the
   # review holds: the design, or a recipe it relies on, is what is wrong, so no fixer can repair
