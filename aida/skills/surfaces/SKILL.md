@@ -57,6 +57,12 @@ character is refused at 3. With no surface file, `register` writes one and turns
 the project record, and commits both. Review runs the command in the task's tree, and nobody walks
 it. Exit 3 also means the file holds an e2e page surface already, because a project uses one form.
 
+The command runs with the session's PATH. So it must reach this tree's own build, never an
+installed copy, for example through a path inside the tree. Register it before the build starts:
+on the trunk before tasks are cut, or in the first task's tree. A register during review moves the
+code under review, and review refuses that. A task cut before the trunk had the file cannot run it.
+Review reads a command unknown when the range changed it, or deleted its files, or changed their mode.
+
 ## Resolve the recipes
 
 Dispatch `catalog-identifier`, naming the role, once per point. The points are `e2e-setup` for

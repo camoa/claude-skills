@@ -785,7 +785,8 @@ rw_run_done() {
 # placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
 # an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
 # exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
-# test-execution row, whose preconditions record may hold its tool as absent at the end of the task.
+# test-execution row, whose preconditions record may hold its tool as absent at the end of the task,
+# $3 the install advice for exit 127 when no recipe supplies one.
 rw_run_fault() {
   local label="$1" fw="${2:-}" said known install named rp
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
@@ -806,6 +807,7 @@ rw_run_fault() {
       # (gap row 271). The shell's own line names the program it could not find.
       said="$(printf '%s\n' "$RW_RUN_OUTPUT" | grep -m1 '[^[:space:]]')"
       install="The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says."
+      [ -z "${3:-}" ] || install="$3"
       # A record with no requires_tooling result for the framework, neither a condition nor an
       # end-of-task tool, is one the tool check never ran on, as before 6.0.11 (gap row 284). It is
       # named, not repaired: running require here would run each tool, and a tool may reach a site.
@@ -827,7 +829,7 @@ rw_run_fault() {
       RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. ${known:-$install}" ;;
     126)
       RW_RUN_VERDICT="unknown"
-      RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;
+      RW_RUN_DETAIL="the $label command was found and could not run (exit 126, permission denied), so nothing was decided. A script without the execute bit gives this." ;;
   esac
 }
 
@@ -2220,6 +2222,8 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "the project record says $gate is $enabled, so review ran nothing for it. Review runs nothing that is off." >>"$checks_out"
     return 0
   fi
+  # The changed list is the one checks read, derived again for the range the record holds.
+  [ -n "$RW_RANGE" ] || { RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange // ""')"; rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"; }
   if [ "$(printf '%s' "$mine" | jq '[ .[] | select(has("command")) ] | length')" -gt 0 ]; then
     rw_command_surfaces "$check_id" "$mine" "$off" "$checks_out" "$surfaces_out"
     return 0
@@ -2253,9 +2257,7 @@ rw_surface_kind() {
 
   # Narrowing: the person who registered a surface declared the paths that render it, and review
   # runs the surface when the diff touched one of them, when it is critical, or when it declares
-  # none. No agent guesses. The rest get their own row, not run, and the detail says why. The
-  # changed list is the one checks read, derived again for the range the record holds.
-  [ -n "$RW_RANGE" ] || { RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange // ""')"; rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"; }
+  # none. No agent guesses. The rest get their own row, not run, and the detail says why.
   run='[]'; unaffected='[]'
   i=0
   while [ "$i" -lt "$count" ]; do
@@ -2383,24 +2385,51 @@ RW_SURFACE_KIND
 # The e2e surfaces that carry their own command, for a project with no page to drive (gap row 289).
 # Each command runs in the task's tree through the runner every recipe row uses, never a shell, and
 # only exit 0 reads met. No recipe row and no walk apply, since the exit status is the whole answer.
+# The command and its scripts live in the tree under review, so the build could weaken what judges
+# it. A command that differs from the same id at the range base, carries a shell character, or names
+# a path whose files the range deleted or made non-executable reads unknown and does not run.
 # Register refuses a page surface beside a command one. A hand-edited file that holds both reads
 # unknown for the page, since nothing here runs the recipe's suite. $1 the check id, $2 the enabled
 # surfaces of the kind, $3 the disabled ones, $4 the check rows file, $5 the surface rows file.
 rw_command_surfaces() {
   local check_id="$1" mine="$2" off="$3" checks_out="$4" surfaces_out="$5"
-  local count i one sid verdict ran worst="" detail="" rc="" outfile=""
+  local count i one sid verdict ran worst="" detail="" rc="" outfile="" base head rel base_doc cmd was tok scopes touched
+  base="${RW_RANGE%%..*}"; head="${RW_RANGE##*..}"
+  rel="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')"
+  base_doc="$(git -C "$RV_CODEPATH" show "$base:$rel" 2>/dev/null)"
   count="$(printf '%s' "$mine" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
     one="$(printf '%s' "$mine" | jq -c --argjson i "$i" '.[$i]')"
     sid="$(printf '%s' "$one" | jq -r '.id')"
+    cmd="$(printf '%s' "$one" | jq -c '.command // empty')"
     i=$((i + 1))
-    ran=false
-    if [ "$(printf '%s' "$one" | jq 'has("command")')" = "false" ]; then
+    ran=false; verdict=""
+    # A surface absent at the base was registered in this range, and there is nothing to compare.
+    was="$(printf '%s' "$base_doc" | jq -c --arg id "$sid" '[ (.surfaces // [])[] | select(.id == $id) ][0].command // empty' 2>/dev/null)"
+    scopes=""
+    for tok in $(printf '%s' "$cmd" | jq -r '.[]' 2>/dev/null); do
+      case "$tok" in -*|/*|*..*) continue ;; esac
+      [ -e "$RV_CODEPATH/$tok" ] || git -C "$RV_CODEPATH" cat-file -e "$base:$tok" 2>/dev/null || continue
+      scopes="$scopes $tok"
+      [ -d "$RV_CODEPATH/$tok" ] || [ "$(dirname "$tok")" = "." ] || scopes="$scopes $(dirname "$tok")"
+    done
+    touched=""
+    # A command substitution splits in bash and zsh alike; each scope is one argv token, so one word.
+    # shellcheck disable=SC2046
+    [ -z "$scopes" ] || touched="$(git -C "$RV_CODEPATH" diff --raw --no-renames "$base" "$head" -- $(printf '%s' "$scopes") 2>/dev/null \
+      | awk -F'\t' '{ split($1, m, " "); if (m[5] == "D" || (m[5] == "M" && substr(m[1], 2) != m[2])) print $2 }' | sort -u | tr '\n' ' ')"
+    if [ -z "$cmd" ]; then
       verdict="unknown"; detail="$detail The $sid surface is a page beside command surfaces, so it did not run."
+    elif [ -n "$was" ] && [ "$was" != "$cmd" ]; then
+      verdict="unknown"; detail="$detail The $sid command is $cmd here and was $was at $base, so this range changed what judges it, and it did not run."
+    elif ! refuse_if_unsafe review-actions "the surface file" "$(printf '%s' "$cmd" | jq -r 'join(" ")')" 2>/dev/null; then
+      verdict="unknown"; detail="$detail The $sid command $cmd carries a shell character, which register refuses, so it did not run."
+    elif [ -n "$touched" ]; then
+      verdict="unknown"; detail="$detail The range deleted files under the $sid command's paths, or changed their mode, so it did not run: ${touched% }."
     else
-      rw_run_row "$(printf '%s' "$one" | jq -c '.command')" '[]' "$RW_VALUES" ""
-      rw_run_fault "$sid"
+      rw_run_row "$cmd" '[]' "$RW_VALUES" ""
+      rw_run_fault "$sid" "" "A command surface has no recipe to install it from. Name a program inside this tree, or put it on the session's PATH."
       verdict="$RW_RUN_VERDICT"
       if [ -n "$verdict" ]; then detail="$detail $RW_RUN_DETAIL"
       else
@@ -2410,6 +2439,8 @@ rw_command_surfaces() {
         # With one command, the record keeps its exit code and output, as for any other row.
         [ "$count" -ne 1 ] || { rc="$RW_RUN_RC"; outfile="$(mktemp)" && cp "$RW_RUN_OUTFILE" "$outfile"; }
       fi
+      # Nothing records which program a name reached, so a failure says where it looked.
+      [ "$verdict" = "met" ] || detail="$detail It ran with the session's PATH from $RV_CODEPATH, so a program it names may be an installed copy rather than this tree's build."
       rw_run_done
     fi
     jq -nc --arg id "$sid" --arg v "$verdict" --argjson ran "$ran" \
@@ -2595,7 +2626,9 @@ do_surfaces() {
     [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
       || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
   fi
-  if [ "$path_scripts" = "0" ]; then
+  if [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
+    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path. Branch $RW_SURFACE_BRANCH holds the surface file, and this task's tree does not, so there is no script to run here. Register the demo path before the build: on the trunk before tasks are cut, or in the first task's tree." >>"$checks_file"
+  elif [ "$path_scripts" = "0" ]; then
     rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface: a page, or a command that exits 0 when the path works." >>"$checks_file"
   else
     rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
