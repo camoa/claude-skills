@@ -437,8 +437,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and an unattended run has none to offer (decision 12).
 #  56  `verify-record` reached the round cap on an unattended run with findings still open. The
 #      order is halted with them named, and the verification itself is recorded first, so a refusal
-#      never throws away the verdicts it already read. On a light task the findings go pending
-#      instead, and the person rules them at the task review (gap row 296).
+#      never throws away the verdicts it already read. On a light task a low finding goes pending
+#      instead, and the person rules it at the task review (gap row 296).
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
 #      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
 #      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
@@ -10221,8 +10221,8 @@ RV_SCOPE
 }
 
 # The compromises log row for the fix rounds a light task skips. The halt at the one-round cap in
-# fix-record calls it, and close calls it for the findings verify-record left pending. $1 the
-# order, $2 what was still open.
+# fix-record calls it, and close calls it for the findings the one round left. $1 the order, $2
+# what was still open.
 light_log_fix_rounds() {
   log_compromise "$TASK_PATH" implement "fix rounds after the first on $1, with $2 still open" \
     "run a second fix round, then take a person's ruling on each finding still open"
@@ -10528,14 +10528,14 @@ do_verify_record() {
   updated_findings="$RV_RULED_FINDINGS"
   # Gap row 279. Unattended at the cap, a finding with an empty fix scope waits for the task
   # review as fix-brief marks it, so only a finding with a fix scope still halts the order. On a
-  # light task every open finding waits there. Light spends one round and leaves the rest to the
-  # person at review, so a halt here calls a person mid-build. close logs the skipped rounds (gap
-  # row 296).
+  # light task a low finding waits there too, so a low leftover does not call a person mid-build.
+  # A medium or high one still halts: later orders would build on a real defect. close logs the
+  # skipped rounds (gap row 296).
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
     local light=false
     ! task_is_light "$TASK_PATH" || light=true
     updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson light "$light" '
-      map(if .actionable == true and .status == "open" and ($light or ((.fixScope // []) | length == 0)) then .status = "pending" else . end)')"
+      map(if .actionable == true and .status == "open" and (($light and .severity == "low") or ((.fixScope // []) | length == 0)) then .status = "pending" else . end)')"
   fi
   local open_now unruled
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
@@ -10903,12 +10903,17 @@ do_close() {
     done <<CLOSE_FAKES
 $(git -C "$RV_RANGE_REPO" diff -U0 --no-renames "$started_at" "$head_now" 2>/dev/null)
 CLOSE_FAKES
-    # The rounds skipped after the one round, for the same reason. A pending finding with a fix
-    # scope, which the verifier did not place outside its file, is one verify-record left at the
-    # light cap (gap row 296).
+  fi
+  # The rounds skipped after a light order's one round, logged here for the same reason, and read
+  # from the order's mark, because a person may have set the task interactive to rule. A finding
+  # with a fix scope left pending or ruled is one the light cap left, unless a fixer reported it
+  # out of its scope or the verifier placed it outside its file (gap row 296). A light round that
+  # failed its own checks is logged by fix-record, not here.
+  if [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '.lightRounds // false')" = "true" ]; then
     local skipped
     skipped="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ .findings[]
-      | select(.status == "pending" and ((.fixScope // []) | length > 0) and .defectInFile != "no") | .id ] | join(", ")')"
+      | select((.status == "pending" or .status == "ruled") and ((.fixScope // []) | length > 0)
+               and .defectInFile != "no" and (has("scopeInsufficientInRound") | not)) | .id ] | join(", ")')"
     [ -z "$skipped" ] || light_log_fix_rounds "$unit_id" "$skipped"
   fi
 

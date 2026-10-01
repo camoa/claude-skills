@@ -213,10 +213,11 @@ it proves. What light skips:
   version that links the input, the logic and the output along the demo path. Every other order
   comes after it, and the design check refuses one that does not.
 - **Implementation** writes no tests for each order and runs no checker over test rows. It gives
-  each order one fix round. A finding still open after that round waits for the person at
-  review, who rules it there. An order halts if its fix round fails its own checks. The order
-  keeps the one round if you set the task interactive. The implementer may build a fake off the
-  demo path, marked in the code with `AIDA-FAKE:`.
+  each order one fix round. A low finding still open after that round waits for the person at
+  review, who rules it there. An order with a medium or high finding still open after that round
+  halts, and so does an order whose fix round fails its own checks. After that round the order
+  keeps its one-round cap even if you set the task interactive, so you rule at once. The
+  implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
 
 What light keeps: the code review of each order, and the project's own checks, including its

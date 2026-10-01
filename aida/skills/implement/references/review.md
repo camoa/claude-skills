@@ -332,9 +332,10 @@ work stops until you act. Test-wrong: the problem is real and the fix needs a fr
 changed, so the tests are retaken. A model may not make these calls with nobody watching." Then
 say each finding in plain words, with what it cites. At the cap, unattended, `verify-record`
 marks each open finding with an empty fix scope pending, as `fix-brief` does. It halts the order
-only for an open finding that has a fix scope. On a light task it marks every open finding
-pending, and the person rules each one at the task review. A light order keeps its one round when
-a person later sets the task interactive, so the ruling is taken at once.
+only for an open finding that has a fix scope. On a light task it also marks each open low
+finding pending, and the person rules it at the task review. A medium or high finding halts the
+order. A light order keeps its one round when a person later sets the task interactive, so the
+ruling is taken at once.
 
 Run the same call again, with one `--ruling` flag added per finding ruled:
 ```
