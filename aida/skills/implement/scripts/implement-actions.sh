@@ -5158,13 +5158,23 @@ TF_RECORDED
     # A rejected absence row has no test to repair, so the refusal names its two routes. An order
     # with no test author drops the --absence instead: its own check, the gate lines, the
     # observation, the record's done-when row or the person's checklist at review, then covers it.
-    local tf_absence_route=""
+    # The test author is named only on a kind whose roles hold one.
+    local tf_absence_route="" tf_has_author=false tf_person_next tf_model_next
+    br_order_needs "$UNIT_JSON"
+    case " $BR_ORDER_ROLES " in *" test-author "*) tf_has_author=true ;; esac
     if printf '%s' "$rows_meta_json" | jq -e 'any(.[]; .verdict == "rejected" and (.criterion | test(":absence:[0-9]+$")))' >/dev/null; then
-      if [ "$BR_ORDER_SLOT" = "order-tests" ]; then
+      if [ "$tf_has_author" = true ]; then
         tf_absence_route=" A rejected absence row says a test could prove that clause. The test author writes a test for it and returns no absence for it, or design splits the clause."
       else
-        tf_absence_route=" A rejected absence row says that clause can be proved. This order has no test author: freeze again without that --absence, so the order's own proof covers the clause, or design splits the clause."
+        tf_absence_route=" A rejected absence row says that clause can be proved. Freeze again without that --absence, so the order's own proof covers the clause, or design splits the clause."
       fi
+    fi
+    if [ "$tf_has_author" = true ]; then
+      tf_person_next=" A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker."
+      tf_model_next=" Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks."
+    else
+      tf_person_next=" Put the rows checkAgain names to the checker."
+      tf_model_next="$tf_person_next"
     fi
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
@@ -5214,11 +5224,11 @@ TF_RECORDED
         '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
-      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker.$tf_absence_route$TF_CARRY_NEXT
+      die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows.$tf_person_next$tf_absence_route$TF_CARRY_NEXT
 checkAgain: $tf_check_again"
     fi
     # No ledger record carries this rejection, so the refusal names the tests to run again.
-    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows. Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks.$tf_absence_route$TF_CARRY_NEXT
+    die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows.$tf_model_next$tf_absence_route$TF_CARRY_NEXT
 checkAgain: $tf_check_again
 redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
