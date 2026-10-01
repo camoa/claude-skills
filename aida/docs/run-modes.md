@@ -128,8 +128,8 @@ order is marked as written without framework input.
 
 A decision to replace existing code, rather than reuse or extend it, is downgraded to extend,
 with the reason written into the work order. Every reuse decision is then checked by a
-read-only confirmer that reads only the written reasoning and the files it cites, never the
-conversation. Its verdict is appended to the order.
+confirmer that reads only the written reasoning and the files it cites, never the
+conversation. Its verdict is appended to the order, and the close refuses until each one agrees.
 
 A criterion nobody wrote, or one that cannot be built as stated, is recorded in the order's
 own reasoning and the run continues. Interactively that goes to you, and to scope's update

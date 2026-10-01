@@ -201,7 +201,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      outside the project folder or under a path the project ignores. Or a dependency cycle, an
 #      order that reaches no owner, overlapping owned files, or an id naming nothing real
 #      (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
-#      files, before writing anything.
+#      files, before writing anything. An unattended `close` also refuses a disposition made
+#      unattended whose verdict file is missing or holds another value (gap row 293).
 #   6  `start` was asked to begin design on a task research has not closed: no
 #      records/research-check.json, or one whose exitCode is not 0. Research is required (the
 #      owner's rule: no skip), and the way through is the research skill.
@@ -1530,7 +1531,8 @@ do_verify() {
 # merge: folds one order into another (SKILL.md, "Size a work order"). Every list field is the
 # ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
 # appended under a line naming the folded order. A disposition `dispose` wrote on it is not
-# lost, and a reader can tell which order stated what. That line is a paragraph of its own, so
+# lost, and a reader can tell which order stated what. Its `dispositions` entries land after the
+# survivor's, where no verdict file names them, so an unattended close asks for a confirmer again. That line is a paragraph of its own, so
 # a folded paragraph marked struck still starts with REASONING_JQ's prefix. The summary says which scalars were carried
 # and which were dropped. A live run that saw only list counts read the append as a drop and
 # rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
@@ -1586,12 +1588,13 @@ do_merge() {
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
     | union("ownedFiles") | union("sharedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
+    | union("dispositions")
     | .dependsOn = [ (.dependsOn // [])[] | select(. != $from and . != $i.id) ]
     | append("interface") | append("reasoning")
   ' "$into_file")"
 
   local k before after
-  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses verify findings; do
+  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses verify findings dispositions; do
     before="$(jq -r --arg k "$k" '(.[$k] // []) | length' "$into_file")"
     after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
     echo "$k: $before -> $after"
@@ -2077,6 +2080,32 @@ do_close() {
       || die4 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason, removedAt and an optional mergedInto"
   fi
 
+  # Unattended, each disposition nobody watched needs the confirmer's verdict file, and the value
+  # in it must be the one that stands (gap row 293). A value that differs is a disagreement.
+  if [ "$RUN_MODE" = "autonomous" ]; then
+    local unconfirmed="" wo_json wo_id k disp mode cand verdict_file got
+    while IFS= read -r wo_json; do
+      [ -n "$wo_json" ] || continue
+      wo_id="$(jq -r '.id' "$wo_json")"
+      k=0
+      while IFS="$(printf '\t')" read -r disp mode cand; do
+        k=$((k + 1))
+        [ "$mode" = "autonomous" ] || continue
+        verdict_file="$TASK_PATH/records/disposition-$wo_id-$k.json"
+        got="$(jq -r '.value // empty' "$verdict_file" 2>/dev/null)"
+        if [ -z "$got" ]; then
+          unconfirmed="$unconfirmed
+$wo_id, $cand, $disp: no verdict in $verdict_file"
+        elif [ "$got" != "$disp" ]; then
+          unconfirmed="$unconfirmed
+$wo_id, $cand, $disp: the confirmer answered $got in $verdict_file"
+        fi
+      done < <(jq -r '(.dispositions // [])[] | [.disposition, .runMode, .candidate] | @tsv' "$wo_json")
+    done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
+    [ -z "$unconfirmed" ] \
+      || die5 "close: a disposition recorded unattended has no confirmer verdict that agrees. Dispatch disposition-confirmer once per line, with that candidate and file. On a disagreement, dispose the candidate again first:$unconfirmed"
+  fi
+
   local unaccounted
   unaccounted="$(unaccounted_findings)"
   [ -z "$unaccounted" ] \
@@ -2212,6 +2241,11 @@ $unaccounted"
 # paragraph per call, so every candidate's verdict survives. Neither flag, and the order's
 # `reuses` is left as it was.
 #
+# Each call also writes the outcome to the order's `dispositions`, one entry per candidate, and
+# removes that entry's old verdict file. Unattended, it prints `confirmFile:`, the path the
+# confirmer writes its verdict to. An unattended `close` counts the entries against those files,
+# because one confirmer once judged the last of six paragraphs and the other five stood (gap row 293).
+#
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
 # because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
 # stands and the thin reasoning is recorded for a person to see (version 5's rule). A decline
@@ -2304,10 +2338,21 @@ do_dispose() {
     doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
       '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"
   fi
+  doc="$(printf '%s' "$doc" | jq --arg c "$candidate" --arg o "$outcome" --arg m "$RUN_MODE" '
+    {candidate: $c, disposition: $o, runMode: $m} as $e
+    | .dispositions = (.dispositions // [])
+    | if any(.dispositions[]; .candidate == $c) then .dispositions |= map(if .candidate == $c then $e else . end)
+      else .dispositions += [$e] end')"
+  local n confirm_file
+  n="$(printf '%s' "$doc" | jq --arg c "$candidate" '[.dispositions[].candidate] | index($c) + 1')"
+  confirm_file="$TASK_PATH/records/disposition-$id-$n.json"
   write_atomic "$file" "$doc"
+  # A verdict on the entry this call replaced no longer confirms anything.
+  rm -f -- "$confirm_file"
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
+  [ "$RUN_MODE" != "autonomous" ] || echo "confirmFile: $confirm_file"
   echo "reuses: $(printf '%s' "$doc" | jq -r '(.reuses // []) | length')"
   wo_summary "$doc"
   render_wo "$id"

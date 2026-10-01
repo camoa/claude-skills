@@ -316,14 +316,19 @@ dimension is refused the same way; ask what it compared, then call again.
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
 **Autonomous:** after recording a disposition, dispatch `disposition-confirmer` to check it, with
-the message this file names. Its lines are the role, the run mode, and the order file's path,
-the one `dispose` printed on its `DISPOSED:` line. A dispatch that names no role runs as the
-general agent with write tools and this session's model. This one has to be read-only to mean
-anything.
+the message this file names. Dispatch one confirmer per disposition, never one for several. Its
+lines are the role, the run mode, the order file's path from the `DISPOSED:` line, the
+`--candidate` text, and the path on the `confirmFile:` line. A dispatch that names no role runs as
+the general agent with write tools and this session's model. This one must write nothing but its
+verdict file to mean anything.
 
 Never this conversation's own account: being denied that is the entire reason the role exists,
 and handing it over turns the check into the decision reading itself. Record what it found with
 `update --append-reasoning`, which adds a paragraph after the text `dispose` wrote.
+
+An unattended `close` refuses with exit 5 while a disposition made unattended has no verdict file,
+or one whose value differs from the value that stands. It prints one line per such disposition.
+On a disagreement, dispose that candidate again, then dispatch a fresh confirmer.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
