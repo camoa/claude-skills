@@ -855,22 +855,31 @@ if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
   echo
 fi
 
-# A surface kind marked on whose surface file is missing was set up by half, and review would
-# offer its setup as for a kind that is off. Named here so it is seen before review (gap row 275).
-# No exit code moves: a stage that uses no surfaces is not blocked by it.
+# A surface kind marked on whose surface file is missing was set up by half. Named here so it is
+# seen before review (gap row 275). A branch that holds the file needs a merge, and a new setup
+# would collide with it. No exit code moves: a stage that uses no surfaces is not blocked by it.
 SURFACE_KINDS_ON=""
+SURFACES_WITHOUT_FILE_JSON='[]'
 [ "$CODEPATH_EXISTS_JSON" = "true" ] && SURFACE_KINDS_ON="$(jq -r '
   [ (if .surfaces.e2e.enabled == true then "e2e" else empty end),
     (if .surfaces.visualRegression.enabled == true then "visual-regression" else empty end) ] | .[]' \
   "$PROJECT_FILE" 2>/dev/null)"
 if [ -n "$SURFACE_KINDS_ON" ]; then
-  SURFACE_FILE="$(sf_surface_path "$(jq -r '.surfaces.registryPath // ""' "$PROJECT_FILE")" "$CODEPATH_VALUE")"
+  SURFACE_REGISTRY="$(jq -r '.surfaces.registryPath // ""' "$PROJECT_FILE")"
+  SURFACE_FILE="$(sf_surface_path "$SURFACE_REGISTRY" "$CODEPATH_VALUE")"
   sf_load_surfaces "$SURFACE_FILE"
   case "$SF_STATE" in
     missing|absent)
+      SURFACE_BRANCH="$(sf_branch_with "$CODEPATH_VALUE" "$SURFACE_REGISTRY")"
       while IFS= read -r kind; do
         echo "Surfaces: $kind is on, and the surface file is $SF_STATE${SURFACE_FILE:+ at $SURFACE_FILE}."
-        echo "  Review offers its setup as for a kind that is off. Repair: /aida:surfaces $kind writes the file."
+        if [ -n "$SURFACE_BRANCH" ]; then
+          echo "  Branch $SURFACE_BRANCH holds it. Repair: merge that branch. A new setup would collide with it at merge."
+        else
+          echo "  Review offers its setup as for a kind that is off. Repair: /aida:surfaces $kind writes the file."
+        fi
+        SURFACES_WITHOUT_FILE_JSON="$(jq -c --arg k "$kind" --arg f "$SURFACE_FILE" --arg s "$SF_STATE" --arg b "$SURFACE_BRANCH" \
+          '. + [ {kind: $k, file: $f, state: $s, branch: $b} ]' <<<"$SURFACES_WITHOUT_FILE_JSON")"
       done <<SURFACE_KINDS
 $SURFACE_KINDS_ON
 SURFACE_KINDS
@@ -922,6 +931,7 @@ jq -n \
   --arg readyReason "$READY_REASON" \
   --argjson autonomousNoResponse "$AUTONOMOUS_NO_RESPONSE_JSON" \
   --argjson exitCode "$EXIT_CODE" \
+  --argjson surfacesOnWithoutFile "$SURFACES_WITHOUT_FILE_JSON" \
   '{
     timestamp: $timestamp,
     exitCode: $exitCode,
@@ -933,6 +943,7 @@ jq -n \
     retiredFields: $retiredFields,
     crossFieldIssues: $crossFieldIssues,
     ignoredFiles: $ignoredFiles,
+    surfacesOnWithoutFile: $surfacesOnWithoutFile,
     registry: {
       fileState: $registryFileState,
       missingFields: $registryMissingFields,

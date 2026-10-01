@@ -2099,6 +2099,10 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "visual parity has no recipe row, no project field and no harness in version 6, so nothing ran and nothing is claimed. It is recorded as unavailable." >>"$checks_out"
     return 0
   fi
+  if [ "$enabled" = "on with no surface file" ]; then
+    rw_check_row "$check_id" "undeclared" "the project record says $gate is on, and the surface file is $SF_STATE in this tree and on every branch, so it reads as off. Review ran nothing for it and offers its setup." >>"$checks_out"
+    return 0
+  fi
   if [ "$enabled" != "on" ]; then
     rw_check_row "$check_id" "undeclared" "the project record says $gate is $enabled, so review ran nothing for it. Review runs nothing that is off." >>"$checks_out"
     return 0
@@ -2118,7 +2122,13 @@ rw_surface_kind() {
     return 0
   fi
   if [ "$SF_STATE" != "ok" ]; then
-    rw_check_row "$check_id" "unknown" "the recipe commands a $row_id run and the surface file is $SF_STATE, so nobody could say which surfaces to answer about." >>"$checks_out"
+    detail="the recipe commands a $row_id run and the surface file is $SF_STATE, so nobody could say which surfaces to answer about."
+    if [ -n "$RW_SURFACE_BRANCH" ]; then
+      detail="$detail Branch $RW_SURFACE_BRANCH holds the surface file. Merge it into this task's branch, then run review again. A new setup here would collide with it at merge."
+    elif [ "$SF_STATE" != "unreadable" ]; then
+      detail="$detail Nobody was present to take the setup offer. /aida:surfaces $gate writes the file."
+    fi
+    rw_check_row "$check_id" "unknown" "$detail" >>"$checks_out"
     return 0
   fi
   if [ "$count" -eq 0 ]; then
@@ -2357,13 +2367,19 @@ do_surfaces() {
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
-  # A kind marked on with no surface file was set up by half. It reads as off, so it gets the off
-  # kind's offer and verdict, not an unknown that nothing here repairs (gap row 275). The project
-  # record keeps its word: the surfaces skill writes that field, and its yes writes the file.
+  # A kind marked on with no surface file was set up by half (gap row 275). When a branch holds the
+  # file, the repair is a merge, so the check stays unknown, names the branch, and nothing offers a
+  # setup that would collide with it. Otherwise, with a person present, the kind reads as off and gets
+  # the off kind's offer. Unattended, nobody takes that offer, so the check stays unknown and names
+  # the route. The project record keeps its word: the surfaces skill writes that field.
+  RW_SURFACE_BRANCH=""
   case "$SF_STATE" in
     missing|absent)
-      [ "$e2e_on" != "on" ] || e2e_on="on with no surface file"
-      [ "$vr_on" != "on" ] || vr_on="on with no surface file"
+      RW_SURFACE_BRANCH="$(sf_branch_with "$RV_CODEPATH" "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')")"
+      if [ -z "$RW_SURFACE_BRANCH" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
+        [ "$e2e_on" != "on" ] || e2e_on="on with no surface file"
+        [ "$vr_on" != "on" ] || vr_on="on with no surface file"
+      fi
       ;;
   esac
 
@@ -2477,6 +2493,8 @@ RW_SURFACE_VERDICTS
   rw_print_summary "$updated" "surfaces"
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
   echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
+  [ -z "$RW_SURFACE_BRANCH" ] \
+    || echo "SURFACES: branch $RW_SURFACE_BRANCH holds the surface file. Say to merge it into this task's branch and run review again. Offer no setup for a kind marked on." >&2
   case "$setup" in
     available)              echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
     declined)               echo "SURFACES: every kind that is off has been declined, and none of them is offered again." >&2 ;;

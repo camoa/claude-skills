@@ -14,6 +14,10 @@
 #                                    joined to <tree> when it is relative, or <registryPath> as it
 #                                    is when a record written before row 32 of
 #                                    audit/14-live-run-gaps.md holds an absolute one
+#   sf_branch_with <tree> <registryPath>    prints the first local or remote branch that holds the
+#                                    newest commit touching the surface file, or nothing. A file
+#                                    on an unmerged branch needs a merge, and a fresh setup here
+#                                    would collide with it at merge (gap row 275)
 #
 # Missing and unreadable stay two words, because they send a reader to two different repairs. A
 # file whose rows lack a string id, a kinds array or a boolean enabled reads unreadable, and the
@@ -60,5 +64,15 @@ sf_load_surfaces() {
 # The join itself is resolve_against, from scripts/lib/paths.sh, which the caller sources.
 sf_surface_path() {
   [ -n "$1" ] && resolve_against "$1" "$2"
+  return 0
+}
+
+sf_branch_with() {
+  local sha
+  [ -n "$2" ] || return 0
+  sha="$(git -C "$1" log --all -1 --format=%H -- "$2" 2>/dev/null)"
+  [ -n "$sha" ] || return 0
+  git -C "$1" for-each-ref --contains "$sha" --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null \
+    | grep -v '/HEAD$' | head -n 1
   return 0
 }
