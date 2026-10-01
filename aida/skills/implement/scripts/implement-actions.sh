@@ -350,13 +350,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      than minting a second one for the same meaning.
 #  39  `build-brief` found no <task_folder>/implementation/tests-<unit_id>.json for this unit. Step
 #      three (`tests-brief` and `tests-freeze`) has not run for it yet.
-#  40  `build-brief` found an order in the given unit's dependsOn with no completion record in the
-#      ledger (its lastStep is not "closed"), so that order's interface record does not exist yet.
+#  40  `build-brief` or `dispatch-open implementer` found an order in the given unit's dependsOn
+#      with no completion record in the ledger (its lastStep is not "closed"), so that order's
+#      interface record does not exist yet.
 #      The same fact exit 23 names for `tests-brief`, kept apart because the two actions read the
 #      dependency for two different reasons: `tests-brief` needs the interface to write tests
 #      against it, `build-brief` needs it to hand to the model writing the code.
-#  41  `build-brief` found the given unit's attempt counter already at its allowed limit. Nothing is
-#      handed over; the order is exhausted.
+#  41  `build-brief` or `dispatch-open implementer` found the given unit's attempt counter
+#      already at its allowed limit. Nothing is handed over; the order is exhausted.
 #  42  `build-brief` ran before `start`, so <task_folder>/implementation/snapshot.json does not
 #      exist. A different number from exit 25, which `tests-brief` and `tests-freeze` share for the
 #      same fact: `build-brief` gets its own so a caller can tell which step never started without
@@ -760,12 +761,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      <task_folder>/implementation/tests-<unit_id>.json. The same fact exit 39 names for
 #      `build-brief`, with the same message. Nothing is written, so no record opens for a build
 #      that has no brief. Run tests-freeze on the order first. The implementer role also takes
-#      `build-brief`'s ledger refusals, its exit 40 and its exit 41, with the same codes and words
+#      `build-brief`'s ledger refusals and its exits 40, 41 and 116, with the same codes and words
 #      (gap row 281).
 # 115  `dispatch-open` was given the reviewer role for an order with no reviewer brief:
 #      brief-<unit_id>-review.json, or brief-<unit_id>-verify-<round>.json after a fix round. The
 #      message names the step that writes it. Nothing is written. Kept apart from 114 because the
 #      repair differs: a missing brief needs review-brief or verify-brief, not tests-freeze.
+# The code the build-step check added (gap row 281).
+# 116  `build-brief` or `dispatch-open implementer` found the order at a ledger step no build starts
+#      from. A build starts from tests-frozen, or from code-written to rebuild a failed attempt. The
+#      message names the step and what to run instead. Nothing is written.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -5898,7 +5903,7 @@ im_require_tests_record() {
 
 # Every refusal build-brief takes from the order's records rather than from its own arguments:
 # the tests record (exit $3, as above), the ledger, each dependency's completion record (exit
-# 40) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
+# 40), the order's step (exit 116) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
 # it writes, so no builder opens for an order build-brief would refuse (gap row 281). The order's
 # frozen work order is $4. Sets IM_TESTS_DOC, IM_ATTEMPTS_USED and IM_ATTEMPTS_ALLOWED.
 IM_ATTEMPTS_USED=0; IM_ATTEMPTS_ALLOWED=0
@@ -5935,6 +5940,24 @@ IM_DEPS
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$order_entry" != "null" ] \
     || die 3 "$who: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+
+  # --- exit 116: a build starts or resumes only where `read` routes one --------------------------
+  # tests-frozen is the first build, and the step a retake-tests returns to. code-written is a
+  # failed attempt, rebuilt while attempts remain. A builder stopped at its turn limit records
+  # nothing, so its resume finds one of these two. A fix round dispatches the fixer, not this role.
+  local step after
+  step="$(printf '%s' "$order_entry" | jq -r '.lastStep // "not started"')"
+  case "$step" in
+    tests-frozen|code-written) ;;
+    *)
+      case "$step" in
+        checks-passed) after="Its checks passed, so run review-brief on $unit_id next." ;;
+        reviewed|fixed) after="It is in review, so run fix-brief, verify-brief or close on $unit_id, as read routes it." ;;
+        closed) after="It is closed, so nothing more is built for it." ;;
+        *) after="Run tests-freeze on $unit_id first." ;;
+      esac
+      die 116 "$who: $unit_id is at step $step in $ledger_file, and a build starts only from tests-frozen or code-written. $after" ;;
+  esac
   IM_ATTEMPTS_USED="$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')"
   case "$IM_ATTEMPTS_USED" in ''|*[!0-9]*) IM_ATTEMPTS_USED=0 ;; esac
   IM_ATTEMPTS_ALLOWED="$(attempts_allowed_for "$order_entry")"

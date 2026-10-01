@@ -74,7 +74,9 @@ code is written against, not the declaration alone. Three files once said the re
 forward and none of them did; `build-brief` is what actually forwards it now.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
-no completion record, and when the attempts are already spent. Read a refusal and act on it.
+no completion record, and when the attempts are already spent. It also refuses an order past its
+build: a build starts only from `tests-frozen` or `code-written` (exit 116). Read a refusal and
+act on it.
 
 That list is the withheld list.
 
