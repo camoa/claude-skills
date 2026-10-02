@@ -115,7 +115,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh dispatch-close <task_folder> [--no-report]
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
-# fixer or test author whose pinned report lacks its completion line takes that path unasked (112). The
+# fixer or test author whose pinned report lacks its completion line takes that path unasked (112).
+# One whose report is complete closes as finished, even with --no-report (gap row 309). The
 # first time, the record stays open and takes `resumedAt`, and the role is resumed once by message.
 # The second time, the order halts and the record is removed (exit 110, gap row 228). An
 # implementer whose order's diff budget starts with `large` carries `resumesAllowed` 2, so it is
@@ -766,14 +767,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      verify mode after the ledger's `fixed`. The record stays open. The message names `--no-report`.
 # The code the completion line added (gap row 250).
 # 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
-#      pins missing, written before the record's `openedAt`, not ending with the line
-#      `Report: complete`, or holding nothing but that line. The message names the test that
-#      failed, with both times for the second. A fixer's code path must also hold no uncommitted
+#      pins missing, not ending with the line `Report: complete`, or holding nothing but that
+#      line. The message names the test that failed. A fixer's code path must also hold no uncommitted
 #      path, because the fixer commits every change. A test author commits nothing, so its report
 #      is read by the line alone (gap row 307). The role stopped before its last act, so
 #      the close runs as `--no-report` does: the record stays open and takes `resumedAt`. A second
 #      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
-#      without --resume removes the role's earlier report, so an old complete one cannot pass.
+#      without --resume removes the role's earlier report, so an old complete one cannot pass,
+#      and no time is read (gap row 309). A `--no-report` close of a fixer or a test author whose
+#      report passes these tests closes the record as finished.
 #      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
 # The code the reverting restart added (gap row 252).
 # 113  `restart` found a commit of a halted order that also changes a file the order does not own,
@@ -12843,21 +12845,26 @@ do_dispatch_close() {
   # and another task's stays open (live-run row 139).
   local dispatch_file="$TASK_PATH/implementation/dispatch.json"
   # dispatch-open stores the file the role's brief pins under `reportPath` (gap rows 228 and 250).
-  # One block checks it for every role that has one. A missing file, or one written before the
-  # record's `openedAt`, is a previous run's or none. The file's own time is not read: a close that
-  # keeps the record open rewrites it, and a finished report reads as older (gap row 307). A
-  # fixer and a test author also end theirs with `completionLine` as their last act, after at least
-  # one line of report. A fixer's also needs a clean tree in the code path, read as
-  # dispatch-open's leftover scan reads it, because it commits every change before it returns.
-  # The order of its commit and its line is not read: a fixer that wrote the line and then
-  # committed has finished (gap row 307). A test author's is read by the
-  # line alone. The reviewer's file refuses at 111. The other two take the --no-report path unasked,
+  # One block checks it for every role that has one. A missing file, or a reviewer's file written
+  # before the record's `openedAt`, is a previous run's or none. The file's own time is not read: a
+  # close that keeps the record open rewrites it, and a finished report reads as older (gap row
+  # 307). A fixer's and a test author's report has no time test: a fresh dispatch-open removes it,
+  # so one that exists was written in this dispatch. A resume writes a new `openedAt`, and a report
+  # written before the resume is still this agent's (gap row 309). Those two roles also end theirs
+  # with `completionLine` as their last act, after at least one line of report. A fixer's also
+  # needs a clean tree in the code path, read as dispatch-open's leftover scan reads it, because it
+  # commits every change before it returns. The order of its commit and its line is not read: a
+  # fixer that wrote the line and then committed has finished (gap row 307). A test author's is
+  # read by the line alone. The reviewer's file refuses at 111. The other two take the --no-report path unasked,
   # so a cut-off role never closes as finished. A record from before the key existed names no file,
-  # and nothing is checked.
-  local cut_off="" rp_path rp_line rp_cause="" rp_last rp_dirty rp_written rp_opened
-  if [ "$no_report" = false ] && [ -f "$dispatch_file" ]; then
+  # and nothing is checked. A --no-report close of those two runs the same test. The runtime can
+  # mark a role stopped after its last act, and a complete report then closes it (gap row 309).
+  local cut_off="" rp_path="" rp_line="" rp_cause="" rp_last rp_dirty rp_written rp_opened
+  if [ -f "$dispatch_file" ]; then
     rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
     rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
+  fi
+  if [ -f "$dispatch_file" ] && { [ "$no_report" = false ] || [ -n "$rp_line" ]; }; then
     rp_opened="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$dispatch_file" 2>/dev/null)"
     [ -n "$rp_opened" ] || rp_opened="$(im_mtime "$dispatch_file")"
     rp_written="$(im_mtime "$rp_path" 2>/dev/null)"
@@ -12865,7 +12872,7 @@ do_dispatch_close() {
       :
     elif [ ! -f "$rp_path" ]; then
       rp_cause="$rp_path is missing"
-    elif [ "$rp_written" -lt "$rp_opened" ]; then
+    elif [ -z "$rp_line" ] && [ "$rp_written" -lt "$rp_opened" ]; then
       rp_cause="$rp_path is older than its dispatch: written $(im_iso_of "$rp_written"), dispatch opened $(im_iso_of "$rp_opened")"
     elif [ -n "$rp_line" ]; then
       rp_last="$(grep -v '^[[:space:]]*$' "$rp_path" | tail -n 1 | sed 's/[[:space:]]*$//')"
@@ -12883,7 +12890,12 @@ do_dispatch_close() {
     if [ -n "$rp_cause" ] && [ -z "$rp_line" ]; then
       die 111 "dispatch-close: the $(jq -r '.role // "" | split(":") | last' "$dispatch_file") on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open. If it stopped at its turn limit, run dispatch-close again with --no-report."
     fi
-    [ -z "$rp_cause" ] || { cut_off="$rp_cause"; no_report=true; }
+    if [ -n "$rp_cause" ]; then
+      [ "$no_report" = true ] || { cut_off="$rp_cause"; no_report=true; }
+    elif [ "$no_report" = true ]; then
+      no_report=false
+      echo "DISPATCH-CLOSE: $rp_path is complete, so the role finished before the runtime stopped it."
+    fi
   fi
   # A role with no report is resumed by message, not dispatched fresh: its brief is unchanged and its
   # work is unfinished, and a fresh role meets its half-written files (gap row 228). The record
