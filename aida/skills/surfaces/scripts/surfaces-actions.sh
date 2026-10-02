@@ -10,6 +10,7 @@
 #   surfaces-actions.sh [--run-mode ...] install  <kind> <recipe flags> [--viewport <name>=<w>x<h>]...
 #   surfaces-actions.sh [--run-mode ...] register <id> --url <url> --kind <kind>... [--mask <css>]...
 #                                                 [--path <glob>]... [--critical] [--enable]
+#   surfaces-actions.sh [--run-mode ...] register <id> --command <line> --kind e2e [--critical] [--enable]
 #   surfaces-actions.sh [--run-mode ...] baseline [<id>]... --check-recipe <framework>=<path>...
 #                                                 [--value <name>=<value>]... [--confirmed]
 #   surfaces-actions.sh decline <kind>
@@ -29,10 +30,10 @@
 #   1  no project owns this directory
 #   3  could not do its job: a bad argument, a refused command, a differing file, a recipe with no
 #      block, a lookup nobody completed, an id registered with different fields, an absent accept row,
-#      a surface file another branch holds
+#      a surface file another branch holds, a command surface beside a page surface for e2e
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
 #  61  the tree is dirty, so an install, register or baseline commit would sweep other work in
-#  62  `register` or `baseline` before `install` wrote the surface file
+#  62  `register --url` or `baseline` before `install` wrote the surface file
 #  70  a person's answer was passed with nobody present
 #  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
 #
@@ -98,6 +99,15 @@ write_project_field() {
     || printf 'surfaces-actions: the surfaces field was written but not committed.\n' >&2
 }
 
+# Refuses a new surface file here while another branch holds one, since the two would collide at
+# merge (gap row 278). Install and a command's register both write a new file.
+refuse_surface_file_elsewhere() {
+  local branch
+  [ ! -f "$SURFACE_FILE" ] || return 0
+  branch="$(sf_branch_with "$TREE" "$SURFACE_REL")"
+  [ -z "$branch" ] || die 3 "$ACTION: branch $branch holds $SURFACE_REL, and a new one here would collide with it. The file reaches this tree once that branch lands on the trunk. If that branch is abandoned, deleting it, local and remote, lets $ACTION run."
+}
+
 # Loads the surface file and refuses every state but ok: missing is a step out of order (62).
 require_surface_file() {
   sf_load_surfaces "$SURFACE_FILE"
@@ -144,7 +154,7 @@ SA_VIEWPORTS
 
 # --------------------------------------------------------- show and install
 do_show_or_install() {
-  local steps files_dir list doc branch
+  local steps files_dir list doc
   KIND="${1:-}"
   kind_key "$KIND"
   shift; cr_resolve_recipe "$@"
@@ -166,11 +176,7 @@ do_show_or_install() {
     rm -rf "$files_dir"; exit 0
   fi
   recipe_files_refuse_differing install "$RECIPE" "$list" "$TREE" "$files_dir"
-  # A surface file another branch holds would collide with this one at merge (gap row 278).
-  if [ ! -f "$SURFACE_FILE" ]; then
-    branch="$(sf_branch_with "$TREE" "$SURFACE_REL")"
-    [ -z "$branch" ] || die 3 "install: branch $branch holds $SURFACE_REL, and a new one here would collide with it. The file reaches this tree once that branch lands on the trunk. If that branch is abandoned, deleting it, local and remote, lets install run."
-  fi
+  refuse_surface_file_elsewhere
   br_require_clean_tree install "$TREE"
   load_viewports
   [ "$RUN_MODE" = "interactive" ] && { printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"; printf '%s\n' "$steps" | sed 's/^/  /'; }
@@ -196,7 +202,7 @@ do_show_or_install() {
 
 # -------------------------------------------------------------------- register
 do_register() {
-  local id="${1:-}" url="" kinds='[]' masks='[]' paths='[]' critical=false enabled=false row have doc
+  local id="${1:-}" url="" command="" kinds='[]' masks='[]' paths='[]' critical=false enabled=false row have doc
   [ -n "$id" ] || die 3 "register: a surface id is required"
   case "$id" in *[!a-z0-9-]*|-*|*-|*--*) die 3 "register: a surface id is kebab case, got: $id" ;; esac
   shift
@@ -204,11 +210,15 @@ do_register() {
     case "$1" in
       --enable) cr_require_person "--enable" "a person confirmed this surface"; enabled=true; shift; continue ;;
       --critical) critical=true; shift; continue ;;
-      --url|--kind|--mask|--path) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
+      --url|--command|--kind|--mask|--path) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
       *) die 3 "register: unrecognized argument: $1" ;;
     esac
     case "$1" in
       --url)  url="$2" ;;
+      # A command line is refused the way a recipe's install line is, then kept as an argv that
+      # review runs without a shell (gap row 289).
+      --command) refuse_if_unsafe surfaces-actions "the --command value" "$2" || exit 3
+                 command="$(printf '%s' "$2" | jq -Rc '[ splits("[ \t]+") | select(length > 0) ]')" ;;
       --kind) case "$2" in e2e|visual-regression|visual-parity) ;; *) die 3 "register: a kind is e2e, visual-regression or visual-parity, got: $2" ;; esac
               kinds="$(printf '%s' "$kinds" | jq -c --arg k "$2" '. + [$k] | unique')" ;;
       --mask) masks="$(printf '%s' "$masks" | jq -c --arg m "$2" '. + [$m]')" ;;
@@ -216,20 +226,41 @@ do_register() {
     esac
     shift 2
   done
-  [ -n "$url" ] || die 3 "register: --url is required"
+  [ -n "$url$command" ] || die 3 "register: --url or --command is required"
+  [ -z "$url" ] || [ -z "$command" ] || die 3 "register: a surface is a page or a command, so --url and --command never go together"
+  [ "$command" != "[]" ] || die 3 "register: --command holds no word"
   [ "$kinds" != "[]" ] || die 3 "register: at least one --kind is required"
+  [ -z "$command" ] || [ "$kinds" = '["e2e"]' ] || die 3 "register: a command surface has the e2e kind alone, because there is no page to capture"
+  # A command surface needs no recipe and no harness, so it writes the surface file and turns end
+  # to end on when nothing has: a command-line project has no install to run first.
+  sf_load_surfaces "$SURFACE_FILE"
+  local created=""
+  if [ -n "$command" ] && [ "$SF_STATE" = "missing" ]; then
+    refuse_surface_file_elsewhere
+    br_require_clean_tree register "$TREE"; created=yes
+    mkdir -p "$TREE/.visual-review" || die 3 "register: could not create $TREE/.visual-review"
+    write_atomic "$SURFACE_FILE" "$(jq -n '{schemaVersion: 1, viewports: [], surfaces: []}')"
+    KIND="e2e"; write_project_field '.registryPath = $sf | .e2e.enabled = true'
+  fi
   require_surface_file
+  # Review runs either the recipe's e2e row over pages or each command, never both in one project.
+  [ "$(printf '%s' "$kinds" | jq 'index("e2e") != null')" = "false" ] \
+    || [ "$(printf '%s' "$SF_SURFACES" | jq --argjson cmd "$([ -n "$command" ] && echo true || echo false)" \
+           '[ .[] | select((.kinds | index("e2e")) and (has("command") != $cmd)) ] | length')" = "0" ] \
+    || die 3 "register: the surface file holds an e2e surface of the other form, and review runs either commands or the recipe's page suite for e2e. Register $id with the same form, or use another kind."
   # The key order is the reader's own, so a re-register compares equal to what sf_load_surfaces read.
   row="$(jq -nc --arg id "$id" --arg url "$url" --argjson kinds "$kinds" --argjson enabled "$enabled" --argjson masks "$masks" \
-    --argjson paths "$paths" --argjson critical "$critical" \
-    '{id: $id, url: $url, kinds: $kinds, enabled: $enabled, masks: $masks, paths: $paths, critical: $critical}')"
+    --argjson paths "$paths" --argjson critical "$critical" --argjson command "${command:-null}" \
+    '{id: $id, url: $url, kinds: $kinds, enabled: $enabled, masks: $masks, paths: $paths, critical: $critical}
+     + (if $command == null then {} else {command: $command} end)')"
   have="$(printf '%s' "$SF_SURFACES" | jq -c --arg id "$id" '[ .[] | select(.id == $id) ][0] // empty')"
   if [ -n "$have" ]; then
     [ "$have" = "$row" ] && { printf 'surface: %s unchanged\n' "$id"; exit 0; }
     die 3 "register: $id is already registered with different fields. Registered: $have. Given: $row. A duplicate id makes the file invalid, so edit the file or choose another id."
   fi
-  br_require_clean_tree register "$TREE"
-  doc="$(jq --argjson row "$row" '.surfaces += [$row]' "$SURFACE_FILE")" || die 3 "register: could not read $SURFACE_FILE"
+  # A file this call created is the one change in a tree found clean above.
+  [ -n "$created" ] || br_require_clean_tree register "$TREE"
+  doc="$(jq --argjson row "$row" '.surfaces += [$row | if .url == "" then del(.url) else . end]' "$SURFACE_FILE")" || die 3 "register: could not read $SURFACE_FILE"
   write_atomic "$SURFACE_FILE" "$doc"
   printf 'surface: %s enabled=%s kinds=%s paths=%s critical=%s\nsurface-file: %s\n' "$id" "$enabled" \
     "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$(printf '%s' "$paths" | jq 'length')" "$critical" "$SURFACE_FILE"
@@ -312,7 +343,7 @@ do_read() {
   printf 'surface-file: %s (%s)\n' "$SURFACE_FILE" "$SF_STATE"
   # Every setup offer reads this line first: scope's, design's and this skill's own (gap row 278).
   [ "$SF_STATE" != "missing" ] || printf 'surface-branch: %s\n' "$(sf_branch_with "$TREE" "$SURFACE_REL" | grep . || echo none)"
-  [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) url=\(.url) masks=\(.masks | length) paths=\(.paths | length) critical=\(.critical)"'
+  [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) \(if has("command") then "command=" + (.command | join(" ")) else "url=" + .url end) masks=\(.masks | length) paths=\(.paths | length) critical=\(.critical)"'
   # A version 5 project holds a YAML registry beside the file. It is named, left in place, and its
   # ids and URLs are candidates for discovery.
   [ ! -f "$TREE/.visual-review/registry.yml" ] || printf 'registry-v5: %s\n' "$TREE/.visual-review/registry.yml"

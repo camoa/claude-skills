@@ -17,6 +17,10 @@ listing, the checkout, a form. Each surface has an id in kebab case, a URL, and 
 matters. The id is stable for the life of the project, because every baseline is named from the
 id and the viewport name.
 
+A project with no page to drive, such as a command-line tool, registers a command as its end to
+end surface instead of a URL. It needs no setup recipe. Review runs the command in the task's tree,
+without a shell, and only exit 0 is a pass. Nobody walks a command surface.
+
 The surfaces live in one file, `.visual-review/surfaces.json`, committed with the code beside the
 baselines. The file holds the viewports and one row per surface. A row carries the id, URL,
 kinds, masks, the paths that render it, whether it is critical, and whether it is enabled. Both

@@ -52,6 +52,7 @@
 #                                         the stage-boundary commit of one task folder; says so
 #                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
+#   distill_deferred <stage>              prints the line a light task's scope or research distill shows
 #   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
@@ -205,7 +206,10 @@ resolve_task_folder() {
   # directory alone, and a tree moved while the window stands elsewhere is invisible to it.
   found="$(task_tree_from_git "$p" "$code" "$who")"
   [ -z "$found" ] || wt="$found"
-  [ "$top" != "$wt" ] || { printf '%s' "$p"; return 0; }
+  if [ "$top" = "$wt" ]; then
+    task_tree_turn "$p" "$wt" "$who"
+    printf '%s' "$p"; return 0
+  fi
   # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
   # makes it again names it.
   [ -d "$wt" ] || { printf '%s' "$p"; return 0; }
@@ -396,6 +400,18 @@ task_run_mode() {
 task_is_light() {
   [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
 }
+
+# The one overlap rule for owned files, read by check-design.sh and by implementation's `start`.
+# Input: the work orders as a JSON array. Output: one {ids, path} per entry two orders both
+# declare, compared as declared strings. An entry both orders list in sharedFiles is not an
+# overlap, because each order only adds to that file (gap row 287).
+OWNED_OVERLAP_JQ='
+  [ range(0; length) as $i | range($i + 1; length) as $j
+    | .[$i] as $a | .[$j] as $b
+    | ($a.ownedFiles // [])[] as $p
+    | select(($b.ownedFiles // []) | index($p) != null)
+    | select(((($a.sharedFiles // []) | index($p) != null) and (($b.sharedFiles // []) | index($p) != null)) | not)
+    | {ids: [$a.id, $b.id], path: $p} ]'
 
 # One row of the compromises log, COMPROMISES.md at the top of the task's tree (gap row 197). The
 # code that decides a skip calls this, so the log never rests on a model's memory. The file ships
@@ -707,6 +723,14 @@ distill_read() {
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }
 
+# A light task dispatches no distiller at the scope close or the research close. The design close
+# dispatches one over all three stages, so the run pays for one dispatch, and a contract edit
+# before design closes costs no repeat (gap row 292). Scope's and research's distill print this
+# line in place of distill_read. $1 the stage.
+distill_deferred() {
+  echo "distill: deferred to the design close, light run. Dispatch no distiller for $1"
+}
+
 # The playbook record research loads, `<task_folder>/records/playbooks.json`. One spelling for
 # every reader: the four implementation briefs, the architecture review brief and check 16's floor.
 # The JSON form is null rather than a path when the file is absent, so a role never opens a file
@@ -724,13 +748,16 @@ playbooks_path_json() {
 # Derived from the records in the task folder every time, never stored: each stage writes one
 # record when it closes, and the stage is the first whose record is absent. Scope's is the
 # distill sidecar, records/scope-distill.json, which approve and distill both need before they
-# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start.
+# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start. A
+# light task has no scope sidecar until design closes, so its scope closes on the pluginVersion
+# that only the scope close writes into alignment.json.
 # This is the one copy of that rule; the session-start hook and the next skill's report both
 # print what it says. $1 the task folder, $2 the review word next-actions.sh derives from
 # review/review.json (passed, failed, unfinished or none). Calls no die function.
 task_stage() {
   local task_folder="$1" review="$2"
-  if [ ! -f "$task_folder/records/scope-distill.json" ]; then
+  if [ ! -f "$task_folder/records/scope-distill.json" ] && { ! task_is_light "$task_folder" \
+      || [ -z "$(jq -r '.pluginVersion // empty' "$task_folder/alignment.json" 2>/dev/null)" ]; }; then
     echo "scope"
   elif [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
     echo "research"
@@ -742,6 +769,57 @@ task_stage() {
     echo "review"
   else
     echo "completion"
+  fi
+}
+
+# A chain made with --in-tree shares one tree, and the branch checked out there says which task
+# builds in it now (gap row 302). Refuses through die3 when the tree $2 holds a branch other than
+# the one the task folder $1 records. A detached HEAD names no task, so it is not refused. $3 the
+# action's own name.
+task_tree_turn() {
+  local held branch
+  held="$(git -C "$2" symbolic-ref -q --short HEAD 2>/dev/null)"
+  branch="$(jq -r '.worktree.branch // empty' "$1/task.json" 2>/dev/null)"
+  [ -z "$held" ] || [ -z "$branch" ] || [ "$held" = "$branch" ] \
+    || die3 "$3: the worktree $2 holds the branch $held, and this task builds on $branch. Another task of its chain builds in this tree now. Nothing was written. Commit the work there, then run: git -C $2 switch $branch"
+}
+
+# The ids of the other tasks of the project $1 whose record names the tree $2, one per line. $3 is
+# the caller's own id, left out. A tree is named twice when two old ids slug to one folder, or when
+# a later task took it over with --in-tree (gap row 302). Calls no die function.
+task_tree_others() {
+  find "$1/tasks" -name task.json -exec jq -r --arg p "$2" --arg id "$3" \
+    'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null
+}
+
+# True when the task this task builds on has a closed review, a verdict of passed or failed, or
+# reads complete. Its review and completion run in its tree, so --in-tree takes that tree over only
+# then (gap row 302). $1 the task folder.
+task_after_reviewed() {
+  local pred
+  pred="$(dirname -- "$1")/$(jq -r '.after // empty' "$1/task.json" 2>/dev/null)"
+  case "$(jq -r '.verdict // empty' "$pred/review/review.json" 2>/dev/null)" in passed|failed) return 0 ;; esac
+  [ "$(jq -r '.state // empty' "$pred/task.json" 2>/dev/null)" = "complete" ]
+}
+
+# The task this task builds on, from task.json's `after`, and whether that task's build is
+# finished (gap row 291). Prints nothing when the field is absent. Otherwise prints `<id> finished`
+# when the other task holds a readable implementation/finished.json or reads complete, a person
+# having closed it, `<id> missing` when the project holds no such task, and `<id> unfinished`
+# else. start, task_worktree and the next report all ask here. $1 the task folder. Calls no die
+# function.
+task_after_state() {
+  local after pred
+  after="$(jq -r '.after // empty' "$1/task.json" 2>/dev/null)"
+  [ -n "$after" ] || return 0
+  pred="$(dirname -- "$1")/$after"
+  if [ ! -f "$pred/task.json" ]; then
+    printf '%s missing' "$after"
+  elif jq empty "$pred/implementation/finished.json" >/dev/null 2>&1 \
+      || [ "$(jq -r '.state // empty' "$pred/task.json" 2>/dev/null)" = "complete" ]; then
+    printf '%s finished' "$after"
+  else
+    printf '%s unfinished' "$after"
   fi
 }
 
@@ -774,12 +852,13 @@ task_worktree_group() {
 # folder named before the id was slugged. A recorded tree on disk is kept. The base is HEAD of the
 # directory this action was started from when that directory is inside the code repository, so a
 # follow-up made from its parent's tree stacks on the parent's work; otherwise it is the code path's
-# HEAD. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
+# HEAD. A task whose record names `after` is cut from that task's branch instead, or with `inTree`
+# takes over that task's tree. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
 # said once, on stderr, and nothing asks.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule group base_branch
+  local found rule group base_branch after after_branch after_base pred
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -797,6 +876,50 @@ task_worktree() {
   # the machine that wrote it. One copy serves both branches below.
   group="$(task_worktree_group "$code" "$who")" || exit 3
   rule="$group/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
+  # A task made with `after` is cut from that task's branch, and only once its build is finished:
+  # cut earlier, the branch holds none of that build (gap row 291). A complete task whose branch is
+  # gone was merged and pruned, so its work is on trunk and the rule below serves. Checked before
+  # anything is printed or made.
+  after_branch=""
+  after="$(task_after_state "$task_folder")"
+  if [ -n "$after" ] && ! git -C "$code" rev-parse -q --verify "refs/heads/${branch:-feature/$id}" >/dev/null 2>&1; then
+    [ "${after##* }" = "finished" ] \
+      || die3 "$who: task $id builds on task ${after% *}, whose build is ${after##* }. Its tree is cut from that task's branch once that build is finished."
+    pred="$(dirname -- "$task_folder")/${after% *}/task.json"
+    after_branch="$(jq -r '.worktree.branch // empty' "$pred" 2>/dev/null)"
+    if [ -z "$after_branch" ] \
+        || ! after_base="$(git -C "$code" rev-parse -q --verify "refs/heads/$after_branch^{commit}" 2>/dev/null)"; then
+      [ "$(jq -r '.state // empty' "$pred" 2>/dev/null)" = "complete" ] \
+        || die3 "$who: task $id builds on task ${after% *}. That task records no branch, or its branch is not in $code. Nothing was made."
+      after_branch=""
+    fi
+  fi
+  # A task made with --in-tree takes over that task's tree, on a new branch from its tip, so a chain
+  # pays one checkout and one dependency sync (gap row 302). The tree goes only once that task's
+  # review has closed, and only when it is clean and still holds that task's branch. So no work and
+  # no other task's turn is carried over. The earlier task keeps its record, and the tree check
+  # refuses it while this branch is checked out.
+  if [ -n "$after_branch" ] && [ "$(jq -r '.inTree // false' "$task_json" 2>/dev/null)" = true ]; then
+    found=""
+    if task_after_reviewed "$task_folder"; then
+      found="$(task_tree_from_git "$(dirname -- "$pred")" "$code" "$who")"
+    else
+      printf '%s: the tree of task %s is not shared, because its review has not closed and runs in that tree. A new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
+    fi
+    if [ -n "$found" ]; then
+      [ -z "$(git -C "$found" status --porcelain 2>/dev/null)" ] \
+        || die3 "$who: task $id takes over the worktree $found of task ${after% *}, and that tree has uncommitted changes. Nothing was made. Commit them on $after_branch, then run this again."
+      said="$(git -C "$found" switch -q -c "feature/$id" 2>&1)" \
+        || die3 "$who: git could not make the branch feature/$id in $found: $said"
+      write_atomic "$task_json" "$(jq --arg p "$found" --arg b "feature/$id" --arg base "$after_branch" \
+        '.worktree = ((.worktree // {}) + {path: $p, branch: $b, base: $base})' "$task_json")"
+      printf 'worktree: %s, taken over from task %s\n' "$found" "${after% *}" >&2
+      printf '%s' "$found"
+      return 0
+    fi
+    ! task_after_reviewed "$task_folder" \
+      || printf '%s: no tree on disk holds the branch of task %s, so a new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
+  fi
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
     found="$(task_tree_from_git "$task_folder" "$code" "$who")"
@@ -825,8 +948,7 @@ task_worktree() {
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   # Two old ids such as a_b and a-b slug to one folder. The tree there is the other task's.
   if [ -e "$wt" ]; then
-    found="$(find "$project/tasks" -name task.json -exec jq -r --arg p "$wt" --arg id "$id" \
-      'select(.worktree.path == $p and .id != $id) | .id' {} + 2>/dev/null | head -1)"
+    found="$(task_tree_others "$project" "$wt" "$id" | head -1)"
     [ -z "$found" ] \
       || die3 "$who: task $id names its worktree $wt, and task $found already holds that folder. The two ids slug to one folder name. Nothing was made. A person moves one of the trees and records its path in that task's task.json."
   fi
@@ -840,7 +962,11 @@ task_worktree() {
     said="$(git -C "$code" worktree add "$wt" "$branch" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   else
-    base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
+    if [ -n "$after_branch" ]; then
+      base="$after_base"; base_branch="$after_branch"
+    else
+      base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
+    fi
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   fi

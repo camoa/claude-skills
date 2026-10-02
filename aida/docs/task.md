@@ -55,6 +55,21 @@ the action computes the path here. It makes the tree there and records it. That 
 on a second machine, where the record holds the first machine's path. A tree you moved with
 `git worktree move` is found rather than made again.
 
+A new tree is cut from the commit of the folder you create the task in, when that folder is in
+the code repository. So a task created from inside another task's tree starts from that task's
+work. To plan a chain of tasks up front, name the earlier task when you create the later one:
+`--after <task-id>`. AIDA records the link. It cuts the later task's tree from the earlier task's
+branch, once the earlier task's build is finished. Until then the later task has no tree and
+refuses to start. `/aida:next` shows the task each one waits on.
+
+For a chain you run one task after another, add `--in-tree` to `--after`. The later task then
+takes over the earlier task's tree on a new branch, so the chain pays one checkout and one
+dependency sync. The take-over waits until the earlier task's review has closed, because that
+review runs in the tree. If it is still open when the later task starts, the later task gets a new
+tree instead, and AIDA says so. Only one task builds in that tree at a time: the one whose branch is checked
+out there. To go back to the earlier task, for its review, commit and run `git switch` to its
+branch in that tree. Prune keeps a tree that a later task still builds in.
+
 Interactively, AIDA asks for whichever of the two you did not already give. A name and a goal are
 the two facts nothing can guess. Autonomously, a run missing either halts and reports which one,
 the same way a missing code path halts project creation.

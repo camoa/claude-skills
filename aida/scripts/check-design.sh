@@ -52,7 +52,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - ownedFiles do not overlap between work orders, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
-#     touches;
+#     touches. A path both orders list in sharedFiles is not an overlap (gap row 287);
 #   - every criterion id and every non-goal id named anywhere resolves to a real one in the
 #     contract, and every dependsOn id resolves to a real work order in this task's own design/
 #     folder.
@@ -446,6 +446,7 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             nonGoals: [ (.nonGoals // [])[] | select(type == "string" and test("^n[1-9][0-9]*$")) ],
             dependsOn: [ (.dependsOn // [])[] | select(type == "string" and test("^wo[1-9][0-9]*$")) ],
             ownedFiles: [ (.ownedFiles // [])[] | select(type == "string" and (length > 0)) ],
+            sharedFiles: [ (.sharedFiles // [])[]? | select(type == "string") ],
             proof: (.proof // "tests"),
             slot: $f.slot,
             range: $f.range,
@@ -813,15 +814,7 @@ else
 
   # Overlap on the declared strings only, never a glob intersection (ideal/design.md, "What a
   # work order holds"): two orders sharing one identical entry in ownedFiles.
-  OVERLAPPING_OWNED_FILES_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
-    [ range(0; ($orders | length)) as $i
-      | range($i + 1; ($orders | length)) as $j
-      | ($orders[$i]) as $a | ($orders[$j]) as $b
-      | ((($a.ownedFiles // []) as $af | ($b.ownedFiles // []) as $bf | [ $af[] as $p | select($bf | index($p) != null) | $p ])) as $shared
-      | $shared[] as $path
-      | {ids: [$a.id, $b.id], path: $path}
-    ]
-  ')"
+  OVERLAPPING_OWNED_FILES_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c "$OWNED_OVERLAP_JQ")"
 
   # An owned file must be a path and never a glob. Implementation derives the test author's denied
   # reads from these entries and compares them as paths, so a glob would deny nothing while the

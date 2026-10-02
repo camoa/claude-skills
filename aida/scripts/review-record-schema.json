@@ -60,10 +60,12 @@
         "properties": {
           "ref": { "type": "string", "minLength": 1 },
           "verdict": { "enum": ["followed", "departed", "not-applicable"] },
-          "evidence": { "type": "string", "minLength": 1 }
+          "evidence": { "type": "string", "minLength": 1 },
+          "departedAnswer": { "type": "string", "minLength": 1, "description": "The reviewer's own evidence for a departed answer that review-record recorded not-applicable (gap row 300). Present only on such an answer." },
+          "finding": { "type": "string", "minLength": 1 }
         }
       },
-      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, or only the files of the diff for a departure in how files were produced (gap row 280), and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and halts the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
+      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, or only the files of the diff for a departure in how files were produced (gap row 280), and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and halts the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. One exception (gap row 300): when the task has no automated tests and the order froze no test file, a departed answer that names only test files is recorded not-applicable, with the reviewer's evidence kept in `departedAnswer`, and the task review shows it as a catalog note. A departed answer whose `finding` names an actionable finding with a fix scope halts nothing: the fix round cures it, and verify confirms the cure (gap row 303). Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
     },
     "deviationAccepted": {
       "type": "object",
@@ -84,7 +86,7 @@
         "departure": { "type": "string", "minLength": 1 },
         "file": { "type": "string", "minLength": 1 }
       },
-      "description": "A departure found while nobody was present (gap row 279). Unattended, `review-record` halts nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. Present only on an unattended review that found one and that no person accepted."
+      "description": "A departure no person has ruled on yet (gap row 279). Unattended, `review-record` halts nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. An information item marked departsFromDesign is held here in both modes (gap row 308). Present only on a review that found one and that no person accepted."
     }
   },
   "$defs": {
@@ -142,8 +144,8 @@
         },
         "origin": {
           "type": "string",
-          "pattern": "^(review|round[1-9][0-9]*)$",
-          "description": "Where this finding came from: `review` for the review's own, `round<N>` for something a verification found newly broken in that round. Kept because a finding the fix itself introduced reads differently from one the review raised, and a reader must not have to guess which is which."
+          "pattern": "^(review|round[1-9][0-9]*|repair|check)$",
+          "description": "Where this finding came from: `review` for the review's own, `round<N>` for something a verification found newly broken in that round, `repair` for a defect a dependent order's builder found after this order closed (gap row 286), `check` for a check that stopped a fix round, which the script judges from the next round's checks and no verifier sees (gap row 305). Kept because a finding the fix itself introduced reads differently from one the review raised, and a reader must not have to guess which is which."
         },
         "addressedInRound": {
           "type": "integer",
@@ -172,6 +174,26 @@
           "type": "integer",
           "minimum": 1,
           "description": "Which round's fixer reported that the scope it was given was too small for this finding. Present only when a fixer reported it. A fixer does not widen its own scope and does not fix what is not in its findings: it reports, and `fix-record` records the report here (ideal/implementation.md, 'One fixer per round, verification per finding')."
+        },
+        "defectInFile": {
+          "type": "string",
+          "enum": ["yes", "no"],
+          "description": "On a finding with origin `repair` only: the verifier's answer to whether the cited failure arises in the finding's file. The stopped builder named the file, and no other role had checked it. A no makes the finding pending for the person (gap row 286)."
+        },
+        "departureFrom": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The recipe this finding's fix cures a departure from: the reviewer's departed answer named the finding under `finding`, or review-record paired it as the one actionable finding on a file the evidence names (gap row 303). The verify brief asks whether the departure is gone."
+        },
+        "departureCured": {
+          "type": "string",
+          "enum": ["yes", "no"],
+          "description": "On a finding with departureFrom only: the verifier's answer to whether the departure is gone. A no makes the finding pending for the person, with the reason in pendingBecause (gap row 303)."
+        },
+        "pendingBecause": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why a finding waits for the person, when a verification set it pending: a repair finding whose failure the verifier says does not arise in its file. `finish` carries it to finished.json as the decision's text (gap row 286)."
         },
         "scopeInsufficientBecause": {
           "type": "string",
@@ -215,7 +237,7 @@
         },
         "departsFromDesign": {
           "type": "boolean",
-          "description": "The reviewer's one routed answer: true when the item names a departure from the order's design or interface (gap row 224). `review-record` refuses an item without it (exit 52), and halts the order for design drift on true (exit 107), naming the item."
+          "description": "The reviewer's one routed answer: true when the item names a departure from the order's design or interface (gap row 224). `review-record` refuses an item without it (exit 52). True halts nothing in either mode: when no other departure was found, the item is held as deviationPending for the task review (gap row 308)."
         }
       }
     },

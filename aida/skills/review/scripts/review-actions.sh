@@ -785,7 +785,8 @@ rw_run_done() {
 # placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
 # an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
 # exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
-# test-execution row, whose preconditions record may hold its tool as absent at the end of the task.
+# test-execution row, whose preconditions record may hold its tool as absent at the end of the task,
+# $3 the install advice for exit 127 when no recipe supplies one.
 rw_run_fault() {
   local label="$1" fw="${2:-}" said known install named rp
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
@@ -806,6 +807,7 @@ rw_run_fault() {
       # (gap row 271). The shell's own line names the program it could not find.
       said="$(printf '%s\n' "$RW_RUN_OUTPUT" | grep -m1 '[^[:space:]]')"
       install="The tool it runs is not installed in this project: install it with the tool skill, as the recipe's setup says."
+      [ -z "${3:-}" ] || install="$3"
       # A record with no requires_tooling result for the framework, neither a condition nor an
       # end-of-task tool, is one the tool check never ran on, as before 6.0.11 (gap row 284). It is
       # named, not repaired: running require here would run each tool, and a tool may reach a site.
@@ -827,7 +829,7 @@ rw_run_fault() {
       RW_RUN_DETAIL="the $label command could not be found (exit 127), so nothing ran and nothing was decided. It printed: ${said:-nothing}. ${known:-$install}" ;;
     126)
       RW_RUN_VERDICT="unknown"
-      RW_RUN_DETAIL="the $label command list came out empty, so nothing ran and nothing was decided." ;;
+      RW_RUN_DETAIL="the $label command was found and could not run (exit 126, permission denied), so nothing was decided. A script without the execute bit gives this." ;;
   esac
 }
 
@@ -885,6 +887,15 @@ $(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
 RW_CHANGED
   [ -z "$env_aside" ] || aside_line=" Set aside as files \`task environment up\` recorded: ${env_aside%, }."
   [ -z "$support_aside" ] || aside_line="$aside_line Set aside as support files an order's tests froze: ${support_aside%, }."
+  # A commit no order's records account for passes on its files alone, though no order's review
+  # read it (gap row 287). It is named and does not fail the row: it may be a person's own fix, and
+  # only the person can say whether it belongs. The task's architecture reviewer reads it in the
+  # whole diff.
+  local hand
+  # Run from the code repository review reads, since implementation refuses a call from outside it.
+  hand="$(cd "$RV_CODEPATH" && bash "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh" unattributed "$TASK_PATH" 2>/dev/null \
+    | sed -n 's/^unattributed: //p' | grep -vx none | paste -sd ';' - | sed 's/;/; /g')"
+  [ -z "$hand" ] || aside_line="$aside_line These commits lie outside every order's records, so no order's review read them, and a person says whether each belongs: $hand."
   if [ -n "$unmatched" ]; then
     [ -z "$support_changed" ] || extra=" These are frozen support files that changed after the freeze: ${support_changed%, }."
     extra="$extra$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
@@ -1080,19 +1091,6 @@ rw_run_mutation() {
     {verdict: $verdict, detail: $detail, score: $score, survivors: $survivors}
     + (if $output == "" then {} else {output: $output} end)')"
   rm -f "$mut_file"
-}
-
-# The baseline field that holds one tool row's own earlier verdict, or the empty string for a row
-# the baseline has no field for. baseline-schema.json carries three tool fields and no more, so a
-# duplication or design-metrics row the recipe declares has no baseline to subtract, and this says
-# so rather than reading its absence as a clean one.
-rw_baseline_field_for() {
-  case "$1" in
-    coding-standards) printf 'codingStandards' ;;
-    static-analysis)  printf 'staticAnalysis' ;;
-    security)         printf 'security' ;;
-    *) printf '' ;;
-  esac
 }
 
 # One tool row from the check commands block, run over the changed files. Every row the recipe
@@ -1479,6 +1477,20 @@ RW_CATALOG
 $(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
 $TASK_PATH/design-closed.json
 RW_FIT
+
+  # Gap row 300. A departure an order's review-record recorded not-applicable, because the task has
+  # no automated tests, is a catalog note: nothing else shows a person an edited or deleted assertion.
+  local rv_file rv_ref rv_words
+  while IFS= read -r rv_file; do
+    case "$rv_file" in ""|*-findings.json) continue ;; esac
+    while IFS="$(printf '\t')" read -r rv_ref rv_words; do
+      [ -z "$rv_ref" ] || rw_catalog_note "review-record recorded the recipe not-applicable for $(basename "$rv_file" .json | sed 's/^review-//'), because the task has no automated tests; the reviewer answered departed: $rv_words" "$rv_ref"
+    done <<RW_NA
+$(jq -r '(.recipes // [])[] | select(has("departedAnswer")) | [.ref, .departedAnswer] | @tsv' "$rv_file" 2>/dev/null)
+RW_NA
+  done <<RW_REVIEWS
+$(find "$TASK_PATH/implementation" -maxdepth 1 -type f -name 'review-*.json' 2>/dev/null | sort)
+RW_REVIEWS
 
   # --- the change set, read and never derived -----------------------------------------------------
   range="$(printf '%s' "$RW_FINISHED_DOC" | jq -r '.commitRange // ""')"
@@ -1973,14 +1985,14 @@ RW_RESEARCH_FILES
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
   done
-  # What an unattended build left for a person, one check each, which reads unknown until the
+  # What a build left for a person, one check each, which reads unknown until the
   # person answers it with close --row (gap row 279). Nobody present leaves it unknown.
   printf '%s' "$RW_FINISHED_DOC" | jq -c '(.pendingDecisions // [])[]
     | ("decision-" + .unit + "-" + (.finding // "departure")) as $id
     | {id: $id, verdict: "unknown", answeredBy: "nobody",
        detail: ((if .kind == "ruling"
-                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because its fix scope is empty and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
-                 else .unit + " departs from the design, found while nobody was present: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
+                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because " + (.because // "its fix scope is empty") + ", and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
+                 else .unit + " departs from the design, and nobody has ruled on it yet: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
   # --- the done-when clauses the tests step routed here, one verdict each ------------------------
   # Such a clause asserts the change added nothing of a named kind, and no test of it can be watched
   # failing, so the reviewer judges it against the diff (live-run row 184). The verdicts ride in the
@@ -2211,6 +2223,12 @@ rw_surface_kind() {
     rw_check_row "$check_id" "undeclared" "the project record says $gate is $enabled, so review ran nothing for it. Review runs nothing that is off." >>"$checks_out"
     return 0
   fi
+  # The changed list is the one checks read, derived again for the range the record holds.
+  [ -n "$RW_RANGE" ] || { RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange // ""')"; rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"; }
+  if [ "$(printf '%s' "$mine" | jq '[ .[] | select(has("command")) ] | length')" -gt 0 ]; then
+    rw_command_surfaces "$check_id" "$mine" "$off" "$checks_out" "$surfaces_out"
+    return 0
+  fi
   if [ "$RW_SURFACE_BLOCK_STATE" = "unparseable" ]; then
     # The heading is there and the key never opens under it. Nobody looked, rather than a framework
     # that declared nothing, so the word is unknown and it fails the review.
@@ -2240,9 +2258,7 @@ rw_surface_kind() {
 
   # Narrowing: the person who registered a surface declared the paths that render it, and review
   # runs the surface when the diff touched one of them, when it is critical, or when it declares
-  # none. No agent guesses. The rest get their own row, not run, and the detail says why. The
-  # changed list is the one checks read, derived again for the range the record holds.
-  [ -n "$RW_RANGE" ] || { RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange // ""')"; rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"; }
+  # none. No agent guesses. The rest get their own row, not run, and the detail says why.
   run='[]'; unaffected='[]'
   i=0
   while [ "$i" -lt "$count" ]; do
@@ -2365,6 +2381,76 @@ RW_SURFACE_KIND
   fi
   rw_check_row "$check_id" "$worst" "$detail" "$rc" "$RW_RUN_OUTFILE" "$(printf '%s' "$row" | jq -r '.framework // ""')" >>"$checks_out"
   rw_run_done
+}
+
+# The e2e surfaces that carry their own command, for a project with no page to drive (gap row 289).
+# Each command runs in the task's tree through the runner every recipe row uses, never a shell, and
+# only exit 0 reads met. No recipe row and no walk apply, since the exit status is the whole answer.
+# The command and its scripts live in the tree under review, so the build could weaken what judges
+# it. A command that differs from the same id at the range base, carries a shell character, or names
+# a path whose files the range deleted or made non-executable reads unknown and does not run.
+# Register refuses a page surface beside a command one. A hand-edited file that holds both reads
+# unknown for the page, since nothing here runs the recipe's suite. $1 the check id, $2 the enabled
+# surfaces of the kind, $3 the disabled ones, $4 the check rows file, $5 the surface rows file.
+rw_command_surfaces() {
+  local check_id="$1" mine="$2" off="$3" checks_out="$4" surfaces_out="$5"
+  local count i one sid verdict ran worst="" detail="" rc="" outfile="" base head rel base_doc cmd was tok scopes touched
+  base="${RW_RANGE%%..*}"; head="${RW_RANGE##*..}"
+  rel="$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')"
+  base_doc="$(git -C "$RV_CODEPATH" show "$base:$rel" 2>/dev/null)"
+  count="$(printf '%s' "$mine" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$mine" | jq -c --argjson i "$i" '.[$i]')"
+    sid="$(printf '%s' "$one" | jq -r '.id')"
+    cmd="$(printf '%s' "$one" | jq -c '.command // empty')"
+    i=$((i + 1))
+    ran=false; verdict=""
+    # A surface absent at the base was registered in this range, and there is nothing to compare.
+    was="$(printf '%s' "$base_doc" | jq -c --arg id "$sid" '[ (.surfaces // [])[] | select(.id == $id) ][0].command // empty' 2>/dev/null)"
+    scopes=""
+    for tok in $(printf '%s' "$cmd" | jq -r '.[]' 2>/dev/null); do
+      case "$tok" in -*|/*|*..*) continue ;; esac
+      [ -e "$RV_CODEPATH/$tok" ] || git -C "$RV_CODEPATH" cat-file -e "$base:$tok" 2>/dev/null || continue
+      scopes="$scopes $tok"
+      [ -d "$RV_CODEPATH/$tok" ] || [ "$(dirname "$tok")" = "." ] || scopes="$scopes $(dirname "$tok")"
+    done
+    touched=""
+    # A command substitution splits in bash and zsh alike; each scope is one argv token, so one word.
+    # shellcheck disable=SC2046
+    [ -z "$scopes" ] || touched="$(git -C "$RV_CODEPATH" diff --raw --no-renames "$base" "$head" -- $(printf '%s' "$scopes") 2>/dev/null \
+      | awk -F'\t' '{ split($1, m, " "); if (m[5] == "D" || (m[5] == "M" && substr(m[1], 2) != m[2])) print $2 }' | sort -u | tr '\n' ' ')"
+    if [ -z "$cmd" ]; then
+      verdict="unknown"; detail="$detail The $sid surface is a page beside command surfaces, so it did not run."
+    elif [ -n "$was" ] && [ "$was" != "$cmd" ]; then
+      verdict="unknown"; detail="$detail The $sid command is $cmd here and was $was at $base, so this range changed what judges it, and it did not run."
+    elif ! refuse_if_unsafe review-actions "the surface file" "$(printf '%s' "$cmd" | jq -r 'join(" ")')" 2>/dev/null; then
+      verdict="unknown"; detail="$detail The $sid command $cmd carries a shell character, which register refuses, so it did not run."
+    elif [ -n "$touched" ]; then
+      verdict="unknown"; detail="$detail The range deleted files under the $sid command's paths, or changed their mode, so it did not run: ${touched% }."
+    else
+      rw_run_row "$cmd" '[]' "$RW_VALUES" ""
+      rw_run_fault "$sid" "" "A command surface has no recipe to install it from. Name a program inside this tree, or put it on the session's PATH."
+      verdict="$RW_RUN_VERDICT"
+      if [ -n "$verdict" ]; then detail="$detail $RW_RUN_DETAIL"
+      else
+        ran=true
+        if [ "$RW_RUN_RC" = "0" ]; then verdict="met"; else verdict="unmet"; fi
+        detail="$detail The $sid command exited $RW_RUN_RC in $RV_CODEPATH."
+        # With one command, the record keeps its exit code and output, as for any other row.
+        [ "$count" -ne 1 ] || { rc="$RW_RUN_RC"; outfile="$(mktemp)" && cp "$RW_RUN_OUTFILE" "$outfile"; }
+      fi
+      # Nothing records which program a name reached, so a failure says where it looked.
+      [ "$verdict" = "met" ] || detail="$detail It ran with the session's PATH from $RV_CODEPATH, so a program it names may be an installed copy rather than this tree's build."
+      rw_run_done
+    fi
+    jq -nc --arg id "$sid" --arg v "$verdict" --argjson ran "$ran" \
+      '{id: $id, verdict: $v, ran: $ran, walked: false, reportPath: ""}' >>"$surfaces_out"
+    worst="$(rw_worse "$worst" "$verdict")"
+  done
+  [ "$off" = "[]" ] || detail="$detail Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')."
+  rw_check_row "$check_id" "$worst" "${detail# }" "$rc" "$outfile" >>"$checks_out"
+  [ -z "$outfile" ] || rm -f "$outfile"
 }
 
 # Runs one surface row and prints its check row: the wording rw_run_fault gives a run that decided
@@ -2541,8 +2627,10 @@ do_surfaces() {
     [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
       || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
   fi
-  if [ "$path_scripts" = "0" ]; then
-    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface." >>"$checks_file"
+  if [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
+    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path. Branch $RW_SURFACE_BRANCH holds the surface file, and this task's tree does not, so there is no script to run here. Register the demo path before the build: on the trunk before tasks are cut, or in the first task's tree." >>"$checks_file"
+  elif [ "$path_scripts" = "0" ]; then
+    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface: a page, or a command that exits 0 when the path works." >>"$checks_file"
   else
     rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
   fi

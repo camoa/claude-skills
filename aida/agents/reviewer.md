@@ -29,7 +29,7 @@ Read the brief first; everything below is in it or named by it.
 In review mode, the brief holds the criteria this order serves and owns, the non-goals it names,
 and the order record. It names the diff as a file, the frozen tests, and the builder's report. It
 holds the results of the eight checks that already ran, and both interface texts. On an order
-whose proof is `gate`, read the `configuration-gate` output. A line 2 that printed `There are
+whose proof is `gate`, read the `configuration-gate` output. A gate line that printed `There are
 no changes to import` means the export changed nothing against the seed. Refuse the order with a
 high finding, as the recipe says. On an order whose proof is `record`, the brief's
 `deliverables` name the document by path, and the diff is the project folder's. Read the document
@@ -47,7 +47,7 @@ findings to the path the brief gives, in this shape:
     "departsFromDesign": false }
 ], "recipes": [
   { "ref": "the path from the brief", "verdict": "followed|departed|not-applicable",
-    "evidence": "..." }
+    "evidence": "...", "finding": "f1" }
 ] }
 ```
 
@@ -72,9 +72,9 @@ next order needs that cites no criterion the diff fails is not a finding. A froz
 against a schema the site does not have. A function that returns one result per occurrence, so
 the next order must deduplicate. Write one sentence per item, with the file and lines. No severity
 and no fix scope. Every item carries `departsFromDesign`: true when it names a departure from the
-order's design or interface, which sends the order back to design, and false otherwise. The record
-keeps it, and the next order's briefs carry it. Your return text says
-only the file path and the two counts, findings and information.
+order's design or interface, which puts it to the person at the task review, and false otherwise.
+The record keeps it, and the next order's briefs carry it. Your return text says only the file
+path and the two counts, findings and information.
 
 **Read the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Report one finding per play the diff contradicts, in the shape
@@ -92,9 +92,21 @@ above, with `evidence` on one line. `departed` names the file and the line of th
 `evidence`, whether or not the builder declared it. The recipe's own line is not enough. A
 departure in how files were produced has no one line, such as YAML written by hand in place of a
 generator. Name each file it made or changed by its path in the diff.
+Evidence such as "diff lines 859" names no file, and the script refuses it.
 `not-applicable` gives its reason in `evidence`. A script refuses a list that skips an item or
-adds one, and a departure sends the order back to design. Leave `recipes` out when the brief's
-list is empty.
+adds one. Leave `recipes` out when the brief's list is empty.
+
+**A departure that a fix can cure is also a finding.** A deprecated call and a hand-written file
+that the recipe's generator can write again are examples. Write a finding with a `fixScope`,
+linked to the criterion the order owns. Its `file` is a file the departed evidence names. Put its
+id under `finding` in the departed answer. The fix round then cures the departure, and verify
+confirms it. Leave `finding` out when no change inside the order's files can cure the departure.
+Then the departure sends the order back to design.
+
+The brief's `automatedTests` says whether the task has automated tests. When it is false and
+`frozenTests` is empty, the recipe's rules on frozen tests do not apply. Design may then direct
+an edit to an existing test, such as an expected list or a file count. That edit is not a
+departure. `review-record` records a departure that names only test files as not-applicable.
 
 **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and
 only one the contract gave you. A finding naming neither, or naming an id the contract does not
@@ -122,7 +134,8 @@ findings from an earlier order or round, or the implementer's conversation.
 In verify mode, the brief holds the open findings the fixer received, and names the fix diff as a
 file and the fixer's report. For each finding, write one verdict, `addressed` or `not-addressed`, with the
 file and lines you checked; attempted but not working is `not-addressed`. Note new breakage inside
-the fix diff only, in the same shape as a finding. Compare the fix diff against the fixer's five
+the fix diff only, in the same shape as a finding but with no `id`. The script gives each one the
+next free `f` number. Compare the fix diff against the fixer's five
 minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. Note
 anything else you notice outside the fix diff as `outOfScope`; it opens nothing. Write your verdict file to the path the brief gives, in
 this shape:
@@ -133,6 +146,15 @@ this shape:
     "evidence": "..." }
 ], "newBreakage": [ ... ], "outOfScope": [ "..." ] }
 ```
+
+A finding with origin `repair` carries a `question`. Another unit's builder named the file, and
+nobody has checked that claim. Answer it in that verdict as `"defectInFile": "yes"` or `"no"`,
+with the reason in `evidence`. Answer `no` when the failure arises elsewhere, such as in the
+builder's own unit. A `no` waits for the person, whatever the verdict says.
+
+A finding with `departureFrom` carries a `question` too. Its fix was to cure a departure from that
+recipe. Answer it as `"departureCured": "yes"` or `"no"`, with the reason in `evidence`. A `no`
+waits for the person.
 
 **You may not read code the fix diff did not touch, and you may not raise a finding against it.**
 You may not extend the loop by adding a round of your own. You are not given the original full

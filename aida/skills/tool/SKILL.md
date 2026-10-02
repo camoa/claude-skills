@@ -142,7 +142,8 @@ as permission to guess.
 
 Prints the recipe's path, the framework it matched, the commands it holds, and the files it ships.
 Runs nothing. Use it when someone asks what would happen, or when an install failed and you want
-to show the steps.
+to show the steps. Exit 2 means no folder holds a recipe for the tool. Go to "No recipe," above,
+because the catalog can hold one.
 
 ## Tools a recipe names
 
@@ -151,7 +152,7 @@ frontmatter. A stage that resolved such a recipe runs this before the recipe's l
 per recipe path:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] [--task <task folder>] <recipe path>
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] [--task <task folder>] [--only <tool>]... <recipe path>
 ```
 
 A recipe can also name a tool that it needs only on a task with automated tests. That tool goes
@@ -179,7 +180,8 @@ A line that reads unknown with "no recipe" goes to the catalog first, as "No rec
 each path it returns as `--tooling`, and run `require` again.
 
 `--advisory` prints the same lines and always exits 0. A stage passes it when a missing tool must
-not stop it.
+not stop it. `--only <tool>` checks only that tool of the two lists, once per tool. Preconditions
+passes it for the tools that the build's own checks run.
 
 | Exit code | Meaning | What to do |
 |---|---|---|

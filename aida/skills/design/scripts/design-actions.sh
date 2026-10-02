@@ -41,7 +41,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
-#                        --id <woId> --path <path>
+#                        --id <woId> --path <path> [--shared]
 #   design-actions.sh add-done-when  <task_folder> \
 #                        --id <woId> --text <text>
 #   design-actions.sh add-test       <task_folder> \
@@ -156,7 +156,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or `read-guide` or `verify` was given a path naming no file on disk; or `account` was given
 #      a --finding naming no finding under research/, or a --remove naming no entry on the order;
 #      or `distill` found no
-#      records/design-distill.json, so the distiller has not been dispatched yet.
+#      records/design-distill.json, so the distiller has not been dispatched yet. On a light task
+#      it reads the scope and research sidecars too, and any of the three can be absent.
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; a `--id` that is not a valid work order id shape; a
 #      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
@@ -208,6 +209,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   7  `check` or `close` found a research finding no work order accounts for (gap row 223). Each
 #      one prints as `<search>#<n>: <the first line of its text>`. `account` is the way through.
 #      `check` reports it only when the design check itself is clean.
+#   8  an unattended `close` found a disposition made unattended, or one only a paragraph records,
+#      that records/disposition-<order>.json does not confirm: no value for the candidate, or
+#      another value (gap row 293). One line per such disposition says which, and what to do.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -258,6 +262,7 @@ die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
 die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
 die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
+die8() { printf 'design-actions: %s\n' "$1" >&2; exit 8; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -282,7 +287,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--interface <text>] [--reasoning <text>] \
                                          [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
-       design-actions.sh add-owned-file <task_folder> --id <woId> --path <path>
+       design-actions.sh add-owned-file <task_folder> --id <woId> --path <path> [--shared]
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
        design-actions.sh add-test       <task_folder> --id <woId> --level <text> \
                                          --description <text>
@@ -630,6 +635,23 @@ unaccounted_findings() {
 # (live-run rows 79 and 131).
 reasoning_appended() {
   printf '%s' "$1" | jq --arg v "$2" '.reasoning = (if (.reasoning // "") == "" then $v else .reasoning + "\n\n" + $v end)'
+}
+
+# The dispositions that stand on the work order file $1, one `<disposition> TAB <runMode> TAB
+# <candidate>` line each. The order's `dispositions` list comes first. Then each candidate a live
+# `Candidate <c> (` paragraph names and the list does not, with its last paragraph's outcome and the
+# run mode `unrecorded`. An order disposed before the list existed holds only paragraphs, and
+# those are counted too (gap row 293).
+standing_dispositions() {
+  jq -r '
+    ((.dispositions // []) | map(.candidate)) as $listed
+    | ((.dispositions // [])
+       + ([ (.reasoning // "") | split("\n\n")[]
+            | capture("^Candidate (?<candidate>.*) \\((same-name|same-directory|same-layer)\\)\\. Proposed [a-z]+, citing [^\n]*?\\. Disposition: (?<disposition>[a-z]+) \\(")
+            | select(.candidate as $c | $listed | index($c) | not) ]
+          | reduce .[] as $p ({}; .[$p.candidate] = $p.disposition)
+          | to_entries | map({candidate: .key, disposition: .value, runMode: "unrecorded"})))[]
+    | [.disposition, .runMode, .candidate] | @tsv' "$1"
 }
 
 # The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
@@ -1070,7 +1092,7 @@ require_wo_id_arg() {
 }
 
 do_add_owned_file() {
-  local id="" path_val=""
+  local id="" path_val="" shared=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)
@@ -1079,6 +1101,7 @@ do_add_owned_file() {
       --path)
         need_value "add-owned-file" "--path" "$#" "${2:-}"
         path_val="$2"; shift 2 ;;
+      --shared) shared=true; shift ;;
       *) die3 "add-owned-file: unrecognized argument: $1" ;;
     esac
   done
@@ -1104,6 +1127,11 @@ do_add_owned_file() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-owned-file: $file exists but is not valid JSON"
   doc="$(jq --arg p "$path_val" '.ownedFiles = (((.ownedFiles // []) + [$p]) | unique)' "$file")"
+  # --shared marks a file several orders only add to, so another order may own it too when it
+  # also marks it (design-schema.json, sharedFiles). Given again on a path the order owns, it marks
+  # that path.
+  [ "$shared" = "false" ] \
+    || doc="$(printf '%s' "$doc" | jq --arg p "$path_val" '.sharedFiles = (((.sharedFiles // []) + [$p]) | unique)')"
   # An order whose every owned file lies under the project folder delivers a document, not code.
   # So its proof is `record` (nyc defect 17): no test, no commit in the code repository, its
   # done-when rows judged instead. The task folder's deliverables/ is the usual place; a report
@@ -1338,7 +1366,8 @@ do_remove_owned_file() {
     || die2 "remove-owned-file: $id does not own $path_val"
   [ "$(jq -r '(.ownedFiles // []) | length' "$file")" -gt 1 ] \
     || die3 "remove-owned-file: $path_val is the only file $id owns, and an order that names no file hands the builder no boundary (design-schema.json, ownedFiles). Add the replacement first, or fold the order into another with merge"
-  doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]' "$file")"
+  doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]
+    | if has("sharedFiles") then .sharedFiles -= [$p] else . end' "$file")"
   local unset_proof
   unset_proof="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" \
     'if (.proof // "") == "record" and ((.ownedFiles // []) | any(startswith($t)) | not) then "yes" else "" end')"
@@ -1524,7 +1553,9 @@ do_verify() {
 # ordered union without duplicates, the survivor's entries first. `interface` and `reasoning` are
 # appended under a line naming the folded order. A disposition `dispose` wrote on it is not
 # lost, and a reader can tell which order stated what. That line is a paragraph of its own, so
-# a folded paragraph marked struck still starts with REASONING_JQ's prefix. The summary says which scalars were carried
+# a folded paragraph marked struck still starts with REASONING_JQ's prefix. Its `dispositions`
+# entries land after the survivor's, one per candidate with the survivor's kept. The survivor's
+# verdict file does not name them, so an unattended close asks for a confirmer again. The summary says which scalars were carried
 # and which were dropped. A live run that saw only list counts read the append as a drop and
 # rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
 # and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
@@ -1578,13 +1609,15 @@ do_merge() {
       def append(k): if (($f[k] // "") == "" or ($f[k] == .[k])) then . elif ((.[k] // "") == "") then .[k] = "From " + $from + ":\n\n" + $f[k] else .[k] = .[k] + "\n\nFrom " + $from + ":\n\n" + $f[k] end;
     . as $i
     | union("criteriaServed") | union("criteriaOwned") | union("nonGoals") | union("dependsOn")
-    | union("ownedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
+    | union("ownedFiles") | union("sharedFiles") | union("surfaces") | union("tests") | union("doneWhen") | union("reuses") | union("verify") | union("findings")
+    | union("dispositions")
+    | if has("dispositions") then .dispositions |= reduce .[] as $d ([]; if any(.[]; .candidate == $d.candidate) then . else . + [$d] end) else . end
     | .dependsOn = [ (.dependsOn // [])[] | select(. != $from and . != $i.id) ]
     | append("interface") | append("reasoning")
   ' "$into_file")"
 
   local k before after
-  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles surfaces tests doneWhen reuses verify findings; do
+  for k in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles sharedFiles surfaces tests doneWhen reuses verify findings dispositions; do
     before="$(jq -r --arg k "$k" '(.[$k] // []) | length' "$into_file")"
     after="$(printf '%s' "$doc" | jq -r --arg k "$k" '(.[$k] // []) | length')"
     echo "$k: $before -> $after"
@@ -1896,6 +1929,22 @@ do_check() {
   else
     echo "interfaceUnowned: none"
   fi
+  # The backticked interface names that hold `<` or `{` (gap row 299). Such a name is often a
+  # shape, such as `type.<id>`, and the builder's record matches it only by repeating the shape.
+  # A generic type such as `List<Item>` holds `<` too, so the line never blocks the close.
+  local shaped
+  shaped="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '
+        select((.interface | type) == "string") | . as $wo
+        | [ .interface | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`") | select(test("[<{]")) ]
+        | unique | select(length > 0)
+        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done \
+    | paste -s -d ';' - | sed 's/;/; /g')"
+  if [ -n "$shaped" ]; then
+    echo "interfaceShaped: $shaped | best effort: each name in backticks holds < or {, so it may be a shape. The build's interface check matches a shape only by its repeated text. Name each real element, or write the shape as plain text with update --interface"
+  else
+    echo "interfaceShaped: none"
+  fi
   # The calls an order's done-when rows and tests make that nothing it declares names (gap row
   # 231). The test author may not read source, so a signature the brief lacks sent it to a runtime.
   # A `name()` token is looked for as `name(` in the order's interface, its reuses and the
@@ -2054,6 +2103,33 @@ do_close() {
       || die4 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason, removedAt and an optional mergedInto"
   fi
 
+  # Unattended, each disposition nobody watched needs the confirmer's verdict file, and the value
+  # in it must be the one that stands (gap row 293). A value that differs is a disagreement.
+  if [ "$RUN_MODE" = "autonomous" ]; then
+    local unconfirmed="" wo_json wo_id disp mode cand verdict_file got
+    while IFS= read -r wo_json; do
+      [ -n "$wo_json" ] || continue
+      wo_id="$(jq -r '.id' "$wo_json")"
+      verdict_file="$TASK_PATH/records/disposition-$wo_id.json"
+      while IFS="$(printf '\t')" read -r disp mode cand; do
+        [ "$mode" != "interactive" ] || continue
+        got="$(jq -r --arg c "$cand" '.[$c] // empty' "$verdict_file" 2>/dev/null)"
+        if [ -z "$got" ]; then
+          unconfirmed="$unconfirmed
+$wo_id, $cand, $disp: no verdict in $verdict_file"
+        elif [ "$got" = "supersede" ] && [ "$disp" != "supersede" ]; then
+          unconfirmed="$unconfirmed
+$wo_id, $cand, $disp: the confirmer answered supersede, which an unattended dispose cannot record. A person decides it"
+        elif [ "$got" != "$disp" ]; then
+          unconfirmed="$unconfirmed
+$wo_id, $cand, $disp: the confirmer answered $got. Dispose it again with --verdict $got"
+        fi
+      done < <(standing_dispositions "$wo_json")
+    done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
+    [ -z "$unconfirmed" ] \
+      || die8 "close: a disposition made unattended has no confirmer verdict that agrees. For a missing verdict, dispatch one disposition-confirmer for that order:$unconfirmed"
+  fi
+
   local unaccounted
   unaccounted="$(unaccounted_findings)"
   [ -z "$unaccounted" ] \
@@ -2189,6 +2265,11 @@ $unaccounted"
 # paragraph per call, so every candidate's verdict survives. Neither flag, and the order's
 # `reuses` is left as it was.
 #
+# Each call also writes the outcome to the order's `dispositions`, one entry per candidate.
+# Unattended, it prints `confirmFile:`, the order's verdict file, which maps each candidate to the
+# confirmer's value. An unattended `close` counts the dispositions against that file, because one
+# confirmer once judged the last of six paragraphs and the other five stood (gap row 293).
+#
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
 # because it removes nothing. A reuse or extend citing no cost has nothing to downgrade to, so it
 # stands and the thin reasoning is recorded for a person to see (version 5's rule). A decline
@@ -2281,10 +2362,27 @@ do_dispose() {
     doc="$(printf '%s' "$doc" | jq --arg p "$reuse_path" --arg i "$reuse_interface" \
       '.reuses = ((.reuses // []) | map(select(.path != $p))) + [{path: $p, interface: $i}]')"
   fi
+  # What stood for this candidate before this call, read before the write below.
+  local before verdict_file held
+  before="$(standing_dispositions "$file" | awk -F'\t' -v c="$candidate" '$3 == c { print $1 }')"
+  doc="$(printf '%s' "$doc" | jq --arg c "$candidate" --arg o "$outcome" --arg m "$RUN_MODE" '
+    {candidate: $c, disposition: $o, runMode: $m} as $e
+    | .dispositions = (.dispositions // [])
+    | if any(.dispositions[]; .candidate == $c) then .dispositions |= map(if .candidate == $c then $e else . end)
+      else .dispositions += [$e] end')"
   write_atomic "$file" "$doc"
+  # The confirmer's value for this candidate stays when it agrees with the new outcome, and when
+  # the outcome did not change, so a disagreement is never cleared by asking again. A new outcome
+  # it did not judge drops the value, and only this candidate's.
+  verdict_file="$TASK_PATH/records/disposition-$id.json"
+  held="$(jq -r --arg c "$candidate" '.[$c] // empty' "$verdict_file" 2>/dev/null)"
+  if [ -n "$held" ] && [ "$held" != "$outcome" ] && [ "$before" != "$outcome" ]; then
+    write_atomic "$verdict_file" "$(jq --arg c "$candidate" 'del(.[$c])' "$verdict_file")"
+  fi
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
+  [ "$RUN_MODE" != "autonomous" ] || echo "confirmFile: $verdict_file"
   echo "reuses: $(printf '%s' "$doc" | jq -r '(.reuses // []) | length')"
   wo_summary "$doc"
   render_wo "$id"
@@ -2345,9 +2443,19 @@ do_account() {
 }
 
 # Reads the sidecar the distiller wrote after `close`; the read is distill_read in task-helpers.sh.
+# A light task's one distiller wrote a sidecar for each of the three stages, so each is read under
+# its own `stage:` line (distill_deferred).
 do_distill() {
   [ "$#" -eq 0 ] || die3 "distill: unrecognized argument: $1"
-  distill_read "$TASK_PATH" design
+  if task_is_light "$TASK_PATH"; then
+    local stage
+    for stage in scope research design; do
+      echo "stage: $stage"
+      distill_read "$TASK_PATH" "$stage"
+    done
+  else
+    distill_read "$TASK_PATH" design
+  fi
   exit 0
 }
 

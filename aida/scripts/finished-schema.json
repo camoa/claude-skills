@@ -85,7 +85,7 @@
       "items": {
         "$ref": "#/$defs/pendingRow"
       },
-      "description": "What an unattended build left for a person, copied from each order's review record (gap row 279): a finding marked pending, and a departure held as deviationPending. The review stage writes one check per entry, and each reads unknown until the person answers it at close."
+      "description": "What a build left for a person, copied from each order's review record (gap row 279): a finding marked pending, and a departure held as deviationPending. The review stage writes one check per entry, and each reads unknown until the person answers it at close."
     },
     "rowsJudgedByModel": {
       "type": "integer",
@@ -199,6 +199,11 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many fix rounds this order took. Copied from the ledger. It is the cheapest reading of which orders were hard, which is what a person deciding where to look next wants first."
+        },
+        "closedRanges": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$"},
+          "description": "The commitRange this order held each time a dependent order's repair reopened it, oldest first. Present only when one did. commitRange then covers the last close alone, the repair's own commits, so the order's whole work is these ranges and that one (gap row 286)."
         }
       }
     },
@@ -275,10 +280,11 @@
       "required": ["unit", "kind", "text"],
       "properties": {
         "unit": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The order whose review record holds this decision." },
-        "kind": { "type": "string", "enum": ["ruling", "departure"], "description": "`ruling` for a finding with an empty fix scope, `departure` for a departure from the design." },
+        "kind": { "type": "string", "enum": ["ruling", "departure"], "description": "`ruling` for a finding marked pending, `departure` for a departure from the design." },
         "finding": { "type": "string", "pattern": "^f[1-9][0-9]*$", "description": "The finding's own id, present on a ruling only." },
         "severity": { "type": "string", "enum": ["high", "medium", "low"], "description": "What the reviewer called the finding, present on a ruling only." },
-        "text": { "type": "string", "description": "The finding's evidence, or the departure and the file it was found in, copied verbatim." }
+        "text": { "type": "string", "description": "The finding's evidence, or the departure and the file it was found in, copied verbatim." },
+        "because": { "type": "string", "description": "Why a ruling waits, present on a ruling only: a verifier answered and a person decides, its fix scope is empty, or a light task allows one fix round, and it is spent (gap row 305)." }
       }
     },
     "deferredRow": {

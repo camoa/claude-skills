@@ -118,10 +118,11 @@ from; a run at a different commit refuses rather than overwrites.
 each recipe's path, and every later step reads that path. A republished recipe changes nothing
 until `recipe-refresh` replaces the path for the frameworks named. It records what changed and
 re-runs nothing: the verdict stands, because a recipe's conditions change more rarely than its
-markers. Only the test-execution recipe is refreshed. The review recipe is pinned by the baseline
-for the task's life. A republished one has a new body, so the build refuses it, and no action
-takes a new baseline mid-task. The freeze then reads the record's path, or refuses a path that
-disagrees with it, and its record names the recipe it read.
+markers. The review recipe is pinned by the baseline, and the build refuses a different body.
+`recipe-refresh` adopts a new review body only when each tool row reads met or undeclared now.
+That baseline then subtracts nothing. Otherwise it refuses and names the row.
+The freeze then reads the record's path, or refuses a path that disagrees with it, and its record
+names the recipe it read.
 
 ## Writing the tests for one order
 
@@ -134,7 +135,8 @@ production code either. That bound is recorded on the dispatch, not applied by a
 dispatch record is the task's own. So a task has at most one open dispatch, and two tasks of one
 project build side by side. It carries the time it opened, so a record a role never closed is
 named with its age. A role that returns with no report, such as one stopped at its turn limit, is
-asked once to finish. A second return with no report halts the order.
+asked once to finish. An implementer is asked twice when its order's diff budget starts with
+`large`. One more return with no report halts the order.
 
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of
@@ -372,7 +374,10 @@ After each attempt, eight checks run. These are scripts, and no model reads anyt
 5. **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An
    order that froze none reads undeclared here, because there was nothing to hash.
 6. **interface-record.** Does the builder's record name every element the order's declared
-   interface names in backticks.
+   interface names in backticks. The brief lists those names, and the builder repeats them.
+   A shortened name counts when it ends one declared name after a `.` or `::`, and no other.
+   A path is never shortened. A name ending in lowercase only, such as `a.php`, needs a
+   shortened form that keeps a `.` or `::`.
 
 The three tool checks run over the order's owned files minus its frozen tests. The implementer
 may not write the tests, so the tools judge only what it may write. An owned file outside the
@@ -441,14 +446,17 @@ their briefs.
 A departure the builder declared never closes clean. The builder names one with a `Deviation:`
 line, or a heading that starts with "Deviation", in its report or its interface record. The build
 already stops on one. The review runs the same scan over the latest attempt, because a build
-record from an earlier version can carry one. A reviewer that sees a departure marks its
-information item `departsFromDesign`, and that is a hit too. The reviewer also answers each
+record from an earlier version can carry one. The reviewer also answers each
 implement recipe: followed, departed, or not applicable with a reason. A departed answer is a
-hit, and a missing or extra answer is refused. A hit halts the order for design drift, whatever
+hit, and a missing or extra answer is refused. A departure that a fix can cure is not a hit when
+it is paired with a finding that has a fix scope, on a file the evidence names. The fix round
+cures it, and the verify step confirms the cure. A hit halts the order for design drift, whatever
 else the reviewer wrote. What is wrong is the design, or a recipe it relies on, so no fixer can
 repair it. You change the design and restart the order, or you keep the departure with a reason.
-The review record and the ledger keep that reason. Unattended, nobody can keep it, so the halt
-stands.
+The review record and the ledger keep that reason. Unattended, nothing halts: the departure waits
+for you at the task review. A reviewer that sees a departure can also mark its information item
+`departsFromDesign`. That is a note, not a finding, so it never halts the build in either mode. It
+waits for you at the task review too.
 
 ## Fixing what the review found
 

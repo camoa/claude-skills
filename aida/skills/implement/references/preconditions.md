@@ -29,6 +29,10 @@ Dispatch it a third time, with `point: implement` and each framework. Do not rea
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.
 
+**Light:** ask for the three points in one dispatch, with the lines `point: test-execution`,
+`point: review` and `point: implement`, each framework, and the project folder. The record keeps
+the `implement` path, so the tests step and the build step of a light task read it there.
+
 ## Check the tools the test recipe names
 
 The script runs the tool skill's `require` itself, from the worktree, for each `test-execution`
@@ -47,8 +51,24 @@ row of another cost also runs still stops the run.
 
 A tool that reads unknown with "no recipe" goes to the catalog first, as the tool skill's "No
 recipe" section says. The `nextAdvice:` line names this step. Pass each path the catalog returns
-as `--tooling <tool>=<path>` and run this step again. Nothing is checked when no order needs the harness, as the next section says. The `review`
-recipe's tools are review's to check, not this step's.
+as `--tooling <tool>=<path>` and run this step again. When no order needs the harness, the test
+recipe's tools are not checked, as the next section says.
+
+The script also checks the tools that the build's own checks run. It reads the `review` recipe's
+`requires_tooling`. It keeps each tool whose name is in the argv of a `## Check commands` row that
+`build-record` runs. A row that reads files counts only when an order owns a file of a type the
+row reads, inside the code repository. The file need not exist yet. Each tool kept is one
+condition, read as above, so an absent tool stops the run with the install advice. Its owner
+names the tool's tooling recipe, which says how to install it. This holds when no order needs the
+harness too. Such a task runs no test, but `build-record` runs these
+checks on every order. Without this check, the first order is built and paid for, and then its
+checks cannot run. The review recipe's other tools, such as a duplication tool, are review's to
+check.
+
+A row that `build-record` runs, whose argv holds no tool the review recipe names, is not checked.
+No tool name is guessed from a command. The record keeps that row and its argv under
+`buildToolsNotChecked`, and the `buildToolsNotChecked:` line names them. Read that line to the
+person. A missing program then reads unknown at `build-record`, after the order was built.
 
 ## Run the checks
 
@@ -59,6 +79,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --implement-lookup <framework>=<path to the implement recipe, or the lookup's own word> \
+  --check-lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --tooling <tool>=<path to a tooling recipe the catalog returned> \
   --catalog-recipe <framework>=<the catalog's copy or the lookup's word, when a folder answered> \
   --value <name>=<value>...
@@ -76,7 +97,11 @@ declared nothing. `no-recipe` records the framework `undeclared`: the catalog lo
 nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` record it
 `unknown`, and stop: nobody looked. Every framework prints its own line on every run.
 `--check-recipe` is optional per framework: absent, its three tool checks record
-undeclared, with a reason saying no check recipe was resolved.
+undeclared, with a reason saying no check recipe was resolved. A failed `review` lookup passes
+`--check-lookup-failed <framework>=<word>`. The record keeps each framework's answer as
+`reviewLookup`. The `reviewNotResolved:` line names each framework with no review recipe, and
+`none` when every framework has one. Read that line to the person. A light run asks every point
+in one dispatch, and this line is what shows an answer that dispatch dropped.
 
 **A task whose orders are all proved by their records runs no test, so it needs no harness.**
 The same holds for an order a person confirms, whose task has no automated tests. On such a task
@@ -162,6 +187,12 @@ there. A rerun takes new values and never reads the old ones, and `recipe-refres
 when it changes a recipe path. A block that fails or prints nothing stops the blocks after it. Its name stays unfilled,
 and a row that needs it reads unknown and names it. A recipe with no `## Tokens` section fills nothing.
 
+A `gate` order runs the implement recipe's `## Configuration gate` lines at its build. A line may
+hold a token such as `{project}`, which the task's environment record supplies. When any order's
+proof is `gate`, the script resolves each token in those lines and runs none of them, because a
+gate line reaches the site. A token that nothing fills refuses at 3, names the token, and writes
+nothing. Bring the environment up, or pass `--value <name>=<value>`, then run the step again.
+
 ## Read the verdicts to the person
 
 - **met.** Every declared condition answered yes. The build can go on.
@@ -242,9 +273,18 @@ heading changes more rarely than its markers, and the person who refreshes knows
 a framework with no resolved recipe on record, and a path that does not exist (exit 90). The
 freeze refuses a `--test-recipe` that is not the record's path (exit 91), so run this first.
 
-The review recipe is pinned by the baseline for the task's life, and `recipe-refresh` does not
-touch it. Adopting a republished body would need a new baseline, and a baseline reads the tree
-before the task. It cannot be taken again once the task has changed the tree. Each tool runs where
-the tree stands, so a second reading records this task's own findings as pre-existing. The build
-refuses a body the baseline did not read (exit 73). Finish the task with the pinned body. The other
-route is to abandon the baseline by hand, and checks 5 to 7 then subtract this task's own findings.
+The review recipe is pinned by the baseline, with its sha256. The build refuses a body the
+baseline did not read (exit 73). A baseline reads the tree before the task. Each tool runs where
+the tree stands, so a second reading records this task's own findings as pre-existing. For that
+reason a new review body is adopted only when no finding can hide. Resolve it the same way, with
+`point: review`, then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
+  --check-recipe <framework>=<path to the review recipe>
+```
+It runs every tool row of the new body over the baseline's scope, on the tree as it stands. When
+each row reads met or undeclared, nothing is subtracted. It then pins the new body, writes those
+readings into the baseline, and records both hashes under `recipeRefreshes`. When a row reads
+unmet or unknown, it refuses (exit 73), names each such row, and writes nothing. Then finish the
+task with the pinned body, or repair what the row found and run it again. The last route is to
+abandon the baseline by hand, and checks 5 to 7 then subtract this task's own findings.

@@ -80,7 +80,16 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared. At least one entry is required: an order that names no file it may write hands the builder no boundary at all."
+      "description": "The paths this order may write, each a file or a directory and never a glob. check-design.sh refuses a wildcard, and design-actions.sh refuses one at the moment it is added, because implementation derives the test author's denied reads from this list and compares them as paths: a glob there would deny nothing while the dispatch still read as enforced. They must not overlap another order's declared list, except for an entry both orders name in sharedFiles, which is what lets several orders run at once without colliding and lets a critic see a change was out of scope without asking (ideal/design.md, 'What a work order holds'). Checked as declared strings only, the same bound version 5's own overlap check carried: a declaration is not a fact, and nothing here stops a builder touching a file it never declared. At least one entry is required: an order that names no file it may write hands the builder no boundary at all."
+    },
+    "sharedFiles": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The entries of ownedFiles this order shares with other orders, written by `add-owned-file --shared` and removed with the entry. Optional: an order with none omits it. A shared file is one several orders only add to, such as a list of enabled modules or a dependency manifest (gap row 287). Two orders may both own a path only when both name it here; an overlap either order leaves undeclared still fails the design check and `start`. Implementation reads the field in three places. The implementer of one order may read a file it shares. A commit that changes only shared files is attributed to an order by that order's own build or fix record, and never by its paths. The review diff of a shared file holds the changes of that order's own commits only. Whether a change only adds is not checked: no framework-neutral reading of a diff tells an addition from a rewrite, since a manifest entry also edits the line before it."
     },
     "surfaces": {
       "type": "array",
@@ -116,13 +125,13 @@
     "reasoning": {
       "type": "string",
       "default": "",
-      "description": "Why this order exists, for a decision shared by several orders, for example why a base class sits here rather than being copied into each order that needs it (ideal/design.md, 'Why the architecture is not a document'). Empty for most orders: only a shared decision needs stating, and most orders need none. Paragraphs are separated by a blank line. A paragraph that starts `[struck] ` was replaced by a later one (design-actions.sh `update --strike-reasoning`, gap row 215). It stays here and in the rendered design. No brief carries it."
+      "description": "Why this order exists, for a decision shared by several orders, for example why a base class sits here rather than being copied into each order that needs it (ideal/design.md, 'Why the architecture is not a document'). Empty for most orders: only a shared decision needs stating, and the parts of a `large` order, numbered (1), (2) and so on, so the builder commits after each part (gap row 301). Paragraphs are separated by a blank line. A paragraph that starts `[struck] ` was replaced by a later one (design-actions.sh `update --strike-reasoning`, gap row 215). It stays here and in the rendered design. The build brief carries it."
     },
     "diffBudget": {
       "type": "string",
       "default": "",
       "minLength": 1,
-      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against."
+      "description": "How much change this order should take, in plain words, for example \"small: one new class and its test\" (ideal/design.md, 'What a work order holds'). A signal for whoever plans the work and whoever critiques the result, not a limit to game: this field is never compared against an actual diff by any check here. It must not be empty, because an order with no answer here leaves the reviewer nothing to compare the realized diff against. One word of it is read: when it starts with `large`, the implementer's dispatch record carries `resumesAllowed` 2, so a builder stopped at its turn limit is resumed twice (gap row 301)."
     },
     "proof": {
       "type": "string",
@@ -137,6 +146,14 @@
         "$ref": "#/$defs/reuse"
       },
       "description": "The existing things this order's build and tests call, one entry per reuse disposition, written by design-actions.sh's `dispose` beside the outcome it puts in `reasoning`. Optional: an order disposed before this field has none, and an order that reuses nothing has none. The tests brief carries this list whole. The test author may not open production source, and a reused module belongs to no work order (live-run row 69)."
+    },
+    "dispositions": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/disposition"
+      },
+      "description": "The disposition that stands for each candidate, one entry per candidate, written by design-actions.sh's `dispose` alone. A second dispose of the same candidate replaces its entry in place. records/disposition-<id>.json, which the disposition-confirmer writes, maps each candidate to the confirmer's value. An unattended `close` refuses with exit 8 while an entry disposed unattended has no value there, or another value (gap row 293). A `Candidate` paragraph the list does not name counts the same way, so an order disposed before this field is counted too. Optional: an order that disposed nothing has none."
     },
     "findings": {
       "type": "array",
@@ -204,6 +221,32 @@
           "type": "string",
           "minLength": 1,
           "description": "Why this finding is not used. Absent when the order uses it."
+        }
+      }
+    },
+    "disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "disposition",
+        "runMode"
+      ],
+      "properties": {
+        "candidate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The candidate, as `dispose --candidate` named it."
+        },
+        "disposition": {
+          "type": "string",
+          "enum": ["reuse", "extend", "supersede", "decline"],
+          "description": "What stands after the table: the value `dispose` printed on its `disposition:` line."
+        },
+        "runMode": {
+          "type": "string",
+          "enum": ["interactive", "autonomous"],
+          "description": "The run mode of the dispose. Only an unattended disposition needs a confirmer."
         }
       }
     },

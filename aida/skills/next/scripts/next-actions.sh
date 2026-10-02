@@ -17,7 +17,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Depends on, shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh   (sourced, never executed)
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh (sourced, for task_stage only)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh (sourced, for task_stage and task_after_state)
 #
 # Usage:
 #   next-actions.sh [--run-mode <interactive|autonomous>] report
@@ -105,7 +105,7 @@ command -v jq >/dev/null 2>&1 || die3 "jq is required and was not found on PATH"
 source "$REGISTRY_LIB"
 # task_stage is the one copy of the stage rule; the session-start hook reads the stage off this
 # script's lines. The library's other functions take die1, die2 and die4 from the caller and are
-# not called here, and task_stage calls none of them.
+# not called here, and task_stage and task_after_state call none of them.
 TASK_HELPERS="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 # shellcheck source=/dev/null
 source "$TASK_HELPERS" || die3 "the library failed to load: $TASK_HELPERS"
@@ -211,7 +211,7 @@ legacy_stages() {
 
 gather_new_tasks() {
   local project_path="$1"
-  local tasks_dir="$project_path/tasks" d tj state key line review notes stage legacy wtp ondisk
+  local tasks_dir="$project_path/tasks" d tj state key line review notes stage legacy wtp ondisk after
   [ -d "$tasks_dir" ] || return 0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
@@ -241,6 +241,7 @@ gather_new_tasks() {
     notes="${notes%.md}"
     stage="$(task_stage "$d" "$review")"
     legacy="$(legacy_stages "$d")"
+    after="$(task_after_state "$d")"
     # A recorded path that is not on disk is a state of its own, never a path to hand on: the
     # tree was removed, or another machine recorded it. jq cannot look at disk, so the shell does.
     wtp="$(jq -r '.worktree.path // empty' "$tj" 2>/dev/null)"
@@ -249,12 +250,13 @@ gather_new_tasks() {
       if [ -d "$wtp" ]; then ondisk="yes"; else ondisk="no"; fi
     fi
     line="$(jq -c --arg p "$d" --arg review "$review" --arg notes "${notes:-none}" --arg stage "$stage" \
-      --arg legacy "$legacy" --arg ondisk "$ondisk" \
+      --arg legacy "$legacy" --arg ondisk "$ondisk" --arg after "$after" \
       '{kind:"new", id:.id, state:(.state // "new"), parent:(.parent // null),
         children:(.children // []), runMode:(.runMode // "interactive"), runModeStages:(.runModeStages // []),
         review:$review, notes:$notes,
         worktree:(.worktree.path // "none"), stage:$stage, path:$p}
        | if $ondisk != "" then . + {worktreeOnDisk:$ondisk} else . end
+       | if $after != "" then . + {after:($after | sub(" [a-z]+$"; "")), afterBuild:($after | sub("^.* "; ""))} else . end
        | if $legacy != "" then . + {legacyStages:($legacy | split(" "))} else . end' "$tj")"
     [ -n "$line" ] || { printf 'next-actions: %s produced no output from jq; skipped.\n' "$tj" >&2; WARNED=1; continue; }
     printf '%s\t%s\n' "$key" "$line"
@@ -376,6 +378,9 @@ do_open() {
     review="$(review_verdict_of "$project_path/tasks/$target")"
     echo "review: $review"
     echo "stage: $(task_stage "$project_path/tasks/$target" "$review")"
+    local after
+    after="$(task_after_state "$project_path/tasks/$target")"
+    [ -z "$after" ] || printf 'after: %s\nafter-build: %s\n' "${after% *}" "${after##* }"
     local stages
     stages="$(legacy_stages "$project_path/tasks/$target")"
     [ -z "$stages" ] || echo "legacyStages: $stages"

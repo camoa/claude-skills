@@ -8,8 +8,11 @@ reference now. Nothing below may change one.
 Dispatch `catalog-identifier` with the lines `point: implement`, each framework, and the project
 folder. Skip it when an earlier step of this build has resolved it, the tests step included. Name
 the role, and pass the lookup's answer in its own word: SKILL.md holds both rules. Once resolved,
-reuse the path per framework for every order in this build. No record holds these paths. They
-live in the conversation, so a fresh window resolves them again.
+reuse the path per framework for every order in this build. They live in the conversation, so a
+fresh window resolves them again. **Light:** dispatch nothing here. Read each path from
+`implementation/preconditions.json`, at `frameworks[].implementRecipePath`. Read its
+`implementLookup` too. `not-given` means nobody asked, so dispatch the lookup for that framework,
+as other modes do. A failure word means no implement recipe, so pass no path for it.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from
 the path. Do not read the body here.
@@ -40,7 +43,8 @@ It reads the frozen copy and the frozen tests. It writes eleven things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns and, under `findings`, the research findings
-  design used for it;
+  design used for it. Under `interfaceNames` it lists each name the declared interface holds in
+  backticks, the names the interface-record check counts;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
@@ -118,8 +122,10 @@ them belong to this stage, which commits them when it finishes. The owned-files 
 aside and counts them in its detail, so a sweep is visible there, not a failure.
 
 **It writes code only inside the files its order owns.** Not another order's, whatever it finds
-there. The dispatch record carries the list, and a hook refuses the implementer a write under the
-code path outside it while the record is open. The reason tells it to stop and report.
+there. A file the order shares with another order is its own too, and the rendered order tells
+the implementer to add entries there only. The review diff of that file holds this order's own
+commits. The dispatch record carries the list, and a hook refuses the implementer a write under
+the code path outside it while the record is open. The reason tells it to stop and report.
 
 **It may not change a test.** A test that seems wrong is a reason to stop, not to edit. A hook
 refuses the write and names which order froze the file.
@@ -134,7 +140,8 @@ A stop looks like this in the conversation: the role returns early. Its report's
 the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
 cause, and `build-record` refuses a report without one (exit 106). Under `Stop: none`, the report
 also holds exactly one deviation line, `Deviation: none` or `Deviation: <what>: <why>`, and the
-same refusal applies. A deviation other than none, or a heading that starts with "Deviation", in
+same refusal applies. The builder writes each line alone, and puts any note on its own line.
+A deviation other than none, or a heading that starts with "Deviation", in
 the report or the interface record, is a stop. A cause is a stop even
 when code was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
 attempt. It names each commit made after the attempt began, and the person reverts or keeps them
@@ -149,6 +156,29 @@ what the builder's report names. The person, or design, adds a file the unit nee
 halt a started order. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
 (exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
+
+**A defect in a closed order's file has its own route.** The stop line reads
+`Stop: closed-order-defect: <file>: <what fails>`. `build-record` finds the order that owns the
+file in the snapshot. When that order is closed, the script reopens it for a repair, in both run
+modes. It adds one high finding with origin `repair` to that order's review record. The finding
+cites the owner's first criterion by position, and says so. The script sends the order back to its
+review step and adds one fix round to its allowance, so no counter goes down. The ledger entry
+keeps the repair under `repairs`, with the range the order closed with. `finished.json` carries
+that range beside the new one. The script exits 0 and prints a `repair:` line. The stopped order
+spends no attempt. Commits it made after it began are named, as at any stop. Unattended, they
+halt the stopped order for a person. The owner's fixer works in the owner's files, and the
+reviewer verifies the round. The verifier also answers whether the failure arises in that file.
+A `no` makes the finding pending, and the person rules on it at the task review. So the route
+runs unattended too. Follow the `next:` line to the reopened order. Run `start` first when the
+builder left files uncommitted. Then fix, verify and close that order under
+`references/review.md`. Until it closes, `build-brief` refuses the stopped order (exit 40). Then
+build the stopped order again. Its next stop of this kind at the same attempt opens another repair
+once every earlier one reads addressed. The stopped order's attempt allowance caps how many. A
+file no closed order owns, or a stop past that cap, halts as any other stop does. Interactive,
+open with: "A finished unit of work had a defect, and the next unit found it. Its own fixer
+repairs it, and a reviewer checks the repair and where the defect lies. Nothing needs your
+decision unless the reviewer finds the defect elsewhere." Then name the file and the reopened
+order.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
@@ -315,8 +345,8 @@ compared against the baseline it ran against, and a changed recipe makes that co
 no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
-`references/preconditions.md` does. A placeholder is a whole token, never part of one. It has
-these forms:
+`references/preconditions.md` does. A placeholder is a whole token, or part of one, such as
+`gate-{project}`. It has these forms:
 - `{a.b}` is the Input contract field at that dotted path. Pass `--value a.b=<value>`. For a
   list of scalars, pass one `--value a.b=<item>` per item, and the line runs once per item.
   Only the first such name in a line makes it run more than once.
@@ -326,7 +356,11 @@ these forms:
 - `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them. On
   an order that owns no file, such a line does not apply, and it never passes the order alone.
 
-A `{a.b}` placeholder with no value reads unknown.
+A name with no `--value` is read from the tokens preconditions recorded. It is then read from
+the keys of the task's environment record, such as `project`. A `{a.b}` placeholder with no value
+reads unknown. A `## Configuration gate` line of a `gate` order is the exception. A token there
+with no value refuses at 3 before any check runs, and no attempt is spent. The message names the
+token. Supply the value, then run the same step again.
 
 Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
 the worktree. A line can run a script the recipe ships. After the lines, it removes those
@@ -398,6 +432,14 @@ only, beside `recheckedAt`. The
 attempt counter does not move. The order goes to `checks-passed` when the checks pass and stays
 at `code-written` otherwise. The summary has `build-record`'s shape plus a `recheck:` line.
 
+After a fix round, it runs that round's seven checks again over the fix record's range.
+`references/review.md` says when. The same refusals apply to the fix record, with owned-files in
+place of interface-record. A test or a suite that failed is the fixer's work, so the route is the
+next round or a ruling. It rewrites the fix record the same way, and the order stays at `fixed`.
+A pass addresses the check finding, open or pending. An order halted only by the unattended fix
+round cap, on check findings alone, is not refused, and a pass clears that halt. A check that
+fails again stays a finding, and the halt stays.
+
 ## Read the eight checks to the person
 
 This step runs all eight deciding checks. The record holds every one.
@@ -411,8 +453,10 @@ This step runs all eight deciding checks. The record holds every one.
   unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
   An order with verify lines runs them alone then, and the detail says the block did not run.
   A verify line that is not binding runs only when the person approved it at the design close.
-  A line 2 that printed `There are no changes to import` is a finding for the reviewer, not
-  for this check.
+  A gate line that printed `There are no changes to import` is a finding for the reviewer, not
+  for this check. The section's second `sh` block is the put-back line. It runs after a gate
+  that reached its fourth line, whatever the verdict, and never changes the verdict. When it
+  fails, the detail starts with its exit. Tell the person to run that line again by hand.
   On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
   checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
@@ -442,7 +486,10 @@ This step runs all eight deciding checks. The record holds every one.
   that froze none reads undeclared, because the row hashed nothing, and the executed count does
   not count it.
 - **interface-record.** Does the interface record name every element the order's own declared
-  interface names in backticks.
+  interface names in backticks. A shortened name in backticks counts when it ends the declared
+  name after a `.` or `::`, ends no other declared name, and is not itself declared. A path is
+  never shortened. A name ending in lowercase only, such as `a.php`, needs a shortened form that
+  keeps a `.` or `::`. The detail lists each shortened name.
 
 A suite or a tool the baseline recorded red does not fail these checks by itself. The check
 subtracts the baseline's own output from the run now, line by line. Numbers and dots are set

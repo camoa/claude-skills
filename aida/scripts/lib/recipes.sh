@@ -43,6 +43,8 @@
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command
+#   br_token_value <values> <name>            a run line's value for that name, from every source
+#   br_fill_arg <values> <arg>                the argument with each {name} filled, or the unfilled name
 #   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
 #   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
@@ -59,7 +61,7 @@
 #   pc_refuse_forged_value <action> <pair>    exit 3 on a --value carrying a tab or a newline
 #   rv_is_finding_id <id>                     true for `f` and then digits, no leading zero
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
-#   rv_read_findings_array <file> <key> <action>  sets RV_FINDINGS_ARRAY, or exits 52
+#   rv_read_findings_array <file> <key> <action> [minted]  sets RV_FINDINGS_ARRAY, or exits 52
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
 #   cr_catalog_pair <action> <value>          parses --catalog-recipe's path or reason into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
@@ -69,14 +71,15 @@
 #   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
 #   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
 #   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
-#   fenced_blocks_under <recipe> <heading> <tag>  the lines of every block with that tag, in order
-#   sh_blocks_under <recipe> <heading>        the same, for blocks tagged sh: one command per line
+#   fenced_blocks_under <recipe> <heading> <tag> [<n>]  the lines of every block with that tag, or of block n
+#   sh_blocks_under <recipe> <heading> [<n>]  the same, for blocks tagged sh: one command per line
 #   refuse_if_unsafe <who> <recipe> <line>    returns 1 on a line carrying a shell metacharacter
 #   recipe_files_into <recipe> <heading> <dir>  one file per fenced block; prints <n><TAB><path>
 #   run_recipe_line <who> <recipe> <line> <out> [<extra>]...  runs one line as argv, never a
 #                                               shell; writes the command, then its output, to <out>
 #   recipe_output_summary <status> <out> <line>  the status:, lines:, output: and first: lines
 #   fill_tokens_from <list> <line>            the line with every `{name}` the list holds filled
+#   task_environment_tokens <task.json>       the keys task.json keeps under environment, as a list
 #   run_recipe_capture <who> <recipe> <line> <dir> <out> <capture> [<hint>]  runs one line; its
 #                                             stdout to <capture>, both streams to <out>
 #   recipe_tokens_run <who> <recipe> <out> <dir> <seed> <hint>  runs the ## Tokens blocks into RT_TOKENS;
@@ -940,10 +943,9 @@ tf_path_matches_catalog_glob() {
 
 # Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
 # array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry, and
-# that `{dirs}` expands to one token per directory holding one. $5 is
-# the tab-separated `--value` list every other single-placeholder token is read from. A name the
-# list lacks is read from the tokens preconditions recorded (br_recorded_token). A name that
-# ends in `:json` and has no value reads JSON null. $6, when
+# that `{dirs}` expands to one token per directory holding one. Every other `{name}`, a whole
+# token or inside one such as `gate-{project}`, is filled by br_fill_arg from $5, the
+# tab-separated `--value` list (gap row 288). $6, when
 # given, receives standard error on its own, for a row whose recipe declares `signal: empty-stdout`.
 # $7, when given, receives `+ ` and the command as it runs, every token filled (gap row 264). A
 # token that is empty or holds a character outside [A-Za-z0-9_./:=@%+,-] is in single quotes, so a
@@ -956,7 +958,7 @@ tf_path_matches_catalog_glob() {
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
 br_run_resolved() {
   local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}" logfile="${7:-}"
-  local count i tok name list_json pcount pi rc
+  local count i tok list_json pcount pi rc
   set --
   count="$(printf '%s' "$argv_json" | jq 'length' 2>/dev/null)"
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
@@ -985,14 +987,9 @@ br_run_resolved() {
           pi=$((pi + 1))
         done
         ;;
-      '{'*'}')
-        name="${tok#\{}"; name="${name%\}}"
-        tok="$(cr_lookup "$values" "$name")"
-        [ -n "$tok" ] || tok="$(br_recorded_token "$name")"
-        # `{a.b:json}` is a field's whole value as one JSON token, so an absent field is JSON null.
-        case "$name" in *:json) tok="${tok:-null}" ;; esac
-        if [ -z "$tok" ]; then
-          printf 'UNRESOLVED\t%s' "$name"
+      *'{'*'}'*)
+        if ! tok="$(br_fill_arg "$values" "$tok")"; then
+          printf 'UNRESOLVED\t%s' "$tok"
           return 0
         fi
         set -- "$@" "$tok"
@@ -1025,6 +1022,35 @@ br_run_resolved() {
     rc=$?
   fi
   printf 'RAN\t%s' "$rc"
+}
+
+# The value of the name $2 in a run line. The `--value` list $1 is read first, then the tokens
+# preconditions recorded, then the keys task.json keeps under `environment`, the keys the status
+# line reads. A name that ends in `:json` is a field's whole value as one JSON token, so an absent
+# field is JSON null. Prints nothing when no source has the name.
+br_token_value() {
+  local tok
+  tok="$(cr_lookup "$1" "$2")"
+  [ -n "$tok" ] || tok="$(br_recorded_token "$2")"
+  [ -n "$tok" ] || [ -z "${TASK_PATH:-}" ] || tok="$(cr_lookup "$(task_environment_tokens "$TASK_PATH/task.json")" "$2")"
+  case "$2" in *:json) tok="${tok:-null}" ;; esac
+  printf '%s' "$tok"
+}
+
+# The argument $2 with each `{name}` in it filled by br_token_value from the list $1. The text
+# between a `{` and the next `}` is the name, so no argument runs with a brace pair left in. On a
+# name with no value it prints that name and returns 1.
+br_fill_arg() {
+  local rest="$2" out="" name value
+  while :; do
+    case "$rest" in *'{'*'}'*) ;; *) break ;; esac
+    out="$out${rest%%\{*}"; rest="${rest#*\{}"
+    name="${rest%%\}*}"; rest="${rest#*\}}"
+    value="$(br_token_value "$1" "$name")"
+    [ -n "$value" ] || { printf '%s' "$name"; return 1; }
+    out="$out$value"
+  done
+  printf '%s' "$out$rest"
 }
 
 # The value the test recipe's `## Tokens` block gave the name $1 at preconditions, from the task's
@@ -1208,6 +1234,18 @@ br_subtract_baseline() {
   [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
+# The baseline field that holds one tool row's own earlier verdict, or the empty string for a row
+# the baseline has no field for. baseline-schema.json carries three tool fields and no more, so a
+# duplication or design-metrics row the recipe declares has no baseline to subtract, and this says
+# so rather than reading its absence as a clean one.
+rw_baseline_field_for() {
+  case "$1" in
+    coding-standards) printf 'codingStandards' ;;
+    static-analysis)  printf 'staticAnalysis' ;;
+    security)         printf 'security' ;;
+    *) printf '' ;;
+  esac
+}
 
 # Exit 73. Every tool check compares its own result against the baseline that step two took, and
 # that comparison is only honest while both ran the same command. The baseline records the check
@@ -1228,7 +1266,7 @@ cr_require_baseline_recipes() {
     was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
     was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
     if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
-      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. If that body is gone, the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
+      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. Or adopt the new body: implement-actions.sh recipe-refresh --check-recipe $fw=<path> adopts it only when every tool row of it reads met or undeclared on the current tree. Otherwise the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
     fi
     idx=$((idx + 1))
   done
@@ -1526,17 +1564,18 @@ CR_FRAMEWORKS
 
 # The lines inside every block tagged $3 under the H2 $2 of the recipe $1, in order. The tag is
 # read with the surrounding space removed, because a trailing space is invisible in an editor.
+# $4, when given, is a block number: only the lines of that block with the tag, counting from 1.
 fenced_blocks_under() {
-  awk -v want="$2" -v tag="$3" '
+  awk -v want="$2" -v tag="$3" -v only="${4:-0}" '
     function fence_tag(line,   t) { t = line; sub(/^`+/, "", t); gsub(/^[ \t]+|[ \t\r]+$/, "", t); return t }
-    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; next }
+    /^## / { inSection = ($0 == "## " want); inFence = 0; taken = 0; n = 0; next }
     !inSection { next }
-    /^```/ { if (inFence) { inFence = 0; taken = 0; next }; inFence = 1; taken = (fence_tag($0) == tag); next }
-    inFence && taken { print }
+    /^```/ { if (inFence) { inFence = 0; taken = 0; next }; inFence = 1; taken = (fence_tag($0) == tag); n += taken; next }
+    inFence && taken && (only == 0 || n == only) { print }
   ' "$1"
 }
 
-sh_blocks_under() { fenced_blocks_under "$1" "$2" "sh"; }
+sh_blocks_under() { fenced_blocks_under "$1" "$2" "sh" "${3:-}"; }
 
 # A recipe is data written elsewhere. Refuse a line that would mean more than it says. $1 the
 # script's own name, $2 the recipe, $3 the line. Returns 1 and names both on a refusal.
@@ -1913,6 +1952,12 @@ RF_TAKE_DIRS
   printf '%s\n%s\n%s\n' "$back" "$gone" "$left"
 }
 
+# The keys the task record $1 keeps under `environment`, one `<name><TAB><value>` line each, the
+# shape cr_lookup reads. Only string values are listed.
+task_environment_tokens() {
+  jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$1" 2>/dev/null
+}
+
 # Runs the `## Status` line of the environment recipe $2 in the worktree $3. Returns 0 when the
 # site is up, 1 when it is down, and 2 when the recipe has no such block (gap row 212). The recipe
 # decides what up means, so no framework's probe lives here. `{name}` is filled from the keys the
@@ -1929,7 +1974,7 @@ recipe_status_run() {
   RS_FIRST=""
   line="$(sh_blocks_under "$recipe" Status | sed -n '/[^ ]/{p;q;}')"
   [ -n "$line" ] || return 2
-  line="$(fill_tokens_from "$(jq -r '.environment // {} | to_entries[] | select(.value | type == "string") | "\(.key)\t\(.value)"' "$4" 2>/dev/null)" "$line")"
+  line="$(fill_tokens_from "$(task_environment_tokens "$4")" "$line")"
   refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
   case "$line" in *'{'*'}'*) rest="${line#*\{}"; die 3 "$who: the ## Status line of $recipe holds a token nothing fills: {${rest%%\}*}}. A status line may hold only the keys the task record keeps under environment." ;; esac
   recipe_files_place "$who" "$recipe" "$tree" "$dir" >/dev/null
@@ -2001,6 +2046,8 @@ rv_is_finding_id() {
 # Reads $1, a file the reviewer wrote, and sets RV_FINDINGS_ARRAY to the array under key $2 after
 # checking every entry's own shape. $3 the action's own name. Dies (exit 52) on anything it cannot
 # read as that shape, because a findings file this script half understands is worse than none.
+# $4, when given, says the caller mints each entry's id, so the id the file carries is not read.
+# verify-record does that for new breakage (gap row 297).
 #
 # It sets a global rather than printing, and every caller calls it as a plain statement. A function
 # that refuses must never be called with `$(...)`: a command substitution runs in a subshell, so the
@@ -2033,7 +2080,7 @@ rv_refuse_duplicate_keys() {
 }
 
 rv_read_findings_array() {
-  local file="$1" key="$2" who="$3" doc arr count i one id severity evidence seen_ids=""
+  local file="$1" key="$2" who="$3" minted="${4:-}" doc arr count i one id severity evidence seen_ids=""
   [ -f "$file" ] || die 52 "$who: $file not found. The file named on the command line has to exist."
   [ -s "$file" ] || die 52 "$who: $file is empty. An empty file is not an empty findings list; write { \"$key\": [] } instead."
   doc="$(jq -c '.' "$file" 2>/dev/null)"
@@ -2048,9 +2095,13 @@ rv_read_findings_array() {
     one="$(printf '%s' "$arr" | jq -c --argjson i "$i" '.[$i]')"
     [ "$(printf '%s' "$one" | jq -r 'type')" = "object" ] \
       || die 52 "$who: entry $i of $key in $file is not an object."
-    id="$(printf '%s' "$one" | jq -r '.id // ""')"
-    rv_is_finding_id "$id" \
-      || die 52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
+    if [ -n "$minted" ]; then
+      id="entry $i of $key"
+    else
+      id="$(printf '%s' "$one" | jq -r '.id // ""')"
+      rv_is_finding_id "$id" \
+        || die 52 "$who: entry $i of $key in $file has the id '$id'. A finding id is f and then digits, with no leading zero: f1, f2, f10."
+    fi
     severity="$(printf '%s' "$one" | jq -r '.severity // ""')"
     case "$severity" in
       high|medium|low) ;;

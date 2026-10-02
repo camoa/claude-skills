@@ -9,10 +9,11 @@
 # hooks/session-start.sh consumes it in the next window and removes it. A record that cannot be
 # made again is either consumed like that, or it is output a person already saw on stdout.
 #
-# It is not that the same file comes back. Four of these are written by an agent and not by a
-# script: design-critique-<>.md, <>-distill.json, research-split.json and playbooks-catalog.json.
+# It is not that the same file comes back. Five of these are written by an agent and not by a
+# script: design-critique-<>.md, <>-distill.json, disposition-<>.json, research-split.json and
+# playbooks-catalog.json.
 # A second dispatch reads the same inputs and returns a different document. The catalog also needs
-# the guide service reachable. An entry naming an agent in column two is one of these four.
+# the guide service reachable. An entry naming an agent in column two is one of these five.
 #
 # tests/records-folder-spec.sh reads this list. It fails on a name under records/ that is not
 # here, and on a name here that nothing references.
@@ -54,18 +55,19 @@ check-task.json | scripts/check-task.sh | every task check writes it, and `task 
 compacted.json | hooks/pre-compact.sh | every automatic compaction writes it, and hooks/session-start.sh names it once and removes it
 design-check.json | skills/design/scripts/design-actions.sh, action `check` | the action runs scripts/check-design.sh into it again
 design-critique-<>.md | the design-critic agent, one file per lens | the design skill dispatches the three critics again. The close moves every one into design/, an unfinished one under an unfinished- prefix
-<>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again
+<>-distill.json | the distiller agent, one file per stage | the stage's close dispatches the distiller again; on a light task, the design close dispatches one for all three stages
 <>-distill.stamp | scripts/lib/task-helpers.sh, distill_read | the stage's distill or approve action writes it again at its next read of a current sidecar
 design-distill.json | the distiller agent | design close dispatches the distiller again
+disposition-<>.json | the disposition-confirmer agent, one file per work order | the design skill dispatches the confirmer again for the candidates the file lacks; `dispose` removes one candidate's value when its new outcome differs
 environment-down.txt | skills/task/scripts/task-actions.sh, action `environment down` | the action runs the tear-down lines again
 environment-up.txt | skills/task/scripts/task-actions.sh, action `environment up` | the action runs the bring-up lines again
 playbooks-catalog.json | the playbook-loader agent | the research skill dispatches the loader again
 playbooks.json | skills/playbooks/scripts/playbook-actions.sh, action `load` | the action reads the catalog record again
 playbooks.md | skills/playbooks/scripts/playbook-actions.sh, action `load` | the action renders it from playbooks.json again
 research-check.json | skills/research/scripts/research-actions.sh, action `check` | the action runs scripts/check-research.sh into it again
-research-distill.json | the distiller agent | research close dispatches the distiller again
+research-distill.json | the distiller agent | research close dispatches the distiller again; on a light task, design close does
 research-split.json | the split-advisor agent | the research skill dispatches the advisor again after the coverage check
-scope-distill.json | the distiller agent | scope close dispatches the distiller again
+scope-distill.json | the distiller agent | scope close dispatches the distiller again; on a light task, design close does
 surfaces-<>-install.txt | skills/surfaces/scripts/surfaces-actions.sh, action `install` | the action runs the install steps again
 surfaces-baseline.txt | skills/surfaces/scripts/surfaces-actions.sh, action `baseline` | the action runs the accept command again
 tool-<>-<>.txt | skills/tool/scripts/tool-actions.sh | the action runs the tool command again

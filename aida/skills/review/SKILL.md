@@ -133,6 +133,7 @@ branch is recorded rather than assumed.
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 
 `surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there.
+A command surface needs no walk, because its exit status is the whole answer.
 A run with nobody present cannot sign off a task carrying one person verified criterion. That is
 intended: a check that could not run has established nothing.
 
@@ -209,7 +210,7 @@ One number never means two things, and these keep the meanings implementation ga
 | 66 | implementation has not finished, so there is no `finished.json` |
 | 70 | a person's answer was passed on a run with nobody present |
 | 72 | two frameworks each command one tool |
-| 73 | the check recipe moved after this task's baseline was taken, and the baseline is pinned to it for the task's life |
+| 73 | the check recipe moved after this task's baseline was taken, and the baseline is pinned to the body it read |
 | 77 | the project records no framework |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |
 
@@ -217,9 +218,12 @@ Eight of these are review's own. The other eight arrive with the libraries both 
 keeps the meaning implementation gave it. Code 70 is the one an autonomous run meets in ordinary use,
 the first time a `--walked` or a `--row` is passed.
 
-Code 73 has no action behind it, so put its two routes to the person. The first: run `checks` again
-with `--check-recipe` naming the recipe body the baseline read, whose sha256 the refusal prints.
-Nothing here restores a body the catalog replaced. The second: abandon the baseline, by moving
+Code 73 has no review action behind it, so put its three routes to the person. The first: run
+`checks` again with `--check-recipe` naming the recipe body the baseline read, whose sha256 the
+refusal prints. Nothing here restores a body the catalog replaced. The second: adopt the new body
+with the implement skill's `recipe-refresh --check-recipe`, as its `references/preconditions.md`
+says. It adopts only when each tool row of the new body reads met or undeclared on the tree.
+Otherwise it refuses and names the row. The third: abandon the baseline, by moving
 `implementation/baseline.json` and `implementation/baseline-output/` aside and running the
 implement skill's `preconditions` again. Say what that costs. The new baseline reads the tree as it
 stands, which already holds this task's code. Checks 5 to 7 then subtract this task's own findings

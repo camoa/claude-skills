@@ -100,20 +100,34 @@ act on one outside this task.
 
 A departure the builder declared never closes clean, whatever the review holds. The script scans
 the latest attempt's report and the interface record in its build record, the way `build-record`
-does. An information item the reviewer marks `departsFromDesign` true is a hit too. So is a
-recipe the reviewer answers `departed`. The findings file answers each item of the brief's
+does. A recipe the reviewer answers `departed` is a hit too, unless its `finding` names an
+actionable finding with a fix scope. That departure opens a fix round like any finding, in both run modes. The verifier
+answers `departureCured`, and a `no` waits for the person. With no `finding`, the script pairs the
+one such finding on a file the evidence names, and prints a `paired:` line. Exit 52 refuses a
+`finding` on another verdict, or one that names no finding in the file. It also refuses a finding
+on a file the evidence does not name, and two candidates for one answer. The findings file answers each item of the brief's
 `recipes` once. Otherwise the script refuses (exit 108): run `review-brief` again for this order,
 then dispatch the reviewer again. On a hit it refuses (exit 107), writes no review record, and
-halts the order for design drift. The halt names the file and the line number, the item, or the
-recipe. What is wrong is the design, or a recipe it relies on, so no fixer can repair it. Put it to the person, opening with: "What was built departs from the design of
-this unit of work. Only you can say which one stands. Change the design and the unit is built
-again. Keep the departure and the review goes on." Then say what that line or item says. To
+halts the order for design drift. The halt names the file and the line number, or the recipe.
+What is wrong is the design, or a recipe it relies on, so no fixer can repair it. Put it to the
+person, opening with: "What was built departs from the design of this unit of work. Only you can
+say which one stands. Change the design and the unit is built again. Keep the departure and the
+review goes on." Then say what that line or that recipe answer says. To
 change the design, amend the order in design and close design, then offer the
 restart in `references/finish.md`. To keep the departure, run `review-record` again with
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
 reason, and the order goes on as below. Unattended, the flag refuses (exit 68). There nothing
 halts: `review-record` writes the record with the departure as `deviationPending`, prints a
 `departurePending:` line, and the order goes on as below.
+
+An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
+halts the order or the orders after it, in either run mode. `review-record` holds it as
+`deviationPending` and prints a `departurePending:` line. The person decides it at the task
+review: keep it or rebuild. It waits only when no departure above was found, so it never hides one.
+The record holds one departure. So when a departure above was found, the item is not put to the
+person; it stays in the record's `information` list only. A person present may keep the item at
+once with `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger
+hold the reason, though the order never halted.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
@@ -256,17 +270,29 @@ This re-runs seven of the eight checks, with the same order-tests floor build.md
 order's range, tree and diff read from the project folder, as build.md says. Undeclared or unknown there still spends the
 round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
-spends the round and leaves every finding open. At the round cap, the script halts the order
-itself, naming the check that stopped it. `review-brief` is never run again for this order.
+spends the round and leaves every finding open. `review-brief` is never run again for this order.
+`verify-record` then opens one finding for that check, with origin `check`, on the order's first
+criterion and its owned files. It reads low when coding-standards alone stopped the round, and
+medium otherwise. The verifier does not see it. The next round's checks decide it: all met
+addresses it, and a failure keeps it open. At the cap it follows the same rules as any other
+finding: a ruling, a halt, or pending on a light task.
+
+A check can stop the round for a cause outside the fix range. Examples are a broken environment,
+or a file the design later gave the order. Repair that cause, then run `build-recheck` with
+`fix-record`'s recipe flags. It runs the round's checks again over the unchanged range, as
+references/build.md says. The `next:` line offers it when only those rows stopped the round.
+Run it before `verify-brief` when you can, so no check finding opens. After `verify-record`, a
+pass addresses the check finding, open or pending. When the cap halt names only check findings,
+a pass also clears that halt. A check that fails again leaves both in place.
 
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
 (exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
 unchanged code is a round nobody worked.
 
-**When `fix-record` halted the order this way, stop here.** Do not dispatch the reviewer in verify
-mode: `verify-record` refuses on a halted order. Report the halt instead, naming the check it
-stopped on, the same way a halt at the build step is reported. A person clears it with
+**When `fix-record` halted the order, stop here.** Do not dispatch the reviewer in verify
+mode: `verify-record` refuses on a halted order. Report the halt instead, the same way a halt at
+the build step is reported. A person clears it with
 `clear-halt` and then rules on the open findings through `verify-record`.
 
 Open a dispatch record for the reviewer again, the same way review mode did, with nothing denied
@@ -332,7 +358,10 @@ work stops until you act. Test-wrong: the problem is real and the fix needs a fr
 changed, so the tests are retaken. A model may not make these calls with nobody watching." Then
 say each finding in plain words, with what it cites. At the cap, unattended, `verify-record`
 marks each open finding with an empty fix scope pending, as `fix-brief` does. It halts the order
-only for an open finding that has a fix scope.
+only for an open finding that has a fix scope. On a light task it also marks each open low
+finding pending, and the person rules it at the task review. A medium or high finding halts the
+order. A light order keeps its one round when a person later sets the task interactive, so the
+ruling is taken at once.
 
 Run the same call again, with one `--ruling` flag added per finding ruled:
 ```
@@ -395,7 +424,8 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. On success it writes `lastStep = "closed"` and the commit range the order
+the last record left it. On a light task, commits that change only `COMPROMISES.md` may follow
+that record: they are AIDA's own log, and the range ends at the record. On success it writes `lastStep = "closed"` and the commit range the order
 produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The

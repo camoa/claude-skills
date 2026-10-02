@@ -86,7 +86,7 @@
           "sha256": {
             "type": "string",
             "minLength": 1,
-            "description": "A sha256 over that file. Every tool check later in the stage compares its own result against this baseline, and that comparison is only honest while both ran the same command, so a later run resolving a recipe whose hash differs refuses rather than compare one tool output against another tool baseline."
+            "description": "A sha256 over that file. Every tool check later in the stage compares its own result against this baseline, and that comparison is only honest while both ran the same command, so a later run resolving a recipe whose hash differs refuses rather than compare one tool output against another tool baseline. `recipe-refresh --check-recipe` replaces the path and this hash only when every tool row of the new body reads met or undeclared on the current tree, and writes the three tool fields below from that reading (gap row 295)."
           }
         }
       },

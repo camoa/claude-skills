@@ -379,6 +379,10 @@ writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh distill "<task_folder>"
 ```
+**Light:** dispatch no distiller here. Run `distill` alone. It commits the contract and prints
+`distill: deferred to the design close`. Design's close dispatches one distiller over all three
+stages.
+
 Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show
 each `gap:` line. Acting on one is the relevant step above run again; the check never blocks.
 `standsAlone: stale` means the contract changed after the distiller read it. The call then prints

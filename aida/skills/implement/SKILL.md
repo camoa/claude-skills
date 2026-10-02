@@ -74,6 +74,7 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line whose halt holds any other `design drift...` segment, a person present | Offer the restart. A segment about the order's own design file also clears when the design is put back and `start` runs again | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 | An `order(...)` line whose halt begins `test wrong`, a person present | Offer `retake-tests`, which sends the order back to its tests | `review` |
+| An `order(...)` line at `fixed` whose only halt is the fix round cap, naming only check findings | Repair the cause outside the fix range, then run `build-recheck`, which clears the halt on a pass. Or offer `clear-halt` | `review` |
 | An `order(...)` line whose halt holds none of those segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
 
 A refusal writes no halt, so no row above routes it. Its message names the route. Take that route.
@@ -200,20 +201,23 @@ that hold it. The refusal names the record's age when it opened over a day ago, 
 that never returned leaves one.
 
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
-skill dispatches. The signal is the runtime's own mark that the role stopped at its turn limit.
-For the reviewer the script also sees it: a plain close refuses (exit 111) when the findings or
-verdicts file its brief names is missing. The fixer and the test author end the report their brief
-pins with `Report: complete`. A plain close whose report lacks that line takes the step below
-itself (exit 112). After a 112, do not close again: resume the agent. A `--no-report` close after
-a 112 spends the one resume. For the row-checker only the mark tells, so watch for it. Close with
-`--no-report` added. The record stays open, so both hooks keep applying. Then send one message to
-the same agent: finish the work and write the report. Do not dispatch a fresh role. The
-brief is unchanged and the work is unfinished, and a fresh role meets the half-written files. This
-differs from a row a person rejects, where the brief changes and the role is dispatched fresh.
-When the resumed role returns, close again, with `--no-report` if it stopped again. The second
-`--no-report` halts the order (exit 110) with a reason that names the role and its turn cap.
-Report the halt. A person runs `clear-halt`, then `start` to keep or set aside the role's files,
-then dispatches again.
+skill dispatches. An implementer whose order's diff budget starts with `large` is resumed twice.
+The script reads that word from the frozen order. The signal is the runtime's own mark that the
+role stopped at its turn limit. For the reviewer the script also sees it: a plain close refuses
+(exit 111) when the findings or verdicts file its brief names is missing. The fixer and the test
+author end the report their brief pins with `Report: complete`. A plain close whose report lacks
+that line takes the step below itself (exit 112). After a 112, do not close again: resume the
+agent. A `--no-report` close after a 112 spends a resume. For the row-checker only the mark tells,
+so watch for it. Close with `--no-report` added. A fixer or a test author can finish before the
+runtime marks it stopped. If its report is complete, the close says so and removes the record, and
+the role is not resumed. Otherwise the record stays open, so both hooks keep applying. Then send
+one message to the same agent: finish the work and write the report. Do not
+dispatch a fresh role. The brief is unchanged and the work is unfinished, and a fresh role meets
+the half-written files. This differs from a row a person rejects, where the brief changes and the
+role is dispatched fresh. When the resumed role returns, close again, with `--no-report` if it
+stopped again. The `--no-report` after the last resume halts the order (exit 110) with a reason
+that names the role and its turn cap. Report the halt. A person runs `clear-halt`, then `start` to
+keep or set aside the role's files, then dispatches again.
 
 A record already closed takes the same route. Run `dispatch-open` with the same role and unit and
 `--resume`, then resume the same agent by message. When that agent cannot be reached, as from

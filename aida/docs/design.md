@@ -74,6 +74,8 @@ observe. It leaves the level, unit or kernel or functional in your framework's w
 stage that writes the test. The tests are named here because they must exist before the code
 does. A test written from finished code ratifies it; one that failed before the code existed
 constrains it. The diff budget is a signal to the reviewer, never a limit that anything enforces.
+Its first word is `small`, `medium` or `large`. A `large` order's builder may stop at its turn
+limit and be resumed twice instead of once.
 
 ## What design reads first
 
@@ -291,6 +293,10 @@ Which of the other three proofs fits is a judgment, so no exit code holds it.
 It also prints `interfaceUnquoted:` with every order whose interface names nothing in backticks.
 A script cannot tell whether prose names a code element, so this does not hold the close either.
 
+It also prints `interfaceShaped:` with every name in backticks in an interface that holds `<` or
+`{`. Such a name is often a shape, not a name, and a generic type holds `<` too. So this does not
+hold the close either.
+
 It also prints `callsUndeclared:` with each `name()` call a done-when row or a test makes that no
 interface the order declares holds. The test author cannot read source to learn the signature. A
 call a clause denies is named too, so this does not hold the close either.
@@ -347,11 +353,13 @@ Unattended, the record says `none`.
 ## Running it unattended
 
 Set the task's run mode to autonomous before starting and design asks nothing. One thing runs
-unattended that does not run attended. After each reuse disposition, a read-only confirmer reads
-the written reasoning and the files it cites, and nothing else. It is refused this
-conversation's own account, because a decision checked against its author's narrative is not
-checked. It answers agree, disagree or downgrade, with what it compared, and design appends that
-answer to the order's reasoning. Interactively, you read the reasoning yourself.
+unattended that does not run attended. After an order's reuse dispositions, a confirmer reads the
+written reasoning and the files it cites, and nothing else. It is refused this conversation's own
+account, because a decision checked against its author's narrative is not checked. It answers
+agree, disagree or downgrade, with what it compared, and design appends that answer to the
+order's reasoning. One confirmer checks every disposition of one order. The unattended close
+refuses while any disposition made unattended lacks a confirmer's agreement, and asking again
+does not clear a disagreement. Interactively, you read the reasoning yourself.
 
 ## Closing, and what implementation builds from
 

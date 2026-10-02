@@ -19,10 +19,11 @@ refuses a write under the code path outside it. A file this unit needs and does 
 stop, even for a two-line change. Your report names the file and why the unit needs it.
 
 **You may not read another order's source.** The dispatch record's `denyRead` list names the
-files: every other order's owned files, closed orders included. A closed order's source is still
-another unit's source. What another unit exposes is its interface record, and the brief holds the
-ones you depend on. A hook refuses Read, Grep and the plain shell reads such as `cat`, `head`,
-`sed` and `grep`. A path a shell assembles at run time is not caught, and it is still denied.
+files: every other order's owned files, closed orders included. A file your order shares stays
+readable. A closed order's source is still another unit's source. What another unit exposes is
+its interface record, and the brief holds the ones you depend on. A hook refuses Read, Grep and
+the plain shell reads such as `cat`, `head`, `sed` and `grep`. A path a shell assembles at run
+time is not caught, and it is still denied.
 
 **Write the report file with the five answers as your first action, before any edit under the code
 path.** The brief names the path. Name the most surgical fix
@@ -63,7 +64,9 @@ have only the first.
 
 Write the interface record when you are done: what this unit actually exposes, in prose, for the
 units that depend on it. Write it from what you built, not from what you intended. Write it to the
-path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there.
+path the brief names in `interfacePath`, and nowhere else. `build-record` reads it there. Repeat each
+name in the brief's `unit.interfaceNames` verbatim, in backticks. The check counts those exact
+names. A name you did not build stays out, and your answers say why.
 
 Record the evidence: the command you ran, what it printed before, and what it printed after. Run the
 unit's own tests while you work, and the whole suite once before you stop. Run every tool that each
@@ -78,10 +81,13 @@ widen the diff and nothing asked for it.
 **Commit every change before you return.** Use a one-line message naming this unit, on the branch
 already checked out, in the repository the brief's `commitIn` names. That is the code worktree,
 or the project folder for an order whose proof is `record`; there, stage your owned files and
-nothing else. `build-record` refuses when the tree is not clean.
+nothing else. `build-record` refuses when the tree is not clean. When the order's reasoning numbers
+its parts, commit each part when it works, before you start the next. A stop at your turn limit
+then loses one part and not the order.
 
 Return under fifteen lines: the five answers first, then what you changed, one line on the tests,
-that the interface record is written, and any concern.
+that the interface record is written, and any concern. The stop and deviation lines below go in
+the report file. No script reads your returned text, and a hook sends you back to the file.
 
 Stop and say so, rather than working around it, when a test seems wrong, when the interface you were
 given does not fit what the unit has to do, or when your attempts run out. A test you route around
@@ -95,14 +101,21 @@ Stop: none
 Stop: test-wrong: <the test, and why it seems wrong>
 Stop: interface-misfit: <what the unit needs that the interface does not give>
 Stop: file-not-owned: <the file, and why the unit needs it>
+Stop: closed-order-defect: <the file>: <what fails, and the output that shows it>
 Stop: attempts-out: <what is still not done>
 ```
+
+Use `closed-order-defect` when your code is right and what fails lies in a file another unit
+owns. Name that one file, as the error names it, then the failure. A script finds the unit that
+owns the file. When that unit is closed, it reopens it for a repair, and you build again after.
+Otherwise the stop goes to a person.
 
 Write `Stop: none` only when nothing stopped you. A misfit you name anywhere in your report or your
 interface record is a stop, so its line is `interface-misfit`. A departure from the design's
 interface or from a recipe rule is never built. It is a stop, and its line is `interface-misfit`.
 Under `Stop: none`, your report also holds exactly one deviation line: `Deviation: none`, or
-`Deviation: <what>: <why>`. Write `Deviation: none` only when the code follows the interface and
+`Deviation: <what>: <why>`. Write each line alone, and put any note on its own line. Write
+`Deviation: none` only when the code follows the interface and
 every recipe rule. After a stop line other than `none`, return, and end the turn with nothing
 further written. `build-record` refuses a report with no stop line, and a `Stop: none` report with
 no deviation line. It reads any deviation other than `none` as a stop, in the report or the

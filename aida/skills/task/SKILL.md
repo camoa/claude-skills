@@ -51,10 +51,11 @@ accomplish and why, not a ticket. Write it back in one or two sentences and conf
 yes or no before writing anything. Autonomous with no goal given or implied by the conversation:
 **halt.** A task with no stated goal is not a record of anything.
 
-**3. Write it.** Run, with the run mode set as decided above:
+**3. Write it.** Run, with the run mode set as decided above. Add `--after <task-id>` when the
+person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  create --project "<projectPath>" --name "<name>" -- <goal...>
+  create --project "<projectPath>" --name "<name>" [--after <task-id> [--in-tree]] -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
@@ -64,9 +65,25 @@ slug of the code folder plus the task name, so a site name is predictable and un
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
 records on disk stays where it is.
-Show the whole output. Exit code 3 means one of three things: the name collided with an existing task, it failed the name rule
-the script also enforces, or the worktree could not be made. In the last case the folder is
-removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
+The tree is cut from HEAD of the folder this call runs in, when that folder is in the code
+repository. So a task made from inside another task's tree starts from that task's work. From
+anywhere else the tree is cut from HEAD of the code path. With `--after`, the tree is cut from
+that task's branch, and `task.json` records `after`. Use it for a chain of tasks made up front,
+because a tree cut now from trunk holds none of the earlier builds. While that task's build is
+unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
+steps 4 and 5 then. `start` makes the tree once that build is finished.
+Add `--in-tree` with `--after` when the person runs the chain one task after another. The task
+then takes over that task's tree, on the new branch `feature/<name>` from its tip. So the chain
+pays one checkout and one dependency sync. That task's review runs in its tree, so the take-over
+waits until that review has closed. While it is open, `create` makes no tree and prints `in-tree:`.
+Skip steps 4 and 5 then. `start` takes the tree over, or cuts a new tree if the review is still
+open, and says which. That tree must hold no uncommitted change. Both tasks
+then record one tree, and the branch checked out there says which task builds in it now. A stage
+action of the other task exits 3, and its message names the `git switch` that gives it the tree.
+When no tree holds that task's branch, a new tree is cut as with `--after` alone.
+Show the whole output. Exit code 3 has five causes. The name collided with an existing task,
+or it failed the name rule. `--after` named a task this project does not hold, or `--in-tree`
+came without `--after`. Or the worktree could not be made. In the last case the folder is removed. Say what it printed. For a name, ask for a different one. For the worktree, name the
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
@@ -86,12 +103,13 @@ Print the path and say so. Go on to step 5 either way.
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
 site, so a review or a baseline taken there would capture the served checkout instead. Dispatch
-`catalog-identifier` once per point, as the surfaces skill does. The role reads one `point:` line
-per message, and it reads any other word as a framework. The first dispatch has the line
+`catalog-identifier` once per point, as the surfaces skill does. The role reads any word that is
+not on a `point:` line as a framework. The first dispatch has the line
 `point: worktree-environment`, then every framework the project records and the project folder.
 When the project record has `surfaces.e2e.enabled`, dispatch the role again with
 `point: e2e-setup` and the same other lines. When it has `surfaces.visualRegression.enabled`,
-dispatch it again with `point: visual-regression`. `up` then installs that harness in the tree.
+dispatch it again with `point: visual-regression`. **Light:** send all these points in one
+dispatch, one `point:` line each. `up` then installs that harness in the tree.
 Pass the worktree-environment answer as `--recipe <framework>=<path>` or
 `--lookup-failed <framework>=<word>`, one flag per framework. Pass each setup recipe as
 `--setup-recipe <kind>=<path>`, where the kind is `e2e` or `visual-regression`. A setup lookup
@@ -233,7 +251,8 @@ tree goes, the branch stays.
 `--all` when every tree got one. For each tree the script tears the site down when one is up,
 then removes the tree. It deletes the branch when it is merged. It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
-happened to the branch. Show them. Exit 3 names the tree it stopped at and why. The task is not
+happened to the branch. A tree that another task also records stays, and its line says `kept`:
+a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is not
 complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
 that tree was touched, and nothing is ever forced. Say what it printed and stop.
 
@@ -287,6 +306,15 @@ since a completed task is not reopened here. Otherwise it writes the new state, 
 the task check. Show the whole output. The check reports and never repairs, so a finding here is
 the one thing to repair now, before the stage writes anything.
 
+A task made with `--after` starts only when the task it builds on has finished its build. That
+task then holds `implementation/finished.json`, or reads complete. Otherwise `start` prints
+`REFUSED` and exits 1, and the stage that called it writes nothing. Say which task to build first.
+When it starts, `start` cuts the tree from that task's branch, and `worktree:` names the tree.
+That task may be complete with its branch merged and pruned. The tree is then cut by the base
+rule above, because that work is on trunk. A tree that cannot be cut exits 3, and no state is
+written.
+Enter it as `create` step 4 says.
+
 When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
 person by hand, or a stage's script through scope's `init`. A stage's script passes that line
 through. Unattended, the line says the offer waits for a person, and nothing is recorded.
@@ -325,7 +353,8 @@ split advisor recommends the children and their criteria after research closes. 
 `split-read` action checks that every criterion is claimed once, before this action runs. This only performs
 the mechanical split.
 
-The two-level limit stays: a task that already has a parent cannot be split again, and a child
+Each child takes the parent's `after`, so it waits for the same build, and gets its tree as
+`create` gives one. The two-level limit stays: a task that already has a parent cannot be split again, and a child
 always lives in the same project as its parent, never another one. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
@@ -358,9 +387,9 @@ absence already means that. Show the whole output.
 
 `light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
 Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
-whether end to end is on. Light keeps one script that walks the demo path in a browser, and review
+whether end to end is on. Light keeps one script that walks the demo path, and review
 fails the task without it. When end to end is off, say that a person sets it up with
-`/aida:surfaces e2e` before the run.
+`/aida:surfaces e2e` before the run. The `sign-off:` line says that a person closes the task.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 
@@ -390,8 +419,9 @@ it down for the next window. Only a person invokes it; nothing dispatches it.
 
 The current stage is the `stage` the next skill's report prints for this task, the first whose
 close record is absent.
-That is scope without `records/scope-distill.json`, research without
-`records/research-check.json` at `exitCode` 0, design without `design-closed.json`. A task in state `new`, or whose stage has no
+That is scope without `records/scope-distill.json`. A light task is at scope only when
+`alignment.json` also lacks `pluginVersion`, which scope's close stamps. Research is the stage without
+`records/research-check.json` at `exitCode` 0, and design without `design-closed.json`. A task in state `new`, or whose stage has no
 record on disk yet, skips the distiller: nothing exists to distill. The stage's first record is
 `alignment.json` for scope, `research/*.json` for research, `design/*.json` for design. Say which
 stage it would have been and that none exists, then go on to the list. Otherwise, when the

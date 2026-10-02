@@ -99,7 +99,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      alignment.json that does exist; or, for `record-decision`, an id in --field names none;
 #      or, for `retire`, no entry is at the given --entry; or, for `approve` and `distill`, records/scope-distill.json
 #      does not exist yet, so the distiller has not been dispatched. `approve` has promoted and
-#      committed by then; run it again once the sidecar exists.
+#      committed by then; run it again once the sidecar exists. A light task's `distill` reads no
+#      sidecar, because design's close distills all three stages (distill_deferred).
 #   3  the script could not do its job: a missing, blank or malformed argument; an argument value
 #      that is itself another option; alignment.json exists but will not parse as JSON, or parses
 #      but is not a contract (missing schemaVersion, goal, expectedResult, or criteria/nonGoals
@@ -846,7 +847,7 @@ close_scope() {
     write_atomic "$ALIGNMENT_FILE" "$stamped"
   fi
   commit_stage_close "$TASK_PATH" scope "Close scope for $(jq -r '.id' "$TASK_FILE")" "$why"
-  distill_read "$TASK_PATH" scope "$stale"
+  if task_is_light "$TASK_PATH"; then distill_deferred scope; else distill_read "$TASK_PATH" scope "$stale"; fi
 }
 
 # ------------------------------------------------------------------------------------------------

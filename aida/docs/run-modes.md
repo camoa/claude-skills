@@ -5,8 +5,8 @@ Autonomous means nobody is present. AIDA then takes the recommended answer where
 records that it did, and stops at any step it cannot take without you. The mode can cover the
 whole task or only the stages you name. This page covers what each mode is and how you set it.
 It covers the one rule that governs an autonomous run and what differs in each stage. It then
-covers light, an autonomous run that skips named steps and logs each one. It ends with what to
-read when you come back to a run that happened without you.
+covers light, an autonomous run that skips named steps, logs each one, and stops at review for
+you. It ends with what to read when you come back to a run that happened without you.
 
 ## The two modes
 
@@ -128,8 +128,8 @@ order is marked as written without framework input.
 
 A decision to replace existing code, rather than reuse or extend it, is downgraded to extend,
 with the reason written into the work order. Every reuse decision is then checked by a
-read-only confirmer that reads only the written reasoning and the files it cites, never the
-conversation. Its verdict is appended to the order.
+confirmer that reads only the written reasoning and the files it cites, never the
+conversation. Its verdict is appended to the order, and the close refuses until each one agrees.
 
 A criterion nobody wrote, or one that cannot be built as stated, is recorded in the order's
 own reasoning and the run continues. Interactively that goes to you, and to scope's update
@@ -201,30 +201,45 @@ Set it with `/aida:task set-run-mode <task-id> light`. It takes no `--stage`. In
 autonomous tasks are unchanged by it.
 
 A light task has no automated tests. Scope writes that answer itself, so each code order takes
-the proof a person confirms at review. What light skips:
+the proof a person confirms at review. So the run ends at review, and a person closes the task.
+With nobody present, review records each of those criteria as unanswered, and completion halts.
+The task then waits for you. Answer the rows when you run review again, or close the task with
+a reason. `set-run-mode` says this in its `sign-off:` line. The path script does not stand in for
+your answer. Its lines are written by the build it judges, and no record says which criteria
+it proves. What light skips:
 
 - **Research** searches this project and the catalog, and runs no outward search on the web.
 - **Design** runs no critique. The first work order, `wo1`, is the walking skeleton: a tiny
   version that links the input, the logic and the output along the demo path. Every other order
   comes after it, and the design check refuses one that does not.
 - **Implementation** writes no tests for each order and runs no checker over test rows. It gives
-  each order one fix round. An order with a finding still open after that round halts. The
+  each order one fix round. A low finding still open after that round waits for the person at
+  review, who rules it there. An order with a medium or high finding still open after that round
+  halts. A fix round that fails its own checks opens a finding for that check. It reads low for
+  coding-standards alone, and medium for any other check. After that round the order
+  keeps its one-round cap even if you set the task interactive, so you rule at once. The
   implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
 
 What light keeps: the code review of each order, and the project's own checks, including its
-security check. It also keeps one script that walks the demo path in a browser. That script is the project's end to
-end setup, for that one path. A person sets it up once with `/aida:surfaces e2e` and registers
-the demo path as one critical surface. Review then runs it every time, and so can you, after each
-change. Review fails a light task that has no such surface. `set-run-mode` says whether end to
-end is on.
+security check. It also keeps one script that walks the demo path. That script is the project's
+end to end setup, for that one path. A person sets it up once with `/aida:surfaces e2e` and
+registers the demo path as one critical surface. The surface is a page, or a command that exits 0
+when the path works. Review then runs it every time, and so can you, after each change. Review
+fails a light task that has no such surface. `set-run-mode` says whether end to end is on.
+
+Light also dispatches fewer helpers before the first line of code. Scope and research run no
+distiller, and one distiller reads all three stages when design closes. Recipe lookups made at
+the same step go in one dispatch. The build reads the implement recipe that preconditions
+recorded. One interface lookup names every reuse candidate.
 
 **The compromises log.** Each skip is written by the code that decides it, never from a model's
 memory. It goes to `COMPROMISES.md` at the top of the task's worktree, one row per skip, and is
 committed there, so it ships with the code. A row names the task, the stage, what was skipped and
 what a normal run would do. Each marked fake gets its own row when its order closes. The same
-step run twice logs once. A light run is done when the path script passes, the log is current,
-and nothing on the non-goals was built. A later normal task takes the log as its scope.
+step run twice logs once. A light run is ready for you when the path script passes, the log is
+current, and nothing on the non-goals was built. It is done when a person has answered the
+criteria and closed the task. A later normal task takes the log as its scope.
 
 AIDA keeps no budget clock. A budget set with `set-budget` still halts the build at its ceiling,
 because you set it.

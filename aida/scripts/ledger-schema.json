@@ -71,7 +71,7 @@
       "items": {
         "$ref": "#/$defs/haltCleared"
       },
-      "description": "One entry per halt cleared, in the order it happened. Present only when at least one was. Five actions write here. `clear-halt` writes one when a person did what the halt named. `retake-tests` writes one when a test-wrong ruling sent the order back to its tests. `review-record --accept-deviation` writes one when a person kept a departure the builder declared, with the departure halt as the reason, whether or not the order carried it yet (gap row 224). `build-record --accept-deviation` writes one when a person kept a deviation the builder declared, with the deviation halt as the reason, whether or not the order carried it. It leaves a stop-line halt in place (gap row 266). A resumed `start` writes one when its own comparison no longer finds the drift a halt was written for, since `start` is the one action that computes drift (live-run row 143). The grant and the restart clear their own halts and record them in their own fields. The order's haltedBecause is removed at the same moment, so the reason lives on here and nowhere else. A `start` clearing removes only the `design drift` segment, so the order stays halted for any other segment it carried."
+      "description": "One entry per halt cleared, in the order it happened. Present only when at least one was. Six actions write here. `build-recheck` writes one when a fix round's checks pass again and the order's only halt was the unattended fix round cap on check findings alone (gap row 310). `clear-halt` writes one when a person did what the halt named. `retake-tests` writes one when a test-wrong ruling sent the order back to its tests. `review-record --accept-deviation` writes one when a person kept a departure the builder declared, with the departure halt as the reason, whether or not the order carried it yet (gap row 224). `build-record --accept-deviation` writes one when a person kept a deviation the builder declared, with the deviation halt as the reason, whether or not the order carried it. It leaves a stop-line halt in place (gap row 266). A resumed `start` writes one when its own comparison no longer finds the drift a halt was written for, since `start` is the one action that computes drift (live-run row 143). The grant and the restart clear their own halts and record them in their own fields. The order's haltedBecause is removed at the same moment, so the reason lives on here and nowhere else. A `start` clearing removes only the `design drift` segment, so the order stays halted for any other segment it carried."
     },
     "resnapshots": {
       "type": "array",
@@ -167,6 +167,11 @@
           "default": 0,
           "description": "How many fix rounds this order has had. One round is one fixer and one verification. Same reason as attemptsUsed."
         },
+        "lightRounds": {
+          "type": "boolean",
+          "const": true,
+          "description": "Present, and true, once `fix-record` has recorded a fix round of this order on a light task. The order's cap then stays one round when a person later sets the task interactive to rule, because the round was spent under that cap (gap row 296)."
+        },
         "commitRange": {
           "type": "string",
           "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$",
@@ -183,6 +188,13 @@
             "$ref": "#/$defs/grant"
           },
           "description": "One entry per attempt a person has granted on this order, in the order they were granted. Present only when at least one was. A grant with no record of who asked for what is a cap nobody can audit afterwards."
+        },
+        "repairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/repair"
+          },
+          "description": "One entry per repair a dependent order opened on this order after it closed, in the order they were opened. Present only when one was. `build-record` writes it when a builder stops with `Stop: closed-order-defect: <file>: <what fails>` and the file is this order's. It adds one finding to this order's review record, sends the order back to `reviewed` or `fixed`, and adds one fix round to its allowance, so roundsUsed never goes down. The order's fixer repairs it and its reviewer verifies the round, and `close` writes the range again (gap row 286)."
         },
         "doneWhenJudgement": {
           "type": "object",
@@ -372,6 +384,19 @@
           "minLength": 1,
           "description": "What the person did about the halt, in their own words. Required, because a halt cleared with no reason reads as the stop never having meant anything."
         }
+      }
+    },
+    "repair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by", "attempt", "finding", "report", "at"],
+      "properties": {
+        "by": {"type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The order whose builder stopped on the defect. It builds again only once this order closes."},
+        "attempt": {"type": "integer", "minimum": 1, "description": "The attempt of that order the stop did not spend. Another repair at the same attempt opens only once every earlier one's finding reads addressed, and no more than that order's attempts allowed, so a builder that stops on every run halts as any other stop does."},
+        "finding": {"type": "string", "pattern": "^f[1-9][0-9]*$", "description": "The finding the repair added to this order's review record, with origin `repair`."},
+        "report": {"type": "string", "minLength": 1, "description": "The stopped builder's report, which holds the evidence."},
+        "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the repair opened. Set by the script, never typed."},
+        "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when the repair reopened it. `close` writes the range again, so this keeps the first one."}
       }
     },
     "grant": {

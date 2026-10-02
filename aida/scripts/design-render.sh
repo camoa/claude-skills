@@ -171,6 +171,12 @@ render_text_list() {
   render_id_list "nonGoals" "Non-goals"
   render_id_list "dependsOn" "Depends on"
   render_text_list "ownedFiles" "Owned files"
+  # Only an order that shares a file gets the section. Other orders also own these files, so the
+  # builder adds its own lines and leaves theirs (gap row 287).
+  if [ "$(jq -r '(.sharedFiles? // []) | length' "$WO_FILE" 2>/dev/null)" != "0" ]; then
+    render_text_list "sharedFiles" "Shared files"
+    printf 'Other orders also own these files. Add your own entries, and keep the entries other orders wrote. A separator beside your entry may change, such as a comma.\n\n'
+  fi
 
   printf '## Interface\n\n'
   INTERFACE="$(jq -r 'if (.interface? | type) == "string" and (.interface | length) > 0 then .interface else "" end' "$WO_FILE")"

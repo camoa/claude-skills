@@ -32,7 +32,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
-#                    -- <goal...>
+#                    [--after <task-id> [--in-tree]] -- <goal...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] repair --project <path> <old-task-folder>
 #   task-actions.sh [--run-mode <interactive|autonomous>] start --project <path> <task-id> \
 #                    -- <why...>
@@ -71,7 +71,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
 # the folder it made first. A miss that is a real, expected outcome (start or complete or split
 # naming a task that does not exist) exits 1 and prints nothing useful to stdout, never confused
-# with 3.
+# with 3. So does a start refused because the task it builds on (`after`) has not finished its
+# build. A start whose tree cannot be cut from that task's branch exits 3 and writes no state.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk
 # regular-expression interval (foundations.md, Honesty: the exact construct that made every
@@ -114,7 +115,7 @@ done
 
 usage() {
   cat <<'EOF' >&2
-usage: task-actions.sh create   --project <path> --name <id> -- <goal...>
+usage: task-actions.sh create   --project <path> --name <id> [--after <task-id> [--in-tree]] -- <goal...>
        task-actions.sh repair   --project <path> <old-task-folder>
        task-actions.sh start    --project <path> <task-id> -- <why...>
        task-actions.sh complete --project <path> <task-id> -- <summary...>
@@ -187,7 +188,8 @@ task_summary() {
     "children: " + ((.children // []) | join(" ")),
     "runMode: " + (.runMode // "interactive")
       + (if ((.runModeStages // []) | length) > 0 then " (" + (.runModeStages | join(", ")) + ")" else "" end),
-    "worktree: " + (.worktree.path // "none")' "$1"
+    "worktree: " + (.worktree.path // "none"),
+    (if .after then "after: " + .after else empty end)' "$1"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -195,11 +197,13 @@ task_summary() {
 # ------------------------------------------------------------------------------------------------
 
 do_create() {
-  local project_path="" id=""
+  local project_path="" id="" after="" in_tree=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
       --name) id="${2:?--name needs a value}"; shift 2 ;;
+      --after) after="${2:?--after needs a value}"; shift 2 ;;
+      --in-tree) in_tree=true; shift ;;
       --) shift; break ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
@@ -213,14 +217,20 @@ do_create() {
   require_project_folder "$project_path" "create"
   validate_task_id "$id" "create"
   [ -n "$goal" ] || die3 "create: a goal is required after --"
+  [ "$in_tree" = false ] || [ -n "$after" ] || die3 "create: --in-tree takes over the tree of the task --after names, so it needs --after"
 
   local task_dir
   task_dir="$(task_dir_for "$project_path" "$id")"
   [ ! -e "$task_dir" ] || die3 "create: $task_dir already exists. Pick a different name"
+  if [ -n "$after" ]; then
+    case "$after" in */*|.|..) die3 "create: '$after' is not a task id" ;; esac
+    [ -f "$(task_dir_for "$project_path" "$after")/task.json" ] \
+      || die3 "create: --after names $after, and this project has no such task"
+  fi
 
   mkdir -p "$task_dir" || die3 "create: cannot create $task_dir"
 
-  jq -n --arg id "$id" '{
+  jq -n --arg id "$id" --arg after "$after" --argjson inTree "$in_tree" '{
       schemaVersion: 1,
       id: $id,
       state: "new",
@@ -228,7 +238,8 @@ do_create() {
       children: [],
       mechanismHints: [],
       externalIds: {}
-    }' > "$task_dir/task.json" || die3 "create: could not write $task_dir/task.json"
+    } + (if $after == "" then {} else {after: $after} end) + (if $inTree then {inTree: true} else {} end)' > "$task_dir/task.json" \
+    || die3 "create: could not write $task_dir/task.json"
 
   {
     printf '# %s\n\n' "$id"
@@ -238,7 +249,16 @@ do_create() {
 
   # The task's own worktree, made right after the record is written whole, so a second window
   # can open the tree before any stage runs. A tree that cannot be made leaves no half-made task.
-  ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
+  # A task built on another whose build is unfinished gets its tree at start instead.
+  local after_state
+  after_state="$(task_after_state "$task_dir")"
+  # An --in-tree task whose predecessor's review is open gets its tree at start, which comes later
+  # and so more often finds that review closed and the tree free (gap row 302).
+  if [ "$in_tree" = true ] && ! task_after_reviewed "$task_dir"; then
+    echo "in-tree: waits for the review of ${after}. start takes its tree over then, or cuts a new tree."
+  elif [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
+    ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
+  fi
 
   commit_task_change "$project_path" \
     "Create task ${id}" \
@@ -250,6 +270,7 @@ do_create() {
 
   echo "CREATED: ${task_dir}"
   task_summary "$task_dir/task.json"
+  [ -z "$after_state" ] || echo "after-build: ${after_state##* }"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -616,6 +637,18 @@ do_start() {
       ;;
   esac
 
+  # A task built on another starts once that task's build is finished, read from its records, and
+  # its tree is cut then, from that task's branch (gap row 291).
+  local after_state
+  after_state="$(task_after_state "$task_dir")"
+  if [ -n "$after_state" ]; then
+    if [ "${after_state##* }" != "finished" ]; then
+      echo "REFUSED: ${id} builds on ${after_state% *}, whose build is ${after_state##* }. Start ${id} once implementation of ${after_state% *} has finished." >&2
+      return 1
+    fi
+    ( task_worktree "$task_dir" "start" >/dev/null ) || exit 3
+  fi
+
   local tmp
   tmp="$(mktemp)" || die3 "start: cannot create a temp file"
   jq '.state = "in_progress"' "$task_json" > "$tmp" && mv "$tmp" "$task_json" \
@@ -813,14 +846,15 @@ do_split() {
   # The positional list, empty by now, collects each child's folder for the commit: the commit
   # stages the parent's folder and every child's, never tasks/ whole.
   i=0
-  local cgoal ccrit
+  local cgoal ccrit after_state
   while [ "$i" -lt "$child_count" ]; do
     cid="${child_ids[$i]}"; cgoal="${child_goals[$i]}"; ccrit="${child_criteria_json[$i]}"
     cdir="$(task_dir_for "$project_path" "$cid")"
     mkdir -p "$cdir" || die3 "split: cannot create $cdir"
     set -- "$@" "tasks/$cid"
 
-    jq -n --arg id "$cid" --arg parent "$parent_id" '{
+    # A child builds on what its parent builds on, so it waits for the same build (gap row 291).
+    jq -n --arg id "$cid" --arg parent "$parent_id" --arg after "$(jq -r '.after // empty' "$parent_json_file")" '{
         schemaVersion: 1,
         id: $id,
         state: "new",
@@ -828,7 +862,8 @@ do_split() {
         children: [],
         mechanismHints: [],
         externalIds: {}
-      }' > "$cdir/task.json" || die3 "split: could not write $cdir/task.json"
+      } + (if $after == "" then {} else {after: $after} end)' > "$cdir/task.json" \
+      || die3 "split: could not write $cdir/task.json"
 
     {
       printf '# %s\n\n' "$cid"
@@ -839,8 +874,12 @@ do_split() {
         printf '%s' "$ccrit" | jq -r '.[] | "- " + .'
       fi
     } > "$cdir/task.md" || die3 "split: could not write $cdir/task.md"
-    # Each child gets its tree now, so no child waits for a first stage action to make one.
-    task_worktree "$cdir" "split" >/dev/null
+    # Each child gets its tree now, so no child waits for a first stage action to make one. A
+    # child whose parent waits on an unfinished build gets its tree at start, as create does.
+    after_state="$(task_after_state "$cdir")"
+    if [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
+      task_worktree "$cdir" "split" >/dev/null
+    fi
 
     i=$((i + 1))
   done
@@ -961,7 +1000,13 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}${stages_note}"
-  # Light keeps one script that walks the demo path in a browser. It is the project's end to end
+  # A light scope closes with no sidecar and a stamped contract (distill_deferred). Out of light,
+  # the stage rule wants the sidecar again, so the task reads scope until one distiller runs.
+  if [ "$value" != "light" ] && [ ! -f "$task_dir/records/scope-distill.json" ] \
+      && [ -n "$(jq -r '.pluginVersion // empty' "$task_dir/alignment.json" 2>/dev/null)" ]; then
+    echo "distill: scope closed in light mode with no distiller, so this task reads stage scope. Dispatch one distiller for stage scope, then run scope's distill."
+  fi
+  # Light keeps one script that walks the demo path. It is the project's end to end
   # setup, which a person installs (gap row 197).
   if [ "$value" = "light" ]; then
     if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
@@ -969,6 +1014,10 @@ do_set_run_mode() {
     else
       echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
     fi
+    # With no automated tests each code order's proof is a person's answer, so the run cannot close
+    # the task (gap row 290). A contract that already answered yes keeps its tests.
+    [ "$(automated_tests "$task_dir")" = "yes" ] \
+      || echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task."
   fi
   task_summary "$task_json"
 }
@@ -1464,7 +1513,7 @@ do_environment() {
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
     # The address keys the record kept, so `{worktreeProject}` reaches the tear-down. The marker's
     # own fields name no token, so they are left out with the three the up shape owns.
-    TOKENS="$TOKENS$(jq -r '.environment | to_entries[] | select(.key != "address" and .key != "recipe" and .key != "upAt" and .key != "state" and .key != "startedAt") | "\(.key)\t\(.value)"' "$task_json")
+    TOKENS="$TOKENS$(task_environment_tokens "$task_json" | grep -v -E "^(address|recipe|upAt|state|startedAt)$(printf '\t')")
 "
     # A marker with no address holds none of those keys either, and a tear-down line may need one.
     # `up` marked the address command in records/environment-up.txt, with the line above, so the
@@ -1488,6 +1537,20 @@ do_environment() {
     # leaves an empty path here. Then `cd ""` changes nothing and the recipe runs wherever the
     # caller stood. The refusal it already printed is above this one.
     [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was torn down"
+    # A later task made with --in-tree that records a site in this tree uses that site now, so only
+    # this record lets go of it (gap row 302). With no such task the site is this task's alone, so
+    # it goes down whichever branch is checked out.
+    local other
+    while IFS= read -r other; do
+      [ -n "$other" ] && [ -n "$(jq -r '.environment.recipe // empty' "$(task_dir_for "$project_path" "$other")/task.json" 2>/dev/null)" ] || continue
+      write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+      commit_task_change "$project_path" "Let go of the site of ${id}" "task ${other} uses it" "" "" "$id" "environment" \
+        || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+      printf 'environment: down for %s, the site stays up for task %s in %s\n' "$id" "$other" "$wt"
+      return 0
+    done <<TA_OTHERS
+$(task_tree_others "$project_path" "$wt" "$id")
+TA_OTHERS
     # A tear-down after the restore, committed or not, resolves the site by the name the restore
     # put back, which can be the main checkout's (gap row 262).
     restored="$(task_env_restore_commit "$task_dir" "$wt" worktree)" \
@@ -1581,6 +1644,8 @@ TA_TOKEN_LIST
   # inside its own subshell. Without this test `cd ""` changes nothing and the bring-up lines run
   # in the caller's directory, which is any tree at all.
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
+  # up commits the recipe's files on the branch checked out there, so only that branch's task runs it.
+  task_tree_turn "$task_dir" "$wt" "environment"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
   # After the restore, committed or not, a site brought up here takes the name the restore put
@@ -1758,7 +1823,7 @@ do_prune() {
 
   # Every named task is checked before any tree goes: a task that is not complete is a reason to
   # remove nothing, because its tree is where its work is.
-  local id task_dir task_json state wt branch said branch_word group
+  local id task_dir task_json state wt branch said branch_word group held
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
@@ -1777,15 +1842,17 @@ TA_IDS
     [ -n "$id" ] || continue
     task_dir="$(task_dir_for "$project_path" "$id")"; task_json="$task_dir/task.json"
     wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
+    # A later task made with --in-tree builds in this tree now, so the tree stays (gap row 302).
+    held="$(task_tree_others "$project_path" "$wt" "$id" | head -1)"
     # Git's refusal is checked first, so a dirty tree loses nothing: not its site, not its record.
-    [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
+    [ -n "$held" ] || [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
       || die3 "prune: $wt has uncommitted changes. Commit or stash there first; prune never forces"
     # The tear-down runs in a subshell: its own cd into the tree must not be where the remove runs.
     if [ -n "$(jq -r '.environment.recipe // empty' "$task_json")" ]; then
       ( do_environment --project "$project_path" "$id" down ) \
         || die3 "prune: the tear-down of $id failed, so $wt stays. See $task_dir/records/environment-down.txt"
     fi
-    if [ -d "$wt" ]; then
+    if [ -z "$held" ] && [ -d "$wt" ]; then
       said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
         || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
     fi
@@ -1798,6 +1865,7 @@ TA_IDS
     write_atomic "$task_json" "$(jq 'del(.worktree, .environment)' "$task_json")"
     commit_task_change "$project_path" "Prune the worktree of ${id}" "the task is complete and a person chose this tree" "" "" "$id" "prune" \
       || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+    [ -z "$held" ] || wt="$wt kept, task $held builds in it,"
     printf 'pruned: %s %s branch %s %s\n' "$id" "$wt" "$branch" "$branch_word"
   done <<TA_IDS
 $ids

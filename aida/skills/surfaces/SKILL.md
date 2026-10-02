@@ -44,6 +44,25 @@ that branch is abandoned, deleting it, local and remote, lets setup run.
 A stage's offer names the kind in its invocation. Run by hand with no kind, ask which kind after
 `read`, naming each kind's state, and then work that kind only.
 
+## A command as the end to end surface
+
+A project with no page to drive, such as a command-line tool, has no setup recipe for `e2e`. Its
+end to end surface is a command. It needs no recipe and no install:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --command "<line>" --kind e2e --critical --enable
+```
+The line is the command that walks the path, such as a script in the code repository. Exit 0
+means the path works. The line is split at spaces and runs without a shell. So a quote or a shell
+character is refused at 3. With no surface file, `register` writes one and turns end to end on in
+the project record, and commits both. Review runs the command in the task's tree, and nobody walks
+it. Exit 3 also means the file holds an e2e page surface already, because a project uses one form.
+
+The command runs with the session's PATH. So it must reach this tree's own build, never an
+installed copy, for example through a path inside the tree. Register it before the build starts:
+on the trunk before tasks are cut, or in the first task's tree. A register during review moves the
+code under review, and review refuses that. A task cut before the trunk had the file cannot run it.
+Review reads a command unknown when the range changed it, or deleted its files, or changed their mode.
+
 ## Resolve the recipes
 
 Dispatch `catalog-identifier`, naming the role, once per point. The points are `e2e-setup` for
